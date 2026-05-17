@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Barcode, Edit, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags } from 'lucide-react';
+import { Barcode, Edit, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { Company } from '../../types/company';
@@ -13,8 +13,10 @@ import { ProductQuickTagsModal } from './ProductQuickTagsModal';
 import { supabase } from '../../services/supabase';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
+import { stockLocationService } from '../../services/stockLocationService';
 import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct } from './productCardShopee.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
+import type { ProductStockLocation } from '../../types/stock-location';
 
 interface ProductCardProps {
     product: Product;
@@ -162,6 +164,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [currentStock, setCurrentStock] = useState<number | undefined>(product.stock_quantity);
     const [isTogglingStatus, setIsTogglingStatus] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [isStockLocationModalOpen, setIsStockLocationModalOpen] = useState(false);
+    const [stockLocationRows, setStockLocationRows] = useState<ProductStockLocation[]>([]);
+    const [stockLocationLoading, setStockLocationLoading] = useState(false);
+    const [stockLocationError, setStockLocationError] = useState<string | null>(null);
 
     // Video checking and uploading state
     const [videoInfo, setVideoInfo] = useState<{ exists: boolean; url: string | null; checking: boolean }>({ exists: false, url: null, checking: true });
@@ -180,6 +186,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const shopeeVisualState = getShopeeButtonVisualState({ shopee_item_id: shopeeItemId });
     const shopeeModalProduct = mapProductToShopeeLocalProduct(shopeeModalProductSource as Product & Record<string, any>) as LocalProduct;
     const emptyShopeeHistory: ShopeeProduct[] = [];
+    const stockLocationTotal = stockLocationRows.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const stockLocationReserved = stockLocationRows.reduce((sum, item) => sum + Number(item.reserved_quantity || 0), 0);
+    const stockLocationAvailable = Math.max(0, stockLocationTotal - stockLocationReserved);
 
     // Check video: prioridade para video_url salvo no banco; fallback resiliente por SKU
     useEffect(() => {
@@ -404,6 +413,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             toast.error('Erro ao sincronizar estoque do Bling');
         } finally {
             setIsSyncing(false);
+        }
+    };
+
+    const handleOpenStockLocationModal = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsStockLocationModalOpen(true);
+        setStockLocationLoading(true);
+        setStockLocationError(null);
+
+        try {
+            const rows = await stockLocationService.getProductStockDistribution(product.id);
+            setStockLocationRows(rows);
+        } catch (error) {
+            console.error('[ProductCard] Erro ao carregar locais de estoque:', error);
+            setStockLocationRows([]);
+            setStockLocationError('Nao foi possivel carregar os locais deste produto.');
+        } finally {
+            setStockLocationLoading(false);
         }
     };
 
@@ -684,15 +711,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         >
                             <Barcode className="w-4 h-4 text-indigo-600 group-hover:text-indigo-700" />
                         </button>
-                        <a
-                            href={buildStockLocationsHref(product)}
-                            onClick={(e) => e.stopPropagation()}
+                        <button
+                            type="button"
+                            onClick={handleOpenStockLocationModal}
                             className="shrink-0 p-1.5 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors group"
                             title="Ver locais de estoque"
                             aria-label="Ver locais de estoque"
                         >
                             <MapPin className="w-4 h-4 text-emerald-600 group-hover:text-emerald-700" />
-                        </a>
+                        </button>
 
                         <button
                             onClick={handleOpenShopeeModal}
@@ -1034,6 +1061,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                     )}
                 </div>
 
+                {product.track_inventory && !isParentProduct && (
+                    <button
+                        type="button"
+                        onClick={handleOpenStockLocationModal}
+                        className="flex w-full items-center justify-between gap-2 rounded-lg border border-emerald-100 bg-emerald-50/70 px-2.5 py-2 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-100/70"
+                    >
+                        <span className="flex min-w-0 items-center gap-2">
+                            <MapPin className="h-4 w-4 shrink-0 text-emerald-600" />
+                            <span className="min-w-0">
+                                <span className="block text-[10px] font-semibold uppercase text-emerald-700">Onde esta no estoque</span>
+                                <span className="block truncate text-xs text-slate-600">Ver deposito e local</span>
+                            </span>
+                        </span>
+                        <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-bold text-emerald-700 shadow-sm">
+                            {currentStock ?? 0} un.
+                        </span>
+                    </button>
+                )}
+
                 {/* Unique Identifiers (IMEI / Serial) */}
                 {(product.specs?.imei1 || product.specs?.serial || product.specs?.serial_number) && (
                     <div className="border-t border-slate-100 pt-2 space-y-1">
@@ -1089,6 +1135,107 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 onClose={() => setIsTagsModalOpen(false)}
                 onSaved={(tagIds) => setCurrentTags(tagIds)}
             />
+
+            {isStockLocationModalOpen && (
+                <div
+                    className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/50 p-4"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setIsStockLocationModalOpen(false);
+                    }}
+                >
+                    <div
+                        className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+                            <div className="min-w-0">
+                                <p className="text-xs font-semibold uppercase text-emerald-700">Onde esta no estoque</p>
+                                <h3 className="mt-1 truncate text-base font-bold text-slate-900">{product.name}</h3>
+                                {product.sku && <p className="mt-0.5 font-mono text-xs text-slate-500">SKU: {product.sku}</p>}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsStockLocationModalOpen(false)}
+                                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                aria-label="Fechar locais de estoque"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 px-5 py-4">
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                                    <p className="text-[10px] font-semibold uppercase text-slate-500">Total</p>
+                                    <p className="mt-1 text-lg font-black text-slate-900">{stockLocationTotal}</p>
+                                </div>
+                                <div className="rounded-xl border border-amber-100 bg-amber-50 p-3">
+                                    <p className="text-[10px] font-semibold uppercase text-amber-700">Reservado</p>
+                                    <p className="mt-1 text-lg font-black text-amber-700">{stockLocationReserved}</p>
+                                </div>
+                                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+                                    <p className="text-[10px] font-semibold uppercase text-emerald-700">Disponivel</p>
+                                    <p className="mt-1 text-lg font-black text-emerald-700">{stockLocationAvailable}</p>
+                                </div>
+                            </div>
+
+                            {stockLocationLoading ? (
+                                <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-100 bg-slate-50 py-8 text-sm text-slate-500">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Carregando locais de estoque...
+                                </div>
+                            ) : stockLocationError ? (
+                                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                    {stockLocationError}
+                                </div>
+                            ) : stockLocationRows.length === 0 ? (
+                                <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
+                                    Nenhum deposito/local cadastrado para este produto.
+                                </div>
+                            ) : (
+                                <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-100">
+                                    {stockLocationRows.map((item) => {
+                                        const quantity = Number(item.quantity || 0);
+                                        const reserved = Number(item.reserved_quantity || 0);
+                                        const available = Math.max(0, quantity - reserved);
+
+                                        return (
+                                            <div key={item.id} className="border-b border-slate-100 px-4 py-3 last:border-b-0">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-bold text-slate-900">
+                                                            {item.deposit?.name || 'Deposito sem nome'}
+                                                        </p>
+                                                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                                                            Local: {item.location?.name || '-'}
+                                                            {item.location?.code ? ` (${item.location.code})` : ''}
+                                                        </p>
+                                                    </div>
+                                                    <div className="shrink-0 text-right">
+                                                        <p className="text-sm font-black text-emerald-700">{available} disp.</p>
+                                                        <p className="text-[11px] text-slate-500">{quantity} total</p>
+                                                        {reserved > 0 && <p className="text-[11px] text-amber-600">{reserved} reservado</p>}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            <a
+                                href={buildStockLocationsHref(product)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
+                            >
+                                <MapPin className="h-4 w-4" />
+                                Abrir Locais de Estoque
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {isShopeeModalOpen && (
                 <ShopeeSyncModal
