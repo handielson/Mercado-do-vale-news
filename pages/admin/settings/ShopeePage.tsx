@@ -1572,10 +1572,6 @@ export default function ShopeePage() {
         advanceBulkRun(bulkActiveProduct?.id, 'published', undefined, publishedProductIds);
     };
 
-    const skipBulkActiveProduct = () => {
-        advanceBulkRun(bulkActiveProduct?.id, 'skipped', 'Pulou este produto durante a revisao.');
-    };
-
     const handleBulkModalError = (message: string) => {
         advanceBulkRun(bulkActiveProduct?.id, 'failed', message);
     };
@@ -1648,7 +1644,6 @@ export default function ShopeePage() {
     const bulkSelectedCount = bulkSelectedIds.length;
     const bulkSelectableVisibleIds = getBulkSelectableProductIds(bulkFiltered);
     const bulkAllVisibleSelected = bulkSelectableVisibleIds.length > 0 && bulkSelectableVisibleIds.every(id => bulkSelectedSet.has(id));
-    const bulkCurrentPosition = bulkActiveProduct ? bulkQueueIds.findIndex(id => id === bulkActiveProduct.id) + 1 : 0;
     const bulkPublishedCount = bulkRunItems.filter(item => item.status === 'published').length;
     const bulkSkippedCount = bulkRunItems.filter(item => item.status === 'skipped').length;
     const bulkFailedCount = bulkRunItems.filter(item => item.status === 'failed').length;
@@ -2430,45 +2425,19 @@ export default function ShopeePage() {
                     </div>
 
                     {bulkActiveProduct && (
-                        <>
-                            <div className="fixed left-1/2 top-4 z-[80] w-[min(92vw,520px)] -translate-x-1/2 rounded-2xl bg-slate-900 px-4 py-3 text-xs font-semibold text-white shadow-lg">
-                                <div className="mb-2 flex items-center justify-between gap-3">
-                                    <span>Envio em massa {bulkCurrentPosition || 1}/{bulkQueueIds.length}</span>
-                                    <span>{bulkProgressPercent}%</span>
-                                </div>
-                                <div className="mb-2 h-2 overflow-hidden rounded-full bg-white/15">
-                                    <div
-                                        className="h-full rounded-full bg-orange-400 transition-all duration-500"
-                                        style={{ width: `${bulkProgressPercent}%` }}
-                                    />
-                                </div>
-                                <div className="flex items-center justify-between gap-3">
-                                    <span className="truncate text-white/80">
-                                        {bulkActiveRunItem?.name || bulkActiveProduct.name}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={skipBulkActiveProduct}
-                                        className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-white transition-colors hover:bg-white/20"
-                                    >
-                                        Pular
-                                    </button>
-                                </div>
-                            </div>
-                            <ShopeeSyncModal
-                                key={bulkActiveProduct.id}
-                                product={bulkActiveProduct}
-                                company={company}
-                                historicalProducts={products}
-                                variationGroups={variationGroups}
-                                autoPublish={Boolean(bulkAutoPreset)}
-                                bulkAutoPreset={bulkAutoPreset}
-                                onBulkAutoPresetReady={setBulkAutoPreset}
-                                onClose={closeBulkAssistedSync}
-                                onSuccess={handleBulkModalSuccess}
-                                onError={handleBulkModalError}
-                            />
-                        </>
+                        <ShopeeSyncModal
+                            key={bulkActiveProduct.id}
+                            product={bulkActiveProduct}
+                            company={company}
+                            historicalProducts={products}
+                            variationGroups={variationGroups}
+                            autoPublish={Boolean(bulkAutoPreset)}
+                            bulkAutoPreset={bulkAutoPreset}
+                            onBulkAutoPresetReady={setBulkAutoPreset}
+                            onClose={closeBulkAssistedSync}
+                            onSuccess={handleBulkModalSuccess}
+                            onError={handleBulkModalError}
+                        />
                     )}
                 </div>
             )}
