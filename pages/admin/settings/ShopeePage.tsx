@@ -2561,6 +2561,9 @@ export function ShopeeSyncModal({
     const [itemDescription, setItemDescription] = useState(defaultDescription);
     const [shopeePrice, setShopeePrice] = useState((product.price_retail || 0) / 100);
     const [shopeeStock, setShopeeStock] = useState(defaultStock);
+    const [shopeeCalcTaxes, setShopeeCalcTaxes] = useState('0');
+    const [shopeeCalcExtras, setShopeeCalcExtras] = useState('0');
+    const [shopeeCalcMargin, setShopeeCalcMargin] = useState('10');
     const [gtinMode, setGtinMode] = useState<'code' | 'no_gtin'>(initialGtinMode);
     const [gtinInput, setGtinInput] = useState(initialGtinInput);
     const [mediaImages, setMediaImages] = useState<EditableImage[]>(() =>
@@ -2578,7 +2581,6 @@ export function ShopeeSyncModal({
     const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
     const syncDebugEntriesRef = useRef<SyncDebugEntry[]>([]);
     const descriptionDirtyRef = useRef(false);
-    const stockDirtyRef = useRef(false);
     const titleDirtyRef = useRef(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
@@ -2765,10 +2767,6 @@ export function ShopeeSyncModal({
             setShopeePrice(applied.price);
         }
 
-        if (applied.stock !== null && applied.stock !== undefined && (options.force || !stockDirtyRef.current)) {
-            setShopeeStock(applied.stock);
-        }
-
         if (applied.gtinMode === 'no_gtin') {
             setGtinMode('no_gtin');
             setGtinInput('');
@@ -2914,9 +2912,7 @@ export function ShopeeSyncModal({
                     setItemDescription(resolved.description);
                 }
 
-                if (!stockDirtyRef.current) {
-                    setShopeeStock(resolved.stock);
-                }
+                setShopeeStock(resolved.stock);
 
                 if (resolved.weightKg || resolved.dimensions) {
                     setBlingPhysicalDefaults({
@@ -4951,22 +4947,141 @@ export function ShopeeSyncModal({
                                     )}
                                 </div>
                             )}
-                            <div className="rounded-2xl border border-slate-200 bg-white p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Preço (R$)</label>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Preco de venda na Shopee (R$)</label>
                                     <input type="number" step="0.01" value={shopeePrice}
                                         onChange={e => setShopeePrice(parseFloat(e.target.value || '0'))}
                                         className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">Estoque inicial</label>
-                                    <input type="number" value={shopeeStock}
-                                        onChange={e => {
-                                            stockDirtyRef.current = true;
-                                            setShopeeStock(parseInt(e.target.value || '0', 10));
-                                        }}
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+                                    <input
+                                        type="number"
+                                        value={shopeeStock}
+                                        readOnly
+                                        title="Estoque vindo do Bling"
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm text-slate-600 cursor-not-allowed"
+                                    />
+                                    <p className="mt-1 text-[11px] text-slate-500">Vem do Bling e nao deve ser editado aqui.</p>
                                 </div>
+                                </div>
+                                {shopeePrice > 0 && (() => {
+                                    const val = Number(shopeePrice) || 0;
+                                    const comissao = val * 0.20;
+                                    let taxaFixa = 0;
+                                    if (val < 80) taxaFixa = 4;
+                                    else if (val < 100) taxaFixa = 16;
+                                    else if (val < 200) taxaFixa = 20;
+                                    else if (val < 500) taxaFixa = 26;
+                                    else taxaFixa = 28;
+
+                                    const impostoDec = (parseFloat(shopeeCalcTaxes.replace(',', '.')) || 0) / 100;
+                                    const impostoReal = val * impostoDec;
+                                    const extraDespesas = parseFloat(shopeeCalcExtras.replace(',', '.')) || 0;
+                                    const custoProduto = (product.price_cost || 0) / 100;
+                                    const liquidoShopee = val - comissao - taxaFixa;
+                                    const lucroReal = liquidoShopee - custoProduto - impostoReal - extraDespesas;
+                                    const margemDec = (parseFloat(shopeeCalcMargin.replace(',', '.')) || 0) / 100;
+                                    const denominator = 1 - 0.20 - impostoDec - margemDec;
+
+                                    let precoSugerido = 0;
+                                    if (denominator > 0) {
+                                        const brackets = [
+                                            { max: 79.99, taxa: 4 },
+                                            { max: 99.99, taxa: 16 },
+                                            { max: 199.99, taxa: 20 },
+                                            { max: 499.99, taxa: 26 },
+                                            { max: Infinity, taxa: 28 },
+                                        ];
+                                        for (const bracket of brackets) {
+                                            const calculated = (custoProduto + extraDespesas + bracket.taxa) / denominator;
+                                            if (calculated <= bracket.max) {
+                                                precoSugerido = calculated;
+                                                break;
+                                            }
+                                        }
+                                        if (!precoSugerido) precoSugerido = (custoProduto + extraDespesas + 28) / denominator;
+                                    }
+
+                                    return (
+                                        <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-3 space-y-3">
+                                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
+                                                        <Calculator className="w-4 h-4" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-semibold text-orange-800">Simulador de Ganhos Shopee</p>
+                                                        <p className="text-[10px] text-orange-600/80">Comissao de 20% + taxa fixa CNPJ</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <label className="text-[10px] font-medium text-slate-500">Imposto (%)</label>
+                                                        <input type="text" inputMode="decimal" value={shopeeCalcTaxes}
+                                                            onChange={e => setShopeeCalcTaxes(e.target.value.replace(/[^0-9.,]/g, ''))}
+                                                            className="w-14 px-1.5 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-orange-500 text-center" />
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <label className="text-[10px] font-medium text-slate-500">Extras (R$)</label>
+                                                        <input type="text" inputMode="decimal" value={shopeeCalcExtras}
+                                                            onChange={e => setShopeeCalcExtras(e.target.value.replace(/[^0-9.,]/g, ''))}
+                                                            className="w-16 px-1.5 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-orange-500 text-center" />
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                                                        <label className="text-[10px] font-bold text-indigo-700">Meta Lucro (%)</label>
+                                                        <input type="text" inputMode="decimal" value={shopeeCalcMargin}
+                                                            onChange={e => setShopeeCalcMargin(e.target.value.replace(/[^0-9.,]/g, ''))}
+                                                            className="w-12 px-1 py-0.5 border border-indigo-200 rounded text-xs font-bold text-indigo-700 focus:ring-1 focus:ring-indigo-500 bg-white text-center" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="rounded-lg border border-orange-100/70 bg-white/70 p-2">
+                                                <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-medium text-slate-600">
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-red-500">- R$ {comissao.toFixed(2)} <span className="text-[9px] text-slate-400 font-normal">(20%)</span></span>
+                                                        <span className="text-red-500">- R$ {taxaFixa.toFixed(2)} <span className="text-[9px] text-slate-400 font-normal">(Fixo)</span></span>
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] text-slate-400 uppercase">Recebivel Shopee</span>
+                                                        <span className={`text-sm font-bold ${liquidoShopee > 0 ? 'text-emerald-600' : 'text-slate-600'}`}>R$ {liquidoShopee.toFixed(2)}</span>
+                                                    </div>
+                                                    <div className="flex flex-col gap-0.5 text-[10px] text-slate-500">
+                                                        <span>Custo: <strong className="text-slate-700">R$ {custoProduto.toFixed(2)}</strong></span>
+                                                        {impostoReal > 0 && <span>Imposto: <strong className="text-red-500">-R$ {impostoReal.toFixed(2)}</strong></span>}
+                                                        {extraDespesas > 0 && <span>Extras: <strong className="text-red-500">-R$ {extraDespesas.toFixed(2)}</strong></span>}
+                                                    </div>
+                                                    <div className="flex flex-col bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
+                                                        <span className="text-[10px] text-blue-600/80 uppercase mb-0.5 font-bold">Sobra estimada</span>
+                                                        <span className={`text-base font-black ${lucroReal > 0 ? 'text-blue-700' : 'text-red-600'}`}>R$ {lucroReal.toFixed(2)}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col gap-2 rounded-lg border border-indigo-200 bg-indigo-50/80 p-2.5 md:flex-row md:items-center md:justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Tag className="w-4 h-4 text-indigo-500" />
+                                                    <div>
+                                                        <p className="text-[11px] font-bold text-indigo-800">Preco sugerido de venda</p>
+                                                        <p className="text-[9px] text-indigo-600/80 leading-tight">Calculado para meta de {shopeeCalcMargin}% liquidos depois das taxas informadas.</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-lg font-black text-indigo-700">
+                                                        {precoSugerido > 0 ? `R$ ${precoSugerido.toFixed(2)}` : 'INVALIDO'}
+                                                    </span>
+                                                    <button type="button" onClick={() => setShopeePrice(precoSugerido)}
+                                                        disabled={precoSugerido <= 0}
+                                                        title="Aplicar preco sugerido"
+                                                        className="px-2 py-1 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-md transition disabled:opacity-50">
+                                                        Aplicar sugestao
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                             <div className="rounded-2xl border border-slate-200 bg-white p-4">
                                 <label className="block text-xs font-semibold text-slate-700 mb-1">Descricao do anuncio</label>
