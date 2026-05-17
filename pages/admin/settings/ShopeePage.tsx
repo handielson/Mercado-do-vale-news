@@ -85,6 +85,7 @@ export interface ShopeeProduct {
     price_cost?: number;
     category_slug?: string;
     inmetro_certificate?: string;
+    anatel_certificate?: string;
     ncm?: string;
     description?: string;
     brand?: string;
@@ -127,6 +128,7 @@ export interface LocalProduct {
     price_cost: number;
     category_slug: string;
     inmetro_certificate?: string;
+    anatel_certificate?: string;
     ncm?: string;
     description?: string;
     brand?: string;
@@ -402,6 +404,38 @@ function normalizeShopeeDescription(value: string | undefined): string {
         .replace(/\n{3,}/g, '\n\n')
         .replace(/[ \t]{2,}/g, ' ')
         .trim();
+}
+
+function pickCertificateValue(...candidates: Array<string | undefined | null>): string {
+    for (const value of candidates) {
+        const trimmed = String(value || '').trim();
+        if (trimmed) return trimmed;
+    }
+    return '';
+}
+
+function appendShopeeCertificatesToDescription(
+    description: string,
+    source: { inmetro_certificate?: string; anatel_certificate?: string; specs?: Record<string, any> | null },
+    maxLength = 3000,
+): string {
+    const inmetro = pickCertificateValue(source.inmetro_certificate, source.specs?.inmetro_certificate);
+    const anatel = pickCertificateValue(source.anatel_certificate, source.specs?.anatel_certificate);
+    if (!inmetro && !anatel) return description;
+
+    const lines: string[] = [];
+    if (inmetro) lines.push(`- Certificado INMETRO: ${inmetro}`);
+    if (anatel) lines.push(`- Homologacao ANATEL: ${anatel}`);
+
+    const base = description.trim();
+    const block = `\n\nCertificacoes:\n${lines.join('\n')}`;
+
+    if (base.length + block.length <= maxLength) {
+        return `${base}${block}`;
+    }
+    const reservedRoom = Math.min(block.length, maxLength);
+    const truncatedBase = base.slice(0, Math.max(0, maxLength - reservedRoom)).trimEnd();
+    return `${truncatedBase}${block}`.slice(0, maxLength);
 }
 
 function extractShopeeAttributeTree(data: any): any[] {
@@ -3831,7 +3865,12 @@ export function ShopeeSyncModal({
             const attributeList = buildAttributePayload();
             const cleanItemName = (itemName.trim() || product.name || '').slice(0, 120);
             const cleanItemSku = String(product.sku || '').trim().slice(0, 100);
-            const cleanDescription = (normalizeShopeeDescription(itemDescription) || cleanItemName).slice(0, 3000);
+            const baseDescription = (normalizeShopeeDescription(itemDescription) || cleanItemName).slice(0, 3000);
+            const cleanDescription = appendShopeeCertificatesToDescription(baseDescription, {
+                inmetro_certificate: product.inmetro_certificate,
+                anatel_certificate: product.anatel_certificate,
+                specs: product.specs,
+            });
             const existingProductItemId = normalizePositiveId(product.shopee_item_id);
             let proactiveDuplicateItem: any = null;
             let proactiveDuplicateItemId: number | null = null;
