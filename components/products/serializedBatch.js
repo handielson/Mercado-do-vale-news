@@ -1,0 +1,54 @@
+const SERIALIZED_FIELDS = [
+  { key: 'imei1', label: 'IMEI 1' },
+  { key: 'imei2', label: 'IMEI 2' },
+  { key: 'serial', label: 'Serial' },
+];
+
+function cleanValue(value) {
+  return typeof value === 'string' ? value.trim() : value;
+}
+
+export function hasSerializedIdentity(specs = {}) {
+  return SERIALIZED_FIELDS.some(({ key }) => Boolean(cleanValue(specs?.[key])));
+}
+
+export function findSerializedBatchDuplicates(items) {
+  const seen = new Map();
+  const duplicates = [];
+
+  for (const item of items) {
+    for (const { key, label } of SERIALIZED_FIELDS) {
+      const value = cleanValue(item?.[key]);
+      if (!value) continue;
+
+      const token = `${key}:${String(value).toLowerCase()}`;
+      if (seen.has(token) && !duplicates.includes(`${label}: ${value}`)) {
+        duplicates.push(`${label}: ${value}`);
+      }
+      seen.set(token, true);
+    }
+  }
+
+  return duplicates;
+}
+
+export function buildSerializedBatchPlan(baseData, items) {
+  const normalizedItems = items.map((item) => ({
+    ...baseData,
+    stock_quantity: 1,
+    specs: {
+      ...(baseData.specs || {}),
+      imei1: cleanValue(item.imei1) || undefined,
+      imei2: cleanValue(item.imei2) || undefined,
+      serial: cleanValue(item.serial) || undefined,
+      color: cleanValue(item.color) || undefined,
+      storage: cleanValue(item.storage) || undefined,
+      ram: cleanValue(item.ram) || undefined,
+    },
+  }));
+
+  return {
+    batchStockQuantity: normalizedItems.length,
+    items: normalizedItems,
+  };
+}
