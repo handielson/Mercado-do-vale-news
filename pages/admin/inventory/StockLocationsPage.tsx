@@ -436,30 +436,80 @@ export function StockLocationsPage() {
    * do produto (color, size, ram, storage, voltage) — comum em produtos cujo nome
    * não traz o sufixo da variação.
    */
+  const getSpecValue = (specs: Record<string, any> | null | undefined, keys: string[]): string => {
+    if (!specs || typeof specs !== 'object') return '';
+    for (const key of keys) {
+      const value = specs[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+      if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    }
+    return '';
+  };
+
+  const inferColorVariationFromName = (fullName: string): { name: string; variation: string } | null => {
+    const colors = [
+      'transparente',
+      'incolor',
+      'preto',
+      'preta',
+      'branco',
+      'branca',
+      'azul',
+      'vermelho',
+      'vermelha',
+      'verde',
+      'rosa',
+      'roxo',
+      'roxa',
+      'lilas',
+      'lilás',
+      'cinza',
+      'prata',
+      'dourado',
+      'dourada',
+      'grafite',
+      'marrom',
+      'salmao',
+      'salmão',
+    ];
+    for (const color of colors) {
+      const colorPattern = new RegExp(`(^|\\s)${color}(?=\\s|$)`, 'i');
+      if (!colorPattern.test(fullName)) continue;
+
+      const nameWithoutColor = fullName.replace(colorPattern, '$1').replace(/\s+/g, ' ').trim();
+      const label = color.charAt(0).toUpperCase() + color.slice(1).toLowerCase();
+      return { name: nameWithoutColor || fullName.trim(), variation: `Cor:${label}` };
+    }
+    return null;
+  };
+
   const splitNameVariation = (fullName: string, specs?: Record<string, any> | null): { name: string; variation: string } => {
     const match = fullName.match(/^(.*?)\s+((?:Cor|Tamanho|Capacidade|RAM|Armazenamento|Memória|Voltagem)\s*:\s*.+)$/i);
     if (match) {
       return { name: match[1].trim(), variation: match[2].trim() };
     }
     if (specs && typeof specs === 'object') {
-      const labels: Array<[string, string]> = [
-        ['color', 'Cor'],
-        ['size', 'Tamanho'],
-        ['ram', 'RAM'],
-        ['storage', 'Armazenamento'],
-        ['voltage', 'Voltagem'],
-        ['capacity', 'Capacidade'],
-        ['memory', 'Memória'],
+      const labels: Array<[string[], string]> = [
+        [['color', 'cor', 'Cor'], 'Cor'],
+        [['size', 'tamanho', 'Tamanho'], 'Tamanho'],
+        [['ram', 'RAM'], 'RAM'],
+        [['storage', 'armazenamento', 'Armazenamento'], 'Armazenamento'],
+        [['version', 'versao', 'Versao', 'versão', 'Versão'], 'Versão'],
+        [['voltage', 'voltagem', 'Voltagem'], 'Voltagem'],
+        [['capacity', 'capacidade', 'Capacidade'], 'Capacidade'],
+        [['memory', 'memoria', 'Memoria', 'memória', 'Memória'], 'Memória'],
       ];
       const parts: string[] = [];
-      for (const [key, label] of labels) {
-        const v = specs[key];
-        if (v && typeof v === 'string' && v.trim()) parts.push(`${label}:${v.trim()}`);
+      for (const [keys, label] of labels) {
+        const value = getSpecValue(specs, keys);
+        if (value) parts.push(`${label}:${value}`);
       }
       if (parts.length > 0) {
         return { name: fullName.trim(), variation: parts.join(' · ') };
       }
     }
+    const inferred = inferColorVariationFromName(fullName);
+    if (inferred) return inferred;
     return { name: fullName.trim(), variation: '' };
   };
 
