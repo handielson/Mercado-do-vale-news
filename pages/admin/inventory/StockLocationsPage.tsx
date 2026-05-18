@@ -537,22 +537,48 @@ export function StockLocationsPage() {
       setBatchResults([]);
       return;
     }
+    let cancelled = false;
     const timeoutId = window.setTimeout(async () => {
       try {
         const results = await stockLocationService.searchProducts(term);
         const existingIds = new Set(batchItems.map(i => i.product.id));
-        setBatchResults(results.filter(r => !existingIds.has(r.id)));
+        if (!cancelled) {
+          setBatchResults(results.filter(r => !existingIds.has(r.id)));
+        }
       } catch {
-        setBatchResults([]);
+        if (!cancelled) {
+          setBatchResults([]);
+        }
       }
     }, 300);
-    return () => window.clearTimeout(timeoutId);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
   }, [batchSearch, batchItems]);
 
   const handleBatchToDepositChange = (depositId: string) => {
     setBatchToDepositId(depositId);
     const first = locations.find((l) => l.deposit_id === depositId);
     setBatchToLocationId(first?.id || '');
+  };
+
+  const getDistributionAvailable = (distribution: ProductStockLocation) => {
+    return Math.max(0, Number(distribution.quantity || 0) - Number(distribution.reserved_quantity || 0));
+  };
+
+  const getBatchTransferSources = (item: BatchItem, toLocationId = batchToLocationId) => {
+    return item.distribution
+      .filter((source) => {
+        if (source.location_id === toLocationId) return false;
+        return getDistributionAvailable(source) > 0;
+      })
+      .sort((a, b) => getDistributionAvailable(b) - getDistributionAvailable(a));
+  };
+
+  const getBatchTransferAvailable = (item: BatchItem, toLocationId = batchToLocationId) => {
+    return getBatchTransferSources(item, toLocationId)
+      .reduce((sum, source) => sum + getDistributionAvailable(source), 0);
   };
 
   /**
@@ -599,18 +625,18 @@ export function StockLocationsPage() {
         .filter(d => d.quantity - d.reserved_quantity > 0)
         .sort((a, b) => (b.quantity - b.reserved_quantity) - (a.quantity - a.reserved_quantity))[0]
         || distribution[0];
-      const available = best ? best.quantity - best.reserved_quantity : 0;
+      const available = distribution.reduce((sum, source) => sum + getDistributionAvailable(source), 0);
       const item: BatchItem = {
         product,
         fromDepositId: best?.deposit_id || '',
         fromLocationId: best?.location_id || '',
         available,
-        quantity: available > 0 ? '1' : '0',
+        quantity: String(available),
         distribution,
       };
       setBatchItems(prev => [...prev, item]);
       setBatchSearch('');
-      setBatchResults([]);
+      setBatchResults(prev => prev.filter(r => r.id !== product.id));
     } catch (err: any) {
       setBatchError(err?.message || 'Erro ao adicionar produto ao lote.');
     }
@@ -624,10 +650,8 @@ export function StockLocationsPage() {
     setBatchItems(prev => prev.map(i => {
       if (i.product.id !== productId) return i;
       const next = { ...i, ...patch };
-      // Recalcula available quando troca origem
-      if (patch.fromLocationId !== undefined) {
-        const dist = next.distribution.find(d => d.location_id === patch.fromLocationId);
-        next.available = dist ? dist.quantity - dist.reserved_quantity : 0;
+      if (patch.fromLocationId !== undefined || patch.distribution !== undefined) {
+        next.available = getBatchTransferAvailable(next);
       }
       return next;
     }));
@@ -643,39 +667,62 @@ export function StockLocationsPage() {
       setBatchError('Selecione o depósito e o local de destino.');
       return;
     }
-    const validItems = batchItems.filter(i => {
-      const qty = Number(i.quantity);
-      return Number.isFinite(qty) && qty > 0 && i.fromLocationId && i.fromLocationId !== batchToLocationId;
+    const invalidOverAvailable = batchItems.find((item) => {
+      const qty = Number(item.quantity);
+      const available = getBatchTransferAvailable(item, batchToLocationId);
+      return Number.isFinite(qty) && qty > available;
     });
-    if (validItems.length === 0) {
+    if (invalidOverAvailable) {
+      setBatchError(`Quantidade maior que o saldo transferível para ${invalidOverAvailable.product.sku || invalidOverAvailable.product.name}.`);
+      return;
+    }
+
+    const transferRequests = batchItems.flatMap((item) => {
+      let remainingQuantity = Number(item.quantity);
+      if (!Number.isFinite(remainingQuantity) || remainingQuantity <= 0) return [];
+
+      return getBatchTransferSources(item, batchToLocationId).flatMap((source) => {
+        if (remainingQuantity <= 0) return [];
+        const sourceAvailable = getDistributionAvailable(source);
+        const quantity = Math.min(remainingQuantity, sourceAvailable);
+        remainingQuantity -= quantity;
+        return [{
+          item,
+          source,
+          quantity,
+        }];
+      });
+    });
+
+    if (transferRequests.length === 0) {
       setBatchError('Nenhum item tem quantidade/origem válida para transferir.');
       return;
     }
 
     setBatchSubmitting(true);
-    setBatchProgress({ done: 0, total: validItems.length });
+    setBatchProgress({ done: 0, total: transferRequests.length });
     const failed: { sku: string | null; error: string }[] = [];
-    for (let i = 0; i < validItems.length; i++) {
-      const item = validItems[i];
+    for (let i = 0; i < transferRequests.length; i++) {
+      const request = transferRequests[i];
       try {
         await stockLocationService.transferStockLocation({
-          product_id: item.product.id,
-          from_deposit_id: item.fromDepositId,
-          from_location_id: item.fromLocationId,
+          product_id: request.item.product.id,
+          from_deposit_id: request.source.deposit_id,
+          from_location_id: request.source.location_id,
           to_deposit_id: batchToDepositId,
           to_location_id: batchToLocationId,
-          quantity: Number(item.quantity),
+          quantity: request.quantity,
           reason: batchReason.trim() || 'Transferência em lote',
           notes: batchNotes.trim() || undefined,
         });
       } catch (err: any) {
-        failed.push({ sku: item.product.sku || null, error: err?.message || 'falha' });
+        failed.push({ sku: request.item.product.sku || null, error: err?.message || 'falha' });
       }
-      setBatchProgress({ done: i + 1, total: validItems.length });
+      setBatchProgress({ done: i + 1, total: transferRequests.length });
     }
     setBatchSubmitting(false);
 
-    const okCount = validItems.length - failed.length;
+    const okCount = transferRequests.length - failed.length;
     if (failed.length > 0) {
       setBatchError(`${okCount} transferência(s) ok, ${failed.length} falharam: ${failed.slice(0, 3).map(f => f.sku || '?').join(', ')}${failed.length > 3 ? '…' : ''}`);
     } else {
@@ -1387,7 +1434,8 @@ export function StockLocationsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {batchItems.map((item) => {
-                    const originLocations = item.distribution.filter(d => d.quantity > 0);
+                    const originLocations = getBatchTransferSources(item);
+                    const transferAvailable = getBatchTransferAvailable(item);
                     return (
                       <tr key={item.product.id}>
                         <td className="px-3 py-3">
@@ -1398,28 +1446,16 @@ export function StockLocationsPage() {
                           </p>
                         </td>
                         <td className="px-3 py-3">
-                          <select
-                            value={item.fromLocationId}
-                            onChange={(e) => {
-                              const dist = originLocations.find(d => d.location_id === e.target.value);
-                              updateBatchItem(item.product.id, {
-                                fromLocationId: e.target.value,
-                                fromDepositId: dist?.deposit_id || '',
-                              });
-                            }}
-                            className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
-                          >
-                            {originLocations.length === 0 && (
-                              <option value="">Sem saldo</option>
+                          <div className="text-xs text-slate-600">
+                            <p className="font-semibold text-slate-800">
+                              {originLocations.length > 1 ? 'Todas as origens com saldo' : originLocations[0] ? `${originLocations[0].deposit?.name || '-'} / ${originLocations[0].location?.name || '-'}` : 'Sem saldo'}
+                            </p>
+                            {originLocations.length > 1 && (
+                              <p className="mt-0.5 text-slate-500">{originLocations.length} locais</p>
                             )}
-                            {originLocations.map((d) => (
-                              <option key={d.location_id} value={d.location_id}>
-                                {d.deposit?.name || '-'} · {d.location?.name || '-'}
-                              </option>
-                            ))}
-                          </select>
+                          </div>
                         </td>
-                        <td className="px-3 py-3 text-right font-semibold text-emerald-700">{item.available}</td>
+                        <td className="px-3 py-3 text-right font-semibold text-emerald-700">{transferAvailable}</td>
                         <td className="px-3 py-3">
                           <div className="flex items-center justify-center gap-1">
                             <input
@@ -1439,8 +1475,8 @@ export function StockLocationsPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => item.available > 0 && updateBatchItem(item.product.id, { quantity: String(item.available) })}
-                              disabled={item.available <= 0}
+                              onClick={() => transferAvailable > 0 && updateBatchItem(item.product.id, { quantity: String(transferAvailable) })}
+                              disabled={transferAvailable <= 0}
                               className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                             >
                               Tudo
