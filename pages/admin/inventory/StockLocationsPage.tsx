@@ -563,6 +563,21 @@ export function StockLocationsPage() {
     setBatchToLocationId(first?.id || '');
   };
 
+  const getBatchFallbackSource = () => {
+    const defaultDepositId = deposits.find((deposit) => deposit.is_default)?.id || deposits[0]?.id || '';
+    const fallbackLocation =
+      locations.find((location) => location.deposit_id === defaultDepositId && location.is_default) ||
+      locations.find((location) => location.deposit_id === defaultDepositId) ||
+      locations[0];
+
+    if (!fallbackLocation) return null;
+
+    return {
+      depositId: fallbackLocation.deposit_id || defaultDepositId,
+      locationId: fallbackLocation.id,
+    };
+  };
+
   const getDistributionAvailable = (distribution: ProductStockLocation) => {
     return Math.max(0, Number(distribution.quantity || 0) - Number(distribution.reserved_quantity || 0));
   };
@@ -579,6 +594,32 @@ export function StockLocationsPage() {
   const getBatchTransferAvailable = (item: BatchItem, toLocationId = batchToLocationId) => {
     return getBatchTransferSources(item, toLocationId)
       .reduce((sum, source) => sum + getDistributionAvailable(source), 0);
+  };
+
+  const materializeBatchItemDistribution = async (
+    product: StockLocationProductSearchResult,
+    distribution: ProductStockLocation[]
+  ) => {
+    const productStockQuantity = Math.max(0, Math.trunc(Number(product.stock_quantity || 0)));
+    const localStockQuantity = distribution.reduce((sum, source) => sum + Math.max(0, Number(source.quantity || 0)), 0);
+    const missingQuantity = Math.max(0, productStockQuantity - localStockQuantity);
+
+    if (missingQuantity <= 0) return distribution;
+
+    const fallbackSource = getBatchFallbackSource();
+    if (!fallbackSource) return distribution;
+
+    const existingFallback = distribution.find((source) => source.location_id === fallbackSource.locationId);
+    await stockLocationService.adjustStockLocation({
+      product_id: product.id,
+      deposit_id: fallbackSource.depositId,
+      location_id: fallbackSource.locationId,
+      quantity: Number(existingFallback?.quantity || 0) + missingQuantity,
+      reason: 'Distribuição automática para transferência em lote',
+      notes: 'Saldo total do produto existia sem local suficiente; materializado antes da transferência.',
+    });
+
+    return stockLocationService.getProductStockDistribution(product.id);
   };
 
   /**
@@ -620,7 +661,8 @@ export function StockLocationsPage() {
   const addBatchItem = async (product: StockLocationProductSearchResult) => {
     setBatchError(null);
     try {
-      const distribution = await stockLocationService.getProductStockDistribution(product.id);
+      let distribution = await stockLocationService.getProductStockDistribution(product.id);
+      distribution = await materializeBatchItemDistribution(product, distribution);
       const best = [...distribution]
         .filter(d => d.quantity - d.reserved_quantity > 0)
         .sort((a, b) => (b.quantity - b.reserved_quantity) - (a.quantity - a.reserved_quantity))[0]

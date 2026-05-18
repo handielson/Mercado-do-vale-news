@@ -14,6 +14,9 @@ function assertIncludes(source, snippet, label) {
 
 assertIncludes(page, 'getBatchTransferSources', 'batch transfer should calculate all source locations');
 assertIncludes(page, 'getBatchTransferAvailable', 'batch transfer should expose total movable stock');
+assertIncludes(page, 'materializeBatchItemDistribution', 'batch transfer should materialize missing location rows from product stock');
+assertIncludes(page, 'const missingQuantity = Math.max(0, productStockQuantity - localStockQuantity)', 'batch transfer should only materialize the stock missing from locations');
+assertIncludes(page, "reason: 'Distribuição automática para transferência em lote'", 'batch materialization should leave an audit reason');
 assertIncludes(page, "quantity: String(available)", 'scanned product should default to all available stock');
 assertIncludes(page, 'originLocations.length > 1 ? \'Todas as origens com saldo\'', 'batch row should show all origins instead of forcing a single source choice');
 assertIncludes(page, 'setBatchResults(prev => prev.filter(r => r.id !== product.id))', 'adding a product should remove it from the suggestion queue immediately');
