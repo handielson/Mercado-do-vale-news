@@ -39,6 +39,7 @@ import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
 import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl } from '../../utils/video-url';
+import { buildSerializedBatchPlan, findSerializedBatchDuplicates, hasSerializedIdentity } from './serializedBatch.js';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -89,12 +90,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         }
 
         // Evita duplicatas por IMEI1 ou Serial
-        const isDuplicate = serialList.some(existing =>
-            (item.imei1 && existing.imei1 === item.imei1) ||
-            (item.serial && existing.serial === item.serial)
-        );
-        if (isDuplicate) {
-            toast.warning('Este produto (IMEI/Serial) já está na lista.');
+        const duplicateIdentifiers = findSerializedBatchDuplicates([...serialList, item]);
+        if (duplicateIdentifiers.length > 0) {
+            toast.warning('Este produto serializado já está na lista.', {
+                description: duplicateIdentifiers.join(' | ')
+            });
             return;
         }
 
@@ -196,6 +196,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const selectedCategoryId = watch('category_id');
     const selectedBrand = watch('brand');
     const [selectedBrandId, setSelectedBrandId] = useState<string>('');
+    const currentSerializedIdentity = hasSerializedIdentity(watch('specs') || {});
+    const isSerializedStockCalculated = serialList.length > 0 || (currentSerializedIdentity && !initialData);
+
+    useEffect(() => {
+        if (serialList.length > 0) {
+            setValue('stock_quantity', serialList.length, { shouldValidate: true });
+            return;
+        }
+
+        if (currentSerializedIdentity && !initialData) {
+            setValue('stock_quantity', 1, { shouldValidate: true });
+        }
+    }, [serialList.length, currentSerializedIdentity, initialData, setValue]);
 
     // Warranty states
     const [brandWarrantyDays, setBrandWarrantyDays] = useState<number | null>(null);
@@ -667,6 +680,15 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 // Entrada em massa: verificar unicidade de todos antes de salvar qualquer um
                 const { supabase } = await import('../../services/supabase');
                 const duplicates: string[] = [];
+                const duplicateIdentifiers = findSerializedBatchDuplicates(serialList);
+
+                if (duplicateIdentifiers.length > 0) {
+                    toast.error(`Cadastro bloqueado: existem identificadores repetidos na lista`, {
+                        description: duplicateIdentifiers.join(' | '),
+                        duration: 8000
+                    });
+                    return;
+                }
 
                 for (const item of serialList) {
                     const fieldsToCheck: { key: 'imei1' | 'imei2' | 'serial'; label: string }[] = [
@@ -698,9 +720,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
                 // Carregar cores uma vez antes do loop para resolver nome → UUID
                 const allColors = await colorService.listActive().catch(() => []);
+                const batchPlan = buildSerializedBatchPlan(mergedData, serialList);
 
                 // Todos únicos — salvar um por um
-                for (const item of serialList) {
+                for (let index = 0; index < serialList.length; index++) {
+                    const item = serialList[index];
                     // Resolver imagens da cor específica do item
                     let itemImages = mergedData.images || [];
                     if (item.color && mergedData.model_id) {
@@ -717,19 +741,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         }
                     }
 
-                    const itemData = {
-                        ...mergedData,
-                        images: itemImages,
-                        specs: {
-                            ...mergedData.specs,
-                            imei1: item.imei1,
-                            imei2: item.imei2,
-                            serial: item.serial,
-                            color: item.color,
-                            storage: item.storage,
-                            ram: item.ram,
-                        }
-                    };
+                    const itemData = { ...batchPlan.items[index], images: itemImages };
                     await onSubmit(itemData);
                 }
                 toast.success(`${serialList.length} produto(s) cadastrado(s) com sucesso!`);
@@ -758,6 +770,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                             return;
                         }
                     }
+                }
+                if (hasSerializedIdentity(mergedData.specs || {})) {
+                    mergedData.stock_quantity = 1;
                 }
                 await onSubmit(mergedData);
                 toast.success('Produto cadastrado com sucesso!');
@@ -1139,16 +1154,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                                 type="number"
                                 min="0"
                                 step="1"
-                                value={watch('stock_quantity') || 0}
+                                value={serialList.length > 0 ? serialList.length : (watch('stock_quantity') || 0)}
                                 onChange={(e) => setValue('stock_quantity', e.target.valueAsNumber || 0)}
+                                disabled={isSerializedStockCalculated}
                                 placeholder="Ex: 10"
-                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
                             />
                             {errors.stock_quantity && (
                                 <p className="text-xs text-red-600 mt-1">{errors.stock_quantity.message}</p>
                             )}
                             <p className="text-xs text-slate-500 mt-1">
-                                Quantidade disponível para venda
+                                {isSerializedStockCalculated
+                                    ? 'Quantidade calculada pelos aparelhos serializados informados'
+                                    : 'Quantidade disponível para venda'}
                             </p>
                         </div>
                     )}
