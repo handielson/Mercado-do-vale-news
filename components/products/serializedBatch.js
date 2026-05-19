@@ -44,6 +44,8 @@ export function buildSerializedBatchPlan(baseData, items) {
       color: cleanValue(item.color) || undefined,
       storage: cleanValue(item.storage) || undefined,
       ram: cleanValue(item.ram) || undefined,
+      version: cleanValue(item.version) || undefined,
+      battery_health: cleanValue(item.battery_health) || undefined,
     },
   }));
 

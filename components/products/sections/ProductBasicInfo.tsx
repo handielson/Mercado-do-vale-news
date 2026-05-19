@@ -165,8 +165,7 @@ export function ProductBasicInfo({
         // Auto-fill name only if field is empty
         const currentName = watch('name');
         if (!currentName) {
-            const autoName = model.description || model.name;
-            setValue('name', autoName, { shouldValidate: true, shouldDirty: true });
+            setValue('name', model.name, { shouldValidate: true, shouldDirty: true });
         }
     };
 
@@ -174,10 +173,24 @@ export function ProductBasicInfo({
         try {
             const models = await modelService.listActive();
             // Search in eans[] array (new format)
-            const model = models.find(m => Array.isArray(m.eans) && m.eans.includes(ean));
+            let model = models.find(m => Array.isArray(m.eans) && m.eans.includes(ean));
 
             if (model) {
                 console.log('📦 EAN found! Setting model:', model.name);
+                applyModelToForm(model);
+                return;
+            }
+
+            const product = await productService.getByEan(ean);
+            if (product?.model_id) {
+                model = models.find(m => m.id === product.model_id);
+            }
+            if (!model && product?.model) {
+                model = models.find(m => m.name === product.model);
+            }
+
+            if (model) {
+                console.log('EAN de produto cadastrado encontrado. Selecionando modelo:', model.name);
                 applyModelToForm(model);
             }
         } catch (error) {

@@ -109,7 +109,7 @@ export function useEANAutofill({
                     if (shouldFill('category_id')) setValue('category_id', foundProduct.category_id);
                     if (shouldFill('brand') && foundProduct.brand) setValue('brand', foundProduct.brand);
                     if (shouldFill('model') && foundProduct.model) setValue('model', foundProduct.model);
-                    if (shouldFill('name')) setValue('name', foundProduct.name);
+                    if (shouldFill('name')) setValue('name', foundProduct.model || foundProduct.name);
                     if (shouldFill('description') && foundProduct.description) setValue('description', foundProduct.description);
 
                     // Fill specs (check with specs. prefix)

@@ -16,6 +16,7 @@ export const productSchema = z.object({
     category_id: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
     brand: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
     model: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
+    parent_id: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
 
     // Basic Information
     name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),

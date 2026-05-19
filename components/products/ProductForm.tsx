@@ -70,6 +70,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         color?: string;
         storage?: string;
         ram?: string;
+        version?: string;
+        battery_health?: string;
     }
     const [serialList, setSerialList] = useState<BatchItem[]>([]);
 
@@ -81,6 +83,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             color: watch('specs.color') || undefined,
             storage: watch('specs.storage') || undefined,
             ram: watch('specs.ram') || undefined,
+            version: watch('specs.version') || undefined,
+            battery_health: watch('specs.battery_health') || undefined,
         };
 
         // Precisa ao menos de IMEI1 ou Serial
@@ -103,9 +107,6 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         setValue('specs.imei1', '');
         setValue('specs.imei2', '');
         setValue('specs.serial', '');
-        setValue('specs.color', '');
-        setValue('specs.storage', '');
-        setValue('specs.ram', '');
         toast.success('Produto adicionado à lista!');
     };
 
@@ -960,6 +961,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                                         {item.color && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">COR</span><span className="text-slate-800">{item.color}</span></span>}
                                         {item.ram && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">RAM</span><span className="text-slate-800">{item.ram}</span></span>}
                                         {item.storage && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">STORAGE</span><span className="text-slate-800">{item.storage}</span></span>}
+                                        {item.version && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">VERSAO</span><span className="text-slate-800">{item.version}</span></span>}
+                                        {item.battery_health && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">BATERIA</span><span className="text-slate-800">{item.battery_health}</span></span>}
                                     </div>
                                     <button
                                         type="button"
