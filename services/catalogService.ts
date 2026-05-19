@@ -5,6 +5,7 @@ import { normalizeProduct } from '@/services/productNormalizer';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import { buildVpsUrl, getVpsSyncHeaders } from '@/services/vpsProxyBase';
 import type { CatalogSettings } from '@/types/catalogSettings';
+import { filterBySelectedCategories } from './catalogFiltering';
 
 
 // Persistent Cache (Stale-While-Revalidate pattern)
@@ -79,6 +80,7 @@ export const catalogService = {
             })) as unknown as CatalogProduct[];
 
             result = catalogConfigService.applyVisibilityRules(result as any, settings) as unknown as CatalogProduct[];
+            result = filterBySelectedCategories(result, filters?.categories);
 
             const from = (page - 1) * pageSize;
             const paginated = result.slice(from, from + pageSize);
@@ -239,9 +241,7 @@ export const catalogService = {
             if (filters?.inStockOnly) {
                 result = result.filter(p => !p.track_inventory || (p.stock_quantity || 0) > 0);
             }
-            if (filters?.categories && filters.categories.length > 1) {
-                result = result.filter(p => p.category_id && filters.categories!.includes(p.category_id));
-            }
+            result = filterBySelectedCategories(result, filters?.categories);
             if (filters?.brands && filters.brands.length > 0) {
                 result = result.filter(p => p.brand && filters.brands!.includes(p.brand));
             }

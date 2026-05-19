@@ -274,8 +274,81 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         }
     };
 
+    const applyNormalizedModelPayload = (normalized: any) => {
+        const visibleTemplateValues = Object.fromEntries(
+            Object.entries(normalized.templateValues || {}).filter(([key]) => !isHiddenSpecKey(key))
+        );
+        const appliedFields: string[] = [];
+
+        if (normalized.name) {
+            setName(normalized.name);
+            appliedFields.push('nome');
+        }
+        if (normalized.brandId) {
+            setBrandId(normalized.brandId);
+            appliedFields.push('marca');
+        }
+        if (normalized.categoryId) {
+            setCategoryId(normalized.categoryId);
+            appliedFields.push('categoria');
+        }
+        if (typeof normalized.active === 'boolean') {
+            setActive(normalized.active);
+            appliedFields.push('status');
+        }
+        if (normalized.description) {
+            setDescription(normalized.description);
+            appliedFields.push('descricao');
+        }
+        if (normalized.eans?.length) {
+            setEans(normalized.eans);
+            appliedFields.push('EANs');
+        }
+        if (Object.keys(visibleTemplateValues).length > 0) {
+            setTemplateValues(prev => ({
+                ...prev,
+                ...visibleTemplateValues
+            }));
+            appliedFields.push(`${Object.keys(visibleTemplateValues).length} campo(s) do template`);
+        }
+
+        if (normalized.missingChoices?.length) {
+            const missingList = normalized.missingChoices
+                .map((item: any) => `${item.fieldLabel}: "${item.value}"`)
+                .join('; ');
+            toast.warning('Cadastre novas opcoes antes de salvar', {
+                description: missingList,
+                duration: 10000,
+            });
+        }
+
+        return appliedFields;
+    };
+
+    const warnUnresolvedModelPayload = (data: any, normalized: any) => {
+        const missing: string[] = [];
+        if ((data.brand || data.marca || data.brand_name) && !normalized.brandId) {
+            missing.push(`marca "${data.brand || data.marca || data.brand_name}"`);
+        }
+        if ((data.category || data.categoria || data.category_name) && !normalized.categoryId) {
+            missing.push(`categoria "${data.category || data.categoria || data.category_name}"`);
+        }
+
+        if (missing.length > 0) {
+            toast.error('Alguns dados do JSON nao existem no cadastro', {
+                description: `Cadastre ou ajuste: ${missing.join(', ')}.`,
+                duration: 10000,
+            });
+        }
+    };
+
     const handleApplyModelJson = () => {
         try {
+            if (loading) {
+                toast.error('Aguarde marcas, categorias e campos carregarem antes de aplicar o JSON.');
+                return;
+            }
+
             const data = parseModelImportJson(modelJsonInput);
             const normalized = normalizeModelImportPayload(data, {
                 brands,
@@ -283,34 +356,21 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 customFields: visibleSpecFields,
                 choiceOptions: fieldChoiceOptions,
             });
-            const visibleTemplateValues = Object.fromEntries(
-                Object.entries(normalized.templateValues).filter(([key]) => !isHiddenSpecKey(key))
-            );
+            const appliedFields = applyNormalizedModelPayload(normalized);
+            warnUnresolvedModelPayload(data, normalized);
 
-            if (normalized.name) setName(normalized.name);
-            if (normalized.brandId) setBrandId(normalized.brandId);
-            if (normalized.categoryId) setCategoryId(normalized.categoryId);
-            if (typeof normalized.active === 'boolean') setActive(normalized.active);
-            if (normalized.description) setDescription(normalized.description);
-            if (normalized.eans?.length) setEans(normalized.eans);
-            if (Object.keys(visibleTemplateValues).length > 0) {
-                setTemplateValues(prev => ({
-                    ...prev,
-                    ...visibleTemplateValues
-                }));
+            if (appliedFields.length === 0) {
+                toast.error('Nenhum campo foi preenchido pelo JSON.', {
+                    description: 'Verifique se os nomes dos campos, marca e categoria existem no cadastro.',
+                    duration: 10000,
+                });
+                return;
             }
 
             setModelJsonInput('');
-            if (normalized.missingChoices?.length) {
-                const missingList = normalized.missingChoices
-                    .map((item: any) => `${item.fieldLabel}: "${item.value}"`)
-                    .join('; ');
-                toast.warning('Cadastre novas opcoes antes de salvar', {
-                    description: missingList,
-                    duration: 10000,
-                });
-            }
-            toast.success('Modelo preenchido com sucesso pelo JSON.');
+            toast.success('Modelo preenchido com sucesso pelo JSON.', {
+                description: `Aplicado: ${appliedFields.join(', ')}.`,
+            });
         } catch (err) {
             console.error('Erro no parser do JSON do modelo', err);
             toast.error(err instanceof Error ? err.message : 'O formato JSON Ã© invÃ¡lido.');
@@ -333,11 +393,60 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
             const data = JSON.parse(jsonText);
 
-            if (data.description) setDescription(data.description);
-            if (data.slug) handleTemplateValueChange('slug', data.slug);
-            if (data.meta_title) handleTemplateValueChange('meta_title', data.meta_title);
-            if (data.meta_description) handleTemplateValueChange('meta_description', data.meta_description);
-            if (data.keywords && Array.isArray(data.keywords)) handleTemplateValueChange('keywords', data.keywords);
+            if (data.name || data.brand || data.category || data.template_values || data.logistics || data.seo) {
+                const normalized = normalizeModelImportPayload(data, {
+                    brands,
+                    categories,
+                    customFields: visibleSpecFields,
+                    choiceOptions: fieldChoiceOptions,
+                });
+                const appliedFields = applyNormalizedModelPayload(normalized);
+                warnUnresolvedModelPayload(data, normalized);
+
+                if (appliedFields.length === 0) {
+                    toast.error('Nenhum campo foi preenchido pelo JSON.', {
+                        description: 'Verifique se os nomes dos campos, marca e categoria existem no cadastro.',
+                        duration: 10000,
+                    });
+                    return;
+                }
+            } else {
+                const seo = data.seo || {};
+                const slug = data.slug || seo.slug;
+                const metaTitle = data.meta_title || data.metaTitle || seo.meta_title || seo.metaTitle;
+                const metaDescription = data.meta_description || data.metaDescription || seo.meta_description || seo.metaDescription;
+                const keywords = data.keywords || seo.keywords;
+                const appliedFields: string[] = [];
+
+                if (data.description) {
+                    setDescription(data.description);
+                    appliedFields.push('descricao');
+                }
+                if (slug) {
+                    handleTemplateValueChange('slug', slug);
+                    appliedFields.push('slug');
+                }
+                if (metaTitle) {
+                    handleTemplateValueChange('meta_title', metaTitle);
+                    appliedFields.push('titulo SEO');
+                }
+                if (metaDescription) {
+                    handleTemplateValueChange('meta_description', metaDescription);
+                    appliedFields.push('meta descricao');
+                }
+                if (keywords && Array.isArray(keywords)) {
+                    handleTemplateValueChange('keywords', keywords);
+                    appliedFields.push('keywords');
+                }
+
+                if (appliedFields.length === 0) {
+                    toast.error('Nenhum campo SEO foi preenchido pelo JSON.', {
+                        description: 'Use description, slug, meta_title, meta_description ou keywords.',
+                        duration: 10000,
+                    });
+                    return;
+                }
+            }
 
             setJsonInput('');
             toast.success('Campos SEO preenchidos com sucesso pela Inteligência Artificial!');

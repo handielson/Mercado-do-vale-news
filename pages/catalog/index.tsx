@@ -293,6 +293,7 @@ function CatalogContent() {
     }, [filterStats?.categories, setSearchParams]);
 
     const isAdmin = customer?.customer_type === 'ADMIN';
+    const hasActiveSearch = searchQuery.trim().length > 0;
 
     // Group products by variants (Brand + Model + RAM + Storage)
     // Admin só pode ver esgotados quando a configuração global permitir.
@@ -354,7 +355,7 @@ function CatalogContent() {
 
     // Melhoria 1 — Agrupar resultados de busca por categoria (mín. 3 produtos por categoria)
     const searchCategorySections = useMemo(() => {
-        if (!searchQuery || filters.categories.length > 0) return [];
+        if (!hasActiveSearch || filters.categories.length > 0) return [];
 
         const catList = filterStats?.categories || [];
         const catMap = new Map(catList.map(c => [c.id!, c.name]));
@@ -374,10 +375,10 @@ function CatalogContent() {
                 categoryName: catMap.get(catId) || 'Categoria',
                 groups,
             }));
-    }, [searchQuery, filters.categories, productGroups, filterStats?.categories]);
+    }, [hasActiveSearch, filters.categories, productGroups, filterStats?.categories]);
 
     // Ativa agrupamento quando há busca ativa, sem filtro de categoria e 2+ seções com 3+ itens
-    const isSearchCategoryMode = !!searchQuery && !filters.categories.length && searchCategorySections.length >= 2;
+    const isSearchCategoryMode = hasActiveSearch && !filters.categories.length && searchCategorySections.length >= 2;
     const isPaginatedCatalogMode = !isAllChildrenMode && !isSearchCategoryMode;
     const catalogPageSlice = useMemo(() => {
         return getCatalogPageSlice(productGroups, currentPage, productsPerPage);
@@ -409,7 +410,8 @@ function CatalogContent() {
     }, [currentPage, lastPageForNavigation]);
     const showPagination = isPaginatedCatalogMode && (hasPreviousPage || hasNextPage || paginationPages.length > 1);
     const isCatalogGridLoading = (loading && productGroups.length === 0) || needsMoreGroupsForPage;
-    const isAllProductsListing = !filters.categories.length && !searchQuery;
+    const isAllProductsListing = !filters.categories.length && !hasActiveSearch;
+    const showDesktopCategoryNav = !hasActiveSearch;
     const paginationPathname = getCatalogPaginationPathname({
         pathname: location.pathname,
         isAllProducts: isAllProductsListing && !isCollectionPage,
@@ -695,40 +697,42 @@ function CatalogContent() {
             )}
 
             {/* Category Navigation - oculto no mobile (coberto pelo dropdown da sticky bar) */}
-            <div className="hidden sm:block">
-            <CategoryNav
-                activeCategory={filters.categories[0] || null}
-                activeCategoryIds={filters.categories}
-                onCategoryChange={(categoryId) => {
-                    const ids = Array.isArray(categoryId)
-                        ? categoryId
-                        : categoryId ? [categoryId] : [];
+            {showDesktopCategoryNav && (
+                <div className="hidden sm:block">
+                    <CategoryNav
+                        activeCategory={filters.categories[0] || null}
+                        activeCategoryIds={filters.categories}
+                        onCategoryChange={(categoryId) => {
+                            const ids = Array.isArray(categoryId)
+                                ? categoryId
+                                : categoryId ? [categoryId] : [];
 
-                    if (ids.length === 0) {
-                        setFilters({
-                            ...filters,
-                            categories: []
-                        });
-                        syncCategoryUrl([]);
-                        navigate('/produtos');
-                        return;
-                    }
+                            if (ids.length === 0) {
+                                setFilters({
+                                    ...filters,
+                                    categories: []
+                                });
+                                syncCategoryUrl([]);
+                                navigate('/produtos');
+                                return;
+                            }
 
-                    setFilters({
-                        ...filters,
-                        categories: ids
-                    });
+                            setFilters({
+                                ...filters,
+                                categories: ids
+                            });
 
-                    syncCategoryUrl(ids);
-                }}
-                categories={categoryNavCategories.map(cat => ({
-                    id: cat.id,
-                    name: cat.name,
-                    parent_id: cat.parent_id,
-                    count: cat.count
-                }))}
-            />
-            </div>
+                            syncCategoryUrl(ids);
+                        }}
+                        categories={categoryNavCategories.map(cat => ({
+                            id: cat.id,
+                            name: cat.name,
+                            parent_id: cat.parent_id,
+                            count: cat.count
+                        }))}
+                    />
+                </div>
+            )}
 
             {/* Promo Banner Global */}
             {promoData && promoActive && (
@@ -917,7 +921,7 @@ function CatalogContent() {
                 </div>
 
                 {/* Seções do Catálogo - ocultar quando há filtro de categoria ativo ou busca */}
-                {isHomeCatalogPage && !sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && !searchQuery && (
+                {isHomeCatalogPage && !sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && !hasActiveSearch && (
                     <div className="mb-12 space-y-12">
                         {sections.map((section) => (
                             <CatalogSectionComponent
@@ -932,7 +936,7 @@ function CatalogContent() {
                     </div>
                 )}
 
-                {!filters.categories.length && !searchQuery && (
+                {!filters.categories.length && !hasActiveSearch && (
                     <div className="mb-6">
                         <h2 className="text-2xl font-bold text-gray-900">{catalogSeo.heading}</h2>
                         {isCollectionPage && catalogSeo.intro && (
