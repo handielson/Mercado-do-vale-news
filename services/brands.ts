@@ -203,7 +203,8 @@ async function deleteBrand(id: string): Promise<void> {
 
 
 /**
- * Get only active brands (all brands for now since we don't have active field)
+ * Get brands available for selectors.
+ * Older rows may have active as null, which is treated as active by the mapper.
  */
 async function listActive(): Promise<Brand[]> {
     const companyId = await getCompanyId();
@@ -211,7 +212,7 @@ async function listActive(): Promise<Brand[]> {
         .from('brands')
         .select('*')
         .eq('company_id', companyId)
-        .eq('active', true)
+        .or('active.eq.true,active.is.null')
         .order('name');
 
     if (error) throw new Error(`Failed to fetch active brands: ${error.message}`);

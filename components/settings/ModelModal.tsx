@@ -26,6 +26,12 @@ interface ModelModalProps {
 
 type TabType = 'basic' | 'json' | 'template' | 'seo' | 'photos' | 'tags';
 
+const normalizeAutocompleteText = (value: string) => value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
 /**
  * TemplateFieldInput Component
  * Renders appropriate input based on field type
@@ -129,6 +135,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     // Basic fields
     const [name, setName] = useState('');
     const [brandId, setBrandId] = useState('');
+    const [brandSearch, setBrandSearch] = useState('');
     const [active, setActive] = useState(true);
 
     // Template fields
@@ -205,6 +212,26 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
     const brandObj = brands.find(b => b.id === brandId);
     const categoryObj = categories.find(c => c.id === categoryId);
+    const findBrandByName = (value: string) => {
+        const normalized = normalizeAutocompleteText(value);
+        if (!normalized) return undefined;
+        return brands.find((brand) => normalizeAutocompleteText(brand.name) === normalized);
+    };
+    const handleBrandSearchChange = (value: string) => {
+        setBrandSearch(value);
+        setBrandId(findBrandByName(value)?.id || '');
+    };
+    const handleBrandSearchBlur = () => {
+        if (!brandSearch.trim()) {
+            setBrandId('');
+            return;
+        }
+        const matchedBrand = findBrandByName(brandSearch);
+        if (matchedBrand) {
+            setBrandId(matchedBrand.id);
+            setBrandSearch(matchedBrand.name);
+        }
+    };
     const normalizeFieldAlias = (value: string) => value
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -512,6 +539,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         if (model) {
             setName(model.name);
             setBrandId(model.brand_id);
+            setBrandSearch(brands.find((brand) => brand.id === model.brand_id)?.name || '');
             setActive(model.active);
             setCategoryId(model.category_id || '');
             setDescription(model.description || '');
@@ -520,6 +548,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         } else {
             setName('');
             setBrandId('');
+            setBrandSearch('');
             setActive(true);
             setCategoryId('');
             setDescription('');
@@ -529,6 +558,14 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         setError('');
         setActiveTab('basic');
     }, [model, isOpen]);
+
+    useEffect(() => {
+        if (!brandId) return;
+        const selectedBrand = brands.find((brand) => brand.id === brandId);
+        if (selectedBrand && brandSearch !== selectedBrand.name) {
+            setBrandSearch(selectedBrand.name);
+        }
+    }, [brandId, brands, brandSearch]);
 
     const loadData = async () => {
         try {
@@ -751,18 +788,26 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 {loading ? (
                                     <div className="text-sm text-slate-500">Carregando marcas...</div>
                                 ) : (
-                                    <select
-                                        value={brandId}
-                                        onChange={(e) => setBrandId(e.target.value)}
+                                    <>
+                                    <input
+                                        list="model-brand-options-basic"
+                                        value={brandSearch}
+                                        onChange={(e) => handleBrandSearchChange(e.target.value)}
+                                        onBlur={handleBrandSearchBlur}
+                                        placeholder="Digite para buscar a marca"
                                         className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="">Selecione uma marca</option>
+                                    />
+                                    <datalist id="model-brand-options-basic">
                                         {brands.map((brand) => (
-                                            <option key={brand.id} value={brand.id}>
-                                                {brand.name}
-                                            </option>
+                                            <option key={brand.id} value={brand.name} />
                                         ))}
-                                    </select>
+                                    </datalist>
+                                    {brandSearch && !brandId && (
+                                        <p className="mt-1 text-xs text-amber-600">
+                                            Selecione uma marca cadastrada da lista.
+                                        </p>
+                                    )}
+                                    </>
                                 )}
                             </div>
 
@@ -959,18 +1004,24 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         <label className="block text-xs font-medium text-slate-600 mb-1">
                                             Marca
                                         </label>
-                                        <select
-                                            value={brandId}
-                                            onChange={(e) => setBrandId(e.target.value)}
+                                        <input
+                                            list="model-brand-options-json"
+                                            value={brandSearch}
+                                            onChange={(e) => handleBrandSearchChange(e.target.value)}
+                                            onBlur={handleBrandSearchBlur}
+                                            placeholder="Digite para buscar a marca"
                                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                        >
-                                            <option value="">Selecione uma marca</option>
+                                        />
+                                        <datalist id="model-brand-options-json">
                                             {brands.map((brand) => (
-                                                <option key={brand.id} value={brand.id}>
-                                                    {brand.name}
-                                                </option>
+                                                <option key={brand.id} value={brand.name} />
                                             ))}
-                                        </select>
+                                        </datalist>
+                                        {brandSearch && !brandId && (
+                                            <p className="mt-1 text-xs text-amber-600">
+                                                Selecione uma marca cadastrada da lista.
+                                            </p>
+                                        )}
                                     </div>
 
                                     <div>
