@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, FileText, Settings, Search, ExternalLink, Tags } from 'lucide-react';
+import { X, FileText, Settings, Search, ExternalLink, Tags, Braces } from 'lucide-react';
 import { toast } from 'sonner';
 import { Model, type ModelInput } from '../../types/model';
 import { type Brand } from '../../types/brand';
@@ -15,6 +15,7 @@ import { CurrencyInput } from '../ui/CurrencyInput';
 import { tableDataService, type TableOption } from '../../services/table-data';
 import { CategorySelect } from '../products/CategorySelect';
 import { ColorImageManager } from './ColorImageManager';
+import { buildModelImportPrompt, normalizeModelImportPayload, parseModelImportJson } from './modelJsonImport.js';
 
 interface ModelModalProps {
     isOpen: boolean;
@@ -23,7 +24,7 @@ interface ModelModalProps {
     model?: Model | null;
 }
 
-type TabType = 'basic' | 'template' | 'seo' | 'photos' | 'tags';
+type TabType = 'basic' | 'json' | 'template' | 'seo' | 'photos' | 'tags';
 
 /**
  * TemplateFieldInput Component
@@ -142,6 +143,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [customFields, setCustomFields] = useState<CustomField[]>([]);
     const [officialTags, setOfficialTags] = useState<CrossSellTag[]>([]);
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
+    const [fieldChoiceOptions, setFieldChoiceOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({});
 
     // UI State
     const [saving, setSaving] = useState(false);
@@ -154,6 +156,9 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [aiPrompt, setAiPrompt] = useState('');
     const [promptCopied, setPromptCopied] = useState(false);
     const [jsonInput, setJsonInput] = useState('');
+    const [modelJsonInput, setModelJsonInput] = useState('');
+    const [modelPromptCopied, setModelPromptCopied] = useState(false);
+    const [showModelPrompt, setShowModelPrompt] = useState(false);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Update AI Prompt automatically when model data changes
@@ -198,6 +203,94 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         }
     };
 
+    const brandObj = brands.find(b => b.id === brandId);
+    const categoryObj = categories.find(c => c.id === categoryId);
+    const normalizeFieldAlias = (value: string) => value
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .trim();
+    const isFieldEnabledForCategory = (field: CustomField) => {
+        if (!categoryId || !categoryConfig) return true;
+        const customFieldConfig = Array.isArray(categoryConfig.custom_fields)
+            ? categoryConfig.custom_fields.find((configuredField: any) => (
+                configuredField.field_id === field.id ||
+                configuredField.id === field.id ||
+                normalizeFieldAlias(configuredField.key || '') === normalizeFieldAlias(field.key) ||
+                normalizeFieldAlias(configuredField.name || configuredField.label || '') === normalizeFieldAlias(field.label)
+            ))
+            : null;
+
+        const requirement = customFieldConfig?.requirement ?? categoryConfig[field.key];
+        return requirement !== 'off' && requirement !== 'hidden';
+    };
+    const visibleSpecFields = customFields
+        .filter(f => f.category === 'spec')
+        .filter(isFieldEnabledForCategory);
+    const hiddenSpecFields = customFields
+        .filter(f => f.category === 'spec')
+        .filter(field => !isFieldEnabledForCategory(field));
+    const hiddenSpecAliases = hiddenSpecFields.flatMap(field => [field.key, field.label]);
+    const isHiddenSpecKey = (key: string) => hiddenSpecAliases.some(alias => {
+        return normalizeFieldAlias(alias) === normalizeFieldAlias(key);
+    });
+    const modelImportPrompt = buildModelImportPrompt({
+        name,
+        brand: brandObj?.name || '',
+        category: categoryObj?.name || 'Smartphones',
+        customFields: visibleSpecFields,
+        choiceOptions: fieldChoiceOptions,
+    });
+
+    const handleCopyModelPrompt = async () => {
+        try {
+            await navigator.clipboard.writeText(modelImportPrompt);
+            setModelPromptCopied(true);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+                setModelPromptCopied(false);
+                timeoutRef.current = null;
+            }, 2000);
+        } catch (err) {
+            console.error('Erro ao copiar prompt do modelo:', err);
+        }
+    };
+
+    const handleApplyModelJson = () => {
+        try {
+            const data = parseModelImportJson(modelJsonInput);
+            const normalized = normalizeModelImportPayload(data, {
+                brands,
+                categories,
+                customFields: visibleSpecFields,
+                choiceOptions: fieldChoiceOptions,
+            });
+            const visibleTemplateValues = Object.fromEntries(
+                Object.entries(normalized.templateValues).filter(([key]) => !isHiddenSpecKey(key))
+            );
+
+            if (normalized.name) setName(normalized.name);
+            if (normalized.brandId) setBrandId(normalized.brandId);
+            if (normalized.categoryId) setCategoryId(normalized.categoryId);
+            if (typeof normalized.active === 'boolean') setActive(normalized.active);
+            if (normalized.description) setDescription(normalized.description);
+            if (normalized.eans?.length) setEans(normalized.eans);
+            if (Object.keys(visibleTemplateValues).length > 0) {
+                setTemplateValues(prev => ({
+                    ...prev,
+                    ...visibleTemplateValues
+                }));
+            }
+
+            setModelJsonInput('');
+            toast.success('Modelo preenchido com sucesso pelo JSON.');
+        } catch (err) {
+            console.error('Erro no parser do JSON do modelo', err);
+            toast.error(err instanceof Error ? err.message : 'O formato JSON Ã© invÃ¡lido.');
+        }
+    };
+
     const handleApplyJson = () => {
         try {
             if (!jsonInput.trim()) {
@@ -231,6 +324,42 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     useEffect(() => {
         loadData();
     }, []);
+
+    useEffect(() => {
+        const loadFieldChoiceOptions = async () => {
+            const nextOptions: Record<string, Array<{ value: string; label: string }>> = {};
+
+            customFields.forEach((field) => {
+                if (field.field_type === 'select' && Array.isArray(field.options)) {
+                    nextOptions[field.key] = field.options
+                        .filter(Boolean)
+                        .map((option) => ({ value: option, label: option }));
+                }
+            });
+
+            const relationFields = customFields.filter(field => field.field_type === 'table_relation' && field.table_config);
+            await Promise.all(relationFields.map(async (field) => {
+                try {
+                    const options = await tableDataService.loadOptions(
+                        field.table_config!.table_name,
+                        field.table_config!.value_column,
+                        field.table_config!.label_column,
+                        field.table_config!.order_by
+                    );
+                    nextOptions[field.key] = options.map((option) => ({
+                        value: String(option.value),
+                        label: String(option.label),
+                    }));
+                } catch (error) {
+                    console.error(`Error loading choices for ${field.key}:`, error);
+                }
+            }));
+
+            setFieldChoiceOptions(nextOptions);
+        };
+
+        loadFieldChoiceOptions();
+    }, [customFields]);
 
     useEffect(() => {
         if (model) {
@@ -300,6 +429,14 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             ...prev,
             [key]: value
         }));
+    };
+
+    const handleAddEan = (value?: string) => {
+        const nextEan = (value ?? eanInputRef.current?.value ?? '').trim();
+        if (!nextEan || eans.includes(nextEan)) return;
+
+        setEans(prev => [...prev, nextEan]);
+        if (eanInputRef.current) eanInputRef.current.value = '';
     };
 
     const handleSave = async () => {
@@ -390,6 +527,18 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         <div className="flex items-center justify-center gap-2">
                             <Settings size={18} />
                             Básico
+                        </div>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('json')}
+                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'json'
+                            ? 'text-blue-600 border-b-2 border-blue-600'
+                            : 'text-slate-600 hover:text-slate-800'
+                            }`}
+                    >
+                        <div className="flex items-center justify-center gap-2">
+                            <Braces size={18} />
+                            JSON
                         </div>
                     </button>
                     <button
@@ -510,25 +659,14 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter') {
                                                     e.preventDefault();
-                                                    const input = e.currentTarget;
-                                                    const value = input.value.trim();
-                                                    if (value && !eans.includes(value)) {
-                                                        setEans([...eans, value]);
-                                                        input.value = '';
-                                                    }
+                                                    handleAddEan(e.currentTarget.value);
                                                 }
                                             }}
                                             className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         />
                                         <button
                                             type="button"
-                                            onClick={() => {
-                                                const value = eanInputRef.current?.value.trim();
-                                                if (value && !eans.includes(value)) {
-                                                    setEans([...eans, value]);
-                                                    if (eanInputRef.current) eanInputRef.current.value = '';
-                                                }
-                                            }}
+                                            onClick={() => handleAddEan()}
                                             className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold"
                                             title="Adicionar EAN"
                                         >+</button>
@@ -588,6 +726,299 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         </>
                     )}
 
+                    {/* JSON Tab */}
+                    {activeTab === 'json' && (
+                        <div className="space-y-5">
+                            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                                <h3 className="font-semibold text-indigo-950 mb-2 flex items-center gap-2">
+                                    <Braces size={18} />
+                                    Cadastro por JSON
+                                </h3>
+                                <p className="text-sm text-indigo-800">
+                                    Copie o prompt, gere o JSON na IA e cole a resposta para preencher o modelo, SEO, logÃ­stica, EANs e campos tÃ©cnicos.
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                <div className="bg-white border border-slate-200 rounded-lg p-4">
+                                    <div className="flex items-center justify-between gap-3 mb-2">
+                                        <label className="text-sm font-semibold text-slate-800">
+                                            Prompt de cadastro completo
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={handleCopyModelPrompt}
+                                            className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-bold"
+                                        >
+                                            {modelPromptCopied ? 'Copiado!' : 'Copiar prompt'}
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        readOnly
+                                        value={modelImportPrompt}
+                                        rows={18}
+                                        className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg bg-slate-50 text-slate-700 resize-none"
+                                    />
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                        <a href="https://gemini.google.com/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">
+                                            <ExternalLink size={15} /> Gemini
+                                        </a>
+                                        <a href="https://chat.openai.com/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm">
+                                            <ExternalLink size={15} /> ChatGPT
+                                        </a>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white border border-slate-200 rounded-lg p-4">
+                                    <label className="block text-sm font-semibold text-slate-800 mb-2">
+                                        Colar JSON retornado
+                                    </label>
+                                    <textarea
+                                        value={modelJsonInput}
+                                        onChange={(e) => setModelJsonInput(e.target.value)}
+                                        rows={18}
+                                        className="w-full px-3 py-2 text-xs font-mono border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white resize-none"
+                                        placeholder='{"name":"Redmi A7 Pro","brand":"Xiaomi","category":"Smartphones","template_values":{"ram":"4GB","storage":"128GB"}}'
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleApplyModelJson}
+                                        disabled={!modelJsonInput.trim()}
+                                        className="mt-3 w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Preencher modelo pelo JSON
+                                    </button>
+                                    <p className="text-xs text-slate-500 mt-2">
+                                        Campos desconhecidos dentro de template_values, specs, custom_fields ou campos serÃ£o preservados como valores padrÃ£o do modelo.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="bg-white border border-slate-200 rounded-lg p-4">
+                                <div className="flex items-center justify-between gap-3 mb-4">
+                                    <div>
+                                        <h4 className="font-semibold text-slate-900">Revisar e editar antes de salvar</h4>
+                                        <p className="text-xs text-slate-500">
+                                            Tudo abaixo pode ser ajustado manualmente depois de aplicar o JSON.
+                                        </p>
+                                    </div>
+                                    <span className="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                        {eans.length} EAN{eans.length === 1 ? '' : 's'}
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Marca
+                                        </label>
+                                        <select
+                                            value={brandId}
+                                            onChange={(e) => setBrandId(e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                        >
+                                            <option value="">Selecione uma marca</option>
+                                            {brands.map((brand) => (
+                                                <option key={brand.id} value={brand.id}>
+                                                    {brand.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Nome do Modelo
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            placeholder="Ex: Redmi A7 Pro"
+                                        />
+                                    </div>
+
+                                    <div className="lg:col-span-2">
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Categoria Padrao
+                                        </label>
+                                        <CategorySelect
+                                            value={categoryId}
+                                            onChange={setCategoryId}
+                                        />
+                                    </div>
+
+                                    <div className="lg:col-span-2">
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            EANs de referencia
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                ref={eanInputRef}
+                                                type="text"
+                                                placeholder="Digite um EAN e pressione Enter"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        handleAddEan(e.currentTarget.value);
+                                                    }
+                                                }}
+                                                className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleAddEan()}
+                                                className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-bold"
+                                                title="Adicionar EAN"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                        {eans.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {eans.map((ean, index) => (
+                                                    <span
+                                                        key={`${ean}-${index}`}
+                                                        className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-sm border border-indigo-100"
+                                                    >
+                                                        {ean}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEans(eans.filter((_, i) => i !== index))}
+                                                            className="hover:text-indigo-950"
+                                                        >
+                                                            x
+                                                        </button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="lg:col-span-2">
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Descricao Padrao
+                                        </label>
+                                        <textarea
+                                            value={description}
+                                            onChange={(e) => setDescription(e.target.value)}
+                                            rows={4}
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+                                            placeholder="Descricao comercial do modelo"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-slate-200 pt-4 mt-4">
+                                    <h5 className="text-sm font-semibold text-slate-800 mb-3">Campos tecnicos editaveis</h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {visibleSpecFields.map((field) => (
+                                                <TemplateFieldInput
+                                                    key={field.id}
+                                                    field={field}
+                                                    value={templateValues[field.key]}
+                                                    onChange={(value) => handleTemplateValueChange(field.key, value)}
+                                                />
+                                            ))}
+                                    </div>
+                                    {categoryId && categoryConfig && visibleSpecFields.length === 0 && (
+                                        <div className="text-center py-6 text-slate-500">
+                                            <p className="text-sm">Nenhum campo tecnico configurado para esta categoria</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="border-t border-slate-200 pt-4 mt-4">
+                                    <h5 className="text-sm font-semibold text-slate-800 mb-3">SEO e logistica editaveis</h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">Slug</label>
+                                            <input
+                                                type="text"
+                                                value={templateValues['slug'] || ''}
+                                                onChange={(e) => handleTemplateValueChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">Peso (kg)</label>
+                                            <input
+                                                type="number"
+                                                step="0.001"
+                                                value={templateValues['weight_kg'] || ''}
+                                                onChange={(e) => handleTemplateValueChange('weight_kg', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">Largura (cm)</label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                value={templateValues['dimensions.width_cm'] || ''}
+                                                onChange={(e) => handleTemplateValueChange('dimensions.width_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">Altura (cm)</label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                value={templateValues['dimensions.height_cm'] || ''}
+                                                onChange={(e) => handleTemplateValueChange('dimensions.height_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">Profundidade (cm)</label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                value={templateValues['dimensions.depth_cm'] || ''}
+                                                onChange={(e) => handleTemplateValueChange('dimensions.depth_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                        <div className="md:col-span-2 xl:col-span-3">
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">Titulo SEO</label>
+                                            <input
+                                                type="text"
+                                                value={templateValues['meta_title'] || ''}
+                                                onChange={(e) => handleTemplateValueChange('meta_title', e.target.value)}
+                                                maxLength={60}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">Meta Descricao</label>
+                                            <textarea
+                                                value={templateValues['meta_description'] || ''}
+                                                onChange={(e) => handleTemplateValueChange('meta_description', e.target.value)}
+                                                maxLength={160}
+                                                rows={3}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                                            />
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">Keywords</label>
+                                            <input
+                                                type="text"
+                                                value={templateValues['keywords'] ? templateValues['keywords'].join(', ') : ''}
+                                                onChange={(e) => {
+                                                    const values = e.target.value.split(',').map(k => k.trim()).filter(k => k);
+                                                    handleTemplateValueChange('keywords', values);
+                                                }}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Template Tab */}
                     {activeTab === 'template' && (
                         <>
@@ -609,6 +1040,41 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     value={categoryId}
                                     onChange={setCategoryId}
                                 />
+                            </div>
+
+                            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div>
+                                        <h4 className="font-semibold text-indigo-950">Prompt dinamico para IA</h4>
+                                        <p className="text-xs text-indigo-700 mt-1">
+                                            Gerado com a marca, categoria e apenas os campos ativos deste template.
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowModelPrompt(prev => !prev)}
+                                            className="px-3 py-1.5 bg-white text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors text-xs font-bold"
+                                        >
+                                            {showModelPrompt ? 'Ocultar prompt' : 'Ver prompt'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleCopyModelPrompt}
+                                            className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-bold"
+                                        >
+                                            {modelPromptCopied ? 'Copiado!' : 'Copiar para IA'}
+                                        </button>
+                                    </div>
+                                </div>
+                                {showModelPrompt && (
+                                    <textarea
+                                        readOnly
+                                        value={modelImportPrompt}
+                                        rows={10}
+                                        className="mt-3 w-full px-3 py-2 text-xs font-mono border border-indigo-200 rounded-lg bg-white text-slate-700 resize-y"
+                                    />
+                                )}
                             </div>
 
                             {/* Description */}
@@ -649,43 +1115,18 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
                                 {/* Spec Fields */}
                                 <div className="grid grid-cols-2 gap-4">
-                                    {customFields
-                                        .filter(f => f.category === 'spec')
-                                        .filter(field => {
-                                            // If no category selected, show all fields
-                                            if (!categoryId || !categoryConfig) {
-                                                return true;
-                                            }
-
-                                            // Check if field is configured in category
-                                            const fieldKey = field.key;
-                                            const configValue = categoryConfig[fieldKey];
-
-                                            // If field is explicitly set to 'off', hide it
-                                            if (configValue === 'off') {
-                                                return false;
-                                            }
-
-                                            // Show field if it's required, optional, or not configured
-                                            return true;
-                                        })
-                                        .map((field) => (
-                                            <TemplateFieldInput
-                                                key={field.id}
-                                                field={field}
-                                                value={templateValues[field.key]}
-                                                onChange={(value) => handleTemplateValueChange(field.key, value)}
-                                            />
-                                        ))}
+                                    {visibleSpecFields.map((field) => (
+                                        <TemplateFieldInput
+                                            key={field.id}
+                                            field={field}
+                                            value={templateValues[field.key]}
+                                            onChange={(value) => handleTemplateValueChange(field.key, value)}
+                                        />
+                                    ))}
                                 </div>
 
                                 {/* No fields message */}
-                                {categoryId && categoryConfig && customFields
-                                    .filter(f => f.category === 'spec')
-                                    .filter(field => {
-                                        const configValue = categoryConfig[field.key];
-                                        return configValue !== 'off';
-                                    }).length === 0 && (
+                                {categoryId && categoryConfig && visibleSpecFields.length === 0 && (
                                         <div className="text-center py-8 text-slate-500">
                                             <p className="text-sm">Nenhum campo de especificação configurado para esta categoria</p>
                                         </div>
