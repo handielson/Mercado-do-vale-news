@@ -7,6 +7,23 @@ const normalizeText = (value) => String(value || '')
     .trim();
 
 const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+const REQUIRED_SMARTPHONE_FIELD_KEYS = new Set([
+    'battery_mah',
+    'cam_principal_mpx',
+    'cam_selfie_mpx',
+    'carregamento',
+    'celular_biometria',
+    'celular_fps_display',
+    'celular_slot_para_cartao',
+    'chipset',
+    'display',
+    'entrada_fone_de_ouvido',
+    'nfc',
+    'processador',
+    'rede_operadora',
+    'resistencia',
+    'tipo_de_display',
+]);
 
 export function parseModelImportJson(input) {
     if (!input || !String(input).trim()) {
@@ -95,12 +112,23 @@ const createFieldKeyResolver = (customFields = []) => {
     };
 };
 
-const mergeTemplateObject = (target, source, resolveFieldKey) => {
+const mergeTemplateObject = (target, source, resolveFieldKey, emptyFields = [], fieldByKey = new Map()) => {
     if (!isPlainObject(source)) return;
 
     Object.entries(source).forEach(([key, value]) => {
-        if (value === undefined || value === null || value === '') return;
-        target[resolveFieldKey(key)] = value;
+        const fieldKey = resolveFieldKey(key);
+        if (value === undefined || value === null || value === '') {
+            const field = fieldByKey.get(fieldKey);
+            if (field) {
+                emptyFields.push({
+                    fieldKey,
+                    fieldLabel: field.label || fieldKey,
+                    importance: REQUIRED_SMARTPHONE_FIELD_KEYS.has(fieldKey) ? 'required' : 'optional',
+                });
+            }
+            return;
+        }
+        target[fieldKey] = value;
     });
 };
 
@@ -118,6 +146,7 @@ export function normalizeModelImportPayload(data, context = {}) {
     const fieldByKey = new Map(customFields.map((field) => [field.key, field]));
     const templateValues = {};
     const missingChoices = [];
+    const emptyFields = [];
 
     const name = payload.name || payload.nome || payload.modelo || payload.model;
     const brandId = payload.brand_id || findByIdOrName(brands, payload.brand || payload.marca || payload.brand_name);
@@ -129,13 +158,13 @@ export function normalizeModelImportPayload(data, context = {}) {
             ? [String(payload.ean).trim()].filter(Boolean)
             : undefined;
 
-    mergeTemplateObject(templateValues, payload.template_values, resolveFieldKey);
-    mergeTemplateObject(templateValues, payload.specs, resolveFieldKey);
-    mergeTemplateObject(templateValues, payload.especificacoes, resolveFieldKey);
-    mergeTemplateObject(templateValues, payload['especificações'], resolveFieldKey);
-    mergeTemplateObject(templateValues, payload.custom_fields, resolveFieldKey);
-    mergeTemplateObject(templateValues, payload.campos, resolveFieldKey);
-    mergeTemplateObject(templateValues, payload.extra_fields, resolveFieldKey);
+    mergeTemplateObject(templateValues, payload.template_values, resolveFieldKey, emptyFields, fieldByKey);
+    mergeTemplateObject(templateValues, payload.specs, resolveFieldKey, emptyFields, fieldByKey);
+    mergeTemplateObject(templateValues, payload.especificacoes, resolveFieldKey, emptyFields, fieldByKey);
+    mergeTemplateObject(templateValues, payload['especificações'], resolveFieldKey, emptyFields, fieldByKey);
+    mergeTemplateObject(templateValues, payload.custom_fields, resolveFieldKey, emptyFields, fieldByKey);
+    mergeTemplateObject(templateValues, payload.campos, resolveFieldKey, emptyFields, fieldByKey);
+    mergeTemplateObject(templateValues, payload.extra_fields, resolveFieldKey, emptyFields, fieldByKey);
 
     const seo = payload.seo || {};
     const slug = payload.slug || seo.slug;
@@ -220,6 +249,7 @@ export function normalizeModelImportPayload(data, context = {}) {
         eans,
         templateValues,
         missingChoices,
+        emptyFields,
     };
 }
 
@@ -259,8 +289,9 @@ Regras:
 3. Use apenas dados reais do produto, de ficha tecnica/fabricante/anuncio confiavel. Nao invente especificacoes.
 4. Nao inclua IMEI, serial, cor unica de aparelho ou quantidade de estoque. Esses dados pertencem ao produto, nao ao modelo.
 5. Em textos, evite aspas duplas internas; use aspas simples se precisar.
-6. Se nao tiver certeza sobre um dado tecnico, deixe o campo ausente ou null.
-7. Para campos de escolha, use o valor real do produto. Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real no JSON para o painel avisar que a opcao precisa ser cadastrada. Nao adapte para uma opcao parecida.
+6. Preencha todas as informacoes basicas reais do smartphone quando existirem em fonte confiavel, especialmente slot para cartao/microSD/SIM, entrada de fone, biometria, rede, NFC, resistencia, tela, chipset, bateria e carregamento.
+7. Se nao tiver certeza sobre um dado tecnico, deixe o campo ausente ou null para o painel avisar que faltou dado real. Nao crie nada.
+8. Para campos de escolha, use o valor real do produto. Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real no JSON para o painel avisar que a opcao precisa ser cadastrada. Nao adapte para uma opcao parecida.
 
 Contexto atual:
 - Nome do modelo: ${name || '[preencher]'}

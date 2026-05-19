@@ -322,6 +322,18 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             });
         }
 
+        const requiredEmptyFields = (normalized.emptyFields || []).filter((item: any) => item.importance === 'required');
+        if (requiredEmptyFields.length) {
+            const emptyNames = requiredEmptyFields.map((item: any) => item.fieldLabel || item.fieldKey);
+            const visibleNames = emptyNames.slice(0, 8).join('; ');
+            const remaining = emptyNames.length > 8 ? `; +${emptyNames.length - 8} campo(s)` : '';
+
+            toast.error('Campos tecnicos basicos vieram sem dados reais', {
+                description: `${visibleNames}${remaining}. Confira a ficha tecnica e preencha antes de salvar.`,
+                duration: 12000,
+            });
+        }
+
         return appliedFields;
     };
 
