@@ -28,6 +28,7 @@ import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogSettings } from '@/types/catalogSettings';
 import { vpsApiService } from '@/services/vpsApiService';
 import { buildProductVideoPlaylist, isMp4VideoUrl } from '@/utils/product-video-playlist';
+import { getPublicProductName } from './publicProductName.js';
 /**
  * PublicProductPage
  * A dedicated SEO-friendly landing page for a single product.
@@ -642,8 +643,10 @@ export const PublicProductPage: React.FC = () => {
         product.specs?.ficha_tecnica,
     ]);
 
-    const title = product.meta_title || `${toTitleCase(product.name)} | Mercado do Vale`;
-    const description = product.meta_description || resolvedDescription || `Compre ${product.name} no Mercado do Vale.`;
+    const publicProductName = getPublicProductName(product);
+    const publicProductTitle = toTitleCase(publicProductName);
+    const title = `${publicProductTitle} | Mercado do Vale`;
+    const description = product.meta_description || resolvedDescription || `Compre ${publicProductName} no Mercado do Vale.`;
 
     const handleAddToCart = () => {
         if (comboChoiceGroups.length > 0) {
@@ -730,7 +733,7 @@ export const PublicProductPage: React.FC = () => {
     const getShareText = () => {
         const variantNames = uniqueVariants.map(v => (v as any)._displayLabel).join(', ');
         
-        let text = `*${toTitleCase(product.name)}*\n`;
+        let text = `*${publicProductTitle}*\n`;
         if (variantNames) {
             text += `Disponível: ${variantNames}\n`;
         }
@@ -918,7 +921,7 @@ export const PublicProductPage: React.FC = () => {
                     {JSON.stringify({
                         "@context": "https://schema.org/",
                         "@type": "Product",
-                        "name": toTitleCase(product.name),
+                        "name": publicProductTitle,
                         "image": product.images || [],
                         "description": description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(),
                         "sku": product.sku || '',
@@ -968,7 +971,7 @@ export const PublicProductPage: React.FC = () => {
                     )}
                     <span>/</span>
                     <span className="text-slate-900 font-medium truncate max-w-[200px] sm:max-w-xs">
-                        {product.name}
+                        {publicProductTitle}
                     </span>
                 </nav>
 
@@ -1026,7 +1029,7 @@ export const PublicProductPage: React.FC = () => {
                             ) : selectedImage && selectedImage !== 'VIDEO' && selectedImage !== 'MOSAIC' ? (
                                 <img
                                     src={getCacheBustedUrl(selectedImage, product.updated_at || product.created_at)}
-                                    alt={product.meta_title || toTitleCase(product.name)}
+                                    alt={product.meta_title || publicProductTitle}
                                     className="w-full h-full object-contain"
                                 />
                             ) : (
@@ -1067,7 +1070,7 @@ export const PublicProductPage: React.FC = () => {
                                         onClick={() => setSelectedImage(img)}
                                         className={`w-20 h-20 flex-shrink-0 bg-white rounded-lg border-2 overflow-hidden ${selectedImage === img ? 'border-blue-600' : 'border-slate-200 hover:border-slate-300'}`}
                                     >
-                                        <img src={getCacheBustedUrl(img, product.updated_at || product.created_at)} alt={`${product.meta_title || toTitleCase(product.name)} - Ângulo ${idx + 1}`} className="w-full h-full object-contain p-1" />
+                                        <img src={getCacheBustedUrl(img, product.updated_at || product.created_at)} alt={`${product.meta_title || publicProductTitle} - Ângulo ${idx + 1}`} className="w-full h-full object-contain p-1" />
                                     </button>
                                 ))}
                             </div>
@@ -1078,7 +1081,7 @@ export const PublicProductPage: React.FC = () => {
                     <div className="space-y-6">
                         <div>
                             <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight">
-                                {toTitleCase(product.name)}
+                                {publicProductTitle}
                             </h1>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-slate-500">
                                 <span>
