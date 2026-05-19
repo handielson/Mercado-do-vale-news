@@ -225,16 +225,33 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         const requirement = customFieldConfig?.requirement ?? categoryConfig[field.key];
         return requirement !== 'off' && requirement !== 'hidden';
     };
+    const isSmartphoneCategory = (category?: Category) => {
+        const categoryName = normalizeFieldAlias(category?.name || '');
+        const categorySlug = normalizeFieldAlias(category?.slug || '');
+        return ['smartphone', 'smartphones', 'celular', 'celulares', 'iphone', 'iphones']
+            .some(term => categoryName.includes(term) || categorySlug.includes(term));
+    };
+    const isFieldBlockedForCategory = (field: CustomField) => {
+        if (!isSmartphoneCategory(categoryObj)) return false;
+
+        const fieldKey = normalizeFieldAlias(field.key);
+        const fieldLabel = normalizeFieldAlias(field.label);
+        return fieldKey === 'tipo' || fieldLabel.includes('receptor');
+    };
     const visibleSpecFields = customFields
         .filter(f => f.category === 'spec')
-        .filter(isFieldEnabledForCategory);
+        .filter(isFieldEnabledForCategory)
+        .filter(field => !isFieldBlockedForCategory(field));
     const hiddenSpecFields = customFields
         .filter(f => f.category === 'spec')
-        .filter(field => !isFieldEnabledForCategory(field));
+        .filter(field => !isFieldEnabledForCategory(field) || isFieldBlockedForCategory(field));
     const hiddenSpecAliases = hiddenSpecFields.flatMap(field => [field.key, field.label]);
     const isHiddenSpecKey = (key: string) => hiddenSpecAliases.some(alias => {
         return normalizeFieldAlias(alias) === normalizeFieldAlias(key);
     });
+    const getSanitizedTemplateValues = (values: Record<string, any>) => Object.fromEntries(
+        Object.entries(values).filter(([key]) => !isHiddenSpecKey(key))
+    );
     const modelImportPrompt = buildModelImportPrompt({
         name,
         brand: brandObj?.name || '',
@@ -478,7 +495,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 active,
                 category_id: categoryId || undefined,
                 description: description || undefined,
-                template_values: Object.keys(templateValues).length > 0 ? templateValues : undefined,
+                template_values: Object.keys(getSanitizedTemplateValues(templateValues)).length > 0 ? getSanitizedTemplateValues(templateValues) : undefined,
                 eans: finalEans.length > 0 ? finalEans : undefined
             };
 

@@ -17,6 +17,74 @@ const vpsBaseUrl = process.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina
 const vpsSyncKey = process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
 const reconcilePageSize = 100;
 const reconcileLocalPageSize = 1000;
+const productSearchFallbackMaxPages = Number(process.env.BLING_PRODUCT_SEARCH_FALLBACK_MAX_PAGES || 50);
+
+function normalizeBlingSearchText(value: unknown): string {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function getBlingSearchTokens(search: string): string[] {
+    const ignored = new Set(['a', 'as', 'o', 'os', 'de', 'da', 'das', 'do', 'dos', 'e', 'em', 'para', 'por', 'com']);
+    return normalizeBlingSearchText(search)
+        .split(/\s+/)
+        .filter(token => token.length >= 2 && !ignored.has(token));
+}
+
+function matchesLooseBlingProductSearch(item: any, search: string): boolean {
+    const query = normalizeBlingSearchText(search);
+    if (!query) return true;
+
+    const haystack = normalizeBlingSearchText([
+        item?.nome,
+        item?.codigo,
+        item?.gtin,
+        item?.marca,
+        item?.categoria?.descricao,
+        item?.variacao?.nome,
+    ].filter(Boolean).join(' '));
+
+    if (!haystack) return false;
+    if (haystack.includes(query)) return true;
+
+    const tokens = getBlingSearchTokens(search);
+    if (tokens.length === 0) return false;
+
+    const matchedTokens = tokens.filter(token => haystack.includes(token)).length;
+    const requiredMatches = Math.max(1, Math.ceil(tokens.length * 0.6));
+    return matchedTokens >= requiredMatches;
+}
+
+async function fetchLooseBlingProductSearch(base: string, headers: Record<string, string>, search: string) {
+    const seen = new Set<number>();
+    const matched: any[] = [];
+
+    for (let page = 1; page <= productSearchFallbackMaxPages; page++) {
+        const url = base.replace(/pagina=[^&]*/, `pagina=${page}`);
+        const response = await fetch(url, { headers });
+        if (!response.ok) {
+            if (page === 1) throw new Error(`Bling error: ${response.status}: ${await response.text()}`);
+            break;
+        }
+
+        const json = await response.json();
+        const items = Array.isArray(json?.data) ? json.data : [];
+        for (const item of items) {
+            if (!item?.id || seen.has(item.id)) continue;
+            if (!matchesLooseBlingProductSearch(item, search)) continue;
+            seen.add(item.id);
+            matched.push(item);
+        }
+
+        if (items.length < 100 || matched.length >= 100) break;
+    }
+
+    return matched;
+}
 
 function isBlingReconcileAuthorized(req: any): boolean {
     const authHeader = String(req.headers?.authorization || '');
@@ -451,6 +519,14 @@ export default async function handler(req: any, res: any) {
             const merged: any[] = [];
             for (const item of [...(nameData.data || []), ...(skuData.data || [])]) {
                 if (!seen.has(item.id)) { seen.add(item.id); merged.push(item); }
+            }
+            if (merged.length === 0) {
+                const looseMatches = await fetchLooseBlingProductSearch(base, headers, search);
+                return res.status(200).json({
+                    data: looseMatches,
+                    total: looseMatches.length,
+                    searchMode: 'loose',
+                });
             }
             return res.status(200).json({ data: merged, total: merged.length });
         } catch (err: any) {
@@ -1262,4 +1338,3 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'Invalid resource. Valid: exchange|categories|products|product-detail|stock|stock-sync|webhook|finance|nfe|nfce|nf-detail|sync-prices-vps|product-update-fiscal|reconcile' });
 
 }
-
