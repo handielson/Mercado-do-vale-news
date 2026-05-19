@@ -71,12 +71,12 @@ export const VersionSelect: React.FC<VersionSelectProps> = ({
 
     return (
         <div className="space-y-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
                 <select
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     disabled={isLoading}
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
+                    className="min-w-0 w-full flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
                 >
                     <option value="">Selecione uma versão</option>
                     {versions.map((version) => (
@@ -90,7 +90,7 @@ export const VersionSelect: React.FC<VersionSelectProps> = ({
                     type="button"
                     onClick={loadVersions}
                     disabled={isLoading}
-                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                    className="shrink-0 p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center disabled:opacity-50"
                     title="Atualizar lista de versões"
                 >
                     <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -99,7 +99,7 @@ export const VersionSelect: React.FC<VersionSelectProps> = ({
                 <button
                     type="button"
                     onClick={() => setShowCreateDialog(true)}
-                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                    className="shrink-0 p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
                     title="Nova Versão"
                 >
                     <Plus className="w-5 h-5" />
