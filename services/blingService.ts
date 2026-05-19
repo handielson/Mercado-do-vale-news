@@ -7,6 +7,7 @@ import { vpsApiService } from './vpsApiService';
 import { buildVpsUrl, getVpsSyncHeaders, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
 import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
 import { buildComboStockDeductionTargets, type BlingComboSelection } from './blingComboStock';
+import { resolveBlingDescription } from './blingDescription.js';
 
 const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
@@ -664,7 +665,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         ean: item.gtin || null,
         alternative_eans: item.gtin ? [item.gtin] : [],
         brand: typeof item.marca === 'object' ? item.marca?.nome || null : item.marca || null,
-        description: item.descricao || item.descricaoComplementar || item.descricaoCurta || modelDescription || null,
+        description: resolveBlingDescription(item) || modelDescription || null,
         status: item.situacao === 'A' ? 'active' : 'inactive',
         // Categoria
         category_id: resolveCategoryId(item.categoria?.id, categoryId),
