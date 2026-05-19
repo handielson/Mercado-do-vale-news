@@ -12,7 +12,7 @@ import { buildBlingReconcilePlan } from './_lib/bling-reconcile-core.js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!;
 const supabaseKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!;
-const blingApiBase = 'https://api.bling.com.br/Api/v3';
+const blingApiBase = 'https://www.bling.com.br/Api/v3';
 const vpsBaseUrl = process.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
 const vpsSyncKey = process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
 const reconcilePageSize = 100;
@@ -508,7 +508,7 @@ export default async function handler(req: any, res: any) {
             ? new URLSearchParams({ grant_type: 'refresh_token', refresh_token: String(code) })
             : new URLSearchParams({ grant_type: 'authorization_code', code: String(code), redirect_uri: String(redirect_uri) });
         try {
-            const tokenRes = await fetch('https://api.bling.com.br/Api/v3/oauth/token', {
+            const tokenRes = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': `Basic ${credentials}` },
                 body: body.toString(),
@@ -528,7 +528,7 @@ export default async function handler(req: any, res: any) {
         if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
         const page = req.query.page || 1;
         try {
-            const r = await fetch(`https://api.bling.com.br/Api/v3/categorias/produtos?pagina=${page}&limite=100`, {
+            const r = await fetch(`https://www.bling.com.br/Api/v3/categorias/produtos?pagina=${page}&limite=100`, {
                 headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
             });
             if (!r.ok) return res.status(r.status).json({ error: `Bling error: ${r.status}`, detail: await r.text() });
@@ -547,7 +547,7 @@ export default async function handler(req: any, res: any) {
         const search = req.query.search as string | undefined;
         const traceId = `bling-products-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const headers = { 'Authorization': authHeader, 'Accept': 'application/json' };
-        const base = `https://api.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5`;
+        const base = `https://www.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5`;
         const debug: any = {
             traceId,
             resource,
@@ -628,7 +628,7 @@ export default async function handler(req: any, res: any) {
             if (!settings?.bling_access_token) return res.status(401).json({ error: 'Bling not connected' });
             let accessToken = settings.bling_access_token;
             if (settings.bling_token_expires_at && new Date(settings.bling_token_expires_at) < new Date()) {
-                const tokenRes = await fetch('https://api.bling.com.br/Api/v3/oauth/token', {
+                const tokenRes = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: settings.bling_refresh_token, client_id: settings.bling_client_id, client_secret: settings.bling_client_secret }),
@@ -646,7 +646,7 @@ export default async function handler(req: any, res: any) {
         if (!id) return res.status(400).json({ error: 'Product ID required' });
         try {
             if (variacoes === '1') {
-                const varRes = await fetch(`https://api.bling.com.br/Api/v3/produtos/variacoes/${id}`, {
+                const varRes = await fetch(`https://www.bling.com.br/Api/v3/produtos/variacoes/${id}`, {
                     headers: { 'Authorization': authHeader, 'Accept': 'application/json' },
                 });
                 if (!varRes.ok) return res.status(varRes.status).json({ error: `Bling error: ${varRes.status}` });
@@ -654,8 +654,8 @@ export default async function handler(req: any, res: any) {
                 return res.status(200).json(varData.data || {});
             }
             const [prodRes, stockRes] = await Promise.all([
-                fetch(`https://api.bling.com.br/Api/v3/produtos/${id}`, { headers: { 'Authorization': authHeader, 'Accept': 'application/json' } }),
-                fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=100&idsProdutos[]=${id}`, { headers: { 'Authorization': authHeader, 'Accept': 'application/json' } }),
+                fetch(`https://www.bling.com.br/Api/v3/produtos/${id}`, { headers: { 'Authorization': authHeader, 'Accept': 'application/json' } }),
+                fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=100&idsProdutos[]=${id}`, { headers: { 'Authorization': authHeader, 'Accept': 'application/json' } }),
             ]);
             if (!prodRes.ok) return res.status(prodRes.status).json({ error: `Bling error: ${prodRes.status}`, detail: await prodRes.text() });
             const prodData = await prodRes.json();
@@ -699,7 +699,7 @@ export default async function handler(req: any, res: any) {
             if (!settings?.bling_access_token) return res.status(401).json({ error: 'Bling not connected' });
             let accessToken = settings.bling_access_token;
             if (settings.bling_token_expires_at && new Date(settings.bling_token_expires_at) < new Date()) {
-                const tokenRes = await fetch('https://api.bling.com.br/Api/v3/oauth/token', {
+                const tokenRes = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: settings.bling_refresh_token, client_id: settings.bling_client_id, client_secret: settings.bling_client_secret }),
@@ -715,7 +715,7 @@ export default async function handler(req: any, res: any) {
             const results = [];
             for (const blingId of blingIds) {
                 // 1. Fetch current product detail to avoid overwriting existing fields
-                const prodRes = await fetch(`https://api.bling.com.br/Api/v3/produtos/${blingId}`, { 
+                const prodRes = await fetch(`https://www.bling.com.br/Api/v3/produtos/${blingId}`, { 
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } 
                 });
                 if (!prodRes.ok) {
@@ -739,7 +739,7 @@ export default async function handler(req: any, res: any) {
                 delete payload.estoque;
 
                 // 3. PUT updated product
-                const putRes = await fetch(`https://api.bling.com.br/Api/v3/produtos/${blingId}`, {
+                const putRes = await fetch(`https://www.bling.com.br/Api/v3/produtos/${blingId}`, {
                     method: 'PUT',
                     headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify(payload)
@@ -815,14 +815,14 @@ export default async function handler(req: any, res: any) {
         if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
         const page = req.query.page || 1;
         try {
-            let url = `https://api.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`;
+            let url = `https://www.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`;
             
             // Forward idsProdutos[] array if present (support both express parsing variants)
             const idsParam = req.query['idsProdutos[]'] || req.query.idsProdutos;
             if (idsParam) {
                 const ids = Array.isArray(idsParam) ? idsParam : [idsParam];
                 const idsQuery = ids.map((id: any) => `idsProdutos[]=${id}`).join('&');
-                url = `https://api.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100&${idsQuery}`;
+                url = `https://www.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100&${idsQuery}`;
             }
 
             const blingRes = await fetch(url, {
@@ -850,7 +850,7 @@ export default async function handler(req: any, res: any) {
             if (!settings?.bling_access_token) return res.status(401).json({ error: 'Bling not connected' });
             let accessToken = settings.bling_access_token;
             if (settings.bling_token_expires_at && new Date(settings.bling_token_expires_at) < new Date()) {
-                const tokenRes = await fetch('https://api.bling.com.br/Api/v3/oauth/token', {
+                const tokenRes = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: settings.bling_refresh_token, client_id: settings.bling_client_id, client_secret: settings.bling_client_secret }),
@@ -862,11 +862,11 @@ export default async function handler(req: any, res: any) {
                     if (updateErr) console.error('Token refresh (stock) update failed:', updateErr);
                 }
             }
-            const depRes = await fetch('https://api.bling.com.br/Api/v3/depositos?pagina=1&limite=1', { headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
+            const depRes = await fetch('https://www.bling.com.br/Api/v3/depositos?pagina=1&limite=1', { headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' } });
             const depData = await depRes.json();
             const depositoId = depData.data?.[0]?.id;
             if (!depositoId) return res.status(422).json({ error: 'No Bling deposit found' });
-            const stockRes = await fetch('https://api.bling.com.br/Api/v3/estoques', {
+            const stockRes = await fetch('https://www.bling.com.br/Api/v3/estoques', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
                 body: JSON.stringify({ produto: { id: blingId }, deposito: { id: depositoId }, operacao: 'S', quantidade: quantity, observacoes: notes || 'Venda PDV Mercado do Vale' }),
@@ -975,7 +975,7 @@ export default async function handler(req: any, res: any) {
             if (!blingId) return res.status(400).json({ error: 'blingId is required' });
             const supabase = createClient(supabaseUrl, supabaseKey);
             const { data: settings } = await supabase.from('company_settings').select('bling_access_token').single();
-            const resBling = await fetch(`https://api.bling.com.br/Api/v3/produtos/${blingId}`, { 
+            const resBling = await fetch(`https://www.bling.com.br/Api/v3/produtos/${blingId}`, { 
                 headers: { 'Authorization': `Bearer ${settings?.bling_access_token}`, 'Accept': 'application/json' } 
             });
             const data = await resBling.json();
@@ -994,12 +994,12 @@ export default async function handler(req: any, res: any) {
             const supabase = createClient(supabaseUrl, supabaseKey);
             const { data: settings } = await supabase.from('company_settings').select('bling_access_token').single();
             
-            const resBling = await fetch(`https://api.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${blingId}`, { 
+            const resBling = await fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${blingId}`, { 
                 headers: { 'Authorization': `Bearer ${settings?.bling_access_token}`, 'Accept': 'application/json' } 
             });
             const data = await resBling.json();
             
-            const resProd = await fetch(`https://api.bling.com.br/Api/v3/produtos/${blingId}`, {
+            const resProd = await fetch(`https://www.bling.com.br/Api/v3/produtos/${blingId}`, {
                 headers: { 'Authorization': `Bearer ${settings?.bling_access_token}`, 'Accept': 'application/json' }
             });
             const prodData = await resProd.json();
@@ -1099,7 +1099,7 @@ export default async function handler(req: any, res: any) {
         const authHeader = req.headers['authorization'];
         if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
         const headers = { 'Authorization': authHeader, 'Accept': 'application/json', 'Content-Type': 'application/json' };
-        const BASE = 'https://api.bling.com.br/Api/v3';
+        const BASE = 'https://www.bling.com.br/Api/v3';
         const { action, id, resourceType } = req.query as Record<string, string>;
         if (!resourceType || !['pagar', 'receber'].includes(resourceType)) return res.status(400).json({ error: 'resourceType must be "pagar" or "receber"' });
         const endpoint = resourceType === 'pagar' ? 'contas/pagar' : 'contas/receber';
@@ -1165,7 +1165,7 @@ export default async function handler(req: any, res: any) {
 
         try {
             const supabase = createClient(supabaseUrl, supabaseKey);
-            const r = await fetchBlingWithStoredTokenRetry(supabase, `https://api.bling.com.br/Api/v3/${tipo}/${id}`, authHeader);
+            const r = await fetchBlingWithStoredTokenRetry(supabase, `https://www.bling.com.br/Api/v3/${tipo}/${id}`, authHeader);
             if (!r.ok) {
                 const txt = await r.text();
                 return res.status(r.status).json({ error: `Bling ${tipo} detail error: ${r.status}`, detail: txt });
@@ -1186,7 +1186,7 @@ export default async function handler(req: any, res: any) {
         const fim    = q.dataEmissaoFim    || q.dataEmissaoFinal   || '';
         const situacao = q.situacao || '';
         const pagina   = q.pagina  || '1';
-        let url = `https://api.bling.com.br/Api/v3/${endpoint}?pagina=${pagina}&limite=100`;
+        let url = `https://www.bling.com.br/Api/v3/${endpoint}?pagina=${pagina}&limite=100`;
         if (inicio)   url += `&dataEmissaoInicial=${inicio}`;
         if (fim)      url += `&dataEmissaoFinal=${fim}`;
         if (situacao) url += `&situacao=${situacao}`;
@@ -1357,7 +1357,7 @@ export default async function handler(req: any, res: any) {
             // Refresh token if expired
             let accessToken = settings.bling_access_token;
             if (settings.bling_token_expires_at && new Date(settings.bling_token_expires_at) < new Date()) {
-                const tokenRes = await fetch('https://api.bling.com.br/Api/v3/oauth/token', {
+                const tokenRes = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: settings.bling_refresh_token, client_id: settings.bling_client_id, client_secret: settings.bling_client_secret }),
@@ -1375,7 +1375,7 @@ export default async function handler(req: any, res: any) {
             }
 
             // 1. Busca produto completo para não sobrescrever outros campos
-            const prodRes = await fetch(`https://api.bling.com.br/Api/v3/produtos/${blingId}`, {
+            const prodRes = await fetch(`https://www.bling.com.br/Api/v3/produtos/${blingId}`, {
                 headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' }
             });
             if (!prodRes.ok) {
@@ -1395,7 +1395,7 @@ export default async function handler(req: any, res: any) {
             delete payload.estoque; // campo readonly — Bling rejeita se enviado
 
             // 3. PUT no Bling
-            const putRes = await fetch(`https://api.bling.com.br/Api/v3/produtos/${blingId}`, {
+            const putRes = await fetch(`https://www.bling.com.br/Api/v3/produtos/${blingId}`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,

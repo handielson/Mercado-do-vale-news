@@ -9,7 +9,7 @@ import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
 import { buildComboStockDeductionTargets, type BlingComboSelection } from './blingComboStock';
 import { resolveBlingDescription } from './blingDescription.js';
 
-const BLING_API_BASE = 'https://api.bling.com.br/Api/v3';
+const BLING_API_BASE = 'https://www.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
 const parentDetailCache = new Map<number, any>();
 

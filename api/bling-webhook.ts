@@ -128,7 +128,7 @@ export default async function handler(req: any, res: any) {
 
         if (settings?.bling_token_expires_at && new Date(settings.bling_token_expires_at) < new Date()) {
             try {
-                const tokenRes = await fetch('https://api.bling.com.br/Api/v3/oauth/token', {
+                const tokenRes = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({
@@ -411,7 +411,7 @@ async function patchVpsJson(path: string, body: object): Promise<any | null> {
 async function fetchBlingStock(blingId: number, accessToken: string): Promise<number | null> {
     try {
         const res = await fetch(
-            `https://api.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${blingId}`,
+            `https://www.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${blingId}`,
             {
                 headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
                 signal: AbortSignal.timeout(10000),
@@ -448,7 +448,7 @@ async function fetchBlingStock(blingId: number, accessToken: string): Promise<nu
 async function fetchBlingProductDetail(blingId: number, accessToken: string): Promise<{ nome: string; codigo: string } | null> {
     try {
         const res = await fetch(
-            `https://api.bling.com.br/Api/v3/produtos/${blingId}`,
+            `https://www.bling.com.br/Api/v3/produtos/${blingId}`,
             {
                 headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
                 signal: AbortSignal.timeout(10000),
