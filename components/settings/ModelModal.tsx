@@ -136,6 +136,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [name, setName] = useState('');
     const [brandId, setBrandId] = useState('');
     const [brandSearch, setBrandSearch] = useState('');
+    const [brandDropdownOpen, setBrandDropdownOpen] = useState(false);
     const [active, setActive] = useState(true);
 
     // Template fields
@@ -217,11 +218,25 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         if (!normalized) return undefined;
         return brands.find((brand) => normalizeAutocompleteText(brand.name) === normalized);
     };
+    const filteredBrands = brands
+        .filter((brand) => {
+            const search = normalizeAutocompleteText(brandSearch);
+            if (!search) return true;
+            return normalizeAutocompleteText(brand.name).includes(search);
+        })
+        .slice(0, 30);
     const handleBrandSearchChange = (value: string) => {
         setBrandSearch(value);
         setBrandId(findBrandByName(value)?.id || '');
+        setBrandDropdownOpen(true);
+    };
+    const handleSelectBrand = (brand: Brand) => {
+        setBrandId(brand.id);
+        setBrandSearch(brand.name);
+        setBrandDropdownOpen(false);
     };
     const handleBrandSearchBlur = () => {
+        setTimeout(() => setBrandDropdownOpen(false), 120);
         if (!brandSearch.trim()) {
             setBrandId('');
             return;
@@ -789,19 +804,36 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     <div className="text-sm text-slate-500">Carregando marcas...</div>
                                 ) : (
                                     <>
-                                    <input
-                                        list="model-brand-options-basic"
-                                        value={brandSearch}
-                                        onChange={(e) => handleBrandSearchChange(e.target.value)}
-                                        onBlur={handleBrandSearchBlur}
-                                        placeholder="Digite para buscar a marca"
-                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                    <datalist id="model-brand-options-basic">
-                                        {brands.map((brand) => (
-                                            <option key={brand.id} value={brand.name} />
-                                        ))}
-                                    </datalist>
+                                    <div className="relative">
+                                        <input
+                                            value={brandSearch}
+                                            onChange={(e) => handleBrandSearchChange(e.target.value)}
+                                            onFocus={() => setBrandDropdownOpen(true)}
+                                            onBlur={handleBrandSearchBlur}
+                                            placeholder="Digite para buscar a marca"
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        {brandDropdownOpen && (
+                                            <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                                                {filteredBrands.length > 0 ? (
+                                                    filteredBrands.map((brand) => (
+                                                        <button
+                                                            key={brand.id}
+                                                            type="button"
+                                                            onMouseDown={() => handleSelectBrand(brand)}
+                                                            className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                                                        >
+                                                            {brand.name}
+                                                        </button>
+                                                    ))
+                                                ) : (
+                                                    <div className="px-3 py-2 text-sm text-slate-500">
+                                                        Nenhuma marca encontrada
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                     {brandSearch && !brandId && (
                                         <p className="mt-1 text-xs text-amber-600">
                                             Selecione uma marca cadastrada da lista.
@@ -1004,19 +1036,36 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         <label className="block text-xs font-medium text-slate-600 mb-1">
                                             Marca
                                         </label>
-                                        <input
-                                            list="model-brand-options-json"
-                                            value={brandSearch}
-                                            onChange={(e) => handleBrandSearchChange(e.target.value)}
-                                            onBlur={handleBrandSearchBlur}
-                                            placeholder="Digite para buscar a marca"
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                        />
-                                        <datalist id="model-brand-options-json">
-                                            {brands.map((brand) => (
-                                                <option key={brand.id} value={brand.name} />
-                                            ))}
-                                        </datalist>
+                                        <div className="relative">
+                                            <input
+                                                value={brandSearch}
+                                                onChange={(e) => handleBrandSearchChange(e.target.value)}
+                                                onFocus={() => setBrandDropdownOpen(true)}
+                                                onBlur={handleBrandSearchBlur}
+                                                placeholder="Digite para buscar a marca"
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                            />
+                                            {brandDropdownOpen && (
+                                                <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                                                    {filteredBrands.length > 0 ? (
+                                                        filteredBrands.map((brand) => (
+                                                            <button
+                                                                key={brand.id}
+                                                                type="button"
+                                                                onMouseDown={() => handleSelectBrand(brand)}
+                                                                className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
+                                                            >
+                                                                {brand.name}
+                                                            </button>
+                                                        ))
+                                                    ) : (
+                                                        <div className="px-3 py-2 text-sm text-slate-500">
+                                                            Nenhuma marca encontrada
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
                                         {brandSearch && !brandId && (
                                             <p className="mt-1 text-xs text-amber-600">
                                                 Selecione uma marca cadastrada da lista.
