@@ -14,7 +14,7 @@ import { supabase } from '../../services/supabase';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
 import { stockLocationService } from '../../services/stockLocationService';
-import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct } from './productCardShopee.js';
+import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct, validateShopeeItemForProduct } from './productCardShopee.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
 import type { ProductStockLocation } from '../../types/stock-location';
 
@@ -489,6 +489,40 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         return null;
     };
 
+    const fetchShopeeItemBaseInfo = async (itemId: number) => {
+        const response = await fetch(`/api/shopee-catalog?action=get_item_base_info&item_id_list=${encodeURIComponent(String(itemId))}`);
+        if (!response.ok) throw new Error('Falha ao validar anuncio na Shopee');
+        const payload = await response.json().catch(() => null);
+        return payload?.response?.item_list?.[0] || null;
+    };
+
+    const clearStaleShopeeLink = async (itemId: number) => {
+        await supabase
+            .from('shopee_products')
+            .delete()
+            .eq('product_id', product.id)
+            .eq('shopee_item_id', itemId);
+
+        await supabase
+            .from('products')
+            .update({ shopee_item_id: null })
+            .eq('id', product.id)
+            .eq('shopee_item_id', itemId);
+
+        setShopeeItemId(null);
+    };
+
+    const openShopeeSyncModal = async () => {
+        await ensureShopeeCompany();
+        const hydratedProduct = await vpsApiService.getProductById(product.id, true);
+        setShopeeModalProductSource({
+            ...(product as Product & Record<string, any>),
+            ...(hydratedProduct || {}),
+            shopee_item_id: null,
+        });
+        setIsShopeeModalOpen(true);
+    };
+
     const handleOpenShopeeModal = async (e: React.MouseEvent) => {
         e.stopPropagation();
         if (isPreparingShopeeModal) return;
@@ -500,6 +534,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 : await refreshShopeeLinkState();
 
             if (existingItemId) {
+                const shopeeItem = await fetchShopeeItemBaseInfo(existingItemId);
+                const validation = validateShopeeItemForProduct(product, shopeeItem);
+                if (!validation.isMatch) {
+                    await clearStaleShopeeLink(existingItemId);
+                    toast.warning('Vinculo antigo da Shopee removido', {
+                        description: validation.reason || 'O anuncio salvo nao corresponde a este produto.',
+                    });
+                    await openShopeeSyncModal();
+                    return;
+                }
+
                 const company = await ensureShopeeCompany();
                 const shopeeUrl = buildShopeeProductUrl(company?.shopee_shop_id, existingItemId);
                 if (!shopeeUrl) {
@@ -511,13 +556,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 return;
             }
 
-            await ensureShopeeCompany();
-            const hydratedProduct = await vpsApiService.getProductById(product.id, true);
-            setShopeeModalProductSource({
-                ...(product as Product & Record<string, any>),
-                ...(hydratedProduct || {}),
-            });
-            setIsShopeeModalOpen(true);
+            await openShopeeSyncModal();
         } catch (error) {
             console.error('[ProductCard] Erro ao preparar modal Shopee:', error);
             toast.error('Nao foi possivel abrir a sincronizacao da Shopee.');

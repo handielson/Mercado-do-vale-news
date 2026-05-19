@@ -3,6 +3,7 @@ import {
   buildShopeeProductUrl,
   getShopeeButtonVisualState,
   mapProductToShopeeLocalProduct,
+  validateShopeeItemForProduct,
 } from './productCardShopee.js';
 
 const syncedState = getShopeeButtonVisualState({ shopee_item_id: 987654321 });
@@ -20,6 +21,22 @@ assert.equal(
 );
 assert.equal(buildShopeeProductUrl('', 987654321), null);
 assert.equal(buildShopeeProductUrl('12345', null), null);
+
+assert.deepEqual(
+  validateShopeeItemForProduct({ sku: 'CTR3' }, { item_sku: 'CBX-U2AMAF30' }),
+  {
+    isMatch: false,
+    reason: 'SKU local CTR3 difere do SKU Shopee CBX-U2AMAF30',
+  },
+);
+assert.deepEqual(
+  validateShopeeItemForProduct({ sku: 'CTR3' }, { item_sku: 'ctr3' }),
+  { isMatch: true, reason: null },
+);
+assert.deepEqual(
+  validateShopeeItemForProduct({ sku: 'CTR3' }, { item_sku: '' }),
+  { isMatch: true, reason: null },
+);
 
 const mapped = mapProductToShopeeLocalProduct({
   id: 'prod-1',

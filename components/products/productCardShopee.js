@@ -14,6 +14,10 @@ function normalizePositiveNumber(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function normalizeComparableSku(value) {
+  return normalizeString(value).trim().toLowerCase();
+}
+
 export function buildShopeeProductUrl(shopId, itemId) {
   const normalizedShopId = normalizeString(shopId).trim();
   const normalizedItemId = normalizePositiveNumber(itemId);
@@ -33,6 +37,20 @@ export function getShopeeButtonVisualState(product) {
       ? `Produto sincronizado na Shopee (#${itemId})`
       : 'Sincronizar com Shopee',
   };
+}
+
+export function validateShopeeItemForProduct(product, shopeeItem) {
+  const productSku = normalizeComparableSku(product?.sku);
+  const shopeeSku = normalizeComparableSku(shopeeItem?.item_sku);
+
+  if (productSku && shopeeSku && productSku !== shopeeSku) {
+    return {
+      isMatch: false,
+      reason: `SKU local ${product?.sku} difere do SKU Shopee ${shopeeItem?.item_sku}`,
+    };
+  }
+
+  return { isMatch: true, reason: null };
 }
 
 export function mapProductToShopeeLocalProduct(product) {
