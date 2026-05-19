@@ -96,7 +96,7 @@ export function ProductSpecifications({
             const uniqueError = uniqueErrors[key];
             const isChecking = checkingField === key;
             return (
-                <div key={key} className="space-y-1">
+                <div key={key} className="space-y-1 min-w-0">
                     <FieldLabel label={metadata.label} required={isRequired} />
                     <div className="relative">
                         <input
@@ -156,7 +156,7 @@ export function ProductSpecifications({
         // Select input
         if (metadata.type === 'select' && metadata.options) {
             return (
-                <div key={key} className="space-y-1">
+                <div key={key} className="space-y-1 min-w-0">
                     <FieldLabel label={metadata.label} required={isRequired} />
                     <select
                         value={watch(fieldKey) || ''}
@@ -202,11 +202,11 @@ export function ProductSpecifications({
             </div>
 
             {/* Grid responsivo com alinhamento consistente - Max 3 colunas para evitar sobreposição */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-5 gap-y-5">
 
                 {/* IMEI 1 */}
                 {categoryConfig.imei1 && categoryConfig.imei1 !== 'off' && (
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                         <IMEIInput
                             label="IMEI 1"
                             technicalName="specs.imei1"
@@ -234,7 +234,7 @@ export function ProductSpecifications({
 
                 {/* IMEI 2 */}
                 {categoryConfig.imei2 && categoryConfig.imei2 !== 'off' && (
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                         <IMEIInput
                             id="field-imei2"
                             label="IMEI 2"
@@ -272,7 +272,7 @@ export function ProductSpecifications({
 
                 {/* COR */}
                 {categoryConfig.color && categoryConfig.color !== 'off' && (
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             Cor Predominante {categoryConfig.color === 'required' && <span className="text-red-500">*</span>}
                             <span className="ml-2 text-xs text-slate-400 font-mono">specs.color</span>
@@ -289,7 +289,7 @@ export function ProductSpecifications({
 
                 {/* ARMAZENAMENTO */}
                 {categoryConfig.storage && categoryConfig.storage !== 'off' && (
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                         <CapacitySelect
                             value={watch('specs.storage') || ''}
                             onChange={(val) => setValue('specs.storage', val)}
@@ -305,7 +305,7 @@ export function ProductSpecifications({
 
                 {/* RAM */}
                 {categoryConfig.ram && categoryConfig.ram !== 'off' && (
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                         <CapacitySelect
                             value={watch('specs.ram') || ''}
                             onChange={(val) => setValue('specs.ram', val)}
@@ -322,7 +322,7 @@ export function ProductSpecifications({
 
                 {/* VERSÃO */}
                 {categoryConfig.version && categoryConfig.version !== 'off' && !templateValues?.['version'] && (
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             Versão {categoryConfig.version === 'required' && <span className="text-red-500">*</span>}
                             <span className="ml-2 text-xs text-slate-400 font-mono">specs.version</span>
@@ -339,7 +339,7 @@ export function ProductSpecifications({
 
                 {/* SAÚDE DA BATERIA */}
                 {categoryConfig.battery_health && categoryConfig.battery_health !== 'off' && (
-                    <div className="space-y-1">
+                    <div className="space-y-1 min-w-0">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                             Saúde Bateria {categoryConfig.battery_health === 'required' && <span className="text-red-500">*</span>}
                             <span className="ml-2 text-xs text-slate-400 font-mono">specs.battery_health</span>
@@ -401,7 +401,7 @@ export function ProductSpecifications({
                             if (customField.requirement === 'off') return null;
 
                             return (
-                                <div key={customField.id} className="space-y-1">
+                                <div key={customField.id} className="space-y-1 min-w-0">
                                     <FieldLabel
                                         label={customField.name}
                                         required={customField.requirement === 'required'}

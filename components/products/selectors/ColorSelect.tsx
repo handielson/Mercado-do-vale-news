@@ -50,8 +50,8 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
 
     return (
         <div className="space-y-2">
-            <div className="flex items-center gap-2">
-                <div className="flex-1 relative">
+            <div className="flex items-center gap-2 min-w-0">
+                <div className="min-w-0 flex-1 relative">
                     <select
                         value={value}
                         onChange={(e) => onChange(e.target.value)}
@@ -82,7 +82,7 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
                     type="button"
                     onClick={loadColors}
                     disabled={isLoading}
-                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center disabled:opacity-50"
+                    className="shrink-0 p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center disabled:opacity-50"
                     title="Atualizar lista de cores"
                 >
                     <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -92,7 +92,7 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
                     href="/admin/settings/colors"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center"
+                    className="shrink-0 p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center"
                     title="Gerenciar Cores (abre em nova aba)"
                 >
                     <Plus className="w-5 h-5" />

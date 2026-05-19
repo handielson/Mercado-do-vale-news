@@ -192,6 +192,16 @@ export const ProductWarranty: React.FC<ProductWarrantyProps> = ({
                     A garantia selecionada será exibida no recibo de venda. Você pode configurar os períodos padrão de garantia nas páginas de Marcas e Categorias, ou criar templates personalizados em Configurações.
                 </p>
             </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                <p className="font-semibold text-blue-900 mb-1">Garantia Estendida</p>
+                <p className="text-blue-800 text-xs">
+                    A oferta de Garantia Estendida e habilitada por categoria e aparece no carrinho/PDV para produtos elegiveis. Ative em
+                    {' '}<a href="/admin/settings/categories" className="font-semibold underline hover:text-blue-950">Categorias</a>
+                    {' '}e configure os planos em
+                    {' '}<a href="/admin/settings/documents" className="font-semibold underline hover:text-blue-950">Documentos & Garantias</a>.
+                </p>
+            </div>
         </div>
     );
 };

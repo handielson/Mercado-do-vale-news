@@ -247,20 +247,20 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                     return (
                         <div
                             key={row.key}
-                            className={`rounded-xl border ${row.borderColor} ${row.bgColor} p-4`}
+                            className={`rounded-xl border ${row.borderColor} ${row.bgColor} p-3`}
                         >
                             {/* Header da linha */}
-                            <div className="flex items-center gap-2 mb-3">
-                                {row.icon}
-                                <div>
-                                    <span className="text-sm font-semibold text-slate-800">{row.label}</span>
-                                    <span className="ml-2 text-xs text-slate-400">{row.audience}</span>
+                            <div className="flex items-start gap-2 mb-3 min-w-0">
+                                <span className="mt-0.5 shrink-0">{row.icon}</span>
+                                <div className="min-w-0">
+                                    <span className="block text-sm font-semibold text-slate-800">{row.label}</span>
+                                    <span className="block text-xs text-slate-500 truncate">{row.audience}</span>
                                 </div>
                             </div>
 
-                            <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+                            <div className="grid grid-cols-1 xl:grid-cols-[220px_minmax(230px,auto)_auto] xl:items-end gap-3">
                                 {/* Campo de preço */}
-                                <div className="w-full lg:w-52 shrink-0">
+                                <div className="w-full">
                                     <label className="block text-xs font-medium text-slate-600 mb-1">
                                         Preço de Venda (R$)
                                     </label>
@@ -275,22 +275,22 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
 
                                 {/* Indicadores de margem */}
                                 {hasPrice && (
-                                    <div className="flex flex-wrap gap-3 flex-1">
-                                        <div className="flex flex-col items-center bg-white rounded-lg px-4 py-2 border border-slate-200 min-w-[80px]">
-                                            <span className="text-xs text-slate-500 mb-0.5">Lucro</span>
-                                            <span className={`text-sm font-bold ${isNegative ? 'text-red-600' : row.textColor}`}>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div className="bg-white rounded-lg px-3 py-2 border border-slate-200">
+                                            <span className="block text-[11px] text-slate-500 leading-none">Lucro</span>
+                                            <span className={`block text-sm font-bold leading-tight mt-1 ${isNegative ? 'text-red-600' : row.textColor}`}>
                                                 {formatCurrency(marginCents)}
                                             </span>
                                         </div>
-                                        <div className="flex flex-col items-center bg-white rounded-lg px-4 py-2 border border-slate-200 min-w-[70px]">
-                                            <span className="text-xs text-slate-500 mb-0.5">Margem</span>
-                                            <span className={`text-sm font-bold ${isNegative ? 'text-red-600' : row.textColor}`}>
+                                        <div className="bg-white rounded-lg px-3 py-2 border border-slate-200">
+                                            <span className="block text-[11px] text-slate-500 leading-none">Margem</span>
+                                            <span className={`block text-sm font-bold leading-tight mt-1 ${isNegative ? 'text-red-600' : row.textColor}`}>
                                                 {marginPct.toFixed(1)}%
                                             </span>
                                         </div>
-                                        <div className="flex flex-col items-center bg-white rounded-lg px-4 py-2 border border-slate-200 min-w-[70px]">
-                                            <span className="text-xs text-slate-500 mb-0.5">Markup</span>
-                                            <span className={`text-sm font-bold ${isNegative ? 'text-red-600' : 'text-slate-700'}`}>
+                                        <div className="bg-white rounded-lg px-3 py-2 border border-slate-200">
+                                            <span className="block text-[11px] text-slate-500 leading-none">Markup</span>
+                                            <span className={`block text-sm font-bold leading-tight mt-1 ${isNegative ? 'text-red-600' : 'text-slate-700'}`}>
                                                 {markup.toFixed(2)}x
                                             </span>
                                         </div>
@@ -298,7 +298,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                                 )}
 
                                 {/* Botões rápidos de % */}
-                                <div className="flex items-center gap-1.5 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap xl:justify-end">
                                     <span className="text-xs text-slate-500 whitespace-nowrap">Aplicar margem:</span>
                                     {row.quickPercents.map((pct) => (
                                         <button
