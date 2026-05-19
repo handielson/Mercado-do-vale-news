@@ -12,6 +12,7 @@ import { getPriceHistory, applyPricesToVariation, PriceSnapshot } from '../../..
 import { blingService } from '../../../services/blingService';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
 import { toast } from 'sonner';
+import { MODEL_SEO_BATCH_SIZE, selectFirstModelIds } from './modelBulkSelection.js';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -504,6 +505,10 @@ export function ModelsPage() {
         }
     };
 
+    const selectSeoBatch = () => {
+        setSelectedModelIds(selectFirstModelIds(filtered, MODEL_SEO_BATCH_SIZE));
+    };
+
     const toggleSelect = (id: string) => {
         const newSet = new Set(selectedModelIds);
         if (newSet.has(id)) newSet.delete(id);
@@ -623,6 +628,17 @@ export function ModelsPage() {
                         <span className="text-xs text-slate-400 whitespace-nowrap">
                             {filtered.length} de {models.length} modelo{models.length !== 1 ? 's' : ''}
                         </span>
+
+                        <button
+                            type="button"
+                            onClick={selectSeoBatch}
+                            disabled={filtered.length === 0}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-purple-200 bg-white text-purple-700 hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            title="Selecionar os primeiros 25 modelos filtrados para SEO em massa"
+                        >
+                            <Sparkles size={14} />
+                            Marcar 25
+                        </button>
                         
                         <button
                             onClick={() => selectedModelIds.size > 0 && setSeoModalOpen(true)}

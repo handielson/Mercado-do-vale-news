@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, Package, Plus } from 'lucide-react';
+import { ArrowLeft, Package, Plus, ShieldCheck } from 'lucide-react';
 import { Product, ProductInput } from '../../../types/product';
 import { Unit, UnitInput } from '../../../types/unit';
 import { productService } from '../../../services/products';
@@ -126,6 +126,13 @@ export const ProductDetailPage: React.FC = () => {
         navigate('/admin/products');
     };
 
+    const handleWarrantyShortcut = () => {
+        setActiveTab('product');
+        window.setTimeout(() => {
+            document.getElementById('product-warranty-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 80);
+    };
+
     // Loading state
     if (isLoadingProduct) {
         return (
@@ -215,6 +222,16 @@ export const ProductDetailPage: React.FC = () => {
                                 )}
                             </div>
                             {activeTab === 'inventory' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                        </button>
+
+                        <button
+                            onClick={handleWarrantyShortcut}
+                            className="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 text-slate-600 hover:bg-blue-50 hover:text-blue-800 border border-transparent"
+                        >
+                            <div className="flex items-center gap-3">
+                                <ShieldCheck className="w-5 h-5 text-slate-400" />
+                                Garantias
+                            </div>
                         </button>
                     </nav>
                 </div>

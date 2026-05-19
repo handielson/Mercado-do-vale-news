@@ -991,14 +991,16 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
 
             {/* 3. GARANTIA */}
-            <ProductWarranty
-                warrantyType={watch('warranty_type') || 'brand'}
-                warrantyTemplateId={watch('warranty_template_id') || ''}
-                brandWarrantyDays={brandWarrantyDays}
-                categoryWarrantyDays={categoryWarrantyDays}
-                onWarrantyTypeChange={(type) => setValue('warranty_type', type, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}
-                onTemplateChange={(templateId) => setValue('warranty_template_id', templateId, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}
-            />
+            <div id="product-warranty-section" className="scroll-mt-24">
+                <ProductWarranty
+                    warrantyType={watch('warranty_type') || 'brand'}
+                    warrantyTemplateId={watch('warranty_template_id') || ''}
+                    brandWarrantyDays={brandWarrantyDays}
+                    categoryWarrantyDays={categoryWarrantyDays}
+                    onWarrantyTypeChange={(type) => setValue('warranty_type', type, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}
+                    onTemplateChange={(templateId) => setValue('warranty_template_id', templateId, { shouldDirty: true, shouldTouch: true, shouldValidate: true })}
+                />
+            </div>
 
             {/* Simple hidden inputs to ensure warranty fields are in form submission */}
             <input
