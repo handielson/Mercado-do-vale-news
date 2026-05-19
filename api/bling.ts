@@ -19,6 +19,40 @@ const reconcilePageSize = 100;
 const reconcileLocalPageSize = 1000;
 const productSearchFallbackMaxPages = Number(process.env.BLING_PRODUCT_SEARCH_FALLBACK_MAX_PAGES || 50);
 
+async function readBlingResponse(response: Response) {
+    const text = await response.text();
+    let json: any = null;
+
+    if (text) {
+        try {
+            json = JSON.parse(text);
+        } catch {
+            json = null;
+        }
+    }
+
+    return {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        text,
+        json,
+    };
+}
+
+function summarizeBlingBody(body: any) {
+    const data = Array.isArray(body?.json?.data) ? body.json.data : [];
+    return {
+        ok: body?.ok,
+        status: body?.status,
+        statusText: body?.statusText,
+        count: data.length,
+        error: body?.json?.error || body?.json?.erro || null,
+        message: body?.json?.message || body?.json?.mensagem || body?.json?.descricao || null,
+        body: data.length > 0 ? undefined : (body?.json || body?.text || null),
+    };
+}
+
 function normalizeBlingSearchText(value: unknown): string {
     return String(value || '')
         .normalize('NFD')
@@ -59,19 +93,29 @@ function matchesLooseBlingProductSearch(item: any, search: string): boolean {
     return matchedTokens >= requiredMatches;
 }
 
-async function fetchLooseBlingProductSearch(base: string, headers: Record<string, string>, search: string) {
+async function fetchLooseBlingProductSearch(base: string, headers: Record<string, string>, search: string, debug: any = null) {
     const seen = new Set<number>();
     const matched: any[] = [];
 
     for (let page = 1; page <= productSearchFallbackMaxPages; page++) {
         const url = base.replace(/pagina=[^&]*/, `pagina=${page}`);
         const response = await fetch(url, { headers });
+        const body = await readBlingResponse(response);
+        debug?.fallbackPages?.push({
+            page,
+            ...summarizeBlingBody(body),
+        });
+
         if (!response.ok) {
-            if (page === 1) throw new Error(`Bling error: ${response.status}: ${await response.text()}`);
+            if (page === 1) {
+                const error = new Error(`Bling fallback failed at page ${page}: ${response.status} ${response.statusText}`);
+                (error as any).blingDebug = debug;
+                throw error;
+            }
             break;
         }
 
-        const json = await response.json();
+        const json = body.json || {};
         const items = Array.isArray(json?.data) ? json.data : [];
         for (const item of items) {
             if (!item?.id || seen.has(item.id)) continue;
@@ -501,36 +545,73 @@ export default async function handler(req: any, res: any) {
         if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
         const page = req.query.page || 1;
         const search = req.query.search as string | undefined;
+        const traceId = `bling-products-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const headers = { 'Authorization': authHeader, 'Accept': 'application/json' };
         const base = `https://api.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5`;
+        const debug: any = {
+            traceId,
+            resource,
+            page: String(page),
+            search: search || '',
+            searchLength: search?.length || 0,
+            startedAt: new Date().toISOString(),
+            stages: [],
+            fallbackPages: [],
+        };
         try {
             if (!search) {
                 const r = await fetch(base, { headers });
-                if (!r.ok) return res.status(r.status).json({ error: `Bling error: ${r.status}`, detail: await r.text() });
-                return res.status(200).json(await r.json());
+                const body = await readBlingResponse(r);
+                debug.stages.push({ name: 'list', url: base.replace(/Bearer\s+[^&\s]+/g, 'Bearer [redacted]'), ...summarizeBlingBody(body) });
+                if (!r.ok) return res.status(r.status).json({ error: `Bling error: ${r.status}`, detail: body.text, debug });
+                return res.status(200).json(body.json || { data: [] });
             }
             const [byName, bySku] = await Promise.all([
                 fetch(`${base}&nome=${encodeURIComponent(search)}`, { headers }),
                 fetch(`${base}&codigo=${encodeURIComponent(search)}`, { headers }),
             ]);
-            const nameData = byName.ok ? await byName.json() : { data: [] };
-            const skuData = bySku.ok ? await bySku.json() : { data: [] };
+            const nameBody = await readBlingResponse(byName);
+            const skuBody = await readBlingResponse(bySku);
+            debug.stages.push({ name: 'by_name', queryParam: 'nome', ...summarizeBlingBody(nameBody) });
+            debug.stages.push({ name: 'by_sku', queryParam: 'codigo', ...summarizeBlingBody(skuBody) });
+
+            if (!byName.ok || !bySku.ok) {
+                console.error('[Bling products debug] Direct search failed', debug);
+            }
+
+            const nameData = byName.ok ? (nameBody.json || { data: [] }) : { data: [] };
+            const skuData = bySku.ok ? (skuBody.json || { data: [] }) : { data: [] };
             const seen = new Set<number>();
             const merged: any[] = [];
             for (const item of [...(nameData.data || []), ...(skuData.data || [])]) {
                 if (!seen.has(item.id)) { seen.add(item.id); merged.push(item); }
             }
             if (merged.length === 0) {
-                const looseMatches = await fetchLooseBlingProductSearch(base, headers, search);
+                debug.stages.push({ name: 'fallback_loose_start', maxPages: productSearchFallbackMaxPages });
+                const looseMatches = await fetchLooseBlingProductSearch(base, headers, search, debug);
+                debug.stages.push({ name: 'fallback_loose_done', count: looseMatches.length });
                 return res.status(200).json({
                     data: looseMatches,
                     total: looseMatches.length,
                     searchMode: 'loose',
+                    debug,
                 });
             }
-            return res.status(200).json({ data: merged, total: merged.length });
+            return res.status(200).json({ data: merged, total: merged.length, searchMode: 'direct', debug });
         } catch (err: any) {
-            return res.status(500).json({ error: 'network_error', message: err.message });
+            const responseDebug = err?.blingDebug || debug;
+            responseDebug.failedAt = new Date().toISOString();
+            responseDebug.exception = {
+                name: err?.name,
+                message: err?.message,
+                stack: typeof err?.stack === 'string' ? err.stack.split('\n').slice(0, 5).join('\n') : undefined,
+            };
+            console.error('[Bling products debug] Search failed', responseDebug);
+            return res.status(500).json({
+                error: 'bling_products_search_failed',
+                message: err?.message || 'Erro inesperado ao buscar produtos no Bling',
+                debug: responseDebug,
+            });
         }
     }
 

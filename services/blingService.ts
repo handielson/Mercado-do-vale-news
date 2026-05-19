@@ -895,8 +895,33 @@ export async function searchBlingProducts(query: string, onProgress?: (p: FetchP
         // Rate limit protection
         await new Promise(resolve => setTimeout(resolve, 350));
 
-        if (!res.ok) throw new Error(`Bling API error ${res.status}`);
+        if (!res.ok) {
+            let errorPayload: any = null;
+            let errorText = '';
+            try {
+                errorText = await res.text();
+                errorPayload = errorText ? JSON.parse(errorText) : null;
+            } catch {
+                errorPayload = null;
+            }
+
+            const debug = errorPayload?.debug;
+            const debugSummary = debug
+                ? ` trace=${debug.traceId || '-'} stages=${JSON.stringify(debug.stages || [])} fallback=${JSON.stringify(debug.fallbackPages || [])} exception=${debug.exception?.message || ''}`
+                : '';
+
+            console.error('[searchBlingProducts] API error', {
+                status: res.status,
+                query,
+                payload: errorPayload || errorText,
+            });
+
+            throw new Error(`${errorPayload?.message || errorPayload?.error || `Bling API error ${res.status}`}${debugSummary}`);
+        }
         const json = await res.json();
+        if (json.debug) {
+            console.info('[searchBlingProducts] debug', json.debug);
+        }
         const items = json.data || [];
 
         if (items.length === 0) break;
