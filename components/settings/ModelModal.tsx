@@ -947,17 +947,8 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 </div>
 
                                 <div className="border-t border-slate-200 pt-4 mt-4">
-                                    <h5 className="text-sm font-semibold text-slate-800 mb-3">SEO e logistica editaveis</h5>
+                                    <h5 className="text-sm font-semibold text-slate-800 mb-3">Logistica editavel</h5>
                                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Slug</label>
-                                            <input
-                                                type="text"
-                                                value={templateValues['slug'] || ''}
-                                                onChange={(e) => handleTemplateValueChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                            />
-                                        </div>
                                         <div>
                                             <label className="block text-xs font-medium text-slate-600 mb-1">Peso (kg)</label>
                                             <input
@@ -995,38 +986,6 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                                 step="0.1"
                                                 value={templateValues['dimensions.depth_cm'] || ''}
                                                 onChange={(e) => handleTemplateValueChange('dimensions.depth_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                        <div className="md:col-span-2 xl:col-span-3">
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Titulo SEO</label>
-                                            <input
-                                                type="text"
-                                                value={templateValues['meta_title'] || ''}
-                                                onChange={(e) => handleTemplateValueChange('meta_title', e.target.value)}
-                                                maxLength={60}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                        <div className="md:col-span-2">
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Meta Descricao</label>
-                                            <textarea
-                                                value={templateValues['meta_description'] || ''}
-                                                onChange={(e) => handleTemplateValueChange('meta_description', e.target.value)}
-                                                maxLength={160}
-                                                rows={3}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                                            />
-                                        </div>
-                                        <div className="md:col-span-2">
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Keywords</label>
-                                            <input
-                                                type="text"
-                                                value={templateValues['keywords'] ? templateValues['keywords'].join(', ') : ''}
-                                                onChange={(e) => {
-                                                    const values = e.target.value.split(',').map(k => k.trim()).filter(k => k);
-                                                    handleTemplateValueChange('keywords', values);
-                                                }}
                                                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                             />
                                         </div>
