@@ -64,6 +64,21 @@ const normalizeChoice = (value, choices = []) => {
     return found ? found.value : value;
 };
 
+const getChoiceMatch = (value, choices = []) => {
+    if (value === undefined || value === null || value === '') return { value, missing: false };
+    if (!choices.length) return { value, missing: false };
+
+    const normalized = normalizeText(value);
+    const found = choices.find((choice) => (
+        normalizeText(choice.value) === normalized ||
+        normalizeText(choice.label) === normalized
+    ));
+
+    return found
+        ? { value: found.value, missing: false }
+        : { value, missing: true };
+};
+
 const createFieldKeyResolver = (customFields = []) => {
     const entries = customFields.flatMap((field) => [
         [field.key, field.key],
@@ -100,7 +115,9 @@ export function normalizeModelImportPayload(data, context = {}) {
     const customFields = context.customFields || [];
     const choiceOptions = context.choiceOptions || {};
     const resolveFieldKey = createFieldKeyResolver(customFields);
+    const fieldByKey = new Map(customFields.map((field) => [field.key, field]));
     const templateValues = {};
+    const missingChoices = [];
 
     const name = payload.name || payload.nome || payload.modelo || payload.model;
     const brandId = payload.brand_id || findByIdOrName(brands, payload.brand || payload.marca || payload.brand_name);
@@ -155,10 +172,38 @@ export function normalizeModelImportPayload(data, context = {}) {
 
     Object.entries(templateValues).forEach(([key, value]) => {
         const choices = choiceOptions[key] || [];
+        const field = fieldByKey.get(key);
+        const shouldWarnMissingChoice = field?.field_type === 'select' || field?.field_type === 'table_relation';
+
         if (Array.isArray(value)) {
-            templateValues[key] = value.map((item) => normalizeChoice(item, choices));
+            const normalizedItems = [];
+            value.forEach((item) => {
+                const result = getChoiceMatch(item, choices);
+                if (result.missing && shouldWarnMissingChoice) {
+                    missingChoices.push({
+                        fieldKey: key,
+                        fieldLabel: field?.label || key,
+                        value: String(item),
+                        options: choices.map((choice) => choice.label || choice.value),
+                    });
+                    return;
+                }
+                normalizedItems.push(result.value);
+            });
+            templateValues[key] = normalizedItems;
         } else {
-            templateValues[key] = normalizeChoice(value, choices);
+            const result = getChoiceMatch(value, choices);
+            if (result.missing && shouldWarnMissingChoice) {
+                missingChoices.push({
+                    fieldKey: key,
+                    fieldLabel: field?.label || key,
+                    value: String(value),
+                    options: choices.map((choice) => choice.label || choice.value),
+                });
+                delete templateValues[key];
+            } else {
+                templateValues[key] = normalizeChoice(value, choices);
+            }
         }
     });
 
@@ -174,6 +219,7 @@ export function normalizeModelImportPayload(data, context = {}) {
         description: description ? String(description) : '',
         eans,
         templateValues,
+        missingChoices,
     };
 }
 
@@ -210,10 +256,11 @@ export function buildModelImportPrompt({ name, brand, category, customFields = [
 Regras:
 1. Retorne APENAS um objeto JSON valido. Sem markdown, sem explicacoes.
 2. Use "template_values" para todos os campos tecnicos atuais e futuros.
-3. Se algum campo novo fizer sentido e nao estiver listado, inclua dentro de "template_values" usando uma chave clara em snake_case.
+3. Use apenas dados reais do produto, de ficha tecnica/fabricante/anuncio confiavel. Nao invente especificacoes.
 4. Nao inclua IMEI, serial, cor unica de aparelho ou quantidade de estoque. Esses dados pertencem ao produto, nao ao modelo.
 5. Em textos, evite aspas duplas internas; use aspas simples se precisar.
-6. Para campos de escolha, use exatamente uma das opcoes validas listadas. Nao invente RAM, armazenamento, versao, saude de bateria ou qualquer valor de dropdown.
+6. Se nao tiver certeza sobre um dado tecnico, deixe o campo ausente ou null.
+7. Para campos de escolha, use o valor real do produto. Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real no JSON para o painel avisar que a opcao precisa ser cadastrada. Nao adapte para uma opcao parecida.
 
 Contexto atual:
 - Nome do modelo: ${name || '[preencher]'}

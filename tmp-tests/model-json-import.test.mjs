@@ -18,6 +18,7 @@ const customFields = [
   { key: 'ram', label: 'Memoria RAM', field_type: 'select' },
   { key: 'storage', label: 'Armazenamento', field_type: 'select' },
   { key: 'version', label: 'Versao', field_type: 'table_relation' },
+  { key: 'water_resistance', label: 'Protecao', field_type: 'select' },
   { key: 'screen_size', label: 'Tamanho da Tela', field_type: 'text' },
 ];
 
@@ -33,6 +34,10 @@ const choiceOptions = {
   version: [
     { value: 'version-global-id', label: 'Global' },
     { value: 'version-nacional-id', label: 'Nacional' },
+  ],
+  water_resistance: [
+    { value: 'IP67', label: 'IP67' },
+    { value: 'IP68', label: 'IP68' },
   ],
 };
 
@@ -61,6 +66,7 @@ const choiceOptions = {
       "Memoria RAM": "4GB",
       "Armazenamento": "128GB",
       "Versao": "Global",
+      "Protecao": "IP70",
       "novo_campo_futuro": "valor preservado"
     }
   }
@@ -76,6 +82,13 @@ const choiceOptions = {
   assert.equal(normalized.templateValues.ram, '4GB');
   assert.equal(normalized.templateValues.storage, '128GB');
   assert.equal(normalized.templateValues.version, 'version-global-id');
+  assert.equal(normalized.templateValues.water_resistance, undefined);
+  assert.deepEqual(normalized.missingChoices, [{
+    fieldKey: 'water_resistance',
+    fieldLabel: 'Protecao',
+    value: 'IP70',
+    options: ['IP67', 'IP68'],
+  }]);
   assert.equal(normalized.templateValues.novo_campo_futuro, 'valor preservado');
   assert.equal(normalized.templateValues.weight_kg, 0.25);
   assert.equal(normalized.templateValues['dimensions.width_cm'], 8);
@@ -96,6 +109,8 @@ const choiceOptions = {
   assert.match(prompt, /ram/);
   assert.match(prompt, /Opcoes validas: 4GB, 6GB/);
   assert.match(prompt, /Opcoes validas: Global, Nacional/);
+  assert.match(prompt, /Use apenas dados reais do produto/);
+  assert.match(prompt, /Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real/);
   assert.match(prompt, /screen_size/);
   assert.match(prompt, /Galaxy A15/);
 }

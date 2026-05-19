@@ -301,6 +301,15 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             }
 
             setModelJsonInput('');
+            if (normalized.missingChoices?.length) {
+                const missingList = normalized.missingChoices
+                    .map((item: any) => `${item.fieldLabel}: "${item.value}"`)
+                    .join('; ');
+                toast.warning('Cadastre novas opcoes antes de salvar', {
+                    description: missingList,
+                    duration: 10000,
+                });
+            }
             toast.success('Modelo preenchido com sucesso pelo JSON.');
         } catch (err) {
             console.error('Erro no parser do JSON do modelo', err);
