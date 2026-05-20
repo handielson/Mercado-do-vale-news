@@ -254,9 +254,37 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
 }
 
 export interface ImportErrorDetail {
+    id?: number;
     name: string;
     sku: string | null;
     reason: string;
+    debug: ImportErrorDebug;
+}
+
+export interface ImportErrorDebug {
+    timestamp: string;
+    operation: string;
+    rawMessage: string;
+    product: {
+        blingId: number | string | null;
+        name: string | null;
+        sku: string | null;
+        blingCategoryId?: number | string | null;
+    };
+    category: {
+        defaultCategoryId: string | null;
+        resolvedCategoryId: string | null;
+    };
+    model: {
+        selectedModelId: string | null;
+        validImportModelId: string | null;
+        finalModelId: string | null;
+        existingProductId: string | null;
+        existingProductModelId: string | null;
+        autoCreateModel: boolean;
+        selectedModelName: string | null;
+        selectedModelBrandName: string | null;
+    };
 }
 
 export interface ImportResult {
@@ -1402,6 +1430,9 @@ export async function importBlingProducts(
         const item = selectedProducts[i];
         let operation = 'verificação';
         let resolvedCategoryForDebug: string | null = null;
+        let blingCategoryIdForDebug: number | string | null = item.categoria?.id ?? null;
+        let existingProductForDebug: { id: string | null; model_id: string | null } | null = null;
+        let finalModelIdForDebug: string | null = validImportModelId || null;
         try {
             // Busca detalhe completo: herda campos do pai quando for variação
             const detail = await fetchBlingProductDetail(item.id);
@@ -1431,6 +1462,7 @@ export async function importBlingProducts(
                 imagens: detail.imagens?.length ? detail.imagens : item.imagens,
                 stock_quantity: detail.stock_quantity ?? item.stock_quantity,
             } : item;
+            blingCategoryIdForDebug = enriched?.categoria?.id ?? blingCategoryIdForDebug;
 
             const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, validImportModelId, marginWholesale, marginReseller, modelDescription);
 
@@ -1482,7 +1514,11 @@ export async function importBlingProducts(
 
             if (checkError) throw new Error(checkError.message);
 
+            existingProductForDebug = existing
+                ? { id: existing.id || null, model_id: existing.model_id || null }
+                : null;
             let finalModelId = (existing && existing.model_id) ? existing.model_id : validImportModelId;
+            finalModelIdForDebug = finalModelId || null;
 
             // --- AUTO-CREATE/RESOLVE BRAND LOGIC (Always runs) ---
             // Extrai a marca do Bling ou assume "Diversos" caso falhe e precisemos gerar um modelo
@@ -1593,6 +1629,7 @@ export async function importBlingProducts(
                 }
                 
                 finalModelId = resolvedModelId;
+                finalModelIdForDebug = finalModelId || null;
                 
                 // Set the brand to the inferred brand
                 row.brand = brandName;
@@ -1645,18 +1682,38 @@ export async function importBlingProducts(
             }
         } catch (err: any) {
             const rawMessage = err?.message || String(err);
-            console.error('[bling:import-error-raw]', {
+            const debug: ImportErrorDebug = {
+                timestamp: new Date().toISOString(),
                 operation,
-                productId: item.id,
-                productName: item.nome,
-                productSku: item.codigo,
-                resolvedCategoryId: resolvedCategoryForDebug,
                 rawMessage,
-            });
+                product: {
+                    blingId: item.id ?? null,
+                    name: item.nome || null,
+                    sku: item.codigo || null,
+                    blingCategoryId: blingCategoryIdForDebug,
+                },
+                category: {
+                    defaultCategoryId: categoryId || null,
+                    resolvedCategoryId: resolvedCategoryForDebug,
+                },
+                model: {
+                    selectedModelId: modelId || null,
+                    validImportModelId: validImportModelId || null,
+                    finalModelId: finalModelIdForDebug,
+                    existingProductId: existingProductForDebug?.id || null,
+                    existingProductModelId: existingProductForDebug?.model_id || null,
+                    autoCreateModel,
+                    selectedModelName: modelName,
+                    selectedModelBrandName: modelBrandName,
+                },
+            };
+            console.error('[bling:import-error-raw]', debug);
             result.errors.push({
+                id: item.id,
                 name: item.nome,
                 sku: item.codigo,
                 reason: humanizeImportError(operation, rawMessage),
+                debug,
             });
         }
 

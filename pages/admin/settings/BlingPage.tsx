@@ -429,6 +429,28 @@ export default function BlingPage() {
         toast.success('URL copiada!');
     }
 
+    function copyImportErrorDebug(error: any) {
+        const payload = error?.debug || {
+            name: error?.name,
+            sku: error?.sku,
+            reason: error?.reason,
+        };
+        navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+        toast.success('Debug copiado!');
+    }
+
+    function copyAllImportErrorDebug(errors: any[]) {
+        const payload = errors.map((error, index) => ({
+            index,
+            name: error?.name,
+            sku: error?.sku,
+            reason: error?.reason,
+            debug: error?.debug || null,
+        }));
+        navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+        toast.success('Debug de todos os erros copiado!');
+    }
+
     async function handleSyncFiscal() {
         const sku = fiscalSku.trim();
         const ncm = fiscalNcm.trim().replace(/\D/g, '');
@@ -1887,7 +1909,17 @@ export default function BlingPage() {
                                                 {importResult.errors.length > 0 && (
                                                     <div className="space-y-4">
                                                         <div className="space-y-2">
-                                                            <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Detalhes dos Erros</p>
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Detalhes dos Erros</p>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => copyAllImportErrorDebug(importResult.errors)}
+                                                                    className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                                                >
+                                                                    <Copy className="h-3.5 w-3.5" />
+                                                                    Copiar todos
+                                                                </button>
+                                                            </div>
                                                             <div className="max-h-48 overflow-y-auto space-y-1.5">
                                                                 {importResult.errors.map((e, i) => (
                                                                     <div key={i} className="bg-white border border-red-200 rounded-lg px-3 py-2">
@@ -1896,6 +1928,14 @@ export default function BlingPage() {
                                                                                 <p className="text-xs font-semibold text-slate-800 truncate">{e.name}</p>
                                                                                 {e.sku && <p className="text-xs text-slate-400">SKU: {e.sku}</p>}
                                                                             </div>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => copyImportErrorDebug(e)}
+                                                                                className="inline-flex flex-shrink-0 items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+                                                                            >
+                                                                                <Copy className="h-3 w-3" />
+                                                                                Copiar debug
+                                                                            </button>
                                                                         </div>
                                                                         <p className="text-xs text-red-600 mt-1">⚠️ {e.reason}</p>
                                                                     </div>
