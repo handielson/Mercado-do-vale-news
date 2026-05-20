@@ -1,7 +1,6 @@
 import { supabase } from './supabase';
 import { modelColorImagesService } from './model-color-images';
 import { modelService } from './models';
-import { brandService } from './brands';
 import { crossSellTagsService } from './cross-sell-tags';
 import { vpsApiService } from './vpsApiService';
 import { buildVpsUrl, getVpsSyncHeaders, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
@@ -12,6 +11,87 @@ import { resolveBlingDescription } from './blingDescription.js';
 const BLING_API_BASE = 'https://www.bling.com.br/Api/v3';
 const COMPANY_SLUG = 'mercado-do-vale';
 const parentDetailCache = new Map<number, any>();
+
+function normalizeSlug(value: string): string {
+    return value
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+async function resolveSupabaseBrandForModel(brandName: string, companyId: string): Promise<string> {
+    const slug = normalizeSlug(brandName);
+
+    const { data: existingBrands, error: existingError } = await supabase
+        .from('brands')
+        .select('id, name, slug, active, warranty_days, logo_url, created_at, updated_at, company_id')
+        .eq('company_id', companyId)
+        .eq('slug', slug)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+    if (existingError) {
+        throw new Error(`Failed to resolve brand for model: ${existingError.message}`);
+    }
+
+    if (existingBrands && existingBrands.length > 0) {
+        return existingBrands[0].id;
+    }
+
+    const { data: existingByName, error: existingByNameError } = await supabase
+        .from('brands')
+        .select('id, name, slug, active, warranty_days, logo_url, created_at, updated_at, company_id')
+        .eq('company_id', companyId)
+        .ilike('name', brandName)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+    if (existingByNameError) {
+        throw new Error(`Failed to resolve brand for model: ${existingByNameError.message}`);
+    }
+
+    if (existingByName && existingByName.length > 0) {
+        return existingByName[0].id;
+    }
+
+    const payload = {
+        company_id: companyId,
+        name: brandName,
+        slug,
+        warranty_days: 90,
+        active: true,
+    };
+
+    const { data: newBrand, error: createError } = await supabase
+        .from('brands')
+        .insert(payload)
+        .select('id, name, slug, active, warranty_days, logo_url, created_at, updated_at, company_id')
+        .single();
+
+    if (createError) {
+        const msg = (createError.message || '').toLowerCase();
+        const isConflict = createError.code === '23505' || msg.includes('duplicate') || msg.includes('unique') || msg.includes('409');
+        if (isConflict) {
+            const { data: conflictBrand, error: conflictError } = await supabase
+                .from('brands')
+                .select('id')
+                .eq('company_id', companyId)
+                .eq('slug', slug)
+                .maybeSingle();
+
+            if (!conflictError && conflictBrand?.id) {
+                return conflictBrand.id;
+            }
+        }
+
+        throw new Error(`Failed to create brand for model: ${createError.message}`);
+    }
+
+    vpsApiService.syncBrand(newBrand).catch(console.warn);
+    return newBrand.id;
+}
 
 // ------- Types -------
 
@@ -1533,16 +1613,7 @@ export async function importBlingProducts(
             
             let resolvedBrandId = brandCache.get(brandName);
             if (!resolvedBrandId) {
-                const brands = await brandService.list();
-                const normalizeString = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-                const expectedSlug = normalizeString(brandName);
-                const existingBrand = brands.find(b => b.slug === expectedSlug || normalizeString(b.name) === expectedSlug);
-                if (existingBrand) {
-                    resolvedBrandId = existingBrand.id;
-                } else {
-                    const newBrand = await brandService.create({ name: brandName, active: true, warranty_days: 90 });
-                    resolvedBrandId = newBrand.id;
-                }
+                resolvedBrandId = await resolveSupabaseBrandForModel(brandName, companyId);
                 brandCache.set(brandName, resolvedBrandId);
             }
             
@@ -1578,12 +1649,6 @@ export async function importBlingProducts(
                 let resolvedModelId = modelCache.get(cacheKey);
                 if (!resolvedModelId) {
                     const models = await modelService.list();
-                    const normalizeSlug = (value: string) => value
-                        .toLowerCase()
-                        .normalize('NFD')
-                        .replace(/[\u0300-\u036f]/g, '')
-                        .replace(/[^a-z0-9]+/g, '-')
-                        .replace(/^-+|-+$/g, '');
                     const modelSlug = normalizeSlug(newModelName);
                     const existingModel = models.find(m =>
                         (m.slug && m.slug === modelSlug) ||
