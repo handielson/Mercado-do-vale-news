@@ -258,7 +258,6 @@ export default function BlingPage() {
         modelService.list().then(mods => {
             const sorted = [...mods].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
             setModels(sorted);
-            if (sorted.length > 0) setImportModelId(sorted[0].id);
         }).catch(() => { });
         colorService.list().then(cols => setSystemColors(cols)).catch(() => { });
 
@@ -1316,7 +1315,6 @@ export default function BlingPage() {
                                                     onClick={() => modelService.list().then(mods => {
                                                         const sorted = [...mods].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                                                         setModels(sorted);
-                                                        if (sorted.length > 0 && !importModelId && !autoCreateModel) setImportModelId(sorted[0].id);
                                                     }).catch(() => { })}
                                                     className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-500 flex-shrink-0"
                                                 >

@@ -1372,15 +1372,24 @@ export async function importBlingProducts(
     let modelBrandName: string | null = null;
     let modelName: string | null = null;
     let modelDescription: string | null = null;
+    let validImportModelId = modelId;
     if (modelId) {
         const { data: modelData } = await supabase
             .from('models')
             .select('name, description, brand_id, brands(name)')
             .eq('id', modelId)
             .maybeSingle();
-        modelBrandName = (modelData?.brands as any)?.name || null;
-        modelName = modelData?.name || null;
-        modelDescription = (modelData as any)?.description || null;
+        if (modelData) {
+            modelBrandName = (modelData?.brands as any)?.name || null;
+            modelName = modelData?.name || null;
+            modelDescription = (modelData as any)?.description || null;
+        } else {
+            console.warn('[bling:selected-model-missing]', {
+                modelId,
+                autoCreateModel,
+            });
+            validImportModelId = undefined;
+        }
     }
 
     // Caches for auto-create mode to avoid duplicate db lookups/inserts
@@ -1423,7 +1432,7 @@ export async function importBlingProducts(
                 stock_quantity: detail.stock_quantity ?? item.stock_quantity,
             } : item;
 
-            const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, modelId, marginWholesale, marginReseller, modelDescription);
+            const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, validImportModelId, marginWholesale, marginReseller, modelDescription);
 
             // Se o mapeamento local estiver desatualizado (categoria removida/trocada), cai para a categoria padrão.
             if (!row.category_id || !validVpsCategoryIds.has(row.category_id)) {
@@ -1473,7 +1482,7 @@ export async function importBlingProducts(
 
             if (checkError) throw new Error(checkError.message);
 
-            let finalModelId = (existing && existing.model_id) ? existing.model_id : modelId;
+            let finalModelId = (existing && existing.model_id) ? existing.model_id : validImportModelId;
 
             // --- AUTO-CREATE/RESOLVE BRAND LOGIC (Always runs) ---
             // Extrai a marca do Bling ou assume "Diversos" caso falhe e precisemos gerar um modelo
@@ -1590,7 +1599,7 @@ export async function importBlingProducts(
             }
 
             // Fallback: if Bling didn't provide a brand, use the one from the selected model (only if we didn't just auto-create it)
-            if (!row.brand && modelBrandName && finalModelId === modelId) row.brand = modelBrandName;
+            if (!row.brand && modelBrandName && finalModelId === validImportModelId) row.brand = modelBrandName;
 
             row.model_id = finalModelId || null;
             // Materializa as imagens do Bling na VPS; se uma falhar, preserva a URL original para nao quebrar o produto.
