@@ -2,6 +2,7 @@ import { Brand, BrandInput } from '../types/brand';
 import { supabase } from './supabase';
 import { vpsApiService } from './vpsApiService';
 import { getCompanyId } from './companyContext';
+import { USE_VPS } from '../config/migration';
 
 /**
  * BRAND SERVICE - Supabase Implementation
@@ -20,10 +21,30 @@ function generateSlug(name: string): string {
         .replace(/^-+|-+$/g, '');
 }
 
+function mapRow(row: any): Brand {
+    const activeValue = row.active;
+    return {
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        active: activeValue === undefined || activeValue === null ? true : activeValue !== false && activeValue !== 0 && activeValue !== '0',
+        logo_url: row.logo_url || undefined,
+        warranty_days: row.warranty_days || 90,
+        created: row.created_at || '',
+        updated: row.updated_at || row.created_at || ''
+    };
+}
+
 /**
  * List all brands
  */
 async function list(): Promise<Brand[]> {
+    if (USE_VPS.brands) {
+        const rows = await vpsApiService.getBrands();
+        if (!rows) throw new Error('Falha ao carregar marcas da VPS');
+        return rows.map(mapRow);
+    }
+
     const companyId = await getCompanyId();
 
     const { data, error } = await supabase
@@ -34,21 +55,18 @@ async function list(): Promise<Brand[]> {
 
     if (error) throw new Error(`Failed to fetch brands: ${error.message}`);
 
-    return (data || []).map(row => ({
-        id: row.id,
-        name: row.name,
-        slug: row.slug,
-        active: row.active ?? true,
-        warranty_days: row.warranty_days || 90,
-        created: row.created_at,
-        updated: row.updated_at
-    }));
+    return (data || []).map(mapRow);
 }
 
 /**
  * Get brand by ID
  */
 async function getById(id: string): Promise<Brand | null> {
+    if (USE_VPS.brands) {
+        const brands = await list();
+        return brands.find(brand => brand.id === id) || null;
+    }
+
     const companyId = await getCompanyId();
 
     const { data, error } = await supabase
@@ -63,15 +81,7 @@ async function getById(id: string): Promise<Brand | null> {
         throw new Error(`Failed to fetch brand: ${error.message}`);
     }
 
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        active: data.active ?? true,
-        warranty_days: data.warranty_days || 90,
-        created: data.created_at,
-        updated: data.updated_at
-    };
+    return mapRow(data);
 }
 
 /**
@@ -80,6 +90,22 @@ async function getById(id: string): Promise<Brand | null> {
 async function create(input: BrandInput): Promise<Brand> {
     const companyId = await getCompanyId();
     const slug = generateSlug(input.name);
+
+    if (USE_VPS.brands) {
+        const id = crypto.randomUUID();
+        const payload = {
+            id,
+            company_id: companyId,
+            name: input.name,
+            slug,
+            warranty_days: input.warranty_days || 90,
+            logo_url: input.logo_url || null,
+            active: input.active !== undefined ? input.active : true
+        };
+        const ok = await vpsApiService.syncBrand(payload);
+        if (!ok) throw new Error('Falha ao criar marca na VPS');
+        return mapRow(payload);
+    }
 
     const { data, error } = await supabase
         .from('brands')
@@ -104,30 +130,14 @@ async function create(input: BrandInput): Promise<Brand> {
                 .single();
             
             if (!fetchErr && existingBrand) {
-                const result = {
-                    id: existingBrand.id,
-                    name: existingBrand.name,
-                    slug: existingBrand.slug,
-                    active: existingBrand.active ?? true,
-                    warranty_days: existingBrand.warranty_days || 90,
-                    created: existingBrand.created_at,
-                    updated: existingBrand.updated_at
-                };
+                const result = mapRow(existingBrand);
                 return result;
             }
         }
         throw new Error(`Failed to create brand: ${error.message}`);
     }
 
-    const result = {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        active: data.active ?? true,
-        warranty_days: data.warranty_days || 90,
-        created: data.created_at,
-        updated: data.updated_at
-    };
+    const result = mapRow(data);
     // Fire-and-forget VPS sync
     vpsApiService.syncBrand({ ...data, company_id: data.company_id }).catch(console.warn);
     return result;
@@ -139,6 +149,21 @@ async function create(input: BrandInput): Promise<Brand> {
 async function update(id: string, input: BrandInput): Promise<Brand> {
     const companyId = await getCompanyId();
     const slug = generateSlug(input.name);
+
+    if (USE_VPS.brands) {
+        const payload = {
+            name: input.name,
+            slug,
+            warranty_days: input.warranty_days || 90,
+            logo_url: input.logo_url || null,
+            active: input.active !== undefined ? input.active : true
+        };
+        const ok = await vpsApiService.updateBrand(id, payload);
+        if (!ok) throw new Error('Falha ao atualizar marca na VPS');
+        const updated = await getById(id);
+        if (!updated) throw new Error('Marca nao encontrada apos atualizacao');
+        return updated;
+    }
 
     // 1. Fetch current name before updating (needed for cascading)
     const { data: current, error: fetchError } = await supabase
@@ -190,6 +215,12 @@ async function update(id: string, input: BrandInput): Promise<Brand> {
  * Delete brand
  */
 async function deleteBrand(id: string): Promise<void> {
+    if (USE_VPS.brands) {
+        const ok = await vpsApiService.deleteBrand(id);
+        if (!ok) throw new Error('Falha ao excluir marca na VPS');
+        return;
+    }
+
     const { error } = await supabase
         .from('brands')
         .delete()
@@ -207,6 +238,10 @@ async function deleteBrand(id: string): Promise<void> {
  * Older rows may have active as null, which is treated as active by the mapper.
  */
 async function listActive(): Promise<Brand[]> {
+    if (USE_VPS.brands) {
+        return (await list()).filter(brand => brand.active);
+    }
+
     const companyId = await getCompanyId();
     const { data, error } = await supabase
         .from('brands')
@@ -216,15 +251,7 @@ async function listActive(): Promise<Brand[]> {
         .order('name');
 
     if (error) throw new Error(`Failed to fetch active brands: ${error.message}`);
-    return (data || []).map(row => ({
-        id: row.id,
-        name: row.name,
-        slug: row.slug,
-        active: row.active ?? true,
-        warranty_days: row.warranty_days || 90,
-        created: row.created_at,
-        updated: row.updated_at
-    }));
+    return (data || []).map(mapRow);
 }
 
 export const brandService = {
