@@ -64,7 +64,7 @@ Dominio/API atual:
 
 Servidor atual:
 
-- Fastify em `PORT`, documentado como `3001` no exemplo de env.
+- Fastify em `PORT`, atualmente validado pelo servidor como `4000` quando `PORT` nao esta definido.
 - PM2 roda a API em `/var/www/mdv-api`.
 - A API ja serve uploads em `/images/*`.
 - A API ja possui muitas rotas de catalogo, produtos, marcas, categorias, imagens, banners, company settings, shipping, coupons, favoritos, Synology, autoresponder etc.
@@ -307,11 +307,11 @@ Nginx deve encaminhar essas rotas antes do fallback SPA:
 
 ```nginx
 location = /sitemap.xml {
-    proxy_pass http://127.0.0.1:3001/api/sitemap;
+    proxy_pass http://127.0.0.1:4000/api/sitemap;
 }
 
 location ~ ^/produto/([^/]+)$ {
-    proxy_pass http://127.0.0.1:3001/api/seo-produto?slug=$1;
+    proxy_pass http://127.0.0.1:4000/api/seo-produto?slug=$1;
 }
 ```
 
@@ -401,7 +401,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:4000;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -411,23 +411,23 @@ server {
     }
 
     location /images/ {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:4000;
         proxy_set_header Host $host;
     }
 
     location /video/ {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:4000;
         proxy_set_header Host $host;
         proxy_read_timeout 300s;
     }
 
     location = /sitemap.xml {
-        proxy_pass http://127.0.0.1:3001/api/sitemap;
+        proxy_pass http://127.0.0.1:4000/api/sitemap;
         proxy_set_header Host $host;
     }
 
     location ~ ^/produto/([^/]+)$ {
-        proxy_pass http://127.0.0.1:3001/api/seo-produto?slug=$1;
+        proxy_pass http://127.0.0.1:4000/api/seo-produto?slug=$1;
         proxy_set_header Host $host;
     }
 
@@ -691,4 +691,3 @@ Considerar "fora da Vercel" somente quando:
 - frontend e APIs rodam na VPS;
 - deploy novo nao usa `npx vercel`;
 - rollback esta documentado e testado.
-

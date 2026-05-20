@@ -73,6 +73,7 @@ const pool = mysql.createPool({
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_AUTH_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const BRASILAPI_NCM_URL = 'https://brasilapi.com.br/api/ncm/v1';
 
 const CORS_ORIGINS = [
   'https://www.mercadodovale.com.br',
@@ -183,10 +184,12 @@ function getBearerToken(request) {
   return auth.slice(7).trim();
 }
 
-async function isAdminBearerToken(request) {
-  if (!SUPABASE_URL || !SUPABASE_AUTH_KEY) return false;
+async function getSupabaseBearerAuthContext(request) {
+  if (!SUPABASE_URL || !SUPABASE_AUTH_KEY) {
+    return { userId: null, customerId: null, isAdmin: false };
+  }
   const token = getBearerToken(request);
-  if (!token) return false;
+  if (!token) return { userId: null, customerId: null, isAdmin: false };
 
   try {
     const authRes = await fetch(`${SUPABASE_URL.replace(/\/+$/, '')}/auth/v1/user`, {
@@ -196,14 +199,14 @@ async function isAdminBearerToken(request) {
       },
       signal: AbortSignal.timeout(5000),
     });
-    if (!authRes.ok) return false;
+    if (!authRes.ok) return { userId: null, customerId: null, isAdmin: false };
 
     const user = await authRes.json();
     const userId = user?.id;
-    if (!userId) return false;
+    if (!userId) return { userId: null, customerId: null, isAdmin: false };
 
     const customerRes = await fetch(
-      `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/customers?select=customer_type&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+      `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/customers?select=id,customer_type&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
       {
         headers: {
           apikey: SUPABASE_AUTH_KEY,
@@ -212,14 +215,24 @@ async function isAdminBearerToken(request) {
         signal: AbortSignal.timeout(5000),
       }
     );
-    if (!customerRes.ok) return false;
+    if (!customerRes.ok) return { userId, customerId: null, isAdmin: false };
 
     const customers = await customerRes.json();
-    return customers?.[0]?.customer_type === 'ADMIN';
+    const customer = customers?.[0] || null;
+    return {
+      userId,
+      customerId: customer?.id || null,
+      isAdmin: customer?.customer_type === 'ADMIN',
+    };
   } catch (err) {
     console.warn('[auth] Supabase admin Bearer validation failed:', err.message);
-    return false;
+    return { userId: null, customerId: null, isAdmin: false };
   }
+}
+
+async function isAdminBearerToken(request) {
+  const auth = await getSupabaseBearerAuthContext(request);
+  return auth.isAdmin;
 }
 
 async function requireSyncKeyOrAdmin(request, reply) {
@@ -230,6 +243,164 @@ async function requireSyncKeyOrAdmin(request, reply) {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+function normalizeVpsProxyPath(input) {
+  const value = Array.isArray(input) ? input[0] : input;
+  const proxyPath = String(value || '').trim();
+  if (!proxyPath || !proxyPath.startsWith('/')) return '';
+  if (proxyPath.startsWith('/api/')) return '';
+  return proxyPath;
+}
+
+function isVpsProxySensitiveGetPath(proxyPath) {
+  return (
+    proxyPath.startsWith('/company-settings') ||
+    proxyPath.startsWith('/admin/') ||
+    proxyPath.startsWith('/table-data/') ||
+    proxyPath.startsWith('/images/list')
+  );
+}
+
+function isVpsProxyPublicProductReadPath(pathname) {
+  if (pathname === '/products' || pathname === '/products/category-counts') return true;
+  if (/^\/products\/by-category\/[^/]+$/u.test(pathname)) return true;
+  if (/^\/products\/by-(?:slug|ean)\/[^/]+$/u.test(pathname)) return true;
+  if (/^\/products\/[^/]+\/combo$/u.test(pathname)) return true;
+  return /^\/products\/[^/]+$/u.test(pathname);
+}
+
+function isVpsProxyPublicPath(proxyPath, method = 'GET') {
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  const pathname = proxyPath.split('?')[0] || '/';
+
+  if (normalizedMethod === 'POST' && /^\/banners\/[^/]+\/(?:click|view)$/u.test(pathname)) {
+    return true;
+  }
+
+  if (normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD') return false;
+
+  if (
+    pathname === '/banners' ||
+    pathname === '/battery-healths' ||
+    pathname === '/brands' ||
+    pathname === '/catalog-settings' ||
+    pathname === '/catalog/metadata' ||
+    pathname === '/categories' ||
+    pathname === '/check-video' ||
+    pathname === '/field-presets' ||
+    pathname === '/payment-fees' ||
+    pathname === '/public/company-settings' ||
+    pathname === '/public/check-video' ||
+    pathname === '/rams' ||
+    pathname === '/shipping/settings' ||
+    pathname === '/shipping/zones' ||
+    pathname === '/status' ||
+    pathname === '/storages' ||
+    pathname === '/versions' ||
+    pathname === '/warranty-templates'
+  ) {
+    return true;
+  }
+
+  if (pathname.startsWith('/coupons/validate/')) return true;
+  if (pathname.startsWith('/video/')) return true;
+  if (/^\/versions\/[^/]+$/u.test(pathname)) return true;
+
+  return isVpsProxyPublicProductReadPath(pathname);
+}
+
+function extractVpsProxyFavoritesCustomerId(proxyPath) {
+  const match = proxyPath.match(/^\/customers\/([^/]+)\/favorites(?:\/[^/]+)?$/);
+  return match?.[1] || null;
+}
+
+async function handleBrasilapiNcmProxy(request, reply) {
+  const search = String(request.query?.search || '').trim();
+  if (!search || search.length < 2) {
+    return reply.code(400).send({ error: 'Missing or invalid search parameter' });
+  }
+
+  try {
+    const upstream = await fetch(`${BRASILAPI_NCM_URL}?search=${encodeURIComponent(search)}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(7000),
+    });
+    const body = await upstream.text();
+    return reply
+      .code(upstream.status)
+      .header('content-type', upstream.headers.get('content-type') || 'application/json; charset=utf-8')
+      .header('cache-control', 's-maxage=86400, stale-while-revalidate=604800')
+      .send(body);
+  } catch (err) {
+    return reply.code(502).send({ error: 'BrasilAPI unavailable', detail: err.message });
+  }
+}
+
+function buildVpsProxyPayload(request) {
+  if (request.method === 'GET' || request.method === 'HEAD') return undefined;
+  if (request.body == null) return undefined;
+  if (Buffer.isBuffer(request.body) || typeof request.body === 'string') return request.body;
+  return JSON.stringify(request.body);
+}
+
+fastify.get('/api/brasilapi-ncm', handleBrasilapiNcmProxy);
+
+fastify.all('/api/vps-proxy', async (request, reply) => {
+  if (request.query?.brasilapi === 'ncm') {
+    return handleBrasilapiNcmProxy(request, reply);
+  }
+
+  const method = String(request.method || 'GET').toUpperCase();
+  const vpsProxyTargetPath = normalizeVpsProxyPath(request.query?.path);
+  if (!vpsProxyTargetPath) {
+    return reply.code(400).send({ error: 'Missing or invalid query param: path' });
+  }
+
+  const auth = await getSupabaseBearerAuthContext(request);
+  const isWrite = method !== 'GET' && method !== 'HEAD';
+  const isPublicPath = isVpsProxyPublicPath(vpsProxyTargetPath, method);
+  const favoritesCustomerId = extractVpsProxyFavoritesCustomerId(vpsProxyTargetPath);
+
+  if (favoritesCustomerId) {
+    if (!auth.userId) return reply.code(401).send({ error: 'Auth required' });
+    if (!auth.isAdmin && auth.customerId !== favoritesCustomerId) {
+      return reply.code(403).send({ error: 'Forbidden for this customer' });
+    }
+  } else if (vpsProxyTargetPath === '/cart/sync') {
+    if (!auth.userId) return reply.code(401).send({ error: 'Auth required' });
+    const bodyCustomerId = request.body?.customerId ? String(request.body.customerId) : null;
+    if (!auth.isAdmin && (!bodyCustomerId || auth.customerId !== bodyCustomerId)) {
+      return reply.code(403).send({ error: 'Forbidden for this customer' });
+    }
+  } else if ((isWrite || isVpsProxySensitiveGetPath(vpsProxyTargetPath)) && !auth.isAdmin) {
+    return reply.code(403).send({ error: 'Admin required' });
+  }
+
+  if (!isPublicPath && !process.env.SYNC_SECRET) {
+    return reply.code(500).send({ error: 'SYNC_SECRET not configured on server' });
+  }
+
+  const headers = {
+    accept: String(request.headers.accept || 'application/json'),
+  };
+  const contentType = request.headers['content-type'];
+  if (contentType) headers['content-type'] = String(contentType);
+  if (!isPublicPath) headers['x-sync-key'] = process.env.SYNC_SECRET;
+
+  const response = await fastify.inject({
+    method,
+    url: vpsProxyTargetPath,
+    headers,
+    payload: buildVpsProxyPayload(request),
+  });
+
+  reply.code(response.statusCode);
+  const responseContentType = response.headers['content-type'];
+  if (responseContentType) reply.header('content-type', responseContentType);
+  const cacheControl = response.headers['cache-control'];
+  if (cacheControl) reply.header('cache-control', cacheControl);
+  return reply.send(response.rawPayload);
+});
+
 const jsonStr = (v) => v == null ? null : (typeof v === 'string' ? v : JSON.stringify(v));
 const optionalBool = (v) => v == null ? null : (v ? 1 : 0);
 

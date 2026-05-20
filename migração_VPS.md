@@ -522,7 +522,7 @@ Esta seção deve ser alimentada ao longo da migração.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `/` | Vercel static | VPS Nginx `dist/` | vps-staging-validado-http | frontend | pública | `curl -H "Host: staging.mercadodovale.com.br" http://76.13.232.162/`; `node tmp-tests/vps-site-deploy-script-static.test.mjs`; `node tmp-tests/vps-nginx-staging-config-static.test.mjs`; `npm run build` | deploy executado na VPS em `/var/www/mdv-site/releases/20260520-180705`; Nginx staging instalado; DNS de staging ainda pendente |
 | `/admin/*` | Vercel static | VPS Nginx `dist/` | vps-staging-validado-http | frontend/admin | Supabase auth no app | `curl -I -H "Host: staging.mercadodovale.com.br" http://76.13.232.162/admin/products`; login + refresh direto em staging após DNS | fallback SPA validado via HTTP 200; falta validação no navegador com DNS ou hosts local |
-| `/api/vps-proxy` | Vercel Function | VPS Fastify | pendente | proxy/api | Supabase admin/customer + sync key | comparar writes e reads | rota crítica para admin |
+| `/api/vps-proxy` | Vercel Function | VPS Fastify | vps-staging-validado-http | proxy/api | Supabase admin/customer + sync key | `node tmp-tests/vps-proxy-fastify-route-static.test.mjs`; `node --check vps_server.js`; `node --check vps_server.cjs`; `curl /api/vps-proxy?path=/status`; `curl /api/vps-proxy?path=/products?limit=1`; `curl /api/vps-proxy?path=/company-settings` sem token | rota compatível criada, deployada e validada no staging; falta regressão com sessão admin real |
 | `/api/bling` | Vercel Function | VPS Fastify | pendente | api/oauth | conforme `resource` | produtos, detalhe, reconcile, OAuth | preservar query `resource` |
 | `/api/auth/callback/bling` | Vercel rewrite | VPS Fastify | pendente | oauth | callback externo | reconectar Bling | preservar URL pública |
 | `/api/bling-webhook` | Vercel Function | VPS Fastify | pendente | webhook | segredo/validação quando disponível | payload Bling simulado | rota crítica |
@@ -536,7 +536,7 @@ Esta seção deve ser alimentada ao longo da migração.
 | `/api/cron-dispatcher` | Vercel Cron/Function | VPS cron + Fastify/script | pendente | cron | `CRON_SECRET` | execução manual e log | substituir Vercel Cron |
 | `/sitemap.xml` | Vercel rewrite/function | VPS Fastify ou arquivo estático | pendente | sitemap/seo | pública | XML válido | pode virar arquivo gerado |
 | `/produto/:slug` | Vercel rewrite/function | VPS Fastify via Nginx | pendente | seo | pública | HTML com OG/canonical | não pode cair só no SPA |
-| `/api/brasilapi-ncm` | Vercel rewrite/proxy | VPS Fastify | pendente | api/proxy | pública/admin conforme uso | busca NCM | cache recomendado |
+| `/api/brasilapi-ncm` | Vercel rewrite/proxy | VPS Fastify | vps-staging-validado-http | api/proxy | pública | `curl /api/brasilapi-ncm?search=8517`; `node tmp-tests/vps-proxy-fastify-route-static.test.mjs` | rota direta criada no Fastify, deployada e validada com cache |
 
 ## Registro de Mudanças
 
@@ -660,3 +660,91 @@ Pendências:
 Rollback: apontar `/var/www/mdv-site/current` para `/var/www/mdv-site/previous` ou desabilitar `mdv-site-staging` no Nginx.
 
 Próximo passo: criar o DNS de staging ou validar via arquivo `hosts`, depois começar pelo bloco `/api/vps-proxy`.
+
+### 2026-05-20 - Preparação da rota Fastify `/api/vps-proxy`
+
+Mudança: criada compatibilidade da rota `/api/vps-proxy` diretamente no Fastify da VPS.
+
+Objetivo: remover a Vercel do caminho crítico do proxy admin/cliente sem mudar ainda o contrato usado pelo frontend.
+
+Arquivos/infra alterados:
+
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/vps-proxy-fastify-route-static.test.mjs`
+- `infra/nginx/mdv-site-staging.conf`
+- `tmp-tests/vps-nginx-staging-config-static.test.mjs`
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/api/vps-proxy`
+- `/api/brasilapi-ncm`
+- `/api/*` no Nginx staging
+
+Validação:
+
+- `node tmp-tests/vps-proxy-fastify-route-static.test.mjs`
+- `node --check vps_server.js`
+- `node --check vps_server.cjs`
+- `curl -i -H "Host: staging.mercadodovale.com.br" http://76.13.232.162/api/status`: encontrou `502 Bad Gateway` antes da correção, indicando proxy Nginx apontando para porta incorreta.
+
+Resultado: código da rota Fastify foi preparado e o problema de porta do Nginx staging foi identificado. Produção atual não foi alterada.
+
+Pendências:
+
+- aplicar Nginx staging corrigido para `127.0.0.1:4000`;
+- fazer deploy da API (`vps_server.js`) na VPS;
+- validar `/api/status`, `/api/vps-proxy?path=/status`, `/api/vps-proxy?path=/products&limit=1` e `/api/brasilapi-ncm?search=8517`;
+- validar uma chamada admin real com sessão Supabase;
+- documentar resultado da regressão depois do deploy.
+
+Rollback: reverter `vps_server.js` na VPS pelo backup do deploy da API ou remover o site staging do Nginx.
+
+Próximo passo: aplicar a correção do Nginx staging e fazer deploy controlado da API.
+
+### 2026-05-20 - Deploy e validação staging de `/api/vps-proxy`
+
+Mudança: aplicada a correção do Nginx staging para a porta real do Fastify (`127.0.0.1:4000`) e feito deploy manual da API VPS.
+
+Objetivo: validar a rota `/api/vps-proxy` fora da Vercel, mantendo o mesmo contrato do frontend.
+
+Arquivos/infra alterados:
+
+- `/etc/nginx/sites-available/mdv-site-staging`
+- `/var/www/mdv-api/server.js`
+- `/var/www/mdv-api/vps_server.js`
+- `/var/www/mdv-api/services/vpsUploadPathPolicy.cjs`
+- `/var/www/mdv-api/.codex-backups/20260520-184952`
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/api/vps-proxy`
+- `/api/brasilapi-ncm`
+- `/api/*` no staging Nginx
+
+Validação:
+
+- `nginx -t`: configuração válida.
+- `systemctl reload nginx`: recarga executada.
+- `node --check /var/www/mdv-api/server.js`: sintaxe válida antes do restart.
+- `pm2 restart mdv-api --update-env`: processo `mdv-api` online.
+- `curl -i -H "Host: staging.mercadodovale.com.br" "http://76.13.232.162/api/vps-proxy?path=%2Fstatus"`: `200 OK`.
+- `curl -i -H "Host: staging.mercadodovale.com.br" "http://76.13.232.162/api/vps-proxy?path=%2Fproducts%3Flimit%3D1"`: `200 OK`.
+- `curl -i -H "Host: staging.mercadodovale.com.br" "http://76.13.232.162/api/brasilapi-ncm?search=8517"`: `200 OK`.
+- `curl -i -H "Host: staging.mercadodovale.com.br" "http://76.13.232.162/api/vps-proxy?path=%2Fcompany-settings"` sem sessão: `403 Admin required`, confirmando bloqueio administrativo.
+- `curl -i "https://api.xiaomipetrolina.com.br/status"`: `200 OK`, confirmando API atual online após restart.
+
+Resultado: `/api/vps-proxy` e `/api/brasilapi-ncm` já funcionam no staging pela VPS. A validação com sessão admin real ainda precisa ser feita no navegador depois do DNS/hosts de staging.
+
+Pendências:
+
+- validar login/admin real usando o domínio de staging;
+- testar uma escrita administrativa pequena e reversível;
+- decidir se o frontend em staging deve forçar proxy local para todas as chamadas VPS;
+- manter produção principal na Vercel até regressão de navegador.
+
+Rollback: restaurar `/var/www/mdv-api/.codex-backups/20260520-184952/server.js` para `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
+
+Próximo passo: validar navegador com staging e seguir para `/api/bling` ou callbacks OAuth, mantendo Vercel fora do caminho novo.
