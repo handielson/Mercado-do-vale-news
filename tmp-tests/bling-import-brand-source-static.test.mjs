@@ -26,4 +26,9 @@ assert(
   'New Supabase brands created for import should still be synced to the VPS'
 );
 
+assert(
+  !/select\('[^']*logo_url/.test(service),
+  'Bling import brand resolver must not select brands.logo_url because the production Supabase table does not have that column'
+);
+
 console.log('bling import brand source static checks ok');

@@ -26,7 +26,7 @@ async function resolveSupabaseBrandForModel(brandName: string, companyId: string
 
     const { data: existingBrands, error: existingError } = await supabase
         .from('brands')
-        .select('id, name, slug, active, warranty_days, logo_url, created_at, updated_at, company_id')
+        .select('id, name, slug, active, warranty_days, created_at, updated_at, company_id')
         .eq('company_id', companyId)
         .eq('slug', slug)
         .order('created_at', { ascending: false })
@@ -42,7 +42,7 @@ async function resolveSupabaseBrandForModel(brandName: string, companyId: string
 
     const { data: existingByName, error: existingByNameError } = await supabase
         .from('brands')
-        .select('id, name, slug, active, warranty_days, logo_url, created_at, updated_at, company_id')
+        .select('id, name, slug, active, warranty_days, created_at, updated_at, company_id')
         .eq('company_id', companyId)
         .ilike('name', brandName)
         .order('created_at', { ascending: false })
@@ -67,7 +67,7 @@ async function resolveSupabaseBrandForModel(brandName: string, companyId: string
     const { data: newBrand, error: createError } = await supabase
         .from('brands')
         .insert(payload)
-        .select('id, name, slug, active, warranty_days, logo_url, created_at, updated_at, company_id')
+        .select('id, name, slug, active, warranty_days, created_at, updated_at, company_id')
         .single();
 
     if (createError) {
