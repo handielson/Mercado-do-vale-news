@@ -17,6 +17,26 @@ function proxyUrl(path: string, method: string = 'GET'): string {
   return buildVpsUrl(path, { method });
 }
 
+function forcedProxyUrl(path: string): string {
+  const env = (import.meta as any).env ?? {};
+  const proxyBase = env.DEV ? '/vps-proxy' : '/api/vps-proxy';
+  return `${proxyBase}?path=${encodeURIComponent(path)}`;
+}
+
+function summarizeBody(text: string): string {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return '';
+  return trimmed.length > 500 ? `${trimmed.slice(0, 500)}...` : trimmed;
+}
+
+function logReadFailure(path: string, url: string, detail: Record<string, unknown>): void {
+  console.error('[vpsApiService.fetchSafe] GET failed', {
+    path,
+    url,
+    ...detail,
+  });
+}
+
 function isPublicStorefrontRuntime(): boolean {
   if (typeof window === 'undefined') return false;
   return !/^\/(?:admin|pdv|auth|login)(?:\/|$)/.test(window.location.pathname);
@@ -113,35 +133,89 @@ class VpsApiService {
     this.cache.set(key, { data, timestamp: Date.now() });
   }
 
+  private async fetchJsonWithDiagnostics<T>(
+    path: string,
+    url: string,
+    headers: Record<string, string>,
+    signal: AbortSignal,
+    cache: RequestCache,
+  ): Promise<{ ok: true; data: T } | { ok: false; status?: number; statusText?: string; body?: string; error?: string }> {
+    try {
+      const res = await fetch(url, {
+        signal,
+        headers,
+        cache,
+      });
+
+      if (!res.ok) {
+        const body = summarizeBody(await res.text().catch(() => ''));
+        return {
+          ok: false,
+          status: res.status,
+          statusText: res.statusText,
+          body,
+        };
+      }
+
+      return {
+        ok: true,
+        data: await res.json() as T,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error || 'Erro desconhecido'),
+      };
+    }
+  }
+
   private async fetchSafe<T>(path: string, noCache = false): Promise<T | null> {
     if (!noCache) {
       const cached = this.isCached<T>(path);
       if (cached !== null) return cached;
     }
-    try {
+
+    const separator = path.includes('?') ? '&' : '?';
+    const fullPath = noCache ? `${path}${separator}_t=${Date.now()}` : path;
+    const headers = await this.authHeaders({ Accept: 'application/json' });
+    const cacheMode: RequestCache = noCache ? 'no-store' : 'default';
+    const timeoutMs = getReadTimeoutMs(path);
+    const primaryUrl = proxyUrl(fullPath, 'GET');
+    const fallbackUrl = forcedProxyUrl(fullPath);
+    const urls = primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl];
+    const failures: Array<Record<string, unknown>> = [];
+
+    for (const url of urls) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), getReadTimeoutMs(path));
-      
-      const separator = path.includes('?') ? '&' : '?';
-      const fullPath = noCache ? `${path}${separator}_t=${Date.now()}` : path;
-      const headers: Record<string, string> = { Accept: 'application/json' };
-      
-      const res = await fetch(proxyUrl(fullPath, 'GET'), {
-        signal: controller.signal,
-        headers: await this.authHeaders(headers),
-        cache: noCache ? 'no-store' : 'default',
-      }).finally(() => {
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const result = await this.fetchJsonWithDiagnostics<T>(
+        path,
+        url,
+        headers,
+        controller.signal,
+        cacheMode,
+      ).finally(() => {
         clearTimeout(timer);
       });
-      if (!res.ok) return null;
-      const data = (await res.json()) as T;
-      if (!noCache) {
-        this.setCache<T>(path, data);
+
+      if (result.ok) {
+        const data = result.data;
+        if (!noCache) {
+          this.setCache<T>(path, data);
+        }
+        return data;
       }
-      return data;
-    } catch {
-      return null;
+
+      const failure = {
+        url,
+        ...result,
+        ok: undefined,
+      };
+      failures.push(failure);
+      logReadFailure(path, url, failure);
     }
+
+    return null;
   }
 
   private async writeSafe(method: 'POST' | 'PUT' | 'DELETE' | 'PATCH', path: string, body?: unknown): Promise<boolean> {
