@@ -39,12 +39,12 @@ run('buildVpsUrl preserva query string em acesso direto', () => {
   assert.equal(url, 'https://api.xiaomipetrolina.com.br/products?search=fone&_t=123');
 });
 
-run('buildVpsUrl usa proxy server-side para catalogo publico em producao', () => {
+run('buildVpsUrl usa VPS direta para catalogo publico em producao', () => {
   const url = buildVpsUrl('/products?search=fone&_t=123', {
     env: {},
     runtimeHostname: 'mercadodovale.com.br',
   });
-  assert.equal(url, '/api/vps-proxy?path=%2Fproducts%3Fsearch%3Dfone%26_t%3D123');
+  assert.equal(url, 'https://api.xiaomipetrolina.com.br/products?search=fone&_t=123');
 });
 
 run('buildVpsUrl usa proxy server-side para company-settings em producao', () => {
@@ -55,12 +55,12 @@ run('buildVpsUrl usa proxy server-side para company-settings em producao', () =>
   assert.equal(url, '/api/vps-proxy?path=%2Fcompany-settings');
 });
 
-run('buildVpsUrl usa proxy server-side para company-settings publico em producao', () => {
+run('buildVpsUrl usa VPS direta para company-settings publico em producao', () => {
   const url = buildVpsUrl('/public/company-settings', {
     env: {},
     runtimeHostname: 'mercadodovale.com.br',
   });
-  assert.equal(url, '/api/vps-proxy?path=%2Fpublic%2Fcompany-settings');
+  assert.equal(url, 'https://api.xiaomipetrolina.com.br/public/company-settings');
 });
 
 run('buildVpsUrl permite VPS direta para leitura publica quando flag explicita esta ativa', () => {
@@ -69,6 +69,14 @@ run('buildVpsUrl permite VPS direta para leitura publica quando flag explicita e
     runtimeHostname: 'mercadodovale.com.br',
   });
   assert.equal(url, 'https://api.xiaomipetrolina.com.br/products?search=fone&_t=123');
+});
+
+run('buildVpsUrl permite forcar proxy para leitura publica em producao', () => {
+  const url = buildVpsUrl('/products?search=fone&_t=123', {
+    env: { VITE_FORCE_VPS_PROXY: '1' },
+    runtimeHostname: 'mercadodovale.com.br',
+  });
+  assert.equal(url, '/api/vps-proxy?path=%2Fproducts%3Fsearch%3Dfone%26_t%3D123');
 });
 
 run('buildVpsUrl usa proxy server-side para favoritos em producao', () => {

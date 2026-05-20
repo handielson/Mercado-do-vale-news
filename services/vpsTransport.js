@@ -133,12 +133,13 @@ function getProxyBase(env = {}, runtimeHostname) {
 export function resolveVpsBase(env = {}, runtimeHostname, path, method = 'GET') {
   const proxyBase = getProxyBase(env, runtimeHostname);
   const allowDirectPublicVps = env.VITE_ALLOW_DIRECT_PUBLIC_VPS === '1';
+  const forceVpsProxy = env.VITE_FORCE_VPS_PROXY === '1';
 
   if (proxyBase === DEV_VPS_PROXY_BASE) {
     return proxyBase;
   }
 
-  if (allowDirectPublicVps && path && isPublicVpsPath(path, method)) {
+  if ((allowDirectPublicVps || !forceVpsProxy) && path && isPublicVpsPath(path, method)) {
     return normalizeVpsBase(env.VITE_VPS_BASE_URL || DEFAULT_VPS_BASE_URL);
   }
 

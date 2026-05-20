@@ -127,6 +127,31 @@ function getCacheAge(): string | null {
     }
 }
 
+async function fetchAllAdminVpsProducts(): Promise<any[] | null> {
+    const pageSize = 300;
+    const rows: any[] = [];
+
+    for (let offset = 0; ; offset += pageSize) {
+        const page = await vpsApiService.getProducts({
+            status: 'all',
+            limit: pageSize,
+            offset,
+            noCache: true,
+        });
+
+        if (!page) {
+            if (offset === 0) return null;
+            console.warn('[useProducts] VPS interrompida ao paginar produtos no offset:', offset);
+            break;
+        }
+
+        rows.push(...page);
+        if (page.length < pageSize) break;
+    }
+
+    return rows;
+}
+
 /**
  * useProducts Hook
  * Manages product list state, loading, and client-side filtering.
@@ -169,9 +194,9 @@ export const useProducts = () => {
             if (mode === 'refresh') setIsRefreshing(true);
             setError(null);
 
-            // VPS MySQL primeiro (rápido, sem images base64) — fallback Supabase
+            // VPS MySQL primeiro — fallback Supabase se a primeira página falhar.
             let data: Product[];
-            const vpsData = await vpsApiService.getProducts({ status: 'all', limit: 2000 });
+            const vpsData = await fetchAllAdminVpsProducts();
             if (vpsData) {
                 data = await enrichProductsWithShopeeLinks(vpsData.map(mapVpsProduct));
                 console.log(`[useProducts] VPS: ${data.length} produtos`);
@@ -250,8 +275,8 @@ export const useProducts = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // The admin list initially loads a capped page for speed; enrich it from the
-    // VPS when searching so SKUs beyond that first page are still discoverable.
+    // Enrich search results from the VPS so records created after the cached
+    // list was loaded are still discoverable.
     useEffect(() => {
         const term = filters.search.trim();
         if (term.length < 2) return;
