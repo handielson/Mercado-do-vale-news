@@ -25,11 +25,7 @@ async function fetchMetadata(): Promise<MetadataCache | null> {
             const timestamp = Date.now();
             const res = await fetch(buildVpsUrl(`/catalog/metadata?_t=${timestamp}`), {
                 signal: controller.signal,
-                headers: { 
-                    Accept: 'application/json',
-                    'Cache-Control': 'no-cache, no-store, must-revalidate',
-                    'Pragma': 'no-cache'
-                },
+                headers: { Accept: 'application/json' },
                 cache: 'no-store',
             });
             clearTimeout(timer);
