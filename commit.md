@@ -80,6 +80,7 @@ eu devo seguir esta regra:
 7. se a mudanca precisar aparecer no projeto web, garantir que o commit chegue em `main`
 8. verificar se a Vercel criou o deployment esperado
 9. confirmar se precisa ou nao deploy na VPS
+10. depois que voce testar e der aval, revisar e apagar arquivos soltos que tenham ficado do trabalho, para evitar lixo no repositorio
 
 ## Como decidir o destino do commit
 
@@ -176,7 +177,23 @@ Nesses casos, depois disso eu tambem preciso executar o deploy operacional da VP
 8. se houver necessidade de Vercel, garantir que o commit chegue em `main`
 9. verificar o deployment da Vercel
 10. se houver necessidade de VPS, executar tambem o deploy da VPS
-11. informar com clareza onde o commit ficou, o status da Vercel e o status da VPS
+11. aguardar seu teste/aval quando a mudanca depender de validacao manual no sistema
+12. depois do seu aval, analisar `git status --short --untracked-files=all` e apagar apenas arquivos soltos claramente temporarios ou sem impacto no sistema
+13. informar com clareza onde o commit ficou, o status da Vercel, o status da VPS e se houve limpeza de arquivos soltos
+
+### Limpeza pos-teste com aval
+
+No fim do fluxo de commit/deploy, se voce testar e der aval, eu devo fazer uma limpeza dos arquivos soltos que sobraram do trabalho.
+
+Regra:
+
+- conferir `git status --short --untracked-files=all`
+- separar arquivos soltos por tipo: logs, temporarios, outputs de build/render, testes descartaveis, docs/planos, assets e scripts
+- apagar somente o que for claramente lixo ou arquivo temporario que nao afeta o sistema
+- nao apagar arquivos rastreados pelo Git
+- nao apagar docs, assets, scripts ou testes que possam ser trabalho util sem antes confirmar com voce
+- se houver duvida, manter o arquivo e te mostrar a lista para decisao
+- depois de limpar, conferir novamente o `git status`
 
 ### O que eu nao devo fazer
 
@@ -188,6 +205,7 @@ Nesses casos, depois disso eu tambem preciso executar o deploy operacional da VP
 - nao ignorar worktree sujo
 - nao misturar documentacao com codigo nao relacionado no mesmo commit
 - nao presumir deploy na VPS para arquivos de documentacao
+- nao apagar arquivos soltos antes do seu teste/aval final, salvo quando voce pedir explicitamente uma limpeza
 
 ## Observacoes praticas para este projeto
 
@@ -241,4 +259,4 @@ Em resumo: para Git e build neste projeto, o caminho correto e pedir/usar execuc
 
 Quando voce pedir para comitar de novo, a regra e:
 
-`comitar so o que foi pedido, fazer push, levar para main quando precisar aparecer na Vercel, verificar o deployment, e fazer deploy na VPS quando a mudanca atingir a VPS.`
+`comitar so o que foi pedido, fazer push, levar para main quando precisar aparecer na Vercel, verificar o deployment, fazer deploy na VPS quando a mudanca atingir a VPS e, depois do seu teste com aval, limpar arquivos soltos que sejam lixo para nao atrapalhar commits futuros.`
