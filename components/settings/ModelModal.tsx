@@ -586,7 +586,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         try {
             setLoading(true);
             const [brandsData, categoriesData, fieldsData, tagsData] = await Promise.all([
-                brandService.listActive(),
+                brandService.list(),
                 categoryService.list(),
                 customFieldsService.list(),
                 crossSellTagsService.list()
