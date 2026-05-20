@@ -529,6 +529,94 @@ async function handleMercadoPagoWebhookVps(body) {
 
 fastify.get('/api/brasilapi-ncm', handleBrasilapiNcmProxy);
 
+function escapeSitemapXml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function isLocalSitemapHost(host) {
+  return /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(String(host || ''));
+}
+
+function buildSitemapBaseUrl(request) {
+  const forwardedProto = String(request.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHost = String(request.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const rawProtocol = forwardedProto || 'https';
+  const host = forwardedHost || request.headers.host || 'mercadodovale.com.br';
+  const protocol = rawProtocol === 'http' && isLocalSitemapHost(host) ? 'http' : 'https';
+  return `${protocol}://${host}`;
+}
+
+function formatSitemapDate(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
+  return date.toISOString().split('T')[0];
+}
+
+fastify.get('/api/sitemap', async (request, reply) => {
+  try {
+    const [products] = await pool.query(
+      `SELECT slug, name, updated_at
+       FROM products
+       WHERE slug IS NOT NULL
+         AND slug != ''
+         AND name IS NOT NULL
+         AND name != ''
+         AND (status IN ('active', 'Ativo') OR status IS NULL)
+         AND (is_parent = 0 OR is_parent IS NULL)
+         AND (exclude_from_seo = 0 OR exclude_from_seo IS NULL)
+       ORDER BY updated_at DESC
+       LIMIT 5000`
+    );
+
+    const baseUrl = buildSitemapBaseUrl(request);
+    const productUrls = products.map((product) => `    <url>
+        <loc>${escapeSitemapXml(`${baseUrl}/produto/${product.slug}`)}</loc>
+        <lastmod>${formatSitemapDate(product.updated_at)}</lastmod>
+        <changefreq>daily</changefreq>
+        <priority>0.9</priority>
+    </url>`).join('\n');
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>${escapeSitemapXml(`${baseUrl}/`)}</loc>
+        <changefreq>daily</changefreq>
+        <priority>1.0</priority>
+    </url>
+    <url>
+        <loc>${escapeSitemapXml(`${baseUrl}/quem-somos`)}</loc>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    <url>
+        <loc>${escapeSitemapXml(`${baseUrl}/faq`)}</loc>
+        <changefreq>monthly</changefreq>
+        <priority>0.5</priority>
+    </url>
+${productUrls}
+</urlset>`;
+
+    return reply
+      .header('Content-Type', 'application/xml; charset=utf-8')
+      .header('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400')
+      .code(200)
+      .send(xml.trim());
+  } catch (err) {
+    return reply.code(500).send({
+      error: 'Failed to generate sitemap',
+      debug: buildCopyableDebug('sitemap', {
+        step: 'query products',
+        rawMessage: err.message,
+      }),
+    });
+  }
+});
+
 fastify.get('/api/mercadopago-webhook', async () => ({ ok: true, mode: 'vps-fastify', accepts: 'POST' }));
 
 fastify.post('/api/mercadopago-webhook', async (request, reply) => {

@@ -486,6 +486,81 @@ Nenhuma rota crítica deve ser migrada sem atualizar o mapa.
 | Deploy | GitHub Actions para VPS | manual temporário |
 | Rollback | symlink release | restaurar backup manual temporário |
 
+## Fluxo de Deploy do Site na VPS
+
+Este é o fluxo operacional para publicar o frontend sem Vercel.
+
+1. Gerar build do site:
+
+```bash
+npm run build
+```
+
+2. Enviar o build para a VPS:
+
+```bash
+npm run deploy:vps-site
+```
+
+O script deve publicar a pasta `dist/` em um release versionado dentro de:
+
+```text
+/var/www/mdv-site/releases
+```
+
+Cada deploy cria uma pasta própria, por exemplo:
+
+```text
+/var/www/mdv-site/releases/20260520-180705
+```
+
+3. Trocar o release ativo por symlink:
+
+```text
+/var/www/mdv-site/current
+```
+
+Antes da troca, o release anterior deve ficar preservado em:
+
+```text
+/var/www/mdv-site/previous
+```
+
+4. Servir o site pelo Nginx:
+
+- `root` aponta para `/var/www/mdv-site/current`;
+- assets versionados de `/assets/*` usam cache longo;
+- rotas SPA como `/admin/*` caem no `index.html`;
+- `/api/*` é proxy reverso para o Fastify/PM2;
+- `/sitemap.xml` e `/produto/:slug` ficam reservadas antes do fallback SPA porque precisam de SEO/HTML próprio.
+
+5. Validar após o deploy:
+
+- `curl -I` no domínio ou staging;
+- abrir `/`;
+- abrir `/admin/products`;
+- validar assets `/assets/*`;
+- validar `/api/status`;
+- validar `/api/vps-proxy?path=/status`;
+- checar logs do Nginx e PM2.
+
+6. Rollback:
+
+Se o deploy falhar, voltar o symlink `current` para `previous`:
+
+```bash
+ln -sfn /var/www/mdv-site/previous /var/www/mdv-site/current
+```
+
+Depois validar novamente `GET /`, `/admin/products` e `/api/status`.
+
+7. Produção e fallback:
+
+- enquanto a regressão completa não terminar, Vercel fica como fallback temporário;
+- a VPS staging deve provar site, API, login, admin, pagamento, webhooks, SEO e sitemap antes da troca DNS;
+- no corte final, Cloudflare/DNS aponta `mercadodovale.com.br` e `www.mercadodovale.com.br` para a VPS;
+- se a troca final apresentar falha, reverter DNS/Cloudflare para o fallback temporário ou voltar `current` para `previous`, conforme a origem do problema.
+
 ## Checklist de Cada Bloco
 
 Antes de considerar um bloco migrado:
@@ -534,7 +609,7 @@ Esta seção deve ser alimentada ao longo da migração.
 | `/api/shipping` | Vercel Function | VPS Fastify | pendente | api | admin/public conforme uso | cotação Melhor Envio | revisar tokens |
 | `/api/telegram-webhook` | Vercel Function | VPS Fastify | pendente | webhook | token/segredo | payload Telegram simulado | se ativo |
 | `/api/cron-dispatcher` | Vercel Cron/Function | VPS cron + Fastify/script | pendente | cron | `CRON_SECRET` | execução manual e log | substituir Vercel Cron |
-| `/sitemap.xml` | Vercel rewrite/function | VPS Fastify ou arquivo estático | pendente | sitemap/seo | pública | XML válido | pode virar arquivo gerado |
+| `/sitemap.xml` | Vercel rewrite/function | VPS Fastify via Nginx | vps-staging-validado-http | sitemap/seo | pública | `node tmp-tests/vps-sitemap-fastify-static.test.mjs`; `node --check vps_server.js`; `node --check vps_server.cjs`; `curl /api/sitemap`; `curl /sitemap.xml` | Nginx faz proxy para `/api/sitemap`; rota Fastify deployada e validada no staging com XML, cache, HTTPS canônico e debug copiável |
 | `/produto/:slug` | Vercel rewrite/function | VPS Fastify via Nginx | pendente | seo | pública | HTML com OG/canonical | não pode cair só no SPA |
 | `/api/brasilapi-ncm` | Vercel rewrite/proxy | VPS Fastify | vps-staging-validado-http | api/proxy | pública | `curl /api/brasilapi-ncm?search=8517`; `node tmp-tests/vps-proxy-fastify-route-static.test.mjs` | rota direta criada no Fastify, deployada e validada com cache |
 
@@ -787,6 +862,46 @@ Pendências:
 
 Rollback: restaurar o backup anterior de `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
 
+### 2026-05-20 - Deploy e validação staging de `/sitemap.xml`
+
+Mudança: feito deploy manual da API VPS com a rota `/api/sitemap` e validação do proxy Nginx de `/sitemap.xml`.
+
+Objetivo: comprovar que o sitemap público já pode sair da Vercel e ser servido pela VPS.
+
+Arquivos/infra alterados:
+
+- `/var/www/mdv-api/server.js`
+- `/var/www/mdv-api/vps_server.js`
+- `/var/www/mdv-api/services/vpsUploadPathPolicy.cjs`
+- `/var/www/mdv-api/.codex-backups/20260520193807`
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/api/sitemap`
+- `/sitemap.xml`
+
+Validação:
+
+- `node --check /var/www/mdv-api/server.js`: sintaxe válida antes do restart.
+- `pm2 restart mdv-api --update-env`: processo `mdv-api` online.
+- `curl -H "Host: staging.mercadodovale.com.br" http://76.13.232.162/api/sitemap`: `200 OK`, `Content-Type: application/xml; charset=utf-8`.
+- `curl -H "Host: staging.mercadodovale.com.br" http://76.13.232.162/sitemap.xml`: `200 OK`, `Content-Type: application/xml; charset=utf-8`.
+- Ambas as respostas retornaram `cache-control: s-maxage=3600, stale-while-revalidate=86400`.
+- Ambas as respostas geraram 2131 entradas `<url>`.
+- As URLs canônicas saíram com `https://staging.mercadodovale.com.br/...`, mesmo o teste HTTP passando pela VPS.
+- `curl -i "https://api.xiaomipetrolina.com.br/status"`: `200 OK`, confirmando API atual online após restart.
+
+Resultado: `/sitemap.xml` está validada no staging pela VPS. A rota filtra produtos com slug/nome, remove pais e itens `exclude_from_seo`, escapa XML e força HTTPS canônico fora de localhost.
+
+Pendências:
+
+- comparar quantidade de URLs com sitemap atual da Vercel antes do corte final;
+- validar o sitemap de produção com `Host: mercadodovale.com.br` antes da troca DNS;
+- decidir se duplicatas de slug devem ser limpas no banco ou deduplicadas na geração.
+
+Rollback: restaurar `/var/www/mdv-api/.codex-backups/20260520193807/server.js` para `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
+
 ### 2026-05-20 - Deploy e validação staging de `/api/mercadopago-webhook`
 
 Mudança: feito deploy manual da API VPS com a rota `/api/mercadopago-webhook`.
@@ -823,3 +938,46 @@ Pendências:
 - decidir se o rewrite da Vercel será removido somente no corte final ou mantido temporariamente como compatibilidade.
 
 Rollback: restaurar `/var/www/mdv-api/.codex-backups/20260520191224/server.js` para `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
+
+### 2026-05-20 - Preparação da rota Fastify `/api/sitemap`
+
+Mudança: criada a geração de sitemap diretamente no Fastify da VPS para atender `/sitemap.xml` via Nginx.
+
+Objetivo: remover a dependência da Vercel para o sitemap público antes do corte de DNS do site.
+
+Arquivos alterados:
+
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/vps-sitemap-fastify-static.test.mjs`
+- `tmp-tests/vps-site-deploy-runbook-static.test.mjs`
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/api/sitemap`
+- `/sitemap.xml`
+
+Validação local:
+
+- `node tmp-tests/vps-site-deploy-runbook-static.test.mjs`
+- `node tmp-tests/vps-site-deploy-script-static.test.mjs`
+- `node tmp-tests/vps-nginx-staging-config-static.test.mjs`
+- `node tmp-tests/vps-sitemap-fastify-static.test.mjs`
+- `node --check vps_server.js`
+- `node --check vps_server.cjs`
+
+Debug copiável:
+
+- Falhas na geração retornam `debug` com `timestamp`, `operation`, `step` e `rawMessage`.
+- O sitemap não retorna segredos nem dados sensíveis.
+
+Pendências:
+
+- fazer deploy da API VPS;
+- validar `/api/sitemap` em staging;
+- validar `/sitemap.xml` pelo Nginx staging;
+- confirmar que URLs de produto aparecem com o host correto;
+- depois da validação, trocar status da rota para `vps-staging-validado-http`.
+
+Rollback: restaurar o backup anterior de `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
