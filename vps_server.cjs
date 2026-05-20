@@ -342,7 +342,203 @@ function buildVpsProxyPayload(request) {
   return JSON.stringify(request.body);
 }
 
+function buildCopyableDebug(operation, details = {}) {
+  return {
+    timestamp: new Date().toISOString(),
+    operation,
+    ...details,
+  };
+}
+
+function getSupabaseRestBaseUrl() {
+  if (!SUPABASE_URL) return '';
+  return `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1`;
+}
+
+function buildSupabaseRestHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_AUTH_KEY,
+    Authorization: `Bearer ${SUPABASE_AUTH_KEY}`,
+    Accept: 'application/json',
+    ...extra,
+  };
+}
+
+async function supabaseRestSelect(table, query) {
+  const baseUrl = getSupabaseRestBaseUrl();
+  if (!baseUrl || !SUPABASE_AUTH_KEY) {
+    throw new Error('Supabase REST env vars missing');
+  }
+
+  const response = await fetch(`${baseUrl}/${table}?${query}`, {
+    headers: buildSupabaseRestHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_err) {
+    data = text;
+  }
+  if (!response.ok) {
+    const error = new Error(`Supabase REST select failed: ${response.status}`);
+    error.status = response.status;
+    error.body = data;
+    throw error;
+  }
+  return data;
+}
+
+async function supabaseRestPatch(table, query, payload) {
+  const baseUrl = getSupabaseRestBaseUrl();
+  if (!baseUrl || !SUPABASE_AUTH_KEY) {
+    throw new Error('Supabase REST env vars missing');
+  }
+
+  const response = await fetch(`${baseUrl}/${table}?${query}`, {
+    method: 'PATCH',
+    headers: buildSupabaseRestHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    }),
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(8000),
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_err) {
+    data = text;
+  }
+  if (!response.ok) {
+    const error = new Error(`Supabase REST patch failed: ${response.status}`);
+    error.status = response.status;
+    error.body = data;
+    throw error;
+  }
+  return data;
+}
+
+function isMercadoPagoWebhookPayload(body) {
+  if (!body || typeof body !== 'object') return false;
+  const type = String(body.type || '').toLowerCase();
+  const action = String(body.action || '').toLowerCase();
+  return (type === 'payment' || action.startsWith('payment.')) && !!body?.data?.id;
+}
+
+async function handleMercadoPagoWebhookVps(body) {
+  const paymentId = String(body?.data?.id || '').trim();
+  if (!paymentId) {
+    return { status: 200, body: { message: 'ignored', reason: 'no payment id' } };
+  }
+
+  try {
+    const integrations = await supabaseRestSelect('payment_integrations', 'select=access_token,is_active&gateway_name=eq.mercado_pago&is_active=eq.true&limit=1');
+    const integration = Array.isArray(integrations) ? integrations[0] : null;
+    if (!integration?.access_token) {
+      return {
+        status: 200,
+        body: {
+          error: 'integration not configured',
+          debug: buildCopyableDebug('mercadopago-webhook', {
+            step: 'load integration',
+            paymentId,
+            rawMessage: 'Active Mercado Pago integration not found',
+          }),
+        },
+      };
+    }
+
+    const mercadoPagoResponse = await fetch(
+      `https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`,
+      {
+        headers: { Authorization: `Bearer ${integration.access_token}` },
+        signal: AbortSignal.timeout(12000),
+      }
+    );
+
+    if (!mercadoPagoResponse.ok) {
+      const rawBody = await mercadoPagoResponse.text().catch(() => '');
+      return {
+        status: 200,
+        body: {
+          error: 'payment lookup failed',
+          debug: buildCopyableDebug('mercadopago-webhook', {
+            step: 'verify payment',
+            paymentId,
+            mercadoPagoStatus: mercadoPagoResponse.status,
+            rawMessage: rawBody.slice(0, 1200),
+          }),
+        },
+      };
+    }
+
+    const payment = await mercadoPagoResponse.json();
+    if (payment.status !== 'approved') {
+      return { status: 200, body: { message: 'ignored', reason: `status=${payment.status}` } };
+    }
+
+    const gatewayPaymentId = String(payment.id);
+    const orders = await supabaseRestSelect(
+      'orders',
+      `select=id,status&gateway_payment_id=eq.${encodeURIComponent(gatewayPaymentId)}&limit=1`
+    );
+    const order = Array.isArray(orders) ? orders[0] : null;
+
+    if (!order) {
+      return {
+        status: 200,
+        body: {
+          error: 'order not found',
+          debug: buildCopyableDebug('mercadopago-webhook', {
+            step: 'find order',
+            paymentId,
+            gatewayPaymentId,
+            rawMessage: 'No order found for gateway_payment_id',
+          }),
+        },
+      };
+    }
+
+    const finalStatuses = ['paid', 'preparing', 'shipped', 'delivered', 'completed'];
+    if (finalStatuses.includes(order.status)) {
+      return { status: 200, body: { message: 'already processed', order_id: order.id } };
+    }
+
+    await supabaseRestPatch('orders', `id=eq.${encodeURIComponent(order.id)}`, { status: 'paid', payment_status: 'paid' });
+
+    return { status: 200, body: { message: 'success', order_id: order.id } };
+  } catch (err) {
+    return {
+      status: 200,
+      body: {
+        error: 'webhook processing failed',
+        debug: buildCopyableDebug('mercadopago-webhook', {
+          step: 'process webhook',
+          paymentId,
+          rawMessage: err.message,
+          status: err.status || null,
+          body: err.body || null,
+        }),
+      },
+    };
+  }
+}
+
 fastify.get('/api/brasilapi-ncm', handleBrasilapiNcmProxy);
+
+fastify.get('/api/mercadopago-webhook', async () => ({ ok: true, mode: 'vps-fastify', accepts: 'POST' }));
+
+fastify.post('/api/mercadopago-webhook', async (request, reply) => {
+  if (!isMercadoPagoWebhookPayload(request.body)) {
+    return reply.code(200).send({ message: 'ignored', reason: 'not payment webhook' });
+  }
+
+  const result = await handleMercadoPagoWebhookVps(request.body);
+  return reply.code(result.status).send(result.body);
+});
 
 fastify.all('/api/vps-proxy', async (request, reply) => {
   if (request.query?.brasilapi === 'ncm') {

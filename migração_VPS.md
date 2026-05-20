@@ -526,7 +526,7 @@ Esta seção deve ser alimentada ao longo da migração.
 | `/api/bling` | Vercel Function | VPS Fastify | pendente | api/oauth | conforme `resource` | produtos, detalhe, reconcile, OAuth | preservar query `resource` |
 | `/api/auth/callback/bling` | Vercel rewrite | VPS Fastify | pendente | oauth | callback externo | reconectar Bling | preservar URL pública |
 | `/api/bling-webhook` | Vercel Function | VPS Fastify | pendente | webhook | segredo/validação quando disponível | payload Bling simulado | rota crítica |
-| `/api/mercadopago-webhook` | Vercel rewrite | VPS Fastify | pendente | webhook | validação Mercado Pago | payload MP simulado | hoje aponta para Bling webhook |
+| `/api/mercadopago-webhook` | Vercel rewrite | VPS Fastify | vps-staging-validado-http | webhook | validação Mercado Pago | `node tmp-tests/mercadopago-webhook-fastify-static.test.mjs`; `node --check vps_server.js`; `node --check vps_server.cjs`; `curl --resolve ... GET /api/mercadopago-webhook`; `curl --resolve ... POST payload não-MP`; `curl --resolve ... POST payment id=0` | rota Fastify deployada no staging; confirma pagamento real no Mercado Pago antes de atualizar pedido; debug copiável validado sem segredos |
 | `/api/shopee` | Vercel Function | VPS Fastify | pendente | oauth/api | Shopee assinatura | OAuth Shopee | preservar callback |
 | `/api/shopee-catalog` | Vercel Function | VPS Fastify | pendente | api | admin | listar categorias/atributos/upload | atenção a upload e timeout |
 | `/api/shopee-actions` | Vercel Function | VPS Fastify | pendente | api | admin | pedidos/etiquetas/sync | atenção a assinatura Shopee |
@@ -748,3 +748,78 @@ Pendências:
 Rollback: restaurar `/var/www/mdv-api/.codex-backups/20260520-184952/server.js` para `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
 
 Próximo passo: validar navegador com staging e seguir para `/api/bling` ou callbacks OAuth, mantendo Vercel fora do caminho novo.
+
+### 2026-05-20 - Preparação da rota Fastify `/api/mercadopago-webhook`
+
+Mudança: criada a rota `/api/mercadopago-webhook` diretamente no Fastify da VPS, substituindo o rewrite da Vercel que hoje despacha para o webhook do Bling.
+
+Objetivo: receber notificações do Mercado Pago na VPS e validar o pagamento real pela API oficial antes de atualizar o pedido no Supabase.
+
+Arquivos alterados:
+
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/mercadopago-webhook-fastify-static.test.mjs`
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/api/mercadopago-webhook`
+
+Validação local:
+
+- `node tmp-tests/mercadopago-webhook-fastify-static.test.mjs`
+- `node --check vps_server.js`
+- `node --check vps_server.cjs`
+
+Debug copiável:
+
+- Respostas de erro controlado retornam `debug` com `timestamp`, `operation`, `step`, `paymentId`, status upstream e mensagem bruta limitada.
+- Tokens e chaves não são retornados no debug.
+
+Pendências:
+
+- fazer deploy da API VPS;
+- validar `GET /api/mercadopago-webhook` em staging;
+- validar `POST /api/mercadopago-webhook` com payload não-MP;
+- validar payload MP simulado, sem atualizar pedido real;
+- depois da validação, trocar status da rota para `vps-staging-validado-http`.
+
+Rollback: restaurar o backup anterior de `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
+
+### 2026-05-20 - Deploy e validação staging de `/api/mercadopago-webhook`
+
+Mudança: feito deploy manual da API VPS com a rota `/api/mercadopago-webhook`.
+
+Objetivo: comprovar que o webhook do Mercado Pago já pode responder pela VPS em staging, com debug copiável em falhas controladas.
+
+Arquivos/infra alterados:
+
+- `/var/www/mdv-api/server.js`
+- `/var/www/mdv-api/vps_server.js`
+- `/var/www/mdv-api/services/vpsUploadPathPolicy.cjs`
+- `/var/www/mdv-api/.codex-backups/20260520191224`
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/api/mercadopago-webhook`
+
+Validação:
+
+- `node --check /var/www/mdv-api/server.js`: sintaxe válida antes do restart.
+- `pm2 restart mdv-api --update-env`: processo `mdv-api` online.
+- `curl -i -H "Host: staging.mercadodovale.com.br" "http://76.13.232.162/api/mercadopago-webhook"`: `200 OK`.
+- `curl --resolve staging.mercadodovale.com.br:80:76.13.232.162 -i -H "Content-Type: application/json" --data-raw "{\"type\":\"test\"}" "http://staging.mercadodovale.com.br/api/mercadopago-webhook"`: `200 OK`, `ignored`.
+- `curl --resolve staging.mercadodovale.com.br:80:76.13.232.162 -i -H "Content-Type: application/json" --data-raw "{\"type\":\"payment\",\"data\":{\"id\":\"0\"}}" "http://staging.mercadodovale.com.br/api/mercadopago-webhook"`: `200 OK`, `payment lookup failed` com `debug` copiável.
+- `curl -i "https://api.xiaomipetrolina.com.br/status"`: `200 OK`, confirmando API atual online após restart.
+
+Resultado: `/api/mercadopago-webhook` está validada no staging pela VPS. O payload simulado não atualizou pedido real e retornou diagnóstico copiável com `timestamp`, `operation`, `step`, `paymentId`, status do Mercado Pago e mensagem bruta limitada.
+
+Pendências:
+
+- testar com uma notificação real do Mercado Pago em ambiente controlado;
+- após regressão real, trocar o endpoint público do Mercado Pago para a rota VPS definitiva;
+- decidir se o rewrite da Vercel será removido somente no corte final ou mantido temporariamente como compatibilidade.
+
+Rollback: restaurar `/var/www/mdv-api/.codex-backups/20260520191224/server.js` para `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
