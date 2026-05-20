@@ -120,7 +120,8 @@ export function isPublicVpsPath(path, method = 'GET') {
 }
 
 function getProxyBase(env = {}, runtimeHostname) {
-  const isDevBuild = Boolean(env.DEV);
+  const isProductionMode = env.MODE === 'production';
+  const isDevBuild = !isProductionMode && Boolean(env.DEV);
   const forceLocalProxy = env.VITE_FORCE_LOCAL_VPS_PROXY === '1';
 
   if (isDevBuild || forceLocalProxy || isLocalHostname(runtimeHostname)) {

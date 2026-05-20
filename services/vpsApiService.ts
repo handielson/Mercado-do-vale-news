@@ -19,7 +19,8 @@ function proxyUrl(path: string, method: string = 'GET'): string {
 
 function forcedProxyUrl(path: string): string {
   const env = (import.meta as any).env ?? {};
-  const proxyBase = env.DEV ? '/vps-proxy' : '/api/vps-proxy';
+  const isProductionMode = env.MODE === 'production';
+  const proxyBase = !isProductionMode && env.DEV ? '/vps-proxy' : '/api/vps-proxy';
   return `${proxyBase}?path=${encodeURIComponent(path)}`;
 }
 

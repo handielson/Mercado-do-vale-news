@@ -55,6 +55,22 @@ run('buildVpsUrl usa proxy server-side para company-settings em producao', () =>
   assert.equal(url, '/api/vps-proxy?path=%2Fcompany-settings');
 });
 
+run('buildVpsUrl trata MODE production como producao mesmo com DEV true', () => {
+  const url = buildVpsUrl('/company-settings', {
+    env: { DEV: true, MODE: 'production' },
+    runtimeHostname: 'mercadodovale.com.br',
+  });
+  assert.equal(url, '/api/vps-proxy?path=%2Fcompany-settings');
+});
+
+run('buildVpsUrl mantem leitura publica direta quando MODE production vem com DEV true', () => {
+  const url = buildVpsUrl('/products?status=all&limit=300', {
+    env: { DEV: true, MODE: 'production' },
+    runtimeHostname: 'mercadodovale.com.br',
+  });
+  assert.equal(url, 'https://api.xiaomipetrolina.com.br/products?status=all&limit=300');
+});
+
 run('buildVpsUrl usa VPS direta para company-settings publico em producao', () => {
   const url = buildVpsUrl('/public/company-settings', {
     env: {},
