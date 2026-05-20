@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "deploy:vps-site": "node scripts/deploy-vps-site.cjs",
     "preview": "vite preview"
   },
   "dependencies": {
