@@ -35,13 +35,39 @@ function mapRow(row: any): Brand {
     };
 }
 
+function getBrandProxyUrl(): string {
+    const env = (import.meta as any).env ?? {};
+    const proxyBase = env.DEV ? '/vps-proxy' : '/api/vps-proxy';
+    return `${proxyBase}?path=${encodeURIComponent('/brands')}`;
+}
+
+async function loadVpsBrands(): Promise<any[]> {
+    const rows = await vpsApiService.getBrands();
+    if (Array.isArray(rows) && rows.length > 0) return rows;
+
+    const response = await fetch(getBrandProxyUrl(), {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+    });
+
+    if (!response.ok) {
+        throw new Error(`Falha ao carregar marcas da VPS: ${response.status} ${response.statusText}`);
+    }
+
+    const fallbackRows = await response.json();
+    if (!Array.isArray(fallbackRows)) {
+        throw new Error('Falha ao carregar marcas da VPS: resposta invalida');
+    }
+
+    return fallbackRows;
+}
+
 /**
  * List all brands
  */
 async function list(): Promise<Brand[]> {
     if (USE_VPS.brands) {
-        const rows = await vpsApiService.getBrands();
-        if (!rows) throw new Error('Falha ao carregar marcas da VPS');
+        const rows = await loadVpsBrands();
         return rows.map(mapRow);
     }
 
