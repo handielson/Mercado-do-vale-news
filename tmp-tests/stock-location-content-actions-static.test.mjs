@@ -11,6 +11,7 @@ assert.match(page, /onClick=\{\(\) => handleContentTransferFromRow\(item\)\}/, '
 assert.match(page, /closeLocationContents\(true\)/, 'content transfer must only close the box modal after the transfer modal is prepared');
 assert.match(page, /contentsActionProductId === item\.product_id \? 'Abrindo\.\.\.' : 'Transferir'/, 'content transfer button must show an in-progress state instead of looking like it returned to the page');
 assert.match(page, /setProductDistribution\(distribution\)/, 'content transfer must keep row-seeded distribution when live distribution is unavailable');
+assert.match(page, /toast\.success\(`\$\{quantity\} unidade\(s\) de \$\{selectedProduct\.name\} transferida\(s\) para \$\{targetLocationName\}\.`\)/, 'transfer save must show a success message after moving stock');
 assert.match(page, /handleReturnContentItemToStore/, 'page must expose return-to-store action for a box item');
 assert.match(page, /Voltar para loja/, 'content modal must show a return-to-store button');
 assert.match(page, /stockLocationService\.transferStockLocation\(\{[\s\S]*from_location_id: item\.location_id/, 'return-to-store must transfer from the current box location');

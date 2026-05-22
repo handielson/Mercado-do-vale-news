@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowRightLeft, Boxes, Building2, Eye, FileDown, History, Loader2, MapPin, PackageSearch, Pencil, Plus, RefreshCw, RotateCcw, Search, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { toast } from 'sonner';
 import { stockLocationService } from '../../../services/stockLocationService';
 import {
   LocationContentItem,
@@ -1251,6 +1252,8 @@ export function StockLocationsPage() {
         stockLocationService.getStockDivergences().then(setDivergences),
       ]);
 
+      const targetLocationName = locations.find((location) => location.id === transferToLocationId)?.name || 'destino selecionado';
+      toast.success(`${quantity} unidade(s) de ${selectedProduct.name} transferida(s) para ${targetLocationName}.`);
       setTransferOpen(false);
     } catch (error) {
       setTransferError(error instanceof Error ? error.message : 'Nao foi possivel transferir o estoque.');
