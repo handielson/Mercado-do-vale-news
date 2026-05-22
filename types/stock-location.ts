@@ -34,6 +34,15 @@ export interface StockDepositInput {
   is_default?: boolean;
 }
 
+export interface StockDepositUpdateInput {
+  name: string;
+  code?: string;
+  type?: StockDepositType;
+  cep?: string | null;
+  address?: string | null;
+  is_default?: boolean;
+}
+
 export interface StockLocation {
   id: string;
   company_id: string;
@@ -48,6 +57,14 @@ export interface StockLocation {
 }
 
 export interface StockLocationInput {
+  deposit_id: string;
+  name: string;
+  code?: string;
+  description?: string | null;
+  is_default?: boolean;
+}
+
+export interface StockLocationUpdateInput {
   deposit_id: string;
   name: string;
   code?: string;

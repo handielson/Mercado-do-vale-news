@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowRightLeft, Boxes, Building2, Eye, FileDown, History, Loader2, MapPin, PackageSearch, Plus, RefreshCw, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, Boxes, Building2, Eye, FileDown, History, Loader2, MapPin, PackageSearch, Pencil, Plus, RefreshCw, RotateCcw, Search, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { stockLocationService } from '../../../services/stockLocationService';
@@ -24,6 +24,7 @@ export function StockLocationsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [editingDepositId, setEditingDepositId] = useState<string | null>(null);
   const [depositName, setDepositName] = useState('');
   const [depositCode, setDepositCode] = useState('');
   const [depositType, setDepositType] = useState<StockDeposit['type']>('warehouse');
@@ -33,6 +34,7 @@ export function StockLocationsPage() {
   const [depositSaving, setDepositSaving] = useState(false);
   const [depositError, setDepositError] = useState<string | null>(null);
   const [locationOpen, setLocationOpen] = useState(false);
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
   const [locationDepositId, setLocationDepositId] = useState('');
   const [locationName, setLocationName] = useState('');
   const [locationCode, setLocationCode] = useState('');
@@ -157,12 +159,25 @@ export function StockLocationsPage() {
   };
 
   const openDepositModal = () => {
+    setEditingDepositId(null);
     setDepositName('');
     setDepositCode('');
     setDepositType('warehouse');
     setDepositCep('');
     setDepositAddress('');
     setDepositDefault(deposits.length === 0);
+    setDepositError(null);
+    setDepositOpen(true);
+  };
+
+  const openEditDepositModal = (deposit: StockDeposit) => {
+    setEditingDepositId(deposit.id);
+    setDepositName(deposit.name || '');
+    setDepositCode(deposit.code || '');
+    setDepositType(deposit.type || 'warehouse');
+    setDepositCep(deposit.cep || '');
+    setDepositAddress(deposit.address || '');
+    setDepositDefault(Boolean(deposit.is_default));
     setDepositError(null);
     setDepositOpen(true);
   };
@@ -175,11 +190,23 @@ export function StockLocationsPage() {
   const openLocationModal = (depositId = selectedDepositId) => {
     const fallbackDepositId = deposits.find((deposit) => deposit.is_default)?.id || deposits[0]?.id || '';
 
+    setEditingLocationId(null);
     setLocationDepositId(depositId === 'all' ? fallbackDepositId : depositId);
     setLocationName('');
     setLocationCode('');
     setLocationDescription('');
     setLocationDefault(false);
+    setLocationError(null);
+    setLocationOpen(true);
+  };
+
+  const openEditLocationModal = (location: StockLocation) => {
+    setEditingLocationId(location.id);
+    setLocationDepositId(location.deposit_id || '');
+    setLocationName(location.name || '');
+    setLocationCode(location.code || '');
+    setLocationDescription(location.description || '');
+    setLocationDefault(Boolean(location.is_default));
     setLocationError(null);
     setLocationOpen(true);
   };
@@ -201,7 +228,16 @@ export function StockLocationsPage() {
       setDepositSaving(true);
       setDepositError(null);
 
-      const createdDeposit = await stockLocationService.createDeposit({
+      const savedDeposit = editingDepositId
+        ? await stockLocationService.updateDeposit(editingDepositId, {
+          name: depositName,
+          code: depositCode,
+          type: depositType,
+          cep: depositCep,
+          address: depositAddress,
+          is_default: depositDefault,
+        })
+        : await stockLocationService.createDeposit({
         name: depositName,
         code: depositCode,
         type: depositType,
@@ -217,10 +253,10 @@ export function StockLocationsPage() {
 
       setDeposits(depositData);
       setLocations(locationData);
-      setSelectedDepositId(createdDeposit.id);
+      setSelectedDepositId(savedDeposit.id);
       setDepositOpen(false);
     } catch (error) {
-      setDepositError(error instanceof Error ? error.message : 'Nao foi possivel criar o deposito.');
+      setDepositError(error instanceof Error ? error.message : 'Nao foi possivel salvar o deposito.');
     } finally {
       setDepositSaving(false);
     }
@@ -243,20 +279,30 @@ export function StockLocationsPage() {
       setLocationSaving(true);
       setLocationError(null);
 
-      await stockLocationService.createLocation({
-        deposit_id: locationDepositId,
-        name: locationName,
-        code: locationCode,
-        description: locationDescription,
-        is_default: locationDefault,
-      });
+      if (editingLocationId) {
+        await stockLocationService.updateLocation(editingLocationId, {
+          deposit_id: locationDepositId,
+          name: locationName,
+          code: locationCode,
+          description: locationDescription,
+          is_default: locationDefault,
+        });
+      } else {
+        await stockLocationService.createLocation({
+          deposit_id: locationDepositId,
+          name: locationName,
+          code: locationCode,
+          description: locationDescription,
+          is_default: locationDefault,
+        });
+      }
 
       const locationData = await stockLocationService.listLocations();
       setLocations(locationData);
       setSelectedDepositId(locationDepositId);
       setLocationOpen(false);
     } catch (error) {
-      setLocationError(error instanceof Error ? error.message : 'Nao foi possivel criar o local.');
+      setLocationError(error instanceof Error ? error.message : 'Nao foi possivel salvar o local.');
     } finally {
       setLocationSaving(false);
     }
@@ -428,6 +474,37 @@ export function StockLocationsPage() {
     setContentsLocation(null);
     setContentsItems([]);
     setContentsError(null);
+  };
+
+  const buildProductFromContentItem = (item: LocationContentItem): StockLocationProductSearchResult => ({
+    id: item.product_id,
+    name: item.product_name,
+    sku: item.sku || null,
+    ean: item.ean || null,
+    stock_quantity: Number(item.total_stock || item.quantity || 0),
+    images: item.product_image ? [item.product_image] : null,
+  });
+
+  const getDefaultStockTarget = (excludeLocationId = '') => {
+    const preferredDeposit =
+      deposits.find((deposit) => deposit.is_default && deposit.type === 'store') ||
+      deposits.find((deposit) => deposit.type === 'store') ||
+      deposits.find((deposit) => deposit.is_default) ||
+      deposits[0];
+
+    if (!preferredDeposit) return null;
+
+    const preferredLocation =
+      locations.find((location) => location.deposit_id === preferredDeposit.id && location.is_default && location.id !== excludeLocationId) ||
+      locations.find((location) => location.deposit_id === preferredDeposit.id && location.id !== excludeLocationId) ||
+      locations.find((location) => location.id !== excludeLocationId);
+
+    if (!preferredLocation) return null;
+
+    return {
+      depositId: preferredLocation.deposit_id || preferredDeposit.id,
+      locationId: preferredLocation.id,
+    };
   };
 
   /**
@@ -852,6 +929,93 @@ export function StockLocationsPage() {
     }
   };
 
+  const handleContentTransferFromRow = async (item: LocationContentItem) => {
+    closeLocationContents();
+    try {
+      const product = buildProductFromContentItem(item);
+      setSelectedProduct(product);
+      setProductSearch(product.name);
+      setProductLoading(true);
+      setProductError(null);
+      const distribution = await loadProductDistribution(item.product_id);
+      setQuickTransferDestinationDefaults(distribution);
+      const target = getDefaultStockTarget(item.location_id || '');
+      setTransferFromDepositId(item.deposit_id || '');
+      setTransferFromLocationId(item.location_id || '');
+      setTransferToDepositId(target?.depositId || '');
+      setTransferToLocationId(target?.locationId || '');
+      setTransferQuantity(item.available > 0 ? String(item.available) : '1');
+      setTransferReason('');
+      setTransferNotes('');
+      setTransferError(null);
+      setTransferOpen(true);
+    } catch (err: any) {
+      console.error('[StockLocationsPage] transfer from contents', err);
+    } finally {
+      setProductLoading(false);
+    }
+  };
+
+  const handleReturnContentItemToStore = async (item: LocationContentItem) => {
+    if (!item.deposit_id || !item.location_id) {
+      setContentsError('Este produto nao tem origem valida para voltar para loja.');
+      return;
+    }
+
+    const target = getDefaultStockTarget(item.location_id);
+    if (!target) {
+      setContentsError('Cadastre um deposito/local padrao da loja antes de devolver itens.');
+      return;
+    }
+
+    if (target.locationId === item.location_id) {
+      setContentsError('Este produto ja esta no local padrao da loja.');
+      return;
+    }
+
+    if (item.available <= 0) {
+      setContentsError('Nao ha saldo disponivel para devolver; existe quantidade reservada neste local.');
+      return;
+    }
+
+    try {
+      setContentsLoading(true);
+      setContentsError(null);
+      await stockLocationService.transferStockLocation({
+        product_id: item.product_id,
+        from_deposit_id: item.deposit_id,
+        from_location_id: item.location_id,
+        to_deposit_id: target.depositId,
+        to_location_id: target.locationId,
+        quantity: item.available,
+        reason: 'Retorno automatico para loja',
+        notes: item.sku ? `Removido da caixa/local pelo painel. SKU: ${item.sku}` : 'Removido da caixa/local pelo painel.',
+      });
+
+      if (contentsLocation) {
+        const nextItems = await stockLocationService.getLocationContents(contentsLocation.id);
+        setContentsItems(nextItems);
+      }
+
+      await Promise.all([
+        stockLocationService.listMovements({ limit: 20 }).then(setMovements),
+        stockLocationService.getStockDivergences().then(setDivergences),
+      ]);
+
+      if (selectedProduct?.id === item.product_id) {
+        const distribution = await loadProductDistribution(item.product_id);
+        setSelectedProduct({
+          ...selectedProduct,
+          stock_quantity: distribution.reduce((total, row) => total + row.quantity, 0),
+        });
+      }
+    } catch (err: any) {
+      setContentsError(err?.message || 'Nao foi possivel devolver o produto para loja.');
+    } finally {
+      setContentsLoading(false);
+    }
+  };
+
   const handleAdjustmentDepositChange = (depositId: string) => {
     const firstLocation = locations.find((location) => location.deposit_id === depositId);
     const distribution = productDistribution.find((item) => item.deposit_id === depositId && item.location_id === firstLocation?.id);
@@ -1139,16 +1303,14 @@ export function StockLocationsPage() {
               <EmptyBlock label="Nenhum depósito encontrado." />
             ) : (
               deposits.map((deposit) => (
-                <button
+                <div
                   key={deposit.id}
-                  type="button"
-                  onClick={() => setSelectedDepositId(deposit.id)}
                   className={`w-full px-5 py-4 text-left transition hover:bg-slate-50 ${
                     selectedDepositId === deposit.id ? 'bg-blue-50' : 'bg-white'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <button type="button" onClick={() => setSelectedDepositId(deposit.id)} className="min-w-0 flex-1 text-left">
                       <div className="flex items-center gap-2">
                         <p className="font-semibold text-slate-900">{deposit.name}</p>
                         {deposit.is_default && (
@@ -1156,10 +1318,20 @@ export function StockLocationsPage() {
                         )}
                       </div>
                       <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">{deposit.code}</p>
+                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{deposit.type}</span>
+                      <button
+                        type="button"
+                        onClick={() => openEditDepositModal(deposit)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                        title="Renomear deposito"
+                      >
+                        <Pencil size={14} />
+                      </button>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{deposit.type}</span>
                   </div>
-                </button>
+                </div>
               ))
             )}
           </div>
@@ -1239,6 +1411,15 @@ export function StockLocationsPage() {
                         </span>
                       </td>
                       <td className="px-5 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => openEditLocationModal(location)}
+                          className="mr-2 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                          title="Renomear local"
+                        >
+                          <Pencil size={14} />
+                          Renomear
+                        </button>
                         <button
                           type="button"
                           onClick={() => openLocationContents(location)}
@@ -1783,8 +1964,8 @@ export function StockLocationsPage() {
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Novo deposito</h2>
-                <p className="mt-1 text-sm text-slate-500">Cadastre uma loja, galpao ou ponto fisico de estoque.</p>
+                <h2 className="text-lg font-bold text-slate-900">{editingDepositId ? 'Renomear deposito' : 'Novo deposito'}</h2>
+                <p className="mt-1 text-sm text-slate-500">{editingDepositId ? 'Atualize nome, codigo e tipo do deposito.' : 'Cadastre uma loja, galpao ou ponto fisico de estoque.'}</p>
               </div>
               <button
                 type="button"
@@ -1890,7 +2071,7 @@ export function StockLocationsPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {depositSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Salvar deposito
+                {editingDepositId ? 'Salvar deposito' : 'Criar deposito'}
               </button>
             </div>
           </form>
@@ -1905,8 +2086,8 @@ export function StockLocationsPage() {
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Novo local</h2>
-                <p className="mt-1 text-sm text-slate-500">Cadastre prateleira, balcao, caixa ou posicao interna.</p>
+                <h2 className="text-lg font-bold text-slate-900">{editingLocationId ? 'Renomear local' : 'Novo local'}</h2>
+                <p className="mt-1 text-sm text-slate-500">{editingLocationId ? 'Atualize nome, codigo e descricao do local.' : 'Cadastre prateleira, balcao, caixa ou posicao interna.'}</p>
               </div>
               <button
                 type="button"
@@ -1930,6 +2111,7 @@ export function StockLocationsPage() {
                 <select
                   value={locationDepositId}
                   onChange={(event) => setLocationDepositId(event.target.value)}
+                  disabled={Boolean(editingLocationId)}
                   className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                   required
                 >
@@ -2000,7 +2182,7 @@ export function StockLocationsPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {locationSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Salvar local
+                {editingLocationId ? 'Salvar local' : 'Criar local'}
               </button>
             </div>
           </form>
@@ -2504,12 +2686,21 @@ export function StockLocationsPage() {
                           <td className="px-3 py-3 text-right">
                             <button
                               type="button"
-                              onClick={() => handleTransferFromContents(item)}
+                              onClick={() => handleContentTransferFromRow(item)}
                               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                               title="Transferir este produto a partir deste local"
                             >
                               <ArrowRightLeft size={12} />
                               Transferir
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReturnContentItemToStore(item)}
+                              className="ml-2 inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-100"
+                              title="Remover desta caixa e voltar para a loja"
+                            >
+                              <RotateCcw size={12} />
+                              Voltar para loja
                             </button>
                           </td>
                         </tr>

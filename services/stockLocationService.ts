@@ -26,6 +26,8 @@ import {
   StockLocationSaleRestoreInput,
   StockLocationSaleRestoreResult,
   StockLocationInput,
+  StockDepositUpdateInput,
+  StockLocationUpdateInput,
 } from '../types/stock-location';
 
 function normalizeLocationCode(value: string): string {
@@ -91,6 +93,43 @@ class StockLocationService {
     return data as StockDeposit;
   }
 
+  async updateDeposit(id: string, input: StockDepositUpdateInput): Promise<StockDeposit> {
+    const name = input.name.trim();
+    const code = normalizeLocationCode(input.code || input.name);
+
+    if (!id) {
+      throw new Error('Deposito obrigatorio.');
+    }
+
+    if (!name) {
+      throw new Error('Informe o nome do deposito.');
+    }
+
+    if (!code) {
+      throw new Error('Informe um codigo valido para o deposito.');
+    }
+
+    const { data, error } = await supabase
+      .from('stock_deposits')
+      .update({
+        name,
+        code,
+        type: input.type || 'warehouse',
+        cep: input.cep?.trim() || null,
+        address: input.address?.trim() || null,
+        is_default: Boolean(input.is_default),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return data as StockDeposit;
+  }
+
   async listLocations(depositId?: string): Promise<StockLocation[]> {
     let query = supabase
       .from('stock_locations')
@@ -142,6 +181,46 @@ class StockLocationService {
     const { data, error } = await supabase
       .from('stock_locations')
       .insert(payload)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return data as StockLocation;
+  }
+
+  async updateLocation(id: string, input: StockLocationUpdateInput): Promise<StockLocation> {
+    const name = input.name.trim();
+    const code = normalizeLocationCode(input.code || input.name);
+
+    if (!id) {
+      throw new Error('Local obrigatorio.');
+    }
+
+    if (!input.deposit_id) {
+      throw new Error('Selecione o deposito do local.');
+    }
+
+    if (!name) {
+      throw new Error('Informe o nome do local.');
+    }
+
+    if (!code) {
+      throw new Error('Informe um codigo valido para o local.');
+    }
+
+    const { data, error } = await supabase
+      .from('stock_locations')
+      .update({
+        deposit_id: input.deposit_id,
+        name,
+        code,
+        description: input.description?.trim() || null,
+        is_default: Boolean(input.is_default),
+      })
+      .eq('id', id)
       .select()
       .single();
 
