@@ -676,8 +676,9 @@ Validacao manual:
 - `http://staging.mercadodovale.com.br/admin/products`: admin abriu com sessao real e lista de produtos carregada.
 - Produto aberto a partir da vitrine carregou imagem, preco e opcoes, mas foi observado que um clique anterior caiu no dominio publico `mercadodovale.com.br`; precisa repetir navegacao de produto mantendo host `staging`.
 - Em `Locais de Estoque`, pesquisa por SKU `CCSAM3PRO5GCR`: nenhum resultado encontrado.
+- Em `Locais de Estoque`, teste manual com SKU `CTRN115G`: resultado informado como `tudo ok`.
 
-Resultado: staging/admin com sessao real iniciou corretamente. O SKU `CCSAM3PRO5GCR`, citado como produto excluido do Bling que permanecia em caixa, nao aparece na busca de locais de estoque, indicando que nao esta mais preso em caixa/local no teste manual.
+Resultado: staging/admin com sessao real iniciou corretamente. O SKU `CCSAM3PRO5GCR`, citado como produto excluido do Bling que permanecia em caixa, nao aparece na busca de locais de estoque, indicando que nao esta mais preso em caixa/local no teste manual. O SKU `CTRN115G` tambem foi testado manualmente em Locais de Estoque e informado como OK.
 
 Pendencias:
 
