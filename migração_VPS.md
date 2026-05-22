@@ -660,6 +660,42 @@ Pendente para corte final:
 
 ## Registro de Mudanças
 
+### 2026-05-22 - Rodada de testes seguros antes do teste manual
+
+Mudanca: executada nova bateria de testes live/read-only e guards antes de avancar para navegador com login ou mutacoes reais.
+
+Objetivo: confirmar que a VPS continua saudavel e que nao ha regressao automatica antes dos testes manuais/controlados.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Validacao:
+
+- `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests/vps-staging-frontend-proxy-check.cjs`: `ok=true`; `/`, `/admin/products`, `/api/vps-proxy?path=/status` e produtos retornaram `200`; `/company-settings` sem sessao retornou `403`.
+- `SEO_PRODUCTION_HOST_LIVE=true node tmp-tests/vps-seo-production-host-check.cjs`: `ok=true`; raiz redireciona `301` para `www`, sitemap `200`, `2136` URLs e `2133` produtos.
+- `OAUTH_PREFLIGHT_LIVE=true node tmp-tests/vps-oauth-preflight-check.cjs`: `ok=true`; Bling sem code redireciona para settings, exchange sem credenciais retorna `400`, Shopee callback sem parametros retorna `400`, URL de auth Shopee aponta para host oficial e redirect `www`.
+- `node tmp-tests/vps-migration-guard-regression.cjs`: `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`.
+- `node tmp-tests/vps-shopee-live-read-check.cjs`: `ok=true`, loja/categorias/logistica/itens/detalhe/modelos `200`.
+- `node tmp-tests/vps-shopee-order-live-read-check.cjs`: `ok=true`, pedidos/detalhe/rastreio/escrow `200`.
+- `node tmp-tests/vps-bling-live-read-check.cjs`: `ok=true`, categorias `71`, produtos `100`, NFe `100`, NFCe `34`.
+- `node tmp-tests/vps-cron-dispatcher-log-check.cjs`: `ok=true`, crontab ativo e ultimo log real com `Cron ran successfully. Dispatched 1 templates.`
+- `node tmp-tests/vps-bling-detail-live-read-check.cjs`: `ok=true`, detalhe de produto e detalhe de NFe `200`.
+- `node tmp-tests/vps-bling-stock-live-read-check.cjs`: `ok=true`, estoque filtrado `200`.
+- `node tmp-tests/vps-bling-finance-live-read-check.cjs`: `ok=true`, contas a receber/pagar lista e detalhe `200`.
+- `node tmp-tests/vps-sitemap-public-compare.cjs`: `ok=true`; sitemap publico atual na Vercel tem `3` URLs, sitemap VPS staging tem `2136` URLs, delta `2133`.
+
+Resultado: todos os testes seguros passaram. A diferenca do sitemap confirma que a VPS ja esta pronta para entregar o SEO completo, enquanto o dominio publico atual ainda depende da Vercel e entrega sitemap pequeno.
+
+Pendencias:
+
+- validar navegador real com `staging.mercadodovale.com.br` apontando para a VPS ou `hosts` local com permissao admin;
+- validar login/admin com sessao real;
+- executar mutacoes apenas com produto/pedido/pagamento/evento de teste explicitamente escolhido;
+- so depois preparar corte DNS do dominio principal.
+
+Rollback: nenhuma mudanca de runtime foi feita nesta etapa.
+
 ### 2026-05-22 - Preparacao de testes controlados Shopee/shipping/webhooks
 
 Mudanca: executadas validacoes seguras para preparar os proximos testes controlados de escrita, sem alterar estoque, preco, pedidos, etiquetas ou webhooks reais.
