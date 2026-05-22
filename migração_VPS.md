@@ -660,6 +660,36 @@ Pendente para corte final:
 
 ## Registro de Mudanças
 
+### 2026-05-22 - Checagem DNS para proximo passo de navegador/login
+
+Mudanca: conferido o estado publico dos dominios antes de tentar a validacao real de navegador, login/admin e corte final.
+
+Objetivo: identificar se o bloqueio atual esta em codigo/VPS ou em DNS antes de avancar para testes autenticados.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Validacao:
+
+- `Resolve-DnsName mercadodovale.com.br`: resolve para `76.76.21.21`, IP da Vercel.
+- `Resolve-DnsName www.mercadodovale.com.br`: resolve como `CNAME cname.vercel-dns.com`, com IPs Vercel.
+- `Resolve-DnsName staging.mercadodovale.com.br`: sem resposta publica.
+- `curl -I https://www.mercadodovale.com.br/sitemap.xml`: `405 Method Not Allowed` pela Vercel em `HEAD`.
+- `curl GET https://www.mercadodovale.com.br/sitemap.xml`: `200`, `text/xml`, `644` bytes, indicando sitemap publico atual pequeno na Vercel.
+- `curl GET -H "Host: www.mercadodovale.com.br" http://76.13.232.162/sitemap.xml`: `200`, `application/xml`, `511078` bytes, confirmando sitemap completo servido pela VPS com host de producao.
+- `curl GET -H "Host: staging.mercadodovale.com.br" http://76.13.232.162/admin/products`: `200`, `text/html`, confirmando fallback SPA staging direto na VPS.
+
+Resultado: o proximo bloqueio nao e codigo da VPS; e DNS/hosts para validar navegador real e sessao admin. O site publico principal ainda depende da Vercel, enquanto a VPS ja responde corretamente quando recebe o `Host` esperado.
+
+Pendencias:
+
+- criar/apontar `staging.mercadodovale.com.br` para `76.13.232.162` ou validar via arquivo `hosts`;
+- apos DNS/hosts, abrir staging no navegador real e validar login/admin com sessao;
+- depois da regressao autenticada, preparar corte de `mercadodovale.com.br` e `www.mercadodovale.com.br` para a VPS.
+
+Rollback: nenhuma mudanca de runtime foi feita nesta etapa.
+
 ### 2026-05-22 - Revalidacao live read-only Bling/Shopee, cron e guards
 
 Mudanca: executada nova rodada do checklist ativo com validacoes read-only pela VPS, conferindo integracoes externas sem mutacao real.
