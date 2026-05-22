@@ -18,7 +18,7 @@
 - Modify: `package.json`
 - Modify: `migração_VPS.md`
 
-- [ ] **Step 1: Write the failing static test**
+- [x] **Step 1: Write the failing static test**
 
 Create `tmp-tests/vps-site-deploy-script-static.test.mjs` validating that the deploy script:
 
@@ -50,7 +50,7 @@ assert(pkg.scripts['deploy:vps-site'] === 'node scripts/deploy-vps-site.cjs', 'p
 console.log('vps site deploy script static checks ok');
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 
@@ -60,7 +60,7 @@ node tmp-tests/vps-site-deploy-script-static.test.mjs
 
 Expected: fail because the script does not exist yet.
 
-- [ ] **Step 3: Implement the deploy script**
+- [x] **Step 3: Implement the deploy script**
 
 Create `scripts/deploy-vps-site.cjs` with:
 
@@ -71,7 +71,7 @@ Create `scripts/deploy-vps-site.cjs` with:
 - atomic-ish symlink switch: `previous -> old current`, `current -> new release`;
 - clear rollback command printed at the end.
 
-- [ ] **Step 4: Add package script**
+- [x] **Step 4: Add package script**
 
 Add:
 
@@ -79,7 +79,7 @@ Add:
 "deploy:vps-site": "node scripts/deploy-vps-site.cjs"
 ```
 
-- [ ] **Step 5: Run test and build**
+- [x] **Step 5: Run test and build**
 
 Run:
 
@@ -90,7 +90,7 @@ npm run build
 
 Expected: both pass.
 
-- [ ] **Step 6: Update migration documentation**
+- [x] **Step 6: Update migration documentation**
 
 Update `migração_VPS.md`:
 
@@ -106,4 +106,3 @@ Stage only the files above and commit:
 git add package.json scripts/deploy-vps-site.cjs tmp-tests/vps-site-deploy-script-static.test.mjs migração_VPS.md docs/superpowers/plans/2026-05-20-vps-staging-frontend.md
 git commit -m "chore(vps): add static site deploy flow"
 ```
-

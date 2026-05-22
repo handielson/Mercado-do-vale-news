@@ -78,6 +78,7 @@ const BRASILAPI_NCM_URL = 'https://brasilapi.com.br/api/ncm/v1';
 const CORS_ORIGINS = [
   'https://www.mercadodovale.com.br',
   'https://mercadodovale.com.br',
+  'https://staging.mercadodovale.com.br',
   'https://www.mercadodovale.com',
   'https://mercadodovale.com',
   'https://www.xiaomipetrolina.com.br',
@@ -421,6 +422,68 @@ async function supabaseRestPatch(table, query, payload) {
   return data;
 }
 
+async function supabaseRestInsert(table, payload) {
+  const baseUrl = getSupabaseRestBaseUrl();
+  if (!baseUrl || !SUPABASE_AUTH_KEY) {
+    throw new Error('Supabase REST env vars missing');
+  }
+
+  const response = await fetch(`${baseUrl}/${table}`, {
+    method: 'POST',
+    headers: buildSupabaseRestHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    }),
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(8000),
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_err) {
+    data = text;
+  }
+  if (!response.ok) {
+    const error = new Error(`Supabase REST insert failed: ${response.status}`);
+    error.status = response.status;
+    error.body = data;
+    throw error;
+  }
+  return data;
+}
+
+async function supabaseRestUpsert(table, query, payload) {
+  const baseUrl = getSupabaseRestBaseUrl();
+  if (!baseUrl || !SUPABASE_AUTH_KEY) {
+    throw new Error('Supabase REST env vars missing');
+  }
+
+  const response = await fetch(`${baseUrl}/${table}?${query}`, {
+    method: 'POST',
+    headers: buildSupabaseRestHeaders({
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=representation',
+    }),
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(8000),
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_err) {
+    data = text;
+  }
+  if (!response.ok) {
+    const error = new Error(`Supabase REST upsert failed: ${response.status}`);
+    error.status = response.status;
+    error.body = data;
+    throw error;
+  }
+  return data;
+}
+
 function isMercadoPagoWebhookPayload(body) {
   if (!body || typeof body !== 'object') return false;
   const type = String(body.type || '').toLowerCase();
@@ -529,6 +592,3913 @@ async function handleMercadoPagoWebhookVps(body) {
 
 fastify.get('/api/brasilapi-ncm', handleBrasilapiNcmProxy);
 
+function normalizeShippingCep(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function buildFrenetShippingBody(body) {
+  return {
+    SellerCEP: normalizeShippingCep(body.from_cep),
+    RecipientCEP: normalizeShippingCep(body.to_cep),
+    RecipientCountry: 'BR',
+    ShipmentInvoiceValue: Math.max((body.order_value ?? 0) / 100, 10),
+    ShippingItemArray: [
+      {
+        Height: body.height_cm ?? 10,
+        Length: body.length_cm ?? 20,
+        Quantity: 1,
+        Weight: (body.weight_g ?? 300) / 1000,
+        Width: body.width_cm ?? 15,
+      },
+    ],
+  };
+}
+
+function getMelhorEnvioBaseUrl(sandbox) {
+  return sandbox ? 'https://sandbox.melhorenvio.com.br' : 'https://melhorenvio.com.br';
+}
+
+async function readShippingJsonResponse(response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text.slice(0, 500) };
+  }
+}
+
+function shippingError(status, error, details = {}) {
+  return {
+    status,
+    body: {
+      error,
+      debug: buildCopyableDebug('shipping', details),
+    },
+  };
+}
+
+async function handleShippingApiVps(query, body = {}) {
+  const provider = String(query?.provider || '');
+  const action = String(query?.action || '');
+
+  if (provider === 'frenet' && action === 'calculate') {
+    if (!body.token) return shippingError(400, 'Token Frenet nao fornecido', { provider, action, step: 'validate token' });
+    if (!body.from_cep || !body.to_cep) return shippingError(400, 'CEP de origem e destino sao obrigatorios', { provider, action, step: 'validate cep' });
+
+    const apiRes = await fetch('https://api.frenet.com.br/shipping/quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', token: body.token },
+      body: JSON.stringify(buildFrenetShippingBody(body)),
+    });
+    const data = await readShippingJsonResponse(apiRes);
+    if (!apiRes.ok) return shippingError(apiRes.status, data, { provider, action, step: 'frenet quote', upstreamStatus: apiRes.status });
+    return { status: 200, body: data };
+  }
+
+  if (provider === 'melhor-envio' && action === 'calculate') {
+    if (!body.token) return shippingError(400, 'Token do Melhor Envio nao fornecido', { provider, action, step: 'validate token' });
+    if (!body.from_cep || !body.to_cep) return shippingError(400, 'CEP de origem e destino sao obrigatorios', { provider, action, step: 'validate cep' });
+
+    const melhorEnvioBody = {
+      from: { postal_code: normalizeShippingCep(body.from_cep) },
+      to: { postal_code: normalizeShippingCep(body.to_cep) },
+      package: {
+        height: body.height_cm ?? 10,
+        width: body.width_cm ?? 15,
+        length: body.length_cm ?? 20,
+        weight: (body.weight_g ?? 300) / 1000,
+      },
+      options: { insurance_value: 0, receipt: false, own_hand: false },
+    };
+
+    const apiRes = await fetch(`${getMelhorEnvioBaseUrl(body.sandbox)}/api/v2/me/shipment/calculate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${body.token}`,
+        'User-Agent': 'MercadoDoVale/1.0 (suporte@mercadodovale.com)',
+      },
+      body: JSON.stringify(melhorEnvioBody),
+    });
+    const data = await readShippingJsonResponse(apiRes);
+    if (!apiRes.ok) return shippingError(apiRes.status, data, { provider, action, step: 'melhor-envio calculate', upstreamStatus: apiRes.status, sandbox: !!body.sandbox });
+    return { status: 200, body: data };
+  }
+
+  if (provider === 'melhor-envio' && action === 'label') {
+    if (!body.token || !body.carrier_id || !body.from_cep || !body.to?.name) {
+      return shippingError(400, 'Dados incompletos', { provider, action, step: 'validate label payload' });
+    }
+
+    const baseUrl = getMelhorEnvioBaseUrl(body.sandbox);
+    const baseApiUrl = `${baseUrl}/api/v2`;
+    const headers = {
+      Authorization: `Bearer ${body.token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'User-Agent': 'MercadoDoVale/1.0 (suporte@mercadodovale.com)',
+    };
+    const cartBody = {
+      service: body.carrier_id,
+      from: { postal_code: body.from_cep },
+      to: {
+        name: body.to.name,
+        phone: body.to.phone,
+        email: '',
+        document: body.to.document,
+        company_document: '',
+        address: body.to.address,
+        city: body.to.city,
+        district: body.to.district,
+        state_abbr: body.to.state_abbr,
+        postal_code: body.to.postal_code,
+        number: body.to.number,
+        complement: body.to.complement || '',
+      },
+      package: (body.products || []).map((product) => ({
+        name: product.name,
+        quantity: product.quantity,
+        unitary_value: 1,
+        weight: product.weight,
+      })),
+      options: { insurance_value: 0, receipt: false, own_hand: false },
+    };
+
+    const cartRes = await fetch(`${baseUrl}/api/v2/me/cart`, { method: 'POST', headers, body: JSON.stringify(cartBody) });
+    const cartData = await readShippingJsonResponse(cartRes);
+    if (!cartRes.ok) return shippingError(cartRes.status, cartData?.message || 'Erro ao adicionar ao carrinho', { provider, action, step: 'melhor-envio cart', upstreamStatus: cartRes.status });
+
+    const orderId = cartData?.id;
+    if (!orderId) return shippingError(502, 'ID do pedido nao retornado', { provider, action, step: 'melhor-envio cart id' });
+
+    const checkoutRes = await fetch(`${baseUrl}/api/v2/me/shipment/checkout`, { method: 'POST', headers, body: JSON.stringify({ orders: [orderId] }) });
+    if (!checkoutRes.ok) {
+      const checkoutData = await readShippingJsonResponse(checkoutRes);
+      return shippingError(checkoutRes.status, checkoutData?.message || 'Erro no checkout', { provider, action, step: 'melhor-envio checkout', upstreamStatus: checkoutRes.status });
+    }
+
+    const generateRes = await fetch(`${baseUrl}/api/v2/me/shipment/generate`, { method: 'POST', headers, body: JSON.stringify({ orders: [orderId] }) });
+    if (!generateRes.ok) {
+      const generateData = await readShippingJsonResponse(generateRes);
+      return shippingError(generateRes.status, generateData?.message || 'Erro ao gerar etiqueta', { provider, action, step: 'melhor-envio generate', upstreamStatus: generateRes.status });
+    }
+
+    const printUrl = `${baseUrl}/shipment/print?orders[]=${orderId}&token=${body.token}`;
+    return { status: 200, body: { url: printUrl, order_id: orderId } };
+  }
+
+  return shippingError(404, 'Provider or action not match', { provider, action, step: 'route dispatch' });
+}
+
+fastify.post('/api/shipping', async (request, reply) => {
+  try {
+    const result = await handleShippingApiVps(request.query, request.body || {});
+    return reply.code(result.status).send(result.body);
+  } catch (err) {
+    return reply.code(500).send({
+      error: err.message || 'Erro interno no frete',
+      debug: buildCopyableDebug('shipping', {
+        provider: String(request.query?.provider || ''),
+        action: String(request.query?.action || ''),
+        step: 'unexpected exception',
+        rawMessage: err.message,
+      }),
+    });
+  }
+});
+
+function blingRedirect(reply, location, statusCode = 302) {
+  return reply.code(statusCode).header('Location', location).send();
+}
+
+function buildBlingCallbackUrl(request, configuredCallbackUrl) {
+  if (configuredCallbackUrl) {
+    const value = String(configuredCallbackUrl);
+    if (value.startsWith('http')) return value;
+    const protocol = request.headers['x-forwarded-proto'] || 'https';
+    const host = request.headers['x-forwarded-host'] || request.headers.host;
+    return `${protocol}://${host}${value}`;
+  }
+  const protocol = request.headers['x-forwarded-proto'] || 'https';
+  const host = request.headers['x-forwarded-host'] || request.headers.host;
+  return `${protocol}://${host}/api/auth/callback/bling`;
+}
+
+function getShopeeBaseUrlVps(partnerId) {
+  if (String(partnerId) === '1229870' || process.env.SHOPEE_ENV === 'sandbox') {
+    return 'https://partner.test-stable.shopeemobile.com';
+  }
+  return 'https://partner.shopeemobile.com';
+}
+
+function generateShopeePublicSignVps(partnerId, partnerKey, apiPath, timestamp) {
+  const baseString = `${partnerId}${apiPath}${timestamp}`;
+  return crypto.createHmac('sha256', partnerKey).update(baseString).digest('hex');
+}
+
+function buildShopeeCallbackUrlVps() {
+  const origin = String(process.env.SHOPEE_REDIRECT_BASE_URL || 'https://www.mercadodovale.com.br').replace(/\/+$/, '');
+  return `${origin}/api/shopee?action=callback`;
+}
+
+async function handleShopeeOAuthVps(request, reply) {
+  const action = String(request.query?.action || '');
+
+  if (action === 'auth') {
+    try {
+      const rows = await supabaseRestSelect('company_settings', 'select=shopee_partner_id,shopee_partner_key&limit=1');
+      const settings = Array.isArray(rows) ? rows[0] : null;
+      if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
+        return reply.code(400).send({ error: 'Shopee Partner ID e Key não configurados no painel.' });
+      }
+      const partnerId = String(settings.shopee_partner_id);
+      const apiPath = '/api/v2/shop/auth_partner';
+      const timestamp = Math.floor(Date.now() / 1000);
+      const sign = generateShopeePublicSignVps(partnerId, settings.shopee_partner_key, apiPath, timestamp);
+      const redirectUrl = buildShopeeCallbackUrlVps(request);
+      const authUrl = `${getShopeeBaseUrlVps(partnerId)}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}&redirect=${encodeURIComponent(redirectUrl)}`;
+      return reply.code(200).send({ url: authUrl });
+    } catch (err) {
+      return reply.code(500).send({
+        error: err.message,
+        debug: buildCopyableDebug('shopee-oauth', {
+          step: 'build auth url',
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (action === 'callback') {
+    const { code, shop_id, main_account_id } = request.query || {};
+    if (!code || (!shop_id && !main_account_id)) {
+      return reply.type('text/html; charset=utf-8').code(400).send('<h1>Falha na autorização</h1><p>Parâmetros ausentes (code, shop_id).</p>');
+    }
+    try {
+      const rows = await supabaseRestSelect('company_settings', 'select=id,shopee_partner_id,shopee_partner_key&limit=1');
+      const settings = Array.isArray(rows) ? rows[0] : null;
+      if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
+        return reply.type('text/html; charset=utf-8').code(500).send('<h1>Erro Interno</h1><p>Credenciais da Shopee não encontradas.</p>');
+      }
+      const partnerId = Number(settings.shopee_partner_id);
+      const activeShopId = Number(shop_id || main_account_id);
+      const apiPath = '/api/v2/auth/token/get';
+      const timestamp = Math.floor(Date.now() / 1000);
+      const sign = generateShopeePublicSignVps(String(partnerId), settings.shopee_partner_key, apiPath, timestamp);
+      const tokenUrl = `${getShopeeBaseUrlVps(partnerId)}${apiPath}?partner_id=${partnerId}&timestamp=${timestamp}&sign=${sign}`;
+      const tokenResponse = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, shop_id: activeShopId, partner_id: partnerId }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const tokenData = await tokenResponse.json();
+      if (tokenData?.error) {
+        return reply.type('text/html; charset=utf-8').code(400).send(`<h1>Erro na comunicação com a Shopee</h1><p>${tokenData.error}: ${tokenData.message || ''}</p>`);
+      }
+      await supabaseRestPatch('company_settings', `id=eq.${encodeURIComponent(String(settings.id))}`, {
+        shopee_shop_id: activeShopId.toString(),
+        shopee_access_token: tokenData.access_token,
+        shopee_refresh_token: tokenData.refresh_token,
+      });
+      return reply.type('text/html; charset=utf-8').code(200).send(`
+        <html><head><title>Shopee Autorizada</title></head>
+        <body style="font-family: sans-serif; text-align: center; padding: 50px;">
+          <h1 style="color: #ee4d2d;">Conexão Bem-Sucedida!</h1>
+          <p>A integração com a sua loja Shopee foi completada.</p>
+          <p>Você já pode fechar esta aba e voltar para o Painel.</p>
+          <script>setTimeout(() => { window.location.href = '/admin/settings/shopee'; }, 5000);</script>
+        </body></html>
+      `);
+    } catch (err) {
+      return reply.code(500).send({
+        error: err.message,
+        debug: buildCopyableDebug('shopee-oauth', {
+          step: 'callback token exchange',
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  return reply.code(404).send({ error: 'Route not found or missing action.' });
+}
+
+async function handleShopeeWebhookVps(request, reply) {
+  if (request.method !== 'POST') return reply.code(405).send({ error: 'Method Not Allowed' });
+
+  try {
+    const payload = request.body || {};
+    if (payload.code === 3 && payload.data) {
+      const { ordersn, status } = payload.data;
+      const shopId = payload.shop_id;
+
+      try {
+        const rows = await supabaseRestSelect('company_settings', 'select=n8n_webhook_url&limit=1');
+        const settings = Array.isArray(rows) ? rows[0] : null;
+        if (settings?.n8n_webhook_url) {
+          await fetch(settings.n8n_webhook_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source: 'shopee',
+              event: 'order_status_update',
+              order_sn: ordersn,
+              status,
+              shop_id: shopId,
+            }),
+            signal: AbortSignal.timeout(10000),
+          }).catch((err) => {
+            console.error('[shopee-webhook] n8n relay failed:', buildCopyableDebug('shopee-webhook', {
+              step: 'relay to n8n',
+              orderSn: String(ordersn || ''),
+              rawMessage: err.message,
+            }));
+          });
+        }
+      } catch (err) {
+        console.error('[shopee-webhook] settings lookup failed:', buildCopyableDebug('shopee-webhook', {
+          step: 'load n8n webhook url',
+          orderSn: String(ordersn || ''),
+          rawMessage: err.message,
+        }));
+      }
+    }
+
+    return reply.code(200).send({ message: 'success' });
+  } catch (err) {
+    console.error('[shopee-webhook] fatal:', buildCopyableDebug('shopee-webhook', {
+      step: 'process webhook',
+      rawMessage: err.message,
+    }));
+    return reply.code(200).send({ error: err.message });
+  }
+}
+
+function generateShopeeShopSignVps(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId) {
+  const baseString = `${partnerId}${apiPath}${timestamp}${accessToken}${shopId}`;
+  return crypto.createHmac('sha256', partnerKey).update(baseString).digest('hex');
+}
+
+function isRetryableShopeeAuthErrorVps(data) {
+  return ['invalid_access_token', 'invalid_acceess_token', 'error_auth'].includes(String(data?.error || ''));
+}
+
+async function readShopeeCatalogJsonResponseVps(response) {
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return { message: text.slice(0, 500) };
+  }
+}
+
+async function getShopeeCatalogCredentialsVps() {
+  const rows = await supabaseRestSelect('company_settings', 'select=shopee_partner_id,shopee_partner_key,shopee_access_token,shopee_shop_id,shopee_refresh_token&limit=1');
+  const settings = Array.isArray(rows) ? rows[0] : null;
+  if (!settings?.shopee_partner_id || !settings?.shopee_partner_key || !settings?.shopee_access_token || !settings?.shopee_shop_id) {
+    throw new Error('Shopee não autenticada. Configure as credenciais no painel.');
+  }
+  return {
+    partnerId: String(settings.shopee_partner_id),
+    partnerKey: String(settings.shopee_partner_key),
+    accessToken: String(settings.shopee_access_token),
+    shopId: String(settings.shopee_shop_id),
+    refreshToken: settings.shopee_refresh_token ? String(settings.shopee_refresh_token) : '',
+  };
+}
+
+async function refreshShopeeCatalogTokenVps(creds) {
+  if (!creds.refreshToken) throw new Error('Shopee refresh token ausente.');
+  const apiPath = '/api/v2/auth/access_token/get';
+  const timestamp = Math.floor(Date.now() / 1000);
+  const sign = generateShopeePublicSignVps(creds.partnerId, creds.partnerKey, apiPath, timestamp);
+  const url = `${getShopeeBaseUrlVps(creds.partnerId)}${apiPath}?partner_id=${creds.partnerId}&timestamp=${timestamp}&sign=${sign}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      partner_id: Number(creds.partnerId),
+      refresh_token: creds.refreshToken,
+      shop_id: Number(creds.shopId),
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  const tokenData = await readShopeeCatalogJsonResponseVps(response);
+  if (!response.ok || tokenData?.error) {
+    throw new Error(tokenData?.message || tokenData?.error || 'Erro ao renovar token Shopee');
+  }
+  await supabaseRestPatch('company_settings', 'shopee_partner_id=not.is.null', {
+    shopee_access_token: tokenData.access_token,
+    shopee_refresh_token: tokenData.refresh_token,
+  });
+  return {
+    ...creds,
+    accessToken: String(tokenData.access_token),
+    refreshToken: String(tokenData.refresh_token || creds.refreshToken),
+  };
+}
+
+function buildShopeeCatalogUrlVps(apiPath, creds, extraParams = '') {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const sign = generateShopeeShopSignVps(creds.partnerId, creds.partnerKey, apiPath, timestamp, creds.accessToken, creds.shopId);
+  let url = `${getShopeeBaseUrlVps(creds.partnerId)}${apiPath}?partner_id=${creds.partnerId}&timestamp=${timestamp}&access_token=${encodeURIComponent(creds.accessToken)}&shop_id=${creds.shopId}&sign=${sign}`;
+  if (extraParams) url += `&${extraParams}`;
+  return url;
+}
+
+async function shopeeCatalogRequestVps(method, apiPath, creds, body, extraParams = '', alreadyRetried = false) {
+  const response = await fetch(buildShopeeCatalogUrlVps(apiPath, creds, extraParams), {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body == null ? undefined : JSON.stringify(body),
+    signal: AbortSignal.timeout(20000),
+  });
+  const data = await readShopeeCatalogJsonResponseVps(response);
+  if (isRetryableShopeeAuthErrorVps(data) && !alreadyRetried) {
+    const refreshedCreds = await refreshShopeeCatalogTokenVps(creds);
+    return shopeeCatalogRequestVps(method, apiPath, refreshedCreds, body, extraParams, true);
+  }
+  return { status: response.status, ok: response.ok, data };
+}
+
+async function shopeeCatalogGetVps(apiPath, creds, extraParams = '') {
+  return shopeeCatalogRequestVps('GET', apiPath, creds, null, extraParams);
+}
+
+async function shopeeCatalogPostVps(apiPath, creds, body = {}, extraParams = '') {
+  return shopeeCatalogRequestVps('POST', apiPath, creds, body, extraParams);
+}
+
+function clampShopeeCatalogIntVps(value, fallback, min, max) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function encodeShopeeCatalogParamsVps(params) {
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') searchParams.set(key, String(value));
+  }
+  return searchParams.toString();
+}
+
+function requireShopeeCatalogPostVps(request, reply) {
+  if (request.method === 'POST') return false;
+  reply.code(405).send({ error: 'POST required' });
+  return true;
+}
+
+function firstShopeeCatalogStringVps(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return '';
+}
+
+function isNoShopeeCatalogGtinValueVps(value) {
+  const normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
+  return ['SEM GTIN', 'SEM_GTIN', 'NAO POSSUI', 'ISENTO'].includes(normalized);
+}
+
+async function resolveShopeeCatalogMediaInputVps(dataUrl, remoteUrl, expectedPrefix) {
+  const dataValue = String(dataUrl || '');
+  const urlValue = String(remoteUrl || '');
+
+  if (dataValue) {
+    const matches = dataValue.match(/^data:([^;]+);base64,(.*)$/);
+    if (!matches || !matches[1].startsWith(expectedPrefix)) return null;
+    return {
+      mimeType: matches[1],
+      buffer: Buffer.from(matches[2], 'base64'),
+      fileNameHint: `upload.${matches[1].split('/')[1] || 'bin'}`,
+    };
+  }
+
+  if (urlValue) {
+    const response = await fetch(urlValue, { signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error(`Falha ao baixar midia remota: ${response.status}`);
+    const mimeType = response.headers.get('content-type') || (expectedPrefix === 'image/' ? 'image/jpeg' : 'video/mp4');
+    if (!mimeType.startsWith(expectedPrefix)) return null;
+    return {
+      mimeType,
+      buffer: Buffer.from(await response.arrayBuffer()),
+      fileNameHint: urlValue.split('/').pop() || `upload.${mimeType.split('/')[1] || 'bin'}`,
+    };
+  }
+
+  return null;
+}
+
+function md5ShopeeCatalogHexVps(buffer) {
+  return crypto.createHash('md5').update(buffer).digest('hex');
+}
+
+function getShopeeCatalogVideoUploadIdVps(data) {
+  return firstShopeeCatalogStringVps(
+    data?.response?.video_upload_id,
+    data?.response?.upload_id,
+    data?.video_upload_id,
+    data?.upload_id,
+  );
+}
+
+function getShopeeCatalogVideoUploadStatusVps(data) {
+  return String(
+    data?.response?.status ||
+    data?.response?.video_upload_result?.status ||
+    data?.response?.video_info?.status ||
+    data?.status ||
+    ''
+  ).toLowerCase();
+}
+
+async function normalizeShopeeCatalogPricePayloadVps(incoming, creds) {
+  const itemId = Number(incoming?.item_id);
+  const incomingPriceList = Array.isArray(incoming?.price_list) ? incoming.price_list : [];
+
+  if (!Number.isFinite(itemId) || itemId <= 0) {
+    return { error: { status: 400, body: { error: 'item_id required' } } };
+  }
+  if (incomingPriceList.length === 0) {
+    return { error: { status: 400, body: { error: 'price_list required' } } };
+  }
+
+  const detailResult = await shopeeCatalogGetVps('/api/v2/product/get_item_base_info', creds, encodeShopeeCatalogParamsVps({
+    item_id_list: itemId,
+    need_tax_info: false,
+    need_complaint_policy: false,
+  }));
+  const currentItem = detailResult.data?.response?.item_list?.[0] || null;
+  const hasModel = currentItem?.has_model === true || currentItem?.has_model === 1 || currentItem?.has_model === '1';
+  const hasZeroModel = incomingPriceList.some((row) => Number(row?.model_id) === 0);
+  const pricePayload = { item_id: itemId, price_list: incomingPriceList };
+
+  if (hasModel || hasZeroModel) {
+    const modelResult = await shopeeCatalogGetVps('/api/v2/product/get_model_list', creds, encodeShopeeCatalogParamsVps({ item_id: itemId }));
+    const modelList = Array.isArray(modelResult.data?.response?.model) ? modelResult.data.response.model : [];
+    const modelIds = modelList.map((model) => Number(model?.model_id)).filter((id) => Number.isFinite(id) && id > 0);
+    const firstPrice = incomingPriceList.find((row) => Number(row?.original_price) > 0);
+    const fallbackPrice = Number(firstPrice?.original_price);
+    const incomingByModel = new Map();
+
+    for (const row of incomingPriceList) {
+      const modelId = Number(row?.model_id);
+      const price = Number(row?.original_price);
+      if (Number.isFinite(modelId) && modelId > 0 && Number.isFinite(price) && price > 0) {
+        incomingByModel.set(modelId, price);
+      }
+    }
+
+    const expandedPriceList = modelIds
+      .map((modelId) => ({
+        model_id: modelId,
+        original_price: Number(incomingByModel.get(modelId) ?? fallbackPrice),
+      }))
+      .filter((row) => Number.isFinite(row.original_price) && row.original_price > 0);
+
+    if (expandedPriceList.length > 0) {
+      pricePayload.price_list = expandedPriceList;
+    }
+  }
+
+  return { payload: pricePayload };
+}
+
+async function mergeShopeeCatalogUpdateItemPayloadVps(incoming, creds) {
+  const itemId = Number(incoming?.item_id);
+  if (!Number.isFinite(itemId) || itemId <= 0) {
+    return { error: { status: 400, body: { error: 'item_id required' } } };
+  }
+
+  const detailResult = await shopeeCatalogGetVps('/api/v2/product/get_item_base_info', creds, encodeShopeeCatalogParamsVps({
+    item_id_list: itemId,
+    need_tax_info: true,
+    need_complaint_policy: false,
+  }));
+  const currentItem = detailResult.data?.response?.item_list?.[0] || null;
+  const currentDim = currentItem?.dimension || {};
+  const hasModel = currentItem?.has_model === true;
+  const currentTax = currentItem?.tax_info && typeof currentItem.tax_info === 'object' ? { ...currentItem.tax_info } : {};
+  const incomingTax = incoming?.tax_info && typeof incoming.tax_info === 'object' ? { ...incoming.tax_info } : {};
+  const incomingGtinCandidate = firstShopeeCatalogStringVps(incomingTax.gtin, incoming.gtin_code);
+  const noGtinSelected = isNoShopeeCatalogGtinValueVps(incomingGtinCandidate);
+  const resolvedGtin = noGtinSelected
+    ? 'SEM GTIN'
+    : firstShopeeCatalogStringVps(incomingTax.gtin, incoming.gtin_code, currentTax.gtin, currentItem?.gtin_code, currentItem?.gtin, currentItem?.ean);
+  const mergedTax = { ...currentTax, ...incomingTax };
+
+  if (resolvedGtin) {
+    mergedTax.gtin = resolvedGtin;
+    incoming.gtin_code = resolvedGtin;
+  }
+
+  if (hasModel && resolvedGtin) {
+    const modelResult = await shopeeCatalogGetVps('/api/v2/product/get_model_list', creds, encodeShopeeCatalogParamsVps({ item_id: itemId }));
+    const modelList = Array.isArray(modelResult.data?.response?.model) ? modelResult.data.response.model : [];
+    const modelPayload = {
+      item_id: itemId,
+      model: modelList
+        .filter((model) => model?.model_id != null)
+        .map((model) => ({ model_id: model.model_id, gtin_code: resolvedGtin })),
+    };
+
+    if (modelPayload.model.length > 0) {
+      const modelUpdate = await shopeeCatalogPostVps('/api/v2/product/update_model', creds, modelPayload);
+      if (modelUpdate.data?.error) return { earlyResult: modelUpdate };
+    }
+  }
+
+  const payload = {
+    ...incoming,
+    item_id: itemId,
+    condition: incoming.condition ?? currentItem?.condition,
+    item_sku: incoming.item_sku ?? currentItem?.item_sku,
+    item_weight: incoming.item_weight ?? currentItem?.weight,
+    package_length: incoming.package_length ?? currentDim.package_length,
+    package_width: incoming.package_width ?? currentDim.package_width,
+    package_height: incoming.package_height ?? currentDim.package_height,
+    tax_info: Object.keys(mergedTax).length > 0 ? mergedTax : undefined,
+  };
+
+  if (!payload.tax_info) delete payload.tax_info;
+  if (!payload.gtin_code) delete payload.gtin_code;
+  return { payload };
+}
+
+async function handleShopeeCatalogVps(request, reply) {
+  const action = String(request.query?.action || '');
+  const query = request.query || {};
+
+  try {
+    if (action === 'attributes' && !query.category_id) return reply.code(400).send({ error: 'category_id required' });
+    if (action === 'search_attribute_values' && !query.attribute_id) return reply.code(400).send({ error: 'attribute_id required' });
+    if (action === 'brand_list' && !query.category_id) return reply.code(400).send({ error: 'category_id required' });
+    if (action === 'get_item_base_info' && !query.item_id_list) return reply.code(400).send({ error: 'item_id_list required' });
+    if (action === 'get_model_list' && !query.item_id) return reply.code(400).send({ error: 'item_id required' });
+
+    const creds = await getShopeeCatalogCredentialsVps();
+    let result;
+
+    switch (action) {
+      case 'categories':
+        result = await shopeeCatalogGetVps('/api/v2/product/get_category', creds, encodeShopeeCatalogParamsVps({ language: query.language || 'pt-BR' }));
+        break;
+      case 'attributes':
+        result = await shopeeCatalogGetVps('/api/v2/product/get_attribute_tree', creds, encodeShopeeCatalogParamsVps({ category_id_list: query.category_id, language: query.language || 'pt-BR' }));
+        break;
+      case 'search_attribute_values':
+        result = await shopeeCatalogPostVps('/api/v2/product/search_attribute_value_list', creds, {}, encodeShopeeCatalogParamsVps({
+          attribute_id: query.attribute_id,
+          keyword: query.keyword,
+          cursor: clampShopeeCatalogIntVps(query.cursor, 0, 0, 999999),
+          limit: clampShopeeCatalogIntVps(query.limit, 20, 1, 100),
+        }));
+        break;
+      case 'brand_list':
+        result = await shopeeCatalogGetVps('/api/v2/product/get_brand_list', creds, encodeShopeeCatalogParamsVps({
+          category_id: query.category_id,
+          status: query.status || 1,
+          page_size: clampShopeeCatalogIntVps(query.page_size, 20, 1, 100),
+          offset: clampShopeeCatalogIntVps(query.offset, 0, 0, 999999),
+        }));
+        break;
+      case 'shop_info':
+        result = await shopeeCatalogGetVps('/api/v2/shop/get_shop_info', creds);
+        break;
+      case 'logistics_channel_list':
+        result = await shopeeCatalogGetVps('/api/v2/logistics/get_channel_list', creds);
+        break;
+      case 'warehouse_list':
+        result = await shopeeCatalogGetVps('/api/v2/inventory/get_warehouse_list', creds);
+        break;
+      case 'warehouse_detail':
+        result = await shopeeCatalogGetVps('/api/v2/shop/get_warehouse_detail', creds, encodeShopeeCatalogParamsVps({ warehouse_type: query.warehouse_type || 1 }));
+        break;
+      case 'warehouse_locations':
+        result = await shopeeCatalogGetVps('/api/v2/merchant/get_merchant_warehouse_location_list', creds, encodeShopeeCatalogParamsVps({ merchant_id: query.merchant_id }));
+        break;
+      case 'add_item':
+        if (requireShopeeCatalogPostVps(request, reply)) return;
+        result = await shopeeCatalogPostVps('/api/v2/product/add_item', creds, request.body || {});
+        break;
+      case 'update_price': {
+        if (requireShopeeCatalogPostVps(request, reply)) return;
+        const normalized = await normalizeShopeeCatalogPricePayloadVps(request.body || {}, creds);
+        if (normalized.error) return reply.code(normalized.error.status).send(normalized.error.body);
+        result = await shopeeCatalogPostVps('/api/v2/product/update_price', creds, normalized.payload);
+        break;
+      }
+      case 'update_stock':
+        if (requireShopeeCatalogPostVps(request, reply)) return;
+        result = await shopeeCatalogPostVps('/api/v2/product/update_stock', creds, request.body || {});
+        break;
+      case 'update_model':
+        if (requireShopeeCatalogPostVps(request, reply)) return;
+        result = await shopeeCatalogPostVps('/api/v2/product/update_model', creds, request.body || {});
+        break;
+      case 'init_tier_variation':
+        if (requireShopeeCatalogPostVps(request, reply)) return;
+        result = await shopeeCatalogPostVps('/api/v2/product/init_tier_variation', creds, request.body || {});
+        break;
+      case 'delete_item':
+        if (requireShopeeCatalogPostVps(request, reply)) return;
+        result = await shopeeCatalogPostVps('/api/v2/product/delete_item', creds, request.body || {});
+        break;
+      case 'update_item_status':
+        if (requireShopeeCatalogPostVps(request, reply)) return;
+        result = await shopeeCatalogPostVps('/api/v2/product/update_item_status', creds, request.body || {});
+        break;
+      case 'update_item': {
+        if (requireShopeeCatalogPostVps(request, reply)) return;
+        const merged = await mergeShopeeCatalogUpdateItemPayloadVps({ ...(request.body || {}) }, creds);
+        if (merged.error) return reply.code(merged.error.status).send(merged.error.body);
+        if (merged.earlyResult) return reply.code(merged.earlyResult.status).send(merged.earlyResult.data);
+        result = await shopeeCatalogPostVps('/api/v2/product/update_item', creds, merged.payload);
+        break;
+      }
+      case 'upload_image': {
+        if (requireShopeeCatalogPostVps(request, reply)) return;
+        const parsed = await resolveShopeeCatalogMediaInputVps(request.body?.image_data_url, request.body?.image_url, 'image/');
+        if (!parsed) return reply.code(400).send({ error: 'invalid image_data_url' });
+        const ext = parsed.mimeType.split('/')[1] || 'jpg';
+        const fileName = String(request.body?.file_name || parsed.fileNameHint || `image_${Date.now()}.${ext}`);
+        const formData = new FormData();
+        formData.append('image', new Blob([new Uint8Array(parsed.buffer)], { type: parsed.mimeType }), fileName);
+        result = await shopeeCatalogMultipartVps('/api/v2/media_space/upload_image', creds, formData);
+        break;
+      }
+      case 'upload_video': {
+        if (requireShopeeCatalogPostVps(request, reply)) return;
+        const parsed = await resolveShopeeCatalogMediaInputVps(request.body?.video_data_url, request.body?.video_url, 'video/');
+        if (!parsed) return reply.code(400).send({ error: 'invalid video input' });
+        const ext = parsed.mimeType.split('/')[1] || 'mp4';
+        const fileName = String(request.body?.file_name || parsed.fileNameHint || `video_${Date.now()}.${ext}`);
+        const startedAt = Date.now();
+
+        const init = await shopeeCatalogPostVps('/api/v2/media_space/init_video_upload', creds, {
+          file_md5: md5ShopeeCatalogHexVps(parsed.buffer),
+          file_size: parsed.buffer.length,
+        });
+        if (init.data?.error) return reply.code(200).send(init.data);
+        const uploadId = getShopeeCatalogVideoUploadIdVps(init.data);
+        if (!uploadId) {
+          return reply.code(200).send({
+            error: 'video_upload_id_not_found',
+            message: 'Shopee nao retornou video_upload_id ao iniciar o upload de video',
+            response: init.data?.response,
+          });
+        }
+
+        const maxPartSize = 4 * 1024 * 1024;
+        const partSeqList = [];
+        for (let offset = 0, partSeq = 0; offset < parsed.buffer.length; offset += maxPartSize, partSeq += 1) {
+          const partBuffer = parsed.buffer.subarray(offset, Math.min(offset + maxPartSize, parsed.buffer.length));
+          partSeqList.push(partSeq);
+          const formData = new FormData();
+          formData.append('video_upload_id', uploadId);
+          formData.append('part_seq', String(partSeq));
+          formData.append('content_md5', md5ShopeeCatalogHexVps(partBuffer));
+          formData.append('part_content', new Blob([new Uint8Array(partBuffer)], { type: 'application/octet-stream' }), `${fileName}.part${partSeq}`);
+          const part = await shopeeCatalogMultipartVps('/api/v2/media_space/upload_video_part', creds, formData);
+          if (part.data?.error) return reply.code(200).send(part.data);
+        }
+
+        const complete = await shopeeCatalogPostVps('/api/v2/media_space/complete_video_upload', creds, {
+          video_upload_id: uploadId,
+          part_seq_list: partSeqList,
+          report_data: { upload_cost: Math.max(1, Date.now() - startedAt) },
+        });
+        if (complete.data?.error) return reply.code(200).send(complete.data);
+
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const poll = await shopeeCatalogGetVps('/api/v2/media_space/get_video_upload_result', creds, encodeShopeeCatalogParamsVps({ video_upload_id: uploadId }));
+          const status = getShopeeCatalogVideoUploadStatusVps(poll.data);
+          if (['success', 'succeeded', 'complete', 'completed'].includes(status) || poll.data?.response?.video_info) {
+            return reply.code(200).send({
+              error: '',
+              message: '',
+              response: {
+                video_upload_id: uploadId,
+                video_info: poll.data?.response?.video_info || null,
+                status: poll.data?.response?.status || status,
+              },
+            });
+          }
+          if (poll.data?.error) {
+            const msg = String(poll.data?.message || '').toLowerCase();
+            const waitable = msg.includes('invalid or expired vid') || msg.includes('request vid is abnormal');
+            if (!waitable) return reply.code(200).send(poll.data);
+          }
+        }
+
+        return reply.code(408).send({
+          error: 'video_upload_timeout',
+          message: 'Upload do video ainda em processamento. Tente salvar novamente em alguns segundos.',
+          response: { video_upload_id: uploadId },
+        });
+      }
+      case 'get_full_catalog': {
+        const pageSize = clampShopeeCatalogIntVps(query.page_size, 100, 1, 100);
+        const maxPages = clampShopeeCatalogIntVps(query.max_pages, 200, 1, 200);
+        const maxItems = clampShopeeCatalogIntVps(query.max_items, 0, 0, 20000);
+        const itemStatus = String(query.item_status || 'NORMAL');
+        const allItemIds = [];
+        let offset = 0;
+        let hasNextPage = true;
+        let safety = 0;
+
+        while (hasNextPage && safety < 200 && safety < maxPages && (maxItems === 0 || allItemIds.length < maxItems)) {
+          const listResult = await shopeeCatalogGetVps('/api/v2/product/get_item_list', creds, encodeShopeeCatalogParamsVps({
+            offset,
+            page_size: pageSize,
+            item_status: itemStatus,
+          }));
+          if (listResult.data?.error) return reply.code(200).send(listResult.data);
+          const pageItems = Array.isArray(listResult.data?.response?.item) ? listResult.data.response.item : [];
+          for (const item of pageItems) {
+            if (item?.item_id != null && (maxItems === 0 || allItemIds.length < maxItems)) allItemIds.push(Number(item.item_id));
+          }
+          hasNextPage = listResult.data?.response?.has_next_page === true;
+          offset = Number(listResult.data?.response?.next_offset ?? (offset + pageSize));
+          if (pageItems.length === 0) break;
+          safety += 1;
+        }
+
+        const uniqueIds = [...new Set(allItemIds)].filter((id) => Number.isFinite(id)).slice(0, maxItems || undefined);
+        const itemList = [];
+        const detailBatch = 50;
+        for (let i = 0; i < uniqueIds.length; i += detailBatch) {
+          const batchIds = uniqueIds.slice(i, i + detailBatch).join(',');
+          const detailResult = await shopeeCatalogGetVps('/api/v2/product/get_item_base_info', creds, encodeShopeeCatalogParamsVps({
+            item_id_list: batchIds,
+            need_tax_info: true,
+            need_complaint_policy: false,
+          }));
+          if (detailResult.data?.error) return reply.code(200).send(detailResult.data);
+          itemList.push(...(detailResult.data?.response?.item_list || []));
+        }
+
+        return reply.code(200).send({
+          error: '',
+          message: 'success',
+          response: { total_count: uniqueIds.length, item_list: itemList },
+        });
+      }
+      case 'get_item_list':
+        result = await shopeeCatalogGetVps('/api/v2/product/get_item_list', creds, encodeShopeeCatalogParamsVps({
+          offset: clampShopeeCatalogIntVps(query.offset, 0, 0, 999999),
+          page_size: clampShopeeCatalogIntVps(query.page_size, 20, 1, 100),
+          item_status: query.item_status || 'NORMAL',
+        }));
+        break;
+      case 'get_item_base_info':
+        result = await shopeeCatalogGetVps('/api/v2/product/get_item_base_info', creds, encodeShopeeCatalogParamsVps({ item_id_list: query.item_id_list }));
+        break;
+      case 'get_model_list':
+        result = await shopeeCatalogGetVps('/api/v2/product/get_model_list', creds, encodeShopeeCatalogParamsVps({ item_id: query.item_id }));
+        break;
+      case 'debug':
+        result = await shopeeCatalogGetVps('/api/v2/product/get_item_list', creds, encodeShopeeCatalogParamsVps({ offset: 0, page_size: 5, item_status: 'NORMAL' }));
+        break;
+      default:
+        return reply.code(404).send({ error: `Unknown action: ${action}` });
+    }
+
+    return reply.code(result.status).send(result.data);
+  } catch (err) {
+    return reply.code(500).send({
+      error: err.message,
+      debug: buildCopyableDebug('shopee-catalog', {
+        action,
+        step: 'catalog request',
+        rawMessage: err.message,
+      }),
+    });
+  }
+}
+
+function getShopeeActionsPayloadVps(request) {
+  if (request.method === 'GET') return request.query || {};
+  const body = request.body && typeof request.body === 'object' ? request.body : {};
+  return body.payload && typeof body.payload === 'object' ? body.payload : body;
+}
+
+function getShopeeActionsActionVps(request) {
+  if (request.method === 'GET') return String(request.query?.action || '').trim();
+  return String(request.body?.action || '').trim();
+}
+
+function requireShopeeActionsPostVps(request, reply) {
+  if (request.method === 'POST') return false;
+  reply.code(405).send({ error: 'POST required' });
+  return true;
+}
+
+function firstShopeeActionsNonEmptyVps(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const normalized = String(value).trim();
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
+async function loadShopeeActionsProductFromVps(productId) {
+  const response = await fetch(`https://api.xiaomipetrolina.com.br/products/${encodeURIComponent(String(productId))}`, {
+    signal: AbortSignal.timeout(10000),
+  });
+  const data = await readShopeeCatalogJsonResponseVps(response);
+  if (!response.ok) {
+    const err = new Error('Produto não encontrado na VPS');
+    err.status = response.status || 404;
+    err.body = data;
+    throw err;
+  }
+  return data;
+}
+
+function getShopeeActionsProductItemIdVps(product) {
+  const value = firstShopeeActionsNonEmptyVps(product?.shopee_item_id, product?.shopeeItemId, product?.shopee_item?.id);
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+function stripShopeeActionsHtmlVps(value) {
+  return String(value || '').replace(/<[^>]*>?/gm, '').replace(/\s+/g, ' ').trim();
+}
+
+async function resolveShopeeActionsImageInputVps(imageUrl) {
+  const value = String(imageUrl || '');
+  if (!value) return null;
+
+  if (value.startsWith('data:image')) {
+    const matches = value.match(/^data:(image\/[\w.+-]+);base64,(.*)$/);
+    if (!matches) return null;
+    const mimeType = matches[1];
+    return {
+      buffer: Buffer.from(matches[2], 'base64'),
+      mimeType,
+      filename: `img_${Date.now()}.${mimeType.split('/')[1] || 'jpg'}`,
+    };
+  }
+
+  const response = await fetch(value, { signal: AbortSignal.timeout(15000) });
+  if (!response.ok) return null;
+  const arrayBuffer = await response.arrayBuffer();
+  return {
+    buffer: Buffer.from(arrayBuffer),
+    mimeType: response.headers.get('content-type') || 'image/jpeg',
+    filename: value.split('/').pop() || 'image.jpg',
+  };
+}
+
+async function shopeeCatalogMultipartVps(apiPath, creds, formData) {
+  const response = await fetch(buildShopeeCatalogUrlVps(apiPath, creds), {
+    method: 'POST',
+    body: formData,
+    signal: AbortSignal.timeout(30000),
+  });
+  const data = await readShopeeCatalogJsonResponseVps(response);
+  return { status: response.status, ok: response.ok, data };
+}
+
+async function uploadShopeeActionsProductImagesVps(product, creds) {
+  const imageIds = [];
+  const images = Array.isArray(product?.images) ? product.images : [];
+
+  for (const imageUrl of images.slice(0, 9)) {
+    try {
+      const image = await resolveShopeeActionsImageInputVps(imageUrl);
+      if (!image?.buffer?.length) continue;
+      const formData = new FormData();
+      formData.append('image', new Blob([new Uint8Array(image.buffer)], { type: image.mimeType }), image.filename);
+      const upload = await shopeeCatalogMultipartVps('/api/v2/media_space/upload_image', creds, formData);
+      const imageId = upload.data?.response?.image_info?.image_id;
+      if (imageId) imageIds.push(imageId);
+    } catch (err) {
+      console.error('[shopee-actions] image upload failed:', buildCopyableDebug('shopee-actions', {
+        action: 'add_item',
+        step: 'upload image',
+        rawMessage: err.message,
+      }));
+    }
+  }
+
+  return imageIds;
+}
+
+async function assertShopeeActionsProductNotLinkedVps(productId, product) {
+  const linkedItemId = getShopeeActionsProductItemIdVps(product);
+  if (linkedItemId) {
+    return { linked: true, itemId: linkedItemId };
+  }
+
+  const rows = await supabaseRestSelect('shopee_products', `select=shopee_item_id&product_id=eq.${encodeURIComponent(String(productId))}&shopee_item_id=not.is.null&limit=1`);
+  const fallbackItemId = Number(Array.isArray(rows) ? rows[0]?.shopee_item_id : 0);
+  if (Number.isFinite(fallbackItemId) && fallbackItemId > 0) {
+    return { linked: true, itemId: fallbackItemId };
+  }
+
+  return { linked: false, itemId: 0 };
+}
+
+async function persistShopeeActionsItemLinkVps(productId, product, shopeeItemId) {
+  const response = await fetch(`https://api.xiaomipetrolina.com.br/products/${encodeURIComponent(String(productId))}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Sync-Key': process.env.VPS_SYNC_KEY || process.env.SYNC_SECRET || '',
+    },
+    body: JSON.stringify({ ...product, shopee_item_id: shopeeItemId }),
+    signal: AbortSignal.timeout(15000),
+  });
+  const data = await readShopeeCatalogJsonResponseVps(response);
+  return { ok: response.ok, status: response.status, data };
+}
+
+async function handleShopeeActionsVps(request, reply) {
+  if (request.method !== 'POST' && request.method !== 'GET') {
+    return reply.code(405).send({ error: 'Method not allowed' });
+  }
+
+  const action = getShopeeActionsActionVps(request);
+  const payload = getShopeeActionsPayloadVps(request);
+  if (!action) return reply.code(400).send({ error: 'action obrigatória' });
+
+  try {
+    if (action === 'get_escrow_list' && (!payload.time_from || !payload.time_to)) return reply.code(400).send({ error: 'time_from e time_to são obrigatórios' });
+    if (action === 'get_order_detail' && !payload.order_sn_list) return reply.code(400).send({ error: 'order_sn_list não fornecido' });
+    if (['get_tracking_info', 'get_escrow_detail', 'get_shipping_document'].includes(action) && !payload.order_sn) return reply.code(400).send({ error: 'order_sn não fornecido' });
+    if (action === 'ship_order' && !payload.order_sn) return reply.code(400).send({ error: 'order_sn não fornecido' });
+    if (action === 'add_item' && !payload.product_id) return reply.code(400).send({ error: 'product_id não fornecido' });
+    if (['update_stock', 'update_price'].includes(action) && !payload.product_id) return reply.code(400).send({ error: 'product_id não fornecido' });
+    if (action === 'update_stock' && payload.stock === undefined) return reply.code(400).send({ error: 'Faltam parametros' });
+    if (action === 'update_price' && payload.price === undefined) return reply.code(400).send({ error: 'Faltam parametros' });
+
+    const creds = await getShopeeCatalogCredentialsVps();
+    let result;
+
+    switch (action) {
+      case 'refresh_token': {
+        const refreshedCreds = await refreshShopeeCatalogTokenVps(creds);
+        return reply.code(200).send({ success: true, access_token: refreshedCreds.accessToken });
+      }
+
+      case 'get_shop_info':
+        result = await shopeeCatalogGetVps('/api/v2/shop/get_shop_info', creds);
+        return reply.code(result.status).send(result.data);
+
+      case 'get_order_list': {
+        let timeTo = payload.time_to;
+        let timeFrom = payload.time_from;
+        if (!timeFrom) {
+          timeTo = Math.floor(Date.now() / 1000);
+          timeFrom = timeTo - (15 * 24 * 60 * 60);
+        }
+        result = await shopeeCatalogGetVps('/api/v2/order/get_order_list', creds, encodeShopeeCatalogParamsVps({
+          time_range_field: payload.time_range_field || 'create_time',
+          time_from: timeFrom,
+          time_to: timeTo,
+          page_size: payload.page_size || 50,
+          cursor: payload.cursor,
+          order_status: payload.order_status,
+        }));
+        return reply.code(result.status).send(result.data);
+      }
+
+      case 'get_escrow_list':
+        result = await shopeeCatalogGetVps('/api/v2/payment/get_escrow_list', creds, encodeShopeeCatalogParamsVps({
+          release_time_from: payload.time_from,
+          release_time_to: payload.time_to,
+          page_size: payload.page_size || 50,
+          page_no: payload.page_no || 0,
+        }));
+        return reply.code(result.status).send(result.data);
+
+      case 'get_order_detail': {
+        const snParam = Array.isArray(payload.order_sn_list) ? payload.order_sn_list.join(',') : payload.order_sn_list;
+        const optionalFields = 'buyer_user_id,buyer_username,estimated_shipping_fee,recipient_address,actual_shipping_fee,goods_to_declare,note,note_update_time,item_list,pay_time,dropshipper,dropshipper_phone,split_up,buyer_cancel_reason,cancel_by,cancel_reason,actual_shipping_fee_confirmed,buyer_cpf_id,fulfillment_flag,pickup_done_time,package_list,shipping_carrier,payment_method,total_amount,invoice_data,checkout_shipping_carrier,reverse_shipping_fee,order_chargeable_weight_gram,edt,prescription_images,prescription_check_status';
+        result = await shopeeCatalogGetVps('/api/v2/order/get_order_detail', creds, encodeShopeeCatalogParamsVps({
+          order_sn_list: snParam,
+          response_optional_fields: optionalFields,
+        }));
+        return reply.code(result.status).send(result.data);
+      }
+
+      case 'get_tracking_info': {
+        const orderSn = String(payload.order_sn || '').trim();
+        const [trackingResult, numberResult] = await Promise.all([
+          shopeeCatalogGetVps('/api/v2/logistics/get_tracking_info', creds, encodeShopeeCatalogParamsVps({ order_sn: orderSn })),
+          shopeeCatalogGetVps('/api/v2/logistics/get_tracking_number', creds, encodeShopeeCatalogParamsVps({ order_sn: orderSn })),
+        ]);
+        const data = trackingResult.data || {};
+        if (data.response && numberResult.data?.response) {
+          data.response.tracking_number_explicit = numberResult.data.response.tracking_number || numberResult.data.response.first_mile_tracking_number || numberResult.data.response.logistics_tracking_no || '';
+        }
+        return reply.code(trackingResult.status).send(data);
+      }
+
+      case 'get_escrow_detail':
+        result = await shopeeCatalogGetVps('/api/v2/payment/get_escrow_detail', creds, encodeShopeeCatalogParamsVps({ order_sn: payload.order_sn }));
+        return reply.code(result.status).send(result.data);
+
+      case 'get_shipping_document': {
+        const orderSn = String(payload.order_sn || '').trim();
+        const shippingDocumentType = payload.shipping_document_type || 'SHIPPING_LABEL';
+        const orderList = [{ order_sn: orderSn, shipping_document_type: shippingDocumentType }];
+        const infoResult = await shopeeCatalogPostVps('/api/v2/logistics/get_shipping_document_info', creds, { order_list: orderList });
+        const docResponse = await fetch(buildShopeeCatalogUrlVps('/api/v2/logistics/download_shipping_document', creds), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_list: orderList }),
+          signal: AbortSignal.timeout(20000),
+        });
+        const contentType = docResponse.headers.get('content-type') || '';
+        if (contentType.includes('application/pdf')) {
+          const pdfBuffer = Buffer.from(await docResponse.arrayBuffer());
+          return reply
+            .code(200)
+            .header('Content-Type', 'application/pdf')
+            .header('Content-Disposition', `attachment; filename="etiqueta-${orderSn}.pdf"`)
+            .send(pdfBuffer);
+        }
+        const docData = await readShopeeCatalogJsonResponseVps(docResponse);
+        return reply.code(docResponse.status).send({ info: infoResult.data, doc: docData });
+      }
+
+      case 'ship_order': {
+        if (requireShopeeActionsPostVps(request, reply)) return;
+        const orderSn = String(payload.order_sn || '').trim();
+        const requestedPackageNumber = String(payload.package_number || '').trim();
+        const orderDetail = await shopeeCatalogGetVps('/api/v2/order/get_order_detail', creds, encodeShopeeCatalogParamsVps({
+          order_sn_list: orderSn,
+          response_optional_fields: 'package_list,shipping_carrier,order_status,fulfillment_flag',
+        }));
+        const orderDetailData = orderDetail.data || {};
+
+        if (orderDetailData?.error) {
+          return reply.code(200).send({
+            error: 'ship_order_precheck_failed',
+            message: orderDetailData.message || orderDetailData.error,
+            details: orderDetailData,
+          });
+        }
+
+        const order = orderDetailData?.response?.order_list?.[0];
+        if (!order) {
+          return reply.code(200).send({
+            error: 'ship_order_precheck_failed',
+            message: 'Pedido não encontrado na Shopee antes de preparar envio.',
+            details: orderDetailData,
+          });
+        }
+
+        if (order.order_status !== 'READY_TO_SHIP') {
+          return reply.code(200).send({
+            error: 'ship_order_not_ready',
+            message: `Pedido ${orderSn} está com status ${order.order_status || 'desconhecido'}; ship_order só será chamado para READY_TO_SHIP.`,
+            details: { order_status: order.order_status },
+          });
+        }
+
+        const packageList = Array.isArray(order.package_list) ? order.package_list : [];
+        const selectedPackage = requestedPackageNumber
+          ? packageList.find((pkg) => String(pkg?.package_number || '').trim() === requestedPackageNumber)
+          : packageList[0];
+        const resolvedPackageNumber = firstShopeeActionsNonEmptyVps(selectedPackage?.package_number, requestedPackageNumber);
+
+        if (!resolvedPackageNumber) {
+          return reply.code(200).send({
+            error: 'ship_order_package_not_found',
+            message: 'Não foi possível identificar o pacote do pedido para validar o preparo de envio.',
+            details: { order_sn: orderSn, package_list: packageList },
+          });
+        }
+
+        const packageDetail = await shopeeCatalogGetVps('/api/v2/order/get_package_detail', creds, encodeShopeeCatalogParamsVps({
+          order_sn: orderSn,
+          package_number: resolvedPackageNumber,
+        }));
+        const packageDetailData = packageDetail.data || {};
+        const detailPackage = packageDetailData?.response?.package_detail || packageDetailData?.response?.package_list?.[0] || packageDetailData?.response || {};
+        const fulfillmentStatus = firstShopeeActionsNonEmptyVps(
+          detailPackage.fulfillment_status,
+          detailPackage.logistics_status,
+          selectedPackage?.fulfillment_status,
+          selectedPackage?.logistics_status,
+        );
+        const isShipmentArrangedRaw = detailPackage.is_shipment_arranged ?? selectedPackage?.is_shipment_arranged;
+        const isShipmentArranged = isShipmentArrangedRaw === true || String(isShipmentArrangedRaw).toLowerCase() === 'true';
+
+        if (packageDetailData?.error || !fulfillmentStatus) {
+          return reply.code(200).send({
+            error: 'ship_order_precheck_failed',
+            message: 'Não foi possível confirmar que o pacote está pronto para envio. A chamada ship_order foi bloqueada para preservar a taxa de sucesso da Shopee.',
+            details: { package_detail: packageDetailData, package_number: resolvedPackageNumber },
+          });
+        }
+
+        if (isShipmentArranged || fulfillmentStatus === 'LOGISTICS_REQUEST_CREATED') {
+          return reply.code(200).send({
+            success: true,
+            already_arranged: true,
+            message: 'O envio deste pacote já foi preparado anteriormente.',
+            details: { package_number: resolvedPackageNumber, fulfillment_status: fulfillmentStatus, is_shipment_arranged: isShipmentArranged },
+          });
+        }
+
+        if (fulfillmentStatus !== 'LOGISTICS_READY') {
+          return reply.code(200).send({
+            error: 'ship_order_package_not_ready',
+            message: `Pacote ${resolvedPackageNumber} ainda não está pronto para ship_order. Status atual: ${fulfillmentStatus}.`,
+            details: { package_number: resolvedPackageNumber, fulfillment_status: fulfillmentStatus, is_shipment_arranged: isShipmentArranged },
+          });
+        }
+
+        result = await shopeeCatalogPostVps('/api/v2/logistics/ship_order', creds, {
+          order_sn: orderSn,
+          package_number: resolvedPackageNumber,
+          dropoff: {},
+        });
+        return reply.code(result.status).send(result.data);
+      }
+
+      case 'add_item': {
+        if (requireShopeeActionsPostVps(request, reply)) return;
+        const product = await loadShopeeActionsProductFromVps(payload.product_id);
+        const link = await assertShopeeActionsProductNotLinkedVps(payload.product_id, product);
+        if (link.linked) {
+          return reply.code(409).send({
+            error: 'Produto já vinculado à Shopee',
+            item_id: link.itemId,
+          });
+        }
+
+        const imageIdList = await uploadShopeeActionsProductImagesVps(product, creds);
+        const description = stripShopeeActionsHtmlVps(product.description) || product.name || '';
+        const shopeePayload = {
+          original_price: Number(product.price_retail || 0) / 100,
+          description: description.substring(0, 3000),
+          item_name: String(product.name || '').substring(0, 120),
+          normal_stock: product.track_inventory ? Number(product.stock_quantity || 0) : 999,
+          weight: Number(product.weight_kg) > 0.05 ? Number(product.weight_kg) : 0.5,
+          item_status: 'NORMAL',
+          category_id: Number(payload.category_id || product.shopee_category_id || 100013),
+          image: { image_id_list: imageIdList.length > 0 ? imageIdList : undefined },
+          brand: {
+            brand_id: Number(payload.brand_id || product.shopee_brand_id || 0),
+            original_brand_name: payload.brand_name || product.brand || 'NoBrand',
+          },
+          logistics: [
+            {
+              logistic_id: Number(payload.logistic_id || product.shopee_logistic_id || 30018),
+              enabled: true,
+            },
+          ],
+        };
+
+        result = await shopeeCatalogPostVps('/api/v2/product/add_item', creds, shopeePayload);
+        if (result.data?.error) return reply.code(400).send({ error: result.data.error, message: result.data.message, details: result.data });
+        const shopeeItemId = result.data?.response?.item_id;
+        if (shopeeItemId) await persistShopeeActionsItemLinkVps(payload.product_id, product, shopeeItemId);
+        return reply.code(200).send({ item_id: shopeeItemId, data: result.data?.response });
+      }
+
+      case 'update_stock': {
+        if (requireShopeeActionsPostVps(request, reply)) return;
+        const product = await loadShopeeActionsProductFromVps(payload.product_id);
+        const itemId = getShopeeActionsProductItemIdVps(product);
+        if (!itemId) return reply.code(400).send({ error: 'Produto não vinculado a Shopee' });
+        result = await shopeeCatalogPostVps('/api/v2/product/update_stock', creds, {
+          item_id: itemId,
+          stock_list: [{ model_id: 0, normal_stock: Number(payload.stock) }],
+        });
+        return reply.code(result.status).send(result.data);
+      }
+
+      case 'update_price': {
+        if (requireShopeeActionsPostVps(request, reply)) return;
+        const product = await loadShopeeActionsProductFromVps(payload.product_id);
+        const itemId = getShopeeActionsProductItemIdVps(product);
+        if (!itemId) return reply.code(400).send({ error: 'Produto não vinculado a Shopee' });
+        result = await shopeeCatalogPostVps('/api/v2/product/update_price', creds, {
+          item_id: itemId,
+          price_list: [{ model_id: 0, original_price: Number(payload.price) / 100 }],
+        });
+        return reply.code(result.status).send(result.data);
+      }
+
+      default:
+        return reply.code(400).send({ error: 'Ação desconhecida' });
+    }
+  } catch (err) {
+    return reply.code(500).send({
+      error: err.message,
+      debug: buildCopyableDebug('shopee-actions', {
+        action,
+        step: 'actions request',
+        rawMessage: err.message,
+      }),
+    });
+  }
+}
+
+async function requestBlingToken(params, clientId, clientSecret) {
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const response = await fetch('https://www.bling.com.br/Api/v3/oauth/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${credentials}`,
+    },
+    body: params.toString(),
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { message: text.slice(0, 500) };
+  }
+  return { response, data };
+}
+
+async function readBlingProxyResponse(response) {
+  const text = await response.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  return { ok: response.ok, status: response.status, statusText: response.statusText, text, json };
+}
+
+function summarizeBlingProxyBody(body) {
+  const data = Array.isArray(body?.json?.data) ? body.json.data : [];
+  return {
+    ok: body?.ok,
+    status: body?.status,
+    statusText: body?.statusText,
+    count: data.length,
+    error: body?.json?.error || body?.json?.erro || null,
+    message: body?.json?.message || body?.json?.mensagem || body?.json?.descricao || null,
+    body: data.length > 0 ? undefined : (body?.json || body?.text || null),
+  };
+}
+
+function normalizeBlingSearchTextVps(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function getBlingSearchTokensVps(search) {
+  const ignored = new Set(['a', 'as', 'o', 'os', 'de', 'da', 'das', 'do', 'dos', 'e', 'em', 'para', 'por', 'com']);
+  return normalizeBlingSearchTextVps(search)
+    .split(/\s+/)
+    .filter((token) => token.length >= 2 && !ignored.has(token));
+}
+
+function matchesLooseBlingProductSearchVps(item, search) {
+  const query = normalizeBlingSearchTextVps(search);
+  if (!query) return true;
+  const haystack = normalizeBlingSearchTextVps([
+    item?.nome,
+    item?.codigo,
+    item?.gtin,
+    item?.marca,
+    item?.categoria?.descricao,
+    item?.variacao?.nome,
+  ].filter(Boolean).join(' '));
+  if (!haystack) return false;
+  if (haystack.includes(query)) return true;
+  const tokens = getBlingSearchTokensVps(search);
+  if (tokens.length === 0) return false;
+  const matchedTokens = tokens.filter((token) => haystack.includes(token)).length;
+  return matchedTokens >= Math.max(1, Math.ceil(tokens.length * 0.6));
+}
+
+async function fetchLooseBlingProductSearchVps(base, headers, search, debug) {
+  const maxPages = Number(process.env.BLING_PRODUCT_SEARCH_FALLBACK_MAX_PAGES || 50);
+  const seen = new Set();
+  const matched = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    const url = base.replace(/pagina=[^&]*/, `pagina=${page}`);
+    const response = await fetch(url, { headers });
+    const body = await readBlingProxyResponse(response);
+    debug?.fallbackPages?.push({ page, ...summarizeBlingProxyBody(body) });
+
+    if (!response.ok) {
+      if (page === 1) {
+        const error = new Error(`Bling fallback failed at page ${page}: ${response.status} ${response.statusText}`);
+        error.blingDebug = debug;
+        throw error;
+      }
+      break;
+    }
+
+    const items = Array.isArray(body.json?.data) ? body.json.data : [];
+    for (const item of items) {
+      if (!item?.id || seen.has(item.id)) continue;
+      if (!matchesLooseBlingProductSearchVps(item, search)) continue;
+      seen.add(item.id);
+      matched.push(item);
+    }
+
+    if (items.length < 100 || matched.length >= 100) break;
+  }
+
+  return matched;
+}
+
+async function refreshBlingStoredAccessTokenVps(settings) {
+  if (!settings?.bling_refresh_token || !settings?.bling_client_id || !settings?.bling_client_secret) {
+    return settings?.bling_access_token || '';
+  }
+
+  const params = new URLSearchParams();
+  params.set('grant_type', 'refresh_token');
+  params.set('refresh_token', settings.bling_refresh_token);
+  const { response, data } = await requestBlingToken(params, settings.bling_client_id, settings.bling_client_secret);
+
+  if (!response.ok || !data?.access_token) {
+    return settings.bling_access_token || '';
+  }
+
+  await supabaseRestPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, {
+    bling_access_token: data.access_token,
+    bling_refresh_token: data.refresh_token || settings.bling_refresh_token,
+    bling_token_expires_at: new Date(Date.now() + Number(data.expires_in || 3600) * 1000).toISOString(),
+  });
+
+  return data.access_token;
+}
+
+async function getBlingProductDetailAuthHeaderVps(request) {
+  if (request.headers.authorization) return request.headers.authorization;
+
+  const settingsRows = await supabaseRestSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
+  const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
+  if (!settings?.bling_access_token) return '';
+
+  const expiresAt = settings.bling_token_expires_at ? new Date(settings.bling_token_expires_at).getTime() : 0;
+  const shouldRefresh = expiresAt && expiresAt <= Date.now();
+  const accessToken = shouldRefresh ? await refreshBlingStoredAccessTokenVps(settings) : settings.bling_access_token;
+  return accessToken ? `Bearer ${accessToken}` : '';
+}
+
+function readBlingStockQuantityVps(item) {
+  const stockValue = item?.saldoFisicoTotal ?? item?.saldoFisico ?? item?.saldoVirtualTotal ?? item?.saldoVirtual ?? 0;
+  return parseFloat(String(stockValue)) || 0;
+}
+
+function getVpsSyncKeyForBlingSyncPrices() {
+  return process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || process.env.SYNC_SECRET || '';
+}
+
+function isLocalVpsBatchHost(host = '') {
+  const hostname = String(host).split(':')[0].toLowerCase();
+  return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1';
+}
+
+function getVpsBatchBaseUrl(request) {
+  if (process.env.VITE_VPS_BASE_URL) return process.env.VITE_VPS_BASE_URL.replace(/\/+$/, '');
+  if (process.env.VPS_BASE_URL) return process.env.VPS_BASE_URL.replace(/\/+$/, '');
+  const host = request.headers['x-forwarded-host'] || request.headers.host;
+  const proto = request.headers['x-forwarded-proto'] || (isLocalVpsBatchHost(host) ? 'http' : 'https');
+  return `${proto}://${host}`;
+}
+
+async function loadSupabaseProductsForBlingSyncPrices(from, to) {
+  const baseUrl = getSupabaseRestBaseUrl();
+  if (!baseUrl || !SUPABASE_AUTH_KEY) {
+    throw new Error('Supabase REST env vars missing');
+  }
+
+  const select = 'select=id,name,sku,status,category_id,price_retail,price_reseller,price_wholesale,price_cost,stock_quantity,track_inventory,bling_id,bling_parent_id,parent_id';
+  const response = await fetch(`${baseUrl}/products?${select}`, {
+    headers: buildSupabaseRestHeaders({
+      'Range-Unit': 'items',
+      Range: `${from}-${to}`,
+      Prefer: 'count=exact',
+    }),
+    signal: AbortSignal.timeout(12000),
+  });
+  const text = await response.text();
+  let products = [];
+  try {
+    products = text ? JSON.parse(text) : [];
+  } catch {
+    products = [];
+  }
+  if (!response.ok) {
+    const error = new Error(`Supabase products fetch failed: ${response.status}`);
+    error.status = response.status;
+    error.body = text.slice(0, 500);
+    throw error;
+  }
+
+  const contentRange = response.headers.get('content-range') || '';
+  const totalMatch = contentRange.match(/\/(\d+|\*)$/);
+  const total = totalMatch && totalMatch[1] !== '*' ? Number(totalMatch[1]) : products.length;
+  return { products, total: Number.isFinite(total) ? total : products.length };
+}
+
+function buildBlingSyncPricesVpsRows(products) {
+  return products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    sku: p.sku,
+    status: p.status === 'active' ? 'active' : p.status,
+    category_id: p.category_id,
+    price_retail: p.price_retail,
+    price_reseller: p.price_reseller,
+    price_wholesale: p.price_wholesale,
+    price_cost: p.price_cost,
+    stock_quantity: p.stock_quantity ?? 0,
+    track_inventory: p.track_inventory ?? true,
+    bling_id: p.bling_id ?? null,
+    bling_parent_id: p.bling_parent_id ?? null,
+    parent_id: p.parent_id ?? null,
+  }));
+}
+
+function isBlingReconcileAuthorizedVps(request) {
+  const authHeader = String(request.headers.authorization || '');
+  if (process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`) return true;
+  const key = String(request.headers['x-sync-key'] || request.headers['x-api-key'] || '');
+  const syncKey = getVpsSyncKeyForBlingSyncPrices();
+  if (syncKey && key === syncKey) return true;
+  return String(request.headers['user-agent'] || '').includes('vercel-cron/1.0');
+}
+
+async function getValidBlingAccessTokenForReconcileVps() {
+  const settingsRows = await supabaseRestSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
+  const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
+  if (!settings?.bling_access_token) throw new Error('Bling not connected');
+
+  const expiresAt = settings.bling_token_expires_at ? new Date(settings.bling_token_expires_at).getTime() : 0;
+  if (!expiresAt || expiresAt > Date.now()) return settings.bling_access_token;
+  return refreshBlingStoredAccessTokenVps(settings);
+}
+
+async function fetchAllLocalProductsForReconcileVps() {
+  const [rows] = await pool.query(
+    'SELECT id, sku, name, stock_quantity, bling_id FROM products WHERE bling_id IS NOT NULL'
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function fetchAllBlingProductsForReconcileVps(accessToken) {
+  const remoteProducts = [];
+  for (let page = 1; ; page += 1) {
+    if (page > 1) await sleepBlingReconcileVps(450);
+    let response;
+    let body;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      response = await fetch(`https://www.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5`, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(15000),
+      });
+      body = await readBlingProxyResponse(response);
+      if (response.status === 429 && attempt < 2) {
+        await sleepBlingReconcileVps(1200);
+        continue;
+      }
+      break;
+    }
+    if (!response.ok) throw new Error(`Bling products fetch failed (${response.status}): ${body.text}`);
+    const pageItems = Array.isArray(body.json?.data) ? body.json.data : [];
+    remoteProducts.push(...pageItems);
+    if (pageItems.length < 100) break;
+  }
+  return remoteProducts;
+}
+
+function sleepBlingReconcileVps(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchAllBlingStocksForReconcileVps(accessToken, productIds = []) {
+  const remoteStocks = [];
+  for (let page = 1; ; page += 1) {
+    const response = await fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (response.status === 400) break;
+    const body = await readBlingProxyResponse(response);
+    if (!response.ok) throw new Error(`Bling stock fetch failed (${response.status}): ${body.text}`);
+    const pageItems = Array.isArray(body.json?.data) ? body.json.data : [];
+    remoteStocks.push(...pageItems);
+    if (pageItems.length < 100) break;
+  }
+  if (remoteStocks.length > 0) return remoteStocks;
+
+  const mappedIds = [...new Set(productIds.map((id) => String(id || '').trim()).filter(Boolean))];
+  for (let i = 0; i < mappedIds.length; i += 50) {
+    if (i > 0) await sleepBlingReconcileVps(450);
+    const chunk = mappedIds.slice(i, i + 50);
+    const idsQuery = chunk.map((id) => `idsProdutos[]=${encodeURIComponent(id)}`).join('&');
+    let response;
+    let body;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      response = await fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=100&${idsQuery}`, {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(15000),
+      });
+      body = await readBlingProxyResponse(response);
+      if (response.status === 429 && attempt < 2) {
+        await sleepBlingReconcileVps(1200);
+        continue;
+      }
+      break;
+    }
+    if (response.status === 400) continue;
+    if (!response.ok) throw new Error(`Bling stock fetch failed (${response.status}): ${body.text}`);
+    const pageItems = Array.isArray(body.json?.data) ? body.json.data : [];
+    remoteStocks.push(...pageItems);
+  }
+  return remoteStocks;
+}
+
+function normalizeReconcileTextVps(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeReconcileIntegerVps(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.round(numeric));
+}
+
+function getRemoteStockProductIdVps(item) {
+  return item?.produto?.id ?? item?.product?.id ?? item?.idProduto ?? item?.id ?? null;
+}
+
+function getRemoteStockEntryValueVps(item) {
+  if (item?.saldoFisicoTotal !== undefined && item?.saldoFisicoTotal !== null) return { mode: 'total', value: normalizeReconcileIntegerVps(item.saldoFisicoTotal) };
+  if (item?.saldoVirtualTotal !== undefined && item?.saldoVirtualTotal !== null) return { mode: 'total', value: normalizeReconcileIntegerVps(item.saldoVirtualTotal) };
+  if (item?.saldoFisico !== undefined && item?.saldoFisico !== null) return { mode: 'partial', value: normalizeReconcileIntegerVps(item.saldoFisico) };
+  if (item?.saldoVirtual !== undefined && item?.saldoVirtual !== null) return { mode: 'partial', value: normalizeReconcileIntegerVps(item.saldoVirtual) };
+  return { mode: 'partial', value: 0 };
+}
+
+function buildBlingReconcilePlanVps({ localProducts = [], remoteProducts = [], remoteStocks = [] } = {}) {
+  const localByBlingId = new Map();
+  for (const localProduct of localProducts) {
+    if (localProduct?.bling_id) localByBlingId.set(String(localProduct.bling_id), localProduct);
+  }
+
+  const remoteProductsById = new Map();
+  for (const remoteProduct of remoteProducts) {
+    if (remoteProduct?.id) remoteProductsById.set(String(remoteProduct.id), remoteProduct);
+  }
+
+  const remoteStocksById = new Map();
+  for (const remoteStock of remoteStocks) {
+    const productId = getRemoteStockProductIdVps(remoteStock);
+    if (!productId) continue;
+    const key = String(productId);
+    const entry = getRemoteStockEntryValueVps(remoteStock);
+    if (entry.mode === 'total') {
+      remoteStocksById.set(key, entry.value);
+    } else {
+      remoteStocksById.set(key, (remoteStocksById.get(key) || 0) + entry.value);
+    }
+  }
+
+  const stockChanges = [];
+  const nameChanges = [];
+  for (const [blingId, localProduct] of localByBlingId.entries()) {
+    const remoteProduct = remoteProductsById.get(blingId);
+    const remoteStock = remoteStocksById.get(blingId);
+    if (remoteStock !== undefined) {
+      const previousStock = normalizeReconcileIntegerVps(localProduct.stock_quantity);
+      if (previousStock !== remoteStock) {
+        stockChanges.push({ productId: localProduct.id, sku: localProduct.sku || remoteProduct?.codigo || null, blingId: Number(blingId), previousStock, nextStock: remoteStock });
+      }
+    }
+
+    const previousName = normalizeReconcileTextVps(localProduct.name);
+    const nextName = normalizeReconcileTextVps(remoteProduct?.nome);
+    if (nextName && previousName !== nextName) {
+      nameChanges.push({ productId: localProduct.id, sku: localProduct.sku || remoteProduct?.codigo || null, blingId: Number(blingId), previousName, nextName });
+    }
+  }
+
+  return {
+    stockChanges,
+    nameChanges,
+    totals: { localProducts: localProducts.length, localMappedProducts: localByBlingId.size, remoteProducts: remoteProducts.length, remoteStocks: remoteStocks.length },
+  };
+}
+
+function summarizeBlingReconcilePlanDetailsVps(plan, limit = 100) {
+  return {
+    stockChanges: plan.stockChanges.slice(0, limit).map((change) => ({
+      productId: change.productId,
+      sku: change.sku || null,
+      blingId: change.blingId,
+      previousStock: change.previousStock,
+      nextStock: change.nextStock,
+    })),
+    nameChanges: plan.nameChanges.slice(0, limit).map((change) => ({
+      productId: change.productId,
+      sku: change.sku || null,
+      blingId: change.blingId,
+      previousName: change.previousName,
+      nextName: change.nextName,
+    })),
+  };
+}
+
+async function patchVpsForReconcileVps(pathname, body, request) {
+  const syncKey = getVpsSyncKeyForBlingSyncPrices();
+  if (!syncKey) return false;
+  try {
+    const response = await fetch(`${getVpsBatchBaseUrl(request)}${pathname}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-sync-key': syncKey },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function applyReconcileStockChangesVps(changes, request) {
+  const applied = [];
+  const failed = [];
+  for (const change of changes) {
+    try {
+      await supabaseRestPatch('products', `id=eq.${encodeURIComponent(change.productId)}`, { stock_quantity: change.nextStock });
+      const vpsUpdated = await patchVpsForReconcileVps('/products/stock', change.blingId ? { bling_id: change.blingId, stock_quantity: change.nextStock } : { sku: change.sku, stock_quantity: change.nextStock }, request);
+      applied.push({ ...change, vpsUpdated });
+    } catch (err) {
+      failed.push({ type: 'stock', sku: change.sku, blingId: change.blingId, reason: err.message });
+    }
+  }
+  return { applied, failed };
+}
+
+async function applyReconcileNameChangesVps(changes, request) {
+  const applied = [];
+  const failed = [];
+  for (const change of changes) {
+    try {
+      await supabaseRestPatch('products', `id=eq.${encodeURIComponent(change.productId)}`, { name: change.nextName });
+      const vpsUpdated = change.sku ? await patchVpsForReconcileVps('/products/name', { sku: change.sku, name: change.nextName }, request) : false;
+      applied.push({ ...change, vpsUpdated });
+    } catch (err) {
+      failed.push({ type: 'name', sku: change.sku, blingId: change.blingId, reason: err.message });
+    }
+  }
+  return { applied, failed };
+}
+
+function resolveBlingWebhookSourceVps(request) {
+  return String(request.query?.resource || '') === 'webhook' ? 'bling-legacy' : 'bling-webhook';
+}
+
+async function safeInsertBlingWebhookLogVps(source, payload, rawBody) {
+  try {
+    const storedPayload = payload && typeof payload === 'object'
+      ? { ...payload, _route: source }
+      : { rawBody, _route: source };
+    await supabaseRestInsert('webhook_logs', {
+      source: source,
+      payload: storedPayload,
+      received_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('[bling-webhook] Failed to persist webhook_logs:', err?.message || err);
+  }
+}
+
+function readBlingPayloadStockForWebhookVps(productData, body) {
+  const estoque = productData?.estoque || body?.data?.estoque || body?.dados?.estoque;
+  return productData?.stock_quantity
+    ?? productData?.saldoFisicoTotal
+    ?? productData?.saldoFisico
+    ?? productData?.saldoVirtualTotal
+    ?? productData?.saldoVirtual
+    ?? estoque?.saldoFisicoTotal
+    ?? estoque?.saldoFisico
+    ?? estoque?.saldoVirtualTotal
+    ?? estoque?.saldoVirtual
+    ?? body?.data?.saldoFisicoTotal
+    ?? body?.dados?.saldoFisicoTotal;
+}
+
+async function fetchBlingStockForWebhookVps(blingId, accessToken) {
+  try {
+    const response = await fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${encodeURIComponent(String(blingId))}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    const body = await readBlingProxyResponse(response);
+    if (!response.ok) return null;
+    const items = Array.isArray(body.json?.data) ? body.json.data : [];
+    if (items.length > 0 && items[0].saldoFisicoTotal !== undefined) return Number(items[0].saldoFisicoTotal);
+    return items.reduce((total, item) => total + (Number(item?.saldoFisico) || 0), 0);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchBlingProductDetailForWebhookVps(blingId, accessToken) {
+  try {
+    const response = await fetch(`https://www.bling.com.br/Api/v3/produtos/${encodeURIComponent(String(blingId))}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    const body = await readBlingProxyResponse(response);
+    if (!response.ok) return null;
+    return body.json?.data || null;
+  } catch {
+    return null;
+  }
+}
+
+function pickBlingPriceStockUpdatesVps(updates = {}) {
+  const fields = ['price_retail', 'price_wholesale', 'price_cost', 'price_reseller', 'price_promo', 'promo_start', 'promo_end', 'stock_quantity', 'status', 'category_id', 'track_inventory'];
+  const picked = {};
+  for (const field of fields) {
+    if (updates[field] !== undefined) picked[field] = updates[field];
+  }
+  return picked;
+}
+
+function buildBlingPriceTargetSkusVps(primarySku, childProducts = []) {
+  const skus = [];
+  if (typeof primarySku === 'string' && primarySku.trim()) skus.push(primarySku.trim());
+  for (const product of childProducts || []) {
+    const sku = typeof product?.sku === 'string' ? product.sku.trim() : '';
+    if (sku) skus.push(sku);
+  }
+  return Array.from(new Set(skus));
+}
+
+function buildBlingPriceStockPayloadVps(targetSkus = [], updates = {}) {
+  const commercialUpdates = pickBlingPriceStockUpdatesVps(updates);
+  return {
+    products: buildBlingPriceTargetSkusVps('', targetSkus.map((sku) => ({ sku }))).map((sku) => ({
+      sku,
+      ...commercialUpdates,
+    })),
+  };
+}
+
+async function patchVpsJsonForWebhookVps(request, pathname, body) {
+  const syncKey = getVpsSyncKeyForBlingSyncPrices();
+  if (!syncKey) return { ok: false, skipped: 'missing_sync_key' };
+  try {
+    const response = await fetch(`${getVpsBatchBaseUrl(request)}${pathname}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-sync-key': syncKey },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
+    });
+    const text = await response.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+    return response.ok ? (json || { ok: true }) : { ok: false, status: response.status };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function syncShopeeStockFromBlingTargetsVps(_stockTargets) {
+  return { ok: true, skipped: 'vps_webhook_local_shopee_sync_pending', updated: 0, errors: [] };
+}
+
+function normalizeBlingAdminSlugVps(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+async function patchVpsJsonForBlingAdminVps(request, method, pathname, body) {
+  const syncKey = getVpsSyncKeyForBlingSyncPrices();
+  if (!syncKey) return { ok: false, skipped: 'missing_sync_key' };
+  try {
+    const response = await fetch(`${getVpsBatchBaseUrl(request)}${pathname}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
+    });
+    const text = await response.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+    return response.ok ? (json || { ok: true }) : { ok: false, status: response.status };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+async function handleBlingWebhookVps(request, reply) {
+  if (request.method === 'GET') {
+    return reply.code(200).send({ ok: true, mode: 'vps-fastify', accepts: 'POST' });
+  }
+  if (request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+
+  if (isMercadoPagoWebhookPayload(request.body)) {
+    try {
+      const result = await handleMercadoPagoWebhookVps(request.body);
+      return reply.code(result.status).send(result.body);
+    } catch (err) {
+      return reply.code(200).send({ ok: false, error: err.message });
+    }
+  }
+
+  const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body || {});
+  let webhookEventForDebug = '';
+  try {
+    const body = request.body || {};
+    const event = String(body?.event || body?.evento || '').toLowerCase();
+    webhookEventForDebug = event;
+    const source = resolveBlingWebhookSourceVps(request);
+    await safeInsertBlingWebhookLogVps(source, body, rawBody);
+
+    if (!event) return reply.code(200).send({ ok: true, message: 'No event type - ignored' });
+
+    const settingsRows = await supabaseRestSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
+    const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
+    let accessToken = settings?.bling_access_token || null;
+    if (settings?.bling_token_expires_at && new Date(settings.bling_token_expires_at).getTime() < Date.now()) {
+      accessToken = await refreshBlingStoredAccessTokenVps(settings);
+    }
+
+    const isStockEvent = event.includes('stock') || event.includes('estoque') || event.includes('movimentacao');
+    if (isStockEvent) {
+      const productData = body?.data?.produto || body?.dados?.produto || body?.data || {};
+      const blingId = productData?.id;
+      const sku = productData?.codigo;
+      if (!blingId && !sku) return reply.code(200).send({ ok: true, message: 'No product identifier in stock event' });
+
+      let stockQty = null;
+      let stockSource = 'api';
+      if (accessToken && blingId) {
+        stockQty = await fetchBlingStockForWebhookVps(blingId, accessToken);
+      }
+      if (stockQty === null) {
+        const payloadStock = readBlingPayloadStockForWebhookVps(productData, body);
+        const payloadQty = payloadStock !== undefined ? Number(payloadStock) : null;
+        if (accessToken && (payloadQty === null || payloadQty === 0)) {
+          return reply.code(200).send({
+            ok: false,
+            message: 'API failed and payload returned 0 - update aborted to avoid an incorrect zero stock',
+            reason: 'refusing to zero stock incorrectly',
+            blingId,
+            sku,
+          });
+        }
+        if (payloadQty === null || !Number.isFinite(payloadQty)) {
+          return reply.code(200).send({ ok: false, message: 'No Bling token and no stock in payload' });
+        }
+        stockQty = payloadQty;
+        stockSource = accessToken ? 'payload_api_fallback' : 'payload_no_token';
+      }
+
+      let resolvedSku = sku;
+      if (!resolvedSku && blingId) {
+        const rows = await supabaseRestSelect('products', `select=sku&bling_id=eq.${encodeURIComponent(String(blingId))}&limit=1`);
+        resolvedSku = Array.isArray(rows) ? rows[0]?.sku : null;
+      }
+
+      const vpsPayload = blingId ? { bling_id: blingId, stock_quantity: stockQty } : { sku: resolvedSku, stock_quantity: stockQty };
+      const vpsStockResult = await patchVpsJsonForWebhookVps(request, '/products/stock', vpsPayload);
+      if (blingId) {
+        await supabaseRestPatch('products', `bling_id=eq.${encodeURIComponent(String(blingId))}`, { stock_quantity: stockQty });
+      } else if (resolvedSku) {
+        await supabaseRestPatch('products', `sku=eq.${encodeURIComponent(String(resolvedSku))}`, { stock_quantity: stockQty });
+      }
+      const shopeeStockSync = await syncShopeeStockFromBlingTargetsVps(vpsStockResult?.stockTargets || []);
+      return reply.code(200).send({ ok: true, event, sku: resolvedSku, bling_id: blingId, stock_quantity: stockQty, stockSource, vpsUpdated: Boolean(vpsStockResult?.ok), shopeeStockSync });
+    }
+
+    const isProductEvent = event.includes('product') || event.includes('produto');
+    if (isProductEvent) {
+      const productData = body?.data?.produto || body?.dados?.produto || body?.data || {};
+      const blingId = productData?.id;
+      let resolvedName = productData?.nome || productData?.name;
+      let resolvedSku = productData?.codigo;
+      const preco = productData?.preco;
+      if (!blingId && !resolvedSku) return reply.code(200).send({ ok: true, message: 'No product identifier in product event' });
+
+      if ((!resolvedName || !resolvedSku) && accessToken && blingId) {
+        const detail = await fetchBlingProductDetailForWebhookVps(blingId, accessToken);
+        resolvedName = resolvedName || detail?.nome;
+        resolvedSku = resolvedSku || detail?.codigo;
+      }
+      if (!resolvedSku && blingId) {
+        const rows = await supabaseRestSelect('products', `select=sku,name&bling_id=eq.${encodeURIComponent(String(blingId))}&limit=1`);
+        const product = Array.isArray(rows) ? rows[0] : null;
+        resolvedSku = product?.sku;
+        resolvedName = resolvedName || product?.name;
+      }
+      if (!resolvedSku) return reply.code(200).send({ ok: false, message: `SKU not found for bling_id: ${blingId}` });
+
+      const updates = {};
+      if (resolvedName) updates.name = resolvedName;
+      if (preco !== undefined && preco !== null && Number.isFinite(Number(preco))) {
+        updates.price_retail = Math.round(Number(preco) * 100);
+      }
+      const payloadStock = readBlingPayloadStockForWebhookVps(productData, body);
+      if (payloadStock !== undefined && payloadStock !== null && Number.isFinite(Number(payloadStock))) {
+        updates.stock_quantity = Math.max(0, Math.trunc(Number(payloadStock)));
+      }
+      if (Object.keys(updates).length === 0) return reply.code(200).send({ ok: true, message: 'Nothing to update' });
+
+      let childPriceTargets = [];
+      if (blingId && updates.price_retail !== undefined) {
+        const children = await supabaseRestSelect('products', `select=sku&bling_parent_id=eq.${encodeURIComponent(String(blingId))}`);
+        childPriceTargets = Array.isArray(children) ? children : [];
+      }
+      const priceTargetSkus = updates.price_retail !== undefined ? buildBlingPriceTargetSkusVps(resolvedSku, childPriceTargets) : [resolvedSku];
+      const vpsNameResult = updates.name ? await patchVpsJsonForWebhookVps(request, '/products/name', { sku: resolvedSku, name: updates.name }) : { ok: true };
+      const vpsPriceStockResult = Object.keys(pickBlingPriceStockUpdatesVps(updates)).length > 0
+        ? await patchVpsJsonForWebhookVps(
+          request,
+          '/products/prices-stock',
+          updates.price_retail !== undefined
+            ? buildBlingPriceStockPayloadVps(priceTargetSkus, {
+              price_retail: updates.price_retail,
+              ...(priceTargetSkus.length === 1 && updates.stock_quantity !== undefined ? { stock_quantity: updates.stock_quantity } : {}),
+            })
+            : { products: [{ sku: resolvedSku, ...pickBlingPriceStockUpdatesVps(updates) }] }
+        )
+        : { ok: true, stockTargets: [] };
+      if (blingId) await supabaseRestPatch('products', `bling_id=eq.${encodeURIComponent(String(blingId))}`, updates);
+      if (updates.price_retail !== undefined && childPriceTargets.length > 0) {
+        await supabaseRestPatch('products', `bling_parent_id=eq.${encodeURIComponent(String(blingId))}`, { price_retail: updates.price_retail });
+      }
+      const shopeeStockSync = updates.stock_quantity !== undefined
+        ? await syncShopeeStockFromBlingTargetsVps(vpsPriceStockResult?.stockTargets || [])
+        : { ok: true, skipped: 'stock_unchanged', updated: 0, errors: [] };
+      return reply.code(200).send({ ok: true, event, sku: resolvedSku, priceTargetSkus, updates, vpsUpdated: Boolean(vpsNameResult?.ok && vpsPriceStockResult?.ok), shopeeStockSync });
+    }
+
+    return reply.code(200).send({ ok: true, message: `Event '${event}' not handled` });
+  } catch (err) {
+    return reply.code(200).send({
+      ok: false,
+      error: err.message,
+      debug: buildCopyableDebug('bling-webhook', {
+        step: 'handle webhook',
+        event: webhookEventForDebug,
+        rawMessage: err.message,
+      }),
+    });
+  }
+}
+
+async function handleBlingOAuthCallbackVps(request, reply) {
+  const query = request.query || {};
+
+  if (query.error) {
+    return blingRedirect(reply, `/admin/settings/bling?error=${encodeURIComponent(String(query.error))}`);
+  }
+
+  if (!query.code) {
+    return blingRedirect(reply, '/admin/settings/bling?error=missing_code');
+  }
+
+  try {
+    const settingsRows = await supabaseRestSelect('company_settings', 'select=id,bling_client_id,bling_client_secret,bling_callback_url&limit=1');
+    const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
+
+    if (!settings?.bling_client_id || !settings?.bling_client_secret) {
+      return blingRedirect(reply, '/admin/settings/bling?error=missing_credentials');
+    }
+
+    const tokenParams = new URLSearchParams();
+    tokenParams.set('grant_type', 'authorization_code');
+    tokenParams.set('code', String(query.code));
+    tokenParams.set('redirect_uri', buildBlingCallbackUrl(request, settings.bling_callback_url));
+
+    const { response, data } = await requestBlingToken(tokenParams, settings.bling_client_id, settings.bling_client_secret);
+    if (!response.ok) {
+      return blingRedirect(reply, `/admin/settings/bling?error=token_exchange_failed&status=${response.status}`);
+    }
+
+    const expiresAt = new Date(Date.now() + Number(data?.expires_in || 3600) * 1000).toISOString();
+    await supabaseRestPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, {
+      bling_access_token: data?.access_token || null,
+      bling_refresh_token: data?.refresh_token || null,
+      bling_token_expires_at: expiresAt,
+    });
+
+    return blingRedirect(reply, '/admin/settings/bling?connected=true');
+  } catch (err) {
+    return blingRedirect(reply, `/admin/settings/bling?error=network_error&detail=${encodeURIComponent(err.message || 'unknown')}`);
+  }
+}
+
+async function handleBlingApiVps(request, reply) {
+  const query = request.query || {};
+  const resource = String(query.resource || '');
+
+  if (resource === 'oauth-callback' || query?.code) {
+    return handleBlingOAuthCallbackVps(request, reply);
+  }
+
+  if (resource === 'webhook') {
+    return handleBlingWebhookVps(request, reply);
+  }
+
+  if (resource === 'webhook-logs') {
+    if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
+    try {
+      const logs = await supabaseRestSelect('webhook_logs', 'select=id, source, payload, received_at&order=received_at.desc&limit=20');
+      return reply.code(200).send({ ok: true, tableExists: true, logs: Array.isArray(logs) ? logs : [] });
+    } catch (err) {
+      return reply.code(200).send({ ok: false, tableExists: false, error: err.message, logs: [] });
+    }
+  }
+
+  if (resource === 'exchange') {
+    if (request.method !== 'POST') {
+      return reply.code(405).send({ error: 'Method not allowed' });
+    }
+
+    const body = request.body || {};
+    const { code, client_id, client_secret, redirect_uri, grant_type } = body;
+    if (!client_id || !client_secret) return reply.code(400).send({ error: 'Missing client_id or client_secret' });
+
+    const isRefresh = grant_type === 'refresh_token';
+    if (isRefresh && !code) return reply.code(400).send({ error: 'Missing refresh_token' });
+    if (!isRefresh && (!code || !redirect_uri)) return reply.code(400).send({ error: 'Missing required fields: code, redirect_uri' });
+
+    try {
+      const tokenParams = new URLSearchParams();
+      if (isRefresh) {
+        tokenParams.set('grant_type', 'refresh_token');
+        tokenParams.set('refresh_token', String(code));
+      } else {
+        tokenParams.set('grant_type', 'authorization_code');
+        tokenParams.set('code', String(code));
+        tokenParams.set('redirect_uri', String(redirect_uri));
+      }
+
+      const { response, data } = await requestBlingToken(tokenParams, client_id, client_secret);
+      if (!response.ok) {
+        return reply.code(response.status).send({
+          error: 'token_exchange_failed',
+          debug: buildCopyableDebug('bling-oauth', {
+            step: 'exchange token',
+            grantType: isRefresh ? 'refresh_token' : 'authorization_code',
+            upstreamStatus: response.status,
+            rawMessage: data?.error?.description || data?.message || 'Bling token exchange failed',
+          }),
+        });
+      }
+      return reply.code(200).send({
+        access_token: data?.access_token,
+        refresh_token: data?.refresh_token || null,
+        expires_in: data?.expires_in || 3600,
+      });
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-oauth', {
+          step: 'exchange token',
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'product-detail') {
+    if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
+    if (!query.id) return reply.code(400).send({ error: 'Product ID required' });
+
+    const id = encodeURIComponent(String(query.id));
+    const authHeader = await getBlingProductDetailAuthHeaderVps(request);
+    if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
+
+    try {
+      if (query.variacoes === '1') {
+        const response = await fetch(`https://www.bling.com.br/Api/v3/produtos/variacoes/${id}`, {
+          headers: { Authorization: authHeader, Accept: 'application/json' },
+        });
+        const body = await readBlingProxyResponse(response);
+        if (!response.ok) return reply.code(response.status).send({ error: `Bling error: ${response.status}`, detail: body.text });
+        return reply.code(200).send(body.json?.data || {});
+      }
+
+      const [productResponse, stockResponse] = await Promise.all([
+        fetch(`https://www.bling.com.br/Api/v3/produtos/${id}`, { headers: { Authorization: authHeader, Accept: 'application/json' } }),
+        fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?pagina=1&limite=100&idsProdutos[]=${id}`, { headers: { Authorization: authHeader, Accept: 'application/json' } }),
+      ]);
+      const productBody = await readBlingProxyResponse(productResponse);
+      if (!productResponse.ok) return reply.code(productResponse.status).send({ error: `Bling error: ${productResponse.status}`, detail: productBody.text });
+
+      const produto = productBody.json?.data || {};
+      let stockQuantity = 0;
+      if (stockResponse.ok) {
+        const stockBody = await readBlingProxyResponse(stockResponse);
+        for (const item of (stockBody.json?.data || [])) {
+          stockQuantity += readBlingStockQuantityVps(item);
+        }
+      }
+
+      if (stockQuantity === 0 && produto?.estoque) {
+        stockQuantity = readBlingStockQuantityVps(produto.estoque);
+      }
+
+      return reply.code(200).send({ ...produto, stock_quantity: Number(stockQuantity) });
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-product-detail', {
+          resource,
+          step: 'product detail proxy',
+          id,
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'product-update-fiscal') {
+    if (request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+
+    const { blingId, ncm, cest, origem } = request.body || {};
+    if (!blingId) return reply.code(400).send({ error: 'blingId required' });
+    if (!ncm && !cest && origem === undefined) {
+      return reply.code(400).send({ error: 'At least one of ncm, cest or origem required' });
+    }
+
+    try {
+      const authHeader = await getBlingProductDetailAuthHeaderVps(request);
+      if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
+
+      const encodedId = encodeURIComponent(String(blingId));
+      const productResponse = await fetch(`https://www.bling.com.br/Api/v3/produtos/${encodedId}`, {
+        headers: { Authorization: authHeader, Accept: 'application/json' },
+      });
+      const productBody = await readBlingProxyResponse(productResponse);
+      if (!productResponse.ok) {
+        return reply.code(productResponse.status).send({
+          error: 'fetch_failed',
+          detail: productBody.text,
+          debug: buildCopyableDebug('bling-product-update', {
+            resource,
+            step: 'fetch product',
+            blingId: String(blingId),
+            upstreamStatus: productResponse.status,
+          }),
+        });
+      }
+
+      const produto = productBody.json?.data || {};
+      const tributacaoAtual = produto.tributacao || {};
+      const tributacaoNova = { ...tributacaoAtual };
+      if (ncm !== undefined) tributacaoNova.ncm = ncm || null;
+      if (cest !== undefined) tributacaoNova.cest = cest || null;
+      if (origem !== undefined) tributacaoNova.origem = origem;
+
+      const payload = { ...produto, tributacao: tributacaoNova };
+      delete payload.estoque;
+
+      const updateResponse = await fetch(`https://www.bling.com.br/Api/v3/produtos/${encodedId}`, {
+        method: 'PUT',
+        headers: { Authorization: authHeader, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const updateBody = await readBlingProxyResponse(updateResponse);
+      if (!updateResponse.ok) {
+        return reply.code(updateResponse.status).send({
+          ok: false,
+          error: 'bling_update_failed',
+          detail: updateBody.text,
+          debug: buildCopyableDebug('bling-product-update', {
+            resource,
+            step: 'update fiscal fields',
+            blingId: String(blingId),
+            upstreamStatus: updateResponse.status,
+          }),
+        });
+      }
+
+      return reply.code(200).send({ ok: true, blingId, ncm, cest });
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-product-update', {
+          resource,
+          step: 'product fiscal update',
+          blingId: String(blingId || ''),
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'product-update-dimensions') {
+    if (request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+
+    const { blingIds, updateData } = request.body || {};
+    if (!blingIds || !Array.isArray(blingIds) || !updateData) {
+      return reply.code(400).send({ error: 'blingIds array and updateData required' });
+    }
+
+    try {
+      const authHeader = await getBlingProductDetailAuthHeaderVps(request);
+      if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
+
+      const results = [];
+      for (const blingId of blingIds) {
+        const encodedId = encodeURIComponent(String(blingId));
+        const productResponse = await fetch(`https://www.bling.com.br/Api/v3/produtos/${encodedId}`, {
+          headers: { Authorization: authHeader, Accept: 'application/json' },
+        });
+        const productBody = await readBlingProxyResponse(productResponse);
+        if (!productResponse.ok) {
+          results.push({ id: blingId, success: false, error: 'fetch_failed', detail: productBody.text });
+          continue;
+        }
+
+        const produto = productBody.json?.data || {};
+        const payload = {
+          ...produto,
+          pesoBruto: updateData.pesoBruto !== undefined ? updateData.pesoBruto : produto.pesoBruto,
+          dimensoes: {
+            ...(produto.dimensoes || {}),
+            ...(updateData.dimensoes || {}),
+          },
+        };
+        delete payload.estoque;
+
+        const updateResponse = await fetch(`https://www.bling.com.br/Api/v3/produtos/${encodedId}`, {
+          method: 'PUT',
+          headers: { Authorization: authHeader, 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const updateBody = await readBlingProxyResponse(updateResponse);
+        if (updateResponse.ok) {
+          results.push({ id: blingId, success: true });
+        } else {
+          results.push({ id: blingId, success: false, error: 'update_failed', detail: updateBody.text });
+        }
+      }
+
+      return reply.code(200).send({ ok: true, results });
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-product-update', {
+          resource,
+          step: 'product dimensions update',
+          idsCount: Array.isArray(blingIds) ? blingIds.length : 0,
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'image-proxy') {
+    if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
+    const imageUrl = request.query?.url;
+    if (!imageUrl || typeof imageUrl !== 'string') return reply.code(400).send({ error: 'Missing url parameter' });
+
+    try {
+      const parsedUrl = new URL(imageUrl);
+      if (parsedUrl.protocol !== 'https:') return reply.code(400).send({ error: 'Only https URLs are supported' });
+
+      const allowedExactHosts = new Set(['orgbling.s3.amazonaws.com', 'i.imgur.com', 'imgur.com']);
+      const allowedSuffixes = ['xiaomipetrolina.com.br', 'mercadodovale.com.br', 'supabase.co'];
+      const vpsBase = process.env.VITE_VPS_BASE_URL || process.env.VPS_BASE_URL;
+      if (vpsBase) {
+        try {
+          allowedExactHosts.add(new URL(vpsBase).hostname);
+        } catch {
+          // ignore invalid optional env URL
+        }
+      }
+
+      const host = parsedUrl.hostname.toLowerCase();
+      const isAllowed = allowedExactHosts.has(host) || allowedSuffixes.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+      if (!isAllowed) return reply.code(400).send({ error: 'Unsupported image host', host });
+
+      const imageResponse = await fetch(imageUrl, { signal: AbortSignal.timeout(12000) });
+      if (!imageResponse.ok) return reply.code(imageResponse.status).send({ error: 'Failed to fetch image from URL' });
+      const arrayBuffer = await imageResponse.arrayBuffer();
+      return reply
+        .header('Content-Type', imageResponse.headers.get('content-type') || 'image/jpeg')
+        .header('Cache-Control', 'public, max-age=31536000, s-maxage=31536000, immutable')
+        .code(200)
+        .send(Buffer.from(arrayBuffer));
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-diagnostics', {
+          resource,
+          step: 'image proxy',
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'debug-product') {
+    if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
+    const debugBlingId = request.query?.blingId;
+    if (!debugBlingId) return reply.code(400).send({ error: 'blingId is required' });
+
+    try {
+      const authHeader = await getBlingProductDetailAuthHeaderVps(request);
+      if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
+      const response = await fetch(`https://www.bling.com.br/Api/v3/produtos/${debugBlingId}`, {
+        headers: { Authorization: authHeader, Accept: 'application/json' },
+        signal: AbortSignal.timeout(12000),
+      });
+      const body = await readBlingProxyResponse(response);
+      if (!response.ok) return reply.code(response.status).send({ error: `Bling error: ${response.status}`, detail: body.text });
+      return reply.code(200).send(body.json || {});
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-diagnostics', {
+          resource,
+          step: 'debug product',
+          blingId: String(debugBlingId || ''),
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'debug-diagnostic') {
+    if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
+    const debugBlingId = request.query?.blingId;
+    if (!debugBlingId) return reply.code(400).send({ error: 'blingId is required' });
+
+    try {
+      const authHeader = await getBlingProductDetailAuthHeaderVps(request);
+      if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
+      const [stockResponse, productResponse] = await Promise.all([
+        fetch(`https://www.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${debugBlingId}`, {
+          headers: { Authorization: authHeader, Accept: 'application/json' },
+          signal: AbortSignal.timeout(12000),
+        }),
+        fetch(`https://www.bling.com.br/Api/v3/produtos/${debugBlingId}`, {
+          headers: { Authorization: authHeader, Accept: 'application/json' },
+          signal: AbortSignal.timeout(12000),
+        }),
+      ]);
+      const [stockBody, productBody] = await Promise.all([
+        readBlingProxyResponse(stockResponse),
+        readBlingProxyResponse(productResponse),
+      ]);
+      return reply.code(200).send({
+        stock: stockBody.json,
+        product: productBody.json,
+        stockStatus: stockResponse.status,
+        productStatus: productResponse.status,
+      });
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-diagnostics', {
+          resource,
+          step: 'debug diagnostic',
+          blingId: String(debugBlingId || ''),
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'fix-profile') {
+    if (request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+    const { userId } = request.body || {};
+    if (!userId) return reply.code(400).send({ error: 'userId is required' });
+
+    try {
+      const companyRows = await supabaseRestSelect('companies', 'select=id&slug=eq.mercado-do-vale&limit=1');
+      const company = Array.isArray(companyRows) ? companyRows[0] : null;
+      if (!company) return reply.code(404).send({ error: 'Company not found' });
+      const profileRows = await supabaseRestUpsert('profiles', 'on_conflict=id', { id: userId, company_id: company.id });
+      return reply.code(200).send({ ok: true, profile: Array.isArray(profileRows) ? profileRows[0] : profileRows, company_id: company.id });
+    } catch (err) {
+      return reply.code(500).send({
+        error: err.message,
+        debug: buildCopyableDebug('bling-admin-helpers', {
+          resource,
+          step: 'fix profile',
+          userId: String(userId || ''),
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'sync-model-brand') {
+    if (request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+    const { model_id, brand_name } = request.body || {};
+    if (!model_id || !brand_name) return reply.code(400).send({ error: 'model_id and brand_name are required' });
+
+    try {
+      const modelRows = await supabaseRestSelect('models', `select=id,brand_id,company_id&id=eq.${encodeURIComponent(String(model_id))}&limit=1`);
+      const model = Array.isArray(modelRows) ? modelRows[0] : null;
+      if (!model) return reply.code(404).send({ error: 'Model not found' });
+
+      const slug = normalizeBlingAdminSlugVps(brand_name);
+      const brandRows = await supabaseRestSelect('brands', `select=id,name,slug,active,warranty_days&company_id=eq.${encodeURIComponent(String(model.company_id))}&name=ilike.${encodeURIComponent(String(brand_name))}&limit=1`);
+      let brandRow = Array.isArray(brandRows) ? brandRows[0] : null;
+      let brandId = brandRow?.id;
+      let wasCreated = false;
+
+      if (!brandId) {
+        const inserted = await supabaseRestInsert('brands', {
+          company_id: model.company_id,
+          name: brand_name,
+          slug,
+          warranty_days: 90,
+          active: true,
+        });
+        brandRow = Array.isArray(inserted) ? inserted[0] : inserted;
+        brandId = brandRow?.id;
+        wasCreated = true;
+      }
+
+      if (!brandId) return reply.code(500).send({ error: 'Failed to resolve brand' });
+      await supabaseRestPatch('models', `id=eq.${encodeURIComponent(String(model_id))}`, { brand_id: brandId });
+
+      const vpsBrandPayload = { ...brandRow, company_id: model.company_id };
+      const vpsSync = await patchVpsJsonForBlingAdminVps(request, wasCreated ? 'POST' : 'PUT', wasCreated ? '/brands' : `/brands/${encodeURIComponent(String(brandId))}`, vpsBrandPayload);
+
+      return reply.code(200).send({ ok: true, brand_id: brandId, brand_name, model_id, was_created: wasCreated, vpsSync });
+    } catch (err) {
+      return reply.code(500).send({
+        error: err.message,
+        debug: buildCopyableDebug('bling-admin-helpers', {
+          resource,
+          step: 'sync model brand',
+          modelId: String(model_id || ''),
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'fix-bling-id') {
+    if (request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+    const { sku, blingId } = request.body || {};
+    if (!sku || !blingId) return reply.code(400).send({ error: 'sku e blingId são obrigatórios' });
+
+    try {
+      const beforeRows = await supabaseRestSelect('products', `select=id,sku,bling_id,stock_quantity&sku=eq.${encodeURIComponent(String(sku))}&limit=1`);
+      const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
+      const updatedRows = await supabaseRestPatch('products', `sku=eq.${encodeURIComponent(String(sku))}`, { bling_id: Number(blingId) });
+      return reply.code(200).send({ ok: true, before, after: Array.isArray(updatedRows) ? updatedRows[0] : updatedRows });
+    } catch (err) {
+      return reply.code(200).send({
+        ok: false,
+        error: err.message,
+        debug: buildCopyableDebug('bling-admin-helpers', {
+          resource,
+          step: 'fix bling id',
+          sku: String(sku || ''),
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'stock') {
+    if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
+    const authHeader = request.headers.authorization;
+    if (!authHeader) return reply.code(401).send({ error: 'Missing Authorization header' });
+
+    const page = request.query?.page || 1;
+    const reqIdsProdutos = request.query?.['idsProdutos[]'] || request.query?.idsProdutos;
+    const ids = reqIdsProdutos ? (Array.isArray(reqIdsProdutos) ? reqIdsProdutos : [reqIdsProdutos]) : [];
+    const idsQuery = ids.map((id) => `idsProdutos[]=${encodeURIComponent(String(id))}`).join('&');
+    const url = `https://www.bling.com.br/Api/v3/estoques/saldos?pagina=${page}&limite=100${idsQuery ? `&${idsQuery}` : ''}`;
+
+    try {
+      const stockResponse = await fetch(url, {
+        headers: { Authorization: authHeader, Accept: 'application/json' },
+      });
+      const body = await readBlingProxyResponse(stockResponse);
+      if (stockResponse.status === 400) return reply.code(200).send({ data: [] });
+      if (!stockResponse.ok) {
+        return reply.code(stockResponse.status).send({
+          error: `Bling stock error: ${stockResponse.status}`,
+          detail: body.text,
+          debug: buildCopyableDebug('bling-stock', {
+            resource,
+            page: String(page),
+            idsCount: ids.length,
+            upstreamStatus: stockResponse.status,
+          }),
+        });
+      }
+      return reply.code(200).send(body.json || { data: [] });
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-stock', {
+          resource,
+          page: String(page),
+          idsCount: ids.length,
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'stock-sync') {
+    if (request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+
+    const { blingId, quantity, notes } = request.body || {};
+    if (!blingId || !quantity) return reply.code(400).send({ error: 'blingId and quantity required' });
+
+    try {
+      const authHeader = await getBlingProductDetailAuthHeaderVps(request);
+      if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
+
+      const depositResponse = await fetch('https://www.bling.com.br/Api/v3/depositos?pagina=1&limite=1', {
+        headers: { Authorization: authHeader, Accept: 'application/json' },
+      });
+      const depositBody = await readBlingProxyResponse(depositResponse);
+      if (!depositResponse.ok) {
+        return reply.code(depositResponse.status).send({
+          error: `Bling deposit error: ${depositResponse.status}`,
+          detail: depositBody.text,
+          debug: buildCopyableDebug('bling-stock-sync', {
+            resource,
+            step: 'fetch deposit',
+            upstreamStatus: depositResponse.status,
+          }),
+        });
+      }
+
+      const depositoId = depositBody.json?.data?.[0]?.id;
+      if (!depositoId) return reply.code(422).send({ error: 'No Bling deposit found' });
+
+      const stockResponse = await fetch('https://www.bling.com.br/Api/v3/estoques', {
+        method: 'POST',
+        headers: { Authorization: authHeader, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          produto: { id: blingId },
+          deposito: { id: depositoId },
+          operacao: 'S',
+          quantidade: quantity,
+          observacoes: notes || 'Venda PDV Mercado do Vale',
+        }),
+      });
+      const stockBody = await readBlingProxyResponse(stockResponse);
+      if (!stockResponse.ok) {
+        return reply.code(stockResponse.status).send({
+          error: `Bling stock error: ${stockBody.text}`,
+          debug: buildCopyableDebug('bling-stock-sync', {
+            resource,
+            step: 'post stock movement',
+            blingId: String(blingId),
+            upstreamStatus: stockResponse.status,
+          }),
+        });
+      }
+
+      return reply.code(200).send({ ok: true });
+    } catch (err) {
+      return reply.code(500).send({
+        error: err.message || 'network_error',
+        debug: buildCopyableDebug('bling-stock-sync', {
+          resource,
+          blingId: String(blingId || ''),
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'sync-prices-vps') {
+    if (request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+
+    const syncKey = getVpsSyncKeyForBlingSyncPrices();
+    if (!syncKey) return reply.code(500).send({ error: 'VPS_SYNC_KEY not configured' });
+
+    const pageSize = 50;
+    const page = parseInt(String(query.page || request.body?.page || 0), 10) || 0;
+    const dryRun = String(query?.dryRun || request.body?.dryRun || '').toLowerCase() === 'true';
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+
+    try {
+      const { products, total } = await loadSupabaseProductsForBlingSyncPrices(from, to);
+      if (!products || products.length === 0) {
+        return reply.code(200).send({ ok: true, synced: 0, total, hasMore: false, nextPage: null });
+      }
+
+      const vpsRows = buildBlingSyncPricesVpsRows(products);
+      if (dryRun) {
+        const hasMore = from + products.length < total;
+        return reply.code(200).send({
+          ok: true,
+          dryRun: true,
+          wouldSync: vpsRows.length,
+          page,
+          total,
+          hasMore,
+          nextPage: hasMore ? page + 1 : null,
+          sample: vpsRows.slice(0, 3).map((row) => ({
+            id: row.id,
+            hasBlingId: !!row.bling_id,
+            hasBlingParent: !!row.bling_parent_id,
+            hasParent: !!row.parent_id,
+          })),
+        });
+      }
+      const batchRes = await fetch(`${getVpsBatchBaseUrl(request)}/products/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': syncKey },
+        body: JSON.stringify(vpsRows),
+        signal: AbortSignal.timeout(25000),
+      });
+      const batchBody = await readBlingProxyResponse(batchRes);
+      const batchJson = batchRes.ok ? (batchBody.json || {}) : { upserted: 0 };
+      const hasMore = from + products.length < total;
+
+      return reply.code(200).send({
+        ok: batchRes.ok,
+        synced: batchJson.upserted ?? products.length,
+        page,
+        total,
+        hasMore,
+        nextPage: hasMore ? page + 1 : null,
+        vpsStatus: batchRes.status,
+      });
+    } catch (err) {
+      return reply.code(500).send({
+        error: err.message || 'sync-prices-vps failed',
+        debug: buildCopyableDebug('bling-sync-prices-vps', {
+          resource,
+          page,
+          from,
+          to,
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'reconcile') {
+    if (request.method !== 'GET' && request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+    if (!isBlingReconcileAuthorizedVps(request)) return reply.code(401).send({ error: 'Unauthorized' });
+
+    try {
+      const dryRun = String(query?.dryRun || request.body?.dryRun || '').toLowerCase() === 'true';
+      const includeDetails = String(query?.details || request.body?.details || '').toLowerCase() === 'true';
+      const accessToken = await getValidBlingAccessTokenForReconcileVps();
+      const localProducts = await fetchAllLocalProductsForReconcileVps();
+      const remoteProducts = await fetchAllBlingProductsForReconcileVps(accessToken);
+      const remoteStocks = await fetchAllBlingStocksForReconcileVps(accessToken, localProducts.map((product) => product.bling_id));
+      const plan = buildBlingReconcilePlanVps({ localProducts, remoteProducts, remoteStocks });
+
+      if (dryRun) {
+        return reply.code(200).send({
+          ok: true,
+          dryRun: true,
+          planned: { stockChanges: plan.stockChanges.length, nameChanges: plan.nameChanges.length },
+          totals: plan.totals,
+          ...(includeDetails ? { details: summarizeBlingReconcilePlanDetailsVps(plan) } : {}),
+        });
+      }
+
+      const stockResult = await applyReconcileStockChangesVps(plan.stockChanges, request);
+      const nameResult = await applyReconcileNameChangesVps(plan.nameChanges, request);
+      return reply.code(200).send({
+        ok: true,
+        totals: plan.totals,
+        planned: { stockChanges: plan.stockChanges.length, nameChanges: plan.nameChanges.length },
+        applied: { stockChanges: stockResult.applied.length, nameChanges: nameResult.applied.length },
+        failed: [...stockResult.failed, ...nameResult.failed],
+      });
+    } catch (err) {
+      return reply.code(500).send({
+        ok: false,
+        error: err.message || 'Unknown error',
+        debug: buildCopyableDebug('bling-reconcile', {
+          resource,
+          dryRun: String(query?.dryRun || request.body?.dryRun || ''),
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'finance') {
+    const authHeader = request.headers.authorization;
+    if (!authHeader) return reply.code(401).send({ error: 'Missing Authorization header' });
+
+    const headers = { Authorization: authHeader, Accept: 'application/json', 'Content-Type': 'application/json' };
+    const { action, id, resourceType } = query;
+    if (!resourceType || !['pagar', 'receber'].includes(resourceType)) {
+      return reply.code(400).send({ error: 'resourceType must be "pagar" or "receber"' });
+    }
+
+    const base = 'https://www.bling.com.br/Api/v3';
+    const endpoint = resourceType === 'pagar' ? 'contas/pagar' : 'contas/receber';
+    const sendFinanceError = (status, error, extra = {}) => reply.code(status).send({
+      error,
+      debug: buildCopyableDebug('bling-finance', {
+        resource,
+        action: String(action || ''),
+        resourceType: String(resourceType || ''),
+        id: id ? String(id) : '',
+        ...extra,
+      }),
+    });
+
+    try {
+      if (action === 'list' && request.method === 'GET') {
+        const { pagina = '1', limite = '100', dataVencimentoInicio, dataVencimentoFim, situacao } = query;
+        let url = `${base}/${endpoint}?pagina=${pagina}&limite=${limite}`;
+        if (dataVencimentoInicio) url += `&dataInicial=${dataVencimentoInicio}`;
+        if (dataVencimentoFim) url += `&dataFinal=${dataVencimentoFim}`;
+        if (situacao) url += `&situacoes[]=${situacao === 'pago' ? 2 : situacao === 'cancelado' ? 4 : situacao === 'em_aberto' ? 1 : situacao}`;
+        const response = await fetch(url, { headers });
+        const body = await readBlingProxyResponse(response);
+        if (!response.ok) {
+          return sendFinanceError(response.status, `Bling ${response.status}`, {
+            upstreamStatus: response.status,
+            detail: body.json?.error?.description || body.text,
+          });
+        }
+        return reply.code(200).send(body.json || { data: [] });
+      }
+
+      if (action === 'get' && request.method === 'GET' && id) {
+        const response = await fetch(`${base}/${endpoint}/${id}`, { headers });
+        const body = await readBlingProxyResponse(response);
+        if (!response.ok) return sendFinanceError(response.status, `Bling error: ${response.status}`, { upstreamStatus: response.status });
+        return reply.code(200).send(body.json || {});
+      }
+
+      if (action === 'create' && request.method === 'POST') {
+        const response = await fetch(`${base}/${endpoint}`, { method: 'POST', headers, body: JSON.stringify(request.body || {}) });
+        const body = await readBlingProxyResponse(response);
+        if (!response.ok) return sendFinanceError(response.status, body.json || body.text || 'Bling finance create failed', { upstreamStatus: response.status });
+        return reply.code(200).send(body.json || {});
+      }
+
+      if (action === 'update' && request.method === 'PUT' && id) {
+        const response = await fetch(`${base}/${endpoint}/${id}`, { method: 'PUT', headers, body: JSON.stringify(request.body || {}) });
+        const body = await readBlingProxyResponse(response);
+        if (!response.ok) return sendFinanceError(response.status, body.json || body.text || 'Bling finance update failed', { upstreamStatus: response.status });
+        return reply.code(200).send(body.json || {});
+      }
+
+      if (action === 'baixar' && request.method === 'POST' && id) {
+        const response = await fetch(`${base}/${endpoint}/${id}/baixar`, { method: 'POST', headers, body: JSON.stringify(request.body || {}) });
+        const body = await readBlingProxyResponse(response);
+        if (!response.ok) return sendFinanceError(response.status, body.json || body.text || 'Bling finance baixar failed', { upstreamStatus: response.status });
+        return reply.code(200).send(body.json || {});
+      }
+
+      if (action === 'cancelar' && request.method === 'DELETE' && id) {
+        const response = await fetch(`${base}/${endpoint}/${id}`, { method: 'DELETE', headers });
+        if (!response.ok) return sendFinanceError(response.status, `Bling error: ${response.status}`, { upstreamStatus: response.status });
+        return reply.code(200).send({ success: true });
+      }
+
+      return reply.code(400).send({ error: 'Invalid action or method' });
+    } catch (err) {
+      return sendFinanceError(500, 'network_error', { rawMessage: err.message });
+    }
+  }
+
+  if (resource === 'nf-detail') {
+    if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
+
+    const tipo = String(query.tipo || '').toLowerCase();
+    const id = query.id ? encodeURIComponent(String(query.id)) : '';
+    if (!['nfe', 'nfce'].includes(tipo)) return reply.code(400).send({ error: 'tipo must be nfe or nfce' });
+    if (!id) return reply.code(400).send({ error: 'id is required' });
+
+    try {
+      const authHeader = await getBlingProductDetailAuthHeaderVps(request);
+      if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
+      const response = await fetch(`https://www.bling.com.br/Api/v3/${tipo}/${id}`, {
+        headers: { Authorization: authHeader, Accept: 'application/json' },
+      });
+      const body = await readBlingProxyResponse(response);
+      if (!response.ok) {
+        return reply.code(response.status).send({
+          error: `Bling ${tipo} detail error: ${response.status}`,
+          detail: body.text,
+          debug: buildCopyableDebug('bling-nf', {
+            resource,
+            tipo,
+            id,
+            upstreamStatus: response.status,
+          }),
+        });
+      }
+      return reply.code(200).send(body.json || {});
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-nf', {
+          resource,
+          tipo,
+          id,
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'nfe' || resource === 'nfce') {
+    if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
+
+    const endpoint = resource === 'nfe' ? 'nfe' : 'nfce';
+    const inicio = query.dataEmissaoInicio || query.dataEmissaoInicial || '';
+    const fim = query.dataEmissaoFim || query.dataEmissaoFinal || '';
+    const situacao = query.situacao || '';
+    const pagina = query.pagina || '1';
+    let url = `https://www.bling.com.br/Api/v3/${endpoint}?pagina=${pagina}&limite=100`;
+    if (inicio) url += `&dataEmissaoInicial=${inicio}`;
+    if (fim) url += `&dataEmissaoFinal=${fim}`;
+    if (situacao) url += `&situacao=${situacao}`;
+
+    try {
+      const authHeader = await getBlingProductDetailAuthHeaderVps(request);
+      if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
+      const response = await fetch(url, {
+        headers: { Authorization: authHeader, Accept: 'application/json' },
+      });
+      const body = await readBlingProxyResponse(response);
+      if (!response.ok) {
+        return reply.code(response.status).send({
+          error: `Bling ${endpoint} error: ${response.status}`,
+          detail: body.text,
+          debug: buildCopyableDebug('bling-nf', {
+            resource,
+            endpoint,
+            pagina: String(pagina),
+            upstreamStatus: response.status,
+          }),
+        });
+      }
+      return reply.code(200).send(body.json || { data: [] });
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-nf', {
+          resource,
+          endpoint,
+          pagina: String(pagina),
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'categories') {
+    if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
+    const authHeader = request.headers.authorization;
+    if (!authHeader) return reply.code(401).send({ error: 'Missing Authorization header' });
+    const page = request.query?.page || 1;
+
+    try {
+      const response = await fetch(`https://www.bling.com.br/Api/v3/categorias/produtos?pagina=${page}&limite=100`, {
+        headers: { Authorization: authHeader, Accept: 'application/json' },
+      });
+      const body = await readBlingProxyResponse(response);
+      if (!response.ok) return reply.code(response.status).send({ error: `Bling error: ${response.status}`, detail: body.text });
+      return reply.code(200).send(body.json || { data: [] });
+    } catch (err) {
+      return reply.code(500).send({
+        error: 'network_error',
+        debug: buildCopyableDebug('bling-products', {
+          resource,
+          step: 'categories proxy',
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'products') {
+    if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
+    const authHeader = request.headers.authorization;
+    if (!authHeader) return reply.code(401).send({ error: 'Missing Authorization header' });
+
+    const page = request.query?.page || 1;
+    const search = request.query?.search ? String(request.query.search) : '';
+    const headers = { Authorization: authHeader, Accept: 'application/json' };
+    const base = `https://www.bling.com.br/Api/v3/produtos?pagina=${page}&limite=100&criterio=5`;
+    const debug = {
+      resource,
+      page: String(page),
+      search,
+      searchLength: search.length,
+      startedAt: new Date().toISOString(),
+      stages: [],
+      fallbackPages: [],
+    };
+
+    try {
+      if (!search) {
+        const response = await fetch(base, { headers });
+        const body = await readBlingProxyResponse(response);
+        debug.stages.push({ name: 'list', ...summarizeBlingProxyBody(body) });
+        if (!response.ok) {
+          return reply.code(response.status).send({
+            error: `Bling error: ${response.status}`,
+            detail: body.text,
+            debug: buildCopyableDebug('bling-products', debug),
+          });
+        }
+        return reply.code(200).send(body.json || { data: [] });
+      }
+
+      const [byName, bySku] = await Promise.all([
+        fetch(`${base}&nome=${encodeURIComponent(search)}`, { headers }),
+        fetch(`${base}&codigo=${encodeURIComponent(search)}`, { headers }),
+      ]);
+      const nameBody = await readBlingProxyResponse(byName);
+      const skuBody = await readBlingProxyResponse(bySku);
+      debug.stages.push({ name: 'by_name', queryParam: 'nome', ...summarizeBlingProxyBody(nameBody) });
+      debug.stages.push({ name: 'by_sku', queryParam: 'codigo', ...summarizeBlingProxyBody(skuBody) });
+
+      const nameData = byName.ok ? (nameBody.json || { data: [] }) : { data: [] };
+      const skuData = bySku.ok ? (skuBody.json || { data: [] }) : { data: [] };
+      const seen = new Set();
+      const merged = [];
+      for (const item of [...(nameData.data || []), ...(skuData.data || [])]) {
+        if (!seen.has(item.id)) {
+          seen.add(item.id);
+          merged.push(item);
+        }
+      }
+
+      if (merged.length === 0) {
+        debug.stages.push({ name: 'fallback_loose_start' });
+        const looseMatches = await fetchLooseBlingProductSearchVps(base, headers, search, debug);
+        debug.stages.push({ name: 'fallback_loose_done', count: looseMatches.length });
+        return reply.code(200).send({ data: looseMatches, total: looseMatches.length, searchMode: 'loose', debug });
+      }
+
+      return reply.code(200).send({ data: merged, total: merged.length, searchMode: 'direct', debug });
+    } catch (err) {
+      const responseDebug = err?.blingDebug || debug;
+      responseDebug.failedAt = new Date().toISOString();
+      responseDebug.exception = { name: err?.name, message: err?.message };
+      return reply.code(500).send({
+        error: 'bling_products_search_failed',
+        message: err?.message || 'Erro inesperado ao buscar produtos no Bling',
+        debug: buildCopyableDebug('bling-products', responseDebug),
+      });
+    }
+  }
+
+  return reply.code(400).send({ error: 'Invalid resource. Migrated on VPS: oauth-callback|exchange|categories|products|product-detail|product-update-fiscal|product-update-dimensions|image-proxy|debug-product|debug-diagnostic|fix-profile|sync-model-brand|fix-bling-id|stock|stock-sync|sync-prices-vps|reconcile|finance|nfe|nfce|nf-detail|webhook|webhook-logs' });
+}
+
+const TELEGRAM_BOT_MANUAL_VPS = `*Manual do Bot - Mercado do Vale*
+--------------------------------
+
+*RELATORIOS*
+/relatorio - Fechamento do dia
+/vendas - Resumo rapido das vendas de hoje
+/top10 - Top 10 produtos mais vendidos
+
+*ESTOQUE*
+/estoque - Lista produtos em estoque
+/estoque [nome] - Busca produto por nome
+
+*PRECOS*
+/preco [nome] - Consulta preco de um produto
+
+*PEDIDOS*
+/pedidos - Pedidos online pendentes
+
+*CLIENTES*
+/clientes - Novos clientes desta semana
+
+*MODELO*
+/modelo [nome] - Variacoes, estoque e custo medio
+
+*CATEGORIA*
+/categoria [nome] - Estoque completo de uma categoria
+
+*OUTROS*
+/ajuda - Exibe este manual
+/ping - Testa se o bot esta online`;
+
+function isAuthorizedTelegramWebhookRequestVps(request) {
+  const secret = String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
+  if (!secret) return true;
+  const received = String(
+    request.headers['x-telegram-bot-api-secret-token'] ||
+    request.headers['x-telegram-webhook-secret'] ||
+    request.query?.secret ||
+    request.query?.token ||
+    ''
+  ).trim();
+  return received === secret;
+}
+
+function telegramWebhookMoneyFromCentsVps(value) {
+  const numeric = Number(value) || 0;
+  return `R$ ${(numeric / 100).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+}
+
+function telegramWebhookMoneyRawVps(value) {
+  const numeric = Number(value) || 0;
+  return `R$ ${numeric.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+}
+
+function telegramWebhookSaoPauloDayRangeVps(now) {
+  const start = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+function telegramWebhookVariantVps(specs = {}) {
+  const safeSpecs = specs && typeof specs === 'object' ? specs : {};
+  const color = safeSpecs.color || safeSpecs.cor || '';
+  const ram = safeSpecs.ram || '';
+  const storage = safeSpecs.storage || '';
+  const memory = ram && storage ? `${ram}/${storage}` : (ram || storage);
+  return [color, memory].filter(Boolean).join(' - ');
+}
+
+function truncateTelegramWebhookMessageVps(message, suffix = '\n\n_... lista truncada._') {
+  const value = String(message || '');
+  if (value.length <= 3900) return value;
+  return `${value.substring(0, 3800)}${suffix}`;
+}
+
+async function sendTelegramWebhookMessageVps(token, chatId, text, parseMode = 'Markdown') {
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: parseMode }),
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Telegram webhook send failed: ${response.status} ${body.slice(0, 200)}`);
+  }
+}
+
+async function telegramWebhookSalesTodayVps(now) {
+  const { start, end } = telegramWebhookSaoPauloDayRangeVps(now);
+  const query = `select=total,profit,created_at,payment_method&status=eq.completed&created_at=gte.${encodeURIComponent(start.toISOString())}&created_at=lte.${encodeURIComponent(end.toISOString())}&order=created_at.desc`;
+  const sales = await supabaseRestSelect('sales', query);
+  return Array.isArray(sales) ? sales : [];
+}
+
+async function handleTelegramWebhookCommandVps({ token, chatId, text, command, args, now }) {
+  const tz = 'America/Sao_Paulo';
+
+  if (command === '/ping') {
+    const time = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: tz }).format(now);
+    await sendTelegramWebhookMessageVps(token, chatId, `Bot online! ${time}`);
+    return;
+  }
+
+  if (['/ajuda', '/start', '/help', '/menu'].includes(command)) {
+    await sendTelegramWebhookMessageVps(token, chatId, TELEGRAM_BOT_MANUAL_VPS);
+    return;
+  }
+
+  if (command === '/vendas') {
+    const sales = await telegramWebhookSalesTodayVps(now);
+    const qty = sales.length;
+    const revenue = sales.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
+    const profit = sales.reduce((sum, row) => sum + (Number(row.profit) || 0), 0);
+    const date = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: tz }).format(now);
+    const message = qty === 0
+      ? `*Vendas de hoje (${date})*\n\nNenhuma venda registrada ainda.`
+      : `*Vendas de hoje (${date})*\n\nVendas: *${qty}*\nFaturamento: *${telegramWebhookMoneyRawVps(revenue)}*\nLucro: *${telegramWebhookMoneyRawVps(profit)}*`;
+    await sendTelegramWebhookMessageVps(token, chatId, message);
+    return;
+  }
+
+  if (command === '/relatorio') {
+    await sendTelegramWebhookMessageVps(token, chatId, 'Gerando relatorio completo...');
+    const sales = await telegramWebhookSalesTodayVps(now);
+    const products = await supabaseRestSelect('products', 'select=stock_quantity&status=eq.active&stock_quantity=gt.0');
+    const pendingOrders = await supabaseRestSelect('orders', 'select=id&status=eq.pending');
+    const revenue = sales.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
+    const profit = sales.reduce((sum, row) => sum + (Number(row.profit) || 0), 0);
+    const totalStock = (Array.isArray(products) ? products : []).reduce((sum, product) => sum + (Number(product.stock_quantity) || 0), 0);
+    const date = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: tz }).format(now);
+    let message = `*Relatorio Completo - ${date}*\n----------------------------\n\n`;
+    message += `*VENDAS DO DIA*\nQuantidade: *${sales.length} venda(s)*\nFaturamento: *${telegramWebhookMoneyRawVps(revenue)}*\nLucro: *${telegramWebhookMoneyRawVps(profit)}*\n\n`;
+    message += `*ESTOQUE*\nTotal em estoque: *${totalStock} unidades*\n\n`;
+    if (Array.isArray(pendingOrders) && pendingOrders.length > 0) message += `ATENCAO: ${pendingOrders.length} pedido(s) online pendente(s)`;
+    await sendTelegramWebhookMessageVps(token, chatId, message);
+    return;
+  }
+
+  if (command === '/top10') {
+    await sendTelegramWebhookMessageVps(token, chatId, 'Buscando produtos mais vendidos...');
+    const items = await supabaseRestSelect('sale_items', 'select=product_name,quantity,created_at&order=created_at.desc&limit=500');
+    const rows = Array.isArray(items) ? items : [];
+    if (!rows.length) {
+      await sendTelegramWebhookMessageVps(token, chatId, 'Nenhuma venda registrada ainda.');
+      return;
+    }
+    const grouped = new Map();
+    for (const item of rows) {
+      const name = item.product_name || 'Sem nome';
+      grouped.set(name, (grouped.get(name) || 0) + (Number(item.quantity) || 1));
+    }
+    const sorted = Array.from(grouped.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    let message = `*Top 10 Produtos Mais Vendidos*\n----------------------------\n\n`;
+    sorted.forEach(([name, qty], index) => {
+      message += `${index + 1}. *${qty}x* - ${name}\n`;
+    });
+    await sendTelegramWebhookMessageVps(token, chatId, message);
+    return;
+  }
+
+  if (command === '/estoque') {
+    const searchFilter = args ? `&name=ilike.*${encodeURIComponent(args)}*` : '&limit=30';
+    const products = await supabaseRestSelect('products', `select=name,stock_quantity,specs,price_pix,price_card&status=eq.active&stock_quantity=gt.0${searchFilter}&order=name.asc`);
+    const rows = Array.isArray(products) ? products : [];
+    if (!rows.length) {
+      await sendTelegramWebhookMessageVps(token, chatId, args ? `Nenhum produto encontrado com *"${args}"*` : 'Nenhum produto em estoque no momento.');
+      return;
+    }
+    let message = args ? `*Estoque - "${args}"* (${rows.length})\n----------------------------\n\n` : `*Estoque Geral* (mostrando ${rows.length})\n----------------------------\n\n`;
+    for (const product of rows) {
+      const variant = telegramWebhookVariantVps(product.specs);
+      message += `*${product.name}*\n`;
+      if (variant) message += `_${variant}_\n`;
+      message += `Estoque: *${product.stock_quantity} un*`;
+      if (product.price_pix) message += ` - PIX: *${telegramWebhookMoneyFromCentsVps(product.price_pix)}*`;
+      message += '\n\n';
+    }
+    if (!args && rows.length === 30) message += '_Use `/estoque [nome]` para buscar um produto especifico._';
+    await sendTelegramWebhookMessageVps(token, chatId, truncateTelegramWebhookMessageVps(message, '\n\n_... lista truncada. Use /estoque [nome] para buscar._'));
+    return;
+  }
+
+  if (command === '/preco') {
+    if (!args) {
+      await sendTelegramWebhookMessageVps(token, chatId, 'Informe o produto. Ex: `/preco iphone 15 pro`');
+      return;
+    }
+    const products = await supabaseRestSelect('products', `select=name,stock_quantity,specs,price_pix,price_card&status=eq.active&name=ilike.*${encodeURIComponent(args)}*&order=name.asc&limit=5`);
+    const rows = Array.isArray(products) ? products : [];
+    if (!rows.length) {
+      await sendTelegramWebhookMessageVps(token, chatId, `Produto *"${args}"* nao encontrado.`);
+      return;
+    }
+    let message = `*Precos - "${args}"*\n----------------------------\n\n`;
+    for (const product of rows) {
+      const variant = telegramWebhookVariantVps(product.specs);
+      message += `*${product.name}*\n`;
+      if (variant) message += `_${variant}_\n`;
+      if (product.price_pix) message += `PIX: *${telegramWebhookMoneyFromCentsVps(product.price_pix)}*\n`;
+      if (product.price_card) message += `Cartao: *${telegramWebhookMoneyFromCentsVps(product.price_card)}*\n`;
+      message += `Em estoque: *${product.stock_quantity} un*\n\n`;
+    }
+    await sendTelegramWebhookMessageVps(token, chatId, message);
+    return;
+  }
+
+  if (command === '/pedidos') {
+    const orders = await supabaseRestSelect('orders', 'select=id,customer_name,total,status,created_at,items&status=in.(pending,confirmed)&order=created_at.desc&limit=10');
+    const rows = Array.isArray(orders) ? orders : [];
+    if (!rows.length) {
+      await sendTelegramWebhookMessageVps(token, chatId, 'Nenhum pedido pendente no momento.');
+      return;
+    }
+    let message = `*Pedidos Pendentes/Confirmados* (${rows.length})\n----------------------------\n\n`;
+    for (const order of rows) {
+      const shortId = String(order.id || '?').substring(0, 8).toUpperCase();
+      const date = order.created_at ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: tz }).format(new Date(order.created_at)) : '';
+      message += `*#${shortId}* - ${order.customer_name || 'Cliente'}\n${telegramWebhookMoneyRawVps(order.total || 0)} - ${date}\n\n`;
+    }
+    await sendTelegramWebhookMessageVps(token, chatId, message);
+    return;
+  }
+
+  if (command === '/clientes') {
+    const weekAgo = new Date(now);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const clients = await supabaseRestSelect('customers', `select=name,phone,type,created_at&created_at=gte.${encodeURIComponent(weekAgo.toISOString())}&order=created_at.desc&limit=15`);
+    const rows = Array.isArray(clients) ? clients : [];
+    if (!rows.length) {
+      await sendTelegramWebhookMessageVps(token, chatId, 'Nenhum cliente novo nos ultimos 7 dias.');
+      return;
+    }
+    let message = `*Novos Clientes - Ultimos 7 dias* (${rows.length})\n----------------------------\n\n`;
+    for (const client of rows) {
+      const date = client.created_at ? new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: tz }).format(new Date(client.created_at)) : '';
+      const typeLabel = client.type === 'atacado' ? 'Atacado' : 'Varejo';
+      message += `- *${client.name}* - ${typeLabel} - _${date}_\n`;
+      if (client.phone) message += `  ${client.phone}\n`;
+      message += '\n';
+    }
+    await sendTelegramWebhookMessageVps(token, chatId, message);
+    return;
+  }
+
+  if (command === '/modelo') {
+    if (!args) {
+      await sendTelegramWebhookMessageVps(token, chatId, 'Informe o modelo. Ex: `/modelo iphone 15`');
+      return;
+    }
+    const products = await supabaseRestSelect('products', `select=name,stock_quantity,specs,price_cost&status=eq.active&stock_quantity=gt.0&name=ilike.*${encodeURIComponent(args)}*&order=name.asc`);
+    const rows = Array.isArray(products) ? products : [];
+    if (!rows.length) {
+      await sendTelegramWebhookMessageVps(token, chatId, `Nenhum produto em estoque encontrado para *"${args}"*.`);
+      return;
+    }
+    const grouped = new Map();
+    for (const product of rows) {
+      const entry = grouped.get(product.name) || { qty: 0, costs: [], specs: product.specs || {} };
+      entry.qty += Number(product.stock_quantity) || 0;
+      if (product.price_cost && Number(product.price_cost) > 0) entry.costs.push(Number(product.price_cost));
+      grouped.set(product.name, entry);
+    }
+    const totalQty = Array.from(grouped.values()).reduce((sum, entry) => sum + entry.qty, 0);
+    let message = `*Modelo - "${args}"* (${grouped.size} variacao(oes) - ${totalQty} un total)\n----------------------------\n\n`;
+    for (const [name, entry] of grouped.entries()) {
+      const variant = telegramWebhookVariantVps(entry.specs);
+      const avgCost = entry.costs.length ? entry.costs.reduce((sum, value) => sum + value, 0) / entry.costs.length : null;
+      message += `*${name}*\n`;
+      if (variant) message += `_${variant}_\n`;
+      message += `Estoque: *${entry.qty} un*`;
+      if (avgCost) message += ` - Custo medio: *${telegramWebhookMoneyFromCentsVps(avgCost)}*`;
+      message += '\n\n';
+    }
+    await sendTelegramWebhookMessageVps(token, chatId, truncateTelegramWebhookMessageVps(message));
+    return;
+  }
+
+  if (command === '/categoria') {
+    if (!args) {
+      await sendTelegramWebhookMessageVps(token, chatId, 'Informe a categoria. Ex: `/categoria celulares`');
+      return;
+    }
+    const categories = await supabaseRestSelect('categories', `select=id,name&name=ilike.*${encodeURIComponent(args)}*&limit=5`);
+    const category = Array.isArray(categories) ? categories[0] : null;
+    if (!category) {
+      await sendTelegramWebhookMessageVps(token, chatId, `Categoria *"${args}"* nao encontrada.`);
+      return;
+    }
+    await sendTelegramWebhookMessageVps(token, chatId, `Carregando estoque de *${category.name}*...`);
+    const models = await supabaseRestSelect('models', `select=id&category_id=eq.${encodeURIComponent(category.id)}`);
+    const modelIds = (Array.isArray(models) ? models : []).map((model) => model.id).filter(Boolean);
+    const relationFilter = modelIds.length
+      ? `or=(category_id.eq.${encodeURIComponent(category.id)},model_id.in.(${modelIds.map((id) => `"${String(id).replace(/"/g, '')}"`).join(',')}))`
+      : `category_id=eq.${encodeURIComponent(category.id)}`;
+    const products = await supabaseRestSelect('products', `select=name,stock_quantity,specs,price_cost,brand&status=eq.active&stock_quantity=gt.0&${relationFilter}&order=name.asc`);
+    const rows = Array.isArray(products) ? products : [];
+    if (!rows.length) {
+      await sendTelegramWebhookMessageVps(token, chatId, `Nenhum produto em estoque na categoria *${category.name}*.`);
+      return;
+    }
+    const grouped = new Map();
+    for (const product of rows) {
+      const entry = grouped.get(product.name) || { qty: 0, costs: [], specs: product.specs || {} };
+      entry.qty += Number(product.stock_quantity) || 0;
+      if (product.price_cost && Number(product.price_cost) > 0) entry.costs.push(Number(product.price_cost));
+      grouped.set(product.name, entry);
+    }
+    const totalQty = Array.from(grouped.values()).reduce((sum, entry) => sum + entry.qty, 0);
+    const totalValue = Array.from(grouped.values()).reduce((sum, entry) => {
+      const avg = entry.costs.length ? entry.costs.reduce((acc, value) => acc + value, 0) / entry.costs.length : 0;
+      return sum + avg * entry.qty;
+    }, 0);
+    let message = `*Categoria: ${category.name}*\n${grouped.size} variacao(oes) - *${totalQty} unidades* em estoque`;
+    if (totalValue > 0) message += ` - Custo total: *${telegramWebhookMoneyFromCentsVps(totalValue)}*`;
+    message += `\n----------------------------\n\n`;
+    for (const [name, entry] of grouped.entries()) {
+      const variant = telegramWebhookVariantVps(entry.specs);
+      const avgCost = entry.costs.length ? entry.costs.reduce((sum, value) => sum + value, 0) / entry.costs.length : null;
+      message += `*${name}*\n`;
+      if (variant) message += `_${variant}_\n`;
+      message += `Estoque: *${entry.qty} un*`;
+      if (avgCost) message += ` - Custo medio: *${telegramWebhookMoneyFromCentsVps(avgCost)}*`;
+      message += '\n\n';
+    }
+    await sendTelegramWebhookMessageVps(token, chatId, truncateTelegramWebhookMessageVps(message, '\n\n_... lista truncada. Use /modelo [nome] para buscar um produto especifico._'));
+    return;
+  }
+
+  if (text.startsWith('/')) {
+    await sendTelegramWebhookMessageVps(token, chatId, `Comando nao reconhecido: *${command}*\n\nDigite /ajuda para ver todos os comandos disponiveis.`);
+    return;
+  }
+
+  await sendTelegramWebhookMessageVps(token, chatId, `Ola! Nao entendi a mensagem *"${text}"*.\n\nEste bot funciona apenas com comandos. Digite /ajuda para ver o que posso fazer por voce.`);
+}
+
+async function handleTelegramWebhookVps(request, reply) {
+  if (request.method !== 'POST') return reply.code(200).send({ ok: true });
+  const telegramWebhookSecretConfigured = !!String(process.env.TELEGRAM_WEBHOOK_SECRET || '').trim();
+  if (telegramWebhookSecretConfigured && !isAuthorizedTelegramWebhookRequestVps(request)) return reply.code(401).send({ error: 'Unauthorized' });
+
+  try {
+    const update = request.body || {};
+    const message = update?.message || update?.edited_message;
+    if (!message?.text) return reply.code(200).send({ ok: true });
+    if (!telegramWebhookSecretConfigured) return reply.code(503).send({ error: 'TELEGRAM_WEBHOOK_SECRET not configured' });
+
+    const rows = await supabaseRestSelect('telegram_settings', 'select=*&limit=1');
+    const settings = Array.isArray(rows) ? rows[0] : null;
+    if (!settings?.active || !settings?.bot_token) return reply.code(200).send({ ok: true });
+
+    const token = settings.bot_token;
+
+    const chatId = message.chat?.id || settings.chat_id;
+    if (!chatId) return reply.code(200).send({ ok: true });
+
+    const text = String(message.text || '').trim();
+    const parts = text.split(/\s+/);
+    const command = parts[0].toLowerCase().replace(/@\w+/g, '');
+    const args = parts.slice(1).join(' ');
+
+    await handleTelegramWebhookCommandVps({ token, chatId, text, command, args, now: new Date() });
+    return reply.code(200).send({ ok: true });
+  } catch (err) {
+    console.error('[telegram-webhook] error:', err?.message || err);
+    return reply.code(200).send({ ok: true });
+  }
+}
+
+function isAuthorizedCronDispatcherRequestVps(request) {
+  const cronSecret = String(process.env.CRON_SECRET || process.env.SYNC_SECRET || '').trim();
+  if (!cronSecret) return false;
+  const authHeader = String(request.headers.authorization || '');
+  const headerSecret = String(request.headers['x-cron-secret'] || request.headers['x-sync-key'] || request.headers['x-api-key'] || '').trim();
+  return authHeader === `Bearer ${cronSecret}` || headerSecret === cronSecret;
+}
+
+function cronDispatcherFirstRowVps(rows) {
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+function parseCronDispatcherTemplatesVps(settings) {
+  const templates = settings?.templates;
+  if (Array.isArray(templates)) return templates;
+  if (typeof templates === 'string' && templates.trim()) {
+    try {
+      const parsed = JSON.parse(templates);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function formatCronDispatcherMoneyVps(value) {
+  const numeric = Number(value) || 0;
+  return `R$ ${numeric.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+}
+
+function cronDispatcherSaoPauloDayRangeVps(now) {
+  const start = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+function nlDbCronDispatcherVps(value) {
+  return String(value || '').replace(/\\n/g, '\n');
+}
+
+function safeMarkdownCronDispatcherVps(value) {
+  return nlDbCronDispatcherVps(value).replace(/[*_`[\]]/g, (char) => (char === '_' ? ' ' : ''));
+}
+
+function buildCronDispatcherScheduleTextVps(slots = []) {
+  if (!Array.isArray(slots) || slots.length === 0) return 'Nenhum slot de Instagram cadastrado para a semana.';
+
+  const dayNames = ['Domingo', 'Segunda-feira', 'Terca-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sabado'];
+  const contentLabel = { story: 'Story', reels: 'Reels', carrossel: 'Carrossel', post: 'Post Feed' };
+  const byDay = new Map();
+  for (const slot of slots) {
+    const day = Number(slot.day_of_week);
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(slot);
+  }
+
+  let text = `PROGRAMACAO INSTAGRAM DA SEMANA\n${'='.repeat(28)}\n\n`;
+  for (const [day, daySlots] of Array.from(byDay.entries()).sort((a, b) => a[0] - b[0])) {
+    text += `${dayNames[day] || `Dia ${day}`}\n${'-'.repeat(22)}\n`;
+    for (const slot of daySlots.sort((a, b) => String(a.scheduled_time || '').localeCompare(String(b.scheduled_time || '')))) {
+      const time = String(slot.scheduled_time || '??:??').slice(0, 5);
+      const label = contentLabel[slot.content_type] || slot.content_type || 'Conteudo';
+      text += `\n${time} - ${label}\n`;
+      if (slot.hook) text += `Hook: ${safeMarkdownCronDispatcherVps(slot.hook)}\n`;
+      if (slot.caption) text += `Legenda: ${safeMarkdownCronDispatcherVps(slot.caption)}\n`;
+      if (slot.cta) text += `CTA: ${safeMarkdownCronDispatcherVps(slot.cta)}\n`;
+      if (slot.hashtags) text += `Hashtags: ${safeMarkdownCronDispatcherVps(slot.hashtags)}\n`;
+      if (slot.visual_notes) text += `Visual: ${safeMarkdownCronDispatcherVps(slot.visual_notes)}\n`;
+    }
+    text += '\n';
+  }
+
+  if (text.length > 3800) return `${text.substring(0, 3700)}\n\n... [+${slots.length} posts. Ver agenda completa no admin]`;
+  return `${text}Total: ${slots.length} posts planejados para a semana.`;
+}
+
+async function loadCronDispatcherCompanyVariablesVps() {
+  try {
+    const rows = await supabaseRestSelect('company_settings', 'select=name,phone,email,social_instagram,business_hours,address_street,address_city,address_state,address_number,address_neighborhood&limit=1');
+    const company = cronDispatcherFirstRowVps(rows);
+    if (!company) return {};
+    const address = [
+      company.address_street,
+      company.address_number,
+      company.address_neighborhood,
+      company.address_city,
+      company.address_state,
+    ].filter(Boolean).join(', ');
+    return {
+      '{empresa_nome}': company.name || '',
+      '{empresa_telefone}': company.phone || '',
+      '{empresa_whatsapp}': company.phone || '',
+      '{empresa_email}': company.email || '',
+      '{empresa_instagram}': company.social_instagram ? `@${String(company.social_instagram).replace(/^@/, '')}` : '',
+      '{empresa_horario}': company.business_hours || '',
+      '{empresa_endereco}': address,
+    };
+  } catch {
+    return {};
+  }
+}
+
+async function loadCronDispatcherSalesVariablesVps(now) {
+  const { start, end } = cronDispatcherSaoPauloDayRangeVps(now);
+  try {
+    const query = `select=total,profit&status=eq.completed&created_at=gte.${encodeURIComponent(start.toISOString())}&created_at=lte.${encodeURIComponent(end.toISOString())}`;
+    const sales = await supabaseRestSelect('sales', query);
+    const rows = Array.isArray(sales) ? sales : [];
+    const faturamento = rows.reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
+    const lucroTotal = rows.reduce((sum, sale) => sum + (Number(sale.profit) || 0), 0);
+    return {
+      '{qtd_vendas}': String(rows.length),
+      '{faturamento}': formatCronDispatcherMoneyVps(faturamento),
+      '{lucro_total}': formatCronDispatcherMoneyVps(lucroTotal),
+    };
+  } catch {
+    return {
+      '{qtd_vendas}': '0',
+      '{faturamento}': formatCronDispatcherMoneyVps(0),
+      '{lucro_total}': formatCronDispatcherMoneyVps(0),
+    };
+  }
+}
+
+async function loadCronDispatcherStockVariablesVps() {
+  try {
+    const products = await supabaseRestSelect('products', 'select=name,stock_quantity,specs,category_id,model_id,price_cost&status=eq.active&stock_quantity=gt.0');
+    const rows = Array.isArray(products) ? products : [];
+    const phoneWords = ['iphone', 'samsung', 'xiaomi', 'motorola', 'smartphone', 'galaxy', 'poco', 'redmi', 'realme'];
+    let estoqueCelulares = 0;
+    let estoqueGeral = 0;
+    const grouped = new Map();
+
+    for (const product of rows) {
+      const qty = Number(product.stock_quantity) || 0;
+      estoqueGeral += qty;
+      const name = String(product.name || '');
+      if (!phoneWords.some((word) => name.toLowerCase().includes(word))) continue;
+      estoqueCelulares += qty;
+      const specs = product.specs && typeof product.specs === 'object' ? product.specs : {};
+      const color = specs.color || specs.cor || '';
+      const ram = specs.ram || '';
+      const storage = specs.storage || '';
+      const memory = ram && storage ? `${ram}/${storage}` : (ram || storage);
+      const variant = [color, memory].filter(Boolean).join(' - ');
+      const key = variant ? `${name} - ${variant}` : name;
+      const existing = grouped.get(key) || { qty: 0, costTotal: 0 };
+      grouped.set(key, { qty: existing.qty + qty, costTotal: existing.costTotal + ((Number(product.price_cost) || 0) * qty) });
+    }
+
+    const list = Array.from(grouped.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, data]) => {
+        const averageCost = data.qty > 0 ? data.costTotal / data.qty : 0;
+        const cost = averageCost > 0 ? ` (${formatCronDispatcherMoneyVps(averageCost / 100)})` : '';
+        return `- ${data.qty}x - ${name}${cost}`;
+      });
+
+    return {
+      '{estoque_celulares}': String(estoqueCelulares),
+      '{estoque_geral_loja}': String(estoqueGeral),
+      '{estoque_lista_celulares}': list.length ? list.join('\n') : 'Nenhum celular em estoque.',
+    };
+  } catch {
+    return {
+      '{estoque_celulares}': '0',
+      '{estoque_geral_loja}': '0',
+      '{estoque_lista_celulares}': 'Nenhum celular em estoque.',
+    };
+  }
+}
+
+async function loadCronDispatcherInstagramScheduleVps() {
+  try {
+    const slots = await supabaseRestSelect('instagram_schedule', 'select=*&active=eq.true&order=day_of_week.asc,scheduled_time.asc');
+    return Array.isArray(slots) ? slots : [];
+  } catch {
+    return [];
+  }
+}
+
+async function resolveCronDispatcherTagInlineVps(tag, now) {
+  const cfg = tag?.resolver_config && typeof tag.resolver_config === 'object' ? tag.resolver_config : {};
+  switch (tag?.resolver_type) {
+    case 'static':
+      return cfg.value ?? '';
+    case 'date_now': {
+      const options = cfg.format === 'time'
+        ? { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }
+        : cfg.format === 'datetime'
+          ? { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }
+          : { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' };
+      return new Intl.DateTimeFormat('pt-BR', options).format(now);
+    }
+    case 'count_products': {
+      const status = cfg.status ? `&status=eq.${encodeURIComponent(cfg.status)}` : '';
+      const minStock = cfg.min_stock != null ? `&stock_quantity=gt.${encodeURIComponent(Number(cfg.min_stock) - 1)}` : '';
+      const products = await supabaseRestSelect('products', `select=id${status}${minStock}`);
+      return String(Array.isArray(products) ? products.length : 0);
+    }
+    case 'sum_products_stock': {
+      const status = cfg.status ? `&status=eq.${encodeURIComponent(cfg.status)}` : '';
+      const products = await supabaseRestSelect('products', `select=stock_quantity${status}`);
+      return String((Array.isArray(products) ? products : []).reduce((sum, product) => sum + (Number(product.stock_quantity) || 0), 0));
+    }
+    case 'list_products': {
+      const limit = Number(cfg.limit || 30);
+      const format = cfg.format || '- {qty}x - {name} - {color} - {ram}/{storage}';
+      const rows = await supabaseRestSelect('products', 'select=name,stock_quantity,specs,price_pix,price_card&status=eq.active&stock_quantity=gt.0');
+      const products = Array.isArray(rows) ? rows : [];
+      if (!products.length) return 'Nenhum item em estoque.';
+      const phoneWords = ['iphone', 'samsung', 'xiaomi', 'motorola', 'galaxy', 'poco', 'redmi', 'smartphone'];
+      const filtered = cfg.category_slug === 'celulares'
+        ? products.filter((product) => phoneWords.some((word) => String(product.name || '').toLowerCase().includes(word)))
+        : products;
+      const grouped = new Map();
+      for (const product of filtered) {
+        const specs = product.specs && typeof product.specs === 'object' ? product.specs : {};
+        const key = `${product.name || ''}||${specs.color || ''}||${specs.ram || ''}||${specs.storage || ''}`;
+        const existing = grouped.get(key);
+        if (existing) existing.qty += Number(product.stock_quantity) || 0;
+        else grouped.set(key, { qty: Number(product.stock_quantity) || 0, product });
+      }
+      const lines = Array.from(grouped.values())
+        .sort((a, b) => b.qty - a.qty)
+        .slice(0, limit)
+        .map(({ qty, product }) => {
+          const specs = product.specs && typeof product.specs === 'object' ? product.specs : {};
+          const values = {
+            qty: String(qty),
+            name: product.name || '',
+            color: specs.color || '',
+            ram: specs.ram || '',
+            storage: specs.storage || '',
+            avg_price: product.price_pix ? formatCronDispatcherMoneyVps(Number(product.price_pix) / 100) : '',
+            price_pix: product.price_pix ? formatCronDispatcherMoneyVps(Number(product.price_pix) / 100) : '',
+            price_card: product.price_card ? formatCronDispatcherMoneyVps(Number(product.price_card) / 100) : '',
+          };
+          let line = format;
+          for (const [key, value] of Object.entries(values)) line = line.split(`{${key}}`).join(value);
+          return line;
+        });
+      return lines.length ? lines.join('\n') : 'Nenhum item em estoque.';
+    }
+    case 'count_sales_today': {
+      const { start, end } = cronDispatcherSaoPauloDayRangeVps(now);
+      const status = cfg.status ? `&status=eq.${encodeURIComponent(cfg.status)}` : '';
+      const rows = await supabaseRestSelect('sales', `select=id&created_at=gte.${encodeURIComponent(start.toISOString())}&created_at=lte.${encodeURIComponent(end.toISOString())}${status}`);
+      return String(Array.isArray(rows) ? rows.length : 0);
+    }
+    case 'sum_sales_today': {
+      const { start, end } = cronDispatcherSaoPauloDayRangeVps(now);
+      const field = String(cfg.field || 'total').replace(/[^a-zA-Z0-9_]/g, '') || 'total';
+      const status = cfg.status ? `&status=eq.${encodeURIComponent(cfg.status)}` : '';
+      const rows = await supabaseRestSelect('sales', `select=${field}&created_at=gte.${encodeURIComponent(start.toISOString())}&created_at=lte.${encodeURIComponent(end.toISOString())}${status}`);
+      const total = (Array.isArray(rows) ? rows : []).reduce((sum, row) => sum + (Number(row[field]) || 0), 0);
+      return formatCronDispatcherMoneyVps(total);
+    }
+    default:
+      return tag?.preview_value || `{${tag?.name || ''}}`;
+  }
+}
+
+async function loadCronDispatcherCustomTagVariablesVps(now) {
+  try {
+    const tags = await supabaseRestSelect('system_tags', 'select=*&active=eq.true&resolver_type=neq.system_injected');
+    const dict = {};
+    for (const tag of Array.isArray(tags) ? tags : []) {
+      try {
+        dict[`{${tag.name}}`] = await resolveCronDispatcherTagInlineVps(tag, now);
+      } catch {
+        // Keep dispatch resilient when one custom tag fails.
+      }
+    }
+    return dict;
+  } catch {
+    return {};
+  }
+}
+
+async function sendCronDispatcherTelegramMessageVps(settings, text, extra = {}) {
+  const response = await fetch(`https://api.telegram.org/bot${settings.bot_token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: settings.chat_id, text, ...extra }),
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    throw new Error(`Telegram send failed: ${response.status} ${errorText.slice(0, 200)}`);
+  }
+}
+
+function applyCronDispatcherTemplateVariablesVps(content, dict) {
+  let message = String(content || '');
+  for (const [key, value] of Object.entries(dict)) message = message.split(key).join(value || '');
+  if (message.length > 4000) return `${message.substring(0, 3900)}\n\n... [mensagem truncada]`;
+  return message;
+}
+
+async function maybeSendCronDispatcherInstagramReminderVps(settings, now, hour) {
+  if (hour !== '08') return false;
+  const weekdayName = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', timeZone: 'America/Sao_Paulo' }).format(now);
+  const dayMap = {
+    domingo: 0,
+    'segunda-feira': 1,
+    'terca-feira': 2,
+    'terça-feira': 2,
+    'quarta-feira': 3,
+    'quinta-feira': 4,
+    'sexta-feira': 5,
+    sabado: 6,
+    'sábado': 6,
+  };
+  const dayOfWeek = dayMap[weekdayName.toLowerCase()];
+  if (dayOfWeek === undefined) return false;
+
+  const rows = await supabaseRestSelect('instagram_schedule', `select=*&day_of_week=eq.${dayOfWeek}&active=eq.true&send_telegram_reminder=eq.true&order=scheduled_time.asc`);
+  const slots = Array.isArray(rows) ? rows : [];
+  if (!slots.length) return false;
+
+  const label = weekdayName.charAt(0).toUpperCase() + weekdayName.slice(1);
+  let message = `Cronograma Instagram - ${label}\nSeu guia completo de conteudo para hoje.\n${'-'.repeat(30)}\n\n`;
+  const contentLabel = { story: 'Story', reels: 'Reels', carrossel: 'Carrossel', post: 'Post Feed' };
+  for (const slot of slots) {
+    const time = String(slot.scheduled_time || '??:??').slice(0, 5);
+    message += `${time} - ${contentLabel[slot.content_type] || slot.content_type || 'Conteudo'}\n`;
+    if (slot.hook) message += `Hook: ${nlDbCronDispatcherVps(slot.hook)}\n\n`;
+    if (slot.caption) message += `Legenda pronta:\n${nlDbCronDispatcherVps(slot.caption)}\n\n`;
+    if (slot.cta) message += `CTA: ${nlDbCronDispatcherVps(slot.cta)}\n`;
+    if (slot.hashtags) message += `${slot.hashtags}\n`;
+    if (slot.visual_notes) message += `Visual: ${slot.visual_notes}\n`;
+    message += `\n${'-'.repeat(30)}\n\n`;
+  }
+  message += `${slots.length} post(s) planejado(s) para hoje.\nAcesse o Estudio de Marketing para gerar as artes.`;
+  await sendCronDispatcherTelegramMessageVps(settings, message, { parse_mode: 'Markdown' });
+  return true;
+}
+
+async function handleCronDispatcherVps(request, reply) {
+  if (!String(process.env.CRON_SECRET || process.env.SYNC_SECRET || '').trim()) {
+    return reply.code(503).send({ error: 'Cron secret not configured' });
+  }
+  if (!isAuthorizedCronDispatcherRequestVps(request)) {
+    return reply.code(401).send({ error: 'Unauthorized' });
+  }
+
+  try {
+    const rows = await supabaseRestSelect('telegram_settings', 'select=*&limit=1');
+    const settings = cronDispatcherFirstRowVps(rows);
+    const hasConfiguredTelegramCredential = !!settings?.bot_token;
+    if (!settings || !settings.active || !settings.bot_token || !settings.chat_id) {
+      return reply.code(200).send({
+        message: 'Telegram integration inactive or not fully configured',
+        debug: buildCopyableDebug('cron-dispatcher', {
+          hasSettings: !!settings,
+          isActive: !!settings?.active,
+          hasTelegramCredential: hasConfiguredTelegramCredential,
+          hasChatId: !!settings?.chat_id,
+        }),
+      });
+    }
+
+    const templates = parseCronDispatcherTemplatesVps(settings);
+    if (!templates.length) return reply.code(200).send({ message: 'No templates configured' });
+
+    const now = new Date();
+    const timeParts = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).formatToParts(now);
+    const hour = timeParts.find((part) => part.type === 'hour')?.value || '00';
+    const currentHourPrefix = `${hour}:`;
+    const forceTemplateId = request.query?.forceTemplateId || request.body?.forceTemplateId;
+
+    const scheduledTemplates = templates.filter((template) => {
+      if (forceTemplateId) return String(template.id) === String(forceTemplateId);
+      return template.type === 'scheduled' && String(template.schedule_time || '').startsWith(currentHourPrefix);
+    });
+    if (!scheduledTemplates.length) {
+      return reply.code(200).send({ message: forceTemplateId ? 'Template nao encontrado.' : `No templates scheduled for hour ${hour}` });
+    }
+
+    const instagramSlots = await loadCronDispatcherInstagramScheduleVps();
+    const dateText = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' }).format(now);
+    const dict = {
+      ...(await loadCronDispatcherCompanyVariablesVps()),
+      ...(await loadCronDispatcherSalesVariablesVps(now)),
+      ...(await loadCronDispatcherStockVariablesVps()),
+      '{data}': dateText,
+      '{agenda_instagram_semana}': buildCronDispatcherScheduleTextVps(instagramSlots),
+      ...(await loadCronDispatcherCustomTagVariablesVps(now)),
+    };
+
+    let dispatched = 0;
+    for (const template of scheduledTemplates) {
+      const message = applyCronDispatcherTemplateVariablesVps(template.content, dict);
+      try {
+        await sendCronDispatcherTelegramMessageVps(settings, message);
+        dispatched += 1;
+      } catch (err) {
+        console.error('[cron-dispatcher] Failed to send template:', template.name || template.id, err.message);
+      }
+    }
+
+    let instagramReminderSent = false;
+    try {
+      instagramReminderSent = await maybeSendCronDispatcherInstagramReminderVps(settings, now, hour);
+    } catch (err) {
+      console.error('[cron-dispatcher] Failed to send Instagram reminder:', err.message);
+    }
+
+    return reply.code(200).send({
+      success: true,
+      message: `Cron ran successfully. Dispatched ${dispatched} templates.`,
+      dispatched,
+      instagramReminderSent,
+    });
+  } catch (err) {
+    console.error('[cron-dispatcher] fatal error', err);
+    return reply.code(500).send({ error: err.message || 'Cron dispatcher failed' });
+  }
+}
+
+fastify.all('/api/bling-webhook', handleBlingWebhookVps);
+fastify.all('/api/bling', handleBlingApiVps);
+fastify.get('/api/auth/callback/bling', handleBlingOAuthCallbackVps);
+fastify.all('/api/shopee', handleShopeeOAuthVps);
+fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);
+fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
+fastify.all('/api/shopee-actions', handleShopeeActionsVps);
+fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);
+fastify.all('/api/telegram-webhook', handleTelegramWebhookVps);
+
 function escapeSitemapXml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -556,6 +4526,230 @@ function formatSitemapDate(value) {
   if (Number.isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
   return date.toISOString().split('T')[0];
 }
+
+function stripSeoHtml(html) {
+  return String(html || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function escapeSeoHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildSeoBaseUrl(request) {
+  return buildSitemapBaseUrl(request);
+}
+
+function normalizeSeoImages(images) {
+  if (typeof images === 'string') {
+    try {
+      images = JSON.parse(images);
+    } catch {
+      images = [];
+    }
+  }
+  return Array.isArray(images) ? images.filter(Boolean) : [];
+}
+
+function isUuidLike(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(String(value || ''));
+}
+
+async function loadSeoProductBySlug(slug) {
+  const select = `SELECT id, name, description, meta_title, meta_description, keywords, images,
+      price_retail, stock_quantity, sku, slug, status, is_parent, exclude_from_seo,
+      ${comboStockSql('products')} AS computed_stock_quantity
+     FROM products`;
+  const filter = `AND name IS NOT NULL
+       AND name != ''
+       AND (status IN ('active', 'Ativo') OR status IS NULL)
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND (exclude_from_seo = 0 OR exclude_from_seo IS NULL)`;
+
+  let [rows] = await pool.query(
+    `${select}
+     WHERE slug = ?
+       ${filter}
+     LIMIT 1`,
+    [slug]
+  );
+
+  if (!rows.length && isUuidLike(slug)) {
+    [rows] = await pool.query(
+      `${select}
+       WHERE id = ?
+         ${filter}
+       LIMIT 1`,
+      [slug]
+    );
+  }
+
+  return rows[0] || null;
+}
+
+function readSeoIndexHtml() {
+  const candidates = [
+    process.env.VPS_SITE_INDEX_HTML,
+    process.env.VPS_SITE_ROOT ? path.join(process.env.VPS_SITE_ROOT, 'current', 'index.html') : '',
+    '/var/www/mdv-site/current/index.html',
+    path.join(__dirname, 'dist', 'index.html'),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf8');
+    } catch {
+      // Try the next local candidate.
+    }
+  }
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mercado do Vale</title>
+  </head>
+  <body>
+    <div id="root">Carregando...</div>
+  </body>
+</html>`;
+}
+
+function normalizeSeoKeywords(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    } catch {
+      return value.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function formatSeoPrice(value) {
+  const numeric = Number(value || 0) / 100;
+  if (!Number.isFinite(numeric) || numeric <= 0) return '0.00';
+  return numeric.toFixed(2);
+}
+
+function removeExistingSeoHeadTags(html) {
+  return String(html || '')
+    .replace(/<!--\s*(Open Graph|Twitter Card|Google Shopping)[\s\S]*?-->/gi, '')
+    .replace(/<title>[\s\S]*?<\/title>/gi, '')
+    .replace(/<meta[^>]*name=["']description["'][^>]*>/gi, '')
+    .replace(/<meta[^>]*name=["']keywords["'][^>]*>/gi, '')
+    .replace(/<link[^>]*rel=["']canonical["'][^>]*>/gi, '')
+    .replace(/<meta[^>]*property=["']og:[^"']+["'][^>]*>/gi, '')
+    .replace(/<meta[^>]*name=["']twitter:[^"']+["'][^>]*>/gi, '');
+}
+
+fastify.get('/api/seo-produto', async (request, reply) => {
+  const slug = String(request.query?.slug || '').trim();
+  if (!slug) {
+    return reply.redirect('/');
+  }
+
+  try {
+    const baseHtml = readSeoIndexHtml();
+    const product = await loadSeoProductBySlug(slug);
+
+    if (!product) {
+      return reply
+        .header('Content-Type', 'text/html; charset=utf-8')
+        .header('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
+        .code(200)
+        .send(baseHtml);
+    }
+
+    const baseUrl = buildSeoBaseUrl(request);
+    const images = normalizeSeoImages(product.images);
+    const keywords = normalizeSeoKeywords(product.keywords || product.seo_keywords);
+    const title = product.meta_title || `${product.name} | Mercado do Vale`;
+    const cleanDescription = stripSeoHtml(product.meta_description || product.description || '');
+    const description = cleanDescription.slice(0, 155) || `Compre ${product.name} no Mercado do Vale com o melhor preco.`;
+    const canonicalSlug = product.slug || slug;
+    const url = `${baseUrl}/produto/${encodeURIComponent(canonicalSlug)}`;
+    const image = images[0] || `${baseUrl}/og-cover.jpg`;
+    const stockQuantity = product.computed_stock_quantity ?? product.stock_quantity ?? 0;
+    const availability = Number(stockQuantity) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
+    const schemaProduct = {
+      '@context': 'https://schema.org/',
+      '@type': 'Product',
+      name: product.name || '',
+      image: images.slice(0, 5),
+      description,
+      sku: product.sku || '',
+      offers: {
+        '@type': 'Offer',
+        url,
+        priceCurrency: 'BRL',
+        price: formatSeoPrice(product.price_retail),
+        availability,
+        itemCondition: 'https://schema.org/NewCondition',
+      },
+    };
+    const schemaBreadcrumb = {
+      '@context': 'https://schema.org/',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: baseUrl },
+        { '@type': 'ListItem', position: 2, name: 'Produtos', item: `${baseUrl}/catalog` },
+        { '@type': 'ListItem', position: 3, name: product.name || title, item: url },
+      ],
+    };
+
+    const safeTitle = escapeSeoHtml(title);
+    const safeDescription = escapeSeoHtml(description);
+    const safeImage = escapeSeoHtml(image);
+    const metaTags = `
+    <!-- SEO Injetado via VPS Fastify (seo-produto) -->
+    <title>${safeTitle}</title>
+    <meta name="description" content="${safeDescription}" />
+    ${keywords.length ? `<meta name="keywords" content="${escapeSeoHtml(keywords.join(', '))}" />` : ''}
+    <link rel="canonical" href="${url}" />
+    <meta property="og:type" content="product" />
+    <meta property="og:url" content="${url}" />
+    <meta property="og:title" content="${safeTitle}" />
+    <meta property="og:description" content="${safeDescription}" />
+    <meta property="og:image" content="${safeImage}" />
+    <meta property="og:site_name" content="Mercado do Vale" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="${url}" />
+    <meta name="twitter:title" content="${safeTitle}" />
+    <meta name="twitter:description" content="${safeDescription}" />
+    <meta name="twitter:image" content="${safeImage}" />
+    <script type="application/ld+json">${JSON.stringify(schemaProduct)}</script>
+    <script type="application/ld+json">${JSON.stringify(schemaBreadcrumb)}</script>
+    <!-- Fim SEO seo-produto -->
+`;
+
+    const finalHtml = removeExistingSeoHeadTags(baseHtml)
+      .replace('<head>', `<head>\n${metaTags}`);
+
+    return reply
+      .header('Content-Type', 'text/html; charset=utf-8')
+      .header('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
+      .code(200)
+      .send(finalHtml);
+  } catch (err) {
+    return reply.code(500).send({
+      error: 'Failed to generate product SEO HTML',
+      debug: buildCopyableDebug('seo-produto', {
+        step: 'render product seo',
+        slug,
+        rawMessage: err.message,
+      }),
+    });
+  }
+});
 
 fastify.get('/api/sitemap', async (request, reply) => {
   try {
@@ -655,7 +4849,7 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
     if (!auth.isAdmin && (!bodyCustomerId || auth.customerId !== bodyCustomerId)) {
       return reply.code(403).send({ error: 'Forbidden for this customer' });
     }
-  } else if ((isWrite || isVpsProxySensitiveGetPath(vpsProxyTargetPath)) && !auth.isAdmin) {
+  } else if (((isWrite && !isPublicPath) || isVpsProxySensitiveGetPath(vpsProxyTargetPath)) && !auth.isAdmin) {
     return reply.code(403).send({ error: 'Admin required' });
   }
 

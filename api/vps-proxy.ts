@@ -206,7 +206,7 @@ export default async function handler(req: any, res: any) {
         if (!auth.isAdmin && (!bodyCustomerId || auth.customerId !== bodyCustomerId)) {
             return res.status(403).json({ error: 'Forbidden for this customer' });
         }
-    } else if ((isWrite || isSensitiveGetPath(path)) && !auth.isAdmin) {
+    } else if (((isWrite && !isPublicPath) || isSensitiveGetPath(path)) && !auth.isAdmin) {
         return res.status(403).json({ error: 'Admin required' });
     }
 

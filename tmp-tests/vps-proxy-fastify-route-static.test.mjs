@@ -42,6 +42,12 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 
   assert.match(
     source,
+    /\(\(isWrite\s*&&\s*!isPublicPath\)\s*\|\|\s*isVpsProxySensitiveGetPath\(vpsProxyTargetPath\)\)\s*&&\s*!auth\.isAdmin/,
+    `${file} must not require admin auth for public write proxy paths such as banner tracking`,
+  );
+
+  assert.match(
+    source,
     /fastify\.inject\(\{[\s\S]*url:\s*vpsProxyTargetPath/,
     `${file} must forward protected proxy requests internally with the VPS sync key`,
   );
