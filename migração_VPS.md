@@ -660,6 +660,34 @@ Pendente para corte final:
 
 ## Registro de Mudanças
 
+### 2026-05-22 - Validacao manual inicial do staging admin
+
+Mudanca: validacao manual do staging no navegador apos criacao do DNS `staging.mercadodovale.com.br`.
+
+Objetivo: confirmar que o frontend/admin abre pela VPS com sessao real e validar o caso de estoque citado antes do corte final.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Validacao manual:
+
+- `http://staging.mercadodovale.com.br`: home abriu no navegador pela VPS.
+- `http://staging.mercadodovale.com.br/admin/products`: admin abriu com sessao real e lista de produtos carregada.
+- Produto aberto a partir da vitrine carregou imagem, preco e opcoes, mas foi observado que um clique anterior caiu no dominio publico `mercadodovale.com.br`; precisa repetir navegacao de produto mantendo host `staging`.
+- Em `Locais de Estoque`, pesquisa por SKU `CCSAM3PRO5GCR`: nenhum resultado encontrado.
+
+Resultado: staging/admin com sessao real iniciou corretamente. O SKU `CCSAM3PRO5GCR`, citado como produto excluido do Bling que permanecia em caixa, nao aparece na busca de locais de estoque, indicando que nao esta mais preso em caixa/local no teste manual.
+
+Pendencias:
+
+- testar transferencia entre caixas com um produto seguro que apareca em local/caixa;
+- testar "voltar para loja" com um item seguro;
+- repetir abertura de produto a partir da home staging confirmando que a URL permanece em `staging.mercadodovale.com.br`;
+- registrar prints/resultado antes do corte DNS final.
+
+Rollback: nenhuma mudanca de runtime foi feita nesta etapa.
+
 ### 2026-05-22 - Rodada de testes seguros antes do teste manual
 
 Mudanca: executada nova bateria de testes live/read-only e guards antes de avancar para navegador com login ou mutacoes reais.
