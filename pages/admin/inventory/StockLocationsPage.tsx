@@ -85,6 +85,7 @@ export function StockLocationsPage() {
   const [contentsItems, setContentsItems] = useState<LocationContentItem[]>([]);
   const [contentsLoading, setContentsLoading] = useState(false);
   const [contentsError, setContentsError] = useState<string | null>(null);
+  const [contentsActionProductId, setContentsActionProductId] = useState<string | null>(null);
 
   // Batch transfer: carrinho de produtos pra mandar todos pra mesmo destino.
   type BatchItem = {
@@ -469,7 +470,8 @@ export function StockLocationsPage() {
     }
   };
 
-  const closeLocationContents = () => {
+  const closeLocationContents = (force: boolean | React.MouseEvent = false) => {
+    if (contentsActionProductId && force !== true) return;
     setContentsOpen(false);
     setContentsLocation(null);
     setContentsItems([]);
@@ -483,6 +485,20 @@ export function StockLocationsPage() {
     ean: item.ean || null,
     stock_quantity: Number(item.total_stock || item.quantity || 0),
     images: item.product_image ? [item.product_image] : null,
+  });
+
+  const buildDistributionFromContentItem = (item: LocationContentItem): ProductStockLocation => ({
+    id: `content-${item.product_id}-${item.location_id || 'unknown'}`,
+    company_id: '',
+    product_id: item.product_id,
+    deposit_id: item.deposit_id || '',
+    location_id: item.location_id || '',
+    quantity: Number(item.quantity || 0),
+    reserved_quantity: Number(item.reserved_quantity || 0),
+    created_at: '',
+    updated_at: '',
+    deposit: item.deposit_id ? depositById[item.deposit_id] || null : null,
+    location: item.location_id ? locations.find((location) => location.id === item.location_id) || null : null,
   });
 
   const getDefaultStockTarget = (excludeLocationId = '') => {
@@ -930,14 +946,30 @@ export function StockLocationsPage() {
   };
 
   const handleContentTransferFromRow = async (item: LocationContentItem) => {
-    closeLocationContents();
+    if (!item.deposit_id || !item.location_id) {
+      setContentsError('Este produto nao tem origem valida para transferencia.');
+      return;
+    }
+
+    setContentsActionProductId(item.product_id);
+    setContentsError(null);
+
     try {
       const product = buildProductFromContentItem(item);
+      const rowDistribution = buildDistributionFromContentItem(item);
       setSelectedProduct(product);
       setProductSearch(product.name);
       setProductLoading(true);
       setProductError(null);
-      const distribution = await loadProductDistribution(item.product_id);
+      let distribution = [rowDistribution];
+      try {
+        const loadedDistribution = await loadProductDistribution(item.product_id);
+        const hasCurrentLocation = loadedDistribution.some((source) => source.location_id === item.location_id);
+        distribution = hasCurrentLocation ? loadedDistribution : [rowDistribution, ...loadedDistribution];
+        setProductDistribution(distribution);
+      } catch (distributionError) {
+        setProductDistribution(distribution);
+      }
       setQuickTransferDestinationDefaults(distribution);
       const target = getDefaultStockTarget(item.location_id || '');
       setTransferFromDepositId(item.deposit_id || '');
@@ -948,11 +980,14 @@ export function StockLocationsPage() {
       setTransferReason('');
       setTransferNotes('');
       setTransferError(null);
+      closeLocationContents(true);
       setTransferOpen(true);
     } catch (err: any) {
       console.error('[StockLocationsPage] transfer from contents', err);
+      setContentsError(err?.message || 'Nao foi possivel abrir a transferencia deste item.');
     } finally {
       setProductLoading(false);
+      setContentsActionProductId(null);
     }
   };
 
@@ -2687,15 +2722,21 @@ export function StockLocationsPage() {
                             <button
                               type="button"
                               onClick={() => handleContentTransferFromRow(item)}
+                              disabled={Boolean(contentsActionProductId)}
                               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                               title="Transferir este produto a partir deste local"
                             >
-                              <ArrowRightLeft size={12} />
-                              Transferir
+                              {contentsActionProductId === item.product_id ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <ArrowRightLeft size={12} />
+                              )}
+                              {contentsActionProductId === item.product_id ? 'Abrindo...' : 'Transferir'}
                             </button>
                             <button
                               type="button"
                               onClick={() => handleReturnContentItemToStore(item)}
+                              disabled={Boolean(contentsActionProductId)}
                               className="ml-2 inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-100"
                               title="Remover desta caixa e voltar para a loja"
                             >

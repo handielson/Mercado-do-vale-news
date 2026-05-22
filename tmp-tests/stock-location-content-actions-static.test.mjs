@@ -6,7 +6,11 @@ const service = readFileSync('services/stockLocationService.ts', 'utf8');
 const types = readFileSync('types/stock-location.ts', 'utf8');
 
 assert.match(page, /buildProductFromContentItem/, 'content transfer must build selected product from the location row');
+assert.match(page, /buildDistributionFromContentItem/, 'content transfer must seed transfer availability from the location row');
 assert.match(page, /onClick=\{\(\) => handleContentTransferFromRow\(item\)\}/, 'content transfer button must use direct row data instead of a new Bling/VPS search');
+assert.match(page, /closeLocationContents\(true\)/, 'content transfer must only close the box modal after the transfer modal is prepared');
+assert.match(page, /contentsActionProductId === item\.product_id \? 'Abrindo\.\.\.' : 'Transferir'/, 'content transfer button must show an in-progress state instead of looking like it returned to the page');
+assert.match(page, /setProductDistribution\(distribution\)/, 'content transfer must keep row-seeded distribution when live distribution is unavailable');
 assert.match(page, /handleReturnContentItemToStore/, 'page must expose return-to-store action for a box item');
 assert.match(page, /Voltar para loja/, 'content modal must show a return-to-store button');
 assert.match(page, /stockLocationService\.transferStockLocation\(\{[\s\S]*from_location_id: item\.location_id/, 'return-to-store must transfer from the current box location');
