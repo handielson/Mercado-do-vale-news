@@ -644,6 +644,7 @@ Concluído em leitura real pela VPS:
 - Bling image proxy: `image-proxy` validado com imagem real de produto Bling pela VPS, com saída sanitizada.
 - Bling sync-prices-vps: `dryRun=true` real validado na VPS nas páginas `0`, `1` e `48`; aplicação real controlada da página `0` sincronizou `50` itens em `/products/batch` com HTTP `200`.
 - Staging frontend/proxy: revalidado live pela VPS com host `staging.mercadodovale.com.br`; raiz e `/admin/products` retornam HTML `200`, `/api/vps-proxy?path=/status` e leitura pública de produtos retornam JSON `200`, e `/company-settings` sem sessão continua bloqueado com `403`.
+- Staging Locais de Estoque: correção do botão `Transferir` dentro do conteúdo de caixa commitada e publicada na VPS; asset novo da tela retornou `200` no staging. Falta apenas o reteste manual do usuário na Caixa 20/SKU `CTRN115G`.
 - OAuth preflight: revalidado live pela VPS; callback Bling sem code redireciona para `/admin/settings/bling`, exchange Bling sem credenciais retorna `400`, callback Shopee sem parâmetros retorna `400` e geração de URL Shopee retorna host oficial com redirect para `www.mercadodovale.com.br`.
 
 Pendente para corte final:
@@ -659,6 +660,41 @@ Pendente para corte final:
 - Operação: cron da Vercel removido do `vercel.json`; callbacks restantes da Vercel ficam para depois da regressão final.
 
 ## Registro de Mudanças
+
+### 2026-05-22 - Correção do Transferir em conteúdo de caixa
+
+Mudança: corrigido o fluxo do botão `Transferir` dentro do modal de conteúdo de caixa em `Locais de Estoque`.
+
+Objetivo: impedir que, ao clicar em `Transferir` em um item da caixa, o modal fechasse antes de preparar a transferência e desse a impressão de voltar para a página inicial/por trás. O caso reportado foi a Caixa 20 com o SKU `CTRN115G`.
+
+Arquivos/infra alterados:
+
+- `pages/admin/inventory/StockLocationsPage.tsx`
+- `tmp-tests/stock-location-content-actions-static.test.mjs`
+- release VPS frontend `/var/www/mdv-site/releases/20260522-175355`
+
+Validação:
+
+- `node tmp-tests\stock-location-content-actions-static.test.mjs`
+- `node tmp-tests\stock-location-transfer-static.test.mjs`
+- `node tmp-tests\stock-locations-page-static.test.mjs`
+- `node tmp-tests\stock-location-batch-transfer-static.test.mjs`
+- `npm.cmd run build`
+- commit `183238e fix(stock): keep transfer modal flow visible`
+- `git push origin main`
+- `npm.cmd run deploy:vps-site`
+- Vercel: deploy `mercado-do-vale-news-wakgzvzam.vercel.app` ficou `Ready`.
+- Staging VPS: `http://staging.mercadodovale.com.br/assets/StockLocationsPage-CQ9oaUWs.js` retornou `200`.
+
+Resultado: o clique em `Transferir` agora mantém o fluxo visível, mostra estado `Abrindo...`, prepara a distribuição do item da própria linha da caixa e só fecha o modal de conteúdo depois que a transferência está pronta para abrir. Se a leitura ao vivo da distribuição falhar, o item da caixa continua como fallback para não perder o contexto.
+
+Pendência:
+
+- reteste manual no staging: abrir `http://staging.mercadodovale.com.br/admin/inventory/locations`, entrar na Caixa 20 e clicar em `Transferir` no SKU `CTRN115G`; o esperado é abrir o modal de transferência em vez de voltar para a tela por trás.
+
+Rollback:
+
+- reverter o commit `183238e` e publicar novamente; na VPS, também é possível voltar o symlink para `/var/www/mdv-site/previous` conforme script de deploy.
 
 ### 2026-05-22 - Validacao manual inicial do staging admin
 
