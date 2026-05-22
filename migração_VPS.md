@@ -660,6 +660,41 @@ Pendente para corte final:
 
 ## Registro de Mudanças
 
+### 2026-05-22 - Preparacao de testes controlados Shopee/shipping/webhooks
+
+Mudanca: executadas validacoes seguras para preparar os proximos testes controlados de escrita, sem alterar estoque, preco, pedidos, etiquetas ou webhooks reais.
+
+Objetivo: avancar o checklist enquanto o DNS de staging ainda nao esta disponivel publicamente, separando o que ja pode ser validado em modo seguro do que exige escolha explicita de produto/pedido/midia de teste.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Validacao:
+
+- tentativa de adicionar `76.13.232.162 staging.mercadodovale.com.br` no `hosts` local: negada pelo Windows com `Access denied`; nenhuma entrada foi aplicada.
+- `node tmp-tests/vps-shopee-test-candidate-discovery-static.test.mjs`: `ok`.
+- `node tmp-tests/vps-shopee-test-candidate-discovery.cjs`: `ok=true`, `candidate_count=50`, `test_like_count=0`; candidatos sanitizados indicam produtos vinculados e ativos, mas nenhum claramente marcado como teste.
+- `node tmp-tests/vps-shopee-full-catalog-guarded-check.cjs`: dry-run padrao `ok=true`, `full_catalog_executed=false`, `reason=dry_run_enabled`.
+- `DRY_RUN=false CONFIRM_SHOPEE_FULL_CATALOG_READ=I_UNDERSTAND_SHOPEE_FULL_CATALOG_READ SHOPEE_FULL_CATALOG_MAX_PAGES=1 SHOPEE_FULL_CATALOG_MAX_ITEMS=5 SHOPEE_FULL_CATALOG_PAGE_SIZE=5 node tmp-tests/vps-shopee-full-catalog-guarded-check.cjs`: `ok=true`, leitura real pequena executada, `status=200`, `item_count=5`, sem mutacao.
+- `node tmp-tests/vps-shipping-quote-guarded-simulation.cjs`: `ok=true`, `quote_sent=false`, `mutation_executed=false`, `reason=missing_SHIPPING_TEST_PROVIDER`.
+- `node tmp-tests/vps-melhor-envio-label-guarded-simulation.cjs`: `ok=true`, `label_requested=false`, `mutation_executed=false`, `reason=missing_MELHOR_ENVIO_TEST_CARRIER_ID`.
+- `node tmp-tests/vps-mercadopago-webhook-simulation.cjs`: `ok=true`, `webhook_sent=false`, `reason=missing_MERCADOPAGO_TEST_PAYMENT_ID`.
+- `node tmp-tests/vps-bling-webhook-simulation.cjs`: `ok=true`, `webhook_sent=false`, `reason=missing_BLING_TEST_WEBHOOK_EVENT`.
+- `node tmp-tests/vps-shopee-webhook-order-simulation.cjs`: `ok=true`, `webhook_sent=false`, `reason=missing_SHOPEE_TEST_WEBHOOK_ORDER_SN`.
+
+Resultado: leitura real pequena do catalogo completo Shopee passou pela VPS; os guards de shipping, etiqueta e webhooks continuam sem executar nada por padrao. Ainda nao existe candidato Shopee claramente marcado como teste, entao mutacoes reais seguem bloqueadas ate escolher/criar um item controlado.
+
+Pendencias:
+
+- escolher ou criar produto Shopee de teste para `update_stock`, `update_price`, `add_item` e upload de midia;
+- escolher pedido Shopee controlado para `ship_order` e simulacao de webhook;
+- escolher pagamento Mercado Pago de teste para simulacao real controlada;
+- escolher evento Bling controlado para validar webhook com efeito esperado;
+- obter permissao/admin local ou configurar DNS publico para validar `staging.mercadodovale.com.br` no navegador real.
+
+Rollback: nenhuma mudanca de runtime foi feita nesta etapa.
+
 ### 2026-05-22 - Checagem DNS para proximo passo de navegador/login
 
 Mudanca: conferido o estado publico dos dominios antes de tentar a validacao real de navegador, login/admin e corte final.
