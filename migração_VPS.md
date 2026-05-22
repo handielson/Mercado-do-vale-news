@@ -660,6 +660,53 @@ Pendente para corte final:
 
 ## Registro de Mudanças
 
+### 2026-05-22 - Revalidacao live read-only Bling/Shopee, cron e guards
+
+Mudanca: executada nova rodada do checklist ativo com validacoes read-only pela VPS, conferindo integracoes externas sem mutacao real.
+
+Objetivo: avancar os proximos passos antes do corte final, confirmando que as rotas migradas continuam respondendo e que os guards de escrita permanecem bloqueando execucoes acidentais.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/api/bling`
+- `/api/shopee-actions`
+- `/api/shopee-catalog`
+- `/api/cron-dispatcher`
+- `/sitemap.xml`
+- `/produto/:slug`
+
+Validacao:
+
+- `Resolve-DnsName staging.mercadodovale.com.br`: sem resposta publica no momento da checagem.
+- `curl https://staging.mercadodovale.com.br/` e `curl http://staging.mercadodovale.com.br/`: sem resposta publica por ausencia de DNS/host acessivel.
+- `node tmp-tests/vps-migration-guard-regression.cjs`: `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`.
+- `node tmp-tests/vps-shopee-live-read-check.cjs`: `ok=true`, loja/categorias/logistica/lista de itens/detalhe/modelos `200`; `catalog_categories` retornou `2038` categorias e lista de itens retornou `5` itens.
+- `node tmp-tests/vps-shopee-order-live-read-check.cjs`: `ok=true`, pedidos/detalhe/rastreio/escrow `200`, com pedido descoberto automaticamente.
+- `node tmp-tests/vps-cron-dispatcher-log-check.cjs`: `ok=true`, crontab com entrada ativa, log existente e ultima execucao real `Cron ran successfully. Dispatched 1 templates.`
+- `node tmp-tests/vps-bling-live-read-check.cjs`: `ok=true`, categorias `71`, produtos `100`, NFe `100`, NFCe `34`.
+- `node tmp-tests/vps-bling-stock-live-read-check.cjs`: `ok=true`, produto descoberto e estoque filtrado `200`.
+- `node tmp-tests/vps-bling-finance-live-read-check.cjs`: `ok=true`, receber lista/detalhe e pagar lista/detalhe `200`.
+- `SEO_SPECIAL_SLUGS_LIVE=true node tmp-tests/vps-seo-special-slugs-check.cjs`: `ok=true`, sitemap `200`, `2133` URLs de produto e `8` slugs inspecionados com canonical, OG product e JSON-LD.
+- `node tmp-tests/vps-bling-detail-live-read-check.cjs`: primeira tentativa retornou `429` no detalhe de produto Bling e `200` no detalhe de NFe; apos aguardar a janela de rate limit e repetir somente o teste, retornou `ok=true` com detalhe de produto e NFe `200`.
+- `node tmp-tests/vps-bling-diagnostics-live-read-check.cjs`: `ok=true`, `debug-product` e `debug-diagnostic` responderam com saida sanitizada.
+- `node tmp-tests/vps-bling-image-proxy-live-check.cjs`: `ok=true`, imagem real retornou `200`, `image/png`.
+- `node tmp-tests/vps-bling-sync-prices-dry-run-check.cjs`: `ok=true`, `dryRun=true`, `wouldSync=50`, `total=2443`, sem executar `/products/batch`.
+
+Resultado: as leituras reais Bling/Shopee e SEO continuam funcionando pela VPS; o cron esta instalado e com log real de sucesso; as mutacoes seguem bloqueadas por padrao. O unico incidente foi `429` temporario do Bling no detalhe de produto, resolvido com retry apos pausa, indicando limite externo e nao regressao da rota.
+
+Pendencias:
+
+- apontar/validar DNS publico de `staging.mercadodovale.com.br` ou usar `hosts` local definitivo para validar navegador sem proxy;
+- validar login/admin real com sessao autenticada e `/api/vps-proxy` protegido;
+- executar somente em janela controlada as mutacoes guardadas de Bling, Shopee, webhooks e shipping;
+- validar DNS final/browser apos apontamento publico.
+
+Rollback: nenhuma mudanca de runtime foi feita nesta etapa; se alguma regressao aparecer, usar os backups de runtime/Nginx registrados nas entradas anteriores.
+
 ### 2026-05-22 - Instalação e validação do Nginx de produção na VPS
 
 Mudanca: instalada a config `infra/nginx/mdv-site-production.conf` na VPS e ajustado o validador SEO para tratar `mercadodovale.com.br` como host raiz que redireciona para o canonical `www`.
