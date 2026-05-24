@@ -658,8 +658,8 @@ export function ModelsPage() {
             </div>
 
             {/* Tabela */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-auto max-h-[65vh]">
-                <table className="w-full relative">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto overflow-y-auto max-h-[65vh]">
+                <table className="w-full min-w-[1500px] relative">
                     <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
                         <tr>
                             <th className="px-4 py-3 text-left w-10">
