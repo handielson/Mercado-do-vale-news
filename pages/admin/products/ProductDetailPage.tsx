@@ -191,7 +191,7 @@ export const ProductDetailPage: React.FC = () => {
             setIsSaving(true);
             await productService.update(id, data);
             toast.success('Produto atualizado com sucesso!');
-            await fetchProduct();
+            navigate('/admin/products');
         } catch (error) {
             console.error('Error updating product:', error);
             toast.error('Erro ao atualizar produto');
