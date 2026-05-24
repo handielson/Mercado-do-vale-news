@@ -18,6 +18,8 @@ import {
   StockPathDeactivationTarget,
 } from '../../../types/stock-location';
 
+const BATCH_TRANSFER_STORAGE_KEY = 'mdv-stock-location-batch-transfer-v1';
+
 export function StockLocationsPage() {
   const [searchParams] = useSearchParams();
   const initialSearch = searchParams.get('search')?.trim() || '';
@@ -128,15 +130,71 @@ export function StockLocationsPage() {
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchDraftLoaded, setBatchDraftLoaded] = useState(false);
 
   const formatLocationName = (value: string) =>
     value.toLocaleLowerCase('pt-BR').replace(/(^|[\s\-/])(\p{L})/gu, (_, prefix: string, letter: string) =>
       `${prefix}${letter.toLocaleUpperCase('pt-BR')}`
     );
 
+  const getLocationDisplayName = (location?: Pick<StockLocation, 'name' | 'code'> | null) => {
+    const name = (location?.name || '').trim();
+    const code = (location?.code || '').trim();
+    if (!name) return code || '-';
+    if (!code) return name;
+
+    const normalizedName = name.toLocaleLowerCase('pt-BR');
+    const normalizedCode = code.toLocaleLowerCase('pt-BR');
+    const compactName = normalizedName.replace(/[^a-z0-9]+/g, '');
+    const compactCode = normalizedCode.replace(/[^a-z0-9]+/g, '');
+    if (compactCode && compactName.includes(compactCode)) return name;
+
+    return `${name} ${code}`;
+  };
+
   useEffect(() => {
     loadData();
   }, [movementPeriodDays]);
+
+  useEffect(() => {
+    try {
+      const rawDraft = window.localStorage.getItem(BATCH_TRANSFER_STORAGE_KEY);
+      if (rawDraft) {
+        const draft = JSON.parse(rawDraft);
+        if (Array.isArray(draft?.items)) {
+          setBatchItems(draft.items);
+        }
+        if (typeof draft?.toDepositId === 'string') setBatchToDepositId(draft.toDepositId);
+        if (typeof draft?.toLocationId === 'string') setBatchToLocationId(draft.toLocationId);
+        if (typeof draft?.toLocationSearch === 'string') setBatchToLocationSearch(draft.toLocationSearch);
+        if (typeof draft?.reason === 'string') setBatchReason(draft.reason);
+        if (typeof draft?.notes === 'string') setBatchNotes(draft.notes);
+      }
+    } catch {
+      window.localStorage.removeItem(BATCH_TRANSFER_STORAGE_KEY);
+    } finally {
+      setBatchDraftLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!batchDraftLoaded) return;
+
+    const hasDraft = batchItems.length > 0 || batchToDepositId || batchToLocationId || batchToLocationSearch || batchReason || batchNotes;
+    if (!hasDraft) {
+      window.localStorage.removeItem(BATCH_TRANSFER_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(BATCH_TRANSFER_STORAGE_KEY, JSON.stringify({
+      items: batchItems,
+      toDepositId: batchToDepositId,
+      toLocationId: batchToLocationId,
+      toLocationSearch: batchToLocationSearch,
+      reason: batchReason,
+      notes: batchNotes,
+    }));
+  }, [batchDraftLoaded, batchItems, batchToDepositId, batchToLocationId, batchToLocationSearch, batchReason, batchNotes]);
 
   useEffect(() => {
     if (initialSearch) {
@@ -431,6 +489,7 @@ export function StockLocationsPage() {
       const locationData = await stockLocationService.listLocations();
       setLocations(locationData);
       setSelectedDepositId(locationDepositId);
+      setLocationsExpanded(true);
       setLocationOpen(false);
     } catch (error) {
       setLocationError(error instanceof Error ? error.message : 'Nao foi possivel salvar o local.');
@@ -451,8 +510,10 @@ export function StockLocationsPage() {
 
     return locations.filter((location) => {
       const deposit = depositById[location.deposit_id];
+      const locationLabel = getLocationDisplayName(location).toLowerCase();
       const matchesDeposit = selectedDepositId === 'all' || location.deposit_id === selectedDepositId;
       const matchesSearch = !term ||
+        locationLabel.includes(term) ||
         location.name.toLowerCase().includes(term) ||
         location.code.toLowerCase().includes(term) ||
         deposit?.name.toLowerCase().includes(term);
@@ -844,7 +905,10 @@ export function StockLocationsPage() {
 
   const handleBatchToLocationSearchChange = (value: string) => {
     setBatchToLocationSearch(value);
-    const selected = batchDestinationLocations.find((location) => location.name === value || location.code === value);
+    const selected = batchDestinationLocations.find((location) => {
+      const label = getLocationDisplayName(location);
+      return label === value || location.name === value || location.code === value;
+    });
     setBatchToLocationId(selected?.id || '');
   };
 
@@ -1129,6 +1193,7 @@ export function StockLocationsPage() {
       setBatchToLocationId('');
       setBatchToLocationSearch('');
       setBatchProgress(null);
+      window.localStorage.removeItem(BATCH_TRANSFER_STORAGE_KEY);
       // Recarrega divergências/movimentos
       loadData();
     }
@@ -1773,7 +1838,7 @@ export function StockLocationsPage() {
                   filteredLocations.map((location) => (
                     <tr key={location.id} className="hover:bg-slate-50">
                       <td className="px-5 py-4">
-                        <div className="font-semibold text-slate-900">{location.name}</div>
+                        <div className="font-semibold text-slate-900">{getLocationDisplayName(location)}</div>
                         {location.description && <div className="mt-1 text-xs text-slate-500">{location.description}</div>}
                       </td>
                       <td className="px-5 py-4 font-mono text-xs text-slate-600">{location.code}</td>
@@ -1957,7 +2022,7 @@ export function StockLocationsPage() {
                   >
                     <option value="">Selecione</option>
                     {quickTransferLocations.map((location) => (
-                      <option key={location.id} value={location.id}>{location.name}</option>
+                      <option key={location.id} value={location.id}>{getLocationDisplayName(location)}</option>
                     ))}
                   </select>
                 </label>
@@ -2110,7 +2175,7 @@ export function StockLocationsPage() {
                         <td className="px-3 py-3">
                           <div className="text-xs text-slate-600">
                             <p className="font-semibold text-slate-800">
-                              {originLocations.length > 1 ? 'Todas as origens com saldo' : originLocations[0] ? `${originLocations[0].deposit?.name || '-'} / ${originLocations[0].location?.name || '-'}` : 'Sem saldo'}
+                              {originLocations.length > 1 ? 'Todas as origens com saldo' : originLocations[0] ? `${originLocations[0].deposit?.name || '-'} / ${getLocationDisplayName(originLocations[0].location)}` : 'Sem saldo'}
                             </p>
                             {originLocations.length > 1 && (
                               <p className="mt-0.5 text-slate-500">{originLocations.length} locais</p>
@@ -2216,7 +2281,7 @@ export function StockLocationsPage() {
                   />
                   <datalist id="batch-destination-locations">
                     {batchDestinationLocations.map((l) => (
-                      <option key={l.id} value={l.name}>{l.code}</option>
+                      <option key={l.id} value={getLocationDisplayName(l)}>{l.code}</option>
                     ))}
                   </datalist>
                 </label>
@@ -2692,7 +2757,7 @@ export function StockLocationsPage() {
                   >
                     <option value="">Selecione</option>
                     {entryLocations.map((location) => (
-                      <option key={location.id} value={location.id}>{location.name}</option>
+                      <option key={location.id} value={location.id}>{getLocationDisplayName(location)}</option>
                     ))}
                   </select>
                 </label>
@@ -2812,7 +2877,7 @@ export function StockLocationsPage() {
                       >
                         <option value="">Selecione</option>
                         {transferFromLocations.map((location) => (
-                          <option key={location.id} value={location.id}>{location.name}</option>
+                          <option key={location.id} value={location.id}>{getLocationDisplayName(location)}</option>
                         ))}
                       </select>
                     </label>
@@ -2851,7 +2916,7 @@ export function StockLocationsPage() {
                       >
                         <option value="">Selecione</option>
                         {transferToLocations.map((location) => (
-                          <option key={location.id} value={location.id}>{location.name}</option>
+                          <option key={location.id} value={location.id}>{getLocationDisplayName(location)}</option>
                         ))}
                       </select>
                     </label>
@@ -2986,7 +3051,7 @@ export function StockLocationsPage() {
                   >
                     <option value="">Selecione</option>
                     {adjustmentLocations.map((location) => (
-                      <option key={location.id} value={location.id}>{location.name}</option>
+                      <option key={location.id} value={location.id}>{getLocationDisplayName(location)}</option>
                     ))}
                   </select>
                 </label>
@@ -3114,7 +3179,7 @@ export function StockLocationsPage() {
                         {deactivationTargetLocations
                           .filter((location) => !deactivationToDepositId || location.deposit_id === deactivationToDepositId)
                           .map((location) => (
-                            <option key={location.id} value={location.id}>{location.name}</option>
+                            <option key={location.id} value={location.id}>{getLocationDisplayName(location)}</option>
                           ))}
                       </select>
                     </label>

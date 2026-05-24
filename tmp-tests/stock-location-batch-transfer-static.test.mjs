@@ -13,6 +13,10 @@ function assertIncludes(source, snippet, label) {
 }
 
 assertIncludes(page, 'getBatchTransferSources', 'batch transfer should calculate all source locations');
+assertIncludes(page, 'BATCH_TRANSFER_STORAGE_KEY', 'batch transfer draft should have a localStorage key');
+assertIncludes(page, 'window.localStorage.getItem(BATCH_TRANSFER_STORAGE_KEY)', 'batch transfer should restore unfinished draft after reload');
+assertIncludes(page, 'window.localStorage.setItem(BATCH_TRANSFER_STORAGE_KEY', 'batch transfer should persist unfinished draft');
+assertIncludes(page, 'window.localStorage.removeItem(BATCH_TRANSFER_STORAGE_KEY)', 'batch transfer should clear persisted draft after success');
 assertIncludes(page, 'getBatchTransferAvailable', 'batch transfer should expose total movable stock');
 assertIncludes(page, 'getBatchUndistributedQuantity', 'batch transfer availability should include product stock not yet assigned to a location');
 assertIncludes(page, 'return sourceAvailable + getBatchUndistributedQuantity(item)', 'batch transfer visible availability should include materializable stock');
