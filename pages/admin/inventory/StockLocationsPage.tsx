@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowRightLeft, Boxes, Building2, ChevronDown, ChevronRight, Copy, Eye, FileDown, History, Loader2, MapPin, PackageSearch, Pencil, Plus, RefreshCw, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -19,6 +19,14 @@ import {
 } from '../../../types/stock-location';
 
 const BATCH_TRANSFER_STORAGE_KEY = 'mdv-stock-location-batch-transfer-v1';
+
+type BatchReadError = {
+  id: string;
+  term: string;
+  message: string;
+  createdAt: string;
+  count: number;
+};
 
 export function StockLocationsPage() {
   const [searchParams] = useSearchParams();
@@ -130,7 +138,9 @@ export function StockLocationsPage() {
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchReadErrors, setBatchReadErrors] = useState<BatchReadError[]>([]);
   const [batchDraftLoaded, setBatchDraftLoaded] = useState(false);
+  const batchSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const formatLocationName = (value: string) =>
     value.toLocaleLowerCase('pt-BR').replace(/(^|[\s\-/])(\p{L})/gu, (_, prefix: string, letter: string) =>
@@ -152,6 +162,75 @@ export function StockLocationsPage() {
     return `${name} ${code}`;
   };
 
+  const normalizeReadTerm = (value?: string | null) => (value || '').trim().toLocaleLowerCase('pt-BR');
+
+  const focusBatchSearchInput = () => {
+    window.setTimeout(() => {
+      batchSearchInputRef.current?.focus();
+    }, 0);
+  };
+
+  const playBatchErrorSound = () => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const context = new AudioContextCtor();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'square';
+      oscillator.frequency.value = 220;
+      gain.gain.value = 0.08;
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.18);
+      oscillator.onended = () => context.close();
+    } catch {
+      // Aviso sonoro é apenas apoio operacional; a lista de erros continua sendo o registro principal.
+    }
+  };
+
+  const addBatchReadError = (term: string, message: string) => {
+    const normalizedTerm = normalizeReadTerm(term);
+    if (!normalizedTerm) return;
+    setBatchReadErrors(prev => {
+      const existing = prev.find(error => normalizeReadTerm(error.term) === normalizedTerm);
+      if (existing) {
+        return [
+          { ...existing, message, createdAt: new Date().toISOString(), count: existing.count + 1 },
+          ...prev.filter(error => error.id !== existing.id),
+        ];
+      }
+      return [{
+        id: `${Date.now()}-${normalizedTerm}`,
+        term,
+        message,
+        createdAt: new Date().toISOString(),
+        count: 1,
+      }, ...prev];
+    });
+  };
+
+  const clearBatchReadErrorForProduct = (product: StockLocationProductSearchResult, scannedTerm = '') => {
+    const matches = new Set([scannedTerm, product.ean, product.sku].map(normalizeReadTerm).filter(Boolean));
+    if (matches.size === 0) return;
+    setBatchReadErrors(prev => prev.filter(error => !matches.has(normalizeReadTerm(error.term))));
+  };
+
+  const getBatchProductIdentityKeys = (product: Pick<StockLocationProductSearchResult, 'id' | 'ean' | 'sku'>) =>
+    [product.ean, product.sku, product.id].map(normalizeReadTerm).filter(Boolean);
+
+  const hasBatchProductIdentityOverlap = (
+    left: Pick<StockLocationProductSearchResult, 'id' | 'ean' | 'sku'>,
+    right: Pick<StockLocationProductSearchResult, 'id' | 'ean' | 'sku'>
+  ) => {
+    const leftKeys = new Set(getBatchProductIdentityKeys(left));
+    return getBatchProductIdentityKeys(right).some(key => leftKeys.has(key));
+  };
+
+  const findBatchItemByProduct = (product: StockLocationProductSearchResult) =>
+    batchItems.find(item => hasBatchProductIdentityOverlap(item.product, product));
+
   useEffect(() => {
     loadData();
   }, [movementPeriodDays]);
@@ -163,6 +242,9 @@ export function StockLocationsPage() {
         const draft = JSON.parse(rawDraft);
         if (Array.isArray(draft?.items)) {
           setBatchItems(draft.items);
+        }
+        if (Array.isArray(draft?.readErrors)) {
+          setBatchReadErrors(draft.readErrors);
         }
         if (typeof draft?.toDepositId === 'string') setBatchToDepositId(draft.toDepositId);
         if (typeof draft?.toLocationId === 'string') setBatchToLocationId(draft.toLocationId);
@@ -180,7 +262,7 @@ export function StockLocationsPage() {
   useEffect(() => {
     if (!batchDraftLoaded) return;
 
-    const hasDraft = batchItems.length > 0 || batchToDepositId || batchToLocationId || batchToLocationSearch || batchReason || batchNotes;
+    const hasDraft = batchItems.length > 0 || batchReadErrors.length > 0 || batchToDepositId || batchToLocationId || batchToLocationSearch || batchReason || batchNotes;
     if (!hasDraft) {
       window.localStorage.removeItem(BATCH_TRANSFER_STORAGE_KEY);
       return;
@@ -188,13 +270,14 @@ export function StockLocationsPage() {
 
     window.localStorage.setItem(BATCH_TRANSFER_STORAGE_KEY, JSON.stringify({
       items: batchItems,
+      readErrors: batchReadErrors,
       toDepositId: batchToDepositId,
       toLocationId: batchToLocationId,
       toLocationSearch: batchToLocationSearch,
       reason: batchReason,
       notes: batchNotes,
     }));
-  }, [batchDraftLoaded, batchItems, batchToDepositId, batchToLocationId, batchToLocationSearch, batchReason, batchNotes]);
+  }, [batchDraftLoaded, batchItems, batchReadErrors, batchToDepositId, batchToLocationId, batchToLocationSearch, batchReason, batchNotes]);
 
   useEffect(() => {
     if (initialSearch) {
@@ -1019,22 +1102,55 @@ export function StockLocationsPage() {
     await addBatchItem(candidate);
   };
 
+  const handleBatchSearchEnterWithQueue = async () => {
+    const term = batchSearch.trim();
+    if (!term) return;
+    setBatchError(null);
+    let candidate = batchResults.find(r => r.ean === term)
+      || batchResults.find(r => r.sku === term)
+      || batchResults[0];
+
+    if (!candidate) {
+      try {
+        const fresh = await stockLocationService.searchProducts(term);
+        candidate = fresh.find(r => r.ean === term)
+          || fresh.find(r => r.sku === term)
+          || fresh[0];
+      } catch {
+        // Continua como erro de leitura para o operador reler depois.
+      }
+    }
+
+    if (!candidate) {
+      addBatchReadError(term, `Produto nao encontrado para "${term}".`);
+      playBatchErrorSound();
+      setBatchSearch('');
+      setBatchResults([]);
+      focusBatchSearchInput();
+      return;
+    }
+
+    await addBatchItem(candidate);
+    clearBatchReadErrorForProduct(candidate, term);
+  };
+
   const addBatchItem = async (product: StockLocationProductSearchResult) => {
     setBatchError(null);
-    const existingBatchItem = batchItems.find(i => i.product.id === product.id);
+    const existingBatchItem = findBatchItemByProduct(product);
     if (existingBatchItem) {
       setBatchItems(prev => {
-        const existing = prev.find(i => i.product.id === product.id);
+        const existing = prev.find(i => i.product.id === existingBatchItem.product.id);
         if (!existing) return prev;
         const incremented = {
           ...existing,
           quantity: String((Number(existing.quantity) || 0) + 1),
         };
-        const withoutExisting = prev.filter(i => i.product.id !== product.id);
+        const withoutExisting = prev.filter(i => i.product.id !== existingBatchItem.product.id);
         return [incremented, ...withoutExisting];
       });
       setBatchSearch('');
-      setBatchResults(prev => prev.filter(r => r.id !== product.id));
+      setBatchResults(prev => prev.filter(result => !hasBatchProductIdentityOverlap(result, product)));
+      focusBatchSearchInput();
       return;
     }
 
@@ -1055,7 +1171,8 @@ export function StockLocationsPage() {
       };
       setBatchItems(prev => [item, ...prev]);
       setBatchSearch('');
-      setBatchResults(prev => prev.filter(r => r.id !== product.id));
+      setBatchResults(prev => prev.filter(result => !hasBatchProductIdentityOverlap(result, product)));
+      focusBatchSearchInput();
     } catch (err: any) {
       setBatchError(err?.message || 'Erro ao adicionar produto ao lote.');
     }
@@ -2102,13 +2219,14 @@ export function StockLocationsPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
+              ref={batchSearchInputRef}
               type="search"
               value={batchSearch}
               onChange={(event) => setBatchSearch(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
-                  handleBatchSearchEnter();
+                  handleBatchSearchEnterWithQueue();
                 }
               }}
               placeholder="Bipar EAN, digitar SKU ou nome — Enter adiciona à lista"
@@ -2121,7 +2239,10 @@ export function StockLocationsPage() {
                   <button
                     key={product.id}
                     type="button"
-                    onClick={() => addBatchItem(product)}
+                    onClick={async () => {
+                      await addBatchItem(product);
+                      clearBatchReadErrorForProduct(product);
+                    }}
                     className="flex w-full items-start gap-3 border-b border-slate-100 px-3 py-3 text-left last:border-b-0 hover:bg-slate-50"
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
@@ -2143,6 +2264,42 @@ export function StockLocationsPage() {
               </div>
             )}
           </div>
+
+          {batchReadErrors.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold">Erros de leitura ({batchReadErrors.length})</p>
+                <button
+                  type="button"
+                  onClick={() => setBatchReadErrors([])}
+                  className="rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                >
+                  Limpar erros
+                </button>
+              </div>
+              <ul className="mt-2 divide-y divide-red-100">
+                {batchReadErrors.map((error) => (
+                  <li key={error.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs text-red-950">{error.term}</p>
+                      <p className="text-xs text-red-700">
+                        {error.message}
+                        {error.count > 1 ? ` · ${error.count} tentativas` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setBatchReadErrors(prev => prev.filter(item => item.id !== error.id))}
+                      className="shrink-0 rounded-lg p-1 text-red-500 hover:bg-red-100 hover:text-red-700"
+                      title="Remover erro"
+                    >
+                      <X size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Tabela de itens do lote */}
           {batchItems.length === 0 ? (
