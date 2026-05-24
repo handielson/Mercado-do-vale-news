@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowRightLeft, Boxes, Building2, Eye, FileDown, History, Loader2, MapPin, PackageSearch, Pencil, Plus, RefreshCw, RotateCcw, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, Boxes, Building2, ChevronDown, ChevronRight, Copy, Eye, FileDown, History, Loader2, MapPin, PackageSearch, Pencil, Plus, RefreshCw, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
@@ -13,6 +13,9 @@ import {
   StockLocationDivergence,
   StockLocationMovement,
   StockLocationProductSearchResult,
+  StockPathDeactivationCheck,
+  StockPathDeactivationItem,
+  StockPathDeactivationTarget,
 } from '../../../types/stock-location';
 
 export function StockLocationsPage() {
@@ -22,6 +25,7 @@ export function StockLocationsPage() {
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [divergences, setDivergences] = useState<StockLocationDivergence[]>([]);
   const [movements, setMovements] = useState<StockLocationMovement[]>([]);
+  const [movementPeriodDays, setMovementPeriodDays] = useState('7');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [depositOpen, setDepositOpen] = useState(false);
@@ -45,6 +49,8 @@ export function StockLocationsPage() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selectedDepositId, setSelectedDepositId] = useState<string>('all');
+  const [locationsExpanded, setLocationsExpanded] = useState(false);
+  const [divergencesExpanded, setDivergencesExpanded] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [productResults, setProductResults] = useState<StockLocationProductSearchResult[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<StockLocationProductSearchResult | null>(null);
@@ -79,6 +85,20 @@ export function StockLocationsPage() {
   const [transferError, setTransferError] = useState<string | null>(null);
   const [quickTransferDepositId, setQuickTransferDepositId] = useState('');
   const [quickTransferLocationId, setQuickTransferLocationId] = useState('');
+  const [deactivationOpen, setDeactivationOpen] = useState(false);
+  const [deactivationTarget, setDeactivationTarget] = useState<{
+    type: StockPathDeactivationTarget;
+    id: string;
+    name: string;
+    depositId?: string;
+  } | null>(null);
+  const [deactivationCheck, setDeactivationCheck] = useState<StockPathDeactivationCheck | null>(null);
+  const [deactivationSelectedProductIds, setDeactivationSelectedProductIds] = useState<string[]>([]);
+  const [deactivationToDepositId, setDeactivationToDepositId] = useState('');
+  const [deactivationToLocationId, setDeactivationToLocationId] = useState('');
+  const [deactivationLoading, setDeactivationLoading] = useState(false);
+  const [deactivationSaving, setDeactivationSaving] = useState(false);
+  const [deactivationError, setDeactivationError] = useState<string | null>(null);
 
   // Location-contents modal: mostra o que tem dentro de um local específico.
   const [contentsOpen, setContentsOpen] = useState(false);
@@ -102,15 +122,21 @@ export function StockLocationsPage() {
   const [batchResults, setBatchResults] = useState<StockLocationProductSearchResult[]>([]);
   const [batchToDepositId, setBatchToDepositId] = useState('');
   const [batchToLocationId, setBatchToLocationId] = useState('');
+  const [batchToLocationSearch, setBatchToLocationSearch] = useState('');
   const [batchReason, setBatchReason] = useState('');
   const [batchNotes, setBatchNotes] = useState('');
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
 
+  const formatLocationName = (value: string) =>
+    value.toLocaleLowerCase('pt-BR').replace(/(^|[\s\-/])(\p{L})/gu, (_, prefix: string, letter: string) =>
+      `${prefix}${letter.toLocaleUpperCase('pt-BR')}`
+    );
+
   useEffect(() => {
     loadData();
-  }, []);
+  }, [movementPeriodDays]);
 
   useEffect(() => {
     if (initialSearch) {
@@ -146,7 +172,7 @@ export function StockLocationsPage() {
         stockLocationService.listDeposits(),
         stockLocationService.listLocations(),
         stockLocationService.getStockDivergences(),
-        stockLocationService.listMovements({ limit: 20 }),
+        stockLocationService.listMovements(getMovementQueryFilters()),
       ]);
 
       setDeposits(depositData);
@@ -158,6 +184,44 @@ export function StockLocationsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getMovementQueryFilters = () => ({
+    limit: 80,
+    createdAfter: getMovementCreatedAfter(movementPeriodDays),
+  });
+
+  const copyMovementLog = async () => {
+    const text = buildMovementLogText(movements);
+    if (!text.trim()) {
+      toast.error('Nenhum log para copiar neste periodo.');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Log copiado.');
+    } catch (error) {
+      toast.error('Nao foi possivel copiar o log.');
+    }
+  };
+
+  const downloadMovementLogTxt = () => {
+    const text = buildMovementLogText(movements);
+    if (!text.trim()) {
+      toast.error('Nenhum log para baixar neste periodo.');
+      return;
+    }
+
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `stock-location-log-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const openDepositModal = () => {
@@ -175,7 +239,7 @@ export function StockLocationsPage() {
   const openEditDepositModal = (deposit: StockDeposit) => {
     setEditingDepositId(deposit.id);
     setDepositName(deposit.name || '');
-    setDepositCode(deposit.code || '');
+    setDepositCode('');
     setDepositType(deposit.type || 'warehouse');
     setDepositCep(deposit.cep || '');
     setDepositAddress(deposit.address || '');
@@ -206,7 +270,7 @@ export function StockLocationsPage() {
     setEditingLocationId(location.id);
     setLocationDepositId(location.deposit_id || '');
     setLocationName(location.name || '');
-    setLocationCode(location.code || '');
+    setLocationCode('');
     setLocationDescription(location.description || '');
     setLocationDefault(Boolean(location.is_default));
     setLocationError(null);
@@ -216,6 +280,71 @@ export function StockLocationsPage() {
   const closeLocationModal = () => {
     if (locationSaving) return;
     setLocationOpen(false);
+  };
+
+  const pickDeactivationDestination = (excludeDepositId?: string, excludeLocationId?: string) => {
+    const targetLocation =
+      locations.find((location) => location.is_active && location.id !== excludeLocationId && location.deposit_id !== excludeDepositId) ||
+      locations.find((location) => location.is_active && location.id !== excludeLocationId);
+
+    return {
+      depositId: targetLocation?.deposit_id || '',
+      locationId: targetLocation?.id || '',
+    };
+  };
+
+  const loadDeactivationCheck = async (target = deactivationTarget) => {
+    if (!target) return;
+
+    setDeactivationLoading(true);
+    setDeactivationError(null);
+    try {
+      const check = target.type === 'deposit'
+        ? await stockLocationService.getDepositDeactivationCheck(target.id)
+        : await stockLocationService.getLocationDeactivationCheck(target.id);
+
+      setDeactivationCheck(check);
+      setDeactivationSelectedProductIds(check.pending_items.map((item) => item.product_id));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Nao foi possivel carregar os produtos pendentes.';
+      setDeactivationError(message);
+      toast.error(message);
+    } finally {
+      setDeactivationLoading(false);
+    }
+  };
+
+  const openDepositDeactivation = async (deposit: StockDeposit) => {
+    const target = { type: 'deposit' as const, id: deposit.id, name: deposit.name, depositId: deposit.id };
+    const destination = pickDeactivationDestination(deposit.id);
+
+    setDeactivationTarget(target);
+    setDeactivationCheck(null);
+    setDeactivationSelectedProductIds([]);
+    setDeactivationToDepositId(destination.depositId);
+    setDeactivationToLocationId(destination.locationId);
+    setDeactivationError(null);
+    setDeactivationOpen(true);
+    await loadDeactivationCheck(target);
+  };
+
+  const openLocationDeactivation = async (location: StockLocation) => {
+    const target = { type: 'location' as const, id: location.id, name: location.name, depositId: location.deposit_id };
+    const destination = pickDeactivationDestination(undefined, location.id);
+
+    setDeactivationTarget(target);
+    setDeactivationCheck(null);
+    setDeactivationSelectedProductIds([]);
+    setDeactivationToDepositId(destination.depositId);
+    setDeactivationToLocationId(destination.locationId);
+    setDeactivationError(null);
+    setDeactivationOpen(true);
+    await loadDeactivationCheck(target);
+  };
+
+  const closeDeactivationModal = () => {
+    if (deactivationSaving) return;
+    setDeactivationOpen(false);
   };
 
   const submitDeposit = async (event: React.FormEvent) => {
@@ -703,16 +832,29 @@ export function StockLocationsPage() {
 
   const handleBatchToDepositChange = (depositId: string) => {
     setBatchToDepositId(depositId);
-    const first = locations.find((l) => l.deposit_id === depositId);
-    setBatchToLocationId(first?.id || '');
+    setBatchToLocationId('');
+    setBatchToLocationSearch('');
   };
 
-  const getBatchFallbackSource = () => {
+  const batchDestinationLocations = useMemo(() => {
+    return locations
+      .filter((location) => !batchToDepositId || location.deposit_id === batchToDepositId)
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+  }, [batchToDepositId, locations]);
+
+  const handleBatchToLocationSearchChange = (value: string) => {
+    setBatchToLocationSearch(value);
+    const selected = batchDestinationLocations.find((location) => location.name === value || location.code === value);
+    setBatchToLocationId(selected?.id || '');
+  };
+
+  const getBatchFallbackSource = (excludeLocationId = '') => {
     const defaultDepositId = deposits.find((deposit) => deposit.is_default)?.id || deposits[0]?.id || '';
+    const sourceLocations = locations.filter((location) => location.is_active && location.id !== excludeLocationId);
     const fallbackLocation =
-      locations.find((location) => location.deposit_id === defaultDepositId && location.is_default) ||
-      locations.find((location) => location.deposit_id === defaultDepositId) ||
-      locations[0];
+      sourceLocations.find((location) => location.deposit_id === defaultDepositId && location.is_default) ||
+      sourceLocations.find((location) => location.deposit_id === defaultDepositId) ||
+      sourceLocations[0];
 
     if (!fallbackLocation) return null;
 
@@ -735,22 +877,36 @@ export function StockLocationsPage() {
       .sort((a, b) => getDistributionAvailable(b) - getDistributionAvailable(a));
   };
 
+  const getBatchUndistributedQuantity = (item: BatchItem) => {
+    const productStockQuantity = Math.max(0, Math.trunc(Number(item.product.stock_quantity || 0)));
+    const localStockQuantity = item.distribution.reduce((sum, source) => sum + Math.max(0, Number(source.quantity || 0)), 0);
+    return Math.max(0, productStockQuantity - localStockQuantity);
+  };
+
   const getBatchTransferAvailable = (item: BatchItem, toLocationId = batchToLocationId) => {
-    return getBatchTransferSources(item, toLocationId)
+    const sourceAvailable = getBatchTransferSources(item, toLocationId)
       .reduce((sum, source) => sum + getDistributionAvailable(source), 0);
+    return sourceAvailable + getBatchUndistributedQuantity(item);
   };
 
   const materializeBatchItemDistribution = async (
     product: StockLocationProductSearchResult,
-    distribution: ProductStockLocation[]
+    distribution: ProductStockLocation[],
+    requestedQuantity: number,
+    toLocationId = batchToLocationId
   ) => {
     const productStockQuantity = Math.max(0, Math.trunc(Number(product.stock_quantity || 0)));
     const localStockQuantity = distribution.reduce((sum, source) => sum + Math.max(0, Number(source.quantity || 0)), 0);
+    const transferableAvailableQuantity = distribution
+      .filter((source) => source.location_id !== toLocationId)
+      .reduce((sum, source) => sum + getDistributionAvailable(source), 0);
     const missingQuantity = Math.max(0, productStockQuantity - localStockQuantity);
+    const neededQuantity = Math.max(0, Math.trunc(Number(requestedQuantity || 0)) - transferableAvailableQuantity);
+    const quantityToMaterialize = Math.min(missingQuantity, neededQuantity);
 
-    if (missingQuantity <= 0) return distribution;
+    if (quantityToMaterialize <= 0) return distribution;
 
-    const fallbackSource = getBatchFallbackSource();
+    const fallbackSource = getBatchFallbackSource(toLocationId);
     if (!fallbackSource) return distribution;
 
     const existingFallback = distribution.find((source) => source.location_id === fallbackSource.locationId);
@@ -758,9 +914,9 @@ export function StockLocationsPage() {
       product_id: product.id,
       deposit_id: fallbackSource.depositId,
       location_id: fallbackSource.locationId,
-      quantity: Number(existingFallback?.quantity || 0) + missingQuantity,
+      quantity: Number(existingFallback?.quantity || 0) + quantityToMaterialize,
       reason: 'Distribuição automática para transferência em lote',
-      notes: 'Saldo total do produto existia sem local suficiente; materializado antes da transferência.',
+      notes: `Saldo total do produto existia sem local suficiente; materializado somente ${quantityToMaterialize} unidade(s) solicitada(s) antes da transferência.`,
     });
 
     return stockLocationService.getProductStockDistribution(product.id);
@@ -775,8 +931,6 @@ export function StockLocationsPage() {
     const term = batchSearch.trim();
     if (!term) return;
     setBatchError(null);
-    const existingIds = new Set(batchItems.map(i => i.product.id));
-
     let candidate = batchResults.find(r => r.ean === term)
       || batchResults.find(r => r.sku === term)
       || batchResults[0];
@@ -784,8 +938,7 @@ export function StockLocationsPage() {
     if (!candidate) {
       // Resultados ainda não chegaram (scan mais rápido que o debounce de 300ms)
       try {
-        const fresh = (await stockLocationService.searchProducts(term))
-          .filter(r => !existingIds.has(r.id));
+        const fresh = await stockLocationService.searchProducts(term);
         candidate = fresh.find(r => r.ean === term)
           || fresh.find(r => r.sku === term)
           || fresh[0];
@@ -804,9 +957,25 @@ export function StockLocationsPage() {
 
   const addBatchItem = async (product: StockLocationProductSearchResult) => {
     setBatchError(null);
+    const existingBatchItem = batchItems.find(i => i.product.id === product.id);
+    if (existingBatchItem) {
+      setBatchItems(prev => {
+        const existing = prev.find(i => i.product.id === product.id);
+        if (!existing) return prev;
+        const incremented = {
+          ...existing,
+          quantity: String((Number(existing.quantity) || 0) + 1),
+        };
+        const withoutExisting = prev.filter(i => i.product.id !== product.id);
+        return [incremented, ...withoutExisting];
+      });
+      setBatchSearch('');
+      setBatchResults(prev => prev.filter(r => r.id !== product.id));
+      return;
+    }
+
     try {
-      let distribution = await stockLocationService.getProductStockDistribution(product.id);
-      distribution = await materializeBatchItemDistribution(product, distribution);
+      const distribution = await stockLocationService.getProductStockDistribution(product.id);
       const best = [...distribution]
         .filter(d => d.quantity - d.reserved_quantity > 0)
         .sort((a, b) => (b.quantity - b.reserved_quantity) - (a.quantity - a.reserved_quantity))[0]
@@ -817,10 +986,10 @@ export function StockLocationsPage() {
         fromDepositId: best?.deposit_id || '',
         fromLocationId: best?.location_id || '',
         available,
-        quantity: String(available),
+        quantity: '1',
         distribution,
       };
-      setBatchItems(prev => [...prev, item]);
+      setBatchItems(prev => [item, ...prev]);
       setBatchSearch('');
       setBatchResults(prev => prev.filter(r => r.id !== product.id));
     } catch (err: any) {
@@ -843,6 +1012,21 @@ export function StockLocationsPage() {
     }));
   };
 
+  const decrementBatchItemQuantity = (productId: string) => {
+    setBatchItems(prev => prev.map(item => {
+      if (item.product.id !== productId) return item;
+      const quantity = Math.max(1, (Number(item.quantity) || 1) - 1);
+      return { ...item, quantity: String(quantity) };
+    }));
+  };
+
+  const incrementBatchItemQuantity = (productId: string) => {
+    setBatchItems(prev => prev.map(item => {
+      if (item.product.id !== productId) return item;
+      return { ...item, quantity: String((Number(item.quantity) || 0) + 1) };
+    }));
+  };
+
   const submitBatchTransfer = async () => {
     setBatchError(null);
     if (batchItems.length === 0) {
@@ -853,7 +1037,33 @@ export function StockLocationsPage() {
       setBatchError('Selecione o depósito e o local de destino.');
       return;
     }
-    const invalidOverAvailable = batchItems.find((item) => {
+
+    let preparedBatchItems = batchItems;
+    try {
+      preparedBatchItems = await Promise.all(batchItems.map(async (item) => {
+        const quantity = Number(item.quantity);
+        if (!Number.isFinite(quantity) || quantity <= 0) return item;
+
+        let distribution = item.distribution;
+        const transferableSourceAvailable = getBatchTransferSources(item, batchToLocationId)
+          .reduce((sum, source) => sum + getDistributionAvailable(source), 0);
+        if (quantity > transferableSourceAvailable) {
+          distribution = await materializeBatchItemDistribution(item.product, distribution, quantity, batchToLocationId);
+        }
+
+        const nextItem = { ...item, distribution };
+        return {
+          ...nextItem,
+          available: getBatchTransferAvailable(nextItem, batchToLocationId),
+        };
+      }));
+      setBatchItems(preparedBatchItems);
+    } catch (err: any) {
+      setBatchError(err?.message || 'Nao foi possivel preparar as origens do lote.');
+      return;
+    }
+
+    const invalidOverAvailable = preparedBatchItems.find((item) => {
       const qty = Number(item.quantity);
       const available = getBatchTransferAvailable(item, batchToLocationId);
       return Number.isFinite(qty) && qty > available;
@@ -863,7 +1073,7 @@ export function StockLocationsPage() {
       return;
     }
 
-    const transferRequests = batchItems.flatMap((item) => {
+    const transferRequests = preparedBatchItems.flatMap((item) => {
       let remainingQuantity = Number(item.quantity);
       if (!Number.isFinite(remainingQuantity) || remainingQuantity <= 0) return [];
 
@@ -916,9 +1126,105 @@ export function StockLocationsPage() {
       setBatchItems([]);
       setBatchReason('');
       setBatchNotes('');
+      setBatchToLocationId('');
+      setBatchToLocationSearch('');
       setBatchProgress(null);
       // Recarrega divergências/movimentos
       loadData();
+    }
+  };
+
+  const transferDeactivationItems = async (mode: 'selected' | 'all') => {
+    if (!deactivationTarget || !deactivationCheck) return;
+
+    const selectedIds = new Set(deactivationSelectedProductIds);
+    const items = deactivationCheck.pending_items.filter((item) => mode === 'all' || selectedIds.has(item.product_id));
+
+    if (items.length === 0) {
+      setDeactivationError('Selecione pelo menos um produto para transferir.');
+      return;
+    }
+
+    if (!deactivationToDepositId || !deactivationToLocationId) {
+      setDeactivationError('Selecione o deposito e o local de destino.');
+      return;
+    }
+
+    const sameLocation = items.find((item) => item.location_id === deactivationToLocationId);
+    if (sameLocation) {
+      setDeactivationError('O destino precisa ser diferente do local que sera desativado.');
+      return;
+    }
+
+    const reservedItem = items.find((item) => item.available < item.quantity);
+    if (reservedItem) {
+      setDeactivationError(`O produto ${reservedItem.sku || reservedItem.product_name} tem saldo reservado. Libere a reserva antes de desativar.`);
+      return;
+    }
+
+    setDeactivationSaving(true);
+    setDeactivationError(null);
+
+    const failed: { item: StockPathDeactivationItem; error: string }[] = [];
+    for (const item of items) {
+      try {
+        await stockLocationService.transferStockLocation({
+          product_id: item.product_id,
+          from_deposit_id: item.deposit_id,
+          from_location_id: item.location_id,
+          to_deposit_id: deactivationToDepositId,
+          to_location_id: deactivationToLocationId,
+          quantity: item.quantity,
+          reason: deactivationTarget.type === 'deposit' ? 'Transferencia para desativacao de deposito' : 'Transferencia para desativacao de local',
+          notes: `Transferencia obrigatoria antes de desativar ${deactivationTarget.name}`,
+        });
+      } catch (error) {
+        failed.push({ item, error: error instanceof Error ? error.message : 'falha' });
+      }
+    }
+
+    setDeactivationSaving(false);
+
+    if (failed.length > 0) {
+      const message = `${items.length - failed.length} transferencia(s) ok, ${failed.length} falharam: ${failed.slice(0, 3).map(({ item }) => item.sku || item.product_name).join(', ')}`;
+      setDeactivationError(message);
+      toast.error(message);
+    } else {
+      toast.success(`${items.length} produto(s) transferido(s) com sucesso.`);
+    }
+
+    await Promise.all([
+      loadDeactivationCheck(deactivationTarget),
+      loadData(),
+    ]);
+  };
+
+  const confirmDeactivation = async () => {
+    if (!deactivationTarget || !deactivationCheck) return;
+
+    if (!deactivationCheck.can_deactivate) {
+      setDeactivationError('Produtos pendentes precisam ser transferidos antes de desativar.');
+      return;
+    }
+
+    setDeactivationSaving(true);
+    setDeactivationError(null);
+    try {
+      if (deactivationTarget.type === 'deposit') {
+        await stockLocationService.deactivateDeposit(deactivationTarget.id);
+      } else {
+        await stockLocationService.deactivateLocation(deactivationTarget.id);
+      }
+
+      toast.success(`${deactivationTarget.type === 'deposit' ? 'Deposito' : 'Local'} desativado com sucesso.`);
+      setDeactivationOpen(false);
+      await loadData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Nao foi possivel desativar.';
+      setDeactivationError(message);
+      toast.error(message);
+    } finally {
+      setDeactivationSaving(false);
     }
   };
 
@@ -1034,7 +1340,7 @@ export function StockLocationsPage() {
       }
 
       await Promise.all([
-        stockLocationService.listMovements({ limit: 20 }).then(setMovements),
+        stockLocationService.listMovements(getMovementQueryFilters()).then(setMovements),
         stockLocationService.getStockDivergences().then(setDivergences),
       ]);
 
@@ -1126,7 +1432,7 @@ export function StockLocationsPage() {
 
       const [distribution] = await Promise.all([
         loadProductDistribution(selectedProduct.id),
-        stockLocationService.listMovements({ limit: 20 }).then(setMovements),
+        stockLocationService.listMovements(getMovementQueryFilters()).then(setMovements),
         stockLocationService.getStockDivergences().then(setDivergences),
       ]);
 
@@ -1178,7 +1484,7 @@ export function StockLocationsPage() {
 
       const [distribution] = await Promise.all([
         loadProductDistribution(selectedProduct.id),
-        stockLocationService.listMovements({ limit: 20 }).then(setMovements),
+        stockLocationService.listMovements(getMovementQueryFilters()).then(setMovements),
         stockLocationService.getStockDivergences().then(setDivergences),
       ]);
 
@@ -1203,6 +1509,15 @@ export function StockLocationsPage() {
   const transferSourceAvailable = transferSourceDistribution
     ? transferSourceDistribution.quantity - transferSourceDistribution.reserved_quantity
     : 0;
+  const deactivationTargetLocations = locations.filter((location) => {
+    if (!location.is_active) return false;
+    if (deactivationTarget?.type === 'deposit' && location.deposit_id === deactivationTarget.id) return false;
+    if (deactivationTarget?.type === 'location' && location.id === deactivationTarget.id) return false;
+    return true;
+  });
+  const deactivationPendingItems = deactivationCheck?.pending_items || [];
+  const deactivationAllSelected = deactivationPendingItems.length > 0 &&
+    deactivationPendingItems.every((item) => deactivationSelectedProductIds.includes(item.product_id));
 
   const submitTransfer = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -1248,7 +1563,7 @@ export function StockLocationsPage() {
 
       await Promise.all([
         loadProductDistribution(selectedProduct.id),
-        stockLocationService.listMovements({ limit: 20 }).then(setMovements),
+        stockLocationService.listMovements(getMovementQueryFilters()).then(setMovements),
         stockLocationService.getStockDivergences().then(setDivergences),
       ]);
 
@@ -1367,6 +1682,14 @@ export function StockLocationsPage() {
                       >
                         <Pencil size={14} />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => openDepositDeactivation(deposit)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-white text-red-600 transition hover:border-red-300 hover:bg-red-50"
+                        title="Desativar deposito"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1377,12 +1700,20 @@ export function StockLocationsPage() {
 
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div className="min-w-0">
                 <h2 className="text-lg font-bold text-slate-900">Locais internos</h2>
                 <p className="mt-1 text-sm text-slate-500">Prateleiras, balcões, caixas e posições dentro dos depósitos.</p>
               </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={() => setLocationsExpanded((prev) => !prev)}
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                >
+                  {locationsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  {locationsExpanded ? 'Ocultar locais' : `Mostrar locais (${filteredLocations.length})`}
+                </button>
                 <button
                   type="button"
                   onClick={() => openLocationModal()}
@@ -1392,6 +1723,11 @@ export function StockLocationsPage() {
                   <Plus size={16} />
                   Novo local
                 </button>
+              </div>
+            </div>
+
+            {locationsExpanded && (
+              <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <input
@@ -1399,7 +1735,7 @@ export function StockLocationsPage() {
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Buscar local..."
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-64"
+                    className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
                 <select
@@ -1413,9 +1749,10 @@ export function StockLocationsPage() {
                   ))}
                 </select>
               </div>
-            </div>
+            )}
           </div>
 
+          {locationsExpanded ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-left text-sm">
               <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -1467,6 +1804,15 @@ export function StockLocationsPage() {
                           <Eye size={14} />
                           Ver conteúdo
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => openLocationDeactivation(location)}
+                          className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-50"
+                          title="Desativar local"
+                        >
+                          <Trash2 size={14} />
+                          Excluir
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -1474,6 +1820,11 @@ export function StockLocationsPage() {
               </tbody>
             </table>
           </div>
+          ) : (
+            <div className="border-t border-slate-100 p-5 text-sm text-slate-500">
+              {filteredLocations.length} locais ocultos. Clique em Mostrar locais para consultar, editar ou ver conteudo.
+            </div>
+          )}
         </section>
       </div>
 
@@ -1768,21 +2119,33 @@ export function StockLocationsPage() {
                         </td>
                         <td className="px-3 py-3 text-right font-semibold text-emerald-700">{transferAvailable}</td>
                         <td className="px-3 py-3">
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => decrementBatchItemQuantity(item.product.id)}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-base font-bold text-slate-700 transition hover:bg-slate-50"
+                              aria-label="Diminuir quantidade"
+                              title="Diminuir quantidade"
+                            >
+                              -
+                            </button>
                             <input
                               type="number"
                               min="1"
                               step="1"
                               value={item.quantity}
                               onChange={(e) => updateBatchItem(item.product.id, { quantity: e.target.value })}
-                              className="h-9 w-20 rounded-lg border border-slate-200 bg-white px-2 text-sm text-center"
+                              onFocus={(e) => e.target.select()}
+                              className="h-9 w-16 rounded-lg border border-slate-200 bg-white px-2 text-sm text-center outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                             />
                             <button
                               type="button"
-                              onClick={() => updateBatchItem(item.product.id, { quantity: '1' })}
-                              className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              onClick={() => incrementBatchItemQuantity(item.product.id)}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-base font-bold text-slate-700 transition hover:bg-slate-50"
+                              aria-label="Aumentar quantidade"
+                              title="Aumentar quantidade"
                             >
-                              1
+                              +
                             </button>
                             <button
                               type="button"
@@ -1842,16 +2205,20 @@ export function StockLocationsPage() {
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold text-slate-600">Local de destino</span>
-                  <select
-                    value={batchToLocationId}
-                    onChange={(e) => setBatchToLocationId(e.target.value)}
+                  <input
+                    type="text"
+                    value={batchToLocationSearch}
+                    onChange={(e) => handleBatchToLocationSearchChange(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    list="batch-destination-locations"
+                    placeholder="Digite ou selecione o local"
                     className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
-                  >
-                    <option value="">Selecione</option>
-                    {locations.filter(l => !batchToDepositId || l.deposit_id === batchToDepositId).map((l) => (
-                      <option key={l.id} value={l.id}>{l.name}</option>
+                  />
+                  <datalist id="batch-destination-locations">
+                    {batchDestinationLocations.map((l) => (
+                      <option key={l.id} value={l.name}>{l.code}</option>
                     ))}
-                  </select>
+                  </datalist>
                 </label>
               </div>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1905,14 +2272,32 @@ export function StockLocationsPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 p-5">
-          <h2 className="text-lg font-bold text-slate-900">Divergências</h2>
-          <p className="mt-1 text-sm text-slate-500">Produtos cuja soma por local está diferente do estoque total atual.</p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Divergências</h2>
+              <p className="mt-1 text-sm text-slate-500">Produtos cuja soma por local está diferente do estoque total atual.</p>
+            </div>
+            {divergences.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setDivergencesExpanded((prev) => !prev)}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+              >
+                {divergencesExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                {divergencesExpanded ? 'Ocultar divergencias' : `Mostrar divergencias (${divergences.length})`}
+              </button>
+            )}
+          </div>
         </div>
 
         {loading ? (
           <LoadingBlock label="Carregando divergências..." />
         ) : divergences.length === 0 ? (
           <EmptyBlock label="Nenhuma divergência encontrada." />
+        ) : !divergencesExpanded ? (
+          <div className="p-5 text-sm text-slate-500">
+            {divergences.length} divergencias ocultas. Clique em Mostrar divergencias para conferir os produtos.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
@@ -1943,13 +2328,37 @@ export function StockLocationsPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 p-5">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
               <History size={20} />
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">Histórico de movimentações</h2>
               <p className="mt-1 text-sm text-slate-500">Últimos registros auditáveis de estoque por depósito/local.</p>
+            </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={movementPeriodDays}
+                onChange={(event) => setMovementPeriodDays(event.target.value)}
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                aria-label="Periodo do historico"
+              >
+                <option value="1">Hoje</option>
+                <option value="7">7 dias</option>
+                <option value="30">30 dias</option>
+                <option value="90">90 dias</option>
+                <option value="all">Tudo</option>
+              </select>
+              <button type="button" onClick={copyMovementLog} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                <Copy size={15} />
+                Copiar log
+              </button>
+              <button type="button" onClick={downloadMovementLogTxt} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                <FileDown size={15} />
+                Baixar TXT
+              </button>
             </div>
           </div>
         </div>
@@ -1966,6 +2375,7 @@ export function StockLocationsPage() {
                   <th className="px-5 py-3">Data</th>
                   <th className="px-5 py-3">Tipo</th>
                   <th className="px-5 py-3">Produto</th>
+                  <th className="px-5 py-3">Caminho</th>
                   <th className="px-5 py-3 text-right">Qtd.</th>
                   <th className="px-5 py-3">Motivo</th>
                   <th className="px-5 py-3">Referência</th>
@@ -1980,7 +2390,8 @@ export function StockLocationsPage() {
                         {formatMovementType(movement.movement_type)}
                       </span>
                     </td>
-                    <td className="px-5 py-4 font-mono text-xs text-slate-600">{movement.product_id}</td>
+                    <td className="px-5 py-4 text-sm text-slate-700">{formatMovementProduct(movement)}</td>
+                    <td className="px-5 py-4 text-xs text-slate-600">{formatMovementPath(movement)}</td>
                     <td className="px-5 py-4 text-right font-bold text-slate-900">{movement.quantity}</td>
                     <td className="px-5 py-4 text-slate-700">{movement.reason}</td>
                     <td className="px-5 py-4 text-xs text-slate-500">
@@ -2041,7 +2452,7 @@ export function StockLocationsPage() {
                     type="text"
                     value={depositCode}
                     onChange={(event) => setDepositCode(event.target.value)}
-                    placeholder="Automatico se vazio"
+                    placeholder={editingDepositId ? 'Automático pelo nome' : 'Automatico se vazio'}
                     className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm uppercase outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                   />
                 </label>
@@ -2166,7 +2577,7 @@ export function StockLocationsPage() {
                   <input
                     type="text"
                     value={locationName}
-                    onChange={(event) => setLocationName(event.target.value)}
+                    onChange={(event) => setLocationName(formatLocationName(event.target.value))}
                     placeholder="Ex.: Prateleira 1"
                     className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     required
@@ -2179,7 +2590,7 @@ export function StockLocationsPage() {
                     type="text"
                     value={locationCode}
                     onChange={(event) => setLocationCode(event.target.value)}
-                    placeholder="Automatico se vazio"
+                    placeholder={editingLocationId ? 'Automático pelo nome' : 'Automatico se vazio'}
                     className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm uppercase outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                   />
                 </label>
@@ -2639,6 +3050,151 @@ export function StockLocationsPage() {
       )}
 
       {/* Modal: Conteúdo do local */}
+      {deactivationOpen && deactivationTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Desativar {deactivationTarget.type === 'deposit' ? 'depósito' : 'local'}
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {deactivationTarget.name} ficará como Desativado no histórico. Para concluir, todos os produtos precisam sair deste caminho.
+                </p>
+              </div>
+              <button type="button" onClick={closeDeactivationModal} className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100" aria-label="Fechar">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {deactivationError && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{deactivationError}</div>
+              )}
+
+              {deactivationLoading ? (
+                <LoadingBlock label="Conferindo produtos pendentes..." />
+              ) : deactivationPendingItems.length === 0 ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                  Nenhum produto pendente. Este caminho ja pode ser desativado.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    <p className="font-semibold">Produtos pendentes</p>
+                    <p className="mt-1">Transfira todos os itens abaixo para outro local antes de desativar.</p>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="block text-sm">
+                      <span className="mb-1 block font-semibold text-slate-700">Depósito de destino</span>
+                      <select
+                        value={deactivationToDepositId}
+                        onChange={(event) => {
+                          const depositId = event.target.value;
+                          const firstLocation = deactivationTargetLocations.find((location) => location.deposit_id === depositId);
+                          setDeactivationToDepositId(depositId);
+                          setDeactivationToLocationId(firstLocation?.id || '');
+                        }}
+                        className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="">Selecione...</option>
+                        {deposits
+                          .filter((deposit) => deactivationTargetLocations.some((location) => location.deposit_id === deposit.id))
+                          .map((deposit) => (
+                            <option key={deposit.id} value={deposit.id}>{deposit.name}</option>
+                          ))}
+                      </select>
+                    </label>
+
+                    <label className="block text-sm">
+                      <span className="mb-1 block font-semibold text-slate-700">Local de destino</span>
+                      <select value={deactivationToLocationId} onChange={(event) => setDeactivationToLocationId(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                        <option value="">Selecione...</option>
+                        {deactivationTargetLocations
+                          .filter((location) => !deactivationToDepositId || location.deposit_id === deactivationToDepositId)
+                          .map((location) => (
+                            <option key={location.id} value={location.id}>{location.name}</option>
+                          ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="w-full min-w-[720px] text-left text-sm">
+                      <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-3 py-3">
+                            <input
+                              type="checkbox"
+                              checked={deactivationAllSelected}
+                              onChange={(event) => {
+                                setDeactivationSelectedProductIds(event.target.checked
+                                  ? deactivationPendingItems.map((item) => item.product_id)
+                                  : []);
+                              }}
+                            />
+                          </th>
+                          <th className="px-3 py-3">Produto</th>
+                          <th className="px-3 py-3">Origem</th>
+                          <th className="px-3 py-3 text-right">Físico</th>
+                          <th className="px-3 py-3 text-right">Reservado</th>
+                          <th className="px-3 py-3 text-right">Disponível</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {deactivationPendingItems.map((item) => (
+                          <tr key={`${item.product_id}-${item.location_id}`} className="hover:bg-slate-50">
+                            <td className="px-3 py-3">
+                              <input
+                                type="checkbox"
+                                checked={deactivationSelectedProductIds.includes(item.product_id)}
+                                onChange={(event) => {
+                                  setDeactivationSelectedProductIds((current) => event.target.checked
+                                    ? Array.from(new Set([...current, item.product_id]))
+                                    : current.filter((id) => id !== item.product_id));
+                                }}
+                              />
+                            </td>
+                            <td className="px-3 py-3">
+                              <p className="font-semibold text-slate-900">{item.product_name}</p>
+                              <p className="text-xs text-slate-500">{item.sku || item.ean || '-'}</p>
+                            </td>
+                            <td className="px-3 py-3 text-slate-600">{item.deposit_name || '-'} / {item.location_name || '-'}</td>
+                            <td className="px-3 py-3 text-right font-semibold">{item.quantity}</td>
+                            <td className="px-3 py-3 text-right text-slate-600">{item.reserved_quantity}</td>
+                            <td className="px-3 py-3 text-right font-bold text-emerald-700">{item.available}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+              {deactivationPendingItems.length > 0 && (
+                <>
+                  <button type="button" onClick={() => transferDeactivationItems('selected')} disabled={deactivationSaving || deactivationSelectedProductIds.length === 0} className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+                    {deactivationSaving && <Loader2 size={16} className="animate-spin" />}
+                    Transferir selecionados
+                  </button>
+                  <button type="button" onClick={() => transferDeactivationItems('all')} disabled={deactivationSaving} className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">
+                    {deactivationSaving && <Loader2 size={16} className="animate-spin" />}
+                    Transferir todos
+                  </button>
+                </>
+              )}
+              <button type="button" onClick={confirmDeactivation} disabled={deactivationSaving || deactivationLoading || deactivationPendingItems.length > 0} className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300">
+                {deactivationSaving && <Loader2 size={16} className="animate-spin" />}
+                Confirmar desativação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {contentsOpen && contentsLocation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onClick={closeLocationContents}>
           <div
@@ -2836,4 +3392,72 @@ function formatMovementDate(value: string): string {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(new Date(value));
+}
+
+function formatMovementProduct(movement: StockLocationMovement): string {
+  const product = movement.product;
+  if (!product) return movement.product_id;
+
+  // Nome | Variação | SKU
+  const specs = product.specs || {};
+  const variation = [
+    specs.variation,
+    specs.variant,
+    specs.color,
+    specs.ram,
+    specs.storage,
+  ]
+    .filter(Boolean)
+    .map(String)
+    .join(' ');
+
+  return [
+    product.name || '(sem nome)',
+    variation || '-',
+    product.sku || '-',
+  ].join(' | ');
+}
+
+function formatMovementPath(movement: StockLocationMovement): string {
+  const from = formatMovementPlace(movement.from_deposit, movement.from_location);
+  const to = formatMovementPlace(movement.to_deposit, movement.to_location);
+
+  if (from === '-' && to === '-') return '-';
+  return `${from} -> ${to}`;
+}
+
+function formatMovementPlace(
+  deposit?: StockLocationMovement['from_deposit'],
+  location?: StockLocationMovement['from_location']
+): string {
+  const parts = [deposit?.name, location?.name].filter(Boolean);
+  return parts.length > 0 ? parts.join(' / ') : '-';
+}
+
+function getMovementCreatedAfter(periodDays: string): string | undefined {
+  if (periodDays === 'all') return undefined;
+
+  const days = Number(periodDays);
+  if (!Number.isFinite(days) || days <= 0) return undefined;
+
+  const start = new Date();
+  start.setDate(start.getDate() - days);
+  return start.toISOString();
+}
+
+function buildMovementLogText(movements: StockLocationMovement[]): string {
+  if (movements.length === 0) return '';
+
+  const header = 'Data\tTipo\tProduto\tCaminho\tQtd.\tMotivo\tReferencia';
+  const rows = movements.map((movement) => [
+    formatMovementDate(movement.created_at),
+    formatMovementType(movement.movement_type),
+    formatMovementProduct(movement),
+    formatMovementPath(movement),
+    movement.quantity,
+    movement.reason || '-',
+    `${movement.reference_type || '-'}${movement.reference_id ? ` / ${movement.reference_id}` : ''}`,
+  ].join('\t'));
+
+  return [header, ...rows].join('\n');
 }
