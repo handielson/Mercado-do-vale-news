@@ -1172,7 +1172,10 @@ export function StockLocationsPage() {
       const distribution = await stockLocationService.getProductStockDistribution(product.id);
       const available = distribution.reduce((sum, source) => sum + getDistributionAvailable(source), 0);
       const availableSources = distribution.filter(source => getDistributionAvailable(source) > 0);
-      const defaultSource = availableSources.length === 1 ? availableSources[0] : null;
+      const productStockQuantity = Math.max(0, Math.trunc(Number(product.stock_quantity || 0)));
+      const localStockQuantity = distribution.reduce((sum, source) => sum + Math.max(0, Number(source.quantity || 0)), 0);
+      const undistributedQuantity = Math.max(0, productStockQuantity - localStockQuantity);
+      const defaultSource = availableSources.length === 1 && undistributedQuantity <= 0 ? availableSources[0] : null;
       const item: BatchItem = {
         product,
         fromDepositId: defaultSource?.deposit_id || '',
@@ -2335,6 +2338,7 @@ export function StockLocationsPage() {
                       .filter((source) => source.location_id !== batchToLocationId && getDistributionAvailable(source) > 0)
                       .sort((a, b) => getDistributionAvailable(b) - getDistributionAvailable(a));
                     const selectedOriginLocationId = item.fromLocationId || '';
+                    const undistributedQuantity = getBatchUndistributedQuantity(item);
                     const transferAvailable = getBatchTransferAvailable(item);
                     return (
                       <tr key={item.product.id}>
@@ -2362,9 +2366,14 @@ export function StockLocationsPage() {
                                 ))}
                               </select>
                             ) : (
-                              <p className="font-semibold text-slate-800">
-                                {originLocations[0] ? `${originLocations[0].deposit?.name || '-'} / ${getLocationDisplayName(originLocations[0].location)}` : 'Sem saldo'}
-                              </p>
+                              <>
+                                <p className="font-semibold text-slate-800">
+                                  {originLocations[0] ? `${originLocations[0].deposit?.name || '-'} / ${getLocationDisplayName(originLocations[0].location)}` : 'Sem saldo'}
+                                </p>
+                                {undistributedQuantity > 0 && !selectedOriginLocationId && (
+                                  <p className="mt-0.5 text-slate-500">+ {undistributedQuantity} sem local definido</p>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>

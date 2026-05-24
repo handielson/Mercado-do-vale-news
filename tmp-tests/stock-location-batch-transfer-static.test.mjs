@@ -60,6 +60,8 @@ assertIncludes(page, 'originOptions.length > 1 ? (', 'batch row should show an o
 assertIncludes(page, 'selectedOriginLocationId', 'batch row should track the selected source location');
 assertIncludes(page, 'handleBatchOriginChange', 'batch row should allow choosing a source location');
 assertIncludes(page, '<option value="">Todas as origens com saldo', 'batch row should keep an all-origins option');
+assertIncludes(page, 'const undistributedQuantity = getBatchUndistributedQuantity(item)', 'batch row should expose stock that exists in Bling/product total but has no internal location yet');
+assertIncludes(page, 'availableSources.length === 1 && undistributedQuantity <= 0', 'batch add should not auto-select the only source when there is undistributed stock');
 assertIncludes(page, 'source.location_id !== item.fromLocationId', 'batch transfer sources should honor a selected source location');
 assertIncludes(page, 'item.fromLocationId ? sourceAvailable : sourceAvailable + getBatchUndistributedQuantity(item)', 'batch availability should use only the selected source when one is chosen');
 assertIncludes(page, 'setBatchItems(prev => [item, ...prev])', 'adding a product should put the newest item at the top of the batch list');
