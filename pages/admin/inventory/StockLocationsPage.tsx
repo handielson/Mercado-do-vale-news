@@ -231,6 +231,13 @@ export function StockLocationsPage() {
   const findBatchItemByProduct = (product: StockLocationProductSearchResult) =>
     batchItems.find(item => hasBatchProductIdentityOverlap(item.product, product));
 
+  const isBatchBarcodeTerm = (term: string) => /^\d{8,}$/.test(term.trim());
+
+  const resolveBatchSearchCandidate = (term: string, results: StockLocationProductSearchResult[]) =>
+    results.find(result => normalizeReadTerm(result.ean) === normalizeReadTerm(term))
+    || results.find(result => normalizeReadTerm(result.sku) === normalizeReadTerm(term))
+    || (!isBatchBarcodeTerm(term) ? results[0] : undefined);
+
   useEffect(() => {
     loadData();
   }, [movementPeriodDays]);
@@ -1095,17 +1102,13 @@ export function StockLocationsPage() {
     const term = batchSearch.trim();
     if (!term) return;
     setBatchError(null);
-    let candidate = batchResults.find(r => r.ean === term)
-      || batchResults.find(r => r.sku === term)
-      || batchResults[0];
+    let candidate = resolveBatchSearchCandidate(term, batchResults);
 
     if (!candidate) {
       // Resultados ainda não chegaram (scan mais rápido que o debounce de 300ms)
       try {
         const fresh = await stockLocationService.searchProducts(term);
-        candidate = fresh.find(r => r.ean === term)
-          || fresh.find(r => r.sku === term)
-          || fresh[0];
+        candidate = resolveBatchSearchCandidate(term, fresh);
       } catch {
         // ignora — vai cair no "não encontrado" abaixo
       }
@@ -1123,19 +1126,13 @@ export function StockLocationsPage() {
     const term = batchSearch.trim();
     if (!term) return;
     setBatchError(null);
-    let candidate = batchResults.find(r => r.ean === term)
-      || batchResults.find(r => r.sku === term)
-      || batchResults[0];
+    let candidate: StockLocationProductSearchResult | undefined;
 
-    if (!candidate) {
-      try {
-        const fresh = await stockLocationService.searchProducts(term);
-        candidate = fresh.find(r => r.ean === term)
-          || fresh.find(r => r.sku === term)
-          || fresh[0];
-      } catch {
-        // Continua como erro de leitura para o operador reler depois.
-      }
+    try {
+      const results = await stockLocationService.searchProducts(term);
+      candidate = resolveBatchSearchCandidate(term, results);
+    } catch {
+      // Continua como erro de leitura para o operador reler depois.
     }
 
     if (!candidate) {

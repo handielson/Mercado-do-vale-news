@@ -20,6 +20,9 @@ assertIncludes(page, 'window.localStorage.removeItem(BATCH_TRANSFER_STORAGE_KEY)
 assertIncludes(page, 'batchReadErrors', 'batch scanner errors should be stored as a list');
 assertIncludes(page, 'playBatchErrorSound', 'batch scanner errors should trigger an audible warning');
 assertIncludes(page, 'batchSearchInputRef.current?.focus()', 'batch scanner should keep focus after an error');
+assertIncludes(page, 'isBatchBarcodeTerm', 'batch scanner should detect barcode-like scans');
+assertIncludes(page, '!isBatchBarcodeTerm(term) ? results[0] : undefined', 'barcode-like scans should not fall back to the first fuzzy product result');
+assert(!page.includes('|| batchResults[0]'), 'batch scanner enter must not reuse stale suggestion results as a found product');
 assertIncludes(page, 'addBatchReadError(term', 'missing scanned products should be appended to the error list');
 assertIncludes(page, "setBatchSearch('')", 'missing scanned products should clear the scanner input so the next barcode can be read');
 assertIncludes(page, 'clearBatchReadErrorForProduct(candidate, term)', 'rescanning a previously missing product should remove it from the error list');
