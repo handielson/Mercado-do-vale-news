@@ -27,7 +27,7 @@ assertIncludes(page, 'Erros de leitura', 'batch scanner should render the readin
 assertIncludes(page, 'Limpar erros', 'batch scanner should allow clearing the reading error queue');
 assertIncludes(page, 'getBatchTransferAvailable', 'batch transfer should expose total movable stock');
 assertIncludes(page, 'getBatchUndistributedQuantity', 'batch transfer availability should include product stock not yet assigned to a location');
-assertIncludes(page, 'return sourceAvailable + getBatchUndistributedQuantity(item)', 'batch transfer visible availability should include materializable stock');
+assertIncludes(page, 'item.fromLocationId ? sourceAvailable : sourceAvailable + getBatchUndistributedQuantity(item)', 'batch transfer visible availability should include materializable stock only when all origins are allowed');
 assertIncludes(page, 'const getBatchFallbackSource = (excludeLocationId = \'\')', 'batch materialization should be able to avoid the destination location');
 assertIncludes(page, 'location.id !== excludeLocationId', 'batch fallback source should not use the same location selected as destination');
 assertIncludes(page, 'materializeBatchItemDistribution', 'batch transfer should materialize missing location rows from product stock');
@@ -53,7 +53,12 @@ assertIncludes(page, '<datalist id="batch-destination-locations">', 'batch desti
 assertIncludes(page, 'preparedBatchItems = await Promise.all', 'batch submit should prepare rows using the requested quantities before validating availability');
 assertIncludes(page, 'const transferableSourceAvailable = getBatchTransferSources(item, batchToLocationId)', 'batch submit should distinguish real source rows from undistributed product stock');
 assertIncludes(page, 'if (quantity > transferableSourceAvailable) {', 'batch submit should materialize undistributed stock even when total visible availability is enough');
-assertIncludes(page, 'originLocations.length > 1 ? \'Todas as origens com saldo\'', 'batch row should show all origins instead of forcing a single source choice');
+assertIncludes(page, 'originOptions.length > 1 ? (', 'batch row should show an origin selector when there is more than one source');
+assertIncludes(page, 'selectedOriginLocationId', 'batch row should track the selected source location');
+assertIncludes(page, 'handleBatchOriginChange', 'batch row should allow choosing a source location');
+assertIncludes(page, '<option value="">Todas as origens com saldo', 'batch row should keep an all-origins option');
+assertIncludes(page, 'source.location_id !== item.fromLocationId', 'batch transfer sources should honor a selected source location');
+assertIncludes(page, 'item.fromLocationId ? sourceAvailable : sourceAvailable + getBatchUndistributedQuantity(item)', 'batch availability should use only the selected source when one is chosen');
 assertIncludes(page, 'setBatchItems(prev => [item, ...prev])', 'adding a product should put the newest item at the top of the batch list');
 assertIncludes(page, 'setBatchResults(prev => prev.filter(result => !hasBatchProductIdentityOverlap(result, product)))', 'adding a product should remove equivalent suggestions from the queue immediately');
 assertIncludes(page, 'remainingQuantity', 'batch submit should split requested quantity across source locations');
