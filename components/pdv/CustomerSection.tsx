@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { User, Search, X, Calendar, ShoppingBag, ExternalLink, UserPlus, Loader2 } from 'lucide-react';
+import { User, Search, X, Calendar, ShoppingBag, ExternalLink, UserPlus, Loader2, MapPin, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { formatCpfCnpj, formatPhone, validateCpfCnpj, validateEmail } from '../../utils/cpfCnpjValidation';
+import { capitalizeName, formatCep, searchCep as searchCepUtil } from '../../utils/customerFormUtils';
+import { CustomerAddress, CustomerInput } from '../../types/customer';
 
 interface Customer {
     id: string;
@@ -29,14 +31,54 @@ export default function CustomerSection({
     const [recentCustomers, setRecentCustomers] = useState<Customer[]>([]);
     const [showQuickCreate, setShowQuickCreate] = useState(false);
     const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
-    const [quickCustomer, setQuickCustomer] = useState({
+    const [quickCustomer, setQuickCustomer] = useState<CustomerInput>({
         name: '',
         phone: '',
         cpf_cnpj: '',
         email: '',
+        birth_date: '',
+        customer_type: 'retail',
+        instagram: '',
+        facebook: '',
+        address: {
+            street: '',
+            number: '',
+            complement: '',
+            neighborhood: '',
+            city: '',
+            state: '',
+            zipCode: '',
+        },
+        admin_notes: '',
+        custom_data: {},
+        is_active: true,
     });
+    const [documentType, setDocumentType] = useState<'CPF' | 'CNPJ'>('CPF');
 
     const onlyDigits = (value: string) => value.replace(/\D/g, '');
+
+    const emptyQuickCustomer = (): CustomerInput => ({
+        name: '',
+        phone: '',
+        cpf_cnpj: '',
+        email: '',
+        birth_date: '',
+        customer_type: 'retail',
+        instagram: '',
+        facebook: '',
+        address: {
+            street: '',
+            number: '',
+            complement: '',
+            neighborhood: '',
+            city: '',
+            state: '',
+            zipCode: '',
+        },
+        admin_notes: '',
+        custom_data: {},
+        is_active: true,
+    });
 
     // Buscar últimos 3 clientes ao carregar
     useEffect(() => {
@@ -150,22 +192,76 @@ export default function CustomerSection({
     const openQuickCreate = () => {
         const term = searchTerm.trim();
         const digits = onlyDigits(term);
+        if (digits.length === 11) setDocumentType('CPF');
+        if (digits.length === 14) setDocumentType('CNPJ');
         setQuickCustomer(current => ({
             ...current,
             phone: digits.length >= 8 && digits.length <= 11 ? formatPhone(term) : current.phone,
-            cpf_cnpj: digits.length === 14 ? formatCpfCnpj(term) : current.cpf_cnpj,
+            cpf_cnpj: digits.length === 11 || digits.length === 14 ? formatCpfCnpj(term) : current.cpf_cnpj,
             email: term.includes('@') ? term : current.email,
         }));
         setShowQuickCreate(true);
         setShowResults(false);
     };
 
-    const handleQuickCustomerField = (field: keyof typeof quickCustomer, value: string) => {
+    const handleQuickCustomerField = (field: keyof CustomerInput, value: string | boolean) => {
         const nextValue =
-            field === 'phone' ? formatPhone(value)
-                : field === 'cpf_cnpj' ? formatCpfCnpj(value)
+            field === 'phone' && typeof value === 'string' ? value.replace(/[^\d\s()-]/g, '')
+                : field === 'cpf_cnpj' && typeof value === 'string' ? value.replace(/[^\d./-]/g, '')
+                    : field === 'name' && typeof value === 'string' ? capitalizeName(value)
                     : value;
         setQuickCustomer(current => ({ ...current, [field]: nextValue }));
+    };
+
+    const handleQuickCustomerBlur = (field: keyof CustomerInput, value: string) => {
+        if (field === 'phone') {
+            setQuickCustomer(current => ({ ...current, phone: formatPhone(value) }));
+            return;
+        }
+
+        if (field === 'cpf_cnpj') {
+            if (!value) return;
+            const formatted = formatCpfCnpj(value);
+            const cleaned = onlyDigits(value);
+            setQuickCustomer(current => ({ ...current, cpf_cnpj: formatted }));
+
+            if (documentType === 'CPF' && cleaned.length !== 11) {
+                toast.error('CPF deve ter 11 digitos');
+                return;
+            }
+            if (documentType === 'CNPJ' && cleaned.length !== 14) {
+                toast.error('CNPJ deve ter 14 digitos');
+                return;
+            }
+            if (!validateCpfCnpj(value)) {
+                toast.error(`${documentType} invalido`);
+            }
+        }
+    };
+
+    const handleQuickAddressField = (field: keyof CustomerAddress, value: string) => {
+        setQuickCustomer(current => ({
+            ...current,
+            address: {
+                ...(current.address || {}),
+                [field]: field === 'zipCode' ? formatCep(value) : value,
+            },
+        }));
+    };
+
+    const searchQuickCep = async (cep: string) => {
+        const result = await searchCepUtil(cep);
+        if (result) {
+            setQuickCustomer(current => ({
+                ...current,
+                address: {
+                    ...(current.address || {}),
+                    ...result,
+                },
+            }));
+        } else if (onlyDigits(cep).length === 8) {
+            toast.error('Erro ao buscar CEP');
+        }
     };
 
     const handleCreateCustomer = async (event: React.FormEvent) => {
@@ -180,8 +276,24 @@ export default function CustomerSection({
             return;
         }
 
-        if (cpfCnpj && !validateCpfCnpj(cpfCnpj)) {
-            toast.error('CPF/CNPJ invalido');
+        if (!cpfCnpj) {
+            toast.error(`Informe o ${documentType}`);
+            return;
+        }
+
+        const cleanedDocument = onlyDigits(cpfCnpj);
+        if (documentType === 'CPF' && cleanedDocument.length !== 11) {
+            toast.error('CPF deve ter 11 digitos');
+            return;
+        }
+
+        if (documentType === 'CNPJ' && cleanedDocument.length !== 14) {
+            toast.error('CNPJ deve ter 14 digitos');
+            return;
+        }
+
+        if (!validateCpfCnpj(cpfCnpj)) {
+            toast.error(`${documentType} invalido`);
             return;
         }
 
@@ -197,12 +309,19 @@ export default function CustomerSection({
                 cpf_cnpj: cpfCnpj || undefined,
                 phone: phone || undefined,
                 email: email || undefined,
-                customer_type: 'retail',
+                birth_date: quickCustomer.birth_date || undefined,
+                customer_type: quickCustomer.customer_type || 'retail',
+                instagram: quickCustomer.instagram || undefined,
+                facebook: quickCustomer.facebook || undefined,
+                address: quickCustomer.address,
+                admin_notes: quickCustomer.admin_notes || undefined,
+                custom_data: quickCustomer.custom_data || {},
                 is_active: true,
             });
 
             handleSelectCustomer(created);
-            setQuickCustomer({ name: '', phone: '', cpf_cnpj: '', email: '' });
+            setQuickCustomer(emptyQuickCustomer());
+            setDocumentType('CPF');
             setShowQuickCreate(false);
             fetchRecentCustomers();
             toast.success('Cliente cadastrado e selecionado');
@@ -377,7 +496,7 @@ export default function CustomerSection({
                         </p>
 
                         {showQuickCreate && (
-                            <form onSubmit={handleCreateCustomer} className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
+                            <form onSubmit={handleCreateCustomer} className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4 space-y-5">
                                 <div className="flex items-center justify-between gap-3">
                                     <h4 className="font-semibold text-slate-800 flex items-center gap-2">
                                         <UserPlus size={18} className="text-emerald-700" />
@@ -393,54 +512,279 @@ export default function CustomerSection({
                                     </button>
                                 </div>
 
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                        <User size={16} />
+                                        Dados básicos
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <label className="space-y-1 md:col-span-2">
+                                            <span className="text-xs font-medium text-slate-600">
+                                                {documentType === 'CPF' ? 'Nome Completo' : 'Razão Social'} *
+                                            </span>
+                                            <input
+                                                type="text"
+                                                value={quickCustomer.name}
+                                                onChange={(e) => handleQuickCustomerField('name', e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                placeholder={documentType === 'CPF' ? 'Nome completo' : 'Razão social'}
+                                                autoFocus
+                                                required
+                                            />
+                                        </label>
+
+                                        <label className="space-y-1">
+                                            <span className="text-xs font-medium text-slate-600">Data de Nascimento</span>
+                                            <input
+                                                type="date"
+                                                value={quickCustomer.birth_date || ''}
+                                                onChange={(e) => handleQuickCustomerField('birth_date', e.target.value)}
+                                                max="9999-12-31"
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            />
+                                        </label>
+
+                                        <label className="space-y-1">
+                                            <span className="text-xs font-medium text-slate-600">Tipo de Cliente</span>
+                                            <select
+                                                value={quickCustomer.customer_type || 'retail'}
+                                                onChange={(e) => handleQuickCustomerField('customer_type', e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            >
+                                                <option value="retail">Varejo</option>
+                                                <option value="resale">Revenda</option>
+                                                <option value="wholesale">Atacado</option>
+                                            </select>
+                                        </label>
+
+                                        <label className="space-y-1">
+                                            <span className="text-xs font-medium text-slate-600">Tipo de Documento</span>
+                                            <select
+                                                value={documentType}
+                                                onChange={(e) => {
+                                                    setDocumentType(e.target.value as 'CPF' | 'CNPJ');
+                                                    handleQuickCustomerField('cpf_cnpj', '');
+                                                }}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            >
+                                                <option value="CPF">CPF</option>
+                                                <option value="CNPJ">CNPJ</option>
+                                            </select>
+                                        </label>
+
+                                        <label className="space-y-1">
+                                            <span className="text-xs font-medium text-slate-600">{documentType} *</span>
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                value={quickCustomer.cpf_cnpj || ''}
+                                                onChange={(e) => handleQuickCustomerField('cpf_cnpj', e.target.value)}
+                                                onBlur={(e) => handleQuickCustomerBlur('cpf_cnpj', e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                placeholder={documentType === 'CPF' ? '000.000.000-00' : '00.000.000/0000-00'}
+                                                maxLength={documentType === 'CPF' ? 14 : 18}
+                                                required
+                                            />
+                                        </label>
+
+                                        <label className="space-y-1">
+                                            <span className="text-xs font-medium text-slate-600">Status</span>
+                                            <select
+                                                value={quickCustomer.is_active === false ? 'inactive' : 'active'}
+                                                onChange={(e) => handleQuickCustomerField('is_active', e.target.value === 'active')}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            >
+                                                <option value="active">Ativo</option>
+                                                <option value="inactive">Inativo</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                        <Search size={16} />
+                                        Contato
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <label className="space-y-1">
+                                            <span className="text-xs font-medium text-slate-600">Telefone</span>
+                                            <input
+                                                type="tel"
+                                                inputMode="tel"
+                                                value={quickCustomer.phone || ''}
+                                                onChange={(e) => handleQuickCustomerField('phone', e.target.value)}
+                                                onBlur={(e) => handleQuickCustomerBlur('phone', e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                placeholder="(87) 99999-9999"
+                                                maxLength={15}
+                                            />
+                                        </label>
+
+                                        <label className="space-y-1">
+                                            <span className="text-xs font-medium text-slate-600">E-mail</span>
+                                            <input
+                                                type="email"
+                                                value={quickCustomer.email || ''}
+                                                onChange={(e) => handleQuickCustomerField('email', e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                placeholder="email@exemplo.com"
+                                            />
+                                        </label>
+
+                                        <label className="space-y-1">
+                                            <span className="text-xs font-medium text-slate-600">Instagram</span>
+                                            <input
+                                                type="text"
+                                                value={quickCustomer.instagram || ''}
+                                                onChange={(e) => handleQuickCustomerField('instagram', e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                placeholder="@usuario ou usuario"
+                                            />
+                                        </label>
+
+                                        <label className="space-y-1">
+                                            <span className="text-xs font-medium text-slate-600">Facebook</span>
+                                            <input
+                                                type="text"
+                                                value={quickCustomer.facebook || ''}
+                                                onChange={(e) => handleQuickCustomerField('facebook', e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                                placeholder="@usuario ou usuario"
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <label className="space-y-1 md:col-span-2">
-                                        <span className="text-xs font-medium text-slate-600">Nome *</span>
-                                        <input
-                                            type="text"
-                                            value={quickCustomer.name}
-                                            onChange={(e) => handleQuickCustomerField('name', e.target.value)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                            placeholder="Nome completo"
-                                            autoFocus
-                                        />
-                                    </label>
+                                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 md:col-span-2">
+                                        <MapPin size={16} />
+                                        Endereço
+                                    </div>
 
                                     <label className="space-y-1">
-                                        <span className="text-xs font-medium text-slate-600">Telefone</span>
-                                        <input
-                                            type="tel"
-                                            inputMode="tel"
-                                            value={quickCustomer.phone}
-                                            onChange={(e) => handleQuickCustomerField('phone', e.target.value)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                            placeholder="(87) 99999-9999"
-                                        />
-                                    </label>
-
-                                    <label className="space-y-1">
-                                        <span className="text-xs font-medium text-slate-600">CPF/CNPJ</span>
+                                        <span className="text-xs font-medium text-slate-600">CEP</span>
                                         <input
                                             type="text"
                                             inputMode="numeric"
-                                            value={quickCustomer.cpf_cnpj}
-                                            onChange={(e) => handleQuickCustomerField('cpf_cnpj', e.target.value)}
+                                            value={quickCustomer.address?.zipCode || ''}
+                                            onChange={(e) => handleQuickAddressField('zipCode', e.target.value)}
+                                            onBlur={(e) => searchQuickCep(e.target.value)}
                                             className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                            placeholder="Opcional"
+                                            placeholder="00000-000"
+                                            maxLength={9}
                                         />
                                     </label>
 
-                                    <label className="space-y-1 md:col-span-2">
-                                        <span className="text-xs font-medium text-slate-600">E-mail</span>
+                                    <label className="space-y-1 md:col-span-1">
+                                        <span className="text-xs font-medium text-slate-600">Rua</span>
                                         <input
-                                            type="email"
-                                            value={quickCustomer.email}
-                                            onChange={(e) => handleQuickCustomerField('email', e.target.value)}
+                                            type="text"
+                                            value={quickCustomer.address?.street || ''}
+                                            onChange={(e) => handleQuickAddressField('street', e.target.value)}
                                             className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                            placeholder="Opcional"
+                                            placeholder="Nome da rua"
                                         />
                                     </label>
+
+                                    <label className="space-y-1">
+                                        <span className="text-xs font-medium text-slate-600">Número</span>
+                                        <input
+                                            type="text"
+                                            value={quickCustomer.address?.number || ''}
+                                            onChange={(e) => handleQuickAddressField('number', e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            placeholder="123"
+                                        />
+                                    </label>
+
+                                    <label className="space-y-1">
+                                        <span className="text-xs font-medium text-slate-600">Complemento</span>
+                                        <input
+                                            type="text"
+                                            value={quickCustomer.address?.complement || ''}
+                                            onChange={(e) => handleQuickAddressField('complement', e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            placeholder="Apto, bloco, etc"
+                                        />
+                                    </label>
+
+                                    <label className="space-y-1">
+                                        <span className="text-xs font-medium text-slate-600">Bairro</span>
+                                        <input
+                                            type="text"
+                                            value={quickCustomer.address?.neighborhood || ''}
+                                            onChange={(e) => handleQuickAddressField('neighborhood', e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            placeholder="Nome do bairro"
+                                        />
+                                    </label>
+
+                                    <label className="space-y-1">
+                                        <span className="text-xs font-medium text-slate-600">Cidade</span>
+                                        <input
+                                            type="text"
+                                            value={quickCustomer.address?.city || ''}
+                                            onChange={(e) => handleQuickAddressField('city', e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            placeholder="Nome da cidade"
+                                        />
+                                    </label>
+
+                                    <label className="space-y-1">
+                                        <span className="text-xs font-medium text-slate-600">Estado</span>
+                                        <select
+                                            value={quickCustomer.address?.state || ''}
+                                            onChange={(e) => handleQuickAddressField('state', e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                        >
+                                            <option value="">Selecione...</option>
+                                            <option value="AC">Acre</option>
+                                            <option value="AL">Alagoas</option>
+                                            <option value="AP">Amapá</option>
+                                            <option value="AM">Amazonas</option>
+                                            <option value="BA">Bahia</option>
+                                            <option value="CE">Ceará</option>
+                                            <option value="DF">Distrito Federal</option>
+                                            <option value="ES">Espírito Santo</option>
+                                            <option value="GO">Goiás</option>
+                                            <option value="MA">Maranhão</option>
+                                            <option value="MT">Mato Grosso</option>
+                                            <option value="MS">Mato Grosso do Sul</option>
+                                            <option value="MG">Minas Gerais</option>
+                                            <option value="PA">Pará</option>
+                                            <option value="PB">Paraíba</option>
+                                            <option value="PR">Paraná</option>
+                                            <option value="PE">Pernambuco</option>
+                                            <option value="PI">Piauí</option>
+                                            <option value="RJ">Rio de Janeiro</option>
+                                            <option value="RN">Rio Grande do Norte</option>
+                                            <option value="RS">Rio Grande do Sul</option>
+                                            <option value="RO">Rondônia</option>
+                                            <option value="RR">Roraima</option>
+                                            <option value="SC">Santa Catarina</option>
+                                            <option value="SP">São Paulo</option>
+                                            <option value="SE">Sergipe</option>
+                                            <option value="TO">Tocantins</option>
+                                        </select>
+                                    </label>
                                 </div>
+
+                                <label className="space-y-1 block">
+                                    <span className="text-xs font-medium text-slate-600 flex items-center gap-1">
+                                        <FileText size={14} />
+                                        Observações Internas
+                                    </span>
+                                    <textarea
+                                        value={quickCustomer.admin_notes || ''}
+                                        onChange={(e) => handleQuickCustomerField('admin_notes', e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-y"
+                                        placeholder="Notas privadas para uso interno..."
+                                        rows={3}
+                                    />
+                                </label>
 
                                 <div className="flex justify-end gap-2">
                                     <button
