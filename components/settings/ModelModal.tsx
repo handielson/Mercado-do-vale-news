@@ -959,7 +959,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     Cadastro por JSON
                                 </h3>
                                 <p className="text-sm text-indigo-800">
-                                    Copie o prompt, gere o JSON na IA e cole a resposta para preencher o modelo, SEO, logÃ­stica, EANs e campos tÃ©cnicos.
+                                    Copie o prompt, gere o JSON na IA e cole a resposta para preencher o modelo, SEO, logistica, EANs e campos tecnicos.
                                 </p>
                             </div>
 
@@ -1013,7 +1013,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         Preencher modelo pelo JSON
                                     </button>
                                     <p className="text-xs text-slate-500 mt-2">
-                                        Campos desconhecidos dentro de template_values, specs, custom_fields ou campos serÃ£o preservados como valores padrÃ£o do modelo.
+                                        Campos desconhecidos dentro de template_values, specs, custom_fields ou campos serao preservados como valores padrao do modelo.
                                     </p>
                                 </div>
                             </div>

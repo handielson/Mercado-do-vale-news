@@ -208,23 +208,35 @@ async function create(input: ModelInput): Promise<Model> {
  */
 async function update(id: string, input: ModelInput): Promise<Model> {
     const companyId = await getCompanyId();
-    const slug = generateSlug(input.name);
+    const current = await getById(id);
+    if (!current) throw new Error('Model not found.');
+
+    const shouldRegenerateSlug = input.name.trim() !== current.name;
+    const updatePayload: Record<string, unknown> = {
+        name: input.name,
+        brand_id: input.brand_id,
+        category_id: input.category_id,
+        description: input.description,
+        template_values: input.template_values,
+        eans: input.eans
+    };
+
+    if (shouldRegenerateSlug) updatePayload.slug = generateSlug(input.name);
 
     const { error } = await supabase
         .from('models')
-        .update({
-            name: input.name,
-            slug,
-            brand_id: input.brand_id,
-            category_id: input.category_id,
-            description: input.description,
-            template_values: input.template_values,
-            eans: input.eans
-        })
+        .update(updatePayload)
         .eq('id', id)
         .eq('company_id', companyId);
 
-    if (error) throw new Error(`Failed to update model: ${error.message}`);
+    if (error) {
+        const msg = (error.message || '').toLowerCase();
+        const isConflict = error.code === '23505' || msg.includes('duplicate') || msg.includes('unique') || msg.includes('models_company_id_brand_id_slug_key');
+        if (isConflict) {
+            throw new Error('Ja existe um modelo com esse nome para esta marca.');
+        }
+        throw new Error(`Failed to update model: ${error.message}`);
+    }
 
     const updated = await getById(id);
     if (!updated) throw new Error('Model not found after update.');
