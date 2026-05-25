@@ -50,6 +50,8 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
     const priceReseller = watch('price_reseller') || 0;
     const priceWholesale = watch('price_wholesale') || 0;
     const categoryId = watch('category_id');
+    const selectedRam = watch('specs.ram') || '';
+    const selectedStorage = watch('specs.storage') || '';
 
     // --- Margens automáticas da categoria ---
     const [marginWholesale, setMarginWholesale] = useState<number>(0);
@@ -96,7 +98,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
     const [loadingAverages, setLoadingAverages] = useState(false);
 
     useEffect(() => {
-        if (!modelId) { setStockAverages(null); return; }
+        if (!modelId || !selectedRam || !selectedStorage) { setStockAverages(null); return; }
         let cancelled = false;
         const fetch = async () => {
             setLoadingAverages(true);
@@ -105,6 +107,8 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                     .from('products')
                     .select('price_cost, price_retail, price_reseller, price_wholesale, stock_quantity')
                     .eq('model_id', modelId)
+                    .eq('specs->>ram', selectedRam)
+                    .eq('specs->>storage', selectedStorage)
                     .eq('status', 'active');
                 if (cancelled || !data || data.length === 0) { setStockAverages(null); return; }
                 const totalUnits = data.reduce((s, p) => s + (p.stock_quantity || 0), 0);
@@ -124,7 +128,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
         };
         fetch();
         return () => { cancelled = true; };
-    }, [modelId]);
+    }, [modelId, selectedRam, selectedStorage]);
     // --- fim médias ---
 
     const rows: PriceRowConfig[] = [
@@ -190,18 +194,19 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
             )}
 
             {/* Painel de Médias do Estoque Atual */}
-            {modelId && (
+            {modelId && selectedRam && selectedStorage && (
                 <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
                     <div className="flex items-center gap-2 mb-3">
                         <BarChart2 size={15} className="text-amber-600" />
                         <span className="text-sm font-semibold text-amber-800">Médias do Estoque Atual</span>
+                        <span className="text-xs text-amber-600">{selectedRam}/{selectedStorage}</span>
                         {loadingAverages && <span className="text-xs text-amber-500 ml-auto">carregando...</span>}
                         {stockAverages && !loadingAverages && (
                             <span className="text-xs text-amber-600 ml-auto">{stockAverages.totalUnits} unidade{stockAverages.totalUnits !== 1 ? 's' : ''} em estoque</span>
                         )}
                     </div>
                     {!loadingAverages && !stockAverages && (
-                        <p className="text-xs text-amber-600">Nenhum produto em estoque para este modelo.</p>
+                        <p className="text-xs text-amber-600">Nenhum produto em estoque para esta variação de memória.</p>
                     )}
                     {stockAverages && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
