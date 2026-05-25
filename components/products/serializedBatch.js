@@ -35,6 +35,10 @@ export function findSerializedBatchDuplicates(items) {
 export function buildSerializedBatchPlan(baseData, items) {
   const normalizedItems = items.map((item) => ({
     ...baseData,
+    sku: cleanValue(item.sku) || baseData.sku,
+    eans: Array.isArray(item.eans) && item.eans.length > 0 ? item.eans : baseData.eans,
+    bling_id: item.bling_id ?? baseData.bling_id,
+    bling_parent_id: item.bling_parent_id ?? baseData.bling_parent_id,
     stock_quantity: 1,
     specs: {
       ...(baseData.specs || {}),
@@ -53,4 +57,10 @@ export function buildSerializedBatchPlan(baseData, items) {
     batchStockQuantity: normalizedItems.length,
     items: normalizedItems,
   };
+}
+
+export function resolveSerializedBatchItemImages({ itemImages, colorImages, fallbackImages }) {
+  if (Array.isArray(itemImages) && itemImages.length > 0) return itemImages;
+  if (Array.isArray(colorImages) && colorImages.length > 0) return colorImages;
+  return Array.isArray(fallbackImages) ? fallbackImages : [];
 }

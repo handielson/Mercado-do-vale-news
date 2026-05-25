@@ -18,7 +18,7 @@ import { EANInput } from '../ui/EANInput';
 import { SmartInput } from '../ui/SmartInput';
 import { compressImage } from '../../utils/image-compression';
 import { generateProductName } from '../../utils/product-name-generator';
-import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText, Trash2, CheckCircle2, ListOrdered, Globe, AlertCircle } from 'lucide-react';
+import { Loader2, X, Upload, ChevronDown, ChevronUp, Package, FileText, Trash2, CheckCircle2, ListOrdered, Globe, AlertCircle, Image as ImageIcon } from 'lucide-react';
 import { useEANAutofill } from './hooks/useEANAutofill';
 import { useModelTemplate } from './hooks/useModelTemplate';
 import { ProductSpecifications } from './sections/ProductSpecifications';
@@ -40,7 +40,7 @@ import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
 import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl } from '../../utils/video-url';
-import { buildSerializedBatchPlan, findSerializedBatchDuplicates, hasSerializedIdentity } from './serializedBatch.js';
+import { buildSerializedBatchPlan, findSerializedBatchDuplicates, hasSerializedIdentity, resolveSerializedBatchItemImages } from './serializedBatch.js';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -67,6 +67,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
     // Lista de produtos para entrada em massa
     interface BatchItem {
+        id: string;
+        sku?: string;
+        eans?: string[];
+        bling_id?: number;
+        bling_parent_id?: number;
         imei1?: string;
         imei2?: string;
         serial?: string;
@@ -75,11 +80,18 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         ram?: string;
         version?: string;
         battery_health?: string;
+        images?: string[];
+        imageUploadId?: string;
     }
     const [serialList, setSerialList] = useState<BatchItem[]>([]);
+    const [batchImageUploadingId, setBatchImageUploadingId] = useState<string | null>(null);
+    const [batchBlingLinkingId, setBatchBlingLinkingId] = useState<string | null>(null);
 
     const handleAddToBatchList = () => {
         const item: BatchItem = {
+            id: crypto.randomUUID(),
+            sku: watch('sku') || undefined,
+            eans: [],
             imei1: watch('specs.imei1') || undefined,
             imei2: watch('specs.imei2') || undefined,
             serial: watch('specs.serial') || undefined,
@@ -88,6 +100,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             ram: watch('specs.ram') || undefined,
             version: watch('specs.version') || undefined,
             battery_health: watch('specs.battery_health') || undefined,
+            images: [],
         };
 
         // Precisa ao menos de IMEI1 ou Serial
@@ -115,6 +128,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
     const removeFromSerialList = (index: number) => {
         setSerialList(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const updateBatchItemField = <K extends keyof BatchItem>(index: number, key: K, value: BatchItem[K]) => {
+        setSerialList(prev => prev.map((item, itemIndex) => (
+            itemIndex === index ? { ...item, [key]: value } : item
+        )));
     };
 
     // Estado para indicadores de preço
@@ -373,10 +392,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         searchByEAN();
     }, [watch('eans')]);
 
+    const MAX_IMAGES = 5;
+
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.length) return;
 
-        const MAX_IMAGES = 5;
         const currentImages = getValues('images') || [];
 
         // Check if already at limit
@@ -449,6 +469,88 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             e.target.value = ''; // Reset input
         }
 
+    };
+
+    const handleBatchItemImageUpload = async (index: number, filesList: FileList | null) => {
+        if (!filesList?.length) return;
+
+        const item = serialList[index];
+        if (!item) return;
+
+        const currentImages = item.images || [];
+        if (currentImages.length >= MAX_IMAGES) {
+            alert(`Limite de ${MAX_IMAGES} imagens atingido para este item.`);
+            return;
+        }
+
+        const remainingSlots = MAX_IMAGES - currentImages.length;
+        const files = Array.from(filesList);
+        const filesToProcess = files.slice(0, remainingSlots);
+
+        if (files.length > remainingSlots) {
+            alert(`Voce selecionou ${files.length} imagens, mas so ha espaco para ${remainingSlots}. Apenas as primeiras ${remainingSlots} serao adicionadas.`);
+        }
+
+        const uploadId = item.imageUploadId || item.id;
+        setBatchImageUploadingId(item.id);
+
+        try {
+            const processedImages: string[] = [];
+            const { data } = await supabase.auth.getSession();
+            const token = data.session?.access_token;
+
+            for (const file of filesToProcess) {
+                const compressed = await compressImage(file);
+                const form = new FormData();
+                form.append('file', compressed, file.name);
+                const uploadPath = `/products/${uploadId}/upload-image`;
+                const res = await fetch(buildVpsUrl(uploadPath, { method: 'POST' }), {
+                    method: 'POST',
+                    headers: {
+                        ...getVpsSyncHeaders(),
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                    body: form,
+                });
+
+                if (res.ok) {
+                    const { url } = await res.json();
+                    processedImages.push(url);
+                    continue;
+                }
+
+                const reader = new FileReader();
+                const base64 = await new Promise<string>((resolve, reject) => {
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(compressed);
+                });
+                processedImages.push(base64);
+            }
+
+            setSerialList(prev => prev.map((batchItem, itemIndex) => {
+                if (itemIndex !== index) return batchItem;
+                return {
+                    ...batchItem,
+                    imageUploadId: uploadId,
+                    images: [...(batchItem.images || []), ...processedImages],
+                };
+            }));
+        } catch {
+            alert('Erro ao processar imagens deste item');
+        } finally {
+            setBatchImageUploadingId(null);
+        }
+    };
+
+    const removeBatchItemImage = (itemIndex: number, imageIndex: number) => {
+        setSerialList(prev => prev.map((batchItem, index) => {
+            if (index !== itemIndex) return batchItem;
+            return {
+                ...batchItem,
+                images: (batchItem.images || []).filter((_, currentImageIndex) => currentImageIndex !== imageIndex),
+            };
+        }));
     };
 
     const removeImage = (index: number) => {
@@ -575,17 +677,29 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         return () => clearTimeout(timer);
     }, [currentSkuForVideo, setValue, getValues]);
 
+    const findBlingLinkBySku = async (sku?: string | null) => {
+        const cleanSku = String(sku || '').trim();
+        if (!cleanSku) return null;
+
+        const product = await findBlingProductByExactSku(cleanSku);
+        if (!product) return null;
+
+        const parentId = product.variacao?.produtoPai?.id;
+        const blingEan = String(product.gtin || '').trim();
+
+        return { id: product.id, parentId, ean: blingEan || null };
+    };
+
     const resolveAutomaticBlingLink = async (sku?: string | null) => {
         const cleanSku = String(sku || '').trim();
         if (!cleanSku || blingId || isBlingLinkManualOverride) return null;
 
         try {
             setIsAutoLinkingBling(true);
-            const product = await findBlingProductByExactSku(cleanSku);
-            if (!product) return null;
+            const link = await findBlingLinkBySku(cleanSku);
+            if (!link) return null;
 
-            const parentId = product.variacao?.produtoPai?.id;
-            const blingEan = String(product.gtin || '').trim();
+            const blingEan = link.ean || '';
             if (blingEan) {
                 const currentEans = Array.isArray(getValues('eans')) ? getValues('eans') : [];
                 const hasAnyEan = currentEans.some((ean) => String(ean || '').trim());
@@ -593,15 +707,49 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     setValue('eans', [blingEan], { shouldDirty: true, shouldValidate: true });
                 }
             }
-            setBlingId(product.id);
-            setBlingParentId(parentId);
+            setBlingId(link.id);
+            setBlingParentId(link.parentId);
             toast.info('Vinculado automaticamente pelo SKU no Bling.', { id: 'bling-auto-sku-link' });
-            return { id: product.id, parentId, ean: blingEan || null };
+            return link;
         } catch (error) {
             console.warn('[ProductForm] Auto Bling SKU link skipped:', error);
             return null;
         } finally {
             setIsAutoLinkingBling(false);
+        }
+    };
+
+    const handleBatchItemBlingLink = async (index: number) => {
+        const item = serialList[index];
+        const cleanSku = String(item?.sku || '').trim();
+        if (!item || !cleanSku) {
+            toast.warning('Informe o SKU da variacao antes de vincular no Bling.');
+            return;
+        }
+
+        setBatchBlingLinkingId(item.id);
+        try {
+            const link = await findBlingLinkBySku(cleanSku);
+            if (!link) {
+                toast.warning('SKU nao encontrado no Bling.');
+                return;
+            }
+
+            setSerialList(prev => prev.map((batchItem, itemIndex) => {
+                if (itemIndex !== index) return batchItem;
+                return {
+                    ...batchItem,
+                    bling_id: link.id,
+                    bling_parent_id: link.parentId,
+                    eans: link.ean ? [link.ean] : (batchItem.eans || []),
+                };
+            }));
+            toast.success(link.ean ? 'Bling vinculado e EAN preenchido.' : 'Bling vinculado. Produto sem EAN no Bling.');
+        } catch (error) {
+            console.warn('[ProductForm] Batch Bling SKU link skipped:', error);
+            toast.error('Erro ao buscar SKU no Bling.');
+        } finally {
+            setBatchBlingLinkingId(null);
         }
     };
 
@@ -778,20 +926,36 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
                 // Carregar cores uma vez antes do loop para resolver nome → UUID
                 const allColors = await colorService.listActive().catch(() => []);
-                const batchPlan = buildSerializedBatchPlan(mergedData, serialList);
+                const linkedSerialList = await Promise.all(serialList.map(async (item) => {
+                    if (item.bling_id || !item.sku) return item;
+                    try {
+                        const link = await findBlingLinkBySku(item.sku);
+                        if (!link) return item;
+
+                        return {
+                            ...item,
+                            bling_id: link.id,
+                            bling_parent_id: link.parentId,
+                            eans: link.ean ? [link.ean] : item.eans,
+                        };
+                    } catch {
+                        return item;
+                    }
+                }));
+                const batchPlan = buildSerializedBatchPlan(mergedData, linkedSerialList);
 
                 // Todos únicos — salvar um por um
-                for (let index = 0; index < serialList.length; index++) {
-                    const item = serialList[index];
+                for (let index = 0; index < linkedSerialList.length; index++) {
+                    const item = linkedSerialList[index];
                     // Resolver imagens da cor específica do item
-                    let itemImages = mergedData.images || [];
+                    let colorImages: string[] = [];
                     if (item.color && mergedData.model_id) {
                         const colorEntry = allColors.find(c => c.name === item.color);
                         if (colorEntry) {
                             try {
                                 const colorImgs = await modelColorImagesService.get(mergedData.model_id, colorEntry.id);
                                 if (colorImgs && colorImgs.images.length > 0) {
-                                    itemImages = colorImgs.images;
+                                    colorImages = colorImgs.images;
                                 }
                             } catch {
                                 // Fallback: mantém imagens do formulário
@@ -799,6 +963,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         }
                     }
 
+                    const itemImages = resolveSerializedBatchItemImages({
+                        itemImages: item.images,
+                        colorImages,
+                        fallbackImages: mergedData.images,
+                    });
                     const itemData = { ...batchPlan.items[index], images: itemImages };
                     await onSubmit(itemData);
                 }
@@ -1013,17 +1182,71 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     {serialList.length > 0 && (
                         <div className="space-y-2">
                             {serialList.map((item, index) => (
-                                <div key={index} className="flex items-start gap-3 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                                <div key={item.id} className="flex items-start gap-3 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
                                     <CheckCircle2 size={16} className="text-green-500 shrink-0 mt-0.5" />
                                     <div className="flex-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                                        <span className="flex items-center gap-1">
+                                            <span className="text-xs text-slate-400 font-medium uppercase">SKU</span>
+                                            <input
+                                                type="text"
+                                                value={item.sku || ''}
+                                                onChange={(e) => updateBatchItemField(index, 'sku', e.target.value)}
+                                                className="h-7 w-36 rounded border border-slate-200 bg-white px-2 font-mono text-xs text-slate-800 focus:border-blue-400 focus:outline-none"
+                                                placeholder="SKU"
+                                            />
+                                        </span>
                                         {item.imei1 && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">IMEI 1</span><span className="font-mono text-slate-800">{item.imei1}</span></span>}
                                         {item.imei2 && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">IMEI 2</span><span className="font-mono text-slate-800">{item.imei2}</span></span>}
                                         {item.serial && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">SERIAL</span><span className="font-mono text-slate-800">{item.serial}</span></span>}
+                                        {item.eans?.[0] && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">EAN</span><span className="font-mono text-slate-800">{item.eans[0]}</span></span>}
+                                        {item.bling_id && <span><span className="text-xs text-green-600 font-medium uppercase mr-1">BLING</span><span className="font-mono text-slate-800">{item.bling_id}</span></span>}
                                         {item.color && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">COR</span><span className="text-slate-800">{item.color}</span></span>}
                                         {item.ram && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">RAM</span><span className="text-slate-800">{item.ram}</span></span>}
                                         {item.storage && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">STORAGE</span><span className="text-slate-800">{item.storage}</span></span>}
                                         {item.version && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">VERSAO</span><span className="text-slate-800">{item.version}</span></span>}
                                         {item.battery_health && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">BATERIA</span><span className="text-slate-800">{item.battery_health}</span></span>}
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {(item.images || []).slice(0, 3).map((image, imageIndex) => (
+                                            <div key={`${image}-${imageIndex}`} className="relative h-8 w-8">
+                                                <img src={image} alt="" className="h-full w-full rounded border border-slate-200 bg-white object-cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeBatchItemImage(index, imageIndex)}
+                                                    className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-red-600 text-white flex items-center justify-center"
+                                                    title="Remover imagem"
+                                                >
+                                                    <X size={10} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        <label
+                                            className="h-8 min-w-8 px-2 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50 transition-colors flex items-center justify-center gap-1 cursor-pointer text-xs font-medium"
+                                            title="Adicionar imagem nesta variacao"
+                                        >
+                                            {batchImageUploadingId === item.id ? <Loader2 size={14} className="animate-spin" /> : item.images?.length ? <ImageIcon size={14} /> : <Upload size={14} />}
+                                            <span>{item.images?.length || 0}</span>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                multiple
+                                                className="hidden"
+                                                disabled={batchImageUploadingId === item.id}
+                                                onChange={(e) => {
+                                                    handleBatchItemImageUpload(index, e.target.files);
+                                                    e.currentTarget.value = '';
+                                                }}
+                                            />
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleBatchItemBlingLink(index)}
+                                            disabled={batchBlingLinkingId === item.id}
+                                            className="h-8 w-8 rounded border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors flex items-center justify-center disabled:opacity-60"
+                                            title="Vincular SKU no Bling e puxar EAN"
+                                        >
+                                            {batchBlingLinkingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />}
+                                        </button>
                                     </div>
                                     <button
                                         type="button"
@@ -1342,4 +1565,3 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         </form >
     );
 }
-
