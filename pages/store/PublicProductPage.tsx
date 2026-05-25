@@ -311,15 +311,17 @@ export const PublicProductPage: React.FC = () => {
                 };
                 const needsBrand = !data.brand && data.model_id;
                 const needsDescription = !isMeaningfulDesc(data.description) && data.model_id;
+                let modelTemplateValues: Record<string, unknown> = {};
                 if (!isMeaningfulDesc(data.description)) data.description = null;
-                if (needsBrand || needsDescription) {
+                if (data.model_id) {
                     try {
                         const { data: modelData } = await supabase
                             .from('models')
-                            .select('description, brands(name)')
+                            .select('description, template_values, brands(name)')
                             .eq('id', data.model_id)
                             .single();
 
+                        modelTemplateValues = modelData?.template_values || {};
                         if (needsBrand && modelData?.brands && typeof modelData.brands === 'object') {
                             const bRaw: any = modelData.brands;
                             data.brand = Array.isArray(bRaw) ? bRaw[0]?.name : bRaw.name;
@@ -336,7 +338,10 @@ export const PublicProductPage: React.FC = () => {
                 if (typeof parsedSpecs === 'string') {
                     try { parsedSpecs = JSON.parse(parsedSpecs); } catch { parsedSpecs = {}; }
                 }
-                data.specs = parsedSpecs || {};
+                data.specs = {
+                    ...(modelTemplateValues || {}),
+                    ...(parsedSpecs || {})
+                };
 
                 // Trata Combos e busca Filhos via VPS
                 data.exclude_from_seo = Boolean(data.exclude_from_seo);
@@ -776,7 +781,10 @@ export const PublicProductPage: React.FC = () => {
             description: sib.description || product.description,
             meta_title: sib.meta_title || product.meta_title,
             meta_description: sib.meta_description || product.meta_description,
-            specs: (sib.specs && Object.keys(sib.specs).length > 0) ? sib.specs : product.specs,
+            specs: {
+                ...(product.specs || {}),
+                ...(sib.specs || {})
+            },
             technical_specifications:
                 (sib as any).technical_specifications ||
                 (sib as any).technicalSpecifications ||
@@ -1628,6 +1636,7 @@ export const PublicProductPage: React.FC = () => {
                                         // Labels de fallback para campos nativos (não custom)
                                         const NATIVE_LABELS: Record<string, string> = {
                                             color: 'Cor', storage: 'Armazenamento', ram: 'Memória RAM',
+                                            memoria_ram_virtual: 'Memória RAM Virtual',
                                             version: 'Versão', versao: 'Versão',
                                             battery_health: 'Saúde da Bateria', battery_mah: 'Bateria (mAh)',
                                             display: 'Display (pol)',
@@ -1665,7 +1674,7 @@ export const PublicProductPage: React.FC = () => {
                                                 id: 'identificacao',
                                                 label: 'Principal',
                                                 icon: Smartphone,
-                                                keys: ['version', 'versao', 'color', 'storage', 'ram']
+                                                keys: ['version', 'versao', 'color', 'storage', 'ram', 'memoria_ram_virtual']
                                             },
                                             {
                                                 id: 'tela',
@@ -1778,7 +1787,9 @@ export const PublicProductPage: React.FC = () => {
                                                             {g.items.map(item => (
                                                                 <div key={item.key} className="flex flex-col max-w-full">
                                                                     <dt className="text-slate-500 text-xs font-semibold uppercase tracking-wide truncate pr-2" title={item.label}>{item.label}</dt>
-                                                                    <dd className="font-medium text-slate-900 mt-0.5 break-words pr-2">{item.strVal}</dd>
+                                                                    <dd className="font-medium text-slate-900 mt-0.5 break-words pr-2">
+                                                                        {item.key === 'memoria_ram_virtual' ? `+ ${item.strVal}` : item.strVal}
+                                                                    </dd>
                                                                 </div>
                                                             ))}
                                                         </dl>
