@@ -64,7 +64,7 @@ export const daysUntilBirthday = (birthDate: string): number | null => {
  * Format CEP
  */
 export const formatCep = (cep: string): string => {
-    const cleaned = cep.replace(/\\D/g, '');
+    const cleaned = cep.replace(/\D/g, '');
     if (cleaned.length !== 8) return cep;
     return cleaned.replace(/(\d{5})(\d{3})/, '$1-$2');
 };
@@ -81,7 +81,7 @@ export interface CepResult {
 }
 
 export const searchCep = async (cep: string): Promise<CepResult | null> => {
-    const cleaned = cep.replace(/\\D/g, '');
+    const cleaned = cep.replace(/\D/g, '');
     if (cleaned.length !== 8) return null;
 
     try {
@@ -147,7 +147,7 @@ export const getGoogleMapsUrl = (address: any): string | null => {
 export const getWhatsAppUrl = (phone: string, name?: string): string | null => {
     if (!phone) return null;
 
-    const cleaned = phone.replace(/\\D/g, '');
+    const cleaned = phone.replace(/\D/g, '');
     if (cleaned.length < 10) return null;
 
     const welcomeMessage = `Olá ${name || 'cliente'}! Seja bem-vindo(a)!`;

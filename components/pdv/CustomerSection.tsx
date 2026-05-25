@@ -240,11 +240,15 @@ export default function CustomerSection({
     };
 
     const handleQuickAddressField = (field: keyof CustomerAddress, value: string) => {
+        const nextValue =
+            field === 'zipCode' ? formatCep(value)
+                : field === 'state' ? value.replace(/[^a-zA-Z]/g, '').slice(0, 2).toUpperCase()
+                    : value;
         setQuickCustomer(current => ({
             ...current,
             address: {
                 ...(current.address || {}),
-                [field]: field === 'zipCode' ? formatCep(value) : value,
+                [field]: nextValue,
             },
         }));
     };
@@ -734,41 +738,15 @@ export default function CustomerSection({
                                     </label>
 
                                     <label className="space-y-1">
-                                        <span className="text-xs font-medium text-slate-600">Estado</span>
-                                        <select
+                                        <span className="text-xs font-medium text-slate-600">UF</span>
+                                        <input
+                                            type="text"
                                             value={quickCustomer.address?.state || ''}
                                             onChange={(e) => handleQuickAddressField('state', e.target.value)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                                        >
-                                            <option value="">Selecione...</option>
-                                            <option value="AC">Acre</option>
-                                            <option value="AL">Alagoas</option>
-                                            <option value="AP">Amapá</option>
-                                            <option value="AM">Amazonas</option>
-                                            <option value="BA">Bahia</option>
-                                            <option value="CE">Ceará</option>
-                                            <option value="DF">Distrito Federal</option>
-                                            <option value="ES">Espírito Santo</option>
-                                            <option value="GO">Goiás</option>
-                                            <option value="MA">Maranhão</option>
-                                            <option value="MT">Mato Grosso</option>
-                                            <option value="MS">Mato Grosso do Sul</option>
-                                            <option value="MG">Minas Gerais</option>
-                                            <option value="PA">Pará</option>
-                                            <option value="PB">Paraíba</option>
-                                            <option value="PR">Paraná</option>
-                                            <option value="PE">Pernambuco</option>
-                                            <option value="PI">Piauí</option>
-                                            <option value="RJ">Rio de Janeiro</option>
-                                            <option value="RN">Rio Grande do Norte</option>
-                                            <option value="RS">Rio Grande do Sul</option>
-                                            <option value="RO">Rondônia</option>
-                                            <option value="RR">Roraima</option>
-                                            <option value="SC">Santa Catarina</option>
-                                            <option value="SP">São Paulo</option>
-                                            <option value="SE">Sergipe</option>
-                                            <option value="TO">Tocantins</option>
-                                        </select>
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent uppercase"
+                                            placeholder="UF"
+                                            maxLength={2}
+                                        />
                                     </label>
                                 </div>
 
