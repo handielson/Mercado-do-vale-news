@@ -6,7 +6,7 @@ import { IMEIInput } from '../../ui/IMEIInput';
 import { ColorSelect } from '../selectors/ColorSelect';
 import { CapacitySelect } from '../selectors/CapacitySelect';
 import { VersionSelect } from '../selectors/VersionSelect';
-import { Package, RefreshCw, Loader2 } from 'lucide-react';
+import { CheckCircle2, Package, RefreshCw, Loader2 } from 'lucide-react';
 import { useEnrichedCustomFields } from '../../../hooks/useEnrichedCustomFields';
 import { FIELD_METADATA, isSpecialField, shouldRenderField } from './fieldMetadata';
 import { TableRelationField } from '../../fields/TableRelationField';
@@ -18,6 +18,7 @@ interface ProductSpecificationsProps {
     setValue: UseFormSetValue<ProductInput>;
     errors: FieldErrors<ProductInput>;
     onRefresh?: () => void;
+    onAddToBatchList?: () => void;
     templateValues?: Record<string, any>;
     currentProductId?: string; // ID do produto atual (modo edição)
 }
@@ -31,6 +32,7 @@ export function ProductSpecifications({
     setValue,
     errors,
     onRefresh,
+    onAddToBatchList,
     templateValues,
     currentProductId
 }: ProductSpecificationsProps) {
@@ -188,17 +190,29 @@ export function ProductSpecifications({
                     <Package size={18} className="text-blue-600" />
                     Especificações Técnicas
                 </h3>
-                {onRefresh && (
-                    <button
-                        type="button"
-                        onClick={onRefresh}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Recarregar campos customizados"
-                    >
-                        <RefreshCw size={14} />
-                        Atualizar Campos
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    {onAddToBatchList && (
+                        <button
+                            type="button"
+                            onClick={onAddToBatchList}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                        >
+                            <CheckCircle2 size={14} />
+                            Adicionar a Lista
+                        </button>
+                    )}
+                    {onRefresh && (
+                        <button
+                            type="button"
+                            onClick={onRefresh}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Recarregar campos customizados"
+                        >
+                            <RefreshCw size={14} />
+                            Atualizar Campos
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Grid responsivo com alinhamento consistente - Max 3 colunas para evitar sobreposição */}
@@ -264,8 +278,8 @@ export function ProductSpecifications({
                 {/* SERIAL - Rendered here to ensure it's 3rd field */}
                 {categoryConfig.serial && categoryConfig.serial !== 'off' && renderGenericField('serial', categoryConfig.serial)}
 
-                {/* 
-                    UNIQUE FIELDS (color, storage, ram, version) 
+                {/*
+                    UNIQUE FIELDS (color, storage, ram, version)
                     Always shown here for both CREATE and EDIT modes
                     BatchEntryGrid has been removed for simplicity
                 */}

@@ -1080,6 +1080,20 @@ export async function searchBlingProducts(query: string, onProgress?: (p: FetchP
     return all;
 }
 
+export async function findBlingProductByExactSku(sku: string): Promise<BlingProduct | null> {
+    const normalizedSku = String(sku || '').trim().toLowerCase();
+    if (!normalizedSku) return null;
+
+    const products = await searchBlingProducts(sku);
+    const exactProduct = products.find((product) =>
+        String(product.codigo).trim().toLowerCase() === normalizedSku
+    );
+    if (!exactProduct) return null;
+
+    const detailedProduct = await fetchBlingProductDetail(exactProduct.id);
+    return detailedProduct || exactProduct;
+}
+
 
 /** Traduz erros técnicos do PostgreSQL/Supabase para mensagens amigáveis em português */
 function humanizeImportError(operation: string, rawMessage: string): string {

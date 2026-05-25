@@ -1,27 +1,18 @@
-
-import React, { useState, useEffect } from 'react';
-import { Plus, X, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, RefreshCw, X } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
 import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
+import { filterModelsForSearch } from './modelSelectFilter.js';
 
 interface ModelSelectProps {
     value: string;
-    onChange: (model: string) => void;
-    brandId?: string;  // Filter models by brand
+    onChange: (model: string, selectedModel?: Model) => void;
+    brandId?: string;
     error?: string;
 }
 
-/**
- * ModelSelect Component
- * Select with inline model creation (no page navigation)
- * 
- * ANTIGRAVITY PROTOCOL:
- * - Filters models by selected brand
- * - Inline creation with brand association
- * - Follows BrandSelect pattern
- */
 export const ModelSelect: React.FC<ModelSelectProps> = ({
     value,
     onChange,
@@ -35,27 +26,35 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
     const [newModelName, setNewModelName] = useState('');
     const [selectedBrandId, setSelectedBrandId] = useState('');
     const [isCreating, setIsCreating] = useState(false);
+    const [searchTerm, setSearchTerm] = useState(value || '');
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
     useEffect(() => {
         loadModels();
         loadBrands();
     }, [brandId]);
 
+    useEffect(() => {
+        setSearchTerm(value || '');
+    }, [value]);
+
     const loadModels = async () => {
         try {
             setIsLoading(true);
-            let data: Model[];
-            if (brandId) {
-                data = await modelService.listActiveByBrand(brandId);
-            } else {
-                data = await modelService.listActive();
-            }
+            const data = brandId
+                ? await modelService.listActiveByBrand(brandId)
+                : await modelService.listActive();
             setModels(data);
         } catch (error) {
             console.error('Error loading models:', error);
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleRefreshModels = async () => {
+        await loadModels();
+        setIsDropdownOpen(true);
     };
 
     const loadBrands = async () => {
@@ -86,7 +85,8 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
                 active: true
             });
             await loadModels();
-            onChange(newModel.name);
+            onChange(newModel.name, newModel);
+            setSearchTerm(newModel.name);
             setNewModelName('');
             setSelectedBrandId('');
             setShowCreateDialog(false);
@@ -98,32 +98,62 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
         }
     };
 
+    const filteredModels = filterModelsForSearch(models, searchTerm, value);
+    const shouldShowDropdown = isDropdownOpen && (filteredModels.length > 0 || searchTerm.trim().length > 0);
+
+    const handleSelectModel = (model: Model) => {
+        onChange(model.name, model);
+        setSearchTerm(model.name);
+        setIsDropdownOpen(false);
+    };
+
     return (
         <div className="space-y-2 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
-                <select
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    className={`min-w-0 w-full flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${isLoading ? 'opacity-60 cursor-wait' : ''}`}
-                >
-                    <option value="">Selecione um modelo</option>
-                    
-                    {/* GARANTIA DE COMPATIBILIDADE ASSÍNCRONA */}
-                    {/* Evita que o browser resete o campo enquanto loadModels() baixa a lista */}
-                    {value && !models.some(m => m.name === value) && (
-                        <option value={value}>{value}</option>
-                    )}
+                <div className="relative min-w-0 flex-1">
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                            setIsDropdownOpen(true);
+                            if (!e.target.value.trim()) {
+                                onChange('');
+                            }
+                        }}
+                        onFocus={() => setIsDropdownOpen(true)}
+                        onBlur={() => window.setTimeout(() => setIsDropdownOpen(false), 120)}
+                        placeholder="Buscar modelo..."
+                        disabled={isLoading}
+                        className={`min-w-0 w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50 ${isLoading ? 'cursor-wait' : ''}`}
+                    />
 
-                    {models.map((model) => (
-                        <option key={model.id} value={model.name}>
-                            {model.name}
-                        </option>
-                    ))}
-                </select>
+                    {shouldShowDropdown && (
+                        <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                            {filteredModels.length > 0 ? (
+                                filteredModels.map((model) => (
+                                    <button
+                                        key={model.id}
+                                        type="button"
+                                        onMouseDown={(event) => event.preventDefault()}
+                                        onClick={() => handleSelectModel(model)}
+                                        className={`block w-full px-3 py-2 text-left text-sm hover:bg-blue-50 ${model.name === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'}`}
+                                    >
+                                        {model.name}
+                                    </button>
+                                ))
+                            ) : (
+                                <div className="px-3 py-2 text-sm text-slate-500">
+                                    Nenhum modelo encontrado
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
 
                 <button
                     type="button"
-                    onClick={loadModels}
+                    onClick={handleRefreshModels}
                     disabled={isLoading}
                     className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center disabled:opacity-50"
                     title="Atualizar lista de modelos"
@@ -131,28 +161,27 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
                     <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
 
-                <a
-                    href="/admin/settings/models"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                <button
+                    type="button"
+                    onClick={() => setShowCreateDialog(true)}
                     className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center"
-                    title="Gerenciar Modelos (abre em nova aba)"
+                    title="Novo Modelo"
                 >
                     <Plus className="w-5 h-5" />
-                </a>
+                </button>
             </div>
 
             {error && (
                 <p className="text-xs text-red-600">{error}</p>
             )}
 
-            {/* Inline Create Dialog */}
             {showCreateDialog && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                     <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold text-slate-900">Novo Modelo</h3>
                             <button
+                                type="button"
                                 onClick={() => setShowCreateDialog(false)}
                                 className="p-1 hover:bg-slate-100 rounded transition-colors"
                             >
@@ -161,7 +190,6 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
                         </div>
 
                         <form onSubmit={handleCreateModel} className="space-y-4">
-                            {/* Brand Select (only if brandId not provided) */}
                             {!brandId && (
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">

@@ -35,6 +35,7 @@ import { colorService } from '../../services/colors';
 import { supabase } from '../../services/supabase';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
+import { findBlingProductByExactSku } from '../../services/blingService';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
@@ -54,6 +55,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [isCompressing, setIsCompressing] = useState(false);
     const [blingId, setBlingId] = useState<number | undefined>(initialData?.bling_id);
     const [blingParentId, setBlingParentId] = useState<number | undefined>(initialData?.bling_parent_id);
+    const [isBlingLinkManualOverride, setIsBlingLinkManualOverride] = useState(false);
+    const [isAutoLinkingBling, setIsAutoLinkingBling] = useState(false);
     const [shopeeItemId, setShopeeItemId] = useState<number | undefined>(initialData?.shopee_item_id);
 
     // Estado para armazenar as regras da categoria (Traffic Light)
@@ -165,10 +168,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             console.log('📦 specs keys:', initialData.specs ? Object.keys(initialData.specs) : 'NO SPECS');
             console.log('🔄 Resetting form with initialData...');
             reset(initialData);
-            
+
             // 🔥 CRITICAL: Update external IDs state when initialData arrives asynchronously
             setBlingId(initialData.bling_id || undefined);
             setBlingParentId(initialData.bling_parent_id || undefined);
+            setIsBlingLinkManualOverride(false);
             setShopeeItemId(initialData.shopee_item_id || undefined);
 
             // Em modo edição, carregar o modelo explicitamente para que templateValues
@@ -506,7 +510,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             const { companySettingsService } = await import('../../services/companySettingsService');
             const settings = await companySettingsService.get() as any;
             const videoBaseUrl = settings?.synology_video_base_url || settings?.synologyVideoBaseUrl;
-            
+
             if (!videoBaseUrl) {
                 toast.error('URL base do Synology não configurada nas Definições da Empresa.');
                 return;
@@ -514,7 +518,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
             const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
             const videoUrl = buildProductVideoUrl(videoBaseUrl, sku, ext);
-            
+
             setValue('video_url', videoUrl, { shouldDirty: true, shouldValidate: true });
             toast.success('Link do vídeo gerado com sucesso!');
         } catch (error) {
@@ -542,7 +546,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
                 const currentVideoUrl = getValues('video_url');
                 const normalizedCurrentVideoUrl = normalizeProductVideoUrl(currentVideoUrl);
-                
+
                 // Se for idêntico, não faz nada
                 if (currentVideoUrl === candidateUrl || normalizedCurrentVideoUrl === normalizedCandidateUrl) return;
 
@@ -571,6 +575,46 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         return () => clearTimeout(timer);
     }, [currentSkuForVideo, setValue, getValues]);
 
+    const resolveAutomaticBlingLink = async (sku?: string | null) => {
+        const cleanSku = String(sku || '').trim();
+        if (!cleanSku || blingId || isBlingLinkManualOverride) return null;
+
+        try {
+            setIsAutoLinkingBling(true);
+            const product = await findBlingProductByExactSku(cleanSku);
+            if (!product) return null;
+
+            const parentId = product.variacao?.produtoPai?.id;
+            const blingEan = String(product.gtin || '').trim();
+            if (blingEan) {
+                const currentEans = Array.isArray(getValues('eans')) ? getValues('eans') : [];
+                const hasAnyEan = currentEans.some((ean) => String(ean || '').trim());
+                if (!hasAnyEan) {
+                    setValue('eans', [blingEan], { shouldDirty: true, shouldValidate: true });
+                }
+            }
+            setBlingId(product.id);
+            setBlingParentId(parentId);
+            toast.info('Vinculado automaticamente pelo SKU no Bling.', { id: 'bling-auto-sku-link' });
+            return { id: product.id, parentId, ean: blingEan || null };
+        } catch (error) {
+            console.warn('[ProductForm] Auto Bling SKU link skipped:', error);
+            return null;
+        } finally {
+            setIsAutoLinkingBling(false);
+        }
+    };
+
+    useEffect(() => {
+        if (initialData?.bling_id || blingId || isBlingLinkManualOverride || !currentSkuForVideo) return;
+
+        const timer = setTimeout(() => {
+            resolveAutomaticBlingLink(currentSkuForVideo);
+        }, 900);
+
+        return () => clearTimeout(timer);
+    }, [currentSkuForVideo, initialData?.bling_id, blingId, isBlingLinkManualOverride]);
+
     // Wrapper para onSubmit que mostra toast de erro e calcula preço médio
     const handleFormSubmit = handleSubmit(
         async (data) => {
@@ -591,7 +635,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             const currentWarrantyType = watch('warranty_type');
             const currentWarrantyTemplateId = watch('warranty_template_id');
             const currentVideoUrl = watch('video_url');
-            
+
             // Injeção dos campos não registrados de SEO
             const currentExcludeFromSeo = watch('exclude_from_seo');
             const currentDescription = watch('description');
@@ -670,8 +714,21 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             }
 
             // Inject external integration IDs
-            mergedData.bling_id = blingId;
-            mergedData.bling_parent_id = blingParentId;
+            const automaticBlingLink = !blingId
+                ? await resolveAutomaticBlingLink(mergedData.sku)
+                : null;
+
+            if (automaticBlingLink) {
+                mergedData.bling_id = automaticBlingLink.id;
+                mergedData.bling_parent_id = automaticBlingLink.parentId;
+                const currentPayloadEans = Array.isArray(mergedData.eans) ? mergedData.eans : [];
+                if (automaticBlingLink.ean && !currentPayloadEans.some((ean) => String(ean || '').trim())) {
+                    mergedData.eans = [automaticBlingLink.ean];
+                }
+            } else {
+                mergedData.bling_id = blingId;
+                mergedData.bling_parent_id = blingParentId;
+            }
             mergedData.shopee_item_id = shopeeItemId;
 
             // 1. Salvar produto(s)
@@ -902,6 +959,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 errors={errors}
                 initialData={initialData}
                 onModelSelected={(model) => setSelectedModel(model ?? undefined)}
+                blingId={blingId}
+                blingParentId={blingParentId}
+                isAutoLinkingBling={isAutoLinkingBling}
             />
 
             {/* 1. TIPO DE PRODUTO */}
@@ -936,6 +996,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 setValue={setValue}
                 errors={errors}
                 onRefresh={loadCategoryConfig}
+                onAddToBatchList={!initialData ? handleAddToBatchList : undefined}
                 templateValues={selectedModel?.template_values}
                 currentProductId={initialData?.id}
             />
@@ -975,16 +1036,6 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                             ))}
                         </div>
                     )}
-
-                    <button
-                        type="button"
-                        onClick={handleAddToBatchList}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors"
-                    >
-                        <CheckCircle2 size={16} />
-                        Adicionar à Lista
-                    </button>
-
                     {serialList.length > 0 && (
                         <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
                             💡 Ao clicar em <strong>Salvar Produto</strong>, serão criados <strong>{serialList.length} produto(s)</strong> com os dados acima, um para cada item da lista.
@@ -1088,18 +1139,22 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             <BlingLinkSection
                 blingId={blingId}
                 blingParentId={blingParentId}
+                productSku={watch('sku') || ''}
+                isAutoLinking={isAutoLinkingBling}
                 onLink={(id, parentId) => {
+                    setIsBlingLinkManualOverride(true);
                     setBlingId(id);
                     setBlingParentId(parentId);
                 }}
                 onUnlink={() => {
+                    setIsBlingLinkManualOverride(true);
                     setBlingId(undefined);
                     setBlingParentId(undefined);
                 }}
             />
 
             {/* VÍNCULO COM SHOPEE */}
-            <ShopeeLinkSection 
+            <ShopeeLinkSection
                 productId={initialData?.id}
                 shopeeItemId={shopeeItemId}
                 onLink={(id) => setShopeeItemId(id)}

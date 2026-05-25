@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link2, Link2Off, Loader2, ExternalLink, Search } from 'lucide-react';
+import { Link2, Link2Off, Loader2, ExternalLink, Search, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { searchBlingProducts, BlingProduct } from '../../../services/blingService';
 
 interface BlingLinkSectionProps {
     blingId?: number;
     blingParentId?: number;
+    productSku?: string;
+    isAutoLinking?: boolean;
     onLink: (blingId: number, blingParentId?: number) => void;
     onUnlink: () => void;
 }
@@ -14,12 +16,13 @@ interface BlingLinkSectionProps {
  * BlingLinkSection — Seção do formulário para vincular/desvincular um produto ao Bling.
  * Busca no Bling por nome ou SKU e permite selecionar o produto correto para vincular.
  */
-export function BlingLinkSection({ blingId, blingParentId, onLink, onUnlink }: BlingLinkSectionProps) {
+export function BlingLinkSection({ blingId, blingParentId, productSku, isAutoLinking, onLink, onUnlink }: BlingLinkSectionProps) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<BlingProduct[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [searchError, setSearchError] = useState<string | null>(null);
     const [showResults, setShowResults] = useState(false);
+    const [isEditingLinkedProduct, setIsEditingLinkedProduct] = useState(false);
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +67,7 @@ export function BlingLinkSection({ blingId, blingParentId, onLink, onUnlink }: B
         const parentId = product.variacao?.produtoPai?.id;
         onLink(product.id, parentId);
         toast.success(`✅ Vinculado com sucesso: ${product.nome}`);
+        setIsEditingLinkedProduct(false);
         setQuery('');
         setResults([]);
         setShowResults(false);
@@ -79,7 +83,7 @@ export function BlingLinkSection({ blingId, blingParentId, onLink, onUnlink }: B
     };
 
     // Produto já vinculado
-    if (blingId) {
+    if (blingId && !isEditingLinkedProduct) {
         return (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
                 <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
@@ -109,7 +113,18 @@ export function BlingLinkSection({ blingId, blingParentId, onLink, onUnlink }: B
                     </div>
                     <button
                         type="button"
-                        onClick={onUnlink}
+                        onClick={() => setIsEditingLinkedProduct(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors shrink-0"
+                    >
+                        <Pencil size={12} />
+                        Alterar
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsEditingLinkedProduct(false);
+                            onUnlink();
+                        }}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors shrink-0"
                     >
                         <Link2Off size={12} />
@@ -118,6 +133,11 @@ export function BlingLinkSection({ blingId, blingParentId, onLink, onUnlink }: B
                 </div>
                 <p className="text-xs text-slate-400 mt-2">
                     💡 As vendas no PDV irão decrementar o estoque no Bling automaticamente.
+                </p>
+                <p className="text-xs text-green-700 mt-1">
+                    {productSku
+                        ? `Vinculado automaticamente pelo SKU quando houver correspondência exata (${productSku}).`
+                        : 'Vinculado automaticamente pelo SKU quando houver correspondência exata.'}
                 </p>
             </div>
         );
@@ -132,7 +152,9 @@ export function BlingLinkSection({ blingId, blingParentId, onLink, onUnlink }: B
                 <span className="ml-2 text-xs font-normal text-slate-400">(opcional)</span>
             </h3>
             <p className="text-xs text-slate-400 mb-4">
-                Vincule este produto ao Bling para sincronizar estoque automaticamente nas vendas do PDV.
+                {isAutoLinking
+                    ? 'Buscando vínculo automático pelo SKU...'
+                    : 'Vinculado automaticamente pelo SKU quando houver correspondência exata. Você também pode buscar e alterar manualmente.'}
             </p>
 
             <div className="relative" ref={containerRef}>

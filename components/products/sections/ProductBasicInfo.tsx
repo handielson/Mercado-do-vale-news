@@ -5,7 +5,7 @@ import { Model } from '../../../types/model';
 import { EANInput } from '../../ui/EANInput';
 import { ModelSelect } from '../selectors/ModelSelect';
 import { CategorySelect } from '../CategorySelect';
-import { Package, GitBranch } from 'lucide-react';
+import { ExternalLink, GitBranch, Link2, Loader2, Package } from 'lucide-react';
 import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
 import { versionService } from '../../../services/versions-supabase';
@@ -58,6 +58,65 @@ interface ProductBasicInfoProps {
     errors: FieldErrors<ProductInput>;
     initialData?: ProductInput | null;
     onModelSelected?: (model: Model | null) => void;
+    blingId?: number;
+    blingParentId?: number;
+    isAutoLinkingBling?: boolean;
+}
+
+function VinculoBlingCompacto({
+    blingId,
+    blingParentId,
+    sku,
+    isAutoLinkingBling
+}: {
+    blingId?: number;
+    blingParentId?: number;
+    sku?: string;
+    isAutoLinkingBling?: boolean;
+}) {
+    const hasSku = !!sku?.trim();
+
+    if (isAutoLinkingBling) {
+        return (
+            <div className="min-h-[46px] rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 flex items-center gap-2">
+                <Loader2 size={14} className="animate-spin shrink-0" />
+                <span className="truncate">Buscando no Bling pelo SKU...</span>
+            </div>
+        );
+    }
+
+    if (blingId) {
+        return (
+            <div className="min-h-[46px] rounded-md border border-green-200 bg-green-50 px-3 py-2">
+                <div className="flex h-full min-h-[28px] items-center justify-between gap-3">
+                    <div className="min-w-0 flex items-center gap-2 text-sm">
+                        <Link2 size={14} className="text-green-700 shrink-0" />
+                        <span className="font-medium text-green-900 truncate">Vinculado ao Bling</span>
+                        <span className="font-mono text-xs text-green-700 shrink-0">ID: {blingId}</span>
+                        {blingParentId && (
+                            <span className="font-mono text-xs text-green-600 shrink-0">Pai: {blingParentId}</span>
+                        )}
+                    </div>
+                    <a
+                        href={`https://app.bling.com.br/produtos/${blingId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-green-700 hover:text-green-900 shrink-0"
+                    >
+                        Ver <ExternalLink size={11} />
+                    </a>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-[46px] rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 flex items-center">
+            {hasSku
+                ? 'Sem vinculo exato no Bling para este SKU.'
+                : 'Digite o SKU para vincular automaticamente pelo Bling.'}
+        </div>
+    );
 }
 
 export function ProductBasicInfo({
@@ -66,7 +125,10 @@ export function ProductBasicInfo({
     control,
     errors,
     initialData,
-    onModelSelected
+    onModelSelected,
+    blingId,
+    blingParentId,
+    isAutoLinkingBling
 }: ProductBasicInfoProps) {
     const [selectedModel, setSelectedModel] = useState<Model | null>(null);
     const [isLoadingModel, setIsLoadingModel] = useState(false);
@@ -208,6 +270,34 @@ export function ProductBasicInfo({
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* SKU */}
+                    <div className="space-y-1">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            SKU (Código do Produto)
+                            <span className="ml-2 text-xs text-slate-400 font-mono">products.sku</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={watch('sku') || ''}
+                            onChange={(e) => setValue('sku', e.target.value)}
+                            className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="Será gerado automaticamente se deixado vazio"
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                            Bling
+                            <span className="ml-2 text-xs text-slate-400 font-mono">products.bling_id</span>
+                        </label>
+                        <VinculoBlingCompacto
+                            blingId={blingId}
+                            blingParentId={blingParentId}
+                            sku={watch('sku') || ''}
+                            isAutoLinkingBling={isAutoLinkingBling}
+                        />
+                    </div>
+
                     {/* EAN Scanner */}
                     <div className="space-y-1">
                         <EANInput
@@ -225,11 +315,16 @@ export function ProductBasicInfo({
                         </label>
                         <ModelSelect
                             value={watch('model') || ''}
-                            onChange={async (modelName) => {
+                            onChange={async (modelName, selectedModelFromList) => {
                                 if (!modelName) {
                                     setValue('model', '');
                                     setValue('model_id', '');
                                     setSelectedModel(null);
+                                    return;
+                                }
+
+                                if (selectedModelFromList) {
+                                    applyModelToForm(selectedModelFromList);
                                     return;
                                 }
 
@@ -277,21 +372,6 @@ export function ProductBasicInfo({
                         {errors.name && (
                             <p className="text-xs text-red-600 mt-1">{errors.name.message}</p>
                         )}
-                    </div>
-
-                    {/* SKU */}
-                    <div className="space-y-1">
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                            SKU (Código do Produto)
-                            <span className="ml-2 text-xs text-slate-400 font-mono">products.sku</span>
-                        </label>
-                        <input
-                            type="text"
-                            value={watch('sku') || ''}
-                            onChange={(e) => setValue('sku', e.target.value)}
-                            className="w-full rounded-md border border-slate-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            placeholder="Será gerado automaticamente se deixado vazio"
-                        />
                     </div>
 
                     {/* Produto Pai (Variação) */}
