@@ -2443,15 +2443,30 @@ async function fetchRecentBlingSalesOrdersForSerialSyncVps(accessToken, maxOrder
   return orders.slice(0, limit);
 }
 
+let unitsSerialSaleColumnsCacheVps = null;
+
+async function getUnitsSerialSaleColumnsVps() {
+  if (unitsSerialSaleColumnsCacheVps) return unitsSerialSaleColumnsCacheVps;
+  const [cols] = await pool.query('SHOW COLUMNS FROM units');
+  const names = new Set((Array.isArray(cols) ? cols : []).map((col) => String(col.Field || '')));
+  unitsSerialSaleColumnsCacheVps = {
+    imei: names.has('imei_1') ? 'imei_1' : 'imei',
+    notes: names.has('internal_notes') ? 'internal_notes' : names.has('notes') ? 'notes' : null,
+    soldAt: names.has('sold_at') ? 'sold_at' : null,
+  };
+  return unitsSerialSaleColumnsCacheVps;
+}
+
 async function fetchUnitsByImei1ForSerialSaleSyncVps(imeis = []) {
   const uniqueImeis = [...new Set(imeis.map((imei) => String(imei || '').trim()).filter(Boolean))];
   if (uniqueImeis.length === 0) return new Map();
+  const columns = await getUnitsSerialSaleColumnsVps();
   const placeholders = uniqueImeis.map(() => '?').join(',');
   const [rows] = await pool.query(
-    `SELECT u.id, u.product_id, u.imei_1, u.status, p.sku AS product_sku
+    `SELECT u.id, u.product_id, u.${columns.imei} AS imei_1, u.status, p.sku AS product_sku
        FROM units u
        LEFT JOIN products p ON p.id = u.product_id
-      WHERE u.imei_1 IN (${placeholders})`,
+      WHERE u.${columns.imei} IN (${placeholders})`,
     uniqueImeis
   );
   const map = new Map();
@@ -2466,13 +2481,20 @@ async function markUnitSoldFromBlingSerialSaleVps(unit, order, dryRun) {
   if (dryRun) return { updated: false, productStock: null };
 
   const note = `Baixa automatica Bling pedido ${orderNumber}`;
+  const columns = await getUnitsSerialSaleColumnsVps();
+  const sets = [`status = 'sold'`];
+  const values = [];
+  if (columns.soldAt) sets.push(`${columns.soldAt} = COALESCE(${columns.soldAt}, CURRENT_TIMESTAMP)`);
+  if (columns.notes) {
+    sets.push(`${columns.notes} = TRIM(CONCAT_WS('\n', NULLIF(${columns.notes}, ''), ?))`);
+    values.push(note);
+  }
+  values.push(unit.id);
   const [result] = await pool.query(
     `UPDATE units
-        SET status = 'sold',
-            sold_at = COALESCE(sold_at, CURRENT_TIMESTAMP),
-            internal_notes = TRIM(CONCAT_WS('\n', NULLIF(internal_notes, ''), ?))
+        SET ${sets.join(', ')}
       WHERE id = ? AND status = 'available'`,
-    [note, unit.id]
+    values
   );
   if (!result.affectedRows) return { updated: false, productStock: null };
 

@@ -10,11 +10,13 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /\/Api\/v3\/pedidos\/vendas\/\$\{encodeURIComponent/, `${file} must read Bling sale details`);
   assert.match(source, /extractBlingSerialSaleImeisVps[\s\S]*\\b\\d\{15\}\\b/, `${file} must extract only 15-digit IMEI values from observations`);
   assert.match(source, /detail\?\.observacoes[\s\S]*detail\?\.observacoesInternas/, `${file} must read IMEIs from order observations`);
-  assert.match(source, /SELECT u\.id, u\.product_id, u\.imei_1, u\.status, p\.sku AS product_sku/, `${file} must resolve IMEIs through units joined to products`);
+  assert.match(source, /getUnitsSerialSaleColumnsVps/, `${file} must detect the current VPS units schema`);
+  assert.match(source, /names\.has\('imei_1'\) \? 'imei_1' : 'imei'/, `${file} must support both imei_1 and legacy imei columns`);
+  assert.match(source, /SELECT u\.id, u\.product_id, u\.\$\{columns\.imei\} AS imei_1, u\.status, p\.sku AS product_sku/, `${file} must resolve IMEIs through units joined to products`);
   assert.match(source, /unit_sku_not_in_order/, `${file} must reject IMEIs whose unit SKU is not present in the Bling order`);
   assert.match(source, /sku_quantity_exceeded/, `${file} must reject extra IMEIs beyond the sold item quantity`);
   assert.match(source, /unit\.status !== 'available'/, `${file} must avoid mutating unavailable/sold units`);
-  assert.match(source, /UPDATE units[\s\S]*status = 'sold'[\s\S]*sold_at = COALESCE/, `${file} must mark matched units as sold`);
+  assert.match(source, /UPDATE units[\s\S]*SET \$\{sets\.join/, `${file} must mark matched units as sold with schema-compatible fields`);
   assert.match(source, /await syncProductStock\(unit\.product_id\)/, `${file} must recalculate VPS product stock from available units`);
   assert.match(source, /supabaseRestPatch\('products'[\s\S]*stock_quantity: productStock/, `${file} must mirror serialized stock back to Supabase`);
   assert.match(source, /const serialSales = await syncBlingSerialSalesFromRecentOrdersVps/, `${file} must run serial sale sync as part of reconcile`);
