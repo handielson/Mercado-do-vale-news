@@ -1,262 +1,327 @@
-# Guia de Commit e Deploy
+﻿# Guia de Commit e Deploy
 
-Atualizado em `24/04/2026`.
+Atualizado em `23/05/2026`.
 
-Este arquivo existe para evitar erro e retrabalho quando eu precisar comitar algo neste projeto de novo.
+Este arquivo existe para guiar commits neste projeto sem misturar trabalho paralelo e sem reintroduzir dependÃªncia do deploy antigo.
 
-## Regra-mestra a partir de agora
+## Estado Atual
 
-Quando voce pedir para `comitar`, o entendimento padrao deve ser:
+- branch atual de produÃ§Ã£o: `main`
+- remoto: `origin` em `https://github.com/handielson/Mercado-do-vale-news.git`
+- Ãºltimo commit visto: `2113109` (`fix(stock): show transfer success toast`)
+- produÃ§Ã£o web: Cloudflare + VPS
+- frontend: Nginx servindo `/var/www/mdv-site/current`
+- API: Fastify/Node na VPS via PM2 (`mdv-api`)
+- o deploy antigo saiu do caminho crÃ­tico
 
-1. fazer o commit
-2. fazer o `push`
-3. se a mudanca precisar refletir no projeto web, garantir que ela chegue em `main` e verificar a Vercel
-4. se a mudanca afetar runtime, servicos ou scripts da VPS, fazer tambem o deploy na VPS
+## Regra-Mestra
 
-Ou seja: **nao parar no commit local**, salvo se voce pedir explicitamente para parar antes.
+Quando o pedido for `comitar`, o fluxo padrÃ£o Ã©:
 
-## Estado atual do sistema
+1. conferir `git status`;
+2. revisar o diff dos arquivos relacionados;
+3. stagear somente o que pertence ao assunto do commit;
+4. rodar as validaÃ§Ãµes relevantes;
+5. criar commit com mensagem objetiva;
+6. fazer `push origin main`;
+7. se afetar frontend, publicar na VPS ou confirmar que jÃ¡ foi publicado;
+8. se afetar API/cron/webhook, publicar/reiniciar a VPS ou registrar por que nÃ£o foi feito;
+9. atualizar `migraÃ§Ã£o_VPS.md` quando a mudanÃ§a fizer parte da migraÃ§Ã£o.
 
-### Git
+NÃ£o parar no commit local salvo se o usuÃ¡rio pedir explicitamente.
 
-- branch local atual desta raiz: `master`
-- `origin/master`: `7d4e0d0` — `docs(synology): add NAS recovery runbook`
-- `origin/main`: `ca63f7e` — `docs(synology): add NAS recovery runbook`
-- `origin/HEAD` aponta para `origin/main`
+## Deploy Legado Removido
 
-### Vercel
+NÃ£o usar o deploy antigo como destino de publicaÃ§Ã£o.
 
-- projeto: `mercado-do-vale-news`
-- branch que aciona deploy Git: `main`
-- `master` **nao** gera deploy automatico na Vercel
-- motivo: existe um [vercel.json](/C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/vercel.json:1) na raiz com:
+O repositÃ³rio nÃ£o deve voltar a ter:
 
-```json
-{
-  "git": {
-    "deploymentEnabled": {
-      "master": false
-    }
-  }
-}
+- configuracao da plataforma de deploy antiga;
+- pasta `api/` com Serverless Functions;
+- runtime Node da plataforma antiga;
+- rewrites ou cron jobs da plataforma antiga;
+- CORS permitindo o dominio antigo como fallback.
+
+Teste de guarda:
+
+```powershell
+node tmp-tests\legacy-deploy-removal-static.test.mjs
 ```
 
-- o ultimo deploy verificado da Vercel para o commit do `Synology.md` foi:
-  - SHA: `ca63f7e46fc47dcd0f080b6fb1beb810350a6630`
-  - mensagem: `docs(synology): add NAS recovery runbook`
-  - branch: `main`
-  - status verificado: `READY`
+Auditoria:
 
-### Estrutura importante deste repositorio
+```powershell
+node tools\audit-legacy-deploy-removal-readiness.mjs
+```
 
-- esta raiz nao e a branch de producao da Vercel
-- o [package.json](/C:/Users/Nitro/SynologyDrive/SynologyDrive/Programas/Mercado do Vale New/package.json:1) da raiz e minimo e tem so `mysql2`
-- por isso, empurrar commit apenas para `master` normalmente **nao** basta para aparecer na Vercel
-- quando houver interesse em deploy web, o commit precisa chegar em `main`
+O resultado esperado Ã©:
 
-### Estado do worktree no momento deste documento
+```text
+ready_to_remove_legacy_deploy=true
+legacy_config_present=false
+legacy_rewrites_count=0
+legacy_api_files_count=0
+cors_allows_legacy_fallback=false
+blockers=[]
+```
 
-- existem mudancas locais nao commitadas e arquivos soltos nesta raiz
-- por isso, qualquer commit futuro precisa ser **sempre isolado por arquivo**
-- se for necessario levar algo para `main` sem sujar o estado atual, o caminho mais seguro e usar um `git worktree` isolado
+## Commit Atual Planejado
 
-## Regra pratica para pedidos de commit
+Mensagem sugerida:
 
-Quando voce pedir algo como:
+```text
+chore(vps): remove legacy deploy remnants
+```
 
-- `vamos comitar o arquivo X`
-- `comita isso`
-- `sobe para a vercel`
-- `precisa deploy na vps?`
+Escopo principal:
 
-eu devo seguir esta regra:
+- remover a configuracao do deploy legado;
+- remover functions legadas em `api/`;
+- remover o runtime legado de `package.json` e `package-lock.json`;
+- manter a regra com `tmp-tests/legacy-deploy-removal-static.test.mjs`;
+- atualizar `migraÃ§Ã£o_VPS.md` com a limpeza do deploy legado;
+- incluir as correÃ§Ãµes jÃ¡ feitas e validadas para Bling import/update e financeiro/cache VPS, se o objetivo for fechar o pacote atual da migraÃ§Ã£o.
 
-1. conferir o nome exato do arquivo
-2. verificar se ele esta modificado, novo ou com diferenca de maiuscula/minuscula
-3. stagear **somente** o(s) arquivo(s) pedido(s)
-4. criar commit com mensagem objetiva
-5. manter fora do commit qualquer mudanca paralela do worktree
-6. fazer `push` depois do commit, por padrao
-7. se a mudanca precisar aparecer no projeto web, garantir que o commit chegue em `main`
-8. verificar se a Vercel criou o deployment esperado
-9. confirmar se precisa ou nao deploy na VPS
-10. depois que voce testar e der aval, revisar e apagar arquivos soltos que tenham ficado do trabalho, para evitar lixo no repositorio
+Antes de commitar, revisar com cuidado porque o worktree contÃ©m mudanÃ§as de vÃ¡rios blocos da migraÃ§Ã£o VPS.
 
-## Como decidir o destino do commit
+## Arquivos Que Parecem Pertencer ao Pacote Atual
 
-### Caso 1: commit sem impacto em Vercel ou VPS
+Limpeza do deploy legado:
 
-Se o pedido for apenas algo como:
+- configuracao do deploy legado (removida)
+- `api/**` (removido)
+- `package.json`
+- `package-lock.json`
+- `tmp-tests/legacy-deploy-removal-static.test.mjs`
 
-- guardar historico
-- salvar documentacao
-- registrar um arquivo interno
+DocumentaÃ§Ã£o e auditoria:
 
-mesmo assim eu **nao** devo parar no commit local.
+- `migraÃ§Ã£o_VPS.md`
+- `tools/audit-legacy-deploy-removal-readiness.mjs`
+- `tmp-tests/legacy-deploy-removal-readiness-static.test.mjs`
+- `tmp-tests/public-endpoint-confirmations.mjs`
+- `tmp-tests/integration-config-confirmations.mjs`
 
-O padrao agora e:
+- `reports/cloudflare-dns-before-2026-05-23T01-50-49-386Z.json`
 
-- fazer commit
-- fazer `push` para o remoto correto
-- informar onde o commit ficou
-
-Se nao houver impacto em Vercel nem em VPS, o fluxo termina depois do `push`.
-
-### Caso 2: precisa aparecer na Vercel
-
-Se o pedido implicar:
-
-- site precisa refletir a mudanca
-- "nao chegou na Vercel"
-- "quero que deploye"
-- producao web precisa receber a alteracao
-
-entao o commit precisa chegar em `main`.
-
-Se eu estiver em `master` com worktree sujo, o procedimento correto e:
-
-1. criar um `git worktree` isolado apontando para `origin/main`
-2. aplicar o commit desejado nesse worktree, normalmente com `cherry-pick`
-3. dar `push origin main`
-4. verificar se a Vercel criou o deployment
-
-Importante:
-
-- `push` para `master` sozinho nao atende esse caso
-- so considero o fluxo completo quando o commit estiver em `main` e o deployment da Vercel tiver sido confirmado
-
-## Como decidir se precisa deploy na VPS
-
-### Nao precisa deploy na VPS
-
-Normalmente **nao** precisa VPS quando a mudanca for apenas:
-
-- documentacao
-- markdown
-- notas operacionais
-- arquivos usados so para referencia humana
-
-Exemplo:
-
-- `Synology.md` **nao** exigiu deploy na VPS
-
-### Precisa avaliar deploy na VPS
-
-Precisa avaliar deploy na VPS quando a mudanca afetar codigo ou scripts realmente executados no servidor/VPS, por exemplo:
+VPS/site/API usados na migraÃ§Ã£o:
 
 - `vps_server.js`
 - `vps_server.cjs`
-- servicos PM2
-- jobs/cron rodando na VPS
-- scripts de deploy para NAS/VPS
-- endpoints ou processos que ja foram migrados para a VPS
+- `infra/nginx/mdv-site-production.conf`
+- `scripts/deploy-vps-site.cjs`
+- `tmp-tests/vps-deploy-site-from-deploy-constants.cjs`
+- `tmp-tests/vps-deploy-server-only.cjs`
 
-Se a mudanca mexer nisso, eu nao devo assumir que so Git + Vercel resolvem.
+Bling/financeiro/import:
 
-### Regra nova para VPS
+- `pages/admin/settings/BlingPage.tsx`
+- `pages/admin/financial/FinancialPage.tsx`
+- `services/blingService.ts`
+- `services/blingFinanceService.ts`
+- `tmp-tests/bling-import-existing-category-optional-static.test.mjs`
+- `tmp-tests/bling-import-preserve-images-static.test.mjs`
+- `tmp-tests/bling-finance-service-url-static.test.mjs`
+- `tmp-tests/bling-finance-vps-cache-static.test.mjs`
+- `tmp-tests/vps-bling-finance-cache-live-check.cjs`
 
-Se a mudanca impactar a VPS, o fluxo padrao nao termina em:
+Locais de estoque:
 
-- commit
-- push
-- Vercel
+- `pages/admin/inventory/StockLocationsPage.tsx`
+- `services/stockLocationService.ts`
+- `types/stock-location.ts`
+- `supabase/migrations/20260522000100_deactivate_stock_paths.sql`
+- `tools/apply-stock-deactivation-migration.mjs`
+- `tmp-tests/stock-location-deactivation-static.test.mjs`
+- `tmp-tests/stock-location-duplicate-error-static.test.mjs`
+- `tmp-tests/stock-location-movement-log-actions-static.test.mjs`
+- `tmp-tests/stock-location-movement-product-label-static.test.mjs`
 
-Nesses casos, depois disso eu tambem preciso executar o deploy operacional da VPS ou deixar explicitamente registrado por que ele nao foi feito.
+Bling reconcile/CDC e diagnÃ³sticos controlados:
 
-## Procedimento padrao quando voce pedir "comita X" de novo
+- `services/blingReconcilePlanReview.js`
+- `tools/check-bling-reconcile-apply-readiness.mjs`
+- `tools/review-bling-reconcile-plan.mjs`
+- `tmp-tests/bling-reconcile-*`
+- `tmp-tests/vps-bling-reconcile-*`
+- `tmp-tests/fix-bling-product-cdc-*`
 
-### Fluxo seguro
+Arquivos de relatÃ³rio/screenshot devem ser revisados antes de entrar no commit. NÃ£o incluir imagem ou JSON de relatÃ³rio se nÃ£o for Ãºtil para auditoria.
 
-1. conferir `git status`
-2. localizar o arquivo exato pedido
-3. ler o diff desse arquivo
-4. stagear apenas esse arquivo
-5. commitar com mensagem curta e especifica
-6. informar o hash gerado
-7. fazer `push` para o remoto apropriado
-8. se houver necessidade de Vercel, garantir que o commit chegue em `main`
-9. verificar o deployment da Vercel
-10. se houver necessidade de VPS, executar tambem o deploy da VPS
-11. aguardar seu teste/aval quando a mudanca depender de validacao manual no sistema
-12. depois do seu aval, analisar `git status --short --untracked-files=all` e apagar apenas arquivos soltos claramente temporarios ou sem impacto no sistema
-13. informar com clareza onde o commit ficou, o status da Vercel, o status da VPS e se houve limpeza de arquivos soltos
+## ValidaÃ§Ãµes JÃ¡ Rodadas Nesta Etapa
 
-### Limpeza pos-teste com aval
+- `node tmp-tests\bling-import-existing-category-optional-static.test.mjs`
+- `node tmp-tests\bling-import-preserve-images-static.test.mjs`
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`
+- `npm.cmd run build`
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`
 
-No fim do fluxo de commit/deploy, se voce testar e der aval, eu devo fazer uma limpeza dos arquivos soltos que sobraram do trabalho.
+## Antes Do Commit
 
-Regra:
+Rodar ou confirmar:
 
-- conferir `git status --short --untracked-files=all`
-- separar arquivos soltos por tipo: logs, temporarios, outputs de build/render, testes descartaveis, docs/planos, assets e scripts
-- apagar somente o que for claramente lixo ou arquivo temporario que nao afeta o sistema
-- nao apagar arquivos rastreados pelo Git
-- nao apagar docs, assets, scripts ou testes que possam ser trabalho util sem antes confirmar com voce
-- se houver duvida, manter o arquivo e te mostrar a lista para decisao
-- depois de limpar, conferir novamente o `git status`
+```powershell
+node tmp-tests\legacy-deploy-removal-static.test.mjs
+npm.cmd run build
+node tools\audit-legacy-deploy-removal-readiness.mjs
+git diff --cached --name-only
+git diff --cached --stat
+```
 
-### O que eu nao devo fazer
+Comandos de Git/build neste projeto geralmente precisam ser executados fora do sandbox por causa do Synology Drive.
 
-- nao incluir arquivos nao pedidos no commit
-- nao assumir que `master` faz deploy na Vercel
-- nao parar no commit local quando o pedido foi `comitar`
-- nao deixar de fazer `push` por padrao
-- nao deixar a Vercel sem verificacao quando a mudanca for do app web
-- nao ignorar worktree sujo
-- nao misturar documentacao com codigo nao relacionado no mesmo commit
-- nao presumir deploy na VPS para arquivos de documentacao
-- nao apagar arquivos soltos antes do seu teste/aval final, salvo quando voce pedir explicitamente uma limpeza
+## Depois Do Commit
 
-## Observacoes praticas para este projeto
+1. `git push origin main`
+2. confirmar que o GitHub recebeu o commit;
+3. se houver mudanÃ§a ainda nÃ£o publicada no site, rodar deploy VPS do frontend;
+4. se houver mudanÃ§a em `vps_server.js`/`vps_server.cjs`, publicar/reiniciar API VPS;
+5. conferir domÃ­nio final `https://www.mercadodovale.com.br`;
+6. manter monitoramento de PM2, Nginx, Cloudflare e webhooks.
 
-### Nome de arquivo importa
+## Deploy VPS Do Frontend
 
-Neste caso houve diferenca entre o pedido e o arquivo real:
+Quando a mudanca afetar o frontend publico/admin, publicar a partir de um worktree limpo. Nao rodar `npm run deploy:vps-site` no worktree principal quando ele estiver sujo, porque o script publica o `dist/` gerado localmente e pode levar mudancas paralelas ainda nao commitadas.
 
-- pedido: `synology.md`
-- arquivo real: `Synology.md`
+Fluxo que funcionou em `25/05/2026`:
 
-Entao sempre preciso conferir o nome exato antes de stagear.
+1. confirmar que `origin/main` aponta para o commit que deve ir para producao:
 
-### Main e a branch importante para deploy web
+```powershell
+git ls-remote origin refs/heads/main
+```
 
-Se o objetivo final for ver a mudanca no projeto da Vercel, a verificacao correta e:
+2. criar um worktree temporario limpo apontando para `origin/main`:
 
-- commit chegou em `origin/main`
-- a Vercel criou deployment para esse SHA
+```powershell
+git worktree add C:\tmp\mdv-frontend-deploy origin/main
+```
 
-Empurrar so para `origin/master` nao basta.
+3. instalar dependencias nesse worktree:
 
-### Quando o worktree estiver sujo
+```powershell
+npm.cmd ci
+```
 
-Se houver muitas mudancas paralelas, o modo mais seguro e:
+4. carregar as credenciais VPS existentes em memoria e executar `scripts/deploy-vps-site.cjs`.
 
-- fazer o commit isolado normalmente
-- e, se for preciso levar para `main`, usar worktree separado
+### Onde Encontrar Chaves E Credenciais
 
-Isso evita quebrar ou incluir sem querer o que ja estava aberto localmente.
+Fontes locais conhecidas:
 
-### Git e build sempre fora do sandbox
+- credenciais SSH da VPS Hostinger usadas pelos scripts antigos:
 
-Neste projeto, por estar em pasta sincronizada pelo Synology Drive e por restricoes do sandbox, comandos de Git e build devem ser executados diretamente fora do sandbox com permissao aprovada. Nao perder tempo tentando primeiro dentro do sandbox quando o objetivo for stage, commit, push ou build de verificacao.
+```text
+C:\Users\Nitro\SynologyDrive\SynologyDrive\Programas\Mercado do Vale New\.claude\worktrees\lucid-banzai-322d36\deploy.cjs
+```
 
-Casos ja observados:
+Nesse arquivo, procurar somente estes nomes:
 
-- `git add` pode falhar ao criar `.git/index.lock` com `Permission denied`.
-- `npm.cmd run build` pode falhar no sandbox com `Cannot read directory "../../../../..": Access is denied` e `Could not resolve vite.config.ts`.
+```text
+VpsHost
+VpsUser
+VpsPass
+```
 
-Conduta correta:
+Eles correspondem ao acesso SSH usado para publicar na VPS. Usar esse arquivo apenas como fonte local de valores para o processo de deploy. Nao imprimir `VpsPass` no chat, logs, commits ou documentacao.
 
-1. para `git status`, `git diff`, `git add`, `git commit`, `git push` e `npm.cmd run build`, usar execucao aprovada fora do sandbox desde o inicio;
-2. nao usar comandos destrutivos para resolver lock/permissao;
-3. manter o escopo do commit isolado por arquivo;
-4. conferir `git status`, `git diff --cached --name-only` e `git diff --cached --stat` antes do commit;
-5. so entao commitar e fazer push conforme este guia.
+- variaveis gerais do app local:
 
-Em resumo: para Git e build neste projeto, o caminho correto e pedir/usar execucao aprovada fora do sandbox, nao mudar o procedimento de commit nem incluir arquivos extras.
+```text
+C:\Users\Nitro\SynologyDrive\SynologyDrive\Programas\Mercado do Vale New\mercado-do-vale\.env.local
+C:\Users\Nitro\SynologyDrive\SynologyDrive\Programas\Mercado do Vale New\mercado-do-vale\.env
+C:\Users\Nitro\SynologyDrive\SynologyDrive\Programas\Mercado do Vale New\mercado-do-vale\.env.production
+```
 
-## Frase curta para eu seguir no futuro
+Nesses arquivos existem chaves como `VITE_VPS_SYNC_KEY`, `SUPABASE_*`, `MYSQL_*`, `SYNOLOGY_*`, `BLING_*`, `SHOPEE_*` e outras integracoes. Eles nao tinham `VPS_SITE_HOST`, `VPS_SITE_USER` ou `VPS_SITE_PASSWORD` quando o deploy de `25/05/2026` foi feito.
 
-Quando voce pedir para comitar de novo, a regra e:
+- template do ambiente da VPS/API:
 
-`comitar so o que foi pedido, fazer push, levar para main quando precisar aparecer na Vercel, verificar o deployment, fazer deploy na VPS quando a mudanca atingir a VPS e, depois do seu teste com aval, limpar arquivos soltos que sejam lixo para nao atrapalhar commits futuros.`
+```text
+C:\Users\Nitro\SynologyDrive\SynologyDrive\Programas\Mercado do Vale New\mercado-do-vale\.env.vps.example
+```
+
+Esse arquivo serve como referencia dos nomes esperados na VPS/API, mas nao deve ser tratado como fonte de segredo real.
+
+O deploy novo do frontend espera receber em ambiente:
+
+```text
+VPS_SITE_HOST
+VPS_SITE_USER
+VPS_SITE_PASSWORD ou VPS_SITE_PRIVATE_KEY
+VPS_SITE_ROOT=/var/www/mdv-site
+```
+
+Mapeamento usado no deploy que funcionou:
+
+```text
+VPS_SITE_HOST     <- VpsHost
+VPS_SITE_USER     <- VpsUser
+VPS_SITE_PASSWORD <- VpsPass
+VPS_SITE_ROOT     <- /var/www/mdv-site
+```
+
+Se precisar localizar credenciais sem expor valores, procurar apenas pelos nomes das variaveis:
+
+```powershell
+Select-String -Path ".env",".env.local",".env.production",".env.vps.example" -Pattern "VPS_SITE_|VITE_VPS_SYNC_KEY|SUPABASE_|MYSQL_|SYNOLOGY_|BLING_|SHOPEE_" | ForEach-Object { "$($_.Path):$($_.LineNumber):$($_.Line.Split('=')[0])" }
+```
+
+No Windows, se o deploy falhar com:
+
+```text
+npm run build failed to start: spawnSync npm.cmd EINVAL
+```
+
+aplicar no worktree temporario a correcao operacional em `scripts/deploy-vps-site.cjs`:
+
+```js
+shell: process.platform === 'win32',
+```
+
+Essa correcao ja existia no worktree principal durante o deploy de `25/05/2026`, mas ainda nao fazia parte do commit `1c64cba`. Se ela ainda estiver pendente, considerar commitar em pacote proprio.
+
+Depois do deploy, a saida esperada deve incluir:
+
+```text
+Site release active: /var/www/mdv-site/releases/YYYYMMDD-HHMMSS
+Nginx root should point to: /var/www/mdv-site/current
+```
+
+Verificar no servidor:
+
+```text
+readlink /var/www/mdv-site/current
+test -f /var/www/mdv-site/current/index.html
+ls /var/www/mdv-site/current/assets/PublicProductPage-*.js
+```
+
+Verificar publicamente:
+
+```powershell
+curl.exe -L -s -o NUL -w "%{http_code} %{url_effective}\n" "https://mercadodovale.com.br/"
+```
+
+O resultado final esperado e `200 https://www.mercadodovale.com.br/`.
+
+Exemplo real confirmado em `25/05/2026`:
+
+```text
+commit publicado: 1c64cba0624716800965a25c097f788932e9722e
+release ativa: /var/www/mdv-site/releases/20260525-014618
+asset PDP: /var/www/mdv-site/current/assets/PublicProductPage-CExMp9xy.js
+HTTP final: 200 https://www.mercadodovale.com.br/
+```
+
+Se criar scripts temporarios para carregar variaveis ou verificar a VPS, criar somente dentro de `C:\tmp\...` e remover depois. Nao commitar esses scripts.
+
+## PendÃªncias Operacionais Fora Do Commit
+
+- conferir nos painÃ©is externos se Bling, Shopee e Mercado Pago apontam para URLs finais em `www.mercadodovale.com.br`;
+- fazer regressÃ£o manual com sessÃ£o admin no domÃ­nio final;
+- observar payload real de webhooks em janela controlada;
+- manter monitoramento 24-72h apÃ³s a limpeza.
+
+## Frase Curta Para Seguir
+
+Comitar sÃ³ o pacote da migraÃ§Ã£o VPS, manter o deploy antigo fora, validar build/auditoria, push em `main`, publicar na VPS quando necessÃ¡rio e registrar o resultado no `migraÃ§Ã£o_VPS.md`.
