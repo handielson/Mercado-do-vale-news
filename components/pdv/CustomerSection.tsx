@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { User, Search, X, Calendar, ShoppingBag, ExternalLink } from 'lucide-react';
+import { User, Search, X, Calendar, ShoppingBag, ExternalLink, UserPlus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { customerService } from '../../services/customers';
+import { formatCpfCnpj, formatPhone, validateCpfCnpj, validateEmail } from '../../utils/cpfCnpjValidation';
 
 interface Customer {
     id: string;
@@ -25,6 +27,16 @@ export default function CustomerSection({
     const [isSearching, setIsSearching] = useState(false);
     const [showResults, setShowResults] = useState(false);
     const [recentCustomers, setRecentCustomers] = useState<Customer[]>([]);
+    const [showQuickCreate, setShowQuickCreate] = useState(false);
+    const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+    const [quickCustomer, setQuickCustomer] = useState({
+        name: '',
+        phone: '',
+        cpf_cnpj: '',
+        email: '',
+    });
+
+    const onlyDigits = (value: string) => value.replace(/\D/g, '');
 
     // Buscar últimos 3 clientes ao carregar
     useEffect(() => {
@@ -82,7 +94,7 @@ export default function CustomerSection({
     // Buscar clientes
     const handleSearch = async () => {
         if (!searchTerm.trim()) {
-            toast.error('Digite um nome ou CPF para buscar');
+            toast.error('Digite um nome, CPF/CNPJ, telefone ou e-mail para buscar');
             return;
         }
 
@@ -92,11 +104,27 @@ export default function CustomerSection({
         try {
             const { supabase } = await import('../../services/supabase');
             const term = searchTerm.trim().toLowerCase();
+            const digits = onlyDigits(term);
+            const searchTokens = new Set([term]);
+            if (digits) {
+                searchTokens.add(digits);
+                searchTokens.add(formatPhone(digits));
+                searchTokens.add(formatCpfCnpj(digits));
+            }
+            const orFilter = [...searchTokens]
+                .filter(Boolean)
+                .flatMap(token => [
+                    `name.ilike.%${token}%`,
+                    `cpf_cnpj.ilike.%${token}%`,
+                    `phone.ilike.%${token}%`,
+                    `email.ilike.%${token}%`,
+                ])
+                .join(',');
 
             const { data, error } = await supabase
                 .from('customers')
                 .select('id, name, cpf_cnpj, email, phone, birth_date')
-                .or(`name.ilike.%${term}%,cpf_cnpj.ilike.%${term}%`)
+                .or(orFilter)
                 .eq('is_active', true)
                 .order('name', { ascending: true })
                 .limit(10);
@@ -116,6 +144,77 @@ export default function CustomerSection({
             setSearchResults([]);
         } finally {
             setIsSearching(false);
+        }
+    };
+
+    const openQuickCreate = () => {
+        const term = searchTerm.trim();
+        const digits = onlyDigits(term);
+        setQuickCustomer(current => ({
+            ...current,
+            phone: digits.length >= 8 && digits.length <= 11 ? formatPhone(term) : current.phone,
+            cpf_cnpj: digits.length === 14 ? formatCpfCnpj(term) : current.cpf_cnpj,
+            email: term.includes('@') ? term : current.email,
+        }));
+        setShowQuickCreate(true);
+        setShowResults(false);
+    };
+
+    const handleQuickCustomerField = (field: keyof typeof quickCustomer, value: string) => {
+        const nextValue =
+            field === 'phone' ? formatPhone(value)
+                : field === 'cpf_cnpj' ? formatCpfCnpj(value)
+                    : value;
+        setQuickCustomer(current => ({ ...current, [field]: nextValue }));
+    };
+
+    const handleCreateCustomer = async (event: React.FormEvent) => {
+        event.preventDefault();
+        const name = quickCustomer.name.trim();
+        const cpfCnpj = quickCustomer.cpf_cnpj.trim();
+        const phone = quickCustomer.phone.trim();
+        const email = quickCustomer.email.trim();
+
+        if (!name) {
+            toast.error('Informe o nome do cliente');
+            return;
+        }
+
+        if (cpfCnpj && !validateCpfCnpj(cpfCnpj)) {
+            toast.error('CPF/CNPJ invalido');
+            return;
+        }
+
+        if (email && !validateEmail(email)) {
+            toast.error('E-mail invalido');
+            return;
+        }
+
+        try {
+            setIsCreatingCustomer(true);
+            const created = await customerService.create({
+                name,
+                cpf_cnpj: cpfCnpj || undefined,
+                phone: phone || undefined,
+                email: email || undefined,
+                customer_type: 'retail',
+                is_active: true,
+            });
+
+            handleSelectCustomer(created);
+            setQuickCustomer({ name: '', phone: '', cpf_cnpj: '', email: '' });
+            setShowQuickCreate(false);
+            fetchRecentCustomers();
+            toast.success('Cliente cadastrado e selecionado');
+        } catch (error: any) {
+            console.error('Erro ao cadastrar cliente no PDV:', error);
+            if (error.message?.includes('duplicate key') || error.code === '23505') {
+                toast.error('Cliente ja cadastrado com este CPF/CNPJ');
+            } else {
+                toast.error(error.message || 'Erro ao cadastrar cliente');
+            }
+        } finally {
+            setIsCreatingCustomer(false);
         }
     };
 
@@ -152,7 +251,7 @@ export default function CustomerSection({
 
                 {/* Acesso Rápido - 3 últimos clientes */}
                 {!selectedCustomer && recentCustomers.length > 0 && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
                         {recentCustomers.map((customer) => (
                             <button
                                 key={customer.id}
@@ -253,7 +352,7 @@ export default function CustomerSection({
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 onKeyPress={handleKeyPress}
-                                placeholder="Nome ou CPF/CNPJ do cliente..."
+                                placeholder="Nome, CPF/CNPJ, telefone ou e-mail..."
                                 className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                             <button
@@ -263,11 +362,105 @@ export default function CustomerSection({
                             >
                                 <Search size={18} />
                             </button>
+                            <button
+                                type="button"
+                                onClick={openQuickCreate}
+                                className="px-4 py-2 border border-emerald-200 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors"
+                                title="Cadastrar novo cliente"
+                            >
+                                <UserPlus size={18} />
+                            </button>
                         </div>
 
                         <p className="text-xs text-red-600">
                             ⚠️ Selecionar um cliente é obrigatório para finalizar a venda
                         </p>
+
+                        {showQuickCreate && (
+                            <form onSubmit={handleCreateCustomer} className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                    <h4 className="font-semibold text-slate-800 flex items-center gap-2">
+                                        <UserPlus size={18} className="text-emerald-700" />
+                                        Novo cliente
+                                    </h4>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowQuickCreate(false)}
+                                        className="p-1 text-slate-500 hover:text-slate-800 hover:bg-white rounded"
+                                        title="Fechar cadastro"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <label className="space-y-1 md:col-span-2">
+                                        <span className="text-xs font-medium text-slate-600">Nome *</span>
+                                        <input
+                                            type="text"
+                                            value={quickCustomer.name}
+                                            onChange={(e) => handleQuickCustomerField('name', e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            placeholder="Nome completo"
+                                            autoFocus
+                                        />
+                                    </label>
+
+                                    <label className="space-y-1">
+                                        <span className="text-xs font-medium text-slate-600">Telefone</span>
+                                        <input
+                                            type="tel"
+                                            inputMode="tel"
+                                            value={quickCustomer.phone}
+                                            onChange={(e) => handleQuickCustomerField('phone', e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            placeholder="(87) 99999-9999"
+                                        />
+                                    </label>
+
+                                    <label className="space-y-1">
+                                        <span className="text-xs font-medium text-slate-600">CPF/CNPJ</span>
+                                        <input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={quickCustomer.cpf_cnpj}
+                                            onChange={(e) => handleQuickCustomerField('cpf_cnpj', e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            placeholder="Opcional"
+                                        />
+                                    </label>
+
+                                    <label className="space-y-1 md:col-span-2">
+                                        <span className="text-xs font-medium text-slate-600">E-mail</span>
+                                        <input
+                                            type="email"
+                                            value={quickCustomer.email}
+                                            onChange={(e) => handleQuickCustomerField('email', e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                                            placeholder="Opcional"
+                                        />
+                                    </label>
+                                </div>
+
+                                <div className="flex justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowQuickCreate(false)}
+                                        className="px-3 py-2 text-sm text-slate-700 hover:bg-white rounded-lg transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isCreatingCustomer}
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        {isCreatingCustomer ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                                        Cadastrar e selecionar
+                                    </button>
+                                </div>
+                            </form>
+                        )}
 
                         {/* Resultados da Busca */}
                         {showResults && (
@@ -277,8 +470,16 @@ export default function CustomerSection({
                                         Buscando clientes...
                                     </div>
                                 ) : searchResults.length === 0 ? (
-                                    <div className="p-4 text-center text-slate-500">
-                                        Nenhum cliente encontrado
+                                    <div className="p-4 text-center text-slate-500 space-y-3">
+                                        <p>Nenhum cliente encontrado</p>
+                                        <button
+                                            type="button"
+                                            onClick={openQuickCreate}
+                                            className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+                                        >
+                                            <UserPlus size={16} />
+                                            Cadastrar novo cliente
+                                        </button>
                                     </div>
                                 ) : (
                                     <div className="divide-y divide-slate-200">
