@@ -2375,6 +2375,186 @@ async function applyReconcileNameChangesVps(changes, request) {
   return { applied, failed };
 }
 
+function extractBlingSerialSaleImeisVps(value) {
+  const matches = String(value || '').match(/\b\d{15}\b/g) || [];
+  return [...new Set(matches)];
+}
+
+function normalizeBlingSerialSaleSkuVps(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function getBlingOrderItemSkuVps(item) {
+  return normalizeBlingSerialSaleSkuVps(
+    item?.codigo ||
+    item?.produto?.codigo ||
+    item?.produtoLoja?.codigo ||
+    ''
+  );
+}
+
+function getBlingOrderItemQuantityVps(item) {
+  const numeric = Number(item?.quantidade ?? item?.quantity ?? 1);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 1;
+  return Math.max(1, Math.trunc(numeric));
+}
+
+function isBlingSerialSaleOrderCanceledVps(order) {
+  const statusText = JSON.stringify(order?.situacao || '').toLowerCase();
+  const statusId = Number(order?.situacao?.id ?? order?.situacao);
+  return statusId === 12 || statusText.includes('cancel');
+}
+
+function buildBlingOrderSkuQuantityMapVps(items = []) {
+  const map = new Map();
+  for (const item of items) {
+    const sku = getBlingOrderItemSkuVps(item);
+    if (!sku) continue;
+    map.set(sku, (map.get(sku) || 0) + getBlingOrderItemQuantityVps(item));
+  }
+  return map;
+}
+
+async function fetchBlingSalesOrderDetailForSerialSyncVps(accessToken, id) {
+  const response = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas/${encodeURIComponent(String(id))}`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(15000),
+  });
+  const body = await readBlingProxyResponse(response);
+  if (!response.ok) throw new Error(`Bling sale detail fetch failed (${response.status}): ${body.text}`);
+  return body.json?.data || body.json || null;
+}
+
+async function fetchRecentBlingSalesOrdersForSerialSyncVps(accessToken, maxOrders = 25) {
+  const orders = [];
+  const limit = Math.min(100, Math.max(1, Number(maxOrders) || 25));
+  for (let page = 1; orders.length < limit; page += 1) {
+    if (page > 1) await sleepBlingReconcileVps(350);
+    const response = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas?pagina=${page}&limite=100`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(15000),
+    });
+    const body = await readBlingProxyResponse(response);
+    if (!response.ok) throw new Error(`Bling sales fetch failed (${response.status}): ${body.text}`);
+    const pageItems = Array.isArray(body.json?.data) ? body.json.data : [];
+    orders.push(...pageItems);
+    if (pageItems.length < 100) break;
+  }
+  return orders.slice(0, limit);
+}
+
+async function fetchUnitsByImei1ForSerialSaleSyncVps(imeis = []) {
+  const uniqueImeis = [...new Set(imeis.map((imei) => String(imei || '').trim()).filter(Boolean))];
+  if (uniqueImeis.length === 0) return new Map();
+  const placeholders = uniqueImeis.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT u.id, u.product_id, u.imei_1, u.status, p.sku AS product_sku
+       FROM units u
+       LEFT JOIN products p ON p.id = u.product_id
+      WHERE u.imei_1 IN (${placeholders})`,
+    uniqueImeis
+  );
+  const map = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (row?.imei_1) map.set(String(row.imei_1), row);
+  }
+  return map;
+}
+
+async function markUnitSoldFromBlingSerialSaleVps(unit, order, dryRun) {
+  const orderNumber = order?.numero || order?.id || '';
+  if (dryRun) return { updated: false, productStock: null };
+
+  const note = `Baixa automatica Bling pedido ${orderNumber}`;
+  const [result] = await pool.query(
+    `UPDATE units
+        SET status = 'sold',
+            sold_at = COALESCE(sold_at, CURRENT_TIMESTAMP),
+            internal_notes = TRIM(CONCAT_WS('\n', NULLIF(internal_notes, ''), ?))
+      WHERE id = ? AND status = 'available'`,
+    [note, unit.id]
+  );
+  if (!result.affectedRows) return { updated: false, productStock: null };
+
+  const productStock = await syncProductStock(unit.product_id);
+  if (productStock !== null && productStock !== undefined) {
+    await supabaseRestPatch('products', `id=eq.${encodeURIComponent(unit.product_id)}`, { stock_quantity: productStock });
+  }
+  return { updated: true, productStock };
+}
+
+async function processBlingSerialSaleOrderVps(order, accessToken, dryRun) {
+  const detail = await fetchBlingSalesOrderDetailForSerialSyncVps(accessToken, order.id);
+  const items = Array.isArray(detail?.itens) ? detail.itens : [];
+  const orderNumber = detail?.numero || order?.numero || order?.id || '';
+  const imeis = extractBlingSerialSaleImeisVps(`${detail?.observacoes || ''} ${detail?.observacoesInternas || ''}`);
+  if (imeis.length === 0) return { orderNumber, skipped: true, reason: 'no_imei_in_observations', imeis: 0 };
+  if (isBlingSerialSaleOrderCanceledVps(detail || order)) return { orderNumber, skipped: true, reason: 'order_canceled', imeis: imeis.length };
+
+  const skuQuantities = buildBlingOrderSkuQuantityMapVps(items);
+  if (skuQuantities.size === 0) return { orderNumber, skipped: true, reason: 'no_item_sku', imeis: imeis.length };
+
+  const unitsByImei = await fetchUnitsByImei1ForSerialSaleSyncVps(imeis);
+  const matchedBySku = new Map();
+  const sold = [];
+  const pending = [];
+
+  for (const imei of imeis) {
+    const unit = unitsByImei.get(imei);
+    if (!unit) {
+      pending.push({ imei, reason: 'unit_not_found' });
+      continue;
+    }
+
+    const sku = normalizeBlingSerialSaleSkuVps(unit.product_sku);
+    const soldQty = skuQuantities.get(sku) || 0;
+    if (!soldQty) {
+      pending.push({ imei, sku, reason: 'unit_sku_not_in_order' });
+      continue;
+    }
+
+    const currentMatched = matchedBySku.get(sku) || 0;
+    if (currentMatched >= soldQty) {
+      pending.push({ imei, sku, reason: 'sku_quantity_exceeded' });
+      continue;
+    }
+
+    if (unit.status !== 'available') {
+      pending.push({ imei, sku, reason: `unit_status_${unit.status || 'unknown'}` });
+      continue;
+    }
+
+    const result = await markUnitSoldFromBlingSerialSaleVps(unit, detail || order, dryRun);
+    if (result.updated || dryRun) {
+      matchedBySku.set(sku, currentMatched + 1);
+      sold.push({ imei, sku, unitId: unit.id, dryRun, productStock: result.productStock });
+    } else {
+      pending.push({ imei, sku, reason: 'update_not_applied' });
+    }
+  }
+
+  return { orderNumber, skipped: false, imeis: imeis.length, sold, pending };
+}
+
+async function syncBlingSerialSalesFromRecentOrdersVps({ accessToken, dryRun = true, maxOrders = 25 } = {}) {
+  const orders = await fetchRecentBlingSalesOrdersForSerialSyncVps(accessToken, maxOrders);
+  const processed = [];
+  for (const order of orders) {
+    if (!order?.id) continue;
+    const result = await processBlingSerialSaleOrderVps(order, accessToken, dryRun);
+    if (!result.skipped || result.reason === 'order_canceled') processed.push(result);
+  }
+  return {
+    ok: true,
+    dryRun,
+    checkedOrders: orders.length,
+    ordersWithImeis: processed.length,
+    soldUnits: processed.reduce((sum, order) => sum + (order.sold?.length || 0), 0),
+    pendingUnits: processed.reduce((sum, order) => sum + (order.pending?.length || 0), 0),
+    details: processed,
+  };
+}
+
 function resolveBlingWebhookSourceVps(request) {
   return String(request.query?.resource || '') === 'webhook' ? 'bling-legacy' : 'bling-webhook';
 }
@@ -3385,7 +3565,9 @@ async function handleBlingApiVps(request, reply) {
     try {
       const dryRun = String(query?.dryRun || request.body?.dryRun || '').toLowerCase() === 'true';
       const includeDetails = String(query?.details || request.body?.details || '').toLowerCase() === 'true';
+      const serialOrders = Math.min(100, Math.max(1, Number(query?.serialOrders || request.body?.serialOrders || 25) || 25));
       const accessToken = await getValidBlingAccessTokenForReconcileVps();
+      const serialSales = await syncBlingSerialSalesFromRecentOrdersVps({ accessToken, dryRun, maxOrders: serialOrders });
       const localProducts = await fetchAllLocalProductsForReconcileVps();
       const remoteProducts = await fetchAllBlingProductsForReconcileVps(accessToken);
       const remoteStocks = await fetchAllBlingStocksForReconcileVps(accessToken, localProducts.map((product) => product.bling_id));
@@ -3396,6 +3578,7 @@ async function handleBlingApiVps(request, reply) {
           ok: true,
           dryRun: true,
           planned: { stockChanges: plan.stockChanges.length, nameChanges: plan.nameChanges.length },
+          serialSales,
           totals: plan.totals,
           ...(includeDetails ? { details: summarizeBlingReconcilePlanDetailsVps(plan) } : {}),
         });
@@ -3406,6 +3589,7 @@ async function handleBlingApiVps(request, reply) {
       return reply.code(200).send({
         ok: true,
         totals: plan.totals,
+        serialSales,
         planned: { stockChanges: plan.stockChanges.length, nameChanges: plan.nameChanges.length },
         applied: { stockChanges: stockResult.applied.length, nameChanges: nameResult.applied.length },
         failed: [...stockResult.failed, ...nameResult.failed],
@@ -3417,6 +3601,29 @@ async function handleBlingApiVps(request, reply) {
         debug: buildCopyableDebug('bling-reconcile', {
           resource,
           dryRun: String(query?.dryRun || request.body?.dryRun || ''),
+          rawMessage: err.message,
+        }),
+      });
+    }
+  }
+
+  if (resource === 'serial-sales-sync') {
+    if (request.method !== 'GET' && request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+    if (!isBlingReconcileAuthorizedVps(request)) return reply.code(401).send({ error: 'Unauthorized' });
+
+    try {
+      const dryRun = String(query?.dryRun ?? request.body?.dryRun ?? 'true').toLowerCase() !== 'false';
+      const maxOrders = Math.min(100, Math.max(1, Number(query?.maxOrders || request.body?.maxOrders || 25) || 25));
+      const accessToken = await getValidBlingAccessTokenForReconcileVps();
+      const result = await syncBlingSerialSalesFromRecentOrdersVps({ accessToken, dryRun, maxOrders });
+      return reply.code(200).send(result);
+    } catch (err) {
+      return reply.code(500).send({
+        ok: false,
+        error: err.message || 'Unknown error',
+        debug: buildCopyableDebug('bling-serial-sales-sync', {
+          resource,
+          dryRun: String(query?.dryRun ?? request.body?.dryRun ?? 'true'),
           rawMessage: err.message,
         }),
       });
@@ -3690,7 +3897,7 @@ async function handleBlingApiVps(request, reply) {
     }
   }
 
-  return reply.code(400).send({ error: 'Invalid resource. Migrated on VPS: oauth-callback|exchange|categories|products|product-detail|product-update-fiscal|product-update-dimensions|image-proxy|debug-product|debug-diagnostic|fix-profile|sync-model-brand|fix-bling-id|stock|stock-sync|sync-prices-vps|reconcile|finance|nfe|nfce|nf-detail|webhook|webhook-logs' });
+  return reply.code(400).send({ error: 'Invalid resource. Migrated on VPS: oauth-callback|exchange|categories|products|product-detail|product-update-fiscal|product-update-dimensions|image-proxy|debug-product|debug-diagnostic|fix-profile|sync-model-brand|fix-bling-id|stock|stock-sync|sync-prices-vps|reconcile|serial-sales-sync|finance|nfe|nfce|nf-detail|webhook|webhook-logs' });
 }
 
 const TELEGRAM_BOT_MANUAL_VPS = `*Manual do Bot - Mercado do Vale*
@@ -13419,7 +13626,7 @@ async function runMigrations() {
 
 // Recalcula products.stock_quantity = COUNT(units WHERE status='available') para o produto.
 async function syncProductStock(productId) {
-  if (!productId) return;
+  if (!productId) return null;
   await pool.query(
     `UPDATE products SET stock_quantity = (
        SELECT COUNT(*) FROM units WHERE product_id = ? AND status = 'available'
@@ -13427,6 +13634,8 @@ async function syncProductStock(productId) {
      WHERE id = ?`,
     [productId, productId]
   );
+  const [rows] = await pool.query('SELECT stock_quantity FROM products WHERE id = ? LIMIT 1', [productId]);
+  return rows?.[0]?.stock_quantity ?? null;
 }
 
 // Start
