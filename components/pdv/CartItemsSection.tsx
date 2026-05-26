@@ -15,6 +15,25 @@ interface CartItemsSectionProps {
 const fmt = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
 
+const parseCurrencyToCents = (value: string): number | null => {
+    const normalized = value.replace(/[^\d,.]/g, '');
+    if (!normalized) return null;
+
+    const lastComma = normalized.lastIndexOf(',');
+    const lastDot = normalized.lastIndexOf('.');
+    const decimalIndex = Math.max(lastComma, lastDot);
+
+    if (decimalIndex >= 0) {
+        const integerPart = normalized.slice(0, decimalIndex).replace(/\D/g, '') || '0';
+        const decimalPart = normalized.slice(decimalIndex + 1).replace(/\D/g, '').padEnd(2, '0').slice(0, 2);
+        return Number(integerPart) * 100 + Number(decimalPart);
+    }
+
+    const digits = normalized.replace(/\D/g, '');
+    if (!digits) return null;
+    return Number(digits);
+};
+
 export default function CartItemsSection({ items, warrantyOptions, onUpdateQuantity, onRemoveItem, onUpdateWarranty, onUpdatePrice }: CartItemsSectionProps) {
     if (items.length === 0) return null;
 
@@ -49,17 +68,17 @@ export default function CartItemsSection({ items, warrantyOptions, onUpdateQuant
                                     ) : (
                                         <div className="flex flex-col items-end gap-1 shrink-0">
                                             <div className="flex items-center gap-1">
-                                                <span className="text-xs text-slate-500">Unidade: R$</span>
+                                                <span className="text-xs text-slate-500">Unidade:</span>
                                                 <input
-                                                    type="number"
-                                                    min="0"
-                                                    step="0.01"
+                                                    type="text"
+                                                    inputMode="decimal"
                                                     className="w-24 px-2 py-1 text-right text-sm font-semibold text-slate-800 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                                                    value={(item.unit_price / 100)}
+                                                    value={fmt(item.unit_price)}
+                                                    onFocus={(e) => e.currentTarget.select()}
                                                     onChange={(e) => {
-                                                        const val = parseFloat(e.target.value);
-                                                        if (!isNaN(val) && val >= 0) {
-                                                            onUpdatePrice(item.id, Math.round(val * 100));
+                                                        const cents = parseCurrencyToCents(e.target.value);
+                                                        if (cents !== null && cents >= 0) {
+                                                            onUpdatePrice(item.id, cents);
                                                         }
                                                     }}
                                                 />
