@@ -127,6 +127,14 @@ export function StockLocationsPage() {
     quantity: string;
     distribution: ProductStockLocation[];
   };
+  type BatchDraftItem = {
+    product: StockLocationProductSearchResult;
+    fromDepositId: string;
+    fromLocationId: string;
+    available: number;
+    quantity: string;
+    distribution: ProductStockLocation[];
+  };
   const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
   const [batchSearch, setBatchSearch] = useState('');
   const [batchResults, setBatchResults] = useState<StockLocationProductSearchResult[]>([]);
@@ -141,6 +149,92 @@ export function StockLocationsPage() {
   const [batchReadErrors, setBatchReadErrors] = useState<BatchReadError[]>([]);
   const [batchDraftLoaded, setBatchDraftLoaded] = useState(false);
   const batchSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const batchDraftQuotaWarningShownRef = useRef(false);
+
+  const serializeBatchDraftItem = (item: BatchItem): BatchDraftItem => ({
+    product: {
+      id: item.product.id,
+      name: item.product.name,
+      sku: item.product.sku || null,
+      ean: item.product.ean || null,
+      stock_quantity: item.product.stock_quantity,
+      images: item.product.images?.slice(0, 1) || null,
+    },
+    fromDepositId: item.fromDepositId,
+    fromLocationId: item.fromLocationId,
+    available: item.available,
+    quantity: item.quantity,
+    distribution: item.distribution.map((source) => ({
+      id: source.id,
+      company_id: source.company_id,
+      product_id: source.product_id,
+      deposit_id: source.deposit_id,
+      location_id: source.location_id,
+      quantity: source.quantity,
+      reserved_quantity: source.reserved_quantity,
+      created_at: source.created_at,
+      updated_at: source.updated_at,
+      deposit: source.deposit ? {
+        id: source.deposit.id,
+        company_id: source.deposit.company_id,
+        name: source.deposit.name,
+        code: source.deposit.code,
+        type: source.deposit.type,
+        cep: source.deposit.cep || null,
+        address: source.deposit.address || null,
+        is_default: Boolean(source.deposit.is_default),
+        is_active: source.deposit.is_active !== false,
+        created_at: source.deposit.created_at,
+        updated_at: source.deposit.updated_at,
+      } : null,
+      location: source.location ? {
+        id: source.location.id,
+        company_id: source.location.company_id,
+        deposit_id: source.location.deposit_id,
+        name: source.location.name,
+        code: source.location.code,
+        description: source.location.description || null,
+        is_default: Boolean(source.location.is_default),
+        is_active: source.location.is_active !== false,
+        created_at: source.location.created_at,
+        updated_at: source.location.updated_at,
+      } : null,
+    })),
+  });
+
+  const hydrateBatchDraftItem = (item: BatchDraftItem): BatchItem | null => {
+    if (!item?.product?.id || !item.product.name) return null;
+
+    const distribution = Array.isArray(item.distribution) ? item.distribution.map((source) => ({
+      id: source.id || `${item.product.id}-${source.deposit_id || ''}-${source.location_id || ''}`,
+      company_id: source.company_id || '',
+      product_id: source.product_id || item.product.id,
+      deposit_id: source.deposit_id || '',
+      location_id: source.location_id || '',
+      quantity: Number(source.quantity || 0),
+      reserved_quantity: Number(source.reserved_quantity || 0),
+      created_at: source.created_at || '',
+      updated_at: source.updated_at || '',
+      deposit: source.deposit || null,
+      location: source.location || null,
+    })) : [];
+
+    return {
+      product: {
+        id: item.product.id,
+        name: item.product.name,
+        sku: item.product.sku || null,
+        ean: item.product.ean || null,
+        stock_quantity: Number(item.product.stock_quantity || 0),
+        images: item.product.images?.slice(0, 1) || null,
+      },
+      fromDepositId: item.fromDepositId || '',
+      fromLocationId: item.fromLocationId || '',
+      available: Number(item.available || 0),
+      quantity: item.quantity || '1',
+      distribution,
+    };
+  };
 
   const formatLocationName = (value: string) =>
     value.toLocaleLowerCase('pt-BR').replace(/(^|[\s\-/])(\p{L})/gu, (_, prefix: string, letter: string) =>
@@ -248,7 +342,7 @@ export function StockLocationsPage() {
       if (rawDraft) {
         const draft = JSON.parse(rawDraft);
         if (Array.isArray(draft?.items)) {
-          setBatchItems(draft.items);
+          setBatchItems(draft.items.map(hydrateBatchDraftItem).filter((item): item is BatchItem => Boolean(item)));
         }
         if (Array.isArray(draft?.readErrors)) {
           setBatchReadErrors(draft.readErrors);
@@ -275,15 +369,25 @@ export function StockLocationsPage() {
       return;
     }
 
-    window.localStorage.setItem(BATCH_TRANSFER_STORAGE_KEY, JSON.stringify({
-      items: batchItems,
+    const batchDraft = {
+      items: batchItems.map(serializeBatchDraftItem),
       readErrors: batchReadErrors,
       toDepositId: batchToDepositId,
       toLocationId: batchToLocationId,
       toLocationSearch: batchToLocationSearch,
       reason: batchReason,
       notes: batchNotes,
-    }));
+    };
+
+    try {
+      window.localStorage.setItem(BATCH_TRANSFER_STORAGE_KEY, JSON.stringify(batchDraft));
+      batchDraftQuotaWarningShownRef.current = false;
+    } catch {
+      if (!batchDraftQuotaWarningShownRef.current) {
+        toast.warning('A lista ficou grande demais para manter salva neste navegador. Continue a transferencia sem recarregar a pagina.');
+        batchDraftQuotaWarningShownRef.current = true;
+      }
+    }
   }, [batchDraftLoaded, batchItems, batchReadErrors, batchToDepositId, batchToLocationId, batchToLocationSearch, batchReason, batchNotes]);
 
   useEffect(() => {
