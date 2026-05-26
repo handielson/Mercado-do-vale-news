@@ -517,20 +517,20 @@ class VpsApiService {
     return this.fetchSafe<any>('/shipping/settings');
   }
 
-  async checkVideoBySku(sku: string): Promise<{ exists: boolean; url?: string } | null> {
+  async checkVideoBySku(sku: string, options: { noCache?: boolean } = {}): Promise<{ exists: boolean; url?: string } | null> {
     if (!sku?.trim()) return null;
     const normalizedSku = sku.trim();
-    const cached = this.videoCheckCache.get(normalizedSku);
+    const cached = options.noCache ? null : this.videoCheckCache.get(normalizedSku);
     if (cached && Date.now() - cached.timestamp <= VIDEO_CHECK_CACHE_DURATION) {
       return cached.data;
     }
 
-    const inFlight = this.videoCheckInFlight.get(normalizedSku);
+    const inFlight = options.noCache ? null : this.videoCheckInFlight.get(normalizedSku);
     if (inFlight) return inFlight;
 
     const request = this.fetchSafe<{ exists: boolean; url?: string }>(
       `/check-video?sku=${encodeURIComponent(normalizedSku)}`,
-      false,
+      Boolean(options.noCache),
     ).then((result) => {
       this.videoCheckCache.set(normalizedSku, { data: result, timestamp: Date.now() });
       return result;
@@ -538,7 +538,9 @@ class VpsApiService {
       this.videoCheckInFlight.delete(normalizedSku);
     });
 
-    this.videoCheckInFlight.set(normalizedSku, request);
+    if (!options.noCache) {
+      this.videoCheckInFlight.set(normalizedSku, request);
+    }
     return request;
   }
 

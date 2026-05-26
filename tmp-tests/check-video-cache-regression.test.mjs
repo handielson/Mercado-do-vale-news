@@ -25,4 +25,22 @@ assert.doesNotMatch(
   'checkVideoBySku must not force noCache=true because that appends _t and bypasses server/CDN caches',
 );
 
+assert.match(
+  source,
+  /checkVideoBySku\(sku: string, options: \{ noCache\?: boolean \} = \{\}\)/,
+  'checkVideoBySku should allow callers to force a fresh verification after a video upload',
+);
+
+assert.match(
+  source,
+  /const cached = options\.noCache \? null : this\.videoCheckCache\.get\(normalizedSku\)/,
+  'forced video checks must bypass the local exists=false cache',
+);
+
+assert.match(
+  source,
+  /Boolean\(options\.noCache\)/,
+  'forced video checks must append the no-cache timestamp to the VPS request',
+);
+
 console.log('check-video cache regression ok');

@@ -13123,6 +13123,12 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
       });
 
       if (result.success) {
+        if (folder === 'videos') {
+          const videoCacheKey = path.parse(fileName).name.trim().replace(/\s+/g, '').toUpperCase();
+          if (videoCacheKey) {
+            videoExistenceCache.set(videoCacheKey, { exists: true, url: cdnUrl, cachedAt: Date.now() });
+          }
+        }
         updateSynologyUploadStatus(uploadJob.id, {
           status: 'success',
           progress: 100,

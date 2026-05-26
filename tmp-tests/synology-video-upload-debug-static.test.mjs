@@ -61,6 +61,12 @@ for (const { file, source } of servers) {
     /buildCopyableDebug\('synology-video-upload'[\s\S]{0,500}(SYNO_PASS|_sid|Authorization|x-sync-key|access_token|refresh_token|password)/i,
     `${file} debug must not expose secrets or session ids`
   );
+
+  assert.match(
+    source,
+    /videoExistenceCache\.set\(videoCacheKey, \{ exists: true, url: cdnUrl, cachedAt: Date\.now\(\) \}\)/,
+    `${file} should invalidate stale missing-video cache entries after a successful upload`
+  );
 }
 
 assert.match(
@@ -79,6 +85,12 @@ assert.match(
   card,
   /navigator\.clipboard\.writeText\(debugText\)/,
   'ProductCard should copy the structured upload debug payload'
+);
+
+assert.match(
+  card,
+  /checkVideoBySku\(normalizedSku, \{ noCache: true \}\)/,
+  'ProductCard should force a fresh video existence check after upload succeeds'
 );
 
 console.log('synology video upload debug static checks passed');

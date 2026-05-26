@@ -402,7 +402,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 message: 'Confirmando arquivo no Synology...',
             });
 
-            const confirmed = await vpsApiService.checkVideoBySku(normalizedSku);
+            const confirmed = await vpsApiService.checkVideoBySku(normalizedSku, { noCache: true });
             if (!confirmed?.exists) {
                 throw new Error('A VPS informou sucesso, mas o video ainda nao apareceu no Synology para este SKU');
             }
