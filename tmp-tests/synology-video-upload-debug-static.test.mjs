@@ -32,6 +32,24 @@ for (const { file, source } of servers) {
     `${file} should use the SYNOLOGY_URL protocol default port instead of forcing DSM port 5001`
   );
 
+  assert.match(
+    source,
+    /function describeSynologyErrorCode\(code\)[\s\S]*119: 'SID not found'/,
+    `${file} should translate DSM code 119 in upload debug output`
+  );
+
+  assert.match(
+    source,
+    /const uploadPath = `\/webapi\/entry\.cgi\?_sid=\$\{encodeURIComponent\(sid\)\}`/,
+    `${file} should pass the Synology SID in the upload endpoint query string`
+  );
+
+  assert.match(
+    source,
+    /path: uploadPath, method: 'POST'/,
+    `${file} should use the upload path containing the SID for video uploads`
+  );
+
   assert.doesNotMatch(
     source,
     /parseInt\(urlObj\.port\)\s*\|\|\s*5001/,

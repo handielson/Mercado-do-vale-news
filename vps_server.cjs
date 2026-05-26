@@ -12659,6 +12659,28 @@ const SYNO_CDN = {
   arquivos: 'https://arquivos.xiaomipetrolina.com.br',
 };
 
+function describeSynologyErrorCode(code) {
+  const descriptions = {
+    100: 'Unknown error',
+    101: 'Missing api, method or version parameter',
+    105: 'Session has no permission',
+    106: 'Session timeout',
+    107: 'Session interrupted by duplicate login',
+    119: 'SID not found',
+    400: 'Invalid file operation parameter',
+    407: 'Operation not permitted',
+    408: 'No such file or directory',
+    414: 'File already exists',
+    415: 'Disk quota exceeded',
+    416: 'No space left on device',
+    418: 'Illegal name or path',
+    1800: 'Missing or mismatched Content-Length',
+    1802: 'No filename information in file content',
+    1805: 'Cannot overwrite existing file without overwrite parameter',
+  };
+  return descriptions[Number(code)] || null;
+}
+
 // Local SynologyDrive paths (used when Synology API is unreachable from WSL)
 // Convert Windows path to WSL path if running in WSL
 let SYNOLOGY_DRIVE_BASE = process.env.SYNOLOGY_DRIVE_BASE || 'C:\\Users\\Nitro\\SynologyDrive\\SynologyDrive';
@@ -13083,10 +13105,11 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
 
       const https = require('https');
       const urlObj = new URL(SYNO_URL);
+      const uploadPath = `/webapi/entry.cgi?_sid=${encodeURIComponent(sid)}`;
       const result = await new Promise((resolve, reject) => {
         const options = {
           hostname: urlObj.hostname, port: getSynologyRequestPort(urlObj),
-          path: '/webapi/entry.cgi', method: 'POST', rejectUnauthorized: false,
+          path: uploadPath, method: 'POST', rejectUnauthorized: false,
           headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length },
         };
         const r = https.request(options, (res) => {
@@ -13119,6 +13142,9 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
         console.log(`[synology] Upload OK: ${folderPath}/${fileName}`);
       } else {
         const synologyError = result && typeof result === 'object' ? result.error || result : result;
+        const synologyErrorDescription = synologyError && typeof synologyError === 'object'
+          ? describeSynologyErrorCode(synologyError.code)
+          : null;
         updateSynologyUploadStatus(uploadJob.id, {
           status: 'error',
           progress: 100,
@@ -13136,6 +13162,7 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
             synologyPort,
             cdnUrl,
             synologyError,
+            synologyErrorDescription,
           }),
         });
         console.error(`[synology] Upload FAILED: ${fileName}`, result.error);
