@@ -183,6 +183,25 @@ Comandos de Git/build neste projeto geralmente precisam ser executados fora do s
 
 Quando a mudanca afetar o frontend publico/admin, publicar a partir de um worktree limpo. Nao rodar `npm run deploy:vps-site` no worktree principal quando ele estiver sujo, porque o script publica o `dist/` gerado localmente e pode levar mudancas paralelas ainda nao commitadas.
 
+### Regra Anti Tela Branca
+
+Antes de publicar frontend na VPS, garantir que o build do worktree limpo foi gerado com as variaveis `VITE_*` reais do projeto. O erro recorrente de tela branca/skeleton infinito acontece quando o build roda sem `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`; nesse caso o bundle final contem `Missing Supabase environment variables` e quebra logo ao carregar.
+
+Regras obrigatorias:
+
+1. nunca publicar `dist/` gerado em worktree limpo sem carregar `.env`, `.env.local` e/ou `.env.production` do projeto principal, ou sem injetar as mesmas variaveis por ambiente;
+2. antes do deploy, confirmar que pelo menos `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` estao definidas no ambiente do build, sem imprimir os valores;
+3. depois do build e antes de trocar a release, verificar que o bundle principal nao contem a string `Missing Supabase environment variables`;
+4. se o script de deploy for executado com `VPS_SITE_SKIP_BUILD=1`, isso so pode acontecer depois de um build manual validado com as variaveis `VITE_*` carregadas;
+5. depois do deploy, conferir o dominio final e o bundle ativo:
+
+```powershell
+curl.exe -L -s -o NUL -w "%{http_code} %{url_effective}\n" "https://mercadodovale.com.br/"
+curl.exe -L -s "https://www.mercadodovale.com.br/" | Select-String -Pattern "assets/index-.*\.js|<title>"
+```
+
+O resultado esperado e HTTP `200`, URL final em `https://www.mercadodovale.com.br/`, e o bundle ativo sem erro de variaveis ausentes.
+
 Fluxo que funcionou em `25/05/2026`:
 
 1. confirmar que `origin/main` aponta para o commit que deve ir para producao:
