@@ -12546,6 +12546,66 @@ fastify.post('/team', { preHandler: requireSyncKey }, async (req, reply) => {
   return { ok: true, id };
 });
 
+function sanitizeDeliveryTeamMemberPayload(input = {}) {
+  const name = String(input.name || '').trim();
+  const cpfCnpj = String(input.cpf_cnpj || '').trim();
+  const documentDigits = cpfCnpj.replace(/\D/g, '');
+  const deliveryFee = input.delivery_fee === undefined || input.delivery_fee === null || input.delivery_fee === ''
+    ? undefined
+    : Number(input.delivery_fee);
+
+  if (!name) {
+    const error = new Error('Nome do entregador e obrigatorio');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (![11, 14].includes(documentDigits.length)) {
+    const error = new Error('CPF/CNPJ do entregador invalido');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (deliveryFee !== undefined && !Number.isFinite(deliveryFee)) {
+    const error = new Error('Valor por entrega invalido');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const payload = {
+    name,
+    cpf_cnpj: cpfCnpj,
+    role: 'delivery',
+    employment_type: ['clt', 'freelancer', 'pj'].includes(input.employment_type) ? input.employment_type : 'freelancer',
+    hire_date: input.hire_date || new Date().toISOString().slice(0, 10),
+    phone: input.phone ? String(input.phone).trim() : undefined,
+    pix_key_type: ['cpf', 'phone', 'email', 'random'].includes(input.pix_key_type) ? input.pix_key_type : 'phone',
+    pix_key: input.pix_key ? String(input.pix_key).trim() : undefined,
+    bank_name: input.bank_name ? String(input.bank_name).trim() : undefined,
+    delivery_fee: deliveryFee,
+    is_active: true,
+    admin_notes: input.admin_notes ? String(input.admin_notes).trim() : undefined,
+  };
+
+  return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+}
+
+fastify.post('/team/delivery', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  try {
+    const payload = sanitizeDeliveryTeamMemberPayload(req.body || {});
+    const rows = await supabaseRestInsert('team_members', payload);
+    const created = Array.isArray(rows) ? rows[0] : rows;
+    return reply.code(201).send(created);
+  } catch (err) {
+    const status = err.statusCode || err.status || 500;
+    if (status === 409 || err.body?.code === '23505') {
+      return reply.code(409).send({ error: 'Entregador ja cadastrado com este CPF/CNPJ', code: 'DUPLICATE_DELIVERY_PERSON' });
+    }
+    return reply.code(status >= 400 && status < 600 ? status : 500).send({
+      error: err.message || 'Erro ao cadastrar entregador',
+      detail: err.body || undefined,
+    });
+  }
+});
+
 fastify.patch('/team/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   const m = req.body;
   await pool.query(

@@ -169,7 +169,7 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
 
         try {
             setIsCreatingPerson(true);
-            const created = await teamService.create({
+            const created = await teamService.createDeliveryFromPdv({
                 ...quickPerson,
                 name,
                 cpf_cnpj: formatCpfCnpj(cpfCnpj),

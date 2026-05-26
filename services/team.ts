@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
 import { TeamMember, TeamMemberInput, TeamMemberFilters } from '../types/team';
 
 /**
@@ -129,6 +130,18 @@ class TeamService {
 
         if (error) throw error;
 
+        this.clearCache();
+        return data;
+    }
+
+    /**
+     * Create delivery member from PDV through VPS.
+     *
+     * New operational writes must enter through the VPS layer; keep the
+     * generic create() method for legacy screens until they are migrated.
+     */
+    async createDeliveryFromPdv(input: TeamMemberInput): Promise<TeamMember> {
+        const data = await vpsClient.post<TeamMember>('/team/delivery', input);
         this.clearCache();
         return data;
     }
