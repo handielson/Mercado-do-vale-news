@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Barcode, ChevronDown, ChevronUp, Edit, ImagePlus, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
+import { Barcode, ChevronDown, ChevronUp, Copy, Edit, ImagePlus, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { Company } from '../../types/company';
@@ -35,6 +35,7 @@ type VideoUploadState = {
     progress: number;
     message: string;
     detail?: string;
+    debug?: unknown;
 };
 
 type SynologyUploadResponse = {
@@ -44,6 +45,7 @@ type SynologyUploadResponse = {
     url?: string;
     error?: string;
     detail?: string;
+    debug?: unknown;
 };
 
 type SynologyUploadStatus = {
@@ -52,6 +54,7 @@ type SynologyUploadStatus = {
     message?: string;
     error?: string | null;
     detail?: string | null;
+    debug?: unknown;
     name?: string;
     url?: string;
 };
@@ -78,6 +81,26 @@ const readJsonSafe = <T,>(text: string): T | null => {
 const getUploadErrorMessage = (payload: SynologyUploadResponse | SynologyUploadStatus | null, fallback: string) => {
     const detail = payload?.detail ? ` (${payload.detail})` : '';
     return `${payload?.error || fallback}${detail}`;
+};
+
+class SynologyUploadError extends Error {
+    debug?: unknown;
+
+    constructor(message: string, debug?: unknown) {
+        super(message);
+        this.name = 'SynologyUploadError';
+        this.debug = debug;
+    }
+}
+
+const buildVideoUploadDebugText = (debug: unknown) => {
+    if (!debug) return '';
+    if (typeof debug === 'string') return debug;
+    try {
+        return JSON.stringify(debug, null, 2);
+    } catch {
+        return String(debug);
+    }
 };
 
 const isSynologyVideoUrl = (url: string) => {
@@ -152,7 +175,7 @@ const uploadVideoWithProgress = (
     xhr.onload = () => {
         const payload = readJsonSafe<SynologyUploadResponse>(xhr.responseText);
         if (xhr.status < 200 || xhr.status >= 300) {
-            reject(new Error(getUploadErrorMessage(payload, `Erro HTTP ${xhr.status} no upload para a VPS`)));
+            reject(new SynologyUploadError(getUploadErrorMessage(payload, `Erro HTTP ${xhr.status} no upload para a VPS`), payload?.debug));
             return;
         }
         resolve(payload || { ok: true });
@@ -177,11 +200,11 @@ const pollSynologyUploadStatus = async (uploadId: string, token: string | undefi
         const status = await res.json().catch(() => null) as SynologyUploadStatus | null;
 
         if (!res.ok) {
-            throw new Error(getUploadErrorMessage(status, 'Nao foi possivel consultar o status do upload'));
+            throw new SynologyUploadError(getUploadErrorMessage(status, 'Nao foi possivel consultar o status do upload'), status?.debug);
         }
         if (status?.status === 'success') return status;
         if (status?.status === 'error') {
-            throw new Error(getUploadErrorMessage(status, 'Falha ao gravar video no Synology'));
+            throw new SynologyUploadError(getUploadErrorMessage(status, 'Falha ao gravar video no Synology'), status.debug);
         }
 
         await wait(1500);
@@ -403,9 +426,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 progress: 100,
                 message: 'Falha no envio do video',
                 detail: message,
+                debug: error?.debug,
             });
         } finally {
             setIsUploadingVideo(false);
+        }
+    };
+
+    const handleCopyVideoUploadDebug = async (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.stopPropagation();
+        const debugText = buildVideoUploadDebugText(videoUpload.debug);
+        if (!debugText) return;
+        try {
+            await navigator.clipboard.writeText(debugText);
+            toast.success('Debug do upload copiado');
+        } catch {
+            toast.error('Nao foi possivel copiar o debug');
         }
     };
 
@@ -1405,6 +1441,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         </div>
                         {videoUpload.detail && (
                             <p className="mt-1.5 break-words text-[10px] leading-snug">{videoUpload.detail}</p>
+                        )}
+                        {videoUpload.phase === 'error' && videoUpload.debug && (
+                            <button
+                                type="button"
+                                onClick={handleCopyVideoUploadDebug}
+                                className="mt-2 inline-flex items-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100"
+                                title="Copiar diagnostico tecnico do envio"
+                            >
+                                <Copy className="h-3 w-3" />
+                                Copiar debug
+                            </button>
                         )}
                     </div>
                 )}

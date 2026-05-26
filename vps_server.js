@@ -12953,6 +12953,13 @@ function createSynologyUploadStatus({ folder, fileName, url }) {
     status: 'queued',
     progress: 90,
     message: 'Aguardando envio ao Synology',
+    debug: buildCopyableDebug('synology-video-upload', {
+      uploadId: id,
+      step: 'queued',
+      folder,
+      fileName,
+      cdnUrl: url,
+    }),
     createdAt: now,
     updatedAt: now,
   };
@@ -12980,6 +12987,7 @@ function serializeSynologyUploadStatus(job) {
     message: job.message,
     error: job.error || null,
     detail: job.detail || null,
+    debug: job.debug || null,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   };
@@ -13020,9 +13028,17 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
   const folderPath = SYNO_FOLDERS[folder];
   const cdnUrl = `${SYNO_CDN[folder]}/${fileName}`;
   const uploadJob = createSynologyUploadStatus({ folder, fileName, url: cdnUrl });
+  const synologyHost = (() => {
+    try {
+      const parsed = new URL(SYNO_URL);
+      return `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
+    } catch {
+      return 'invalid-synology-url';
+    }
+  })();
 
   // ── Responde 200 IMEDIATAMENTE (evita timeout 524 do Cloudflare) ──────────
-  reply.code(200).send({ ok: true, uploadId: uploadJob.id, status: uploadJob.status, name: fileName, url: cdnUrl });
+  reply.code(200).send({ ok: true, uploadId: uploadJob.id, status: uploadJob.status, name: fileName, url: cdnUrl, debug: uploadJob.debug });
 
   // ── Upload ao Synology em background (sem bloquear o cliente) ─────────────
   setImmediate(async () => {
@@ -13031,6 +13047,16 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
         status: 'uploading',
         progress: 95,
         message: 'Enviando arquivo ao Synology',
+        debug: buildCopyableDebug('synology-video-upload', {
+          uploadId: uploadJob.id,
+          step: 'synology_request',
+          folder,
+          folderPath,
+          fileName,
+          fileSizeBytes: fileBuf.length,
+          synologyHost,
+          cdnUrl,
+        }),
       });
       const sid = await synoLogin();
       const boundary = `MDVBoundary${Date.now()}`;
@@ -13071,15 +13097,37 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
           status: 'success',
           progress: 100,
           message: 'Upload concluido no Synology',
+          debug: buildCopyableDebug('synology-video-upload', {
+            uploadId: uploadJob.id,
+            step: 'synology_success',
+            folder,
+            folderPath,
+            fileName,
+            fileSizeBytes: fileBuf.length,
+            synologyHost,
+            cdnUrl,
+          }),
         });
         console.log(`[synology] Upload OK: ${folderPath}/${fileName}`);
       } else {
+        const synologyError = result && typeof result === 'object' ? result.error || result : result;
         updateSynologyUploadStatus(uploadJob.id, {
           status: 'error',
           progress: 100,
           message: 'Synology recusou o upload',
           error: 'Synology upload failed',
-          detail: JSON.stringify(result.error || result),
+          detail: JSON.stringify(synologyError),
+          debug: buildCopyableDebug('synology-video-upload', {
+            uploadId: uploadJob.id,
+            step: 'synology_rejected',
+            folder,
+            folderPath,
+            fileName,
+            fileSizeBytes: fileBuf.length,
+            synologyHost,
+            cdnUrl,
+            synologyError,
+          }),
         });
         console.error(`[synology] Upload FAILED: ${fileName}`, result.error);
       }
@@ -13089,6 +13137,17 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
         progress: 100,
         message: 'Erro ao enviar ao Synology',
         error: err.message,
+        debug: buildCopyableDebug('synology-video-upload', {
+          uploadId: uploadJob.id,
+          step: 'synology_exception',
+          folder,
+          folderPath,
+          fileName,
+          fileSizeBytes: fileBuf?.length || 0,
+          synologyHost,
+          cdnUrl,
+          exception: { name: err?.name || 'Error', message: err?.message || String(err) },
+        }),
       });
       console.error(`[synology] Background upload error: ${fileName}`, err.message);
     }
