@@ -80,6 +80,24 @@ const getUploadErrorMessage = (payload: SynologyUploadResponse | SynologyUploadS
     return `${payload?.error || fallback}${detail}`;
 };
 
+const isSynologyVideoUrl = (url: string) => {
+    try {
+        return new URL(url).hostname === 'videos.mercadodovale.com.br';
+    } catch {
+        return false;
+    }
+};
+
+const getSkuFromSynologyVideoUrl = (url: string) => {
+    try {
+        const parsed = new URL(url);
+        const fileName = decodeURIComponent(parsed.pathname.split('/').pop() || '');
+        return fileName.replace(/\.[^.]+$/, '').trim();
+    } catch {
+        return '';
+    }
+};
+
 const buildStockLocationsHref = (product: Product) => {
     const term = product.sku || product.name || product.id;
     return `/admin/inventory/locations?search=${encodeURIComponent(term)}`;
@@ -246,15 +264,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const stockLocationReserved = displayStockLocationRows.reduce((sum, item) => sum + item.reserved, 0);
     const stockLocationAvailable = Math.max(0, stockLocationTotal - stockLocationReserved);
 
-    // Check video: prioridade para video_url salvo no banco; fallback resiliente por SKU
+    // Check video: URLs do Synology precisam existir de verdade; URLs externas salvas continuam confiaveis.
     useEffect(() => {
         const dbVideoUrl = (product.video_url || '').trim();
-        if (dbVideoUrl) {
+        if (dbVideoUrl && !isSynologyVideoUrl(dbVideoUrl)) {
             setVideoInfo({ exists: true, url: dbVideoUrl, checking: false });
             return;
         }
 
-        if (!product.sku) {
+        const videoSku = dbVideoUrl
+            ? getSkuFromSynologyVideoUrl(dbVideoUrl)
+            : (product.sku || '').trim().replace(/\s+/g, '');
+
+        if (!videoSku) {
             setVideoInfo({ exists: false, url: null, checking: false });
             return;
         }
@@ -262,19 +284,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         setVideoInfo((prev) => ({ ...prev, checking: true }));
         let isMounted = true;
 
-        const normalizedSku = product.sku.trim().replace(/\s+/g, '');
-        const canonicalUrl = `https://videos.mercadodovale.com.br/${encodeURIComponent(normalizedSku)}.mp4`;
+        const canonicalUrl = dbVideoUrl || `https://videos.mercadodovale.com.br/${encodeURIComponent(videoSku)}.mp4`;
 
         const resolveVideoInfo = async () => {
             // Caminho principal
-            const primary = await vpsApiService.checkVideoBySku(normalizedSku);
+            const primary = await vpsApiService.checkVideoBySku(videoSku);
             if (primary?.exists) {
                 return { exists: true, url: primary.url || canonicalUrl };
             }
 
             // Fallback para endpoint público legado
             try {
-                const path = `/public/check-video?sku=${encodeURIComponent(normalizedSku)}`;
+                const path = `/public/check-video?sku=${encodeURIComponent(videoSku)}`;
                 const res = await fetch(buildVpsUrl(path, { method: 'GET' }), {
                     headers: { Accept: 'application/json' },
                     cache: 'no-store',
