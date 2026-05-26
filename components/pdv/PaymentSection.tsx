@@ -27,6 +27,7 @@ interface PaymentSectionProps {
     finalAdjustmentDiscount?: number;
     maxFinalAdjustmentDiscount?: number;
     onFinalAdjustmentDiscountChange?: (discount: number) => void;
+    onApplyFinalPaymentAmount?: (amount: number) => void;
 }
 
 export default function PaymentSection({
@@ -40,7 +41,8 @@ export default function PaymentSection({
     onPromotionalDiscountChange,
     finalAdjustmentDiscount,
     maxFinalAdjustmentDiscount,
-    onFinalAdjustmentDiscountChange
+    onFinalAdjustmentDiscountChange,
+    onApplyFinalPaymentAmount
 }: PaymentSectionProps) {
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('money');
     const [paymentAmount, setPaymentAmount] = useState('');
@@ -51,6 +53,26 @@ export default function PaymentSection({
     const remaining = calculateRemaining(total, payments);
     const change = calculateChange(total, payments);
     const isComplete = totalPaid >= total;
+    const creditPayment = [...payments].reverse().find(payment => payment.method === 'credit');
+    const creditPaymentTotal = creditPayment ? (creditPayment.total_with_fee ?? creditPayment.amount ?? 0) : 0;
+    const creditInstallmentValue = creditPayment?.installments
+        ? Math.round(creditPaymentTotal / creditPayment.installments)
+        : 0;
+    const totalBeforeFinalAdjustment = total + (finalAdjustmentDiscount || 0);
+
+    const applyFinalPaymentAmount = () => {
+        if (!onApplyFinalPaymentAmount) return;
+
+        const cleanValue = finalAdjustmentInput.replace(',', '.');
+        const parsedValue = parseFloat(cleanValue) * 100;
+
+        if (isNaN(parsedValue) || parsedValue <= 0) {
+            toast.error('Digite um valor final valido');
+            return;
+        }
+
+        onApplyFinalPaymentAmount(Math.round(parsedValue));
+    };
 
     // Calcular preview de 12x para o Total a Pagar
     let twelveInstallmentTotal = 0;
@@ -174,7 +196,7 @@ export default function PaymentSection({
             </div>
 
             {/* Desconto de Ajuste Final - aplicado por ultimo */}
-            {!isComplete && onFinalAdjustmentDiscountChange && (
+            {false && onFinalAdjustmentDiscountChange && (
                 <div className="mb-4 p-4 bg-rose-50 border-2 border-rose-200 rounded-lg">
                     <h4 className="text-sm font-semibold text-rose-800 mb-2 flex items-center gap-2">
                         <span className="text-lg">🧾</span>
@@ -249,10 +271,15 @@ export default function PaymentSection({
                                 <span className="text-xl">{getPaymentMethodIcon(payment.method)}</span>
                                 <div>
                                     <p className="font-medium text-slate-800">
-                                        {getPaymentMethodLabel(payment.method)}
+                                        {getPaymentMethodLabel(payment.method, payment.installments)}
                                     </p>
                                     <p className="text-sm text-slate-600">
-                                        {formatCurrency(payment.amount)}
+                                        {formatCurrency(payment.total_with_fee ?? payment.amount)}
+                                        {payment.method === 'credit' && payment.installments && payment.installments > 1 && (
+                                            <span className="ml-1">
+                                                ({payment.installments}x de {formatCurrency(Math.round((payment.total_with_fee ?? payment.amount) / payment.installments))})
+                                            </span>
+                                        )}
                                     </p>
                                 </div>
                             </div>
@@ -265,6 +292,72 @@ export default function PaymentSection({
                             </button>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Ajuste final depois da escolha do cartao */}
+            {creditPayment && onApplyFinalPaymentAmount && (
+                <div className="mb-4 p-4 bg-rose-50 border-2 border-rose-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-rose-800 mb-2">
+                        Valor final cobrado
+                    </h4>
+                    <p className="text-xs text-rose-700 mb-3">
+                        Use depois de escolher o parcelamento. O sistema mantem a quantidade de parcelas e recalcula o valor de cada parcela.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2">
+                        <input
+                            type="text"
+                            value={finalAdjustmentInput}
+                            onChange={(e) => setFinalAdjustmentInput(e.target.value.replace(/[^\d,.]/g, ''))}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    applyFinalPaymentAmount();
+                                    e.currentTarget.blur();
+                                }
+                            }}
+                            placeholder={(creditPaymentTotal / 100).toFixed(2).replace('.', ',')}
+                            className="w-full px-4 py-2 border border-rose-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                        />
+                        <button
+                            onClick={applyFinalPaymentAmount}
+                            className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors text-sm font-medium"
+                        >
+                            Aplicar ajuste
+                        </button>
+                        <button
+                            onClick={() => {
+                                setFinalAdjustmentInput('');
+                                onFinalAdjustmentDiscountChange?.(0);
+                                onApplyFinalPaymentAmount(totalBeforeFinalAdjustment);
+                            }}
+                            className="px-4 py-2 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200 transition-colors text-sm font-medium"
+                        >
+                            Limpar
+                        </button>
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
+                            <span className="block text-rose-700">Total original</span>
+                            <strong className="text-slate-800">{formatCurrency(totalBeforeFinalAdjustment)}</strong>
+                        </div>
+                        <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
+                            <span className="block text-rose-700">Ajuste aplicado</span>
+                            <strong className="text-red-600">-{formatCurrency(finalAdjustmentDiscount || 0)}</strong>
+                        </div>
+                        <div className="rounded-lg bg-white/70 border border-rose-100 p-2">
+                            <span className="block text-rose-700">Parcelas atuais</span>
+                            <strong className="text-slate-800">
+                                {creditPayment.installments && creditPayment.installments > 1
+                                    ? `${creditPayment.installments}x de ${formatCurrency(creditInstallmentValue)}`
+                                    : formatCurrency(creditPaymentTotal)}
+                            </strong>
+                        </div>
+                    </div>
+                    {maxFinalAdjustmentDiscount !== undefined && (
+                        <p className="text-xs text-rose-700 mt-2">
+                            Valor minimo permitido: {formatCurrency(Math.max(0, totalBeforeFinalAdjustment - maxFinalAdjustmentDiscount))}
+                        </p>
+                    )}
                 </div>
             )}
 

@@ -135,6 +135,10 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         // Calculate totals from items
         const totals = calculateSaleTotals(saleInput.items);
 
+        const promotionalDiscount = Math.max(0, saleInput.promotional_discount || 0);
+        const discountTotal = totals.discount_total + (saleInput.delivery_cost_store || 0) + promotionalDiscount;
+        const saleTotal = Math.max(0, totals.total + (saleInput.delivery_cost_customer || 0) - promotionalDiscount);
+
         // Prepare sale data
         const isValidUUID = (id?: string) =>
             !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -143,10 +147,10 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             customer_id: saleInput.customer_id,
             seller_id: saleInput.seller_id,
             subtotal: totals.subtotal,
-            discount_total: totals.discount_total + (saleInput.delivery_cost_store || 0),
-            total: totals.total + (saleInput.delivery_cost_customer || 0),
+            discount_total: discountTotal,
+            total: saleTotal,
             cost_total: totals.cost_total,
-            profit: totals.profit,
+            profit: totals.profit - promotionalDiscount,
             payment_methods: saleInput.payment_methods,
             notes: saleInput.notes,
             status: 'completed' as const,
@@ -281,7 +285,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
 
                 const buyerName = customer?.name || 'Cliente';
 
-                const productTotalReais = (totals.subtotal - totals.discount_total) / 100;
+                const productTotalReais = Math.max(0, totals.subtotal - totals.discount_total - promotionalDiscount) / 100;
 
                 const { data: rpcResult, error: rpcError } = await supabase.rpc('process_referral_reward', {
                     p_referral_code: saleInput.referral_code,

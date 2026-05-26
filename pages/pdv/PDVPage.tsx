@@ -29,6 +29,7 @@ import { productService } from '../../services/products';
 import { supabase } from '../../services/supabase';
 import { teamService } from '../../services/team';
 import { getEffectiveRetailPrice } from '../../utils/promoPrice';
+import { buildPdvProductName } from '../../utils/pdvProductDisplay';
 
 interface Customer {
     id: string;
@@ -206,17 +207,7 @@ export default function PDVPage() {
         const newItem: SaleItem = {
             id: crypto.randomUUID(),
             product_id: product.id,
-            product_name: (() => {
-                const specs = (product as any).specs;
-                if (!specs) return product.name;
-                const memPart = specs.ram && specs.storage
-                    ? `, ${specs.ram}/${specs.storage}`
-                    : specs.ram ? `, ${specs.ram}`
-                        : specs.storage ? `, ${specs.storage}`
-                            : '';
-                const colorPart = specs.color ? ` - ${specs.color}` : '';
-                return `${product.name}${memPart}${colorPart}`;
-            })(),
+            product_name: buildPdvProductName(product.name, (product as any).specs),
             product_sku: product.sku,
             quantity: isSerialized ? 1 : quantity, // serializado sempre = 1
             unit_price: getEffectiveRetailPrice(product),
@@ -324,6 +315,7 @@ export default function PDVPage() {
     // Remover pagamento
     const handleRemovePayment = (index: number) => {
         setPayments(payments.filter((_, i) => i !== index));
+        setFinalAdjustmentDiscount(0);
         toast.info('Pagamento removido');
     };
 
@@ -351,8 +343,50 @@ export default function PDVPage() {
             fee_amount: feeAmount,
             total_with_fee: totalWithFee
         };
+        setFinalAdjustmentDiscount(0);
         setPayments([...payments, newPayment]);
         toast.success(`Pagamento de ${installments}x adicionado`);
+    };
+
+    const handleApplyFinalPaymentAmount = (targetTotal: number) => {
+        let creditPaymentIndex = -1;
+        for (let index = payments.length - 1; index >= 0; index -= 1) {
+            if (payments[index].method === 'credit') {
+                creditPaymentIndex = index;
+                break;
+            }
+        }
+
+        if (creditPaymentIndex < 0) {
+            toast.error('Selecione um pagamento no cartao antes do ajuste final');
+            return;
+        }
+
+        const safeTargetTotal = Math.max(0, Math.min(Math.round(targetTotal), totalBeforeFinalAdjustment));
+        const paymentsWithoutAdjustedCredit = payments.reduce((sum, payment, index) => {
+            if (index === creditPaymentIndex) return sum;
+            return sum + (payment.total_with_fee ?? payment.amount ?? 0);
+        }, 0);
+        const targetCreditTotal = safeTargetTotal - paymentsWithoutAdjustedCredit;
+
+        if (targetCreditTotal < 0) {
+            toast.error('O valor final nao pode ser menor que os pagamentos ja informados');
+            return;
+        }
+
+        const nextPayments = payments.map((payment, index) => {
+            if (index !== creditPaymentIndex) return payment;
+
+            return {
+                ...payment,
+                amount: targetCreditTotal,
+                total_with_fee: targetCreditTotal
+            };
+        });
+
+        setPayments(nextPayments);
+        setFinalAdjustmentDiscount(Math.max(0, totalBeforeFinalAdjustment - safeTargetTotal));
+        toast.success('Ajuste final aplicado e parcelas recalculadas');
     };
 
     // Finalizar venda
@@ -833,6 +867,7 @@ export default function PDVPage() {
                             finalAdjustmentDiscount={appliedFinalAdjustmentDiscount}
                             maxFinalAdjustmentDiscount={maxFinalAdjustmentDiscount}
                             onFinalAdjustmentDiscountChange={setFinalAdjustmentDiscount}
+                            onApplyFinalPaymentAmount={handleApplyFinalPaymentAmount}
                         />
                     </div>
 
