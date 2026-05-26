@@ -93,11 +93,23 @@ export default function PDVPage() {
     // Entregadores reais do Supabase (role = 'delivery')
     const [deliveryPersons, setDeliveryPersons] = React.useState<{ id: string; name: string }[]>([]);
 
-    React.useEffect(() => {
+    const loadDeliveryPersons = React.useCallback(() => {
         teamService.list({ role: 'delivery', is_active: true })
             .then(members => setDeliveryPersons(members.map(m => ({ id: m.id, name: m.name }))))
             .catch(() => { /* falha silenciosa — seção de entrega fica sem entregadores */ });
     }, []);
+
+    React.useEffect(() => {
+        loadDeliveryPersons();
+    }, [loadDeliveryPersons]);
+
+    const handleDeliveryPersonCreated = (person: { id: string; name: string }) => {
+        setDeliveryPersons(current => {
+            if (current.some(item => item.id === person.id)) return current;
+            return [person, ...current];
+        });
+        setDeliveryPersonId(person.id);
+    };
 
 
     // Estado das taxas de pagamento
@@ -753,6 +765,7 @@ export default function PDVPage() {
                             deliveryCostCustomer={deliveryCostCustomer}
                             deliveryPersons={deliveryPersons}
                             onDeliveryChange={handleDeliveryChange}
+                            onDeliveryPersonCreated={handleDeliveryPersonCreated}
                         />
 
                         {/* Cupom de desconto */}
