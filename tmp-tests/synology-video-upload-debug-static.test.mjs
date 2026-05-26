@@ -89,8 +89,32 @@ assert.match(
 
 assert.match(
   card,
-  /checkVideoBySku\(normalizedSku, \{ noCache: true \}\)/,
+  /checkVideoBySku\(sku, \{ noCache: true \}\)/,
   'ProductCard should force a fresh video existence check after upload succeeds'
+);
+
+assert.match(
+  card,
+  /VIDEO_CONFIRMATION_RETRY_DELAYS_MS = \[0, 2000, 3000, 5000, 8000, 12000, 15000, 20000\]/,
+  'ProductCard should wait for eventual Synology video listing after upload success'
+);
+
+assert.match(
+  card,
+  /waitForSynologyVideoConfirmation\(normalizedSku/,
+  'ProductCard should retry video confirmation before falling back to pending success'
+);
+
+assert.doesNotMatch(
+  card,
+  /A VPS informou sucesso, mas o video ainda nao apareceu no Synology para este SKU/,
+  'ProductCard should not show a hard failure when Synology listing is eventually consistent'
+);
+
+assert.match(
+  card,
+  /Video enviado; aguardando indexacao/,
+  'ProductCard should show a pending-success state when Synology listing lags behind upload success'
 );
 
 console.log('synology video upload debug static checks passed');

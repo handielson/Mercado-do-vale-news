@@ -66,6 +66,7 @@ const idleVideoUploadState: VideoUploadState = {
 };
 
 const IMAGE_THUMBNAIL_VISIBLE_LIMIT = 4;
+const VIDEO_CONFIRMATION_RETRY_DELAYS_MS = [0, 2000, 3000, 5000, 8000, 12000, 15000, 20000];
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -81,6 +82,22 @@ const readJsonSafe = <T,>(text: string): T | null => {
 const getUploadErrorMessage = (payload: SynologyUploadResponse | SynologyUploadStatus | null, fallback: string) => {
     const detail = payload?.detail ? ` (${payload.detail})` : '';
     return `${payload?.error || fallback}${detail}`;
+};
+
+const waitForSynologyVideoConfirmation = async (
+    sku: string,
+    onAttempt?: (attempt: number, total: number) => void,
+) => {
+    for (let index = 0; index < VIDEO_CONFIRMATION_RETRY_DELAYS_MS.length; index += 1) {
+        const delayMs = VIDEO_CONFIRMATION_RETRY_DELAYS_MS[index];
+        if (delayMs > 0) await wait(delayMs);
+        onAttempt?.(index + 1, VIDEO_CONFIRMATION_RETRY_DELAYS_MS.length);
+
+        const confirmed = await vpsApiService.checkVideoBySku(sku, { noCache: true });
+        if (confirmed?.exists) return confirmed;
+    }
+
+    return null;
 };
 
 class SynologyUploadError extends Error {
@@ -402,18 +419,29 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 message: 'Confirmando arquivo no Synology...',
             });
 
-            const confirmed = await vpsApiService.checkVideoBySku(normalizedSku, { noCache: true });
-            if (!confirmed?.exists) {
-                throw new Error('A VPS informou sucesso, mas o video ainda nao apareceu no Synology para este SKU');
-            }
+            const confirmed = await waitForSynologyVideoConfirmation(normalizedSku, (attempt, total) => {
+                setVideoUpload({
+                    phase: 'verifying',
+                    progress: Math.min(99, 94 + Math.round((attempt / total) * 5)),
+                    message: attempt === 1
+                        ? 'Confirmando arquivo no Synology...'
+                        : `Aguardando o Synology listar o video (${attempt}/${total})...`,
+                });
+            });
 
-            const videoUrl = confirmed.url || finalStatus.url || upload.url || null;
-            toast.success(`Video enviado com sucesso: ${finalStatus.name || upload.name || fileName}`);
+            const videoUrl = confirmed?.url || finalStatus.url || upload.url || `https://videos.mercadodovale.com.br/${encodeURIComponent(fileName)}`;
+            if (confirmed?.exists) {
+                toast.success(`Video enviado com sucesso: ${finalStatus.name || upload.name || fileName}`);
+            } else {
+                toast.info('Video enviado. O Synology pode levar alguns instantes para listar o arquivo.', {
+                    description: finalStatus.name || upload.name || fileName,
+                });
+            }
             setVideoInfo({ exists: true, url: videoUrl, checking: false });
             setVideoUpload({
                 phase: 'success',
                 progress: 100,
-                message: 'Video enviado com sucesso',
+                message: confirmed?.exists ? 'Video enviado com sucesso' : 'Video enviado; aguardando indexacao',
             });
             window.setTimeout(() => {
                 setVideoUpload((current) => current.phase === 'success' ? idleVideoUploadState : current);
