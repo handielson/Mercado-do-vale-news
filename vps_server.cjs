@@ -12643,6 +12643,11 @@ const SYNO_URL  = normalizeSynologyUrl(process.env.SYNOLOGY_URL || 'https://dsm-
 const SYNO_USER = process.env.SYNOLOGY_USER || '';
 const SYNO_PASS = process.env.SYNOLOGY_PASS || '';
 
+function getSynologyRequestPort(urlObj) {
+  if (urlObj.port) return parseInt(urlObj.port, 10);
+  return urlObj.protocol === 'https:' ? 443 : 80;
+}
+
 const SYNO_FOLDERS = {
   imagens:  '/web/imagens',
   videos:   '/web/videos',
@@ -12716,7 +12721,7 @@ function listLocalSynologyFiles(folder, limit = 10000, offset = 0) {
 }
 function synoHttpGet(urlObj, path, timeoutMs = 15000) {
   const https = require('https');
-  const port = urlObj.port ? parseInt(urlObj.port) : (urlObj.protocol === 'https:' ? 443 : 80);
+  const port = getSynologyRequestPort(urlObj);
   return new Promise((resolve, reject) => {
     const req = https.get({ hostname: urlObj.hostname, port, path, rejectUnauthorized: false }, (res) => {
       let d = '';
@@ -12784,7 +12789,7 @@ async function uploadAutoresponderAttachmentToSynology({ fileName, fileBuf }) {
   const result = await new Promise((resolve, reject) => {
     const options = {
       hostname: urlObj.hostname,
-      port: parseInt(urlObj.port) || 5001,
+      port: getSynologyRequestPort(urlObj),
       path: '/webapi/entry.cgi',
       method: 'POST',
       rejectUnauthorized: false,
@@ -12842,7 +12847,7 @@ fastify.get('/video/:filename', async (req, reply) => {
 
     const r = https.request({
       hostname: urlObj.hostname,
-      port: parseInt(urlObj.port) || 5001,
+      port: getSynologyRequestPort(urlObj),
       path: downloadPath,
       method: 'GET',
       headers: headers,
@@ -13028,6 +13033,7 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
   const folderPath = SYNO_FOLDERS[folder];
   const cdnUrl = `${SYNO_CDN[folder]}/${fileName}`;
   const uploadJob = createSynologyUploadStatus({ folder, fileName, url: cdnUrl });
+  const synologyPort = getSynologyRequestPort(new URL(SYNO_URL));
   const synologyHost = (() => {
     try {
       const parsed = new URL(SYNO_URL);
@@ -13055,6 +13061,7 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
           fileName,
           fileSizeBytes: fileBuf.length,
           synologyHost,
+          synologyPort,
           cdnUrl,
         }),
       });
@@ -13078,7 +13085,7 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
       const urlObj = new URL(SYNO_URL);
       const result = await new Promise((resolve, reject) => {
         const options = {
-          hostname: urlObj.hostname, port: parseInt(urlObj.port) || 5001,
+          hostname: urlObj.hostname, port: getSynologyRequestPort(urlObj),
           path: '/webapi/entry.cgi', method: 'POST', rejectUnauthorized: false,
           headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length },
         };
@@ -13105,6 +13112,7 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
             fileName,
             fileSizeBytes: fileBuf.length,
             synologyHost,
+            synologyPort,
             cdnUrl,
           }),
         });
@@ -13125,6 +13133,7 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
             fileName,
             fileSizeBytes: fileBuf.length,
             synologyHost,
+            synologyPort,
             cdnUrl,
             synologyError,
           }),
@@ -13145,6 +13154,7 @@ fastify.post('/synology/upload', { preHandler: requireSyncKeyOrAdmin }, async (r
           fileName,
           fileSizeBytes: fileBuf?.length || 0,
           synologyHost,
+          synologyPort,
           cdnUrl,
           exception: { name: err?.name || 'Error', message: err?.message || String(err) },
         }),

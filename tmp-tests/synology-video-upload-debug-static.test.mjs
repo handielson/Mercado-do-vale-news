@@ -26,6 +26,18 @@ for (const { file, source } of servers) {
     `${file} debug should include DSM error details when Synology rejects the upload`
   );
 
+  assert.match(
+    source,
+    /function getSynologyRequestPort\(urlObj\)[\s\S]*urlObj\.protocol === 'https:' \? 443 : 80/,
+    `${file} should use the SYNOLOGY_URL protocol default port instead of forcing DSM port 5001`
+  );
+
+  assert.doesNotMatch(
+    source,
+    /parseInt\(urlObj\.port\)\s*\|\|\s*5001/,
+    `${file} should not force port 5001 when SYNOLOGY_URL is an HTTPS tunnel without explicit port`
+  );
+
   assert.doesNotMatch(
     source,
     /buildCopyableDebug\('synology-video-upload'[\s\S]{0,500}(SYNO_PASS|_sid|Authorization|x-sync-key|access_token|refresh_token|password)/i,
