@@ -4,6 +4,7 @@ import { ProductInput } from '../../../types/product';
 import { CurrencyInput } from '../../ui/CurrencyInput';
 import { DollarSign, ShoppingCart, Users, Package, BarChart2 } from 'lucide-react';
 import { supabase } from '../../../services/supabase';
+import { vpsApiService } from '../../../services/vpsApiService';
 
 interface ProductPricingProps {
     watch: UseFormWatch<ProductInput>;
@@ -42,6 +43,30 @@ function calcMargin(cost: number, price: number) {
     const marginPct = cost > 0 ? ((price - cost) / cost) * 100 : 0;
     const markup = cost > 0 ? price / cost : 0;
     return { marginCents, marginPct, markup };
+}
+
+function normalizeSpecValue(value: unknown): string {
+    return String(value || '').trim().toLowerCase();
+}
+
+function readSpecs(product: any): Record<string, any> {
+    if (!product?.specs) return {};
+    if (typeof product.specs === 'string') {
+        try {
+            return JSON.parse(product.specs) || {};
+        } catch {
+            return {};
+        }
+    }
+    return product.specs;
+}
+
+function matchesMemoryVariation(product: any, selectedRam: string, selectedStorage: string): boolean {
+    const specs = readSpecs(product);
+    return (
+        normalizeSpecValue(specs.ram) === normalizeSpecValue(selectedRam) &&
+        normalizeSpecValue(specs.storage) === normalizeSpecValue(selectedStorage)
+    );
 }
 
 export function ProductPricing({ watch, setValue, errors, modelId }: ProductPricingProps) {
@@ -103,14 +128,14 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
         const fetch = async () => {
             setLoadingAverages(true);
             try {
-                const { data } = await supabase
-                    .from('products')
-                    .select('price_cost, price_retail, price_reseller, price_wholesale, stock_quantity')
-                    .eq('model_id', modelId)
-                    .eq('specs->>ram', selectedRam)
-                    .eq('specs->>storage', selectedStorage)
-                    .eq('status', 'active');
-                if (cancelled || !data || data.length === 0) { setStockAverages(null); return; }
+                const products = await vpsApiService.getProducts({
+                    model_id: modelId,
+                    status: 'active',
+                    limit: 500,
+                    noCache: true,
+                });
+                const data = (products || []).filter(product => matchesMemoryVariation(product, selectedRam, selectedStorage));
+                if (cancelled || data.length === 0) { setStockAverages(null); return; }
                 const totalUnits = data.reduce((s, p) => s + (p.stock_quantity || 0), 0);
                 if (totalUnits === 0) { setStockAverages(null); return; }
                 const wavg = (field: keyof typeof data[0]) =>
