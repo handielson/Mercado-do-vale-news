@@ -1,9 +1,14 @@
 import imageCompression from 'browser-image-compression';
 import { supabase } from './supabase';
-import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
+import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
 function proxyUrl(path: string, method: string = 'GET'): string {
     return buildVpsUrl(path, { method });
+}
+
+function directVpsUrl(path: string): string {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${VPS_DIRECT_BASE_URL}${normalizedPath}`;
 }
 
 async function authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
@@ -147,7 +152,7 @@ export async function uploadImagesToBank(
             formData.append('file', webpNamed);
             formData.append('path', storagePath);
 
-            const res = await fetch(proxyUrl('/images/upload', 'POST'), {
+            const res = await fetch(directVpsUrl('/images/upload'), {
                 method: 'POST',
                 headers: await authHeaders(),
                 body: formData,

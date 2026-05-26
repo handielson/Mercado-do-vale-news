@@ -183,6 +183,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [isImageGalleryExpanded, setIsImageGalleryExpanded] = useState(false);
     const [isUpdatingImages, setIsUpdatingImages] = useState(false);
     const [replaceImageIndex, setReplaceImageIndex] = useState<number | null>(null);
+    const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [isTagsModalOpen, setIsTagsModalOpen] = useState(false);
@@ -718,6 +719,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         }
     };
 
+    const handleImageDragStart = (e: React.DragEvent, imageIndex: number) => {
+        e.stopPropagation();
+        if (isUpdatingImages) return;
+        setDraggedImageIndex(imageIndex);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(imageIndex));
+    };
+
+    const handleImageDrop = async (e: React.DragEvent, imageIndex: number) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const fromIndex = draggedImageIndex ?? Number(e.dataTransfer.getData('text/plain'));
+        setDraggedImageIndex(null);
+        if (isUpdatingImages || !Number.isInteger(fromIndex) || fromIndex === imageIndex) return;
+        const nextImages = [...productImages];
+        const [movedImage] = nextImages.splice(fromIndex, 1);
+        if (!movedImage) return;
+        nextImages.splice(imageIndex, 0, movedImage);
+        await persistProductImages(nextImages);
+    };
+
     // Resolve cover image: VPS now returns images directly (no compact mode).
     // Only lazy-load model image as fallback when product has no custom images.
     useEffect(() => {
@@ -857,6 +879,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         return (
                             <div
                                 key={`${imageUrl}-${imageIndex}`}
+                                draggable={!isUpdatingImages}
+                                onDragStart={(e) => handleImageDragStart(e, imageIndex)}
+                                onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = 'move';
+                                }}
+                                onDrop={(e) => handleImageDrop(e, imageIndex)}
+                                onDragEnd={() => setDraggedImageIndex(null)}
                                 className={cn(
                                     'group relative h-[72px] w-[72px] overflow-hidden rounded-lg border bg-slate-100',
                                     isPrimaryImage ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'

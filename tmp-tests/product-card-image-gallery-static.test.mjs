@@ -49,6 +49,14 @@ assert(
 );
 
 assert(
+  source.includes('handleImageDragStart') &&
+    source.includes('handleImageDrop') &&
+    source.includes('draggable={!isUpdatingImages}') &&
+    source.includes('onDrop={(e) => handleImageDrop(e, imageIndex)}'),
+  'ProductCard should support drag-and-drop ordering for thumbnail images.',
+);
+
+assert(
   source.includes('uploadImagesToBank'),
   'ProductCard should upload product images through the existing VPS image bank service.',
 );
