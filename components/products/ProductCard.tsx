@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Barcode, Edit, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
+import { Barcode, ChevronDown, ChevronUp, Edit, ImagePlus, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { Company } from '../../types/company';
@@ -14,6 +14,7 @@ import { supabase } from '../../services/supabase';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
 import { stockLocationService } from '../../services/stockLocationService';
+import { deleteImageFromBank, uploadImagesToBank } from '../../services/productImageBank';
 import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct, validateShopeeItemForProduct } from './productCardShopee.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
 import type { ProductStockLocation } from '../../types/stock-location';
@@ -61,6 +62,8 @@ const idleVideoUploadState: VideoUploadState = {
     message: '',
 };
 
+const IMAGE_THUMBNAIL_VISIBLE_LIMIT = 4;
+
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 const readJsonSafe = <T,>(text: string): T | null => {
@@ -80,6 +83,31 @@ const getUploadErrorMessage = (payload: SynologyUploadResponse | SynologyUploadS
 const buildStockLocationsHref = (product: Product) => {
     const term = product.sku || product.name || product.id;
     return `/admin/inventory/locations?search=${encodeURIComponent(term)}`;
+};
+
+const normalizeImageList = (images: unknown): string[] => {
+    if (!Array.isArray(images)) return [];
+    const seen = new Set<string>();
+    return images
+        .map((image) => typeof image === 'string' ? image.trim() : '')
+        .filter((image) => {
+            if (!image || seen.has(image)) return false;
+            seen.add(image);
+            return true;
+        });
+};
+
+const getProductImageBankPath = (imageUrl: string): string | null => {
+    try {
+        const parsed = new URL(imageUrl);
+        const marker = '/images/';
+        const markerIndex = parsed.pathname.indexOf(marker);
+        if (markerIndex < 0) return null;
+        const relativePath = decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length));
+        return relativePath.startsWith('products/') ? relativePath : null;
+    } catch {
+        return null;
+    }
 };
 
 const uploadVideoWithProgress = (
@@ -151,6 +179,11 @@ const pollSynologyUploadStatus = async (uploadId: string, token: string | undefi
  */
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect }) => {
     const [fetchedImages, setFetchedImages] = useState<string[]>([]);
+    const [productImages, setProductImages] = useState<string[]>(() => normalizeImageList(product.images));
+    const [isImageGalleryExpanded, setIsImageGalleryExpanded] = useState(false);
+    const [isUpdatingImages, setIsUpdatingImages] = useState(false);
+    const [replaceImageIndex, setReplaceImageIndex] = useState<number | null>(null);
+    const imageInputRef = useRef<HTMLInputElement>(null);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [isTagsModalOpen, setIsTagsModalOpen] = useState(false);
     // Tags de cross-sell vivem no modelo. Lemos do produto (que herda via specs)
@@ -580,13 +613,122 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         }
     };
 
+    const persistProductImages = async (nextImages: string[]) => {
+        if (!product.sku) {
+            toast.error('Este produto precisa de SKU para atualizar fotos pela VPS.');
+            return false;
+        }
+
+        setIsUpdatingImages(true);
+        try {
+            const cleanImages = normalizeImageList(nextImages);
+            const affectedRows = await vpsApiService.updateProductImagesBySku(product.sku, cleanImages);
+            if (affectedRows < 1) {
+                toast.error('A VPS nao encontrou este SKU para atualizar as fotos.');
+                return false;
+            }
+            setProductImages(cleanImages);
+            setFetchedImages(cleanImages);
+            toast.success('Fotos do produto atualizadas.');
+            return true;
+        } catch (error: any) {
+            toast.error(error?.message || 'Nao foi possivel atualizar as fotos.');
+            return false;
+        } finally {
+            setIsUpdatingImages(false);
+        }
+    };
+
+    const handleSetPrimaryImage = async (e: React.MouseEvent, imageIndex: number) => {
+        e.stopPropagation();
+        if (imageIndex === 0 || isUpdatingImages) return;
+        const nextImages = [...productImages];
+        const [selectedImage] = nextImages.splice(imageIndex, 1);
+        if (!selectedImage) return;
+        await persistProductImages([selectedImage, ...nextImages]);
+    };
+
+    const handleOpenImagePicker = (e: React.MouseEvent, imageIndex: number | null = null) => {
+        e.stopPropagation();
+        if (isUpdatingImages) return;
+        setReplaceImageIndex(imageIndex);
+        imageInputRef.current?.click();
+    };
+
+    const handleProductImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith('image/'));
+        event.target.value = '';
+        if (files.length === 0) return;
+        if (!product.sku) {
+            toast.error('Este produto precisa de SKU para enviar fotos.');
+            return;
+        }
+
+        setIsUpdatingImages(true);
+        try {
+            const upload = await uploadImagesToBank(files, undefined, {
+                sku: product.sku,
+                productName: product.name,
+                color: product.specs?.color || 'PADRAO',
+                startOrder: productImages.length + 1,
+            });
+
+            if (upload.errors.length > 0) {
+                toast.error(`Falha ao enviar ${upload.errors.length} foto(s).`);
+            }
+
+            const uploadedUrls = upload.success.map((image) => image.url).filter(Boolean);
+            if (uploadedUrls.length === 0) return;
+
+            const nextImages = replaceImageIndex == null
+                ? [...productImages, ...uploadedUrls]
+                : productImages.map((image, index) => index === replaceImageIndex ? uploadedUrls[0] : image);
+
+            const replacedPath = replaceImageIndex == null ? null : getProductImageBankPath(productImages[replaceImageIndex] || '');
+            const saved = await persistProductImages(nextImages);
+            if (saved && replacedPath) {
+                deleteImageFromBank(replacedPath).catch(() => undefined);
+            }
+        } catch (error: any) {
+            toast.error(error?.message || 'Nao foi possivel enviar a foto.');
+        } finally {
+            setReplaceImageIndex(null);
+            setIsUpdatingImages(false);
+        }
+    };
+
+    const handleReplaceProductImage = (e: React.MouseEvent, imageIndex: number) => {
+        handleOpenImagePicker(e, imageIndex);
+    };
+
+    const handleDeleteProductImage = async (e: React.MouseEvent, imageIndex: number) => {
+        e.stopPropagation();
+        if (isUpdatingImages) return;
+        const imageUrl = productImages[imageIndex];
+        if (!imageUrl) return;
+        const nextImages = productImages.filter((_, index) => index !== imageIndex);
+        const saved = await persistProductImages(nextImages);
+        const bankPath = getProductImageBankPath(imageUrl);
+        if (saved && bankPath) {
+            try {
+                await deleteImageFromBank(bankPath);
+            } catch {
+                toast.warning('A foto saiu do produto, mas o arquivo nao foi removido da VPS.');
+            }
+        }
+    };
+
     // Resolve cover image: VPS now returns images directly (no compact mode).
     // Only lazy-load model image as fallback when product has no custom images.
     useEffect(() => {
         if (Array.isArray(product.images) && product.images.length > 0) {
-            setFetchedImages(product.images);
+            const cleanImages = normalizeImageList(product.images);
+            setProductImages(cleanImages);
+            setFetchedImages(cleanImages);
             return;
         }
+        setProductImages([]);
+        setFetchedImages([]);
         // Fallback: model image for products without custom images
         if (!product.model_id) return;
         let isMounted = true;
@@ -597,6 +739,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
 
     const rawCoverImage = fetchedImages.length > 0 ? fetchedImages[0] : null;
     const coverImage = getCacheBustedUrl(rawCoverImage, product.updated || product.created);
+    const visibleProductImages = isImageGalleryExpanded
+        ? productImages
+        : productImages.slice(0, IMAGE_THUMBNAIL_VISIBLE_LIMIT);
+    const hiddenImageCount = Math.max(0, productImages.length - visibleProductImages.length);
 
     // Format price from centavos to BRL
     const formatPrice = (centavos: number): string => {
@@ -691,6 +837,122 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         Produto Pai
                     </div>
                 )}
+            </div>
+
+            <div className="border-t border-slate-100 bg-white px-3 py-3">
+                <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple={replaceImageIndex == null}
+                    className="hidden"
+                    onChange={handleProductImageUpload}
+                />
+
+                <div className="flex flex-wrap gap-2">
+                    {visibleProductImages.map((imageUrl, imageIndex) => {
+                        const thumbUrl = getCacheBustedUrl(imageUrl, product.updated || product.created);
+                        const isPrimaryImage = imageIndex === 0;
+
+                        return (
+                            <div
+                                key={`${imageUrl}-${imageIndex}`}
+                                className={cn(
+                                    'group relative h-[72px] w-[72px] overflow-hidden rounded-lg border bg-slate-100',
+                                    isPrimaryImage ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'
+                                )}
+                            >
+                                <button
+                                    type="button"
+                                    onClick={(e) => handleSetPrimaryImage(e, imageIndex)}
+                                    disabled={isPrimaryImage || isUpdatingImages}
+                                    className="block h-full w-full"
+                                    title={isPrimaryImage ? 'Foto principal' : 'Definir como principal'}
+                                    aria-label={isPrimaryImage ? `Foto principal ${imageIndex + 1}` : `Definir foto ${imageIndex + 1} como principal`}
+                                >
+                                    <img
+                                        src={thumbUrl}
+                                        alt={`${product.name} foto ${imageIndex + 1}`}
+                                        className="h-full w-full object-cover"
+                                    />
+                                </button>
+
+                                {isPrimaryImage && (
+                                    <span className="absolute left-1 top-1 rounded bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white shadow">
+                                        1
+                                    </span>
+                                )}
+
+                                <div className="absolute inset-x-1 bottom-1 flex justify-center gap-1">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleReplaceProductImage(e, imageIndex)}
+                                        disabled={isUpdatingImages}
+                                        className="rounded-md bg-white/95 p-1 shadow-sm transition-colors hover:bg-blue-50"
+                                        title="Substituir foto"
+                                        aria-label={`Substituir foto ${imageIndex + 1}`}
+                                    >
+                                        <Edit className="h-3.5 w-3.5 text-blue-600" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleDeleteProductImage(e, imageIndex)}
+                                        disabled={isUpdatingImages}
+                                        className="rounded-md bg-white/95 p-1 shadow-sm transition-colors hover:bg-red-50"
+                                        title="Excluir foto"
+                                        aria-label={`Excluir foto ${imageIndex + 1}`}
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    <button
+                        type="button"
+                        onClick={(e) => handleOpenImagePicker(e)}
+                        disabled={isUpdatingImages || !product.sku}
+                        className={cn(
+                            'flex h-[72px] w-[72px] items-center justify-center rounded-lg border border-dashed transition-colors',
+                            product.sku
+                                ? 'border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300 hover:bg-blue-100'
+                                : 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300'
+                        )}
+                        title={product.sku ? 'Adicionar foto' : 'Produto sem SKU para upload'}
+                        aria-label="Adicionar foto"
+                    >
+                        {isUpdatingImages ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                            <ImagePlus className="h-5 w-5" />
+                        )}
+                    </button>
+
+                    {productImages.length > IMAGE_THUMBNAIL_VISIBLE_LIMIT && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsImageGalleryExpanded((current) => !current);
+                            }}
+                            className="flex h-[72px] w-[72px] items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 transition-colors hover:bg-slate-100"
+                            title={isImageGalleryExpanded ? 'Mostrar menos fotos' : 'Mostrar todas as fotos'}
+                            aria-label={isImageGalleryExpanded ? 'Mostrar menos fotos' : 'Mostrar todas as fotos'}
+                        >
+                            <span className="flex flex-col items-center gap-1 text-[11px] font-semibold">
+                                {isImageGalleryExpanded ? (
+                                    <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                    <>
+                                        <ChevronDown className="h-4 w-4" />
+                                        +{hiddenImageCount}
+                                    </>
+                                )}
+                            </span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Content */}
