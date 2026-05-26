@@ -246,6 +246,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                 {rows.map((row) => {
                     const price = priceValues[row.key as string] || 0;
                     const { marginCents, marginPct, markup } = calcMargin(cost, price);
+                    const desiredProfit = Math.max(0, price - cost);
                     const hasPrice = price > 0 && cost > 0;
                     const isNegative = marginCents < 0;
 
@@ -263,7 +264,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 xl:grid-cols-[220px_minmax(230px,auto)_auto] xl:items-end gap-3">
+                            <div className="grid grid-cols-1 xl:grid-cols-[220px_220px_minmax(230px,auto)_auto] xl:items-end gap-3">
                                 {/* Campo de preço */}
                                 <div className="w-full">
                                     <label className="block text-xs font-medium text-slate-600 mb-1">
@@ -276,6 +277,19 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                                     {errors?.[row.key] && (
                                         <p className="text-xs text-red-600 mt-1">{errors[row.key]?.message}</p>
                                     )}
+                                </div>
+
+                                {/* Campo de lucro desejado */}
+                                <div className="w-full">
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                                        Quero ganhar (R$)
+                                    </label>
+                                    <CurrencyInput
+                                        value={desiredProfit}
+                                        onChange={(val) => setValue(row.key, cost + val)}
+                                        disabled={cost === 0}
+                                    />
+                                    <p className="text-[11px] text-slate-500 mt-1">Direto ou por lucro</p>
                                 </div>
 
                                 {/* Indicadores de margem */}

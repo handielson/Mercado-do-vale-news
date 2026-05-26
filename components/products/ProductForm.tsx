@@ -91,6 +91,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [batchBlingLinkingId, setBatchBlingLinkingId] = useState<string | null>(null);
 
     const handleAddToBatchList = () => {
+        const currentProductImages = getValues('images') || imagePreviews;
         const item: BatchItem = {
             id: crypto.randomUUID(),
             sku: watch('sku') || undefined,
@@ -103,7 +104,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             ram: watch('specs.ram') || undefined,
             version: watch('specs.version') || undefined,
             battery_health: watch('specs.battery_health') || undefined,
-            images: [],
+            images: currentProductImages,
         };
 
         // Precisa ao menos de IMEI1 ou Serial
@@ -1228,9 +1229,14 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                                         {item.battery_health && <span><span className="text-xs text-slate-400 font-medium uppercase mr-1">BATERIA</span><span className="text-slate-800">{item.battery_health}</span></span>}
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
+                                        {(item.images?.length || 0) === 0 && (
+                                            <div className="h-8 w-14 rounded border border-dashed border-slate-300 bg-white text-[10px] font-medium text-slate-400 flex items-center justify-center text-center leading-none">
+                                                Sem imagem
+                                            </div>
+                                        )}
                                         {(item.images || []).slice(0, 3).map((image, imageIndex) => (
                                             <div key={`${image}-${imageIndex}`} className="relative h-8 w-8">
-                                                <img src={image} alt="" className="h-full w-full rounded border border-slate-200 bg-white object-cover" />
+                                                <img src={image} alt={`Imagem ${imageIndex + 1} de ${item.sku || item.serial || 'produto'}`} className="h-full w-full rounded border border-slate-200 bg-white object-cover" />
                                                 <button
                                                     type="button"
                                                     onClick={() => removeBatchItemImage(index, imageIndex)}
