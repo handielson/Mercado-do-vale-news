@@ -388,6 +388,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         }
     };
 
+    const handleVideoTileAction = (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.stopPropagation();
+        if (!product.sku || videoInfo.checking || isUploadingVideo) return;
+        if (videoInfo.exists && videoInfo.url) {
+            window.open(videoInfo.url, '_blank');
+            return;
+        }
+        videoInputRef.current?.click();
+    };
+
+    const getVideoTileLabel = () => {
+        if (!product.sku) return 'Produto sem SKU para enviar video';
+        if (videoInfo.checking) return 'Verificando video no Synology';
+        if (isUploadingVideo) return 'Enviando video para o Synology';
+        return videoInfo.exists ? 'Ver video do produto' : 'Enviar video do produto';
+    };
+
     // Update internal state if props change
     useEffect(() => {
         setCurrentStatus(product.status);
@@ -870,6 +887,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                     className="hidden"
                     onChange={handleProductImageUpload}
                 />
+                <input
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/*"
+                    ref={videoInputRef}
+                    className="hidden"
+                    onChange={handleVideoUpload}
+                />
 
                 <div className="flex flex-wrap gap-2">
                     {visibleProductImages.map((imageUrl, imageIndex) => {
@@ -941,6 +965,41 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
 
                     <button
                         type="button"
+                        onClick={handleVideoTileAction}
+                        disabled={!product.sku || videoInfo.checking || isUploadingVideo}
+                        className={cn(
+                            'flex h-[72px] w-[72px] flex-col items-center justify-center gap-1 rounded-lg border transition-colors',
+                            !product.sku
+                                ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-300'
+                                : videoInfo.checking || isUploadingVideo
+                                    ? 'cursor-wait border-blue-100 bg-blue-50 text-blue-500'
+                                    : videoInfo.exists
+                                        ? 'border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300 hover:bg-blue-100'
+                                        : 'border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:bg-amber-100'
+                        )}
+                        title={getVideoTileLabel()}
+                        aria-label={getVideoTileLabel()}
+                    >
+                        {videoInfo.checking || isUploadingVideo ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : videoInfo.exists ? (
+                            <Video className="h-5 w-5" />
+                        ) : (
+                            <VideoOff className="h-5 w-5" />
+                        )}
+                        <span className="px-1 text-center text-[10px] font-semibold leading-tight">
+                            {videoInfo.checking
+                                ? 'Checando'
+                                : isUploadingVideo
+                                    ? 'Enviando'
+                                    : videoInfo.exists
+                                        ? 'Ver video'
+                                        : 'Enviar video'}
+                        </span>
+                    </button>
+
+                    <button
+                        type="button"
                         onClick={(e) => handleOpenImagePicker(e)}
                         disabled={isUpdatingImages || !product.sku}
                         className={cn(
@@ -989,51 +1048,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             <div className="p-4 space-y-3">
                 {/* Header */}
                 <div className="space-y-2">
-                    <div className="flex items-center justify-end gap-1 overflow-x-auto pb-0.5">
-                        {/* Hidden Input for Video Upload */}
-                        <input
-                            type="file"
-                            accept="video/mp4,video/quicktime,video/*"
-                            ref={videoInputRef}
-                            className="hidden"
-                            onChange={handleVideoUpload}
-                        />
-
-                        {/* Video Status Action */}
-                        {product.sku && (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (videoInfo.checking) return;
-                                    if (videoInfo.exists && videoInfo.url) {
-                                        window.open(videoInfo.url, '_blank');
-                                    } else {
-                                        videoInputRef.current?.click();
-                                    }
-                                }}
-                                disabled={videoInfo.checking || isUploadingVideo}
-                                className={cn(
-                                    "shrink-0 p-1.5 rounded-lg transition-colors group",
-                                    (videoInfo.checking || isUploadingVideo) ? "opacity-50 cursor-wait" :
-                                    videoInfo.exists ? "bg-blue-100 hover:bg-blue-200" : "hover:bg-amber-50"
-                                )}
-                                title={
-                                    videoInfo.checking ? "Verificando status de video..." :
-                                    isUploadingVideo ? "Sincronizando envio de video..." :
-                                    videoInfo.exists ? "Produto possui video. Ver clipe." :
-                                    "Produto sem video. Clique para anexar."
-                                }
-                            >
-                                {isUploadingVideo || videoInfo.checking ? (
-                                    <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
-                                ) : videoInfo.exists ? (
-                                    <Video className="w-4 h-4 text-blue-600 group-hover:text-blue-800" />
-                                ) : (
-                                    <VideoOff className="w-4 h-4 text-slate-400 group-hover:text-amber-500" />
-                                )}
-                            </button>
-                        )}
-
+                    <div className="flex flex-wrap items-center justify-end gap-1 pb-0.5">
                         <button
                             onClick={(e) => handleCopyProductField(e, product.name, 'nome')}
                             className="shrink-0 p-1.5 bg-sky-50 hover:bg-sky-100 rounded-lg transition-colors group"
@@ -1199,16 +1214,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         ) : null}
                     </div>
                     <div className="hidden">
-                        {/* Hidden Input for Video Upload */}
-                        <input 
-                            type="file" 
-                            accept="video/mp4,video/quicktime,video/*"
-                            ref={videoInputRef}
-                            className="hidden"
-                            onChange={handleVideoUpload}
-                        />
-
-                        {/* Video Status Action */}
                         {product.sku && (
                             <button
                                 onClick={(e) => {
