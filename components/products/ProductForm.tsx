@@ -50,6 +50,9 @@ interface ProductFormProps {
     isLoading?: boolean;
 }
 
+const DEFAULT_PRODUCT_VERSION = 'Global';
+const DEFAULT_BATTERY_HEALTH = '100';
+
 export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, isLoading }: ProductFormProps) {
     const [imagePreviews, setImagePreviews] = useState<string[]>(initialData?.images || []);
     const [isCompressing, setIsCompressing] = useState(false);
@@ -353,6 +356,24 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     useEffect(() => {
         loadCategoryConfig();
     }, [selectedCategoryId]);
+
+    useEffect(() => {
+        if (initialData || !categoryConfig) return;
+
+        const defaultSetOptions = {
+            shouldDirty: false,
+            shouldTouch: false,
+            shouldValidate: true
+        };
+
+        if (categoryConfig.version && categoryConfig.version !== 'off' && !getValues('specs.version')) {
+            setValue('specs.version', DEFAULT_PRODUCT_VERSION, defaultSetOptions);
+        }
+
+        if (categoryConfig.battery_health && categoryConfig.battery_health !== 'off' && !getValues('specs.battery_health')) {
+            setValue('specs.battery_health', DEFAULT_BATTERY_HEALTH, defaultSetOptions);
+        }
+    }, [categoryConfig, getValues, initialData, setValue]);
 
     // Auto-generate product name based on category configuration
     useEffect(() => {
