@@ -686,6 +686,7 @@ Concluído em leitura real pela VPS:
 - Bling image proxy: `image-proxy` validado com imagem real de produto Bling pela VPS, com saída sanitizada.
 - Bling sync-prices-vps: `dryRun=true` real validado na VPS nas páginas `0`, `1` e `48`; aplicação real controlada da página `0` sincronizou `50` itens em `/products/batch` com HTTP `200`.
 - Staging frontend/proxy: revalidado live pela VPS com host `staging.mercadodovale.com.br`; raiz e `/admin/products` retornam HTML `200`, `/api/vps-proxy?path=/status` e leitura pública de produtos retornam JSON `200`, e `/company-settings` sem sessão continua bloqueado com `403`.
+- Admin real no domínio público: sessão admin existente validada via Chrome DevTools; `/admin/products` abriu autenticado, carregou filtros/listagem e `Status VPS` mostrou API online, MySQL OK e `/api/vps-proxy` de Synology com HTTP `200`, sem erros de console.
 - Staging Locais de Estoque: correção do botão `Transferir` dentro do conteúdo de caixa commitada e publicada na VPS; asset novo da tela retornou `200` no staging. Falta apenas o reteste manual do usuário na Caixa 20/SKU `CTRN115G`.
 - OAuth preflight: revalidado live pela VPS; callback Bling sem code redireciona para `/admin/settings/bling`, exchange Bling sem credenciais retorna `400`, callback Shopee sem parâmetros retorna `400` e geração de URL Shopee retorna host oficial com redirect para `www.mercadodovale.com.br`.
 
@@ -696,13 +697,56 @@ Pendente para corte final:
 - Shopee escrita: `update_stock`, `update_price`, `add_item`, upload de mídia e `ship_order` guardados; execução real somente com produto/pedido/mídia explicitamente controlados.
 - Webhooks: validar payload Bling, Shopee e Mercado Pago em janela controlada antes de trocar callbacks definitivos.
 - OAuth: reconectar Bling e Shopee com código real válido pela VPS.
-- Staging/frontend: validar DNS/hosts de staging, navegador, login/admin real e `/api/vps-proxy` com sessão.
+- Staging/frontend: login/admin real read-only validado no domínio público; falta apenas teste administrativo autenticado com escrita pequena/reversível, se aprovado em janela controlada.
 - Shipping: cotação Frenet/Melhor Envio e etiqueta Melhor Envio com pedido de teste.
 - SEO: config Nginx de produção reinstalada na VPS; `mercadodovale.com.br` redireciona para `https://www.mercadodovale.com.br`, `www` serve `/sitemap.xml` com `1844` URLs e `1841` produtos únicos por slug; falta validar login/admin real no browser.
 - API/catalogo: `/products/by-ids` criado no Fastify da VPS e validado direto em `api.xiaomipetrolina.com.br` e via `/api/vps-proxy`, retornando `200` e preservando a ordem dos IDs enviados.
 - Operação: cron da Vercel removido do `vercel.json`; callbacks restantes da Vercel ficam para depois da regressão final.
 
 ## Registro de Mudanças
+
+### 2026-05-27 - Validacao admin autenticada e Status VPS no browser
+
+Mudanca: validada sessao admin real pelo Chrome DevTools no dominio publico da VPS, sem digitar credenciais e sem executar acoes de escrita.
+
+Objetivo: fechar a pendencia de login/admin real no navegador para leitura, confirmando que o app admin publicado pela VPS abre autenticado e que uma pagina administrativa read-only consegue consultar a API/proxy da VPS.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/admin`
+- `/admin/products`
+- `/admin/settings/vps-status`
+- `/api/vps-proxy?path=/synology/status`
+- `/api/vps-proxy?path=/synology/command-status`
+
+Validacao:
+
+- `git status --short --branch`: `## main...origin/main` antes da rodada.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`.
+- `node tmp-tests\vps-nginx-production-config-static.test.mjs`: OK.
+- `node tmp-tests\vps-nginx-staging-config-static.test.mjs`: OK.
+- Chrome DevTools em `https://www.mercadodovale.com.br/admin`: dashboard carregou autenticado com usuario `Handielson Amorim` e painel `ADMIN`.
+- Chrome DevTools em `https://www.mercadodovale.com.br/admin/products`: titulo `Mercado do Vale - Produtos`, pagina autenticada carregou cabecalho `Produtos`, filtros, marcas/categorias e acoes administrativas visiveis; nenhuma acao foi clicada.
+- Chrome DevTools em `https://www.mercadodovale.com.br/admin/settings/vps-status`: `Status da VPS` carregou `API online`, `MySQL OK`, produtos `2464`, ativos `2453`, imagens `9496`, disco VPS `18.5 GB / 95.8 GB`.
+- Console DevTools: sem mensagens `error` ou `warn`.
+- Network DevTools em `Status VPS`: `GET https://api.xiaomipetrolina.com.br/status` `200`, `GET https://www.mercadodovale.com.br/api/vps-proxy?path=%2Fsynology%2Fstatus` `200`, `GET https://www.mercadodovale.com.br/api/vps-proxy?path=%2Fsynology%2Fcommand-status` `200`.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 491`, `.rpc(...) = 31`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+
+Resultado: login/admin real no dominio publico ficou validado para leitura. A VPS serve o admin autenticado, `/admin/products` abre com dados/filtros, `Status VPS` confirma API/MySQL/Synology via proxy e nao houve erro de console. Nenhuma credencial foi impressa, nenhuma escrita foi executada e nada foi criado ou alterado na Vercel, Supabase, VPS, Nginx, PM2 ou DNS. O Network ainda mostra leituras Supabase temporarias esperadas pelo inventario atual, classificadas pelo guard operacional.
+
+Pendencias:
+
+- se necessario, executar uma escrita administrativa pequena e reversivel somente em janela controlada;
+- seguir reduzindo leituras operacionais Supabase detectadas no admin por modulo, preferindo VPS/MySQL;
+- manter OAuth real, webhooks reais/simulados e escritas Bling/Shopee/shipping para confirmacao explicita.
+
+Rollback: nao aplicavel; rodada apenas read-only e documentacao.
 
 ### 2026-05-27 - Tentativa read-only de validacao admin no browser publico
 
