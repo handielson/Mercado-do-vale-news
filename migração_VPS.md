@@ -687,6 +687,7 @@ Concluído em leitura real pela VPS:
 - Bling sync-prices-vps: `dryRun=true` real validado na VPS nas páginas `0`, `1` e `48`; aplicação real controlada da página `0` sincronizou `50` itens em `/products/batch` com HTTP `200`.
 - Staging frontend/proxy: revalidado live pela VPS com host `staging.mercadodovale.com.br`; raiz e `/admin/products` retornam HTML `200`, `/api/vps-proxy?path=/status` e leitura pública de produtos retornam JSON `200`, e `/company-settings` sem sessão continua bloqueado com `403`.
 - Admin real no domínio público: sessão admin existente validada via Chrome DevTools; `/admin/products` abriu autenticado, carregou filtros/listagem e `Status VPS` mostrou API online, MySQL OK e `/api/vps-proxy` de Synology com HTTP `200`, sem erros de console.
+- Checklist seguro read-only: revalidado em 2026-05-27 14:49 BRT; guardas de mutação retornaram `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`; produção SEO `www` retornou sitemap `200` com `1836` URLs e `1833` produtos; staging/proxy retornou raiz/admin/status/produtos `200` e `/company-settings` sem sessão `403`; build Vite passou fora do sandbox.
 - Staging Locais de Estoque: correção do botão `Transferir` dentro do conteúdo de caixa commitada e publicada na VPS; asset novo da tela retornou `200` no staging. Falta apenas o reteste manual do usuário na Caixa 20/SKU `CTRN115G`.
 - OAuth preflight: revalidado live pela VPS; callback Bling sem code redireciona para `/admin/settings/bling`, exchange Bling sem credenciais retorna `400`, callback Shopee sem parâmetros retorna `400` e geração de URL Shopee retorna host oficial com redirect para `www.mercadodovale.com.br`.
 
@@ -704,6 +705,51 @@ Pendente para corte final:
 - Operação: cron da Vercel removido do `vercel.json`; callbacks restantes da Vercel ficam para depois da regressão final.
 
 ## Registro de Mudanças
+
+### 2026-05-27 - Revalidacao segura do checklist VPS antes de novas janelas controladas
+
+Mudanca: reexecutada a bateria segura do checklist VPS, sem executar OAuth real, webhooks reais, escrita comercial, deploy, restart de servico ou alteracao de infraestrutura.
+
+Objetivo: garantir que os guards continuam bloqueando mutacoes por padrao e que producao/staging seguem saudaveis antes de qualquer proxima janela controlada de Bling, Shopee, shipping, OAuth ou webhooks.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Rotas/servicos afetados:
+
+- `/`
+- `/admin/products`
+- `/api/vps-proxy?path=/status`
+- `/api/vps-proxy?path=/products&limit=1`
+- `/api/vps-proxy?path=/company-settings`
+- `/sitemap.xml`
+- `/produto/:slug`
+
+Validacao:
+
+- `git status --short --branch`: `## main...origin/main` antes da rodada.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`.
+- `node tmp-tests\vps-nginx-production-config-static.test.mjs`: OK.
+- `node tmp-tests\vps-nginx-staging-config-static.test.mjs`: OK.
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 491`, `.rpc(...) = 31`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `legacy_config_present=false`, `legacy_api_files_count=0`, `legacy_crons_disabled=true`, `cors_allows_legacy_fallback=false`, `legacy_cron_user_agent_allowed=false`, `blockers=[]`; DNS retornou `dns_timeout` no sandbox local.
+- `SEO_PRODUCTION_HOST_LIVE=true SEO_PRODUCTION_HOST=www.mercadodovale.com.br node tmp-tests\vps-seo-production-host-check.cjs`: primeira tentativa bloqueada pelo sandbox com `connect EACCES 76.13.232.162:80`; repetida fora do sandbox e retornou `ok=true`, sitemap `200`, `1836` URLs, `1833` produtos e 3 PDPs SEO `200`.
+- `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests\vps-staging-frontend-proxy-check.cjs`: primeira tentativa bloqueada pelo sandbox com `connect EACCES 76.13.232.162:80`; repetida fora do sandbox e retornou `ok=true`, raiz `200`, `/admin/products` `200`, status/produtos via proxy `200`, `/company-settings` sem sessao `403`.
+- `npm.cmd run build`: primeira tentativa bloqueada pelo sandbox ao resolver `vite.config.ts`; repetida fora do sandbox e concluida com sucesso em `10.06s`, com avisos Vite conhecidos de chunk/import dinamico.
+
+Resultado: os caminhos seguros de producao e staging continuam respondendo pela VPS, a auditoria nao encontrou retorno de dependencia versionada da Vercel, o inventario Supabase segue dentro do baseline classificado e os guards confirmaram que nenhuma mutacao foi executada por padrao.
+
+Pendencias:
+
+- executar escritas Bling/Shopee/shipping somente com alvo controlado e confirmacao explicita;
+- validar payloads reais/simulados de webhooks em janela controlada antes de trocar callbacks definitivos;
+- reconectar Bling e Shopee por OAuth real com codigo valido pela VPS;
+- seguir reduzindo dependencias operacionais Supabase por modulo, preferindo VPS/MySQL.
+
+Rollback: nao aplicavel; rodada apenas read-only e documentacao.
 
 ### 2026-05-27 - Validacao admin autenticada e Status VPS no browser
 
