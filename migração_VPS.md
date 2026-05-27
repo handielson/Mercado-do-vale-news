@@ -740,7 +740,7 @@ Validacao:
 
 Resultado: checklist local e live read-only passou. Producao publica e staging continuam respondendo pelos caminhos essenciais da VPS, e os guards permanecem bloqueando execucoes mutantes por padrao.
 
-Commit: `02d9d89 chore(vps): reduce supabase product reads`.
+Commit: `0718653 chore(vps): reduce supabase product reads`.
 
 Pendencias:
 
