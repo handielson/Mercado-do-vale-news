@@ -430,6 +430,15 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
 
     const safeCopies = Math.max(1, Math.min(MAX_COPIES, Math.floor(copies || 1)));
 
+    const handleCopiesChange = (value: string) => {
+        const next = Number(value.replace(/\D/g, ''));
+        setCopies(Math.max(1, Math.min(MAX_COPIES, next || 1)));
+    };
+
+    const adjustCopies = (delta: number) => {
+        setCopies(Math.max(1, Math.min(MAX_COPIES, safeCopies + delta)));
+    };
+
     const handleUseStock = () => {
         if (stockQty > 0) {
             setCopies(Math.min(MAX_COPIES, stockQty));
@@ -550,14 +559,37 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                                 Quantidade de Cópias
                             </label>
                             <div className="flex gap-2">
-                                <input
-                                    type="number"
-                                    min={1}
-                                    max={MAX_COPIES}
-                                    value={copies}
-                                    onChange={(e) => setCopies(Number(e.target.value))}
-                                    className="w-24 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                                />
+                                <div className="flex h-11 w-32 overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:ring-2 focus-within:ring-blue-500">
+                                    <button
+                                        type="button"
+                                        onClick={() => adjustCopies(-1)}
+                                        disabled={safeCopies <= 1}
+                                        className="w-10 border-r border-slate-200 text-lg font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                        title="Diminuir quantidade"
+                                    >
+                                        -
+                                    </button>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        value={safeCopies}
+                                        onChange={(e) => handleCopiesChange(e.target.value)}
+                                        onFocus={(e) => e.currentTarget.select()}
+                                        onClick={(e) => e.currentTarget.select()}
+                                        className="w-12 border-0 px-1 text-center text-sm focus:outline-none"
+                                        aria-label="Quantidade de cópias"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => adjustCopies(1)}
+                                        disabled={safeCopies >= MAX_COPIES}
+                                        className="w-10 border-l border-slate-200 text-lg font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                        title="Aumentar quantidade"
+                                    >
+                                        +
+                                    </button>
+                                </div>
                                 <button
                                     type="button"
                                     onClick={handleUseStock}
