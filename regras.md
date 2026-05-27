@@ -46,6 +46,30 @@ Regras resumidas:
 - verificar deploy quando aplicavel;
 - avaliar deploy da VPS se a mudanca afetar runtime ou scripts da VPS.
 
+## Log de navegacao admin/PDV
+
+Quando precisar pegar o log de navegacao do painel ou PDV, usar primeiro o botao no admin:
+
+- caminho: `Admin > Configuracoes > Status VPS`;
+- botao: `Copiar logs`;
+- o botao copia os ultimos 200 registros em texto legivel.
+
+Alternativa tecnica pela API da VPS:
+
+- endpoint: `GET /admin/navigation-log?limit=200`;
+- autenticacao: sessao admin ou header `x-sync-key`;
+- tabela MySQL: `admin_navigation_logs`;
+- retencao: os 5000 registros mais recentes.
+
+O logger do frontend captura somente rotas iniciadas por `/admin` e `/pdv`.
+Parametros sensiveis de query, como `token`, `code`, `email`, `password`, `access_token` e `refresh_token`, sao redigidos antes do envio.
+
+Se o botao nao aparecer, confirmar:
+
+1. o frontend publicado na VPS contem a mudanca `feat(admin): add navigation log copy tool`;
+2. a API `mdv-api` foi reiniciada depois do deploy do `vps_server.js`;
+3. `GET /admin/navigation-log?limit=3` responde `200` usando a `VITE_VPS_SYNC_KEY` local, sem imprimir a chave.
+
 ## Sandbox
 
 O ambiente de sandbox pode bloquear operacoes de Git e build, especialmente em pastas sincronizadas pelo Synology Drive.
