@@ -8,6 +8,10 @@ assert.match(source, /www\.mercadodovale\.com\.br/, 'readiness audit must inspec
 assert.match(source, /76\.13\.232\.162/, 'readiness audit must check the VPS IP');
 assert.match(source, /76\.76\.21\.21/, 'readiness audit must recognize the legacy platform apex IP');
 assert.match(source, /resolveCname/, 'readiness audit must inspect CNAME records');
+assert.match(source, /Promise\.race/, 'readiness audit must timeout DNS checks instead of hanging the checklist');
+assert.match(source, /Promise\.all/, 'readiness audit must run DNS checks in parallel');
+assert.match(source, /dns_timeout/, 'readiness audit must label DNS timeout failures clearly');
+assert.match(source, /process\.exit\(0\)/, 'readiness audit must exit after printing JSON so pending DNS handles cannot hang');
 assert.match(source, /legacy_crons_disabled/, 'readiness audit must report legacy cron state');
 assert.match(source, /cors_allows_legacy_fallback/, 'readiness audit must report CORS fallback state');
 assert.match(source, /callbacks OAuth Bling e Shopee/, 'readiness audit must keep OAuth callbacks in the external checklist');

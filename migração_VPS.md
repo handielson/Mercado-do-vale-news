@@ -703,6 +703,53 @@ Pendente para corte final:
 
 ## Registro de Mudanças
 
+### 2026-05-27 - Limpeza final de fallbacks Vercel no runtime VPS
+
+Mudanca: removido o origin legado `https://mercado-do-vale-news.vercel.app` das listas CORS do servidor standalone e da API VPS, removida a autorizacao por user-agent `vercel-cron/1.0` do reconcile Bling na VPS e restaurado o auditor read-only de remocao do deploy legado.
+
+Objetivo: fechar blockers tecnicos restantes da limpeza de Vercel no codigo versionado, garantindo que CORS e reconcile nao mantenham fallback operacional para a plataforma antiga.
+
+Arquivos/infra alterados:
+
+- `server.js`
+- `vps_server.js`
+- `vps_server.cjs`
+- `tools/audit-legacy-deploy-removal-readiness.mjs`
+- `tmp-tests/legacy-deploy-removal-readiness-static.test.mjs`
+- `migração_VPS.md`
+
+Rotas/processos afetados:
+
+- CORS da API/servidor
+- `/api/bling?resource=reconcile`
+- auditoria local de remocao do deploy legado
+
+Validacao:
+
+- RED antes da correcao: `node tmp-tests\legacy-deploy-removal-readiness-static.test.mjs` falhou por ausencia de `tools/audit-legacy-deploy-removal-readiness.mjs`.
+- RED antes da correcao: `node tmp-tests\legacy-deploy-removal-static.test.mjs` falhou porque `server.js` ainda permitia `mercado-do-vale-news.vercel.app`.
+- `node tmp-tests\legacy-deploy-removal-readiness-static.test.mjs`: OK.
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+- `node --check server.js`: OK.
+- `node --check vps_server.js`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node --check tools\audit-legacy-deploy-removal-readiness.mjs`: OK.
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `legacy_config_present=false`, `legacy_api_files_count=0`, `legacy_crons_disabled=true`, `cors_allows_legacy_fallback=false`, `legacy_cron_user_agent_allowed=false`, `blockers=[]`; dentro do sandbox, DNS retorna `dns_timeout` controlado sem travar o checklist.
+- `node tools\audit-legacy-deploy-removal-readiness.mjs` fora do sandbox: `ready_to_remove_legacy_deploy=true`, apex e `www` resolvem via Cloudflare para `104.21.42.27` e `172.67.199.67`; `www` sem CNAME direto (`ENODATA`), consistente com DNS proxied.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `28` checks, `0` falhas, `mutation_executed=false`.
+- `node tmp-tests\vps-cron-dispatcher-fastify-static.test.mjs`: OK.
+- `node tmp-tests\vps-cron-dispatcher-log-check-static.test.mjs`: OK.
+
+Resultado: o codigo versionado nao aceita mais o host antigo da Vercel por CORS e o reconcile Bling nao aceita mais autorizacao implicita pelo user-agent do Vercel Cron. O auditor de readiness voltou a existir, e agora possui timeout/saida controlada para DNS bloqueado em sandbox.
+
+Pendencias:
+
+- publicar/reiniciar a API VPS apos o commit porque `vps_server.js` e `vps_server.cjs` foram alterados;
+- validar pos-deploy `/api/status`, `/api/vps-proxy?path=/status` e um preflight CORS seguro sem permitir o origin legado;
+- conferir em paineis externos os callbacks OAuth e webhooks remanescentes.
+
+Rollback: restaurar o commit anterior ou restaurar backups do deploy da API VPS e reiniciar `pm2 restart mdv-api --update-env`.
+
 ### 2026-05-27 - Tentativa de validacao admin real no dominio publico
 
 Mudanca: testado o acesso browser read-only a `/admin/products` no dominio publico da VPS, sem inserir credenciais e sem executar acao administrativa.

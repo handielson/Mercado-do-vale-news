@@ -35,7 +35,6 @@ const CORS_ORIGINS = [
   'https://mercadodovale.com',
   'https://www.xiaomipetrolina.com.br',
   'https://xiaomipetrolina.com.br',
-  'https://mercado-do-vale-news.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
 ];

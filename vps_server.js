@@ -83,7 +83,6 @@ const CORS_ORIGINS = [
   'https://mercadodovale.com',
   'https://www.xiaomipetrolina.com.br',
   'https://xiaomipetrolina.com.br',
-  'https://mercado-do-vale-news.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
 ];
@@ -2145,7 +2144,7 @@ function isBlingReconcileAuthorizedVps(request) {
   const key = String(request.headers['x-sync-key'] || request.headers['x-api-key'] || '');
   const syncKey = getVpsSyncKeyForBlingSyncPrices();
   if (syncKey && key === syncKey) return true;
-  return String(request.headers['user-agent'] || '').includes('vercel-cron/1.0');
+  return false;
 }
 
 async function getValidBlingAccessTokenForReconcileVps() {
