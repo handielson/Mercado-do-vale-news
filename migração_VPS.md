@@ -4776,6 +4776,40 @@ Pendências:
 
 Rollback: restaurar o backup anterior de `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
 
+### 2026-05-27 - Deploy frontend do modal de etiquetas no admin
+
+Mudanca: publicado novo build do frontend na VPS com o modal de impressao de etiquetas do card de produtos usando controle `-`/`+` para quantidade de copias e selecao total do campo ao clicar.
+
+Objetivo: garantir que a melhoria ja commitada no frontend apareca em `https://www.mercadodovale.com.br/admin/products`.
+
+Arquivos/infra alterados:
+
+- `components/products/LabelPrintModal.tsx` no commit anterior `e88c358`;
+- `scripts/deploy-vps-site.cjs`;
+- `tmp-tests/vps-site-deploy-script-static.test.mjs`;
+- `/var/www/mdv-site/releases/20260527-194954`;
+- `/var/www/mdv-site/current`.
+
+Rotas afetadas:
+
+- `/admin/products`;
+- `/assets/LabelPrintModal-CLAhplZ4.js`.
+
+Validacao:
+
+- `node tmp-tests\label-print-copy-stepper-static.test.mjs`: passou.
+- `node tmp-tests\vps-site-deploy-script-static.test.mjs`: passou.
+- `npm.cmd run deploy:vps-site`: build e upload concluidos; release ativa `/var/www/mdv-site/releases/20260527-194954`.
+- `curl.exe -L -s -o NUL -w "%{http_code} %{url_effective}\n" "https://mercadodovale.com.br/"`: `200 https://www.mercadodovale.com.br/`.
+- `curl.exe -L -s -o NUL -w "%{http_code} %{url_effective}\n" "https://www.mercadodovale.com.br/admin/products"`: `200 https://www.mercadodovale.com.br/admin/products`.
+- `curl.exe -L -s -o NUL -w "%{http_code}\n" "https://www.mercadodovale.com.br/assets/LabelPrintModal-CLAhplZ4.js"`: `200`.
+
+Resultado: frontend publicado na VPS e chunk do modal de etiquetas disponivel publicamente com o controle novo. O primeiro deploy falhou com `spawnSync npm.cmd EINVAL`; o script foi ajustado para rodar `npm.cmd run build` via shell no Windows e o deploy passou.
+
+Pendencias: validar visualmente no navegador autenticado, porque o teste HTTP confirma bundle/rota, mas nao abre sessao admin.
+
+Rollback: apontar `/var/www/mdv-site/current` para `/var/www/mdv-site/previous` na VPS.
+
 ### 2026-05-20 - Deploy e validação staging de `/sitemap.xml`
 
 Mudança: feito deploy manual da API VPS com a rota `/api/sitemap` e validação do proxy Nginx de `/sitemap.xml`.

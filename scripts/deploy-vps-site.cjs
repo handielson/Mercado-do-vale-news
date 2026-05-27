@@ -49,11 +49,13 @@ function runLocalBuild() {
   }
 
   console.log('Running npm run build...');
-  const command = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const result = spawnSync(command, ['run', 'build'], {
+  const isWindows = process.platform === 'win32';
+  const command = isWindows ? 'npm.cmd run build' : 'npm';
+  const args = isWindows ? [] : ['run', 'build'];
+  const result = spawnSync(command, args, {
     cwd: ROOT,
     stdio: 'inherit',
-    shell: false,
+    shell: process.platform === 'win32',
   });
   if (result.error) {
     throw new Error(`npm run build failed to start: ${result.error.message}`);
