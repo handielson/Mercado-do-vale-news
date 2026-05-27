@@ -23,6 +23,7 @@ import { unitService } from './units';
 import { UnitStatus } from '../utils/field-standards';
 import { stockLocationService } from './stockLocationService';
 import { syncStockToBling } from './blingService';
+import { vpsApiService } from './vpsApiService';
 
 
 const COMPANY_SLUG = 'mercado-do-vale';
@@ -96,10 +97,7 @@ async function calculateOrderCostAndProfit(items: Array<{ product_id?: string; q
 
     let totalCost = 0;
     if (productIds.length > 0) {
-        const { data: productRows } = await supabase
-            .from('products')
-            .select('id, price_cost')
-            .in('id', productIds);
+        const productRows = await vpsApiService.getProductsByIds(productIds);
 
         const costMap = new Map((productRows || []).map((p: any) => [String(p.id), Number(p.price_cost) || 0]));
         totalCost = items.reduce((acc, item) => {

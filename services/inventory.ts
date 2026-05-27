@@ -6,6 +6,7 @@ import {
     InventoryFilters
 } from '../types/inventory';
 import { Product } from '../types/product';
+import { vpsApiService } from './vpsApiService';
 
 const INVENTORY_PRODUCT_SELECT = [
     'id',
@@ -41,6 +42,78 @@ function buildProductSearchFilter(searchTerm: string): string {
     ].join(',');
 }
 
+async function loadInventoryProducts(): Promise<Product[]> {
+    const rows = await vpsApiService.getProducts({
+        status: 'all',
+        limit: 5000,
+        noCache: true,
+    });
+
+    return (rows || []).map((p: any) => ({
+        ...p,
+        stock_quantity: normalizeStockQuantity(p)
+    }));
+}
+
+function matchesSearch(product: Product, search: string): boolean {
+    const term = escapeSearchTerm(search);
+    const specs = (product as any).specs || {};
+    return [
+        product.name,
+        product.sku,
+        (product as any).ean,
+        specs.imei1,
+        specs.imei2,
+        specs.serial
+    ].some(value => String(value || '').toLowerCase().includes(term));
+}
+
+function applyInventoryFilters(products: Product[], filters: InventoryFilters = {}): Product[] {
+    let result = [...products];
+
+    if (filters.search) {
+        result = result.filter(product => matchesSearch(product, filters.search!));
+    }
+
+    if (filters.category_id) {
+        result = result.filter(product => product.category_id === filters.category_id);
+    }
+
+    if (filters.brand) {
+        result = result.filter(product => (product as any).specs?.brand === filters.brand);
+    }
+
+    if (filters.status) {
+        result = result.filter(product => (product as any).specs?.unit_status === filters.status);
+    }
+
+    if (filters.only_available) {
+        result = result.filter(product => (product.stock_quantity || 0) > 0);
+    }
+
+    return result;
+}
+
+function sortInventoryProducts(products: Product[], filters: InventoryFilters = {}): Product[] {
+    const sortBy = filters.sort_by || 'name';
+    const sortOrder = filters.sort_order || 'asc';
+    const direction = sortOrder === 'asc' ? 1 : -1;
+
+    return [...products].sort((a, b) => {
+        if (sortBy === 'quantity') {
+            return ((a.stock_quantity || 0) - (b.stock_quantity || 0)) * direction;
+        }
+        if (sortBy === 'value') {
+            const valueA = (a.stock_quantity || 0) * (a.price_cost || 0);
+            const valueB = (b.stock_quantity || 0) * (b.price_cost || 0);
+            return (valueA - valueB) * direction;
+        }
+        const aValue = String((a as any)[sortBy] || '');
+        const bValue = String((b as any)[sortBy] || '');
+        return aValue.localeCompare(bValue) * direction;
+    });
+}
+
 /**
  * Inventory Service
  * Manages stock movements and inventory operations
@@ -55,78 +128,7 @@ class InventoryService {
      * Get inventory with filters
      */
     async getInventory(filters: InventoryFilters = {}): Promise<Product[]> {
-        let query = supabase
-            .from('products')
-            .select(INVENTORY_PRODUCT_SELECT);
-        // Note: Not filtering by track_inventory since it doesn't exist in online DB
-        // All products are considered for inventory
-
-        // Search filter (name, SKU, EAN, IMEI1)
-        if (filters.search) {
-            const searchTerm = escapeSearchTerm(filters.search);
-            query = query.or(buildProductSearchFilter(searchTerm));
-        }
-
-        // Category filter
-        if (filters.category_id) {
-            query = query.eq('category_id', filters.category_id);
-        }
-
-        // Brand filter (from specs)
-        if (filters.brand) {
-            query = query.eq('specs->>brand', filters.brand);
-        }
-
-        // Only available in stock (check specs->stock_quantity)
-        if (filters.only_available) {
-            // This will need to be handled in post-processing since we can't easily filter JSONB numbers
-            // For now, we'll fetch all and filter in memory
-        }
-
-        // Sorting
-        const sortBy = filters.sort_by || 'name';
-        const sortOrder = filters.sort_order || 'asc';
-
-        if (sortBy === 'quantity' || sortBy === 'value') {
-            // Can't sort by JSONB fields directly, will sort in memory
-            query = query.order('name', { ascending: true });
-        } else {
-            query = query.order(sortBy, { ascending: sortOrder === 'asc' });
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching inventory:', error);
-            throw error;
-        }
-
-        let products = (data || []).map(p => ({
-            ...p,
-            stock_quantity: normalizeStockQuantity(p)
-        }));
-
-        // Post-process filters
-        if (filters.only_available) {
-            products = products.filter(p => (p.stock_quantity || 0) > 0);
-        }
-
-        // Post-process sorting
-        if (sortBy === 'quantity') {
-            products.sort((a, b) => {
-                const qtyA = a.stock_quantity || 0;
-                const qtyB = b.stock_quantity || 0;
-                return sortOrder === 'asc' ? qtyA - qtyB : qtyB - qtyA;
-            });
-        } else if (sortBy === 'value') {
-            products.sort((a, b) => {
-                const valueA = (a.stock_quantity || 0) * (a.price_cost || 0);
-                const valueB = (b.stock_quantity || 0) * (b.price_cost || 0);
-                return sortOrder === 'asc' ? valueA - valueB : valueB - valueA;
-            });
-        }
-
-        return products;
+        return sortInventoryProducts(applyInventoryFilters(await loadInventoryProducts(), filters), filters);
     }
 
     /**
@@ -135,39 +137,12 @@ class InventoryService {
      * Non-serialized products show as individual groups
      */
     async getInventoryGrouped(filters: InventoryFilters = {}): Promise<import('../types/inventory').InventoryGroup[]> {
-        let query = supabase
-            .from('products')
-            .select(INVENTORY_PRODUCT_SELECT);
-
-        // Apply filters
-        if (filters.search) {
-            const searchTerm = escapeSearchTerm(filters.search);
-            query = query.or(buildProductSearchFilter(searchTerm));
-        }
-
-        if (filters.category_id) {
-            query = query.eq('category_id', filters.category_id);
-        }
-
-        if (filters.brand) {
-            query = query.eq('specs->>brand', filters.brand);
-        }
-
-        if (filters.status) {
-            query = query.eq('specs->>unit_status', filters.status);
-        }
-
-        const { data: products, error } = await query;
-
-        if (error) {
-            console.error('Error fetching inventory for grouping:', error);
-            throw error;
-        }
+        const products = applyInventoryFilters(await loadInventoryProducts(), filters);
 
         // Group products
         const groups = new Map<string, import('../types/inventory').InventoryGroup>();
 
-        products?.forEach(product => {
+        products.forEach(product => {
             const isSerialized = !!(
                 product.specs?.imei1 ||
                 product.specs?.imei2 ||
@@ -287,17 +262,10 @@ class InventoryService {
      * Get inventory statistics
      */
     async getStats(): Promise<InventoryStats> {
-        const { data: products, error } = await supabase
-            .from('products')
-            .select('specs, price_cost, stock_quantity');
-
-        if (error) {
-            console.error('Error fetching inventory stats:', error);
-            throw error;
-        }
+        const products = await loadInventoryProducts();
 
         const stats: InventoryStats = {
-            total_products: products?.length || 0,
+            total_products: products.length,
             total_units: 0,
             serialized_groups: 0,
             non_serialized_groups: 0,
@@ -313,7 +281,7 @@ class InventoryService {
             total_value: 0
         };
 
-        products?.forEach(product => {
+        products.forEach(product => {
             const isSerialized = !!(
                 product.specs?.imei1 ||
                 product.specs?.imei2 ||
@@ -365,17 +333,13 @@ class InventoryService {
      */
     async adjustStock(adjustment: StockAdjustmentInput): Promise<void> {
         // Get current product
-        const { data: product, error: fetchError } = await supabase
-            .from('products')
-            .select('stock_quantity')
-            .eq('id', adjustment.product_id)
-            .single();
+        const product = await vpsApiService.getProductById(adjustment.product_id, true);
 
-        if (fetchError || !product) {
+        if (!product) {
             throw new Error('Product not found');
         }
 
-        const previousQty = product.stock_quantity || 0;
+        const previousQty = normalizeStockQuantity(product);
         let newQty = previousQty;
 
         // Calculate new quantity based on type
@@ -468,21 +432,8 @@ class InventoryService {
      * Get products with low stock
      */
     async getLowStockProducts(threshold: number = 10): Promise<Product[]> {
-        const { data, error } = await supabase
-            .from('products')
-            .select(INVENTORY_PRODUCT_SELECT);
-
-        if (error) {
-            console.error('Error fetching low stock products:', error);
-            throw error;
-        }
-
         // Filter and sort in memory because low-stock thresholds are dynamic.
-        const products = (data || [])
-            .map(p => ({
-                ...p,
-                stock_quantity: normalizeStockQuantity(p)
-            }))
+        const products = (await loadInventoryProducts())
             .filter(p => {
                 const qty = p.stock_quantity || 0;
                 return qty > 0 && qty <= threshold;
@@ -496,16 +447,8 @@ class InventoryService {
      * Get all unique brands from inventory
      */
     async getBrands(): Promise<string[]> {
-        const { data, error } = await supabase
-            .from('products')
-            .select('specs');
-
-        if (error) {
-            console.error('Error fetching brands:', error);
-            return [];
-        }
-
-        const brands = [...new Set(data?.map(p => p.specs?.brand).filter(Boolean))];
+        const products = await loadInventoryProducts();
+        const brands = [...new Set(products.map(p => (p as any).specs?.brand).filter(Boolean))];
         return brands.sort();
     }
 }

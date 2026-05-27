@@ -660,13 +660,11 @@ export const catalogService = {
             } catch (e) { }
         }
 
-        const { data, error } = await supabase
-            .from('categories')
-            .select('id, name')
-            .order('name');
-
-        if (error) throw error;
-        const result = data || [];
+        const cats = await vpsApiService.getCategories();
+        const result = (cats || [])
+            .map((c: any) => ({ id: c.id, name: c.name }))
+            .filter(c => c.id && c.name)
+            .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
 
         if (storage) {
             try {

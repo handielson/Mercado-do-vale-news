@@ -21,6 +21,7 @@ import { toTitleCase } from '@/utils/stringFormatters';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
 import { buildResponsiveImageSources } from '@/utils/responsive-image-sources.js';
 import { CATALOG_RETURN_STORAGE_KEY, createCatalogReturnState } from '../../pages/catalog/catalogPagination.js';
+import { getPublicProductRouteTarget } from '../../pages/store/productRouteTarget.js';
 import {
     formatCatalogVariationLabel,
     getCatalogCardDisplayName,
@@ -309,7 +310,8 @@ export function ModernProductCard({
             }
         }
 
-        navigate(`/produto/${targetProduct.slug || targetProduct.id}`);
+        const routePeers = productGroup?.variants?.flatMap(variant => variant.products || []) || relatedProducts;
+        navigate(`/produto/${getPublicProductRouteTarget(targetProduct, routePeers)}`);
     };
 
     const handleInfoClick = (e: React.MouseEvent) => {

@@ -12,6 +12,7 @@ import { BatchProductRow } from '../ProductEntryWizard';
 import { UNIQUE_FIELDS } from '../../../../config/product-fields';
 import { customFieldsService, CustomField } from '../../../../services/custom-fields';
 import { supabase } from '../../../../services/supabase';
+import { vpsApiService } from '../../../../services/vpsApiService';
 
 interface BatchEntryGridProps {
     rows: BatchProductRow[]; // Array of product rows
@@ -163,16 +164,10 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
         setCheckingDb(prev => new Set(prev).add(key));
 
         try {
-            // Query specs column: specs->>'field' = value
-            const { data, error } = await supabase
-                .from('products')
-                .select('id')
-                .eq(`specs->>${field}`, value)
-                .limit(1);
-
-            if (error) throw error;
-
-            const alreadyExists = data && data.length > 0;
+            const products = await vpsApiService.getProducts({ status: 'all', limit: 5000, noCache: true });
+            const alreadyExists = (products || []).some((product: any) =>
+                String(product.specs?.[field] || '') === value
+            );
 
             // Update error for this specific field
             onChange(rows.map(row => {

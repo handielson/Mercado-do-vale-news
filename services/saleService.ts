@@ -19,6 +19,7 @@ import { syncStockToBling } from './blingService';
 import { cancelReferralReward } from './cashbackService';
 import { unitService } from './units';
 import { stockLocationService } from './stockLocationService';
+import { vpsApiService } from './vpsApiService';
 
 const shouldFallbackToLegacyStock = (error: unknown): boolean => {
     const message = error instanceof Error ? error.message : String((error as any)?.message || error || '');
@@ -257,10 +258,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             if (promoStatus.isActive && saleInput.customer_id) {
                 const productIds = saleInput.items.map(item => item.product_id);
                 // Verify if any product is a phone (celulares)
-                const { data: productsInSale } = await supabase
-                    .from('products')
-                    .select('category_slug')
-                    .in('id', productIds);
+                const productsInSale = await vpsApiService.getProductsByIds(productIds);
 
                 const hasSmartphone = productsInSale?.some(p => p.category_slug === 'celulares' || p.category_slug === 'iphones') || false;
 

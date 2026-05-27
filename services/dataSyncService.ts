@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { categoryService } from './categories';
 import { customFieldsService, CustomField } from './custom-fields';
+import { vpsApiService } from './vpsApiService';
 import { encodeCSV, parseCSV } from '../utils/csv';
 
 export class DataSyncService {
@@ -153,13 +154,13 @@ export class DataSyncService {
         // Traduz tudo para Português
         const translatedHeaders = finalHeaderKeys.map(key => this.HEADER_MAPPING[key] || dynamicHeadersMap[key] || key);
 
-        // Busca Produtos (Sem JOIN de modelos para evitar ambiguidade de Foreign Key no Supabase)
-        const { data: products, error } = await supabase
-            .from('products')
-            .select('*')
-            .eq('category_id', categoryId)
-            .order('name', { ascending: true });
-        if (error) throw new Error("Erro ao buscar os modelos: " + error.message);
+        // Busca produtos pela VPS/MySQL; modelos seguem separados para evitar ambiguidade no join legado.
+        const products = (await vpsApiService.getProducts({
+            category: categoryId,
+            status: 'all',
+            limit: 5000,
+            noCache: true,
+        }) || []).sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')));
 
         // Fetch de Modelos manualmente para mapear template_values e Marca (brands)
         const modelIds = [...new Set((products || []).map(p => p.model_id).filter(Boolean))];
@@ -336,8 +337,10 @@ export class DataSyncService {
             }
         }
 
-        const { data: allBrands } = await supabase.from('brands').select('name');
-        const validBrands = allBrands ? allBrands.map(b => b.name.toLowerCase()) : [];
+        const allBrands = await vpsApiService.getBrands();
+        const validBrands = (allBrands ?? [])
+            .map((b: any) => String(b.name || '').toLowerCase())
+            .filter(Boolean);
 
         const results = { processed: 0, inserted: 0, updated: 0, errors: [] as string[] };
 

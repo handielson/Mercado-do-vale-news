@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { getOrders, updateOrderStatus, completeOnDeliveryOrder, cancelOrder } from '@/services/orderService';
 import { supabase } from '@/services/supabase';
+import { vpsApiService } from '@/services/vpsApiService';
 import { companySettingsService } from '@/services/companySettingsService';
 import type { CompanySettings } from '@/types/companySettings';
 import { printDeliveryReceipt } from '@/utils/printDeliveryReceipt';
@@ -82,10 +83,7 @@ export default function OnlineOrdersPage() {
             const itemsMissing = allItems.filter(i => !i.product_image_url || !i.product_color);
             if (itemsMissing.length > 0) {
                 const productIds = [...new Set(itemsMissing.map(i => i.product_id))];
-                const { data: products } = await supabase
-                    .from('products')
-                    .select('id, images, specs')
-                    .in('id', productIds);
+                const products = await vpsApiService.getProductsByIds(productIds);
 
                 if (products) {
                     const map = Object.fromEntries(products.map(p => [p.id, p]));

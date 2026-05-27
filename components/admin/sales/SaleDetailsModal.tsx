@@ -38,8 +38,8 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
             // Specs gerais por product_id (color, ram, storage)
             const productIds = sale.items.map(i => (i as any).product_id).filter(Boolean);
             if (productIds.length) {
-                const { data } = await supabase.from('products').select('id, specs').in('id', productIds);
-                (data || []).forEach(p => { map[p.id] = p.specs || {}; });
+                const data = await vpsApiService.getProductsByIds([...new Set(productIds)]);
+                (data || []).forEach((p: any) => { map[p.id] = p.specs || {}; });
             }
 
             // IMEIs por sale_item.id — busca units da VPS pela sale_id

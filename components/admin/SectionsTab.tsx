@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, GripVertical, Edit2, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
 import { catalogSectionsService } from '@/services/catalogSectionsService';
+import { vpsApiService } from '@/services/vpsApiService';
 import type { CatalogSection, SectionType, CreateSectionData } from '@/types/catalogSections';
 import { SECTION_PRESETS, SECTION_TYPE_LABELS } from '@/types/catalogSections';
 
@@ -318,19 +319,37 @@ function SectionForm({ section, onSave, onCancel }: SectionFormProps) {
     const [loadingProducts, setLoadingProducts] = useState(false);
 
     React.useEffect(() => {
-        // Carregar categorias
-        import('@/services/supabase').then(({ supabase }) => {
-            supabase.from('categories').select('id, name').order('name').then(({ data }) => {
-                if (data) setCategories(data);
-            });
+        let mounted = true;
 
-            // Carregar produtos
-            setLoadingProducts(true);
-            supabase.from('products').select('id, name, stock_quantity').eq('status', 'active').order('name').limit(200).then(({ data }) => {
-                if (data) setProducts(data);
-                setLoadingProducts(false);
-            });
+        setLoadingProducts(true);
+        Promise.all([
+            vpsApiService.getCategories(),
+            vpsApiService.getProducts({ status: 'active', limit: 200, compact: true }),
+        ]).then(([categoryRows, productRows]) => {
+            if (!mounted) return;
+
+            setCategories((categoryRows || [])
+                .map((category: any) => ({ id: String(category.id), name: String(category.name || '') }))
+                .filter((category) => category.id && category.name)
+                .sort((a, b) => a.name.localeCompare(b.name)));
+
+            setProducts((productRows || [])
+                .map((product: any) => ({
+                    id: String(product.id),
+                    name: String(product.name || ''),
+                    stock_quantity: Number(product.stock_quantity || 0),
+                }))
+                .filter((product) => product.id && product.name)
+                .sort((a, b) => a.name.localeCompare(b.name)));
+        }).catch((error) => {
+            console.error('Erro ao carregar opcoes da secao:', error);
+        }).finally(() => {
+            if (mounted) setLoadingProducts(false);
         });
+
+        return () => {
+            mounted = false;
+        };
     }, []);
 
     const handleSubmit = (e: React.FormEvent) => {

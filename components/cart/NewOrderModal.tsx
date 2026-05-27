@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Send, MapPin, Loader2, Search } from 'lucide-react';
-import { supabase } from '@/services/supabase';
+import { vpsApiService } from '@/services/vpsApiService';
 import { generateClientOrderText, type ClientOrderItem } from '@/utils/cartShareUtils';
 import type { DeliveryOption } from '@/components/catalog/DeliveryOptions';
 
@@ -42,6 +42,11 @@ const emptyAddress: AddressForm = {
     cep: '', rua: '', bairro: '', cidade: '', uf: '', numero: '', complemento: ''
 };
 
+function hasAvailableStock(product: any): boolean {
+    const stock = product?.stock_quantity ?? product?.stock ?? product?.available_stock;
+    return Number(stock || 0) > 0;
+}
+
 export function NewOrderModal({ items, delivery, paymentLabel, grandTotal, whatsappNumber, onClose }: Props) {
     const [variantStates, setVariantStates] = useState<Record<string, ItemVariantState>>({});
     const [addr, setAddr] = useState<AddressForm>(emptyAddress);
@@ -81,13 +86,17 @@ export function NewOrderModal({ items, delivery, paymentLabel, grandTotal, whats
                 }
 
                 try {
-                    const { data } = await supabase
-                        .from('products')
-                        .select('id, specs')
-                        .eq('model_id', modelId)
-                        .gt('stock', 0);
+                    const data = await vpsApiService.getProducts({
+                        model_id: modelId,
+                        status: 'active',
+                        limit: 100,
+                        compact: true,
+                        noCache: true,
+                    });
 
-                    if (!data || data.length === 0) {
+                    const availableProducts = (data || []).filter(hasAvailableStock);
+
+                    if (availableProducts.length === 0) {
                         states[item.id] = {
                             availableColors: [],
                             availableMemories: [],
@@ -99,11 +108,11 @@ export function NewOrderModal({ items, delivery, paymentLabel, grandTotal, whats
                     }
 
                     const colors = [...new Set(
-                        data.map((p: any) => p.specs?.color || p.specs?.Cor).filter(Boolean)
+                        availableProducts.map((p: any) => p.specs?.color || p.specs?.Cor).filter(Boolean)
                     )] as string[];
 
                     const memories = [...new Set(
-                        data.map((p: any) => {
+                        availableProducts.map((p: any) => {
                             const specs = p.specs || {};
                             const rk = Object.keys(specs).find(k => k.toLowerCase().includes('ram'));
                             const sk = Object.keys(specs).find(k => {

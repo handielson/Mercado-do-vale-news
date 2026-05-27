@@ -4,6 +4,7 @@ import type { CatalogProduct } from '@/types/catalog';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import { normalizeProduct } from '@/services/productNormalizer';
 import { buildVpsUrl } from '@/services/vpsProxyBase';
+import { vpsApiService } from '@/services/vpsApiService';
 
 const PUBLIC_STOREFRONT_TIMEOUT_MS = 3500;
 
@@ -284,10 +285,9 @@ class CatalogSectionsService {
             products = (data || []).map((p: any) => normalizeProduct(p) as unknown as CatalogProduct);
 
             // Filtro client-side por categorias (VPS ignora in_category, só aceita category único)
-            // Expande filter_categories para incluir subcategorias do Supabase
+            // Expande filter_categories para incluir subcategorias da VPS
             if (section.filter_categories && section.filter_categories.length > 0 && !section.pinned_product_ids?.length) {
-                // Busca hierarquia de categorias para expandir pais → filhos
-                const { data: allCats } = await supabase.from('categories').select('id, parent_id');
+                const allCats = await vpsApiService.getCategories();
                 const parentSet = new Set(section.filter_categories);
                 const allowedCats = new Set(section.filter_categories);
                 for (const cat of (allCats || [])) {

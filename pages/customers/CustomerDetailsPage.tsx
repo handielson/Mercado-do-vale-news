@@ -15,6 +15,7 @@ import { replaceWarrantyTags, applyWarrantyDisplayFlags, renderWarrantyBothCopie
 import { printSaleReceipt, PrintReceiptBenefits } from '../../utils/printSaleReceipt';
 import { getCoinBalance } from '../../services/cashbackService';
 import { generateLegacySalePdf } from '../../utils/legacySalePdfGenerator';
+import { vpsApiService } from '../../services/vpsApiService';
 
 /**
  * Customer Details Page
@@ -195,7 +196,7 @@ export default function CustomerDetailsPage() {
                     let warrantyTemplateId: string | undefined;
 
                     if (item.product_id) {
-                        const { data: prod } = await supabase.from('products').select('*').eq('id', item.product_id).single();
+                        const prod = await vpsApiService.getProductById(item.product_id);
                         if (prod) {
                             specs = prod.specs || specs;
                             brand = prod.brand || brand;
@@ -299,12 +300,11 @@ export default function CustomerDetailsPage() {
             // Specs gerais por product_id (ram, storage, color)
             const allProductIds = [...new Set(data.flatMap(s => s.items.map(i => (i as any).product_id)).filter(Boolean))];
             if (allProductIds.length) {
-                const { data: prods } = await supabase.from('products').select('id,specs').in('id', allProductIds);
-                (prods || []).forEach(p => { map[p.id] = p.specs || {}; });
+                const prods = await vpsApiService.getProductsByIds(allProductIds);
+                (prods || []).forEach((p: any) => { map[p.id] = p.specs || {}; });
             }
 
             // IMEIs por sale_item.id — busca units VPS para cada venda com items serializados
-            const { vpsApiService } = await import('../../services/vpsApiService');
             for (const sale of data) {
                 const hasSerialized = sale.items.some((i: any) => i.serialized_unit_id);
                 if (!hasSerialized) continue;

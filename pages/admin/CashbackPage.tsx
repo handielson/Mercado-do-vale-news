@@ -18,6 +18,7 @@ import {
     type CoinPromotion,
 } from '../../services/coinPromotionService';
 import { supabase } from '../../services/supabase';
+import { vpsApiService } from '../../services/vpsApiService';
 
 // ============================================================
 // BADGES DE TIPO DE TRANSAÇÃO
@@ -198,8 +199,16 @@ function PromotionsTab() {
         try {
             const [promoData, prodData, catData] = await Promise.all([
                 listCoinPromotions(),
-                supabase.from('products').select('id, name').order('name').then(r => r.data ?? []),
-                supabase.from('categories').select('id, name').order('name').then(r => r.data ?? []),
+                vpsApiService.getProducts({ status: 'active', limit: 1000, compact: true, noCache: true }).then(rows =>
+                    (rows ?? [])
+                        .map((row: any) => ({ id: row.id, name: row.name }))
+                        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+                ),
+                vpsApiService.getCategories(true).then(rows =>
+                    (rows ?? [])
+                        .map((row: any) => ({ id: row.id, name: row.name }))
+                        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+                ),
             ]);
             setPromos(promoData);
             setProducts(prodData as { id: string; name: string }[]);

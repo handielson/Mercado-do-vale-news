@@ -13,6 +13,8 @@ assert(/try_files\s+\$uri\s+\$uri\/\s+\/index\.html/.test(config), 'SPA fallback
 assert(/location\s+\/assets\//.test(config), 'assets location should be configured');
 assert(/max-age=31536000/.test(config), 'hashed assets should have long cache');
 assert(/location\s+\/api\//.test(config), 'API proxy location should be configured');
+assert(/location\s+=\s+\/api\/status/.test(config), '/api/status compatibility route should be configured before the generic API proxy');
+assert(/proxy_pass\s+http:\/\/127\.0\.0\.1:4000\/status/.test(config), '/api/status should map to Fastify /status');
 assert(/location\s+=\s+\/vps-proxy/.test(config), 'legacy /vps-proxy route should be reserved before SPA fallback');
 assert(/proxy_pass\s+http:\/\/127\.0\.0\.1:4000\/api\/vps-proxy/.test(config), 'legacy /vps-proxy should proxy to Fastify /api/vps-proxy');
 assert(/proxy_pass\s+http:\/\/127\.0\.0\.1:4000/.test(config), 'API proxy should target local Fastify port 4000');

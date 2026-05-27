@@ -10,6 +10,7 @@ import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchB
 import { categoryService } from '../../../services/categories';
 import { modelService } from '../../../services/models-new';
 import { colorService } from '../../../services/colors';
+import { vpsApiService } from '../../../services/vpsApiService';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../../services/vpsProxyBase';
 import { Category } from '../../../types/category';
 import { Model } from '../../../types/model-architecture';
@@ -2369,13 +2370,15 @@ export default function BlingPage() {
                             setBlingIdStats(null);
                             setProductsWithoutId([]);
                             try {
-                                const { data, error } = await supabase
-                                    .from('products')
-                                    .select('id, name, sku, bling_id');
-                                if (error) throw error;
-                                const total = data?.length || 0;
-                                const withId = data?.filter((p: any) => p.bling_id) || [];
-                                const withoutId = data?.filter((p: any) => !p.bling_id) || [];
+                                const data = await vpsApiService.getProducts({
+                                    status: 'all',
+                                    limit: 5000,
+                                    noCache: true,
+                                });
+                                const products = data || [];
+                                const total = products.length;
+                                const withId = products.filter((p: any) => p.bling_id) || [];
+                                const withoutId = products.filter((p: any) => !p.bling_id) || [];
                                 setBlingIdStats({ total, with_id: withId.length, without_id: withoutId.length });
                                 setProductsWithoutId(withoutId.map((p: any) => ({ id: p.id, name: p.name, sku: p.sku })));
                             } catch (e: any) {

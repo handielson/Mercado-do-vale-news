@@ -357,13 +357,15 @@ async function loadPdvSales(now) {
 }
 
 async function loadProductCatalog() {
-  const { supabase } = await import('./supabase');
-  const response = await supabase
-    .from('products')
-    .select('id, sku, name, stock_quantity, price_cost, price_retail');
+  const { vpsApiService } = await import('./vpsApiService');
+  const products = await vpsApiService.getProducts({
+    status: 'all',
+    limit: 5000,
+    compact: true,
+    noCache: true,
+  });
 
-  if (response.error) throw response.error;
-  return Array.isArray(response.data) ? response.data : [];
+  return Array.isArray(products) ? products : [];
 }
 
 function extractBlingDetailItems(detailPayload) {

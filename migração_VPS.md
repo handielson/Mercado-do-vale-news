@@ -486,6 +486,47 @@ Nenhuma rota crítica deve ser migrada sem atualizar o mapa.
 | Deploy | GitHub Actions para VPS | manual temporário |
 | Rollback | symlink release | restaurar backup manual temporário |
 
+## Decisão SSL/TLS - Cloudflare Origin Certificate
+
+Para o site principal atrás da Cloudflare, a preferência é usar **Cloudflare Origin Certificate** no Nginx da VPS para proteger o trecho `Cloudflare -> VPS`.
+
+Decisão:
+
+- custo: `R$ 0`; o Cloudflare Origin Certificate está incluído no plano Free da Cloudflare;
+- escopo recomendado: `mercadodovale.com.br` e `*.mercadodovale.com.br`;
+- uso correto: somente em registros proxied pela Cloudflare, com nuvem laranja ativa;
+- caminho protegido: navegador usa o certificado público da Cloudflare na borda, e a Cloudflare usa o Origin Certificate ao falar com a VPS;
+- não usar como certificado público direto: se o domínio for desproxied ou se alguém acessar a VPS diretamente sem Cloudflare, o navegador pode exibir erro de certificado não confiável;
+- SSL mode desejado na Cloudflare: `Full (strict)`, depois que o Origin Certificate dedicado estiver instalado;
+- alternativa gratuita: Let's Encrypt/Certbot para `mercadodovale.com.br` e `www.mercadodovale.com.br`, especialmente se algum dia o site precisar funcionar sem proxy Cloudflare;
+- estado temporário atual: Nginx de produção usa o certificado existente de `api.xiaomipetrolina.com.br` para atender HTTPS de origem aceito pela Cloudflare; isso funciona, mas deve ser substituído por Origin Certificate dedicado do Mercado do Vale.
+
+Plano de instalação:
+
+1. Gerar no painel Cloudflare um Origin Certificate para `mercadodovale.com.br` e `*.mercadodovale.com.br`.
+2. Salvar certificado e chave privada na VPS, por exemplo:
+
+```text
+/etc/ssl/cloudflare/mercadodovale.com.br.pem
+/etc/ssl/cloudflare/mercadodovale.com.br.key
+```
+
+3. Ajustar `infra/nginx/mdv-site-production.conf`:
+
+```nginx
+ssl_certificate /etc/ssl/cloudflare/mercadodovale.com.br.pem;
+ssl_certificate_key /etc/ssl/cloudflare/mercadodovale.com.br.key;
+```
+
+4. Rodar `nginx -t`, recarregar Nginx e validar:
+
+- `https://www.mercadodovale.com.br/`;
+- `https://www.mercadodovale.com.br/sitemap.xml`;
+- `https://www.mercadodovale.com.br/api/status`;
+- `https://mercadodovale.com.br/sitemap.xml` redirecionando para `www`.
+
+Rollback: voltar temporariamente para o certificado anterior no arquivo Nginx, rodar `nginx -t` e recarregar Nginx.
+
 ## Fluxo de Deploy do Site na VPS
 
 Este é o fluxo operacional para publicar o frontend sem Vercel.
@@ -608,9 +649,9 @@ Esta seção deve ser alimentada ao longo da migração.
 
 | Rota | Origem Atual | Destino Planejado | Status | Tipo | Auth | Teste/Validação | Observações |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `/` | Vercel static | VPS Nginx `dist/` | vps-staging-validado-http | frontend | pública | `curl -H "Host: staging.mercadodovale.com.br" http://76.13.232.162/`; `node tmp-tests/vps-staging-frontend-proxy-check-static.test.mjs`; `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests/vps-staging-frontend-proxy-check.cjs`; `node tmp-tests/vps-site-deploy-script-static.test.mjs`; `node tmp-tests/vps-nginx-staging-config-static.test.mjs`; `npm run build` | deploy executado na VPS em `/var/www/mdv-site/releases/20260520-180705`; Nginx staging instalado; raiz staging validada com HTTP 200 via host header; DNS/browser ainda pendente |
+| `/` | Vercel static | VPS Nginx `dist/` | vps-producao-validado-http | frontend | pública | `curl -H "Host: staging.mercadodovale.com.br" http://76.13.232.162/`; `curl https://www.mercadodovale.com.br/`; `node tmp-tests/vps-staging-frontend-proxy-check-static.test.mjs`; `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests/vps-staging-frontend-proxy-check.cjs`; `node tmp-tests/vps-site-deploy-script-static.test.mjs`; `node tmp-tests/vps-nginx-staging-config-static.test.mjs`; `npm run build` | deploy executado na VPS em `/var/www/mdv-site/releases/20260520-180705`; Nginx staging e produção instalados; raiz pública validada com HTTP 200 via Cloudflare em 2026-05-27; falta validação browser/login real |
 | `/admin/*` | Vercel static | VPS Nginx `dist/` | vps-staging-validado-http | frontend/admin | Supabase auth no app | `curl -I -H "Host: staging.mercadodovale.com.br" http://76.13.232.162/admin/products`; `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests/vps-staging-frontend-proxy-check.cjs`; login + refresh direto em staging após DNS | fallback SPA `/admin/products` validado via HTTP 200; falta validação no navegador com DNS ou hosts local e sessão admin real |
-| `/api/vps-proxy` | Vercel Function | VPS Fastify | vps-staging-validado-http | proxy/api | Supabase admin/customer + sync key | `node tmp-tests/vps-proxy-fastify-route-static.test.mjs`; `node tmp-tests/vps-staging-frontend-proxy-check-static.test.mjs`; `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests/vps-staging-frontend-proxy-check.cjs`; `node --check vps_server.js`; `node --check vps_server.cjs`; `curl /api/vps-proxy?path=/status`; `curl /api/vps-proxy?path=/products?limit=1`; `curl /api/vps-proxy?path=/company-settings` sem token | rota compatível criada, deployada e validada no staging; status/produtos públicos OK e `/company-settings` sem sessão bloqueado; falta regressão com sessão admin real |
+| `/api/vps-proxy` | Vercel Function | VPS Fastify | vps-producao-validado-http | proxy/api | Supabase admin/customer + sync key | `node tmp-tests/vps-proxy-fastify-route-static.test.mjs`; `node tmp-tests/vps-staging-frontend-proxy-check-static.test.mjs`; `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests/vps-staging-frontend-proxy-check.cjs`; `node --check vps_server.js`; `node --check vps_server.cjs`; `curl /api/vps-proxy?path=/status`; `curl /vps-proxy?path=/status`; `curl /api/vps-proxy?path=/products?limit=1`; `curl /api/vps-proxy?path=/company-settings` sem token | rota compatível criada, deployada e validada no staging e no domínio público para leitura de status; status/produtos públicos OK e `/company-settings` sem sessão bloqueado; falta regressão com sessão admin real |
 | `/api/bling` | Vercel Function | VPS Fastify | vps-staging-validado-http | api/oauth | conforme `resource` | `node tmp-tests/vps-bling-resource-parity-static.test.mjs`; `node tmp-tests/vps-bling-oauth-fastify-static.test.mjs`; `node tmp-tests/vps-bling-products-fastify-static.test.mjs`; `node tmp-tests/vps-bling-product-detail-fastify-static.test.mjs`; `node tmp-tests/vps-bling-product-update-fastify-static.test.mjs`; `node tmp-tests/vps-bling-diagnostics-fastify-static.test.mjs`; `node tmp-tests/vps-bling-admin-helpers-fastify-static.test.mjs`; `node tmp-tests/vps-bling-webhook-fastify-static.test.mjs`; `node tmp-tests/vps-bling-stock-fastify-static.test.mjs`; `node tmp-tests/vps-bling-stock-sync-guarded-check-static.test.mjs`; `node tmp-tests/vps-bling-stock-sync-guarded-check.cjs`; `node tmp-tests/vps-bling-product-update-guarded-check-static.test.mjs`; `node tmp-tests/vps-bling-product-update-guarded-check.cjs`; `node tmp-tests/vps-bling-finance-mutation-guarded-check-static.test.mjs`; `node tmp-tests/vps-bling-finance-mutation-guarded-check.cjs`; `node tmp-tests/vps-bling-sync-prices-fastify-static.test.mjs`; `node tmp-tests/vps-bling-reconcile-fastify-static.test.mjs`; `node tmp-tests/vps-bling-finance-fastify-static.test.mjs`; `node tmp-tests/vps-bling-nf-fastify-static.test.mjs`; `curl /api/bling?resource=oauth-callback&error=access_denied`; `curl POST /api/bling?resource=exchange` sem credenciais; `curl /api/bling?resource=categories` sem Authorization; `curl /api/bling?resource=products` sem Authorization; `curl /api/bling?resource=product-detail`; `curl /api/bling?resource=product-detail&id=0`; `curl /api/bling?resource=stock` sem Authorization; `curl POST /api/bling?resource=stock-sync` sem body; `curl GET /api/bling?resource=sync-prices-vps`; `curl /api/bling?resource=reconcile&dryRun=true` sem auth; `curl /api/bling?resource=finance&resourceType=pagar&action=list` sem Authorization; `curl /api/bling?resource=nf-detail` sem tipo; `curl POST /api/bling?resource=product-update-fiscal` sem body; `curl POST /api/bling?resource=product-update-dimensions` sem body; `curl GET /api/bling?resource=webhook`; `curl GET /api/bling?resource=image-proxy`; `curl GET /api/bling?resource=debug-product`; `curl GET /api/bling?resource=debug-diagnostic`; `curl POST /api/bling?resource=fix-profile`; `curl POST /api/bling?resource=sync-model-brand`; `curl POST /api/bling?resource=fix-bling-id` | inventário de recursos do `api/bling.ts` coberto no Fastify da VPS; guards de `stock-sync`, atualização fiscal/dimensões e financeiro preparados sem execução real; validações reais controladas ainda pendentes antes do corte final |
 | `/api/auth/callback/bling` | Vercel rewrite | VPS Fastify | vps-staging-validado-http | oauth | callback externo | `node tmp-tests/vps-bling-oauth-fastify-static.test.mjs`; `node tmp-tests/vps-oauth-preflight-check-static.test.mjs`; `OAUTH_PREFLIGHT_LIVE=true node tmp-tests/vps-oauth-preflight-check.cjs`; `curl /api/auth/callback/bling` sem code | callback preservado na VPS; preflight OAuth sanitizado validado; falta reconexão real com código OAuth válido do Bling |
 | `/api/bling-webhook` | Vercel Function | VPS Fastify | vps-staging-validado-http | webhook | segredo/validação quando disponível | `node tmp-tests/vps-bling-webhook-fastify-static.test.mjs`; `node tmp-tests/vps-bling-webhook-simulation-static.test.mjs`; `node --check tmp-tests/vps-bling-webhook-simulation.cjs`; `node tmp-tests/vps-bling-webhook-simulation.cjs`; `curl GET /api/bling-webhook`; `curl GET /api/bling?resource=webhook` | handler Fastify deployado; guard de payload Bling preparado e validado sem envio; POST real/simulado fica para janela controlada por gravar logs/estoque/preço |
@@ -622,7 +663,7 @@ Esta seção deve ser alimentada ao longo da migração.
 | `/api/shipping` | Vercel Function | VPS Fastify | vps-staging-validado-http | api | admin/public conforme uso | `node tmp-tests/vps-shipping-fastify-static.test.mjs`; `node tmp-tests/vps-shipping-quote-guarded-simulation-static.test.mjs`; `node --check tmp-tests/vps-shipping-quote-guarded-simulation.cjs`; `node tmp-tests/vps-shipping-quote-guarded-simulation.cjs`; `node tmp-tests/vps-melhor-envio-label-guarded-simulation-static.test.mjs`; `node --check tmp-tests/vps-melhor-envio-label-guarded-simulation.cjs`; `node tmp-tests/vps-melhor-envio-label-guarded-simulation.cjs`; `node --check vps_server.js`; `node --check vps_server.cjs`; `curl POST /api/shipping?provider=frenet&action=calculate`; `curl POST /api/shipping?provider=melhor-envio&action=calculate` sem token | rota compatível deployada no staging para Frenet e Melhor Envio; guards de cotacao e etiqueta preparados e validados sem envio; validação real com token/pedido fica para regressão controlada |
 | `/api/telegram-webhook` | Vercel Function | VPS Fastify | vps-staging-validado-http | webhook | `TELEGRAM_WEBHOOK_SECRET` configurado na VPS | `node tmp-tests/vps-telegram-webhook-fastify-static.test.mjs`; `node tmp-tests/vps-telegram-set-webhook-static.test.mjs`; `node tmp-tests/vps-telegram-webhook-ping-static.test.mjs`; `node tmp-tests/vps-telegram-webhook-command-static.test.mjs`; `curl GET /api/telegram-webhook`; `curl POST {}`; `curl POST payload /ping sem segredo`; `node tmp-tests/vps-telegram-set-webhook.cjs`; `node tmp-tests/vps-telegram-webhook-ping.cjs`; `node tmp-tests/vps-telegram-webhook-command.cjs /vendas`; `node tmp-tests/vps-telegram-webhook-command.cjs /estoque`; `node tmp-tests/vps-telegram-webhook-command.cjs /relatorio`; `node tmp-tests/vps-telegram-webhook-command.cjs /top10`; `node tmp-tests/vps-telegram-webhook-command.cjs /pedidos`; `node tmp-tests/vps-telegram-webhook-command.cjs /clientes`; `node tmp-tests/vps-telegram-webhook-command.cjs "/modelo iphone"`; `node tmp-tests/vps-telegram-webhook-command.cjs "/categoria celulares"` | handler Fastify publicado; comandos migrados; webhook real do Telegram aponta para `api.xiaomipetrolina.com.br`; comandos principais reais controlados validados via chat configurado |
 | `/api/cron-dispatcher` | Vercel Cron/Function | VPS cron + Fastify/script | vps-staging-validado-http | cron | `CRON_SECRET` configurado na VPS | `node tmp-tests/vps-cron-dispatcher-fastify-static.test.mjs`; `node tmp-tests/vps-migration-secrets-set-static.test.mjs`; `node tmp-tests/vps-cron-dispatcher-install-static.test.mjs`; `curl /api/cron-dispatcher` sem segredo; `crontab -l` | handler Fastify publicado; chamada pública sem segredo retorna `401`; cron instalado na VPS em `0 22 * * *`; entradas antigas para `www.mercadodovale.com.br/api/cron-dispatcher` removidas |
-| `/sitemap.xml` | Vercel rewrite/function | VPS Fastify via Nginx | vps-producao-validado-http | sitemap/seo | pública | `node tmp-tests/vps-sitemap-fastify-static.test.mjs`; `node tmp-tests/vps-seo-special-slugs-check-static.test.mjs`; `SEO_SPECIAL_SLUGS_LIVE=true node tmp-tests/vps-seo-special-slugs-check.cjs`; `node tmp-tests/vps-seo-production-host-check-static.test.mjs`; `SEO_PRODUCTION_HOST_LIVE=true node tmp-tests/vps-seo-production-host-check.cjs`; `SEO_PRODUCTION_HOST_LIVE=true SEO_PRODUCTION_HOST=www.mercadodovale.com.br node tmp-tests/vps-seo-production-host-check.cjs`; `node tmp-tests/vps-nginx-production-config-static.test.mjs`; `node tmp-tests/vps-nginx-production-config-install-static.test.mjs`; `node --check vps_server.js`; `node --check vps_server.cjs`; `curl /api/sitemap`; `curl /sitemap.xml` | Nginx produção instalado na VPS; raiz `mercadodovale.com.br` redireciona `301` para `https://www.mercadodovale.com.br`; `www` serve sitemap `200` com `2136` URLs e `2133` produtos |
+| `/sitemap.xml` | Vercel rewrite/function | VPS Fastify via Nginx | vps-producao-validado-http | sitemap/seo | pública | `node tmp-tests/vps-sitemap-fastify-static.test.mjs`; `node tmp-tests/vps-sitemap-dedup-slugs-static.test.mjs`; `node tmp-tests/vps-seo-special-slugs-check-static.test.mjs`; `SEO_SPECIAL_SLUGS_LIVE=true node tmp-tests/vps-seo-special-slugs-check.cjs`; `node tmp-tests/vps-seo-production-host-check-static.test.mjs`; `SEO_PRODUCTION_HOST_LIVE=true node tmp-tests/vps-seo-production-host-check.cjs`; `SEO_PRODUCTION_HOST_LIVE=true SEO_PRODUCTION_HOST=www.mercadodovale.com.br node tmp-tests/vps-seo-production-host-check.cjs`; `node tmp-tests/vps-nginx-production-config-static.test.mjs`; `node tmp-tests/vps-nginx-production-config-install-static.test.mjs`; `node --check vps_server.js`; `node --check vps_server.cjs`; `curl /api/sitemap`; `curl /sitemap.xml` | Nginx produção instalado na VPS; raiz `mercadodovale.com.br` redireciona `301` para `https://www.mercadodovale.com.br`; `www` serve sitemap `200` com `1845` URLs e `1842` produtos únicos por slug; `poco-c85` revalidado com 1 ocorrência em 2026-05-27 |
 | `/produto/:slug` | Vercel rewrite/function | VPS Fastify via Nginx | vps-producao-validado-http | seo | pública | `node tmp-tests/vps-seo-produto-fastify-static.test.mjs`; `node tmp-tests/vps-seo-special-slugs-check-static.test.mjs`; `SEO_SPECIAL_SLUGS_LIVE=true node tmp-tests/vps-seo-special-slugs-check.cjs`; `SEO_SPECIAL_SLUGS_LIVE=true SEO_SPECIAL_SLUGS_HOST=www.mercadodovale.com.br SEO_SPECIAL_SLUGS_SITEMAP_URL=http://76.13.232.162/sitemap.xml node tmp-tests/vps-seo-special-slugs-check.cjs`; `node tmp-tests/vps-seo-production-host-check-static.test.mjs`; `SEO_PRODUCTION_HOST_LIVE=true node tmp-tests/vps-seo-production-host-check.cjs`; `SEO_PRODUCTION_HOST_LIVE=true SEO_PRODUCTION_HOST=www.mercadodovale.com.br node tmp-tests/vps-seo-production-host-check.cjs`; `node --check vps_server.js`; `node --check vps_server.cjs`; `curl /api/seo-produto?slug=abracadeira-nylon-enforca-gato-300x36mm-bom-5495`; `curl /produto/abracadeira-nylon-enforca-gato-300x36mm-bom-5495` | rota Fastify deployada e validada no staging e no host `www` da config produção; slugs especiais retornam `200`, canonical `www.mercadodovale.com.br`, `og:type=product` e `2` JSON-LD |
 | `/api/brasilapi-ncm` | Vercel rewrite/proxy | VPS Fastify | vps-staging-validado-http | api/proxy | pública | `curl /api/brasilapi-ncm?search=8517`; `node tmp-tests/vps-proxy-fastify-route-static.test.mjs` | rota direta criada no Fastify, deployada e validada com cache |
 
@@ -656,10 +697,392 @@ Pendente para corte final:
 - OAuth: reconectar Bling e Shopee com código real válido pela VPS.
 - Staging/frontend: validar DNS/hosts de staging, navegador, login/admin real e `/api/vps-proxy` com sessão.
 - Shipping: cotação Frenet/Melhor Envio e etiqueta Melhor Envio com pedido de teste.
-- SEO: config Nginx de produção instalada na VPS; `mercadodovale.com.br` redireciona para `https://www.mercadodovale.com.br`, `www` serve `/sitemap.xml` com `2136` URLs e produtos SEO `200`; falta validar DNS final/browser depois do corte.
+- SEO: config Nginx de produção instalada na VPS; `mercadodovale.com.br` redireciona para `https://www.mercadodovale.com.br`, `www` serve `/sitemap.xml` com `1845` URLs e `1842` produtos únicos por slug; falta validar login/admin real no browser.
+- API/catalogo: `/products/by-ids` criado no Fastify da VPS e validado direto em `api.xiaomipetrolina.com.br` e via `/api/vps-proxy`, retornando `200` e preservando a ordem dos IDs enviados.
 - Operação: cron da Vercel removido do `vercel.json`; callbacks restantes da Vercel ficam para depois da regressão final.
 
 ## Registro de Mudanças
+
+### 2026-05-27 - Rodada de checklist VPS local e live read-only
+
+Mudanca: reexecutado o checklist seguro do bloco VPS sem stagear, commitar ou fazer deploy novo.
+
+Objetivo: confirmar o estado atual antes de seguir para commit/deploy ou validacoes reais com sessao/admin.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/`
+- `/admin/products`
+- `/api/status`
+- `/api/vps-proxy`
+- `/sitemap.xml`
+- `/produto/:slug`
+
+Validacao:
+
+- `node tmp-tests/vps-migration-guard-regression.cjs`: `ok=true`, `28` checks, `0` falhas, sem mutacao real.
+- `node --check vps_server.js`
+- `node --check vps_server.cjs`
+- `node tmp-tests/vps-nginx-production-config-static.test.mjs`
+- `node tmp-tests/vps-nginx-staging-config-static.test.mjs`
+- rodada dos testes `tmp-tests/*` modificados/novos do bloco: todos passaram.
+- `npm.cmd run build`: primeira execucao bloqueada pelo sandbox ao ler `vite.config.ts`; repetida fora do sandbox e concluida com sucesso.
+- `SEO_PRODUCTION_HOST_LIVE=true node tmp-tests/vps-seo-production-host-check.cjs`: `ok=true`, raiz `301` para `https://www.mercadodovale.com.br/sitemap.xml`, sitemap `200`, `1845` URLs, `1842` produtos e 3 produtos SEO `200`.
+- `SEO_PRODUCTION_HOST_LIVE=true SEO_PRODUCTION_HOST=www.mercadodovale.com.br node tmp-tests/vps-seo-production-host-check.cjs`: `ok=true` direto no host `www`.
+- `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests/vps-staging-frontend-proxy-check.cjs`: `ok=true`, raiz `200`, `/admin/products` `200`, status/produtos `200`, `/company-settings` sem sessao `403`.
+- `curl https://www.mercadodovale.com.br/`: `200`, `text/html`.
+- `curl https://www.mercadodovale.com.br/api/status`: `200`, `application/json; charset=utf-8`.
+- `curl https://www.mercadodovale.com.br/sitemap.xml`: `200`, `application/xml; charset=utf-8`.
+
+Resultado: checklist local e live read-only passou. Producao publica e staging continuam respondendo pelos caminhos essenciais da VPS, e os guards permanecem bloqueando execucoes mutantes por padrao.
+
+Commit: `02d9d89 chore(vps): reduce supabase product reads`.
+
+Pendencias:
+
+- browser in-app nao foi concluido porque o runtime do plugin falhou no setup e o DevTools estava bloqueado por perfil Chrome ja em uso;
+- validar login/admin real no dominio publico;
+- definir o proximo pacote para stage/commit/deploy sem misturar alteracoes paralelas.
+
+Rollback: nenhuma alteracao de runtime/infra foi aplicada nesta rodada; rollback nao necessario.
+
+### 2026-05-27 - Revalidacao Nginx producao no IP da VPS
+
+Mudanca: reinstalada/confirmada a config `infra/nginx/mdv-site-production.conf` na VPS usando o instalador guardado, adicionados blocos `443 ssl` para o site e uma regra de compatibilidade `/api/status -> /status`, e revalidados os hosts de producao contra o IP da VPS e pela Cloudflare publica.
+
+Objetivo: garantir que o bloqueador antigo de `404` nos hosts `mercadodovale.com.br` e `www.mercadodovale.com.br` continua resolvido antes do corte DNS final.
+
+Arquivos/infra alterados:
+
+- `/etc/nginx/sites-available/mdv-site-production.conf`
+- `/etc/nginx/sites-enabled/mdv-site-production.conf`
+- `infra/nginx/mdv-site-production.conf`
+- `infra/nginx/mdv-site-staging.conf`
+- `tmp-tests/vps-nginx-production-config-static.test.mjs`
+- `tmp-tests/vps-nginx-staging-config-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- `node tmp-tests/vps-nginx-production-config-static.test.mjs`
+- `node tmp-tests/vps-nginx-staging-config-static.test.mjs`
+- `node tmp-tests/vps-nginx-production-config-install-static.test.mjs`
+- `node tmp-tests/vps-seo-production-host-check-static.test.mjs`
+- `node --check tmp-tests/vps-nginx-production-config-install.cjs`
+- `node --check tmp-tests/vps-seo-production-host-check.cjs`
+- `node tmp-tests/vps-nginx-production-config-install.cjs`: dry-run com credenciais encontradas e `reason=dry_run_enabled`.
+- `DRY_RUN=false CONFIRM_NGINX_PRODUCTION_INSTALL=I_UNDERSTAND_NGINX_PRODUCTION_INSTALL node tmp-tests/vps-nginx-production-config-install.cjs`: `installed=true`, backup remoto criado, `nginx -t` e reload executados.
+- `SEO_PRODUCTION_HOST_LIVE=true node tmp-tests/vps-seo-production-host-check.cjs`: `ok=true`, raiz `301` para `https://www.mercadodovale.com.br/sitemap.xml`, sitemap `200`, `2148` URLs, `2145` produtos e 3 produtos SEO `200`.
+- `SEO_PRODUCTION_HOST_LIVE=true SEO_PRODUCTION_HOST=www.mercadodovale.com.br node tmp-tests/vps-seo-production-host-check.cjs`: `ok=true` direto no host `www`.
+- Antes da correção 443, `curl https://www.mercadodovale.com.br/`, `/sitemap.xml` e `/api/status` retornavam `404` JSON do Fastify, confirmando que o HTTPS público caía no bloco SSL da API.
+- Depois da correção 443, `curl https://www.mercadodovale.com.br/`: `200 OK`, `Content-Type: text/html`.
+- `curl -I https://www.mercadodovale.com.br/sitemap.xml`: `200 OK`, `Content-Type: application/xml; charset=utf-8`.
+- `curl https://www.mercadodovale.com.br/api/status`: `200 OK`, JSON com `mysql.ok=true`.
+- `curl -I https://www.mercadodovale.com.br/produto/xiaomi-redmi-pad-2`: `200 OK`, `Content-Type: text/html; charset=utf-8`.
+- `curl -I https://mercadodovale.com.br/sitemap.xml`: `301`, `Location: https://www.mercadodovale.com.br/sitemap.xml`.
+- `curl -I https://www.mercadodovale.com.br/assets/index-BliW-PDw.js`: `200 OK`, `Cache-Control: public, max-age=31536000, immutable`.
+- `curl "https://www.mercadodovale.com.br/api/vps-proxy?path=%2Fstatus"`: `200 OK`.
+- `curl "https://www.mercadodovale.com.br/vps-proxy?path=%2Fstatus"`: `200 OK`.
+- Browser em `https://www.mercadodovale.com.br/`: carregou a vitrine com titulo `Mercado do Vale | Smartphones e Eletronicos em Petrolina-PE`, produtos e imagens visiveis.
+
+Resultado: Nginx de producao segue ativo na VPS e agora tambem atende o HTTPS que chega pela Cloudflare. O host raiz redireciona para `www`, o host canonico serve o frontend, sitemap, assets, HTML SEO e proxy/status pelo Nginx correto em vez de cair diretamente no Fastify da API.
+
+Pendencias:
+
+- validar browser/login/admin real no dominio publico;
+- instalar certificado/origin cert dedicado para `mercadodovale.com.br`/`www.mercadodovale.com.br` e remover o uso temporario do certificado de `api.xiaomipetrolina.com.br`;
+- investigar erro residual do navegador nao bloqueante: refresh token Supabase invalido do perfil local;
+- manter acompanhamento de slugs compartilhados no banco; o sitemap já deduplica URLs por slug.
+- seguir com login/admin real, OAuth real e execucoes controladas restantes antes do corte definitivo.
+
+Rollback: restaurar backup remoto em `/etc/nginx/sites-available/mdv-site-production.conf.backup.*`, rodar `nginx -t` e recarregar Nginx.
+
+### 2026-05-27 - Deduplicacao de slugs no sitemap
+
+Mudanca: ajustada a rota `/api/sitemap` no Fastify da VPS para emitir apenas uma URL por slug de produto, usando `GROUP BY slug` e `MAX(updated_at)` para preservar o `lastmod` mais recente.
+
+Objetivo: corrigir duplicidade SEO no sitemap publico, inicialmente observada em `/produto/poco-c85`, sem alterar os produtos/variacoes que compartilham slug no banco.
+
+Arquivos/infra alterados:
+
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/vps-sitemap-dedup-slugs-static.test.mjs`
+- `migração_VPS.md`
+- `/var/www/mdv-api/server.js`
+- `/var/www/mdv-api/vps_server.js`
+- `/var/www/mdv-api/.codex-backups/server.js.20260527113450.bak`
+- `/var/www/mdv-api/.codex-backups/vps_server.js.20260527113450.bak`
+
+Investigacao:
+
+- `curl https://www.mercadodovale.com.br/sitemap.xml | Select-String poco-c85`: antes da correcao, `/produto/poco-c85` aparecia 3 vezes.
+- Consulta read-only no MySQL da VPS confirmou 3 produtos ativos/indexaveis com `slug='poco-c85'`: dois registros com SKU `PC858256V` e um com SKU `PC858256R`.
+- A mesma consulta mostrou outros slugs compartilhados por variacoes/capas; portanto, a causa raiz do sitemap duplicado era a query emitir uma URL por linha de produto, enquanto a URL publica canonica usa o slug.
+- O teste `tmp-tests/public-product-route-target.test.mjs` ja documentava que variacoes podem compartilhar slug e, nesse caso, a navegacao usa ID para distinguir variante. Por isso a correcao do sitemap foi deduplicar por slug, nao renomear produtos automaticamente.
+
+Validacao:
+
+- `node tmp-tests/vps-sitemap-dedup-slugs-static.test.mjs`
+- `node tmp-tests/vps-sitemap-fastify-static.test.mjs`
+- `node --check vps_server.js`
+- `node --check vps_server.cjs`
+- `node tmp-tests/autoresponder-vps-server-deploy.cjs`: deploy OK, `mdv-api` reiniciado, backups remotos criados.
+- `curl https://www.mercadodovale.com.br/sitemap.xml`: `poco-c85` passou a aparecer 1 vez; sitemap ficou com `1844` URLs totais e `1841` URLs de produto.
+- `curl https://www.mercadodovale.com.br/api/status`: `200 OK`, `mysql.ok=true` apos restart.
+- `curl -I https://www.mercadodovale.com.br/produto/poco-c85`: `200 OK`, `Content-Type: text/html; charset=utf-8`.
+- `SEO_PRODUCTION_HOST_LIVE=true SEO_PRODUCTION_HOST=www.mercadodovale.com.br node tmp-tests/vps-seo-production-host-check.cjs`: `ok=true`, sitemap `200`, `1844` URLs, `1841` produtos, `poco-c85` validado com canonical/OG/JSON-LD.
+
+Resultado: sitemap publico nao repete mais `/produto/poco-c85` nem outros slugs compartilhados; produtos/variacoes continuam intactos no banco.
+
+Pendencias:
+
+- avaliar depois, como limpeza de dados separada, se existem duplicidades reais indesejadas de produto/SKU, especialmente os dois registros `PC858256V` com slug `poco-c85`;
+- manter o teste de deduplicacao para impedir regressao na rota `/api/sitemap`.
+
+Rollback: restaurar `/var/www/mdv-api/.codex-backups/server.js.20260527113450.bak` para `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
+
+### 2026-05-27 - Rota `/products/by-ids` na API da VPS
+
+Mudanca: criada a rota Fastify `GET /products/by-ids` na API da VPS, com deduplicacao de IDs, limite de 100 itens, estoque calculado por `comboStockSql('products')` e retorno na mesma ordem dos IDs recebidos.
+
+Objetivo: corrigir o `404` observado no browser da producao em `GET /products/by-ids`, usado por telas que precisam reidratar produtos por lista de IDs, como historico de compras, detalhes de venda, pedidos e servicos de catalogo/pedido.
+
+Arquivos/infra alterados:
+
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/vps-products-by-ids-fastify-static.test.mjs`
+- `migração_VPS.md`
+- `/var/www/mdv-api/server.js`
+- `/var/www/mdv-api/vps_server.js`
+- `/var/www/mdv-api/.codex-backups/server.js.20260527114029.bak`
+- `/var/www/mdv-api/.codex-backups/vps_server.js.20260527114029.bak`
+
+Investigacao:
+
+- `curl https://api.xiaomipetrolina.com.br/products/by-ids?ids=...`: antes da correcao retornava `404 {"error":"Not found"}`.
+- `curl https://www.mercadodovale.com.br/api/vps-proxy?path=/products/by-ids?...`: antes da correcao tambem retornava `404`.
+- `services/vpsApiService.ts` ja chamava `/products/by-ids?ids=...`, mas o Fastify da VPS nao tinha essa rota.
+- Como `/products/by-ids` nao existia, o request caia na rota generica `/products/:id` com `id='by-ids'`, resultando em `404`.
+
+Validacao:
+
+- `node tmp-tests/vps-products-by-ids-fastify-static.test.mjs`
+- `node tmp-tests/vps-products-read-batch-static.test.mjs`
+- `node --check vps_server.js`
+- `node --check vps_server.cjs`
+- `node tmp-tests/autoresponder-vps-server-deploy.cjs`: deploy OK, `mdv-api` reiniciado, backups remotos criados.
+- `curl https://api.xiaomipetrolina.com.br/products/by-ids?ids=f16a3c14-194f-44c6-944c-d96910d4b8e1,4b7a285e-058f-4b35-bbad-ccb08f86c32a`: `200 OK`, `Count=2`, SKUs `CPARN13AZPS` e `CCRC562`.
+- `curl https://www.mercadodovale.com.br/api/vps-proxy?path=/products/by-ids?...`: `200 OK`, `Count=2`, mesma ordem dos IDs, SKUs `CPARN13AZPS` e `CCRC562`.
+- `curl https://www.mercadodovale.com.br/api/status`: `200 OK`, `mysql.ok=true` apos restart.
+
+Resultado: `/products/by-ids` deixou de retornar `404` na API direta e pelo proxy publico; as telas que usam `vpsApiService.getProductsByIds()` agora tem endpoint compativel na VPS.
+
+Pendencias:
+
+- observar em browser se desaparece o erro residual de console em producao;
+- avaliar depois se vale reduzir o payload da rota para evitar imagens grandes/base64 quando a tela so precisar de campos resumidos.
+
+Rollback: restaurar `/var/www/mdv-api/.codex-backups/server.js.20260527114029.bak` para `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
+
+### 2026-05-27 - Decisao sobre Cloudflare Origin Certificate
+
+Mudanca: documentada a decisao de usar Cloudflare Origin Certificate dedicado para `mercadodovale.com.br` e `*.mercadodovale.com.br`.
+
+Objetivo: deixar claro que o certificado de origem nao gera custo adicional, esta incluido no plano Free da Cloudflare, e deve substituir o uso temporario do certificado de `api.xiaomipetrolina.com.br` no Nginx de producao.
+
+Arquivos alterados:
+
+- `migração_VPS.md`
+
+Validacao:
+
+- pesquisa em documentacao oficial da Cloudflare confirmou que Origin CA esta disponivel nos planos Free, Pro, Business e Enterprise, e que o apex e wildcard de primeiro nivel sao incluidos por padrao.
+
+Resultado: a politica SSL/TLS ficou registrada: usar Cloudflare Origin Certificate apenas atras da Cloudflare, manter o modo `Full (strict)` apos instalacao, e usar Let's Encrypt como alternativa caso o site precise operar sem proxy Cloudflare.
+
+Pendencias:
+
+- gerar o Origin Certificate no painel Cloudflare;
+- instalar certificado e chave na VPS;
+- trocar `ssl_certificate`/`ssl_certificate_key` em `infra/nginx/mdv-site-production.conf`;
+- validar Nginx e rotas publicas.
+
+Rollback: manter temporariamente o certificado atual de `api.xiaomipetrolina.com.br` ate o certificado dedicado estar instalado e validado.
+
+### 2026-05-27 - PDP publica usa config de categoria da VPS
+
+Mudanca: `PublicProductPage` deixou de consultar `categories` diretamente no Supabase para carregar nome/config da categoria e passou a usar o retorno de `vpsApiService.getCategories()`.
+
+Objetivo: reduzir mais uma dependencia operacional Supabase no catalogo publico, mantendo a VPS/MySQL como fonte da categoria usada na PDP.
+
+Arquivos alterados:
+
+- `pages/store/PublicProductPage.tsx`
+- `tmp-tests/public-product-category-config-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+- `migracao_supabase.md`
+
+Validacao:
+
+- `node tmp-tests\public-product-category-config-vps-static.test.mjs`: primeiro falhou por ainda existir `supabase.from('categories')`; depois passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 492`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 536`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: baseline do guard travado em `492`; `categories` caiu de `9` para `8` usos diretos.
+
+Pendencias:
+
+- continuar removendo leituras diretas de `models`, `products`, `brands`, `custom_fields` e demais grupos do bloco produtos/catalogo.
+
+Rollback: restaurar o fallback Supabase de categoria na PDP e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `493`; nao recomendado como estado final.
+
+### 2026-05-27 - Margens de preco por categoria via VPS
+
+Mudanca: `ProductPricing` deixou de consultar `categories` diretamente no Supabase para carregar `margin_wholesale` e `margin_reseller`, usando `vpsApiService.getCategories()`.
+
+Objetivo: reduzir mais uma dependencia operacional Supabase no formulario de produto, mantendo as margens de precificacao vindas da VPS/MySQL.
+
+Arquivos alterados:
+
+- `components/products/sections/ProductPricing.tsx`
+- `tmp-tests/product-pricing-category-margins-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+- `migracao_supabase.md`
+
+Validacao:
+
+- `node tmp-tests\product-pricing-category-margins-vps-static.test.mjs`: primeiro falhou por ainda existir `supabase.from('categories')`; depois passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 491`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 535`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: baseline do guard travado em `491`; `categories` caiu de `8` para `7` usos diretos e arquivos com `.from(...)` cairam de `97` para `96`.
+
+Pendencias:
+
+- continuar removendo leituras diretas em `categories`, `models`, `products`, `brands` e `custom_fields`.
+
+Rollback: restaurar a leitura Supabase de margens no `ProductPricing` e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `492`; nao recomendado como estado final.
+
+### 2026-05-27 - Allowlist operacional do guard Supabase
+
+Mudança: o auditor `tools/audit-supabase-operational-dependencies.mjs` passou a separar chamadas `supabase.auth` das dependências operacionais e ganhou uma allowlist temporária por módulo ainda não migrado.
+
+Atualização no mesmo bloco: a allowlist foi refinada para classificar também `orders`, garantias, taxonomia de catálogo, engajamento do cliente, time/admin e Storage temporário.
+
+Atualização final do bloco: todas as dependências operacionais detectadas ficaram classificadas e o auditor passou a falhar quando surgir qualquer nova ocorrência sem classificação explícita.
+
+Objetivo: deixar o inventário Supabase mais acionável para a migração VPS, distinguindo autenticação permitida de leituras/escritas operacionais que ainda precisam sair do Supabase.
+
+Arquivos alterados:
+
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migração_VPS.md`
+
+Validação:
+
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 498`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 267`, `unclassifiedOperationalMatches = 275`.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` após refino da allowlist.
+- `node tools\audit-supabase-operational-dependencies.mjs` após refino: `ok=true`, `.from(...) = 498`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 417`, `unclassifiedOperationalMatches = 125`.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` após fechamento do inventário.
+- `node tools\audit-supabase-operational-dependencies.mjs` após fechamento: `ok=true`, `.from(...) = 498`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 542`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\cashback-categories-vps-static.test.mjs`
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` após reduzir leitura de categorias no Cashback.
+- `node tools\audit-supabase-operational-dependencies.mjs` após reduzir leitura de categorias no Cashback: `ok=true`, `.from(...) = 497`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 541`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\catalog-service-categories-vps-static.test.mjs`
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` após reduzir leitura de categorias no catalogService.
+- `node tools\audit-supabase-operational-dependencies.mjs` após reduzir leitura de categorias no catalogService: `ok=true`, `.from(...) = 496`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 540`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\data-sync-import-brands-vps-static.test.mjs`
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` após reduzir leitura de marcas no importador de planilha.
+- `node tools\audit-supabase-operational-dependencies.mjs` após reduzir leitura de marcas no importador de planilha: `ok=true`, `.from(...) = 495`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 539`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\catalog-sections-category-expansion-vps-static.test.mjs`
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` após reduzir leitura de categorias nas seções de catálogo.
+- `node tools\audit-supabase-operational-dependencies.mjs` após reduzir leitura de categorias nas seções de catálogo: `ok=true`, `.from(...) = 494`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 538`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\cart-brand-warranty-vps-static.test.mjs`
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` após reduzir leitura de marcas no carrinho.
+- `node tools\audit-supabase-operational-dependencies.mjs` após reduzir leitura de marcas no carrinho: `ok=true`, `.from(...) = 493`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 537`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o guard continua travando crescimento do baseline e agora informa quais dependências operacionais estão temporariamente permitidas por módulo. O bloco não classificado chegou a `0`, com `MAX_UNCLASSIFIED_OPERATIONAL_MATCHES = 0`, então qualquer nova dependência Supabase operacional sem classificação explícita falha a auditoria. Depois dos primeiros cortes guiados por esse inventário, `pages/admin/CashbackPage.tsx` passou a carregar categorias de promoções por `vpsApiService.getCategories(true)`, `catalogService.getCategoriesWithNames` passou a carregar categorias por `vpsApiService.getCategories()`, `DataSyncService.syncGoogleSpreadsheet` passou a validar marcas por `vpsApiService.getBrands()`, `catalogSectionsService` passou a expandir categorias de seções por `vpsApiService.getCategories()`, `CartPage` passou a buscar garantia de marca por `brandService.listActive()`, e o baseline de `.from(...)` foi reduzido para `493`.
+
+Pendências:
+
+- iniciar cortes por módulo a partir dos maiores grupos classificados: produtos/catálogo, configurações admin, vendas/clientes/financeiro, taxonomia de catálogo, engajamento do cliente, pedidos, cashback/RPCs, variações/modelos e garantias;
+- transformar a allowlist temporária em bloqueios mais específicos conforme cada módulo for migrado para VPS/MySQL/Synology.
+
+Rollback: remover a allowlist/relatórios extras do auditor e voltar ao contador bruto anterior; não recomendado porque reduz a qualidade do inventário.
+
+### 2026-05-26 - Leitura de template dinâmico por VPS e aperto do guard Supabase
+
+Mudança: `DataSyncService.generateDynamicTemplate` passou a buscar os produtos da categoria pela VPS/MySQL em vez de ler `products` diretamente no Supabase, e o guard `tools/audit-supabase-operational-dependencies.mjs` foi ajustado para travar o baseline atual de `.from(...)` em `498`.
+
+Atualização no mesmo bloco: `ProductListPage` passou a listar pela VPS os produtos candidatos à geração automática de `video_url`, mantendo a escrita temporária do campo no Supabase para um bloco separado.
+
+Atualização adicional: `SEODashboardPage` deixou de consultar `products` no Supabase para validar unicidade de slug; agora usa o estado de produtos já carregado pela VPS e preserva apenas a escrita temporária do slug no Supabase.
+
+Atualização adicional: `inventory.adjustStock` passou a ler o estoque atual do produto pela VPS antes de calcular o ajuste, mantendo as escritas temporárias de estoque e rollback no Supabase.
+
+Atualização adicional: `ProductForm` passou a validar duplicidade de IMEI/serial pela VPS tanto na entrada em massa quanto no cadastro unitário, preservando a exclusão do próprio produto em modo edição.
+
+Atualização adicional: `BlingService.importBlingProducts` passou a verificar duplicidade por `bling_id` usando produtos carregados da VPS, mantendo os updates/inserts temporários no Supabase.
+
+Objetivo: impedir regressão durante a migração VPS/Supabase, garantindo que novas dependências operacionais diretas no Supabase não entrem sem serem percebidas.
+
+Arquivos alterados:
+
+- `services/dataSyncService.ts`
+- `services/blingService.ts`
+- `services/inventory.ts`
+- `components/products/ProductForm.tsx`
+- `pages/admin/products/ProductListPage.tsx`
+- `pages/admin/settings/SEODashboardPage.tsx`
+- `tmp-tests/data-sync-template-vps-products-static.test.mjs`
+- `tmp-tests/product-list-video-vps-read-static.test.mjs`
+- `tmp-tests/seo-dashboard-vps-slug-uniqueness-static.test.mjs`
+- `tmp-tests/inventory-adjust-stock-vps-current-product-static.test.mjs`
+- `tmp-tests/inventory-vps-products-static.test.mjs`
+- `tmp-tests/product-form-unique-validation-vps-static.test.mjs`
+- `tmp-tests/unique-validation-vps-products-static.test.mjs`
+- `tmp-tests/bling-import-duplicate-vps-products-static.test.mjs`
+- `tmp-tests/bling-vps-products-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migração_VPS.md`
+
+Validação:
+
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`
+- `node tmp-tests\data-sync-template-vps-products-static.test.mjs`
+- `node tmp-tests\product-list-video-vps-read-static.test.mjs`
+- `node tmp-tests\seo-dashboard-vps-slug-uniqueness-static.test.mjs`
+- `node tmp-tests\inventory-adjust-stock-vps-current-product-static.test.mjs`
+- `node tmp-tests\inventory-vps-products-static.test.mjs`
+- `node tmp-tests\product-form-unique-validation-vps-static.test.mjs`
+- `node tmp-tests\unique-validation-vps-products-static.test.mjs`
+- `node tmp-tests\bling-import-duplicate-vps-products-static.test.mjs`
+- `node tmp-tests\bling-vps-products-static.test.mjs`
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 498`, `.rpc(...) = 31`, `supabase.storage = 13`.
+- bateria estática do bloco de leituras VPS de produtos/catálogo/estoque/PDV/carrinho/admin passou.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`.
+- `npm.cmd run build`: passou fora do sandbox depois de bloqueio de leitura do `vite.config.ts` dentro do sandbox.
+
+Resultado: a exportação do template dinâmico, a listagem de candidatos a vídeo, a validação de unicidade de slug no SEO, a leitura de estoque atual no ajuste de inventário, as validações de IMEI/serial no formulário de produto e a duplicidade de importação Bling já usam a VPS/estado carregado da VPS para leituras de produtos. A parte de modelos e as escritas de `products` continuam temporariamente no Supabase. A proteção da migração agora acompanha o estado atual do código.
+
+Pendências:
+
+- seguir removendo dependências diretas restantes em `products`, depois avançar para `models`, `customers`, `company_settings` e demais tabelas operacionais.
+
+Rollback: voltar `MAX_BASELINE_FROM_CALLS` para o valor anterior apenas se for necessário investigar uma regressão temporária; não recomendado como estado final.
 
 ### 2026-05-22 - Correção do Transferir em conteúdo de caixa
 

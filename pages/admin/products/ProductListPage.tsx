@@ -9,6 +9,7 @@ import { ExportCatalogModal } from '../../../components/admin/ExportCatalogModal
 import { BulkActionBar } from '../../../components/products/BulkActionBar';
 import { BulkCategoryModal } from '../../../components/products/BulkCategoryModal';
 import { supabase } from '../../../services/supabase';
+import { vpsApiService } from '../../../services/vpsApiService';
 import { toast } from 'sonner';
 import { buildProductVideoUrl } from '../../../utils/video-url';
 
@@ -110,14 +111,11 @@ export const ProductListPage: React.FC = () => {
 
             const ext = settings?.synologyVideoExtension || settings?.synology_video_extension || '.mp4';
 
-            const { data: eligibleProducts, error: fetchError } = await supabase
-                .from('products')
-                .select('id, sku')
-                .is('video_url', null)
-                .not('sku', 'is', null)
-                .neq('sku', '');
-
-            if (fetchError) throw new Error(fetchError.message);
+            const eligibleProducts = (await vpsApiService.getProducts({
+                status: 'all',
+                limit: 5000,
+                noCache: true,
+            }) || []).filter((product: any) => !product.video_url && String(product.sku || '').trim());
 
             if (!eligibleProducts || eligibleProducts.length === 0) {
                 toast.success('Nenhum produto precisava de link de vídeo ou com SKU vazio.', { id: 'auto-video' });

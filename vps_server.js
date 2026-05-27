@@ -4983,7 +4983,7 @@ fastify.get('/api/seo-produto', async (request, reply) => {
 fastify.get('/api/sitemap', async (request, reply) => {
   try {
     const [products] = await pool.query(
-      `SELECT slug, name, updated_at
+      `SELECT slug, MAX(updated_at) AS updated_at
        FROM products
        WHERE slug IS NOT NULL
          AND slug != ''
@@ -4992,6 +4992,7 @@ fastify.get('/api/sitemap', async (request, reply) => {
          AND (status IN ('active', 'Ativo') OR status IS NULL)
          AND (is_parent = 0 OR is_parent IS NULL)
          AND (exclude_from_seo = 0 OR exclude_from_seo IS NULL)
+       GROUP BY slug
        ORDER BY updated_at DESC
        LIMIT 5000`
     );
@@ -10641,6 +10642,35 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
   }
   return result;
 
+});
+
+fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const ids = [...new Set(String(req.query?.ids || '')
+    .split(',')
+    .map(id => id.trim())
+    .filter(Boolean))]
+    .slice(0, 100);
+
+  if (!ids.length) return [];
+
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT *,
+      ${comboStockSql('products')} AS stock_quantity
+     FROM products
+     WHERE id IN (${placeholders})
+     ORDER BY FIELD(id, ${placeholders})`,
+    [...ids, ...ids]
+  );
+
+  return rows.map(r => ({
+    ...r,
+    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+    custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+  }));
 });
 
 fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {

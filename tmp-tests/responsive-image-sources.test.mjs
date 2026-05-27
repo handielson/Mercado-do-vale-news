@@ -7,6 +7,7 @@ import {
 const productUrl = 'https://api.xiaomipetrolina.com.br/images/products/SKU/img-1.png?v=123';
 const webpProductUrl = 'https://api.xiaomipetrolina.com.br/images/products/SKU/photo.webp';
 const legacyProductUrl = 'https://api.xiaomipetrolina.com.br/images/legacy/external/external/e3771d34b703c814.png';
+const legacyInlineProductUrl = 'https://api.xiaomipetrolina.com.br/images/legacy/inline/8ea8b186ab613115.jpg';
 
 assert.equal(
   deriveImageVariantUrl(productUrl, 320, 'webp'),
@@ -39,6 +40,12 @@ assert.match(
   legacyProductSources.webpSrcSet,
   /\/images\/legacy\/external\/external\/e3771d34b703c814-320\.webp 320w/,
   'legacy external images should use product derivative sources',
+);
+
+assert.equal(
+  buildResponsiveImageSources(legacyInlineProductUrl, { kind: 'product' }),
+  null,
+  'legacy inline images do not have generated derivatives and should render through the original URL',
 );
 
 const bannerSources = buildResponsiveImageSources(

@@ -3,7 +3,6 @@ import { UseFormWatch, UseFormSetValue } from 'react-hook-form';
 import { ProductInput } from '../../../types/product';
 import { CurrencyInput } from '../../ui/CurrencyInput';
 import { DollarSign, ShoppingCart, Users, Package, BarChart2 } from 'lucide-react';
-import { supabase } from '../../../services/supabase';
 import { vpsApiService } from '../../../services/vpsApiService';
 
 interface ProductPricingProps {
@@ -90,14 +89,11 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
             return;
         }
         const fetchMargins = async () => {
-            const { data } = await supabase
-                .from('categories')
-                .select('margin_wholesale, margin_reseller')
-                .eq('id', categoryId)
-                .maybeSingle();
-            if (data) {
-                setMarginWholesale(data.margin_wholesale || 0);
-                setMarginReseller(data.margin_reseller || 0);
+            const categories = await vpsApiService.getCategories();
+            const category = categories?.find((item: any) => String(item.id) === String(categoryId));
+            if (category) {
+                setMarginWholesale(category.margin_wholesale || 0);
+                setMarginReseller(category.margin_reseller || 0);
             }
         };
         fetchMargins();

@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getOrderById } from '@/services/orderService';
 import { supabase } from '@/services/supabase';
+import { vpsApiService } from '@/services/vpsApiService';
 import type { OrderWithItems } from '@/types/order';
 import { formatCurrency } from '@/utils/saleCalculations';
 import {
@@ -134,13 +135,10 @@ export default function OrderTrackingPage() {
                     .map(i => i.product_id))];
 
                 if (allProductIds.length > 0) {
-                    const { data: products } = await supabase
-                        .from('products')
-                        .select('id, images, specs')
-                        .in('id', allProductIds);
+                    const products = await vpsApiService.getProductsByIds(allProductIds);
 
                     if (products) {
-                        const productMap = Object.fromEntries(products.map(p => [p.id, p]));
+                        const productMap = Object.fromEntries(products.map((p: any) => [p.id, p]));
                         data = {
                             ...data,
                             items: data.items.map(item => {

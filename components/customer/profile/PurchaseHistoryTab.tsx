@@ -12,6 +12,7 @@ import { printOnlineOrderReceipt } from '../../../utils/printOnlineOrderReceipt'
 import { getCoinBalance } from '../../../services/cashbackService';
 import { generateLegacySalePdf } from '../../../utils/legacySalePdfGenerator';
 import { benefitService } from '../../../services/benefitService';
+import { vpsApiService } from '../../../services/vpsApiService';
 import { toast } from 'sonner';
 
 const fmt = (v: number) =>
@@ -274,12 +275,11 @@ export const PurchaseHistoryTab: React.FC = () => {
                 const map: Record<string, Record<string, string>> = {};
                 const allIds = [...new Set(combined.flatMap(s => s.items.map(i => (i as any).product_id)).filter(Boolean))];
                 if (allIds.length) {
-                    const { data: prods } = await supabase.from('products').select('id,specs').in('id', allIds);
-                    (prods || []).forEach(p => { map[p.id] = p.specs || {}; });
+                    const prods = await vpsApiService.getProductsByIds(allIds);
+                    (prods || []).forEach((p: any) => { map[p.id] = p.specs || {}; });
                 }
                 // IMEI por sale_item.id — busca units VPS para vendas com items serializados
                 try {
-                    const { vpsApiService } = await import('../../../services/vpsApiService');
                     for (const sale of combined) {
                         const hasSerialized = sale.items.some((i: any) => i.serialized_unit_id);
                         if (!hasSerialized) continue;

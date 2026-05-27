@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { Product, ProductInput } from '../types/product';
 import { calculateAllAveragePrices } from '../utils/calculateAveragePrice';
+import { vpsApiService } from './vpsApiService';
 
 /**
  * Average Price Service
@@ -25,20 +26,17 @@ interface VariationKey {
  * @returns Array of products matching the variation
  */
 async function getProductsByVariation(variation: VariationKey): Promise<Product[]> {
-    const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('model_id', variation.model_id)
-        .eq('specs->>ram', variation.ram)
-        .eq('specs->>storage', variation.storage)
-        .eq('status', 'active'); // Only active products
+    const rows = await vpsApiService.getProducts({
+        model_id: variation.model_id,
+        status: 'active',
+        limit: 500,
+        noCache: true,
+    });
 
-    if (error) {
-        console.error('Error fetching products by variation:', error);
-        throw error;
-    }
-
-    return data || [];
+    return (rows || []).filter((product: Product) =>
+        (product.specs?.ram || '') === variation.ram &&
+        (product.specs?.storage || '') === variation.storage
+    );
 }
 
 /**

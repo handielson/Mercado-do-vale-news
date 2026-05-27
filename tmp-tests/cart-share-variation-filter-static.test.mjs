@@ -31,4 +31,16 @@ assert.match(
   'cart share budget must skip non-variation specs instead of titleizing every spec key'
 );
 
+assert.doesNotMatch(
+  source,
+  /from\('products'\)|supabase\s*\./,
+  'cart share budget must not read product variations directly from Supabase'
+);
+
+assert.match(
+  source,
+  /vpsApiService\.getProducts/,
+  'cart share budget should load sibling product variations from VPS'
+);
+
 console.log('cart share variation filter static test ok');

@@ -10,7 +10,7 @@ import { CheckCircle2, Package, RefreshCw, Loader2 } from 'lucide-react';
 import { useEnrichedCustomFields } from '../../../hooks/useEnrichedCustomFields';
 import { FIELD_METADATA, isSpecialField, shouldRenderField } from './fieldMetadata';
 import { TableRelationField } from '../../fields/TableRelationField';
-import { supabase } from '../../../services/supabase';
+import { vpsApiService } from '../../../services/vpsApiService';
 
 interface ProductSpecificationsProps {
     categoryConfig: CategoryConfig | null;
@@ -49,21 +49,14 @@ export function ProductSpecifications({
         if (!value || !DB_UNIQUE_FIELDS.includes(field)) return;
         setCheckingField(field);
         try {
-            let query = supabase
-                .from('products')
-                .select('id')
-                .eq(`specs->>${field}`, value);
+            const products = await vpsApiService.getProducts({ status: 'all', limit: 5000, noCache: true });
+            const alreadyExists = (products || []).some((product: any) =>
+                product.id !== currentProductId && String(product.specs?.[field] || '') === value
+            );
 
-            // Em modo edição, exclui o próprio produto da verificação
-            if (currentProductId) {
-                query = query.neq('id', currentProductId);
-            }
-
-            const { data, error } = await query.limit(1);
-            if (error) throw error;
             setUniqueErrors(prev => ({
                 ...prev,
-                [field]: data && data.length > 0 ? 'Já cadastrado no sistema' : ''
+                [field]: alreadyExists ? 'Já cadastrado no sistema' : ''
             }));
         } catch {
             // silently ignore

@@ -22,6 +22,7 @@ import type { WarrantyOption } from '@/types/companySettings';
 import { categoryService } from '@/services/categories';
 import { paymentIntegrationService } from '@/services/paymentIntegrationService';
 import { createOrder } from '@/services/orderService';
+import { vpsApiService } from '@/services/vpsApiService';
 import toast from 'react-hot-toast';
 
 interface QuoteModalProps {
@@ -48,6 +49,12 @@ interface QuoteModalProps {
     externalWarrantyProductId?: string;
     externalWarrantyImageUrl?: string;
     onCoinDiscountChange?: (discountBrl: number, coinsToSpend: number) => void;
+}
+
+function getSpecValue(specs: Record<string, any>, names: string[]): string {
+    const wanted = new Set(names.map(name => name.toLowerCase()));
+    const entry = Object.entries(specs || {}).find(([key]) => wanted.has(key.toLowerCase()));
+    return entry?.[1] == null ? '' : String(entry[1]);
 }
 
 export function QuoteModal({ product, variants, isOpen, onClose, initialVariant, inline, totalOverride, selectedWarranty: externalWarranty, onWarrantyChange, selectedDelivery: externalDelivery, onDeliveryChange, externalCouponCode, externalCouponDiscount, externalReferralCode, externalReferralName, externalWarrantyPrice, externalWarrantyProductName, externalWarrantyProductId, externalWarrantyImageUrl, onCoinDiscountChange }: QuoteModalProps) {
@@ -349,34 +356,24 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
             }
 
             try {
-                const { supabase } = await import('@/services/supabase');
+                const data = await vpsApiService.getProducts({
+                    ...(product.model_id ? { model_id: product.model_id } : { search: product.model || product.name }),
+                    status: 'active',
+                    limit: 100,
+                    compact: true,
+                    noCache: true,
+                });
 
-                // Query products with same model, RAM, Storage and stock > 0
-                // Use model_id if available, otherwise use model name
-                let query = supabase
-                    .from('products')
-                    .select('specs')
-                    .eq('specs->>ram', selectedVariant.ram)
-                    .eq('specs->>storage', selectedVariant.storage)
-                    .gt('stock_quantity', 0);
+                const matchingProducts = (data || []).filter((row: any) => {
+                    const specs = row.specs || {};
+                    const stock = row.stock_quantity ?? row.stock ?? row.available_stock;
+                    const ram = getSpecValue(specs, ['ram']);
+                    const storage = getSpecValue(specs, ['storage', 'armazenamento', 'memoria', 'memory']);
 
-                // Add model filter
-                if (product.model_id) {
-                    query = query.eq('model_id', product.model_id);
-                } else if (product.model) {
-                    query = query.eq('model', product.model);
-                } else {
-                    // Fallback to product name
-                    query = query.eq('name', product.name);
-                }
-
-                const { data, error } = await query;
-
-                if (error) {
-                    console.error('Error loading available colors:', error);
-                    setAvailableColors([]);
-                    return;
-                }
+                    return Number(stock || 0) > 0
+                        && ram === selectedVariant.ram
+                        && storage === selectedVariant.storage;
+                });
 
                 console.log('🔍 Color Query Debug:', {
                     searchingFor: {
@@ -386,29 +383,26 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
                         model: product.model,
                         name: product.name
                     },
-                    productsFound: data?.length || 0,
-                    products: data?.map(p => ({
+                    productsFound: matchingProducts.length,
+                    products: matchingProducts.map((p: any) => ({
                         ram: p.specs?.ram,
                         storage: p.specs?.storage,
                         color: p.specs?.color
                     }))
                 });
 
-                if (data) {
-                    // Extract unique colors
-                    const colors = data
-                        .map(p => p.specs?.color)
-                        .filter((color): color is string => Boolean(color));
+                const colors = matchingProducts
+                    .map((p: any) => p.specs?.color || p.specs?.Cor)
+                    .filter((color: unknown): color is string => Boolean(color));
 
-                    console.log('🎨 Colors loaded:', {
-                        variant: `${selectedVariant.ram}/${selectedVariant.storage}`,
-                        productsFound: data.length,
-                        colorsFound: colors,
-                        uniqueColors: [...new Set(colors)]
-                    });
+                console.log('🎨 Colors loaded:', {
+                    variant: `${selectedVariant.ram}/${selectedVariant.storage}`,
+                    productsFound: matchingProducts.length,
+                    colorsFound: colors,
+                    uniqueColors: [...new Set(colors)]
+                });
 
-                    setAvailableColors([...new Set(colors)]);
-                }
+                setAvailableColors([...new Set(colors)]);
             } catch (error) {
                 console.error('Error loading available colors:', error);
                 setAvailableColors([]);
@@ -416,7 +410,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
         };
 
         loadAvailableColors();
-    }, [product.model_id, selectedVariant.ram, selectedVariant.storage, customer]);
+    }, [product.model_id, product.model, product.name, selectedVariant.ram, selectedVariant.storage, customer]);
 
     // Calculate total price including warranty
     const warrantyPrice = externalWarrantyPrice !== undefined

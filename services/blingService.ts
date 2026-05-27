@@ -93,6 +93,20 @@ async function resolveSupabaseBrandForModel(brandName: string, companyId: string
     return newBrand.id;
 }
 
+async function getVpsProductsForBlingModel(modelId: string, companyId?: string): Promise<any[]> {
+    const products = await vpsApiService.getProducts({
+        model_id: modelId,
+        status: 'all',
+        limit: 1000,
+        noCache: true,
+    });
+
+    return (products || []).filter((product: any) =>
+        (!companyId || !product.company_id || product.company_id === companyId) &&
+        product.bling_id
+    );
+}
+
 // ------- Types -------
 
 export interface BlingCategory {
@@ -832,13 +846,8 @@ export async function syncStockToBling(
     options?: { comboSelections?: BlingComboSelection[] }
 ): Promise<void> {
     try {
-        // Busca o bling_id do produto no banco
-        const { supabase } = await import('./supabase');
-        const { data: product } = await supabase
-            .from('products')
-            .select('bling_id, is_combo')
-            .eq('id', productId)
-            .maybeSingle();
+        // Busca o bling_id do produto pela VPS para manter leituras operacionais fora do Supabase.
+        const product = await vpsApiService.getProductById(productId, true);
 
         if (product?.is_combo) {
             try {
@@ -1382,6 +1391,11 @@ export async function importBlingProducts(
     const result: ImportResult = { created: 0, updated: 0, errors: [] };
     const total = selectedProducts.length;
     const vpsRows: any[] = []; // collect successful rows for batch VPS sync
+    const existingVpsProducts = (await vpsApiService.getProducts({
+        status: 'all',
+        limit: 5000,
+        noCache: true,
+    })) || [];
 
     const formatSupabaseError = (error: any): string => {
         if (!error) return 'Erro desconhecido no Supabase';
@@ -1599,14 +1613,10 @@ export async function importBlingProducts(
             }
             
             operation = 'verificação de duplicata';
-            const { data: existing, error: checkError } = await supabase
-                .from('products')
-                .select('id, model_id')
-                .eq('company_id', companyId)
-                .eq('bling_id', item.id)
-                .maybeSingle();
-
-            if (checkError) throw new Error(checkError.message);
+            const existing = existingVpsProducts.find((product: any) =>
+                Number(product.bling_id) === Number(item.id) &&
+                (!product.company_id || product.company_id === companyId)
+            );
 
             existingProductForDebug = existing
                 ? { id: existing.id || null, model_id: existing.model_id || null }
@@ -1744,6 +1754,7 @@ export async function importBlingProducts(
                 // Use resolvedRow so that any slug/sku/ean modified during conflict fallback
                 // is propagated to the VPS (not the original conflicting value from dbRow).
                 vpsRows.push({ ...insertedData.resolvedRow, id: insertedData.id });
+                existingVpsProducts.push({ ...insertedData.resolvedRow, id: insertedData.id });
             }
 
             // Associa cor ao model_color_images se o produto tiver model_id e cor mapeada
@@ -1857,14 +1868,7 @@ export async function pushModelDimensionsToBling(modelId: string): Promise<{ ok:
 
     // 2. Fetch all unique bling_ids associated with this model's products
     // Note: We group by bling_id as a single model could have multiple variants, but each variant might be a distinct product in Bling.
-    const { data: products, error: prodErr } = await supabase
-        .from('products')
-        .select('bling_id')
-        .eq('model_id', modelId)
-        .eq('company_id', companyId)
-        .not('bling_id', 'is', null);
-
-    if (prodErr) throw new Error(prodErr.message);
+    const products = await getVpsProductsForBlingModel(modelId, companyId);
 
     const blingIds = Array.from(new Set(products.map(p => p.bling_id)));
     if (blingIds.length === 0) {
@@ -1901,15 +1905,9 @@ export async function pullModelDimensionsFromBling(modelId: string): Promise<{ o
     const companyId = await getCompanyId();
 
     // 1. Fetch a product with bling_id
-    const { data: products, error: prodErr } = await supabase
-        .from('products')
-        .select('bling_id')
-        .eq('model_id', modelId)
-        .eq('company_id', companyId)
-        .not('bling_id', 'is', null)
-        .limit(1);
+    const products = await getVpsProductsForBlingModel(modelId, companyId);
 
-    if (prodErr || !products || products.length === 0) {
+    if (!products || products.length === 0) {
         throw new Error('Nenhum produto com Vínculo Bling encontrado para este modelo.');
     }
 
@@ -1968,13 +1966,7 @@ export async function pullModelDimensionsFromBling(modelId: string): Promise<{ o
  * direto do Bling para resolver falhas de importação antiga sem SKU.
  */
 export async function reimportModelProductsFromBling(modelId: string): Promise<number> {
-    const { data: products, error } = await supabase
-        .from('products')
-        .select('id, sku, bling_id, specs')
-        .eq('model_id', modelId)
-        .not('bling_id', 'is', null);
-        
-    if (error) throw new Error('Falha ao buscar produtos no banco de dados para reimportação.');
+    const products = await getVpsProductsForBlingModel(modelId);
     if (!products || products.length === 0) throw new Error('Nenhum produto com ID do Bling encontrado neste modelo.');
 
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

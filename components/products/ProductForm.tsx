@@ -906,9 +906,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
             if (serialList.length > 0) {
                 // Entrada em massa: verificar unicidade de todos antes de salvar qualquer um
-                const { supabase } = await import('../../services/supabase');
                 const duplicates: string[] = [];
                 const duplicateIdentifiers = findSerializedBatchDuplicates(serialList);
+                const existingProducts = await vpsApiService.getProducts({
+                    status: 'all',
+                    limit: 5000,
+                    noCache: true,
+                }) || [];
 
                 if (duplicateIdentifiers.length > 0) {
                     toast.error(`Cadastro bloqueado: existem identificadores repetidos na lista`, {
@@ -927,12 +931,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     for (const { key, label } of fieldsToCheck) {
                         const val = item[key];
                         if (!val) continue;
-                        const { data: existing } = await supabase
-                            .from('products')
-                            .select('id')
-                            .eq(`specs->>${key}`, val)
-                            .limit(1);
-                        if (existing && existing.length > 0) {
+                        const existing = existingProducts.find((product: any) =>
+                            String(product.specs?.[key] || '').trim() === String(val).trim()
+                        );
+                        if (existing) {
                             duplicates.push(`${label}: ${val}`);
                         }
                     }
@@ -998,23 +1000,20 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 onBatchComplete?.();
             } else {
                 // Produto único — verificar serial/IMEI do campo se preenchido
-                const { supabase } = await import('../../services/supabase');
                 const uniqueFields = ['serial', 'imei1', 'imei2'] as const;
+                const existingProducts = await vpsApiService.getProducts({
+                    status: 'all',
+                    limit: 5000,
+                    noCache: true,
+                }) || [];
                 for (const field of uniqueFields) {
                     const val = mergedData.specs?.[field];
                     if (val) {
-                        let query = supabase
-                            .from('products')
-                            .select('id')
-                            .eq(`specs->>${field}`, val);
-
-                        // Em modo edição, exclui o próprio produto da verificação
-                        if (initialData?.id) {
-                            query = query.neq('id', initialData.id);
-                        }
-
-                        const { data: existing } = await query.limit(1);
-                        if (existing && existing.length > 0) {
+                        const existing = existingProducts.find((product: any) =>
+                            product.id !== initialData?.id &&
+                            String(product.specs?.[field] || '').trim() === String(val).trim()
+                        );
+                        if (existing) {
                             toast.error(`${field === 'imei1' ? 'IMEI 1' : field === 'imei2' ? 'IMEI 2' : 'Serial'} já cadastrado no sistema: ${val}`);
                             return;
                         }

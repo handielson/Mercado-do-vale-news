@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import type { Product } from '@/types/product';
 import type { CustomerType } from './catalogMessageGenerator';
 import { formatPrice } from '@/services/installmentCalculator';
+import { vpsApiService } from '@/services/vpsApiService';
 
 interface CompanySettings {
     name: string;
@@ -106,16 +107,26 @@ function groupProducts(products: Product[], customerType: CustomerType): Grouped
     return Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function hasAvailableStock(product: Product): boolean {
+    return Number(product.stock_quantity || 0) > 0;
+}
+
+function normalizeProducts(rows: unknown[] | null): Product[] {
+    return (rows || []).map((row) => row as Product).filter(hasAvailableStock);
+}
+
+async function getCategoryName(categoryId: string): Promise<string | undefined> {
+    const categories = await vpsApiService.getCategories();
+    const category = (categories || []).find((item: any) => String(item.id) === String(categoryId));
+    return category?.name ? String(category.name) : undefined;
+}
+
 /**
  * Fetch company settings
  */
 async function getCompanySettings(): Promise<CompanySettings> {
     try {
-        const { supabase } = await import('@/services/supabase');
-        const { data } = await supabase
-            .from('company_settings')
-            .select('name, phone, email, address, receipt_logo_url')
-            .single();
+        const data = await vpsApiService.getCompanySettings();
 
         return data || {
             name: 'Mercado do Vale',
@@ -451,28 +462,17 @@ export async function generateCategoryPDF(
     customerType: CustomerType = 'retail'
 ): Promise<void> {
     try {
-        const { supabase } = await import('@/services/supabase');
-
-        // Fetch category name
-        const { data: category } = await supabase
-            .from('categories')
-            .select('name')
-            .eq('id', categoryId)
-            .single();
-
-        // Fetch products
-        const { data: products } = await supabase
-            .from('products')
-            .select('*')
-            .eq('category_id', categoryId)
-            .eq('status', 'active')
-            .gt('stock_quantity', 0);
+        const [categoryName, productRows] = await Promise.all([
+            getCategoryName(categoryId),
+            vpsApiService.getProducts({ category: categoryId, status: 'active', limit: 1000, noCache: true }),
+        ]);
+        const products = normalizeProducts(productRows);
 
         if (!products || products.length === 0) {
             throw new Error('Nenhum produto disponível nesta categoria');
         }
 
-        await generateCatalogPDF(products, customerType, category?.name);
+        await generateCatalogPDF(products, customerType, categoryName);
     } catch (error) {
         console.error('Error generating category PDF:', error);
         throw error;
@@ -486,14 +486,8 @@ export async function generateFullCatalogPDF(
     customerType: CustomerType = 'retail'
 ): Promise<void> {
     try {
-        const { supabase } = await import('@/services/supabase');
-
-        // Fetch all active products
-        const { data: products } = await supabase
-            .from('products')
-            .select('*')
-            .eq('status', 'active')
-            .gt('stock_quantity', 0);
+        const productRows = await vpsApiService.getProducts({ status: 'active', limit: 1000, noCache: true });
+        const products = normalizeProducts(productRows);
 
         if (!products || products.length === 0) {
             throw new Error('Nenhum produto disponível no catálogo');

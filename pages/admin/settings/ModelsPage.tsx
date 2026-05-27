@@ -8,6 +8,7 @@ import { ModelModal } from '../../../components/settings/ModelModal';
 import { BulkSeoModal } from '../../../components/settings/BulkSeoModal';
 import { NextStepBanner } from '../../../components/ui/NextStepBanner';
 import { supabase } from '../../../services/supabase';
+import { vpsApiService } from '../../../services/vpsApiService';
 import { getPriceHistory, applyPricesToVariation, PriceSnapshot } from '../../../services/priceHistoryService';
 import { blingService } from '../../../services/blingService';
 import { CurrencyInput } from '../../../components/ui/CurrencyInput';
@@ -75,16 +76,15 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
     const loadPrices = useCallback(async () => {
         setLoadingPrices(true);
         try {
-            const { data, error } = await supabase
-                .from('products')
-                .select('id, name, sku, specs, stock_quantity, price_cost, price_retail, price_reseller, price_wholesale')
-                .eq('model_id', model.id)
-                .eq('status', 'active')
-                .order('name');
+            const data = await vpsApiService.getProducts({
+                model_id: model.id,
+                status: 'active',
+                limit: 500,
+                noCache: true,
+            });
 
-            if (error) throw error;
-
-            const rows: ProductRow[] = data || [];
+            const rows: ProductRow[] = [...(data || [])]
+                .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
             setProducts(rows);
 
             if (rows.length > 0) {

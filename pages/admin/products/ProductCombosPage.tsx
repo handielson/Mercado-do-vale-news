@@ -551,14 +551,14 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
     setLastSaveDebug(null);
     const toastId = toast.loading('Carregando itens do combo...');
     try {
-      const [children, supaResult] = await Promise.all([
+      const [children, vpsRich] = await Promise.all([
         vpsApiService.getComboChildren(combo.id),
-        supabase.from('products').select('description, technical_specifications').eq('id', combo.id).maybeSingle()
+        vpsApiService.getProductById(combo.id, true)
       ]);
 
       // Prioriza description do Supabase (fonte primária), fallback para a VPS
-      const savedDescription = supaResult.data?.description || combo.description || '';
-      const savedTechSpecs = supaResult.data?.technical_specifications || combo.technical_specifications || '';
+      const savedDescription = vpsRich?.description || combo.description || '';
+      const savedTechSpecs = vpsRich?.technical_specifications || combo.technical_specifications || '';
 
       const fixedChildren = (children || []).filter(c => c?.component_type !== 'choice_group');
       setEditingCombo({

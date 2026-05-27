@@ -5,8 +5,8 @@
  * - Client: new order with selected variants, optional address, delivery info
  */
 
-import { supabase } from '@/services/supabase';
 import { calculateInstallments, formatPrice } from '@/services/installmentCalculator';
+import { vpsApiService } from '@/services/vpsApiService';
 
 const SITE_BASE = 'https://mercadodovale.com.br';
 
@@ -149,14 +149,20 @@ export async function fetchSiblingVariations(product: any): Promise<VariationSum
     }
 
     try {
-        const { data } = await supabase
-            .from('products')
-            .select('specs')
-            .eq('model_id', modelId)
-            .gt('stock_quantity', 0); // apenas em estoque
+        const data = await vpsApiService.getProducts({
+            model_id: modelId,
+            status: 'active',
+            limit: 100,
+            compact: true,
+            noCache: true,
+        });
 
         if (!data) return [];
-        return buildVariationSummary(data);
+        const availableProducts = data.filter((row: any) => {
+            const stock = row?.stock_quantity ?? row?.stock ?? row?.available_stock;
+            return Number(stock || 0) > 0;
+        });
+        return buildVariationSummary(availableProducts);
     } catch {
         return [];
     }

@@ -31,8 +31,8 @@ export const monitoringService = {
         const start = Date.now();
 
         try {
-            const { data, error } = await supabase
-                .from('products')
+            const { error } = await supabase
+                .from('performance_metrics')
                 .select('id')
                 .limit(1);
 

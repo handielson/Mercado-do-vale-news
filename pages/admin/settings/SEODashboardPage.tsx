@@ -74,6 +74,11 @@ export const SEODashboardPage: React.FC = () => {
         setIsGenerating(true);
         let successCount = 0;
         let failCount = 0;
+        const usedSlugs = new Set(
+            products
+                .map(p => String(p.slug || '').trim())
+                .filter(Boolean)
+        );
 
         toast.info(`Gerando ${missing.length} slugs. Por favor, aguarde...`);
 
@@ -90,14 +95,7 @@ export const SEODashboardPage: React.FC = () => {
 
                 // Evitar duplicações rigorosamente
                 while (!isUnique && attempts < 20) {
-                    // Usar limit(1) em vez de maybeSingle() para evitar erro de múltiplas linhas
-                    const { data: existing } = await supabase
-                        .from('products')
-                        .select('id')
-                        .eq('slug', slugToUse)
-                        .limit(1);
-
-                    if (!existing || existing.length === 0 || existing[0].id === p.id) {
+                    if (!usedSlugs.has(slugToUse)) {
                         isUnique = true;
                     } else {
                         // Quando já existe, usa um hash aleatório curto para garantir unicidade em variantes
@@ -110,6 +108,7 @@ export const SEODashboardPage: React.FC = () => {
                 if (!isUnique) {
                     slugToUse = `${defaultSlug}-${Date.now()}`;
                 }
+                usedSlugs.add(slugToUse);
 
                 const { error } = await supabase.from('products').update({ slug: slugToUse }).eq('id', p.id);
                 if (!error) {

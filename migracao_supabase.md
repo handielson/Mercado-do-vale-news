@@ -163,6 +163,85 @@ As tabelas com maior acoplamento no codigo hoje sao:
 
 Essas devem ser migradas com adaptadores/servicos VPS primeiro, porque reduzem mais dependencias Supabase por etapa.
 
+### Varredura Local Complementar do Codigo
+
+Varredura executada em 2026-05-26 no workspace local, sem acessar banco e sem imprimir segredos.
+
+Comandos-base usados:
+
+```powershell
+rg -n "\.from\('([^']+)'\)|supabase\.from\('([^']+)'\)" services pages components hooks contexts utils --glob '*.ts' --glob '*.tsx' --glob '*.js' --glob '*.cjs' --glob '*.mjs'
+rg -n "rpc\(" services pages components hooks contexts utils --glob '*.ts' --glob '*.tsx' --glob '*.js' --glob '*.cjs' --glob '*.mjs'
+```
+
+Resumo encontrado:
+
+| Tipo | Ocorrencias | Arquivos | Observacao |
+| --- | ---: | ---: | --- |
+| Leituras/escritas `.from(...)` | 556 | 112 | Inclui services, pages, components, contexts e utils |
+| RPCs Supabase | 31 | 8 | Concentradas em cashback, estoque, catalogo, pedidos e vendas |
+
+Distribuicao por pasta para `.from(...)`:
+
+| Pasta | Arquivos com dependencia |
+| --- | ---: |
+| `services/` | 63 |
+| `pages/` | 25 |
+| `components/` | 17 |
+| `contexts/` | 2 |
+| `utils/` | 4 |
+
+Tabelas mais acopladas nesta varredura local:
+
+| Tabela | Ocorrencias locais | Prioridade pratica |
+| --- | ---: | --- |
+| `products` | 76 | Alta |
+| `customers` | 39 | Alta |
+| `models` | 33 | Alta |
+| `company_settings` | 21 | Alta |
+| `orders` | 20 | Alta |
+| `catalog_banners` | 19 | Alta |
+| `sales` | 18 | Alta |
+| `model_color_images` | 15 | Alta |
+| `brands` | 15 | Alta |
+| `categories` | 15 | Alta |
+| `catalog_settings` | 15 | Alta |
+| `shopee_products` | 15 | Alta |
+| `custom_fields` | 12 | Media |
+| `companies` | 10 | Alta |
+| `warranty_templates` | 10 | Media |
+
+RPCs ainda chamadas no codigo:
+
+| RPC | Ocorrencias | Area |
+| --- | ---: | --- |
+| `add_coins` | 4 | Cashback |
+| `process_referral_reward` | 3 | Pedidos/vendas |
+| `decrement_stock` | 2 | Estoque legado |
+| `increment_stock` | 2 | Estoque legado |
+| `adjust_product_stock_location` | 1 | Estoque por local |
+| `transfer_product_stock_location` | 1 | Estoque por local |
+| `add_product_stock_location` | 1 | Estoque por local |
+| `decrement_product_stock_by_priority` | 1 | Estoque por local |
+| `reserve_product_stock_by_priority` | 1 | Estoque por local |
+| `consume_order_stock_reservations` | 1 | Estoque por local |
+| `release_order_stock_reservations` | 1 | Estoque por local |
+| `restore_product_stock_from_sale_movements` | 1 | Estoque por local |
+| `restore_product_stock_from_order_movements` | 1 | Estoque por local |
+| `increment_product_views` | 1 | Catalogo |
+| `increment_banner_views` | 1 | Catalogo |
+| `increment_banner_clicks` | 1 | Catalogo |
+| `add_pending_coins` | 1 | Cashback |
+| `confirm_pending_coins` | 1 | Cashback |
+| `cancel_pending_coins` | 1 | Cashback |
+| `spend_coins` | 1 | Cashback |
+| `refund_coins` | 1 | Cashback |
+| `refund_referral_coins` | 1 | Cashback |
+| `increment_coin_promo_uses` | 1 | Cashback |
+| RPC dinamica em `cashbackService` | 1 | Cashback |
+
+Conclusao da varredura: o primeiro bloco executavel deve atacar `products`, `models`, `brands`, `categories`, `company_settings`, `companies` e `shopee_products`, porque essas tabelas puxam a maior parte das telas admin/catalogo e reduzem a pressao sobre Supabase sem mexer ainda nos fluxos transacionais mais sensiveis de venda, estoque e cashback.
+
 ### Ordem Tecnica Recomendada por Dados Reais
 
 1. Auth e autorizacao VPS usando token Supabase.
@@ -315,6 +394,209 @@ Qualquer nova dependencia no Supabase precisa ter justificativa registrada antes
 7. Configuracoes admin.
 8. Remocao de fallbacks Supabase.
 9. Auditoria final e testes de regressao.
+
+## Proximo Bloco de Trabalho
+
+### Bloco 1 - Inventario e Guarda de Regressao
+
+Objetivo: impedir que novas dependencias operacionais no Supabase entrem enquanto a migracao avanca.
+
+- [x] Criar teste estatico que conte `.from(...)`, `.rpc(...)` e `supabase.storage` fora de arquivos permitidos.
+- [x] Definir allowlist temporaria por modulo ainda nao migrado.
+- [x] Separar dependencias permitidas de Auth (`supabase.auth`) das dependencias operacionais.
+- [x] Gerar relatorio por tabela e arquivo para guiar commits pequenos.
+- [x] Atualizar este documento com o relatorio antes de migrar codigo.
+
+Comandos de guarda criados:
+
+```powershell
+node tmp-tests\supabase-operational-dependency-guard-static.test.mjs
+node tools\audit-supabase-operational-dependencies.mjs
+```
+
+Baseline inicial registrado em 2026-05-26:
+
+| Metrica | Limite atual |
+| --- | ---: |
+| `.from(...)` | 556 |
+| `.rpc(...)` | 31 |
+| `supabase.storage` | 13 |
+
+Regra: durante a migracao, esses numeros so devem diminuir ou permanecer iguais quando houver justificativa temporaria. Se aumentarem, o audit falha.
+
+Avanco em 2026-05-26:
+
+| Mudanca | Antes | Depois |
+| --- | ---: | ---: |
+| `services/productService.ts` sem Supabase direto | 556 `.from(...)` | 551 `.from(...)` |
+| Dependencias diretas em `products` | 76 | 72 |
+| Arquivos com `.from(...)` | 112 | 111 |
+| `components/admin/SectionsTab.tsx` carrega opcoes por VPS | 551 `.from(...)` | 549 `.from(...)` |
+| Dependencias diretas em `categories` | 15 | 14 |
+| Dependencias diretas em `products` | 72 | 71 |
+| Arquivos com `.from(...)` | 111 | 110 |
+| `utils/catalogMessageGenerator.ts` gera mensagens por VPS | 549 `.from(...)` | 546 `.from(...)` |
+| Dependencias diretas em `categories` | 14 | 13 |
+| Dependencias diretas em `products` | 71 | 69 |
+| Arquivos com `.from(...)` | 110 | 109 |
+| `utils/catalogPDFGenerator.ts` gera PDF por VPS | 546 `.from(...)` | 542 `.from(...)` |
+| Dependencias diretas em `company_settings` | 21 | 20 |
+| Dependencias diretas em `categories` | 13 | 12 |
+| Dependencias diretas em `products` | 69 | 67 |
+| Arquivos com `.from(...)` | 109 | 108 |
+| `components/cart/NewOrderModal.tsx` carrega variacoes por VPS | 542 `.from(...)` | 541 `.from(...)` |
+| `utils/cartShareUtils.ts` carrega variacoes de orcamento por VPS | 541 `.from(...)` | 540 `.from(...)` |
+| Dependencias diretas em `products` | 67 | 65 |
+| Arquivos com `.from(...)` | 108 | 106 |
+| `components/catalog/QuoteModal.tsx` carrega cores disponiveis por VPS | 540 `.from(...)` | 539 `.from(...)` |
+| `pages/store/OrderTrackingPage.tsx` enriquece itens por VPS | 539 `.from(...)` | 538 `.from(...)` |
+| Dependencias diretas em `products` | 65 | 63 |
+| Arquivos com `.from(...)` | 106 | 105 |
+| Historicos/recibos carregam specs de produtos por VPS | 538 `.from(...)` | 534 `.from(...)` |
+| Dependencias diretas em `products` | 63 | 59 |
+| `components/catalog/ProductDetailsModal.tsx` resolve garantia de produto por VPS | 534 `.from(...)` | 532 `.from(...)` |
+| `components/settings/ModelPricesPanel.tsx` carrega variacoes ativas por VPS | 532 `.from(...)` | 531 `.from(...)` |
+| Dependencias diretas em `products` | 59 | 56 |
+| Arquivos com `.from(...)` | 105 | 104 |
+| Leituras simples em cashback, pedidos online, teste de catalogo e frete por VPS | 531 `.from(...)` | 527 `.from(...)` |
+| Dependencias diretas em `products` | 56 | 52 |
+| Arquivos com `.from(...)` | 104 | 103 |
+| `ModelsPage` e `ProductCombosPage` leem produtos por VPS | 527 `.from(...)` | 525 `.from(...)` |
+| `orderService` e `averagePriceService` leem produtos por VPS | 525 `.from(...)` | 523 `.from(...)` |
+| Dependencias diretas em `products` | 52 | 48 |
+| Arquivos com `.from(...)` | 103 | 101 |
+| Digest de vendas e monitoramento deixam de consultar `products` no Supabase | 523 `.from(...)` | 522 `.from(...)` |
+| `tagResolver` e promocao do PDV leem produtos por VPS | 522 `.from(...)` | 518 `.from(...)` |
+| Dependencias diretas em `products` | 48 | 42 |
+| Leituras de inventario passam para VPS mantendo ajustes de estoque no Supabase | 518 `.from(...)` | 513 `.from(...)` |
+| Validadores de unicidade de IMEI/serial consultam produtos por VPS | 513 `.from(...)` | 511 `.from(...)` |
+| Dependencias diretas em `products` | 42 | 35 |
+| Arquivos com `.from(...)` | 101 | 99 |
+| SEO dashboard e diagnosticos Bling consultam produtos por VPS | 511 `.from(...)` | 505 `.from(...)` |
+| Dependencias diretas em `products` | 35 | 29 |
+| Arquivos com `.from(...)` | 99 | 98 |
+| Guard de dependencias operacionais ajustado para o baseline atual | 505 `.from(...)` | limite travado em 505 |
+| `DataSyncService.generateDynamicTemplate` exporta produtos da categoria por VPS | 505 `.from(...)` | 504 `.from(...)` |
+| Dependencias diretas em `products` | 29 | 28 |
+| `ProductListPage` lista candidatos sem video por VPS | 504 `.from(...)` | 503 `.from(...)` |
+| Dependencias diretas em `products` | 28 | 27 |
+| `SEODashboardPage` valida unicidade de slug com estado carregado da VPS | 503 `.from(...)` | 502 `.from(...)` |
+| Dependencias diretas em `products` | 27 | 26 |
+| `inventory.adjustStock` le estoque atual do produto por VPS | 502 `.from(...)` | 501 `.from(...)` |
+| Dependencias diretas em `products` | 26 | 25 |
+| `ProductForm` valida IMEI/serial por VPS | 501 `.from(...)` | 499 `.from(...)` |
+| Dependencias diretas em `products` | 25 | 23 |
+| Arquivos com `.from(...)` | 98 | 97 |
+| `BlingService.importBlingProducts` verifica duplicata por VPS | 499 `.from(...)` | 498 `.from(...)` |
+| Dependencias diretas em `products` | 23 | 22 |
+| Auditor separa Auth e allowlist operacional temporaria | 498 `.from(...)` | 498 `.from(...)`; Auth separado: 48 chamadas; allowlist: 267 ocorrencias; nao classificadas: 275 |
+| `CashbackPage` carrega categorias de promocoes por VPS | 498 `.from(...)` | 497 `.from(...)` |
+| `catalogService.getCategoriesWithNames` carrega categorias por VPS | 497 `.from(...)` | 496 `.from(...)` |
+| `DataSyncService.syncGoogleSpreadsheet` valida marcas por VPS | 496 `.from(...)` | 495 `.from(...)` |
+| `catalogSectionsService` expande categorias de secoes por VPS | 495 `.from(...)` | 494 `.from(...)` |
+| `CartPage` busca garantia de marca por VPS | 494 `.from(...)` | 493 `.from(...)` |
+
+Validacao do guard em 2026-05-26:
+
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tmp-tests\data-sync-template-vps-products-static.test.mjs`: passou.
+- `node tmp-tests\product-list-video-vps-read-static.test.mjs`: passou.
+- `node tmp-tests\seo-dashboard-vps-slug-uniqueness-static.test.mjs`: passou.
+- `node tmp-tests\inventory-adjust-stock-vps-current-product-static.test.mjs`: passou.
+- `node tmp-tests\product-form-unique-validation-vps-static.test.mjs`: passou.
+- `node tmp-tests\unique-validation-vps-products-static.test.mjs`: passou.
+- `node tmp-tests\bling-import-duplicate-vps-products-static.test.mjs`: passou.
+- `node tmp-tests\bling-vps-products-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 498`, `.rpc(...) = 31`, `supabase.storage = 13`.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`.
+- `npm.cmd run build`: passou fora do sandbox depois de bloqueio de leitura do `vite.config.ts` dentro do sandbox.
+
+Atualizacao do guard em 2026-05-27:
+
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 498`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 267`, `unclassifiedOperationalMatches = 275`.
+- A allowlist temporaria agora agrupa dependencias por modulo (`auth-and-profile`, `products-catalog`, `sales-customers-finance`, `admin-config`, `inventory-and-operations` e `integration-settings`) para guiar a reducao incremental sem misturar Auth com dados operacionais.
+
+Refino da allowlist em 2026-05-27:
+
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 498`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 417`, `unclassifiedOperationalMatches = 125`.
+- Novos grupos classificados: `orders-temporary`, `warranty-temporary`, `catalog-taxonomy-temporary`, `customer-engagement-temporary`, `admin-team-temporary` e `storage-temporary`.
+- Proximos maiores grupos nao classificados: `customers`, `delivery_credits`, `model_variants`, `rams`, `shopee_templates`, `storages`, `system_logs`, RPCs de cashback e tabelas de frete.
+
+Fechamento do inventario em 2026-05-27:
+
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 498`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 542`, `unclassifiedOperationalMatches = 0`.
+- O guard agora trava `MAX_UNCLASSIFIED_OPERATIONAL_MATCHES = 0`, portanto qualquer nova chamada operacional Supabase sem classificacao explicita falha a auditoria.
+- O inventario ficou pronto para guiar a reducao por modulo. Maiores grupos permitidos temporariamente: `products-catalog-migration-temporary` (126), `admin-config-temporary` (63), `sales-customers-finance-temporary` (54), `catalog-taxonomy-temporary` (46), `customer-engagement-temporary` (31), `orders-temporary` (24), `cashback-rpc-temporary` (21), `product-variant-taxonomy-temporary` (18) e `warranty-temporary` (18).
+
+Reducao catalogo/cashback em 2026-05-27:
+
+- `node tmp-tests\cashback-categories-vps-static.test.mjs`: passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 497`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 541`, `unclassifiedOperationalMatches = 0`.
+- `CashbackPage` agora usa `vpsApiService.getCategories(true)` para popular categorias das promocoes de moedas. O baseline travado do guard caiu para `MAX_BASELINE_FROM_CALLS = 497`.
+
+Reducao catalogo/marketing em 2026-05-27:
+
+- `node tmp-tests\catalog-service-categories-vps-static.test.mjs`: passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 496`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 540`, `unclassifiedOperationalMatches = 0`.
+- `catalogService.getCategoriesWithNames` agora usa `vpsApiService.getCategories()` para popular selects como o da pagina de Marketing. O baseline travado do guard caiu para `MAX_BASELINE_FROM_CALLS = 496`.
+
+Reducao catalogo/importacao em 2026-05-27:
+
+- `node tmp-tests\data-sync-import-brands-vps-static.test.mjs`: passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 495`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 539`, `unclassifiedOperationalMatches = 0`.
+- `DataSyncService.syncGoogleSpreadsheet` agora usa `vpsApiService.getBrands()` para validar marcas no upload/sync de planilha. O baseline travado do guard caiu para `MAX_BASELINE_FROM_CALLS = 495`.
+
+Reducao catalogo/secoes em 2026-05-27:
+
+- `node tmp-tests\catalog-sections-category-expansion-vps-static.test.mjs`: passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 494`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 538`, `unclassifiedOperationalMatches = 0`.
+- `catalogSectionsService` agora usa `vpsApiService.getCategories()` para expandir categorias pai/filhas nas secoes de catalogo. O baseline travado do guard caiu para `MAX_BASELINE_FROM_CALLS = 494`.
+
+Reducao carrinho/garantia em 2026-05-27:
+
+- `node tmp-tests\cart-brand-warranty-vps-static.test.mjs`: passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 493`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 537`, `unclassifiedOperationalMatches = 0`.
+- `CartPage` agora usa `brandService.listActive()` para obter `warranty_days` de garantias por marca. O baseline travado do guard caiu para `MAX_BASELINE_FROM_CALLS = 493`.
+
+Reducao PDP publica/categoria em 2026-05-27:
+
+- `node tmp-tests\public-product-category-config-vps-static.test.mjs`: falhou primeiro por ainda existir `supabase.from('categories')` na PDP e passou apos a troca.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 492`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 536`, `unclassifiedOperationalMatches = 0`.
+- `PublicProductPage` agora usa `vpsApiService.getCategories()` tambem para aplicar `config` da categoria na PDP, removendo o fallback direto em `categories`. O baseline travado do guard caiu para `MAX_BASELINE_FROM_CALLS = 492`.
+
+Reducao formulario produto/margens em 2026-05-27:
+
+- `node tmp-tests\product-pricing-category-margins-vps-static.test.mjs`: falhou primeiro por ainda existir `supabase.from('categories')` no `ProductPricing` e passou apos a troca.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 491`, `.rpc(...) = 31`, `supabase.storage = 13`, `supabase.auth = 48`, `allowedOperationalMatches = 535`, `unclassifiedOperationalMatches = 0`.
+- `ProductPricing` agora usa `vpsApiService.getCategories()` para carregar `margin_wholesale` e `margin_reseller`. O baseline travado do guard caiu para `MAX_BASELINE_FROM_CALLS = 491`.
+
+### Bloco 2 - Produtos e Catalogo Leitura
+
+Objetivo: garantir que listagem, busca, pagina publica e SEO leiam prioritariamente da VPS/MySQL.
+
+- [ ] Auditar chamadas a `products`, `models`, `brands`, `categories`, `custom_fields` e `model_color_images`.
+- [ ] Trocar chamadas diretas em componentes por services/adaptadores VPS quando endpoint ja existir.
+- [ ] Criar endpoints VPS faltantes apenas quando a tela precisar.
+- [ ] Manter fallback Supabase temporario somente com comentario e teste de remocao futura.
+- [ ] Validar admin produtos, pagina publica, catalogo e sitemap.
+
+### Bloco 3 - Configuracoes Base
+
+Objetivo: remover leitura direta de configuracoes operacionais no frontend.
+
+- [ ] Auditar `company_settings`, `companies`, `catalog_settings`, `catalog_banners` e `user_permissions`.
+- [ ] Centralizar leitura em endpoints VPS protegidos quando admin e publicos quando catalogo.
+- [ ] Validar temas, banners, SEO, permissoes e configuracoes da empresa.
 
 ## Validacao por Modulo
 

@@ -1,5 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { SystemTag } from './systemTagsService';
+import { vpsApiService } from './vpsApiService';
 
 // ============================================================
 // Tag Resolver — Motor de resolução de variáveis dinâmicas
@@ -52,20 +53,29 @@ export async function resolveTag(tag: SystemTag, supabase: SupabaseClient): Prom
 
             // ── COUNT PRODUCTS ───────────────────────────────────
             case 'count_products': {
-                let query = supabase.from('products').select('id', { count: 'exact', head: true });
-                if (cfg.status) query = query.eq('status', cfg.status);
-                if (cfg.min_stock != null) query = query.gt('stock_quantity', cfg.min_stock - 1);
-                // category_slug filter via name heuristic if no FK
-                const { count } = await query;
-                return (count ?? 0).toString();
+                const products = await vpsApiService.getProducts({
+                    status: cfg.status ?? 'all',
+                    limit: 5000,
+                    compact: true,
+                    noCache: true,
+                });
+                const minStock = cfg.min_stock != null ? Number(cfg.min_stock) : null;
+                const count = (products ?? []).filter((p: any) => {
+                    const stock = Number(p.stock_quantity ?? p.stock ?? 0);
+                    return minStock == null || stock >= minStock;
+                }).length;
+                return count.toString();
             }
 
             // ── SUM STOCK ────────────────────────────────────────
             case 'sum_products_stock': {
-                let query = supabase.from('products').select('stock_quantity');
-                if (cfg.status) query = query.eq('status', cfg.status);
-                const { data } = await query;
-                const total = (data ?? []).reduce((s: number, p: any) => s + (p.stock_quantity || 0), 0);
+                const products = await vpsApiService.getProducts({
+                    status: cfg.status ?? 'all',
+                    limit: 5000,
+                    compact: true,
+                    noCache: true,
+                });
+                const total = (products ?? []).reduce((s: number, p: any) => s + Number(p.stock_quantity ?? p.stock ?? 0), 0);
                 return total.toString();
             }
 
@@ -74,14 +84,11 @@ export async function resolveTag(tag: SystemTag, supabase: SupabaseClient): Prom
                 const limit = cfg.limit ?? 30;
                 const fmt = cfg.format ?? '• {qty}x - {name} - {color} - {ram}/{storage}';
 
-                let query = supabase
-                    .from('products')
-                    .select('name, stock_quantity, specs, price_pix, price_card, category_id')
-                    .eq('status', 'active')
-                    .gt('stock_quantity', 0)
-                    .limit(limit * 3); // fetch more to allow grouping
-
-                const { data: products } = await query;
+                const products = await vpsApiService.getProducts({
+                    status: 'active',
+                    limit: limit * 3,
+                    noCache: true,
+                });
                 if (!products || products.length === 0) return 'Nenhum item em estoque.';
 
                 // Filter by category_slug heuristic in name
@@ -89,9 +96,9 @@ export async function resolveTag(tag: SystemTag, supabase: SupabaseClient): Prom
                 const CELULAR_KEYWORDS = ['iphone', 'samsung', 'xiaomi', 'motorola', 'galaxy',
                     'poco', 'redmi', 'smartphone', 'celular'];
 
-                let filtered = products;
+                let filtered = products.filter((p: any) => Number(p.stock_quantity ?? p.stock ?? 0) > 0);
                 if (categorySlug === 'celulares') {
-                    filtered = products.filter((p: any) =>
+                    filtered = filtered.filter((p: any) =>
                         CELULAR_KEYWORDS.some(k => p.name.toLowerCase().includes(k))
                     );
                 }
@@ -104,10 +111,11 @@ export async function resolveTag(tag: SystemTag, supabase: SupabaseClient): Prom
                     const storage = p.specs?.storage || '';
                     const key = `${p.name}||${color}||${ram}||${storage}`;
                     const existing = grouped.get(key);
+                    const stock = Number(p.stock_quantity ?? p.stock ?? 0);
                     if (existing) {
-                        existing.qty += p.stock_quantity || 0;
+                        existing.qty += stock;
                     } else {
-                        grouped.set(key, { qty: p.stock_quantity || 0, p });
+                        grouped.set(key, { qty: stock, p });
                     }
                 });
 
@@ -121,9 +129,11 @@ export async function resolveTag(tag: SystemTag, supabase: SupabaseClient): Prom
                     const color = p.specs?.color || p.specs?.cor || '';
                     const ram = p.specs?.ram || '';
                     const storage = p.specs?.storage || '';
-                    const avgPrice = p.price_pix ? fmtMoney(p.price_pix / 100) : '';
-                    const pricePix = p.price_pix ? fmtMoney(p.price_pix / 100) : '';
-                    const priceCard = p.price_card ? fmtMoney(p.price_card / 100) : '';
+                    const pixValue = Number(p.price_pix ?? p.price_retail ?? p.price ?? 0);
+                    const cardValue = Number(p.price_card ?? p.price_retail ?? p.price ?? 0);
+                    const avgPrice = pixValue ? fmtMoney(pixValue / 100) : '';
+                    const pricePix = pixValue ? fmtMoney(pixValue / 100) : '';
+                    const priceCard = cardValue ? fmtMoney(cardValue / 100) : '';
 
                     return applyLineFormat(fmt, {
                         qty: qty.toString(),

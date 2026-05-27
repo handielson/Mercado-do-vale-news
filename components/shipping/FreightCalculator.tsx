@@ -258,16 +258,14 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
 
         // ── Passo 1: Buscar dados de produto (preço, sku, nome) — VPS-first ────
         // VPS é a fonte verdadeira de preços. Se falhar → fallback para Supabase.
-        let vpsProductMap = new Map<string, { price: number; price_cost: number; name: string }>();
+        let products: any[] = [];
 
         try {
-            const vpsProducts = await vpsApiService.getProducts({ status: 'active' });
+            const vpsProducts = await vpsApiService.getProducts({ status: 'active', limit: 2000, noCache: true });
             if (vpsProducts && vpsProducts.length > 0) {
-                for (const vp of vpsProducts) {
-                    const price = parseFloat(String(vp.price_retail ?? vp.price ?? 0)) || 0;
-                    const priceCost = parseFloat(String(vp.price_cost ?? 0)) || 0;
-                    vpsProductMap.set(String(vp.sku), { price, price_cost: priceCost, name: String(vp.name || '') });
-                }
+                products = vpsProducts
+                    .filter((p: any) => p.model_id)
+                    .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')));
                 console.log(`[FreightCalculator] VPS retornou ${vpsProducts.length} produtos (preços atualizados).`);
             }
         } catch {
@@ -275,14 +273,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         }
 
         // ── Passo 2: Buscar produtos do Supabase (model_id + fallback de preço) ─
-        const { data: products } = await supabase
-            .from('products')
-            .select('id, name, sku, model_id, price, price_cost')
-            .eq('status', 'active')
-            .not('model_id', 'is', null)
-            .order('name');
-
-        if (!products || products.length === 0) {
+        if (products.length === 0) {
             setAllProducts([]);
             setLoadingProducts(false);
             return;
@@ -309,9 +300,8 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
             const length_cm = tv['dimensions.depth_cm'] ?? null;
 
             // Preço — VPS tem prioridade; Supabase como fallback
-            const vpsData = vpsProductMap.get(String(p.sku));
-            const price      = vpsData ? vpsData.price      : (typeof p.price === 'number' ? p.price : 0);
-            const price_cost = vpsData ? vpsData.price_cost : (typeof p.price_cost === 'number' ? p.price_cost : 0);
+            const price = parseFloat(String(p.price_retail ?? p.price ?? 0)) || 0;
+            const price_cost = parseFloat(String(p.price_cost ?? 0)) || 0;
 
             return {
                 id:       p.id,

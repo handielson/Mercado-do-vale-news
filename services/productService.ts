@@ -2,24 +2,29 @@
  * Product Service (PDV)
  * Simplified search service for the Point of Sale screen.
  * Fonte primária: VPS MySQL (via vpsApiService).
- * Supabase: backup apenas.
  */
 
-import { supabase } from './supabase';
 import { Product } from '../types/product';
 import { vpsApiService } from './vpsApiService';
 
-const COMPANY_SLUG = 'mercado-do-vale';
+function asProduct(row: unknown): Product | null {
+    if (!row || typeof row !== 'object') return null;
+    return row as Product;
+}
 
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', COMPANY_SLUG)
-        .single();
+function isActiveProduct(product: Product | null): product is Product {
+    if (!product) return false;
+    const status = String((product as any).status || '').toLowerCase();
+    const isActive = (product as any).is_active;
+    return status === 'active' || isActive === true || isActive == null;
+}
 
-    if (error) throw new Error(`Failed to get company: ${error.message}`);
-    return data.id;
+function productHasIdentifier(product: Product, identifier: string): boolean {
+    const specs = (product as any).specs || {};
+    const normalized = identifier.trim().toLowerCase();
+    return [specs.imei1, specs.imei2, specs.serial, specs.serial_number]
+        .filter(Boolean)
+        .some((value) => String(value).trim().toLowerCase() === normalized);
 }
 
 /**
@@ -48,78 +53,61 @@ export const searchProducts = async (searchTerm: string): Promise<Product[]> => 
  * Get product by ID
  */
 export const getProductById = async (id: string): Promise<Product | null> => {
-    const companyId = await getCompanyId();
-    const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', id)
-        .eq('company_id', companyId)
-        .single();
-
-    if (error) {
-        if (error.code === 'PGRST116') return null;
-        throw new Error(`Failed to fetch product: ${error.message}`);
-    }
-    return data;
+    const data = await vpsApiService.getProductById(id, true);
+    return asProduct(data);
 };
 
 /**
  * Get product by SKU
  */
 export const getProductBySku = async (sku: string): Promise<Product | null> => {
-    const companyId = await getCompanyId();
-    const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('sku', sku)
-        .eq('company_id', companyId)
-        .eq('is_active', true)
-        .single();
+    const normalizedSku = sku.trim().toLowerCase();
+    if (!normalizedSku) return null;
 
-    if (error) {
-        if (error.code === 'PGRST116') return null;
-        throw new Error(`Failed to fetch product by SKU: ${error.message}`);
-    }
-    return data;
+    const products = await vpsApiService.getProducts({
+        sku: sku.trim(),
+        status: 'active',
+        limit: 5,
+        noCache: true,
+    });
+
+    const exact = (products || [])
+        .map(asProduct)
+        .find((product) => isActiveProduct(product) && product.sku?.trim().toLowerCase() === normalizedSku);
+
+    return exact || null;
 };
 
 /**
  * Get product by IMEI (searches both imei1 and imei2)
  */
 export const getProductByImei = async (imei: string): Promise<Product | null> => {
-    const companyId = await getCompanyId();
-    const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('company_id', companyId)
-        .or(`specs->>imei1.eq.${imei},specs->>imei2.eq.${imei}`)
-        .eq('is_active', true)
-        .limit(1)
-        .single();
+    const normalizedImei = imei.trim();
+    if (!normalizedImei) return null;
 
-    if (error) {
-        if (error.code === 'PGRST116') return null;
-        throw new Error(`Failed to fetch product by IMEI: ${error.message}`);
-    }
-    return data;
+    const products = await vpsApiService.getProducts({
+        search: normalizedImei,
+        status: 'active',
+        limit: 10,
+        noCache: true,
+    });
+
+    const exact = (products || [])
+        .map(asProduct)
+        .find((product) => isActiveProduct(product) && productHasIdentifier(product, normalizedImei));
+
+    return exact || null;
 };
 
 /**
  * Get product by barcode (EAN)
  */
 export const getProductByBarcode = async (barcode: string): Promise<Product | null> => {
-    const companyId = await getCompanyId();
-    const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('company_id', companyId)
-        .contains('eans', [barcode])
-        .eq('is_active', true)
-        .single();
+    const normalizedBarcode = barcode.trim();
+    if (!normalizedBarcode) return null;
 
-    if (error) {
-        if (error.code === 'PGRST116') return null;
-        throw new Error(`Failed to fetch product by barcode: ${error.message}`);
-    }
-    return data;
+    const products = await vpsApiService.getProductByEan(normalizedBarcode);
+    return (products || [])
+        .map(asProduct)
+        .find(isActiveProduct) || null;
 };

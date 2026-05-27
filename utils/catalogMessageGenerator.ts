@@ -1,5 +1,6 @@
 import type { Product } from '@/types/product';
 import { formatPrice } from '@/services/installmentCalculator';
+import { vpsApiService } from '@/services/vpsApiService';
 
 export type CustomerType = 'retail' | 'wholesale' | 'resale';
 
@@ -84,6 +85,20 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
     return Array.from(grouped.values());
 }
 
+function hasAvailableStock(product: Product): boolean {
+    return Number(product.stock_quantity || 0) > 0;
+}
+
+function normalizeProducts(rows: unknown[] | null): Product[] {
+    return (rows || []).map((row) => row as Product).filter(hasAvailableStock);
+}
+
+async function getCategoryName(categoryId: string): Promise<string | undefined> {
+    const categories = await vpsApiService.getCategories();
+    const category = (categories || []).find((item: any) => String(item.id) === String(categoryId));
+    return category?.name ? String(category.name) : undefined;
+}
+
 /**
  * Generate catalog message for WhatsApp
  */
@@ -146,28 +161,17 @@ export async function generateCategoryMessage(
     customerType: CustomerType = 'retail'
 ): Promise<string> {
     try {
-        const { supabase } = await import('@/services/supabase');
-
-        // Fetch category name
-        const { data: category } = await supabase
-            .from('categories')
-            .select('name')
-            .eq('id', categoryId)
-            .single();
-
-        // Fetch products in category
-        const { data: products } = await supabase
-            .from('products')
-            .select('*')
-            .eq('category_id', categoryId)
-            .eq('status', 'active')
-            .gt('stock_quantity', 0);
+        const [categoryName, productRows] = await Promise.all([
+            getCategoryName(categoryId),
+            vpsApiService.getProducts({ category: categoryId, status: 'active', limit: 1000, noCache: true }),
+        ]);
+        const products = normalizeProducts(productRows);
 
         if (!products || products.length === 0) {
             return 'Nenhum produto disponível nesta categoria.';
         }
 
-        return generateCatalogMessage(products, customerType, category?.name);
+        return generateCatalogMessage(products, customerType, categoryName);
     } catch (error) {
         console.error('Error generating category message:', error);
         return 'Erro ao gerar catálogo da categoria.';
@@ -181,14 +185,8 @@ export async function generateFullCatalogMessage(
     customerType: CustomerType = 'retail'
 ): Promise<string> {
     try {
-        const { supabase } = await import('@/services/supabase');
-
-        // Fetch all active products
-        const { data: products } = await supabase
-            .from('products')
-            .select('*')
-            .eq('status', 'active')
-            .gt('stock_quantity', 0);
+        const productRows = await vpsApiService.getProducts({ status: 'active', limit: 1000, noCache: true });
+        const products = normalizeProducts(productRows);
 
         if (!products || products.length === 0) {
             return 'Nenhum produto disponível no catálogo.';

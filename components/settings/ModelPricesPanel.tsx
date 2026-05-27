@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { X, Loader2, DollarSign, Clock, CheckCircle } from 'lucide-react';
-import { supabase } from '../../services/supabase';
+import { vpsApiService } from '../../services/vpsApiService';
 import { getPriceHistory, applyPricesToVariation, PriceSnapshot } from '../../services/priceHistoryService';
 import { toast } from 'sonner';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -58,17 +58,16 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline }: ModelP
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('products')
-                .select('id, name, specs, stock_quantity, price_cost, price_retail, price_reseller, price_wholesale')
-                .eq('model_id', modelId)
-                .eq('status', 'active')
-                .order('name');
-
-            if (error) throw error;
+            const data = await vpsApiService.getProducts({
+                model_id: modelId,
+                status: 'active',
+                limit: 500,
+                noCache: true,
+            });
+            const sortedProducts = [...(data || [])].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
 
             const map: Record<string, Variation> = {};
-            for (const p of data || []) {
+            for (const p of sortedProducts) {
                 const ram = p.specs?.ram || '';
                 const storage = p.specs?.storage || '';
                 const key = `${ram}|${storage}`;

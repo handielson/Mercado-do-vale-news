@@ -5,6 +5,7 @@ import { formatPrice, calculateInstallments } from '@/services/installmentCalcul
 import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { supabase } from '@/services/supabase';
+import { vpsApiService } from '@/services/vpsApiService';
 import { customFieldsService, CustomField } from '@/services/custom-fields';
 import { ProductReviewsList } from './ProductReviewsList';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
@@ -234,6 +235,15 @@ export function ProductDetailsModal({
             try {
                 const p = product as any;
                 const warrantyType = p.warranty_type;
+                let vpsProductDetails: any | null = null;
+
+                const getVpsProductDetails = async () => {
+                    if (!p.id) return null;
+                    if (!vpsProductDetails) {
+                        vpsProductDetails = await vpsApiService.getProductById(p.id);
+                    }
+                    return vpsProductDetails;
+                };
 
                 if (warrantyType === 'brand') {
                     // Busca warranty_days da marca pelo nome (product.brand)
@@ -246,9 +256,7 @@ export function ProductDetailsModal({
                 } else if (warrantyType === 'category') {
                     let categoryId = p.category_id;
                     if (!categoryId && p.id) {
-                        const { data: prod } = await supabase
-                            .from('products').select('category_id').eq('id', p.id).single();
-                        categoryId = prod?.category_id;
+                        categoryId = (await getVpsProductDetails())?.category_id;
                     }
                     if (categoryId) {
                         const { data } = await supabase
@@ -258,9 +266,7 @@ export function ProductDetailsModal({
                 } else if (warrantyType === 'custom') {
                     let templateId = p.warranty_template_id;
                     if (!templateId && p.id) {
-                        const { data: prod } = await supabase
-                            .from('products').select('warranty_template_id').eq('id', p.id).single();
-                        templateId = prod?.warranty_template_id;
+                        templateId = (await getVpsProductDetails())?.warranty_template_id;
                     }
                     if (templateId) {
                         const { data } = await supabase

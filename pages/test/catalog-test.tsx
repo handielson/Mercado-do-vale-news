@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/services/supabase';
+import { vpsApiService } from '@/services/vpsApiService';
 
 interface SimpleProduct {
     id: string;
@@ -37,13 +38,7 @@ function CatalogTestPage() {
             setLoading(true);
             setError(null);
 
-            // Buscar produtos diretamente do Supabase
-            const { data: productsData, error: productsError } = await supabase
-                .from('products')
-                .select('id, name, brand, price_retail, images, featured, is_new, discount_percentage')
-                .limit(10);
-
-            if (productsError) throw productsError;
+            const productsData = await vpsApiService.getProducts({ status: 'active', limit: 10, noCache: true });
 
             // Buscar banners diretamente do Supabase
             const { data: bannersData, error: bannersError } = await supabase

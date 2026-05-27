@@ -18,6 +18,7 @@ import { getPublicCompanyData, publicCompanySettingsService } from '@/services/p
 import type { WarrantyOption } from '@/types/companySettings';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import { categoryService } from '@/services/categories';
+import { brandService } from '@/services/brands';
 import { supabase } from '@/services/supabase';
 import { generateBudgetText } from '@/utils/cartShareUtils';
 import { NewOrderModal } from '@/components/cart/NewOrderModal';
@@ -227,7 +228,10 @@ function CartPageContent() {
                     if (p) {
                         const wType = p.warranty_type;
                         if (wType === 'brand' && p.brand) {
-                            supabase.from('brands').select('warranty_days').eq('name', p.brand).maybeSingle().then(r => setEligibleBaseWarrantyDays(r.data?.warranty_days || 90));
+                            brandService.listActive().then(brands => {
+                                const brand = brands.find(brand => brand.name === p.brand);
+                                setEligibleBaseWarrantyDays(brand?.warranty_days || 90);
+                            });
                         } else if (wType === 'category') {
                             const cat = categories.find(c => c?.id === p.category_id);
                             setEligibleBaseWarrantyDays(cat?.warranty_days || 90);
