@@ -681,7 +681,7 @@ Concluído em leitura real pela VPS:
 - Cron dispatcher: rota protegida por segredo, cron instalado na VPS para `0 22 * * *` e primeira execução real observada com sucesso no log.
 - Guardas Vercel/Supabase: revalidados em 2026-05-27 sem criar recurso novo; deploy legado segue sem blockers versionados e o inventario Supabase segue no baseline `.from=491`, `.rpc=31`, `storage=13`, com `0` dependencias operacionais nao classificadas.
 - SEO: comparação pública de sitemap feita; produção atual redireciona para `www.mercadodovale.com.br` com 3 URLs, VPS staging retorna milhares de URLs de produtos; 8 slugs especiais do sitemap staging revalidados com canonical, OG product e JSON-LD.
-- Bling reconcile: apply real controlado executado para o plano revisado de `7` estoques e `57` nomes. A conferência pós-apply revelou que o dry-run ainda lia Supabase antigo; o reconciliador foi corrigido para montar o plano a partir do MySQL da VPS. Após deploy da correção, novo dry-run real retornou `8` mudanças de estoque e `20` mudanças de nome, com detalhes salvos em `tmp-tests/vps-bling-reconcile-dry-run-details-output.json`.
+- Bling reconcile: apply real controlado executado para o plano revisado de `7` estoques e `57` nomes. A conferência pós-apply revelou que o dry-run ainda lia Supabase antigo; o reconciliador foi corrigido para montar o plano a partir do MySQL da VPS. Em 2026-05-27, o reconcile tambem foi ajustado para nao planejar nem aplicar `nameChanges`, preservando nomes locais quando o produto foi apenas vinculado ao Bling.
 - Bling diagnostics: `debug-product` e `debug-diagnostic` validados com `blingId` real pela VPS, com saída sanitizada.
 - Bling image proxy: `image-proxy` validado com imagem real de produto Bling pela VPS, com saída sanitizada.
 - Bling sync-prices-vps: `dryRun=true` real validado na VPS nas páginas `0`, `1` e `48`; aplicação real controlada da página `0` sincronizou `50` itens em `/products/batch` com HTTP `200`.
@@ -694,7 +694,7 @@ Concluído em leitura real pela VPS:
 Pendente para corte final:
 
 - Regressão segura: antes de qualquer execução controlada, rodar `node tmp-tests/vps-migration-guard-regression.cjs` para confirmar que os guards continuam em modo não-mutante por padrão.
-- Bling escrita: `stock-sync`, atualização fiscal/dimensões e mutações financeiras guardados e prontos para caso controlado; `sync-prices-vps` e próxima aplicação do `reconcile` somente após revisar os `8` estoques e `20` nomes restantes do plano atual.
+- Bling escrita: `stock-sync`, atualização fiscal/dimensões e mutações financeiras guardados e prontos para caso controlado; `sync-prices-vps` e próxima aplicação do `reconcile` somente após revisar os estoques restantes do plano atual. Renomes pelo reconcile ficam desativados para preservar produtos apenas vinculados.
 - Shopee escrita: `update_stock`, `update_price`, `add_item`, upload de mídia e `ship_order` guardados; execução real somente com produto/pedido/mídia explicitamente controlados.
 - Webhooks: validar payload Bling, Shopee e Mercado Pago em janela controlada antes de trocar callbacks definitivos.
 - OAuth: reconectar Bling e Shopee com código real válido pela VPS.
@@ -705,6 +705,47 @@ Pendente para corte final:
 - Operação: cron da Vercel removido do `vercel.json`; callbacks restantes da Vercel ficam para depois da regressão final.
 
 ## Registro de Mudanças
+
+### 2026-05-27 - Reconcile Bling preserva nomes de produtos apenas vinculados
+
+Mudanca: removido do `reconcile` da VPS o planejamento e a aplicacao de alteracoes em `products.name` vindas do Bling. O plano continua reportando `nameChanges`, mas agora como lista vazia por padrao, e a aplicacao real atualiza somente estoque/fluxos permitidos.
+
+Objetivo: corrigir o comportamento em que produtos locais apenas vinculados por `bling_id` herdavam o nome do Bling sem terem sido importados explicitamente.
+
+Arquivos/infra alterados:
+
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/vps-bling-reconcile-fastify-static.test.mjs`
+- `tmp-tests/vps-bling-reconcile-preserve-linked-name-static.test.mjs`
+- `bling.md`
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/api/bling?resource=reconcile`
+
+Validacao:
+
+- RED esperado: `node tmp-tests\vps-bling-reconcile-preserve-linked-name-static.test.mjs` falhou antes da correcao porque `buildBlingReconcilePlanVps` ainda continha `nameChanges.push`.
+- `node tmp-tests\vps-bling-reconcile-preserve-linked-name-static.test.mjs`: OK.
+- `node tmp-tests\vps-bling-reconcile-fastify-static.test.mjs`: OK.
+- `node tmp-tests\vps-bling-reconcile-dry-run-details-static.test.mjs`: OK.
+- `node tmp-tests\vps-bling-reconcile-apply-guarded-static.test.mjs`: OK.
+- `node tmp-tests\vps-bling-reconcile-apply-guarded-preflight.test.mjs`: OK.
+- `node --check vps_server.js`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`.
+
+Resultado: o reconcile nao herda mais nomes do Bling para produtos apenas vinculados. Estoque continua protegido pelo fluxo existente e os guards de mutacao permanecem bloqueados por padrao.
+
+Pendencias:
+
+- fazer deploy operacional da API VPS por alterar `vps_server.*`;
+- validar dry-run real apos deploy e confirmar `planned.nameChanges=0`;
+- produtos ja renomeados por apply anterior precisam de correcao pontual/manual ou script controlado separado, se desejado.
+
+Rollback: restaurar commit anterior ou backup remoto da API VPS e reiniciar `pm2 restart mdv-api --update-env`.
 
 ### 2026-05-27 - Revalidacao segura do checklist VPS antes de novas janelas controladas
 

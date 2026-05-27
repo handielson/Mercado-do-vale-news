@@ -2284,7 +2284,6 @@ function buildBlingReconcilePlanVps({ localProducts = [], remoteProducts = [], r
   }
 
   const stockChanges = [];
-  const nameChanges = [];
   for (const [blingId, localProduct] of localByBlingId.entries()) {
     const remoteProduct = remoteProductsById.get(blingId);
     const remoteStock = remoteStocksById.get(blingId);
@@ -2294,17 +2293,11 @@ function buildBlingReconcilePlanVps({ localProducts = [], remoteProducts = [], r
         stockChanges.push({ productId: localProduct.id, sku: localProduct.sku || remoteProduct?.codigo || null, blingId: Number(blingId), previousStock, nextStock: remoteStock });
       }
     }
-
-    const previousName = normalizeReconcileTextVps(localProduct.name);
-    const nextName = normalizeReconcileTextVps(remoteProduct?.nome);
-    if (nextName && previousName !== nextName) {
-      nameChanges.push({ productId: localProduct.id, sku: localProduct.sku || remoteProduct?.codigo || null, blingId: Number(blingId), previousName, nextName });
-    }
   }
 
   return {
     stockChanges,
-    nameChanges,
+    nameChanges: [],
     totals: { localProducts: localProducts.length, localMappedProducts: localByBlingId.size, remoteProducts: remoteProducts.length, remoteStocks: remoteStocks.length },
   };
 }
@@ -3616,14 +3609,13 @@ async function handleBlingApiVps(request, reply) {
       }
 
       const stockResult = await applyReconcileStockChangesVps(plan.stockChanges, request);
-      const nameResult = await applyReconcileNameChangesVps(plan.nameChanges, request);
       return reply.code(200).send({
         ok: true,
         totals: plan.totals,
         serialSales,
         planned: { stockChanges: plan.stockChanges.length, nameChanges: plan.nameChanges.length },
-        applied: { stockChanges: stockResult.applied.length, nameChanges: nameResult.applied.length },
-        failed: [...stockResult.failed, ...nameResult.failed],
+        applied: { stockChanges: stockResult.applied.length, nameChanges: 0 },
+        failed: stockResult.failed,
       });
     } catch (err) {
       return reply.code(500).send({

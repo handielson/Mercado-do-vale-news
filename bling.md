@@ -452,9 +452,16 @@ O fluxo de reconciliacao consulta:
 
 - produtos no Bling;
 - saldos de estoque no Bling;
-- produtos locais no Supabase.
+- produtos locais no MySQL da VPS.
 
-Quando aplica mudancas, tambem envia atualizacoes relevantes para a VPS, como estoque e nome.
+Quando aplica mudancas, o reconcile pode atualizar estoque e processar sincronizacao de vendas seriais, mas nao altera `products.name`.
+
+Regra importante:
+
+- `bling_id` e apenas um vinculo operacional quando o produto ja existe no sistema;
+- vincular um produto ao Bling nao deve fazer o produto herdar o nome do Bling;
+- nome vindo do Bling so entra em fluxo de importacao explicita ou em outro fluxo que documente essa decisao de forma separada;
+- o reconcile reporta `nameChanges: []` por padrao para evitar renomear produtos locais apenas vinculados.
 
 ## Logs e evidencias
 

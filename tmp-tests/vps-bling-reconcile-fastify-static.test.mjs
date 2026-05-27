@@ -16,10 +16,11 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /fetchAllBlingStocksForReconcileVps\(/, `${file} must fetch all Bling stock balances for reconcile`);
   assert.match(source, /buildBlingReconcilePlanVps\(/, `${file} must build a reconcile plan on the VPS`);
   assert.match(source, /dryRun[\s\S]*planned[\s\S]*stockChanges[\s\S]*nameChanges/, `${file} must support dry-run reconcile planning`);
+  assert.match(source, /nameChanges:\s*\[\]/, `${file} must keep reconcile name changes disabled for linked products`);
+  assert.doesNotMatch(source, /nameChanges\.push/, `${file} must not inherit Bling names during reconcile`);
   assert.match(source, /applyReconcileStockChangesVps\(/, `${file} must apply stock changes when dryRun is false`);
-  assert.match(source, /applyReconcileNameChangesVps\(/, `${file} must apply name changes when dryRun is false`);
+  assert.doesNotMatch(source.match(/if \(resource === 'reconcile'\) \{[\s\S]*?if \(resource === 'serial-sales-sync'\)/)?.[0] || '', /applyReconcileNameChangesVps\(/, `${file} must not apply name changes during reconcile`);
   assert.match(source, /patchVpsForReconcileVps\('\/products\/stock'/, `${file} must keep syncing reconcile stock changes to VPS endpoints`);
-  assert.match(source, /patchVpsForReconcileVps\('\/products\/name'/, `${file} must keep syncing reconcile name changes to VPS endpoints`);
   assert.match(source, /buildCopyableDebug\('bling-reconcile'/, `${file} must return copyable debug details for reconcile failures`);
 
   const debugPayloads = source.match(/buildCopyableDebug\('bling-reconcile',\s*(?:\{[\s\S]*?\n\s*\}|[^)]*)\)/g) || [];
