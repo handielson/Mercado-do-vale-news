@@ -739,10 +739,19 @@ Validacao:
 
 Resultado: o reconcile nao herda mais nomes do Bling para produtos apenas vinculados. Estoque continua protegido pelo fluxo existente e os guards de mutacao permanecem bloqueados por padrao.
 
+Commit: `b4ecbb1` (`fix(bling): stop reconcile name inheritance`), enviado para `origin/main`.
+
+Deploy/pos-deploy:
+
+- `node tmp-tests\autoresponder-vps-server-deploy.cjs`: `ok=true`; API publicada em `/var/www/mdv-api`, PM2 `mdv-api` reiniciado e backups remotos criados com sufixo `20260527183707`.
+- `curl https://www.mercadodovale.com.br/api/status`: `200 OK`, MySQL `ok=true`, produtos `2464`, ativos `2453`.
+- `curl https://www.mercadodovale.com.br/api/vps-proxy?path=%2Fstatus`: `200 OK`, MySQL `ok=true`.
+- `node tmp-tests\vps-bling-reconcile-dry-run-check.cjs`: `ok=true`, `dryRun=true`, `planned.stockChanges=19`, `planned.nameChanges=0`, `mutation_executed` ausente/nenhuma aplicacao real.
+
+Resultado pos-deploy: a API publica segue saudavel e o dry-run real do reconcile na VPS confirmou que nao ha mais planejamento de renomeacao pelo Bling.
+
 Pendencias:
 
-- fazer deploy operacional da API VPS por alterar `vps_server.*`;
-- validar dry-run real apos deploy e confirmar `planned.nameChanges=0`;
 - produtos ja renomeados por apply anterior precisam de correcao pontual/manual ou script controlado separado, se desejado.
 
 Rollback: restaurar commit anterior ou backup remoto da API VPS e reiniciar `pm2 restart mdv-api --update-env`.
