@@ -1,19 +1,14 @@
-const { Client } = require('ssh2');
+﻿const { Client } = require('ssh2');
 const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const deploySource = fs.readFileSync(path.join(root, 'deploy.cjs'), 'utf8');
+const { readLegacyVpsConst: readConst } = require('./vps-ssh-config.cjs');
 const APPLY = process.env.CRON_DISPATCHER_CRON_APPLY === '1' || process.argv.includes('--apply');
 const WRAPPER = '/var/www/mdv-api/cron/cron-dispatcher.sh';
 const SCHEDULE = process.env.CRON_DISPATCHER_CRON_SCHEDULE || '0 22 * * *';
 const URL = process.env.CRON_DISPATCHER_URL || 'https://api.xiaomipetrolina.com.br/api/cron-dispatcher';
 
-function readConst(name) {
-  const match = deploySource.match(new RegExp(`const ${name} = '([^']+)';`));
-  if (!match) throw new Error(`Missing ${name} in deploy.cjs`);
-  return match[1];
-}
 
 function exec(conn, command) {
   return new Promise((resolve, reject) => {

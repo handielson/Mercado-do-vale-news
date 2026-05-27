@@ -1,20 +1,15 @@
-const { Client } = require('ssh2');
+﻿const { Client } = require('ssh2');
 const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const deploySource = fs.readFileSync(path.join(root, 'deploy.cjs'), 'utf8');
+const { readLegacyVpsConst: readConst } = require('./vps-ssh-config.cjs');
 const localEnv = fs.existsSync(path.join(root, '.env.local'))
   ? fs.readFileSync(path.join(root, '.env.local'), 'utf8')
   : '';
 
 const API = 'https://api.xiaomipetrolina.com.br';
 
-function readConst(name) {
-  const match = deploySource.match(new RegExp(`const ${name} = '([^']+)';`));
-  if (!match) throw new Error(`Missing ${name} in deploy.cjs`);
-  return match[1];
-}
 
 function readLocalEnv(name) {
   const match = localEnv.match(new RegExp(`^${name}=(.*)$`, 'm'));
@@ -159,7 +154,7 @@ async function main() {
         const [tagCol] = await pool.query(
           "SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'products' AND column_name = 'tag_ids'"
         );
-        const [promoTags] = await pool.query("SELECT id, name, scopes FROM autoresponder_tags WHERE LOWER(name) IN ('promoção','promocao')");
+        const [promoTags] = await pool.query("SELECT id, name, scopes FROM autoresponder_tags WHERE LOWER(name) IN ('promoÃ§Ã£o','promocao')");
         const [skuRows] = await pool.query(
           "SELECT id, name, sku, price_retail, price_promo, tag_ids FROM products WHERE sku = 'CSRN144GRO' LIMIT 1"
         );
@@ -255,19 +250,19 @@ async function main() {
   let promoTags = report.checks.schema.promoTags || [];
   if (promoTags.length === 0) {
     const createdPromo = await admin('/autoresponder/tags', 'POST', {
-      name: 'Promoção',
+      name: 'PromoÃ§Ã£o',
       color: '#ef4444',
-      description: 'Produtos em promoção/oferta',
+      description: 'Produtos em promoÃ§Ã£o/oferta',
       scopes: ['rule', 'conversation', 'product'],
       show_on_bot: true,
     });
-    assertStatus('create Promoção tag', createdPromo);
+    assertStatus('create PromoÃ§Ã£o tag', createdPromo);
     promoTags = [createdPromo.body];
     report.checks.promo_tag_seeded = createdPromo.body;
   }
 
   if (!report.checks.schema.sku) {
-    report.notes.push('promoção not tested: reference SKU CSRN144GRO was not found');
+    report.notes.push('promoÃ§Ã£o not tested: reference SKU CSRN144GRO was not found');
   } else {
     const promoTag = promoTags[0];
     let tagIds = [];
@@ -290,15 +285,15 @@ async function main() {
     const keywords = settingsBefore.body?.product_tag_keywords || {};
     const nextKeywords = typeof keywords === 'string' ? JSON.parse(keywords || '{}') : { ...keywords };
     nextKeywords.promocao = promoTag.id;
-    nextKeywords['promoção'] = promoTag.id;
+    nextKeywords['promoÃ§Ã£o'] = promoTag.id;
     const patchSettings = await admin('/autoresponder/settings', 'PATCH', {
       product_tag_keywords: nextKeywords,
     });
     assertStatus('patch promo keywords', patchSettings);
     const promoSender = `558799${phoneBase}05`;
-    const promo = await botMessage(promoSender, 'promoção');
+    const promo = await botMessage(promoSender, 'promoÃ§Ã£o');
     assertStatus('promo message', promo);
-    if (replies(promo).length < 1) throw new Error('promoção did not reply');
+    if (replies(promo).length < 1) throw new Error('promoÃ§Ã£o did not reply');
     report.checks.promo = replies(promo)[0]?.message || '';
     if (productTagsWerePatched) {
       const restoreProduct = await admin(`/products/${encodeURIComponent(report.checks.schema.sku.id)}/tags`, 'PATCH', {

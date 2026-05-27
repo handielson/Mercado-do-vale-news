@@ -1,17 +1,12 @@
-const { Client } = require('ssh2');
+﻿const { Client } = require('ssh2');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const deploySource = fs.readFileSync(path.join(root, 'deploy.cjs'), 'utf8');
+const { readLegacyVpsConst: readConst } = require('./vps-ssh-config.cjs');
 const remoteEnvPath = '/var/www/mdv-api/.env';
 
-function readConst(name) {
-  const match = deploySource.match(new RegExp(`const ${name} = '([^']+)';`));
-  if (!match) throw new Error(`Missing ${name} in deploy.cjs`);
-  return match[1];
-}
 
 function parseEnvValue(text, key) {
   const line = text.split(/\r?\n/).find((entry) => entry.startsWith(`${key}=`));

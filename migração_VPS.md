@@ -764,6 +764,49 @@ Pendencias:
 
 Rollback: nenhuma alteracao de runtime/infra foi aplicada nesta rodada; rollback nao necessario.
 
+### 2026-05-27 - Normalizacao local das credenciais VPS
+
+Mudanca: criado `.env.vps.local` local e ignorado pelo Git com as chaves `VPS_SITE_HOST`, `VPS_SITE_USER`, `VPS_SITE_PASSWORD` e `VPS_SITE_ROOT`, reaproveitando as credenciais ja existentes no sistema sem imprimir valores.
+
+Objetivo: permitir deploy do frontend pela VPS sem depender de extracao manual do `deploy.cjs` legado e remover credenciais hardcoded do arquivo versionado.
+
+Arquivos/infra alterados:
+
+- `.env.vps.local` local, ignorado por `.gitignore`
+- `deploy.cjs`
+- `tmp-tests/vps-ssh-config.cjs`
+- scripts VPS em `tmp-tests/` que ainda usavam `readConst('VpsHost'|'VpsUser'|'VpsPass')`
+- `tmp-tests/vps-ssh-config-static.test.mjs`
+- `/var/www/mdv-site/releases/20260527-123046`
+
+Validacao:
+
+- `git check-ignore -v .env.vps.local`: arquivo ignorado por `.gitignore`.
+- `Select-String .env.vps.local`: chaves presentes sem imprimir valores.
+- `node tmp-tests/vps-migration-guard-regression.cjs`: `ok=true`, `28` checks, `0` falhas, `mutation_executed=false`.
+- `VPS_SITE_SKIP_BUILD=1 npm.cmd run deploy:vps-site`: carregou `4` variaveis de `.env.vps.local` e publicou a release `/var/www/mdv-site/releases/20260527-123046`.
+- `curl https://www.mercadodovale.com.br/`: `200`, `text/html`.
+- `curl https://www.mercadodovale.com.br/api/status`: `200`, `application/json; charset=utf-8`.
+- `curl https://www.mercadodovale.com.br/sitemap.xml`: `200`, `application/xml; charset=utf-8`.
+- `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests/vps-staging-frontend-proxy-check.cjs`: `ok=true`, raiz/admin `200`, status/produtos `200`, `/company-settings` sem sessao `403`.
+- `node --check` nos `.cjs` alterados: `25` arquivos OK.
+- `node tmp-tests/vps-ssh-config-static.test.mjs`: OK.
+- `node tmp-tests/vps-site-deploy-script-static.test.mjs`: OK.
+- `node -e "require('./tmp-tests/vps-ssh-config.cjs').getVpsSshConfig()"`: carregou host/user/password sem imprimir valores.
+- `node tmp-tests/autoresponder-vps-recent-logs.cjs`: conexao SSH somente leitura OK via `.env.vps.local`; conteudo dos logs nao foi documentado por conter dados operacionais de clientes.
+- `node tmp-tests/autoresponder-vps-server-deploy.cjs`: `ok=true`, API publicada em `/var/www/mdv-api`, backups remotos criados com sufixo `20260527124213`.
+- `curl https://www.mercadodovale.com.br/api/status`: `200`, `application/json; charset=utf-8` apos deploy da API.
+- `curl https://www.mercadodovale.com.br/api/vps-proxy?path=%2Fstatus`: `200`, `application/json; charset=utf-8` apos deploy da API.
+
+Resultado: deploy do frontend agora pode ser executado via `.env.vps.local` local ignorado, sem passar variaveis temporarias derivadas de `deploy.cjs`; `deploy.cjs` e os scripts VPS antigos deixaram de depender de credenciais hardcoded versionadas. Browser/login real ainda nao foi fechado porque o Browser plugin falhou no runtime e o DevTools MCP esta bloqueado por perfil Chrome ja em uso.
+
+Pendencias:
+
+- validar login/admin real no browser com sessao admin;
+- seguir com OAuth real e execucoes controladas restantes antes do corte definitivo.
+
+Rollback: para frontend, usar o comando indicado pelo deploy para reaponter `/var/www/mdv-site/current` para `/var/www/mdv-site/previous`; para credenciais locais, remover `.env.vps.local`.
+
 ### 2026-05-27 - Revalidacao Nginx producao no IP da VPS
 
 Mudanca: reinstalada/confirmada a config `infra/nginx/mdv-site-production.conf` na VPS usando o instalador guardado, adicionados blocos `443 ssl` para o site e uma regra de compatibilidade `/api/status -> /status`, e revalidados os hosts de producao contra o IP da VPS e pela Cloudflare publica.

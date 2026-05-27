@@ -1,16 +1,11 @@
-const { Client } = require('ssh2');
+﻿const { Client } = require('ssh2');
 const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const deploySource = fs.readFileSync(path.join(root, 'deploy.cjs'), 'utf8');
+const { readLegacyVpsConst: readConst } = require('./vps-ssh-config.cjs');
 const targetWebhookUrl = process.env.TELEGRAM_TARGET_WEBHOOK_URL || 'https://api.xiaomipetrolina.com.br/api/telegram-webhook';
 
-function readConst(name) {
-  const match = deploySource.match(new RegExp(`const ${name} = '([^']+)';`));
-  if (!match) throw new Error(`Missing ${name} in deploy.cjs`);
-  return match[1];
-}
 
 function exec(conn, command) {
   return new Promise((resolve, reject) => {

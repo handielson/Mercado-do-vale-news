@@ -1,11 +1,30 @@
-const { Client } = require('ssh2');
+﻿const { Client } = require('ssh2');
+const fs = require('fs');
 const path = require('path');
+
+try {
+  require('dotenv').config({ path: path.join(__dirname, '.env.vps.local') });
+  require('dotenv').config({ path: path.join(__dirname, '.env.local') });
+} catch {
+  // dotenv is optional when env vars are injected by the caller.
+}
 
 const conn = new Client();
 
-const VpsHost = '76.13.232.162';
-const VpsUser = 'root';
-const VpsPass = '@@@@Jsj2865@@@@';
+const VpsHost = process.env.VPS_SITE_HOST || process.env.VPS_HOST;
+const VpsUser = process.env.VPS_SITE_USER || process.env.VPS_USER;
+const VpsPass = process.env.VPS_SITE_PASSWORD || process.env.VPS_ROOT_PASSWORD || process.env.VPS_PASSWORD;
+const VpsPrivateKey = process.env.VPS_SITE_PRIVATE_KEY || process.env.VPS_PRIVATE_KEY;
+
+function requireConfig() {
+  const missing = [];
+  if (!VpsHost) missing.push('VPS_SITE_HOST');
+  if (!VpsUser) missing.push('VPS_SITE_USER');
+  if (!VpsPass && !VpsPrivateKey) missing.push('VPS_SITE_PASSWORD or VPS_SITE_PRIVATE_KEY');
+  if (missing.length > 0) {
+    throw new Error(`Missing required VPS SSH env vars: ${missing.join(', ')}`);
+  }
+}
 
 function finishAndClose() {
   conn.end();
@@ -24,6 +43,7 @@ function uploadFilesSequentially(sftp, files, done) {
 }
 
 console.log(`Connecting to VPS (${VpsHost})...`);
+requireConfig();
 
 conn.on('ready', () => {
   console.log('SSH connected');
@@ -126,4 +146,5 @@ conn.on('ready', () => {
   port: 22,
   username: VpsUser,
   password: VpsPass,
+  privateKey: VpsPrivateKey ? fs.readFileSync(VpsPrivateKey) : undefined,
 });
