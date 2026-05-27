@@ -704,6 +704,50 @@ Pendente para corte final:
 
 ## Registro de Mudanças
 
+### 2026-05-27 - Revalidacao live read-only do checklist VPS
+
+Mudanca: reexecutada a parte segura do checklist VPS com validacoes locais, staging e producao publica, sem executar OAuth real, webhooks reais, escrita comercial, deploy ou alteracao de infraestrutura.
+
+Objetivo: confirmar que os guardas continuam bloqueando mutacoes por padrao e que os caminhos essenciais da producao Cloudflare + VPS seguem saudaveis antes de qualquer janela controlada.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Rotas/servicos afetados:
+
+- `/`
+- `/api/status`
+- `/sitemap.xml`
+- `/produto/:slug`
+- `/admin/products` no staging
+- `/api/vps-proxy` no staging
+
+Validacao:
+
+- `git status --short --branch`: `## main...origin/main` antes da rodada.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`.
+- `node tmp-tests\vps-nginx-production-config-static.test.mjs`: OK.
+- `node tmp-tests\vps-nginx-staging-config-static.test.mjs`: OK.
+- `SEO_PRODUCTION_HOST_LIVE=true SEO_PRODUCTION_HOST=www.mercadodovale.com.br node tmp-tests\vps-seo-production-host-check.cjs`: `ok=true`, sitemap `200`, `1836` URLs, `1833` produtos, 3 PDPs SEO `200` com canonical `www`, `og:type=product` e `2` JSON-LD.
+- `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests\vps-staging-frontend-proxy-check.cjs`: `ok=true`, raiz `200`, `/admin/products` `200`, status/produtos via proxy `200`, `/company-settings` sem sessao `403`.
+- `curl https://www.mercadodovale.com.br/`: `200`, `text/html`.
+- `curl https://www.mercadodovale.com.br/api/status`: `200`, `application/json; charset=utf-8`.
+- `curl https://www.mercadodovale.com.br/sitemap.xml`: `200`, `application/xml; charset=utf-8`.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 491`, `.rpc(...) = 31`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+
+Resultado: producao publica e staging seguem respondendo pela VPS nos caminhos essenciais, o sitemap e os HTMLs SEO continuam validos no host `www`, e os guardas permanecem impedindo mutacoes por padrao. Nada foi criado ou alterado na Vercel ou Supabase, e nenhum endpoint/runtime/Nginx/PM2/DNS/deploy foi modificado.
+
+Pendencias:
+
+- validar login/admin real no dominio publico com sessao existente ou credenciais fornecidas pelo usuario;
+- executar OAuth real, webhooks reais/simulados e escritas Bling/Shopee/shipping apenas em janela controlada com confirmacao explicita;
+- seguir removendo dependencias operacionais Supabase por modulo, preferindo VPS/MySQL.
+
+Rollback: nao aplicavel; rodada apenas read-only e documentacao.
+
 ### 2026-05-27 - Revalidacao dos guardas Vercel/Supabase sem criar recursos
 
 Mudanca: reexecutada a parte segura do checklist voltada a impedir retorno de dependencia operacional na Vercel e crescimento nao controlado de dependencias Supabase.
