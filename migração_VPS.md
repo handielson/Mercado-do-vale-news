@@ -704,6 +704,48 @@ Pendente para corte final:
 
 ## Registro de Mudanças
 
+### 2026-05-27 - Tentativa read-only de validacao admin no browser publico
+
+Mudanca: reexecutada a validacao de navegador no dominio publico da VPS para `/admin/products`, sem inserir credenciais e sem executar acao administrativa.
+
+Objetivo: avancar a pendencia de validacao browser/admin real dentro do limite seguro permitido pelas regras atuais, confirmando o comportamento do gate de login quando nao ha sessao admin disponivel no navegador do agente.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/admin/products`
+- `/admin/login`
+- `/api/vps-proxy` no staging
+- `/sitemap.xml`
+- `/produto/:slug`
+
+Validacao:
+
+- `git status --short --branch`: `## main...origin/main` antes da rodada.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`.
+- `node tmp-tests\vps-nginx-production-config-static.test.mjs`: OK.
+- `node tmp-tests\vps-nginx-staging-config-static.test.mjs`: OK.
+- Browser via `agent-browser` em `https://www.mercadodovale.com.br/admin/products`: URL final `https://www.mercadodovale.com.br/admin/login`, titulo `Mercado do Vale - Sistema de Gestao`.
+- Leitura textual da pagina: exibiu `Área Administrativa`, `Acesso restrito a administradores`, campos de e-mail/senha e botao `Acessar Painel Admin`.
+- `agent-browser errors`: sem erros de pagina reportados.
+- `SEO_PRODUCTION_HOST_LIVE=true SEO_PRODUCTION_HOST=www.mercadodovale.com.br node tmp-tests\vps-seo-production-host-check.cjs`: `ok=true`, sitemap `200`, `1836` URLs, `1833` produtos, 3 PDPs SEO `200`.
+- `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests\vps-staging-frontend-proxy-check.cjs`: `ok=true`, raiz/admin `200`, status/produtos `200`, `/company-settings` sem sessao `403`.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 491`, `.rpc(...) = 31`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+
+Resultado: a producao publica continua servindo o app admin pela VPS e protege `/admin/products` redirecionando para `/admin/login` quando nao existe sessao admin. Nao houve criacao ou alteracao de recursos na Vercel ou Supabase, nem mudanca em endpoint/runtime/Nginx/PM2/DNS/deploy. A validacao autenticada permanece pendente porque nenhuma credencial foi fornecida e o navegador do agente nao tinha sessao admin.
+
+Pendencias:
+
+- validar `/admin/products` autenticado com sessao admin real;
+- executar leitura administrativa pequena e read-only via `/api/vps-proxy` com sessao;
+- manter qualquer escrita administrativa ou integracao comercial para janela controlada com confirmacao explicita.
+
+Rollback: nao aplicavel; rodada apenas read-only e documentacao.
+
 ### 2026-05-27 - Revalidacao live read-only do checklist VPS
 
 Mudanca: reexecutada a parte segura do checklist VPS com validacoes locais, staging e producao publica, sem executar OAuth real, webhooks reais, escrita comercial, deploy ou alteracao de infraestrutura.
