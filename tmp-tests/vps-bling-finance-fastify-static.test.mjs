@@ -9,9 +9,10 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /resourceType must be "pagar" or "receber"/, `${file} must validate finance resourceType`);
   assert.match(source, /resourceType === 'pagar' \? 'contas\/pagar' : 'contas\/receber'/, `${file} must map finance resourceType to Bling endpoints`);
   assert.match(source, /action === 'list' && request\.method === 'GET'/, `${file} must support finance list`);
-  assert.match(source, /dataVencimentoInicio[\s\S]*dataInicial/, `${file} must forward finance start due date filter`);
-  assert.match(source, /dataVencimentoFim[\s\S]*dataFinal/, `${file} must forward finance end due date filter`);
-  assert.match(source, /situacao === 'pago' \? 2 : situacao === 'cancelado' \? 4 : situacao === 'em_aberto' \? 1 : situacao/, `${file} must preserve finance situacao mapping`);
+  assert.match(source, /dataVencimentoInicio[\s\S]*dataVencimentoInicial/, `${file} must forward native finance start due date filter`);
+  assert.match(source, /dataVencimentoFim[\s\S]*dataVencimentoFinal/, `${file} must forward native finance end due date filter`);
+  assert.match(source, /situacao === 'pago' \? 2 : situacao === 'cancelado' \? 5 : situacao === 'em_aberto' \? 1 : situacao/, `${file} must preserve finance situacao mapping`);
+  assert.doesNotMatch(source, /dataInicial|dataFinal|situacoes\[\]/, `${file} must not use non-native finance filters`);
   assert.match(source, /action === 'get' && request\.method === 'GET' && id/, `${file} must support finance get`);
   assert.match(source, /action === 'create' && request\.method === 'POST'/, `${file} must support finance create`);
   assert.match(source, /action === 'update' && request\.method === 'PUT' && id/, `${file} must support finance update`);

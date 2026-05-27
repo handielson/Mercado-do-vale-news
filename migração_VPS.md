@@ -690,6 +690,7 @@ Concluído em leitura real pela VPS:
 - Checklist seguro read-only: revalidado em 2026-05-27 14:49 BRT; guardas de mutação retornaram `ok=true`, `checked=28`, `failed=0`, `mutation_executed=false`; produção SEO `www` retornou sitemap `200` com `1836` URLs e `1833` produtos; staging/proxy retornou raiz/admin/status/produtos `200` e `/company-settings` sem sessão `403`; build Vite passou fora do sandbox.
 - Staging Locais de Estoque: correção do botão `Transferir` dentro do conteúdo de caixa commitada e publicada na VPS; asset novo da tela retornou `200` no staging. Falta apenas o reteste manual do usuário na Caixa 20/SKU `CTRN115G`.
 - OAuth preflight: revalidado live pela VPS; callback Bling sem code redireciona para `/admin/settings/bling`, exchange Bling sem credenciais retorna `400`, callback Shopee sem parâmetros retorna `400` e geração de URL Shopee retorna host oficial com redirect para `www.mercadodovale.com.br`.
+- Bling financeiro: proxy da VPS corrigido para listar contas com filtros nativos do Bling (`dataVencimentoInicial`, `dataVencimentoFinal` e `situacao` singular), evitando `404` ao buscar contas por vencimento.
 
 Pendente para corte final:
 
@@ -705,6 +706,35 @@ Pendente para corte final:
 - Operação: cron da Vercel removido do `vercel.json`; callbacks restantes da Vercel ficam para depois da regressão final.
 
 ## Registro de Mudanças
+
+### 2026-05-27 - Filtros nativos no Bling financeiro da VPS
+
+Mudança: ajustado o recurso `/api/bling?resource=finance` da VPS para encaminhar filtros de listagem com os nomes nativos da API Bling: `dataVencimentoInicial`, `dataVencimentoFinal` e `situacao`.
+
+Objetivo: corrigir erro `404` ao buscar contas financeiras do Bling com intervalo de vencimento, mantendo o frontend chamando o proxy local com `dataVencimentoInicio/Fim`.
+
+Arquivos/infra alterados:
+
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/vps-bling-finance-fastify-static.test.mjs`
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/api/bling?resource=finance&resourceType=pagar&action=list`
+- `/api/bling?resource=finance&resourceType=receber&action=list`
+
+Validação:
+
+- RED esperado: `node tmp-tests\vps-bling-finance-fastify-static.test.mjs` falhou antes da correção exigindo `dataVencimentoInicial`.
+- `node tmp-tests\vps-bling-finance-fastify-static.test.mjs`: OK.
+- `node tmp-tests\bling-finance-service-url-static.test.mjs`: OK.
+- `node tmp-tests\bling-finance-copy-debug-static.test.mjs`: OK.
+- `node --check vps_server.js`: OK.
+- `node --check vps_server.cjs`: OK.
+
+Resultado: a API da VPS volta a montar URLs compatíveis com a listagem de contas do Bling v3. A publicação em produção deve reiniciar `mdv-api` após o commit.
 
 ### 2026-05-27 - Reconcile Bling preserva nomes de produtos apenas vinculados
 

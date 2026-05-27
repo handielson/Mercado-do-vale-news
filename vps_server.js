@@ -3759,9 +3759,9 @@ async function handleBlingApiVps(request, reply) {
       if (action === 'list' && request.method === 'GET') {
         const { pagina = '1', limite = '100', dataVencimentoInicio, dataVencimentoFim, situacao } = query;
         let url = `${base}/${endpoint}?pagina=${pagina}&limite=${limite}`;
-        if (dataVencimentoInicio) url += `&dataInicial=${dataVencimentoInicio}`;
-        if (dataVencimentoFim) url += `&dataFinal=${dataVencimentoFim}`;
-        if (situacao) url += `&situacoes[]=${situacao === 'pago' ? 2 : situacao === 'cancelado' ? 4 : situacao === 'em_aberto' ? 1 : situacao}`;
+        if (dataVencimentoInicio) url += `&dataVencimentoInicial=${dataVencimentoInicio}`;
+        if (dataVencimentoFim) url += `&dataVencimentoFinal=${dataVencimentoFim}`;
+        if (situacao) url += `&situacao=${situacao === 'pago' ? 2 : situacao === 'cancelado' ? 5 : situacao === 'em_aberto' ? 1 : situacao}`;
         const response = await fetch(url, { headers });
         const body = await readBlingProxyResponse(response);
         if (!response.ok) {
