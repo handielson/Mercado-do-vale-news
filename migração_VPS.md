@@ -679,6 +679,7 @@ Concluído em leitura real pela VPS:
 - Shopee: loja, categorias, logística, lista de itens, detalhe de item, modelos, pedidos, detalhe de pedido, rastreio e pagamento/escrow.
 - Telegram: webhook real apontando para `api.xiaomipetrolina.com.br` e comandos principais validados no chat configurado.
 - Cron dispatcher: rota protegida por segredo, cron instalado na VPS para `0 22 * * *` e primeira execução real observada com sucesso no log.
+- Guardas Vercel/Supabase: revalidados em 2026-05-27 sem criar recurso novo; deploy legado segue sem blockers versionados e o inventario Supabase segue no baseline `.from=491`, `.rpc=31`, `storage=13`, com `0` dependencias operacionais nao classificadas.
 - SEO: comparação pública de sitemap feita; produção atual redireciona para `www.mercadodovale.com.br` com 3 URLs, VPS staging retorna milhares de URLs de produtos; 8 slugs especiais do sitemap staging revalidados com canonical, OG product e JSON-LD.
 - Bling reconcile: apply real controlado executado para o plano revisado de `7` estoques e `57` nomes. A conferência pós-apply revelou que o dry-run ainda lia Supabase antigo; o reconciliador foi corrigido para montar o plano a partir do MySQL da VPS. Após deploy da correção, novo dry-run real retornou `8` mudanças de estoque e `20` mudanças de nome, com detalhes salvos em `tmp-tests/vps-bling-reconcile-dry-run-details-output.json`.
 - Bling diagnostics: `debug-product` e `debug-diagnostic` validados com `blingId` real pela VPS, com saída sanitizada.
@@ -702,6 +703,38 @@ Pendente para corte final:
 - Operação: cron da Vercel removido do `vercel.json`; callbacks restantes da Vercel ficam para depois da regressão final.
 
 ## Registro de Mudanças
+
+### 2026-05-27 - Revalidacao dos guardas Vercel/Supabase sem criar recursos
+
+Mudanca: reexecutada a parte segura do checklist voltada a impedir retorno de dependencia operacional na Vercel e crescimento nao controlado de dependencias Supabase.
+
+Objetivo: atender a regra operacional de nao criar mais nada na Vercel ou no Supabase, mantendo a VPS como caminho principal e registrando que a rodada foi apenas read-only.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Rotas/servicos afetados:
+
+- Nenhum endpoint, runtime, Nginx, PM2, DNS, Vercel ou Supabase foi alterado.
+
+Validacao:
+
+- `git status --short --branch`: `## main...origin/main` antes da documentacao.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 491`, `.rpc(...) = 31`, `supabase.storage = 13`, `allowedOperationalMatches = 535`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `legacy_config_present=false`, `legacy_api_files_count=0`, `legacy_crons_disabled=true`, `cors_allows_legacy_fallback=false`, `legacy_cron_user_agent_allowed=false`, `blockers=[]`; DNS retornou `dns_timeout` no ambiente local, sem blocker de codigo.
+
+Resultado: nao houve criacao ou alteracao de recursos na Vercel ou Supabase. O codigo versionado continua sem configuracao legada da Vercel, sem `api/` serverless legado, sem runtime `@vercel/node` e sem fallback CORS/user-agent para a Vercel. O inventario Supabase permanece travado no baseline atual e sem dependencia operacional nova nao classificada.
+
+Pendencias:
+
+- validar callbacks OAuth e webhooks remanescentes nos paineis externos apenas em janela controlada;
+- seguir removendo leituras/escritas operacionais do Supabase por modulo, preferindo VPS/MySQL;
+- manter Supabase apenas onde ainda estiver explicitamente classificado como temporario ou auth.
+
+Rollback: nao aplicavel; rodada apenas read-only e documentacao.
 
 ### 2026-05-27 - Limpeza final de fallbacks Vercel no runtime VPS
 
