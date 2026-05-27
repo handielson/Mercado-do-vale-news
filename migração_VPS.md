@@ -742,10 +742,18 @@ Validacao:
 
 Resultado: o codigo versionado nao aceita mais o host antigo da Vercel por CORS e o reconcile Bling nao aceita mais autorizacao implicita pelo user-agent do Vercel Cron. O auditor de readiness voltou a existir, e agora possui timeout/saida controlada para DNS bloqueado em sandbox.
 
+Commit: `c878b89` (`chore(vps): remove legacy deploy fallbacks`), enviado para `origin/main`.
+
+Deploy/pos-deploy:
+
+- `node tmp-tests\autoresponder-vps-server-deploy.cjs`: `ok=true`; API publicada em `/var/www/mdv-api`, PM2 `mdv-api` reiniciado e backups remotos criados com sufixo `20260527142626`.
+- `curl https://www.mercadodovale.com.br/api/status`: `200`, `application/json; charset=utf-8`.
+- `curl https://www.mercadodovale.com.br/api/vps-proxy?path=%2Fstatus`: `200`, `application/json; charset=utf-8`.
+- Preflight CORS com `Origin: https://mercado-do-vale-news.vercel.app`: `500 Not allowed`, sem `access-control-allow-origin` para o origin legado.
+- Preflight CORS com `Origin: https://www.mercadodovale.com.br`: `204 No Content`, com `access-control-allow-origin: https://www.mercadodovale.com.br`.
+
 Pendencias:
 
-- publicar/reiniciar a API VPS apos o commit porque `vps_server.js` e `vps_server.cjs` foram alterados;
-- validar pos-deploy `/api/status`, `/api/vps-proxy?path=/status` e um preflight CORS seguro sem permitir o origin legado;
 - conferir em paineis externos os callbacks OAuth e webhooks remanescentes.
 
 Rollback: restaurar o commit anterior ou restaurar backups do deploy da API VPS e reiniciar `pm2 restart mdv-api --update-env`.
