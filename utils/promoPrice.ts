@@ -1,11 +1,21 @@
 import type { Product } from '../types/product';
 
+export function normalizeCentValue(value: unknown): number {
+    const numeric = typeof value === 'number'
+        ? value
+        : Number(String(value ?? 0).replace(',', '.'));
+
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.round(numeric);
+}
+
 /**
  * Retorna o preço promocional ativo de um produto (em centavos),
  * ou null se não houver promoção ativa no momento.
  */
 export function getActivePromoPrice(product: Product): number | null {
-    if (!product.price_promo || product.price_promo <= 0) return null;
+    const promoPrice = normalizeCentValue(product.price_promo);
+    if (!promoPrice || promoPrice <= 0) return null;
 
     const now = new Date();
 
@@ -15,7 +25,7 @@ export function getActivePromoPrice(product: Product): number | null {
     // Se tem data de fim, verifica se ainda não terminou
     if (product.promo_end && new Date(product.promo_end) < now) return null;
 
-    return product.price_promo;
+    return promoPrice;
 }
 
 /**
@@ -23,7 +33,7 @@ export function getActivePromoPrice(product: Product): number | null {
  * preço promo (se ativo) ou preço varejo normal.
  */
 export function getEffectiveRetailPrice(product: Product): number {
-    return getActivePromoPrice(product) ?? product.price_retail;
+    return getActivePromoPrice(product) ?? normalizeCentValue(product.price_retail);
 }
 
 /**

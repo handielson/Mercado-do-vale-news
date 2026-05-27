@@ -28,7 +28,7 @@ import { categoryService } from '../../services/categories';
 import { productService } from '../../services/products';
 import { supabase } from '../../services/supabase';
 import { teamService } from '../../services/team';
-import { getEffectiveRetailPrice } from '../../utils/promoPrice';
+import { getEffectiveRetailPrice, normalizeCentValue } from '../../utils/promoPrice';
 import { buildPdvProductName } from '../../utils/pdvProductDisplay';
 
 interface Customer {
@@ -204,17 +204,20 @@ export default function PDVPage() {
         }
 
         // Novo item (produto normal ou unidade serializada individual)
+        const unitPrice = getEffectiveRetailPrice(product);
+        const unitCost = normalizeCentValue(product.price_cost);
+
         const newItem: SaleItem = {
             id: crypto.randomUUID(),
             product_id: product.id,
             product_name: buildPdvProductName(product.name, (product as any).specs),
             product_sku: product.sku,
             quantity: isSerialized ? 1 : quantity, // serializado sempre = 1
-            unit_price: getEffectiveRetailPrice(product),
-            unit_cost: product.price_cost,
-            discount: product.is_gift ? product.price_retail : 0,
-            subtotal: getEffectiveRetailPrice(product) * (isSerialized ? 1 : quantity),
-            total: product.is_gift ? 0 : getEffectiveRetailPrice(product) * (isSerialized ? 1 : quantity),
+            unit_price: unitPrice,
+            unit_cost: unitCost,
+            discount: product.is_gift ? unitPrice : 0,
+            subtotal: unitPrice * (isSerialized ? 1 : quantity),
+            total: product.is_gift ? 0 : unitPrice * (isSerialized ? 1 : quantity),
             is_gift: product.is_gift || false,
             track_inventory: product.track_inventory || false,
             stock_quantity: product.stock_quantity,
