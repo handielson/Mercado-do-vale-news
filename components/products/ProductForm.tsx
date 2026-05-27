@@ -1023,7 +1023,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     mergedData.stock_quantity = 1;
                 }
                 await onSubmit(mergedData);
-                toast.success('Produto cadastrado com sucesso!');
+                if (!initialData) {
+                    toast.success('Produto cadastrado com sucesso!');
+                }
                 onBatchComplete?.();
             }
 
