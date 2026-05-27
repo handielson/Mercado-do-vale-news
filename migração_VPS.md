@@ -703,6 +703,39 @@ Pendente para corte final:
 
 ## Registro de Mudanças
 
+### 2026-05-27 - Tentativa de validacao admin real no dominio publico
+
+Mudanca: testado o acesso browser read-only a `/admin/products` no dominio publico da VPS, sem inserir credenciais e sem executar acao administrativa.
+
+Objetivo: avancar a pendencia de validacao de login/admin real apos o corte para Cloudflare + VPS, confirmando pelo menos o comportamento do gate de autenticacao no host final.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/admin/products`
+- `/admin/login`
+
+Validacao:
+
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `28` checks, `0` falhas, `mutation_executed=false`.
+- Browser via `agent-browser` em `https://www.mercadodovale.com.br/admin/products`: URL final `https://www.mercadodovale.com.br/admin/login`, titulo `Mercado do Vale - Sistema de Gestao`.
+- Leitura visual/textual da pagina: exibiu `Área Administrativa`, `Acesso restrito a administradores`, campo de senha e botao `Acessar Painel Admin`.
+- `agent-browser errors`: sem erros de pagina reportados.
+- Screenshot salvo localmente em `C:\tmp\mdv-admin-login-gate-20260527.png`.
+
+Resultado: o host publico final serve o app admin pela VPS e protege `/admin/products` redirecionando para `/admin/login` quando nao existe sessao admin. A validacao autenticada da tela de produtos ainda nao foi feita porque a sessao do navegador usada pelo agente nao estava logada e nenhuma credencial foi fornecida ou digitada.
+
+Pendencias:
+
+- validar `/admin/products` com sessao admin real;
+- executar uma leitura administrativa pequena e read-only pelo `/api/vps-proxy` com sessao;
+- manter qualquer escrita administrativa para janela controlada e reversivel.
+
+Rollback: nao aplicavel; rodada apenas read-only e documentacao.
+
 ### 2026-05-27 - Revalidacao segura do checklist VPS
 
 Mudanca: reexecutado o checklist seguro da migracao VPS em modo read-only, incluindo guards anti-mutacao, preflight do reconcile Bling, endpoints publicos/staging e browser da producao.
