@@ -886,11 +886,70 @@ Resultado: plano atual de reconcile revisado sem aplicacao real. A pendencia de 
 
 Pendencias:
 
-- revisar manualmente o artefato local `tmp-tests/vps-bling-reconcile-dry-run-details-output.json`;
-- se o plano for aprovado, gerar/confirmar o hash de revisao exigido pelo apply guardado;
+- revisar manualmente a revisao local em `reports/bling-reconcile-review.md`;
 - executar apply somente em janela controlada.
 
 Rollback: restaurar `/var/www/mdv-api/.codex-backups/server.js.20260527132129.bak` e `/var/www/mdv-api/.codex-backups/vps_server.js.20260527132129.bak`, depois reiniciar `pm2 restart mdv-api --update-env`.
+
+### 2026-05-27 - Revisao local e preflight do reconcile Bling
+
+Mudanca: restaurado o fluxo local de revisao/readiness do reconcile para gerar `reports/bling-reconcile-review.md` e `reports/bling-reconcile-review.json` a partir do dry-run atual, com hash SHA-256 do artefato revisado.
+
+Objetivo: manter a aplicacao real bloqueada por padrao, mas deixar claro quais confirmacoes exatas seriam necessarias em uma janela controlada.
+
+Arquivos alterados:
+
+- `tools/review-bling-reconcile-plan.mjs`
+- `tools/check-bling-reconcile-apply-readiness.mjs`
+- `tmp-tests/bling-reconcile-plan-review.test.mjs`
+- `tmp-tests/bling-reconcile-plan-review-cli-static.test.mjs`
+- `tmp-tests/bling-reconcile-apply-readiness-cli-static.test.mjs`
+- `tmp-tests/bling-reconcile-apply-readiness-cli.test.mjs`
+- `tmp-tests/bling-reconcile-apply-readiness-cli-refuses-apply.test.mjs`
+- `tmp-tests/vps-bling-reconcile-apply-guarded-preflight.test.mjs`
+- `tmp-tests/vps-bling-reconcile-apply-guarded-hash-mismatch.test.mjs`
+- `.gitignore`
+- `migração_VPS.md`
+
+Validacao:
+
+- `node tmp-tests/bling-reconcile-plan-review.test.mjs`
+- `node tmp-tests/bling-reconcile-plan-review-cli-static.test.mjs`
+- `node --check tools/review-bling-reconcile-plan.mjs`
+- `node tools/review-bling-reconcile-plan.mjs`
+- `node tmp-tests/bling-reconcile-apply-readiness-cli-static.test.mjs`
+- `node tmp-tests/bling-reconcile-apply-readiness-cli.test.mjs`
+- `node tmp-tests/bling-reconcile-apply-readiness-cli-refuses-apply.test.mjs`
+- `node tmp-tests/vps-bling-reconcile-apply-guarded-static.test.mjs`
+- `node tmp-tests/vps-bling-reconcile-apply-guarded-preflight.test.mjs`
+- `node tmp-tests/vps-bling-reconcile-apply-guarded-hash-mismatch.test.mjs`
+- `node --check tools/check-bling-reconcile-apply-readiness.mjs`
+- `node tools/check-bling-reconcile-apply-readiness.mjs`
+
+Resultado local do plano atual:
+
+- Estoque: `4` mudancas, `2` aumentos, `2` reducoes, `1` zeragem (`PI153D`), delta total `0`, delta maximo absoluto `3`.
+- Nomes: `6` mudancas, `4` classificadas como expansao segura de variante/cor e `2` marcadas para revisao explicita (`PX7P5GNFC8256A`, `X7P8256P`).
+- Source SHA-256 atual: `f49c009136459ff0f83212d38e8e869aa3e9f2f2355e0cfc44697db1962221a7`.
+- Readiness retornou `ok=true`, `applied=false`, `reason=preflight_only`, `localGuardsPassed=true`.
+- O comando de readiness recusa `--apply`; ele apenas regenera a revisao e roda o preflight local sem abrir SSH.
+- Nenhuma mutacao real foi executada.
+
+Confirmacoes que seriam exigidas pelo apply guardado, se aprovado em janela controlada:
+
+- `DRY_RUN=false`
+- `CONFIRM_BLING_RECONCILE_APPLY=I_UNDERSTAND_BLING_RECONCILE_APPLY`
+- `CONFIRM_BLING_RECONCILE_SOURCE_SHA256=f49c009136459ff0f83212d38e8e869aa3e9f2f2355e0cfc44697db1962221a7`
+- `CONFIRM_BLING_RECONCILE_ZEROING=I_REVIEWED_STOCK_ZEROING`
+- `CONFIRM_BLING_RECONCILE_ZEROING_SKUS=PI153D`
+- `CONFIRM_BLING_RECONCILE_UNSAFE_RENAMES=I_REVIEWED_UNSAFE_RENAMES`
+- `CONFIRM_BLING_RECONCILE_UNSAFE_RENAME_SKUS=PX7P5GNFC8256A,X7P8256P`
+
+Pendencias:
+
+- revisar manualmente as mudancas listadas em `reports/bling-reconcile-review.md`;
+- aplicar somente se houver aprovacao explicita para janela controlada;
+- depois de eventual apply, revalidar Bling/Supabase e registrar resultado no checklist.
 
 ### 2026-05-27 - Revalidacao Nginx producao no IP da VPS
 

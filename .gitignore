@@ -71,6 +71,8 @@ reports/media-migration-apply.md
 reports/media-migration-checkpoint.json
 reports/media-reference-replace.json
 reports/media-reference-replace.md
+reports/bling-reconcile-review.json
+reports/bling-reconcile-review.md
 
 # Local AutoResponder archive self-test output
 tmp-tests/archive-self-test-output/

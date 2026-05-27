@@ -8,6 +8,12 @@ import path from 'node:path';
 const tempDir = path.join(tmpdir(), `mdv-reconcile-preflight-${process.pid}`);
 mkdirSync(tempDir, { recursive: true });
 
+function parseTrailingJson(stdout) {
+  const text = String(stdout || '').trim();
+  const jsonStart = Math.max(text.lastIndexOf('\n{'), text.lastIndexOf('\r\n{'));
+  return JSON.parse(jsonStart >= 0 ? text.slice(jsonStart + 1) : text);
+}
+
 try {
   const reviewPath = path.join(tempDir, 'review.json');
   const detailsPath = path.join(tempDir, 'details.json');
@@ -42,7 +48,7 @@ try {
     },
   );
 
-  const payload = JSON.parse(stdout);
+  const payload = parseTrailingJson(stdout);
   assert.equal(payload.applied, false);
   assert.equal(payload.reason, 'preflight_only');
   assert.equal(payload.localGuardsPassed, true);
