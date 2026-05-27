@@ -2416,13 +2416,22 @@ function buildBlingOrderSkuQuantityMapVps(items = []) {
 }
 
 async function fetchBlingSalesOrderDetailForSerialSyncVps(accessToken, id) {
-  const response = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas/${encodeURIComponent(String(id))}`, {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
-    signal: AbortSignal.timeout(15000),
-  });
-  const body = await readBlingProxyResponse(response);
-  if (!response.ok) throw new Error(`Bling sale detail fetch failed (${response.status}): ${body.text}`);
-  return body.json?.data || body.json || null;
+  let lastBody = null;
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt > 0) await sleepBlingReconcileVps(1500 * attempt);
+    const response = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas/${encodeURIComponent(String(id))}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(15000),
+    });
+    const body = await readBlingProxyResponse(response);
+    if (response.ok) return body.json?.data || body.json || null;
+    lastBody = body;
+    lastStatus = response.status;
+    if (response.status === 429) continue;
+    break;
+  }
+  throw new Error(`Bling sale detail fetch failed (${lastStatus}): ${lastBody?.text || ''}`);
 }
 
 async function fetchRecentBlingSalesOrdersForSerialSyncVps(accessToken, maxOrders = 25) {
@@ -2563,6 +2572,7 @@ async function syncBlingSerialSalesFromRecentOrdersVps({ accessToken, dryRun = t
   const processed = [];
   for (const order of orders) {
     if (!order?.id) continue;
+    if (processed.length > 0) await sleepBlingReconcileVps(450);
     const result = await processBlingSerialSaleOrderVps(order, accessToken, dryRun);
     if (!result.skipped || result.reason === 'order_canceled') processed.push(result);
   }

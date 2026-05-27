@@ -75,3 +75,4 @@ reports/media-reference-replace.md
 # Local AutoResponder archive self-test output
 tmp-tests/archive-self-test-output/
 reports/autoresponder-archive-vps-package/
+tmp-tests/vps-bling-reconcile-dry-run-details-output.json

@@ -853,6 +853,45 @@ Pendencias:
 
 Rollback: nao aplicavel; rodada apenas de leitura.
 
+### 2026-05-27 - Reconcile dry-run com retry para rate limit Bling
+
+Mudanca: adicionado retry/backoff no fetch de detalhe de venda usado pelo reconcile/serial-sales, para tratar `429 TOO_MANY_REQUESTS` do Bling sem abortar o dry-run inteiro.
+
+Objetivo: revisar o plano atual de reconcile com segurança, sem aplicar mudanças reais, e reduzir falhas transitórias por limite de `3` requisicoes por segundo do Bling.
+
+Arquivos/infra alterados:
+
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/vps-bling-reconcile-sale-detail-rate-limit-static.test.mjs`
+- `.gitignore`
+- `migração_VPS.md`
+
+Validacao:
+
+- primeira tentativa de `node tmp-tests/vps-bling-reconcile-dry-run-check.cjs`: falhou com `429 TOO_MANY_REQUESTS` no detalhe de venda do Bling; nenhuma mutacao executada.
+- primeira tentativa de `node tmp-tests/vps-bling-reconcile-dry-run-details-check.cjs`: falhou com o mesmo `429`; nenhuma mutacao executada.
+- `node tmp-tests/vps-bling-reconcile-sale-detail-rate-limit-static.test.mjs`: falhou antes do ajuste e passou depois.
+- `node --check vps_server.js`
+- `node --check vps_server.cjs`
+- `node tmp-tests/vps-bling-reconcile-fastify-static.test.mjs`
+- `node tmp-tests/vps-migration-guard-regression.cjs`: `ok=true`, `28` checks, `0` falhas, `mutation_executed=false`.
+- `node tmp-tests/autoresponder-vps-server-deploy.cjs`: `ok=true`, API publicada em `/var/www/mdv-api`, backups remotos criados com sufixo `20260527132129`.
+- `node tmp-tests/vps-bling-reconcile-dry-run-check.cjs`: `ok=true`, `dryRun=true`, plano atual `4` estoques e `6` nomes; totais `2455` produtos locais, `2447` mapeados, `6108` produtos Bling e `2447` estoques remotos.
+- `node tmp-tests/vps-bling-reconcile-dry-run-details-check.cjs`: `ok=true`, `dryRun=true`, detalhes salvos localmente em `tmp-tests/vps-bling-reconcile-dry-run-details-output.json`.
+- resumo local do artefato: `stockChanges=4`, `nameChanges=6`; o arquivo foi ignorado no Git para evitar versionar dados operacionais de produto.
+- `curl https://www.mercadodovale.com.br/api/status`: `200`, `application/json; charset=utf-8`.
+
+Resultado: plano atual de reconcile revisado sem aplicacao real. A pendencia de reconcile ficou reduzida para revisar `4` estoques e `6` nomes antes de qualquer apply controlado.
+
+Pendencias:
+
+- revisar manualmente o artefato local `tmp-tests/vps-bling-reconcile-dry-run-details-output.json`;
+- se o plano for aprovado, gerar/confirmar o hash de revisao exigido pelo apply guardado;
+- executar apply somente em janela controlada.
+
+Rollback: restaurar `/var/www/mdv-api/.codex-backups/server.js.20260527132129.bak` e `/var/www/mdv-api/.codex-backups/vps_server.js.20260527132129.bak`, depois reiniciar `pm2 restart mdv-api --update-env`.
+
 ### 2026-05-27 - Revalidacao Nginx producao no IP da VPS
 
 Mudanca: reinstalada/confirmada a config `infra/nginx/mdv-site-production.conf` na VPS usando o instalador guardado, adicionados blocos `443 ssl` para o site e uma regra de compatibilidade `/api/status -> /status`, e revalidados os hosts de producao contra o IP da VPS e pela Cloudflare publica.
