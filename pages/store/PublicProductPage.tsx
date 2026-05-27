@@ -44,6 +44,7 @@ export const PublicProductPage: React.FC = () => {
     const customerType = useEffectiveCustomerType();
 
     const [product, setProduct] = useState<CatalogProduct | null>(null);
+    const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState<string>('');
     const [siblings, setSiblings] = useState<CatalogProduct[]>([]);
@@ -407,6 +408,7 @@ export const PublicProductPage: React.FC = () => {
                     brand: typeof data.brand === 'object' ? data.brand?.name : (data.brand || ''),
                 };
 
+                setSelectedVariantId(null);
                 setProduct(formattedProduct as unknown as CatalogProduct);
                 trackViewItem(formattedProduct);
 
@@ -550,6 +552,7 @@ export const PublicProductPage: React.FC = () => {
     const estimatedCoins = cashbackSettings?.active && displayPrice >= (cashbackSettings.min_purchase_for_coins || 0)
         ? Math.floor(displayPrice * (cashbackSettings.coins_per_real || 0))
         : 0;
+    const shouldShowVariantPriceRange = variantPriceRange.hasRange && !selectedVariantId && !isKitSelected;
 
     const presencial12x = paymentFees.find(f => f.channel === 'presencial' && f.installments === 12);
     const taxaAplicada12x = presencial12x?.applied_fee_pct || 0;
@@ -788,6 +791,7 @@ export const PublicProductPage: React.FC = () => {
                 (product as any).technicalSpecifications,
         } as CatalogProduct;
 
+        setSelectedVariantId(String(sib.id));
         setProduct(mergedVariant);
         if (mergedVariant.images && mergedVariant.images.length > 0) {
             setSelectedImage(mergedVariant.images[0]);
@@ -1194,7 +1198,7 @@ export const PublicProductPage: React.FC = () => {
                                             </span>
                                         </div>
                                         <div className="text-4xl font-extrabold text-slate-900">
-                                            {variantPriceRange.hasRange ? (
+                                            {shouldShowVariantPriceRange ? (
                                                 <>
                                                     R$ {formatDisplayPrice(variantPriceRange.min)}
                                                     <span className="mx-2 text-2xl text-slate-500">a</span>
@@ -1224,7 +1228,7 @@ export const PublicProductPage: React.FC = () => {
                                 ) : (
                                     <div>
                                         <div className="text-4xl font-extrabold text-slate-900">
-                                            {variantPriceRange.hasRange ? (
+                                            {shouldShowVariantPriceRange ? (
                                                 <>
                                                     R$ {formatDisplayPrice(variantPriceRange.min)}
                                                     <span className="mx-2 text-2xl text-slate-500">a</span>
