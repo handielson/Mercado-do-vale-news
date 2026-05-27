@@ -9,6 +9,7 @@ import { OAuthHashRedirect } from './components/auth/OAuthHashRedirect';
 import { router } from './routes/index';
 import { useFavicon } from './hooks/useFavicon';
 import { useGoogleAnalytics } from './hooks/useGoogleAnalytics';
+import { installAdminNavigationLogger } from './services/adminNavigationLogService';
 
 const LazyToaster = React.lazy(() => import('sonner').then((module) => ({ default: module.Toaster })));
 
@@ -104,6 +105,7 @@ const App: React.FC = () => {
   useFavicon();
   // Injetar Google Analytics dinamicamente (se configurado nos Dados da Empresa)
   useGoogleAnalytics();
+  React.useEffect(() => installAdminNavigationLogger(router), []);
 
   return (
     <HelmetProvider>

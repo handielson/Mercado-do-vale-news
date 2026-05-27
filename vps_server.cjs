@@ -74,6 +74,7 @@ const pool = mysql.createPool({
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_AUTH_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const BRASILAPI_NCM_URL = 'https://brasilapi.com.br/api/ncm/v1';
+const ADMIN_NAVIGATION_LOG_LIMIT = 5000;
 
 const CORS_ORIGINS = [
   'https://www.mercadodovale.com.br',
@@ -241,6 +242,84 @@ async function requireSyncKeyOrAdmin(request, reply) {
   if (await isAdminBearerToken(request)) return;
   return reply.code(401).send({ error: 'Unauthorized' });
 }
+
+function limitText(value, maxLength) {
+  const text = String(value || '').trim();
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
+}
+
+function normalizeNavigationMetadata(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const safe = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const safeKey = limitText(key, 60);
+    if (!safeKey) continue;
+    if (raw === null || typeof raw === 'number' || typeof raw === 'boolean') {
+      safe[safeKey] = raw;
+      continue;
+    }
+    safe[safeKey] = limitText(raw, 300);
+  }
+  return Object.keys(safe).length ? JSON.stringify(safe) : null;
+}
+
+async function pruneAdminNavigationLogs() {
+  await pool.query(
+    `DELETE FROM admin_navigation_logs
+     WHERE id NOT IN (
+       SELECT id FROM (
+         SELECT id FROM admin_navigation_logs ORDER BY id DESC LIMIT ?
+       ) AS recent_navigation_logs
+     )`,
+    [ADMIN_NAVIGATION_LOG_LIMIT]
+  );
+}
+
+fastify.post('/admin/navigation-log', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const body = req.body || {};
+  const auth = await getSupabaseBearerAuthContext(req);
+  const pathname = limitText(body.pathname || body.path, 512);
+  if (!pathname || (!pathname.startsWith('/admin') && !pathname.startsWith('/pdv'))) {
+    return reply.code(400).send({ error: 'Invalid navigation path' });
+  }
+
+  const metadata_json = normalizeNavigationMetadata(body.metadata);
+  const userAgent = limitText(req.headers['user-agent'], 255);
+
+  await pool.query(
+    `INSERT INTO admin_navigation_logs
+      (pathname, search, hash_fragment, full_url, title, referrer_path, user_id, customer_id, user_agent, metadata_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      pathname,
+      limitText(body.search, 512),
+      limitText(body.hash, 128),
+      limitText(body.fullUrl || body.full_url, 1000),
+      limitText(body.title, 255),
+      limitText(body.referrerPath || body.referrer_path, 512),
+      auth.userId || null,
+      auth.customerId || null,
+      userAgent,
+      metadata_json,
+    ]
+  );
+
+  await pruneAdminNavigationLogs();
+  return reply.code(201).send({ ok: true });
+});
+
+fastify.get('/admin/navigation-log', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
+  const rawLimit = Number(req.query?.limit || 200);
+  const limit = Math.max(1, Math.min(ADMIN_NAVIGATION_LOG_LIMIT, Number.isFinite(rawLimit) ? rawLimit : 200));
+  const [rows] = await pool.query(
+    `SELECT id, created_at, pathname, search, hash_fragment, full_url, title, referrer_path, user_id, customer_id, user_agent, metadata_json
+     FROM admin_navigation_logs
+     ORDER BY id DESC
+     LIMIT ?`,
+    [limit]
+  );
+  return { ok: true, limit, items: rows };
+});
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 function normalizeVpsProxyPath(input) {
@@ -13837,6 +13916,26 @@ async function runMigrations() {
     );
   }
   console.log('[migration] pdp_section_headers table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_navigation_logs (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      pathname VARCHAR(512) NOT NULL,
+      search VARCHAR(512) NULL,
+      hash_fragment VARCHAR(128) NULL,
+      full_url VARCHAR(1000) NULL,
+      title VARCHAR(255) NULL,
+      referrer_path VARCHAR(512) NULL,
+      user_id VARCHAR(80) NULL,
+      customer_id VARCHAR(80) NULL,
+      user_agent VARCHAR(255) NULL,
+      metadata_json JSON NULL,
+      INDEX idx_admin_navigation_created (created_at),
+      INDEX idx_admin_navigation_path (pathname)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] admin_navigation_logs table: OK');
 }
 
 // Recalcula products.stock_quantity = COUNT(units WHERE status='available') para o produto.

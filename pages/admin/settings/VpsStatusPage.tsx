@@ -14,6 +14,7 @@ import {
     RotateCcw,
     Power,
     AlertTriangle,
+    Copy,
 } from 'lucide-react';
 import { vpsClient } from '../../../services/vpsClient';
 import { buildSynologyStatusViewModel } from '../../../services/synologyStatusViewModel';
@@ -83,6 +84,27 @@ interface SynologyStatusResponse {
     command?: SynologyCommandStatus | null;
 }
 
+interface NavigationLogItem {
+    id: number;
+    created_at: string;
+    pathname: string;
+    search?: string | null;
+    hash_fragment?: string | null;
+    full_url?: string | null;
+    title?: string | null;
+    referrer_path?: string | null;
+    user_id?: string | null;
+    customer_id?: string | null;
+    user_agent?: string | null;
+    metadata_json?: unknown;
+}
+
+interface NavigationLogResponse {
+    ok: boolean;
+    limit: number;
+    items: NavigationLogItem[];
+}
+
 function formatUptime(secs: number): string {
     const d = Math.floor(secs / 86400);
     const h = Math.floor((secs % 86400) / 3600);
@@ -146,6 +168,37 @@ function StatCard({ icon, label, value, sub }: { icon: React.ReactNode; label: s
     );
 }
 
+function formatNavigationLogForClipboard(items: NavigationLogItem[]): string {
+    if (!items.length) return 'Nenhum log de navegacao admin/PDV encontrado.';
+
+    const lines = [
+        `Logs de navegacao admin/PDV - ${new Date().toLocaleString('pt-BR')}`,
+        `Total copiado: ${items.length}`,
+        '',
+    ];
+
+    for (const item of items) {
+        const when = item.created_at ? new Date(item.created_at).toLocaleString('pt-BR') : 'data indisponivel';
+        const path = `${item.pathname || ''}${item.search || ''}${item.hash_fragment || ''}`;
+        lines.push(`#${item.id} | ${when}`);
+        lines.push(`Tela: ${path || item.full_url || 'N/D'}`);
+        if (item.title) lines.push(`Titulo: ${item.title}`);
+        if (item.customer_id || item.user_id) {
+            lines.push(`Usuario: ${item.customer_id || 'sem customer'} / ${item.user_id || 'sem user'}`);
+        }
+        if (item.referrer_path) lines.push(`Origem: ${item.referrer_path}`);
+        if (item.metadata_json) {
+            const metadata = typeof item.metadata_json === 'string'
+                ? item.metadata_json
+                : JSON.stringify(item.metadata_json);
+            lines.push(`Metadata: ${metadata}`);
+        }
+        lines.push('');
+    }
+
+    return lines.join('\n').trim();
+}
+
 export const VpsStatusPage: React.FC = () => {
     const [status, setStatus] = useState<VpsStatus | null>(null);
     const [synologyStatus, setSynologyStatus] = useState<SynologyStatusResponse | null>(null);
@@ -155,6 +208,7 @@ export const VpsStatusPage: React.FC = () => {
     const [lastCheck, setLastCheck] = useState<Date | null>(null);
     const [countdown, setCountdown] = useState(AUTO_REFRESH_MS / 1000);
     const [actionBusy, setActionBusy] = useState<'restart' | 'reboot' | null>(null);
+    const [copyingNavigationLog, setCopyingNavigationLog] = useState(false);
     const refreshingRef = useRef(false);
 
     const fetchStatus = useCallback(async () => {
@@ -265,6 +319,24 @@ export const VpsStatusPage: React.FC = () => {
         }
     }, []);
 
+    const handleCopyNavigationLogs = useCallback(async () => {
+        setCopyingNavigationLog(true);
+        try {
+            const response = await vpsClient.get<NavigationLogResponse>('/admin/navigation-log?limit=200');
+            const text = formatNavigationLogForClipboard(response.items || []);
+            try {
+                await navigator.clipboard.writeText(text);
+                window.alert('Logs de navegacao copiados para a area de transferencia.');
+            } catch {
+                window.alert(text);
+            }
+        } catch (err: any) {
+            setError(err?.message || 'Falha ao copiar logs de navegacao');
+        } finally {
+            setCopyingNavigationLog(false);
+        }
+    }, []);
+
     return (
         <div className="space-y-6 max-w-4xl">
             <div className="flex items-center justify-between gap-4">
@@ -278,6 +350,15 @@ export const VpsStatusPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <span className="text-xs text-slate-400">Próxima em {countdown}s</span>
+                    <button
+                        onClick={handleCopyNavigationLogs}
+                        disabled={copyingNavigationLog}
+                        title="Copiar ultimos logs de navegacao admin/PDV"
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
+                    >
+                        <Copy size={15} />
+                        {copyingNavigationLog ? 'Copiando...' : 'Copiar logs'}
+                    </button>
                     <button
                         onClick={handleRefreshNow}
                         disabled={loading}

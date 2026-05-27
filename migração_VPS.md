@@ -4776,6 +4776,47 @@ Pendências:
 
 Rollback: restaurar o backup anterior de `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
 
+### 2026-05-27 - Log de navegacao admin/PDV na VPS
+
+Mudanca: adicionada captura de navegacao das telas `/admin` e `/pdv`, com armazenamento na VPS e botao para copiar os ultimos logs na tela `Status VPS`.
+
+Objetivo: permitir diagnostico rapido de caminho percorrido no painel e PDV, sem depender do console do navegador.
+
+Arquivos alterados:
+
+- `App.tsx`
+- `services/adminNavigationLogService.ts`
+- `pages/admin/settings/VpsStatusPage.tsx`
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/admin-navigation-log-vps-static.test.mjs`
+- `tmp-tests/admin-navigation-logger-frontend-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `POST /admin/navigation-log`
+- `GET /admin/navigation-log?limit=200`
+
+Validacao local:
+
+- `node tmp-tests/admin-navigation-log-vps-static.test.mjs`
+- `node tmp-tests/admin-navigation-logger-frontend-static.test.mjs`
+- `npm.cmd run build`
+
+Notas:
+
+- O logger do frontend usa `router.subscribe()` e registra somente rotas `/admin` e `/pdv`.
+- Query params sensiveis como `token`, `code`, `email`, `password`, `access_token` e `refresh_token` sao redigidos antes do envio.
+- A tabela `admin_navigation_logs` e criada no boot da API e limitada aos 5000 registros mais recentes.
+- O botao `Copiar logs` fica em `Admin > Configuracoes > Status VPS` e copia os ultimos 200 registros em texto legivel.
+
+Pendencias:
+
+- publicar frontend na VPS para o botao aparecer no dominio final;
+- publicar/reiniciar API VPS para criar a tabela e liberar as rotas;
+- validar no dominio final com sessao admin.
+
 ### 2026-05-27 - Deploy frontend do modal de etiquetas no admin
 
 Mudanca: publicado novo build do frontend na VPS com o modal de impressao de etiquetas do card de produtos usando controle `-`/`+` para quantidade de copias e selecao total do campo ao clicar.
