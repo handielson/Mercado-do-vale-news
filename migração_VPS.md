@@ -807,6 +807,52 @@ Pendencias:
 
 Rollback: para frontend, usar o comando indicado pelo deploy para reaponter `/var/www/mdv-site/current` para `/var/www/mdv-site/previous`; para credenciais locais, remover `.env.vps.local`.
 
+### 2026-05-27 - Leituras live Bling/Shopee pela VPS
+
+Mudanca: executadas leituras reais sanitizadas de Bling e Shopee pela API da VPS, sem chamadas de escrita e sem imprimir tokens ou payloads completos.
+
+Objetivo: reduzir risco antes das execucoes controladas restantes, comprovando que os recursos de leitura principais continuam respondendo pela VPS.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/api/bling`
+- `/api/shopee-actions`
+- `/api/shopee-catalog`
+- `/api/auth/callback/bling`
+- `/api/shopee`
+
+Validacao:
+
+- `node tmp-tests/vps-bling-live-read-check-static.test.mjs`: OK.
+- `node tmp-tests/vps-shopee-live-read-check-static.test.mjs`: OK.
+- `node tmp-tests/vps-shopee-order-live-read-check-static.test.mjs`: OK.
+- `node tmp-tests/vps-bling-detail-live-read-check-static.test.mjs`: OK.
+- `node tmp-tests/vps-bling-stock-live-read-check-static.test.mjs`: OK.
+- `node tmp-tests/vps-bling-finance-live-read-check-static.test.mjs`: OK.
+- `node tmp-tests/vps-migration-guard-regression.cjs`: `ok=true`, `28` checks, `0` falhas, `mutation_executed=false`.
+- `node tmp-tests/vps-bling-live-read-check.cjs`: `ok=true`; categorias `71`, produtos `100`, NFe `100`, NFCe `35`.
+- `node tmp-tests/vps-shopee-live-read-check.cjs`: `ok=true`, item descoberto; categorias `2038`, canais logisticos `2`, lista de itens `5`, detalhe `1`, modelos `7`; aviso esperado de `estimated_shipping_fee` em canais `90022` e `90006`.
+- `node tmp-tests/vps-shopee-order-live-read-check.cjs`: `ok=true`, pedido descoberto; lista `5`, detalhe `1`, tracking `0`, escrow OK.
+- `node tmp-tests/vps-bling-detail-live-read-check.cjs`: `ok=true`, produto descoberto e detalhe `200`; detalhe NFe pulado por nao descobrir id de NFe nessa leitura.
+- `node tmp-tests/vps-bling-stock-live-read-check.cjs`: `ok=true`, estoque geral `0`, estoque filtrado por produto descoberto `1`.
+- `node tmp-tests/vps-bling-finance-live-read-check.cjs`: `ok=true`, receber `100` e pagar `10`, detalhes `receber/get` e `pagar/get` `200`.
+- `OAUTH_PREFLIGHT_LIVE=true node tmp-tests/vps-oauth-preflight-check.cjs`: `ok=true`; callback Bling sem code `302` para `/admin/settings/bling`; exchange sem credenciais `400`; callback Shopee sem parametros `400`; URL Shopee gerada com `auth_host=partner.shopeemobile.com` e `redirect_host=www.mercadodovale.com.br`.
+
+Resultado: leituras Bling/Shopee e preflight OAuth continuam operacionais pela VPS. Nao houve chamada mutante; execucoes de escrita, reconexao OAuth real e webhooks reais seguem para janela controlada.
+
+Pendencias:
+
+- revisar o plano atual de `reconcile` antes de nova aplicacao real;
+- validar escrita Bling/Shopee somente com produto/pedido explicitamente controlados;
+- reconectar OAuth Bling/Shopee com codigo real valido;
+- validar webhooks reais/simulados em janela controlada.
+
+Rollback: nao aplicavel; rodada apenas de leitura.
+
 ### 2026-05-27 - Revalidacao Nginx producao no IP da VPS
 
 Mudanca: reinstalada/confirmada a config `infra/nginx/mdv-site-production.conf` na VPS usando o instalador guardado, adicionados blocos `443 ssl` para o site e uma regra de compatibilidade `/api/status -> /status`, e revalidados os hosts de producao contra o IP da VPS e pela Cloudflare publica.
