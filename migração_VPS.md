@@ -703,6 +703,53 @@ Pendente para corte final:
 
 ## Registro de Mudanças
 
+### 2026-05-27 - Revalidacao segura do checklist VPS
+
+Mudanca: reexecutado o checklist seguro da migracao VPS em modo read-only, incluindo guards anti-mutacao, preflight do reconcile Bling, endpoints publicos/staging e browser da producao.
+
+Objetivo: confirmar que a producao Cloudflare + VPS e o staging continuam saudaveis antes de qualquer janela controlada de escrita, OAuth real ou webhook real.
+
+Arquivos/infra alterados:
+
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `/`
+- `/api/status`
+- `/api/vps-proxy`
+- `/sitemap.xml`
+- `/produto/:slug`
+- `/admin/products` no staging
+
+Validacao:
+
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `28` checks, `0` falhas, `mutation_executed=false`.
+- `node tmp-tests\bling-reconcile-plan-review.test.mjs`: OK.
+- `node tmp-tests\bling-reconcile-apply-readiness-cli.test.mjs`: OK.
+- `node tmp-tests\vps-bling-reconcile-apply-guarded-preflight.test.mjs`: OK.
+- `node --check vps_server.js`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node tmp-tests\vps-nginx-production-config-static.test.mjs`: OK.
+- `node tmp-tests\vps-nginx-staging-config-static.test.mjs`: OK.
+- `node tools\check-bling-reconcile-apply-readiness.mjs`: `ok=true`, `applied=false`, `reason=preflight_only`; plano segue com `4` estoques, `6` nomes, `1` zeragem (`PI153D`) e `2` renomes que exigem revisao explicita (`PX7P5GNFC8256A`, `X7P8256P`).
+- `SEO_PRODUCTION_HOST_LIVE=true SEO_PRODUCTION_HOST=www.mercadodovale.com.br node tmp-tests\vps-seo-production-host-check.cjs`: `ok=true`, sitemap `200`, `1834` URLs, `1831` produtos, 3 PDPs SEO `200` com canonical `www`, `og:type=product` e `2` JSON-LD.
+- `STAGING_FRONTEND_PROXY_LIVE=true node tmp-tests\vps-staging-frontend-proxy-check.cjs`: `ok=true`, raiz `200`, `/admin/products` `200`, `/api/vps-proxy?path=/status` `200`, produtos `200`, `/company-settings` sem sessao `403`.
+- `curl https://www.mercadodovale.com.br/`: `200`, `text/html`.
+- `curl https://www.mercadodovale.com.br/api/status`: `200`, `application/json; charset=utf-8`.
+- `curl https://www.mercadodovale.com.br/sitemap.xml`: `200`, `application/xml; charset=utf-8`.
+- Browser via `agent-browser` em `https://www.mercadodovale.com.br/`: titulo `Mercado do Vale | Smartphones e Eletronicos em Petrolina-PE`, URL final `https://www.mercadodovale.com.br/`, `bodyLength=5968`, `hasMercado=true`, `imageCount=38`, `loadedImages=11`, console sem erros; screenshot salvo localmente em `C:\tmp\mdv-vps-check-20260527.png`.
+
+Resultado: checklist seguro passou. Producao e staging continuam respondendo pela VPS, os guards permanecem bloqueando mutacoes por padrao e o browser carregou a vitrine publica sem erros de console. Nenhuma alteracao de runtime, Nginx, PM2, DNS ou deploy foi executada nesta rodada.
+
+Pendencias:
+
+- validar login/admin real com sessao no dominio publico;
+- revisar manualmente `reports/bling-reconcile-review.md` antes de qualquer apply real;
+- executar OAuth real, webhooks reais/simulados e escritas Bling/Shopee/shipping somente em janela controlada com confirmacoes explicitas.
+
+Rollback: nao aplicavel; rodada apenas read-only e documentacao.
+
 ### 2026-05-27 - Rodada de checklist VPS local e live read-only
 
 Mudanca: reexecutado o checklist seguro do bloco VPS sem stagear, commitar ou fazer deploy novo.
