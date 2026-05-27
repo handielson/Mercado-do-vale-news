@@ -323,7 +323,7 @@ export default function CustomerSection({
                 is_active: true,
             });
 
-            handleSelectCustomer(created);
+            handleSelectCustomer(created, { showToast: false });
             setQuickCustomer(emptyQuickCustomer());
             setDocumentType('CPF');
             setShowQuickCreate(false);
@@ -342,12 +342,14 @@ export default function CustomerSection({
     };
 
     // Selecionar cliente
-    const handleSelectCustomer = (customer: Customer) => {
+    const handleSelectCustomer = (customer: Customer, options: { showToast?: boolean } = {}) => {
         onSelectCustomer(customer);
         setShowResults(false);
         setSearchTerm('');
         setSearchResults([]);
-        toast.success(`Cliente ${customer.name} selecionado`);
+        if (options.showToast !== false) {
+            toast.success(`Cliente ${customer.name} selecionado`);
+        }
     };
 
     // Remover seleção
