@@ -4,6 +4,10 @@ import { getValidToken } from './blingService';
 
 const BASE = '/api/bling?resource=finance';
 
+function financeUrl(params: URLSearchParams): string {
+    return `${BASE}&${params.toString()}`;
+}
+
 // ─── Generic fetch wrapper ───────────────────────────────────
 async function blingFetch(url: string, options: RequestInit = {}): Promise<any> {
     const buildRequest = (rawToken: string): RequestInit => {
@@ -49,7 +53,7 @@ export const blingFinanceService = {
             if (filters?.dataVencimentoInicio) params.set('dataVencimentoInicio', filters.dataVencimentoInicio);
             if (filters?.dataVencimentoFim) params.set('dataVencimentoFim', filters.dataVencimentoFim);
             if (filters?.situacao) params.set('situacao', filters.situacao);
-            const json = await blingFetch(`${BASE}?${params}`);
+            const json = await blingFetch(financeUrl(params));
             return (json?.data || []) as ContaPagar[];
         };
 
@@ -74,7 +78,7 @@ export const blingFinanceService = {
             if (filters?.dataVencimentoInicio) params.set('dataVencimentoInicio', filters.dataVencimentoInicio);
             if (filters?.dataVencimentoFim) params.set('dataVencimentoFim', filters.dataVencimentoFim);
             if (filters?.situacao) params.set('situacao', filters.situacao);
-            const json = await blingFetch(`${BASE}?${params}`);
+            const json = await blingFetch(financeUrl(params));
             return (json?.data || []) as ContaReceber[];
         };
 
@@ -91,7 +95,7 @@ export const blingFinanceService = {
 
     async getConta(tipo: 'pagar' | 'receber', id: number): Promise<ContaPagar | ContaReceber> {
         const params = new URLSearchParams({ resourceType: tipo, action: 'get', id: String(id) });
-        const json = await blingFetch(`${BASE}?${params}`);
+        const json = await blingFetch(financeUrl(params));
         return json?.data;
     },
 
@@ -109,7 +113,7 @@ export const blingFinanceService = {
         if (input.categoria?.id) body.categoria = { id: input.categoria.id };
         if (input.portador?.id) body.portador = { id: input.portador.id };
 
-        await blingFetch(`${BASE}?${params}`, { method: 'POST', body: JSON.stringify(body) });
+        await blingFetch(financeUrl(params), { method: 'POST', body: JSON.stringify(body) });
     },
 
     async baixarConta(tipo: 'pagar' | 'receber', id: number, baixa: BaixaConta): Promise<void> {
@@ -117,12 +121,12 @@ export const blingFinanceService = {
         // Bling API v3 exige o campo 'valorRecebido' para baixas de pagamentos e recebimentos
         const payload = { ...baixa, valorRecebido: baixa.valor };
         delete (payload as any).valor;
-        await blingFetch(`${BASE}?${params}`, { method: 'POST', body: JSON.stringify(payload) });
+        await blingFetch(financeUrl(params), { method: 'POST', body: JSON.stringify(payload) });
     },
 
     async cancelarConta(tipo: 'pagar' | 'receber', id: number): Promise<void> {
         const params = new URLSearchParams({ resourceType: tipo, action: 'cancelar', id: String(id) });
-        await blingFetch(`${BASE}?${params}`, { method: 'DELETE' });
+        await blingFetch(financeUrl(params), { method: 'DELETE' });
     },
 
     async updateConta(tipo: 'pagar' | 'receber', id: number, data: {
@@ -133,7 +137,7 @@ export const blingFinanceService = {
         contato?: { id?: number; nome?: string };
     }): Promise<void> {
         const params = new URLSearchParams({ resourceType: tipo, action: 'update', id: String(id) });
-        await blingFetch(`${BASE}?${params}`, { method: 'PUT', body: JSON.stringify(data) });
+        await blingFetch(financeUrl(params), { method: 'PUT', body: JSON.stringify(data) });
     },
 };
 
