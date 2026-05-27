@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     DollarSign, TrendingDown, TrendingUp, RefreshCw, Plus, Check,
-    X, AlertCircle, Loader2, Calendar, Filter, Pencil, Search, Printer, ReceiptText, FileCheck
+    X, AlertCircle, Loader2, Calendar, Filter, Pencil, Search, Printer, ReceiptText, FileCheck, Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { blingFinanceService } from '../../../services/blingFinanceService';
@@ -65,6 +65,31 @@ function getDefaultRange(): { inicio: string; fim: string } {
         inicio: inicio.toISOString().split('T')[0],
         fim: fim.toISOString().split('T')[0],
     };
+}
+
+interface FinanceDebugState {
+    title: string;
+    message: string;
+    debug: any;
+}
+
+function buildFallbackDebug(title: string, err: any): any {
+    return {
+        scope: 'bling-finance-page',
+        occurredAt: new Date().toISOString(),
+        title,
+        message: err?.message || String(err || 'Erro desconhecido'),
+        name: err?.name || 'Error',
+        stack: typeof err?.stack === 'string' ? err.stack.split('\n').slice(0, 8) : [],
+    };
+}
+
+function financeDebugText(entry: FinanceDebugState): string {
+    return JSON.stringify({
+        title: entry.title,
+        message: entry.message,
+        debug: entry.debug,
+    }, null, 2);
 }
 
 // ─── Modal: Baixar Conta ────────────────────────────────────────────────────
@@ -478,6 +503,7 @@ export default function FinancialPage() {
     const [baixaTarget, setBaixaTarget] = useState<(ContaPagar | ContaReceber) | null>(null);
     const [lancarTipo, setLancarTipo] = useState<Tab | null>(null);
     const [editTarget, setEditTarget] = useState<(ContaPagar | ContaReceber) | null>(null);
+    const [lastDebug, setLastDebug] = useState<FinanceDebugState | null>(null);
 
     const contasOriginais = tab === 'pagar' ? contasPagar : contasReceber;
 
@@ -491,6 +517,29 @@ export default function FinancialPage() {
     });
 
     const summary = calcSummary(contas);
+
+    async function copyFinanceDebug(entry: FinanceDebugState | null = lastDebug) {
+        if (!entry) return;
+        await navigator.clipboard.writeText(financeDebugText(entry));
+        toast.success('Debug copiado.');
+    }
+
+    function handleFinanceError(title: string, err: any) {
+        const message = err?.message || 'Erro desconhecido';
+        const entry: FinanceDebugState = {
+            title,
+            message,
+            debug: err?.debug || buildFallbackDebug(title, err),
+        };
+
+        setLastDebug(entry);
+        toast.error(`${title}: ${message}`, {
+            action: {
+                label: 'Copiar debug',
+                onClick: () => copyFinanceDebug(entry),
+            },
+        });
+    }
 
     const load = useCallback(async (forceRefresh = false) => {
         setLoading(true);
@@ -530,7 +579,7 @@ export default function FinancialPage() {
             setContasReceber(receber);
             toast.success(`${pagar.length + receber.length} contas atualizadas do Bling.`);
         } catch (err: any) {
-            toast.error('Erro ao buscar contas: ' + err.message);
+            handleFinanceError('Erro ao buscar contas', err);
         } finally {
             setLoading(false);
         }
@@ -556,7 +605,7 @@ export default function FinancialPage() {
             setBaixaTarget(null);
             await load(true);
         } catch (err: any) {
-            toast.error('Erro ao registrar baixa: ' + err.message);
+            handleFinanceError('Erro ao registrar baixa', err);
         }
     }
 
@@ -567,7 +616,7 @@ export default function FinancialPage() {
             toast.success('Conta cancelada.');
             await load(true);
         } catch (err: any) {
-            toast.error('Erro ao cancelar: ' + err.message);
+            handleFinanceError('Erro ao cancelar', err);
         }
     }
 
@@ -579,7 +628,7 @@ export default function FinancialPage() {
             printContaReceipt(detalhe || conta, fullSettings, tab);
         } catch (err: any) {
             toast.dismiss(tId);
-            toast.error('Erro ao trazer detalhes (imprimindo resumo): ' + err.message);
+            handleFinanceError('Erro ao trazer detalhes', err);
             printContaReceipt(conta, fullSettings, tab);
         }
     }
@@ -592,7 +641,7 @@ export default function FinancialPage() {
             printPaymentReceipt(detalhe || conta, fullSettings, tab);
         } catch (err: any) {
             toast.dismiss(tId);
-            toast.error('Erro ao trazer dados (imprimindo resumo): ' + err.message);
+            handleFinanceError('Erro ao trazer dados do recibo', err);
             printPaymentReceipt(conta, fullSettings, tab);
         }
     }
@@ -605,7 +654,7 @@ export default function FinancialPage() {
             printDebtClearance(detalhe || conta, fullSettings);
         } catch (err: any) {
             toast.dismiss(tId);
-            toast.error('Erro ao trazer dados (imprimindo resumo): ' + err.message);
+            handleFinanceError('Erro ao trazer dados da quitação', err);
             printDebtClearance(conta, fullSettings);
         }
     }
@@ -617,7 +666,7 @@ export default function FinancialPage() {
             setLancarTipo(null);
             await load(true);
         } catch (err: any) {
-            toast.error('Erro ao lançar: ' + err.message);
+            handleFinanceError('Erro ao lançar', err);
         }
     }
 
@@ -634,7 +683,7 @@ export default function FinancialPage() {
             setEditTarget(null);
             await load(true);
         } catch (err: any) {
-            toast.error('Erro ao editar: ' + err.message);
+            handleFinanceError('Erro ao editar', err);
         }
     }
 
@@ -671,6 +720,41 @@ export default function FinancialPage() {
                     </button>
                 </div>
             </div>
+
+            {lastDebug && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                            <AlertCircle className="text-red-600 mt-0.5 flex-shrink-0" size={18} />
+                            <div className="min-w-0">
+                                <p className="text-sm font-bold text-red-800">Debug do erro</p>
+                                <p className="text-sm text-red-700 break-words">{lastDebug.title}: {lastDebug.message}</p>
+                                <p className="text-xs text-red-500 mt-1">
+                                    {lastDebug.debug?.method || 'OP'} {lastDebug.debug?.url || lastDebug.debug?.scope || 'financeiro'}
+                                    {lastDebug.debug?.status ? ` • HTTP ${lastDebug.debug.status}` : ''}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <button
+                                onClick={() => copyFinanceDebug(lastDebug)}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-white text-red-700 border border-red-200 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors">
+                                <Copy size={14} />
+                                Copiar debug
+                            </button>
+                            <button
+                                onClick={() => setLastDebug(null)}
+                                className="p-2 bg-white text-red-500 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                                title="Fechar debug">
+                                <X size={14} />
+                            </button>
+                        </div>
+                    </div>
+                    <pre className="mt-3 max-h-56 overflow-auto rounded-lg bg-white/80 border border-red-100 p-3 text-[11px] leading-relaxed text-slate-700 whitespace-pre-wrap">
+                        {financeDebugText(lastDebug)}
+                    </pre>
+                </div>
+            )}
 
             {/* Filters */}
             <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col gap-4">

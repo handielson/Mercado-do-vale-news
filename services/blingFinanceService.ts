@@ -8,6 +8,88 @@ function financeUrl(params: URLSearchParams): string {
     return `${BASE}&${params.toString()}`;
 }
 
+export interface BlingFinanceDebug {
+    scope: 'bling-finance-client';
+    occurredAt: string;
+    method: string;
+    url: string;
+    query: Record<string, string>;
+    status?: number;
+    statusText?: string;
+    retriedAfter401: boolean;
+    request: {
+        hasBody: boolean;
+        bodyKeys: string[];
+        bodySummary?: Record<string, any>;
+    };
+    response: {
+        keys: string[];
+        error?: any;
+        message?: string;
+        detail?: any;
+        hint?: string;
+        upstreamDebug?: any;
+    };
+}
+
+export class BlingFinanceError extends Error {
+    debug: BlingFinanceDebug;
+
+    constructor(message: string, debug: BlingFinanceDebug) {
+        super(message);
+        this.name = 'BlingFinanceError';
+        this.debug = debug;
+    }
+}
+
+function parseQuery(url: string): Record<string, string> {
+    const query = url.split('?')[1] || '';
+    return Object.fromEntries(new URLSearchParams(query).entries());
+}
+
+function summarizeBody(body: RequestInit['body']): BlingFinanceDebug['request'] {
+    if (!body || typeof body !== 'string') return { hasBody: Boolean(body), bodyKeys: [] };
+
+    try {
+        const parsed = JSON.parse(body);
+        const bodySummary: Record<string, any> = {};
+
+        for (const key of ['vencimento', 'competencia', 'valor', 'valorRecebido', 'juros', 'desconto']) {
+            if (parsed?.[key] != null) bodySummary[key] = parsed[key];
+        }
+        if (parsed?.contato) bodySummary.contato = { hasId: parsed.contato.id != null, hasNome: Boolean(parsed.contato.nome) };
+        if (parsed?.categoria) bodySummary.categoria = { hasId: parsed.categoria.id != null };
+        if (parsed?.portador) bodySummary.portador = { hasId: parsed.portador.id != null };
+        if (parsed?.historico) bodySummary.hasHistorico = true;
+
+        return { hasBody: true, bodyKeys: Object.keys(parsed || {}).sort(), bodySummary };
+    } catch {
+        return { hasBody: true, bodyKeys: ['unparseable_json_body'] };
+    }
+}
+
+function buildFinanceDebug(url: string, options: RequestInit, res: Response, json: any, retriedAfter401: boolean): BlingFinanceDebug {
+    return {
+        scope: 'bling-finance-client',
+        occurredAt: new Date().toISOString(),
+        method: String(options.method || 'GET').toUpperCase(),
+        url,
+        query: parseQuery(url),
+        status: res.status,
+        statusText: res.statusText,
+        retriedAfter401,
+        request: summarizeBody(options.body),
+        response: {
+            keys: json && typeof json === 'object' ? Object.keys(json).sort() : [],
+            error: json?.error,
+            message: json?.message,
+            detail: json?.detail,
+            hint: json?.hint,
+            upstreamDebug: json?.debug,
+        },
+    };
+}
+
 // ─── Generic fetch wrapper ───────────────────────────────────
 async function blingFetch(url: string, options: RequestInit = {}): Promise<any> {
     const buildRequest = (rawToken: string): RequestInit => {
@@ -24,8 +106,10 @@ async function blingFetch(url: string, options: RequestInit = {}): Promise<any> 
 
     const rawToken = await getValidToken();
     let res = await fetch(url, buildRequest(rawToken));
+    let retriedAfter401 = false;
 
     if (res.status === 401) {
+        retriedAfter401 = true;
         const refreshedToken = await getValidToken({ forceRefresh: true });
         res = await fetch(url, buildRequest(refreshedToken));
     }
@@ -34,7 +118,7 @@ async function blingFetch(url: string, options: RequestInit = {}): Promise<any> 
     if (!res.ok) {
         const hint = json?.hint ? ` — ${json.hint}` : '';
         const detail = json?.detail || json?.error?.fields?.map((f: any) => f.msg).join(', ') || json?.message || `Erro ${res.status}`;
-        throw new Error(`${detail}${hint}`);
+        throw new BlingFinanceError(`${detail}${hint}`, buildFinanceDebug(url, options, res, json, retriedAfter401));
     }
     return json;
 
