@@ -24,4 +24,14 @@ assert(
   'catalog messages should load products from VPS',
 );
 
+assert(
+  source.includes('Qual desses aparelhos deseja mais informações?'),
+  'copied catalog message must ask the customer to choose by number or model so the bot can answer with the product link',
+);
+
+assert(
+  !source.includes('Entre em contato para mais informa'),
+  'copied catalog message must not use the old generic contact footer',
+);
+
 console.log('catalog message generator VPS static checks passed');

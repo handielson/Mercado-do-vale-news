@@ -147,7 +147,8 @@ export function generateCatalogMessage(
     });
 
     message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `📞 *Entre em contato para mais informações!*\n`;
+    message += `*Qual desses aparelhos deseja mais informações?*\n`;
+    message += `Digite o número ou o modelo escolhido que eu te envio o link do site.\n`;
     message += `🛒 Total: ${grouped.length} ${grouped.length === 1 ? 'modelo' : 'modelos'}`;
 
     return message;
