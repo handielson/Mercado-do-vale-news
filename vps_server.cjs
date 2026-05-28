@@ -14229,6 +14229,9 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await addColumnIfMissing('autoresponder_settings', 'signature_enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
+  await addColumnIfMissing('autoresponder_settings', 'signature_message', 'TEXT NULL');
+
   await pool.query(`
     INSERT IGNORE INTO autoresponder_settings (
       id,
@@ -14254,9 +14257,6 @@ async function runMigrations() {
       JSON_OBJECT()
     );
   `);
-
-  await addColumnIfMissing('autoresponder_settings', 'signature_enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
-  await addColumnIfMissing('autoresponder_settings', 'signature_message', 'TEXT NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_rules (
