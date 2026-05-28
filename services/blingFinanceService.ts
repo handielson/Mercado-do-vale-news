@@ -11,6 +11,10 @@ type FinanceListFilters = {
     situacao?: string;
 };
 
+type FinanceListOptions = {
+    forceRefresh?: boolean;
+};
+
 function financeUrl(params: URLSearchParams): string {
     return `${BASE}&${params.toString()}`;
 }
@@ -172,13 +176,15 @@ async function blingFetch(url: string, options: RequestInit = {}): Promise<any> 
 // â”€â”€â”€ Contas a Pagar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function fetchFinanceList<T extends { id: number }>(
     resourceType: 'pagar' | 'receber',
-    filters?: FinanceListFilters
+    filters?: FinanceListFilters,
+    options?: FinanceListOptions
 ): Promise<T[]> {
     const fetchPage = async (page: number, chunkFilters: FinanceListFilters) => {
         const params = new URLSearchParams({ resourceType, action: 'list', limite: '100', pagina: String(page) });
         if (chunkFilters.dataVencimentoInicio) params.set('dataVencimentoInicio', chunkFilters.dataVencimentoInicio);
         if (chunkFilters.dataVencimentoFim) params.set('dataVencimentoFim', chunkFilters.dataVencimentoFim);
         if (chunkFilters.situacao) params.set('situacao', chunkFilters.situacao);
+        if (options?.forceRefresh) params.set('forceRefresh', '1');
         const json = await blingFetch(financeUrl(params));
         return (json?.data || []) as T[];
     };
@@ -199,13 +205,13 @@ async function fetchFinanceList<T extends { id: number }>(
 
 export const blingFinanceService = {
 
-    async listContasPagar(filters?: FinanceListFilters): Promise<ContaPagar[]> {
-        return fetchFinanceList<ContaPagar>('pagar', filters);
+    async listContasPagar(filters?: FinanceListFilters, options?: FinanceListOptions): Promise<ContaPagar[]> {
+        return fetchFinanceList<ContaPagar>('pagar', filters, options);
 
     },
 
-    async listContasReceber(filters?: FinanceListFilters): Promise<ContaReceber[]> {
-        return fetchFinanceList<ContaReceber>('receber', filters);
+    async listContasReceber(filters?: FinanceListFilters, options?: FinanceListOptions): Promise<ContaReceber[]> {
+        return fetchFinanceList<ContaReceber>('receber', filters, options);
 
     },
 
@@ -256,4 +262,3 @@ export const blingFinanceService = {
         await blingFetch(financeUrl(params), { method: 'PUT', body: JSON.stringify(data) });
     },
 };
-

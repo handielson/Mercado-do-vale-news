@@ -11,7 +11,7 @@ assert.match(source, /blingFetch\(financeUrl\(params\)/);
 assert.match(source, /const MAX_BLING_FINANCE_RANGE_DAYS = 366;/, 'finance searches must respect the Bling date range cap');
 assert.match(source, /function splitFinanceDateRange\(filters\?: FinanceListFilters\): FinanceListFilters\[\]/, 'finance service must split long due-date ranges');
 assert.match(source, /MAX_BLING_FINANCE_RANGE_DAYS - 1/, 'date chunks must be at most 366 inclusive days');
-assert.match(source, /return fetchFinanceList<ContaPagar>\('pagar', filters\);/, 'pagar list must use the shared chunked fetcher');
-assert.match(source, /return fetchFinanceList<ContaReceber>\('receber', filters\);/, 'receber list must use the shared chunked fetcher');
+assert.match(source, /return fetchFinanceList<ContaPagar>\('pagar', filters, options\);/, 'pagar list must use the shared chunked fetcher');
+assert.match(source, /return fetchFinanceList<ContaReceber>\('receber', filters, options\);/, 'receber list must use the shared chunked fetcher');
 
 console.log('bling finance service url static checks ok');

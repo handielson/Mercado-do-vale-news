@@ -75,6 +75,20 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL |
 const SUPABASE_AUTH_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const BRASILAPI_NCM_URL = 'https://brasilapi.com.br/api/ncm/v1';
 const ADMIN_NAVIGATION_LOG_LIMIT = 5000;
+const blingFinanceListCache = new Map();
+
+function getBlingFinanceCacheKey(query) {
+  const params = new URLSearchParams();
+  for (const key of ['resourceType', 'pagina', 'limite', 'dataVencimentoInicio', 'dataVencimentoFim', 'situacao']) {
+    const value = query?.[key];
+    if (value != null && value !== '') params.set(key, String(value));
+  }
+  return params.toString();
+}
+
+function clearBlingFinanceListCache() {
+  blingFinanceListCache.clear();
+}
 
 const CORS_ORIGINS = [
   'https://www.mercadodovale.com.br',
@@ -3758,6 +3772,12 @@ async function handleBlingApiVps(request, reply) {
     try {
       if (action === 'list' && request.method === 'GET') {
         const { pagina = '1', limite = '100', dataVencimentoInicio, dataVencimentoFim, situacao } = query;
+        const forceRefresh = String(query?.forceRefresh || '') === '1';
+        const cacheKey = getBlingFinanceCacheKey(query);
+        const cached = !forceRefresh ? blingFinanceListCache.get(cacheKey) : null;
+        if (cached) {
+          return reply.code(200).send({ ...cached.body, meta: { ...(cached.body?.meta || {}), source: 'vps-cache', cachedAt: cached.cachedAt } });
+        }
         let url = `${base}/${endpoint}?pagina=${pagina}&limite=${limite}`;
         if (dataVencimentoInicio) url += `&dataVencimentoInicial=${dataVencimentoInicio}`;
         if (dataVencimentoFim) url += `&dataVencimentoFinal=${dataVencimentoFim}`;
@@ -3770,6 +3790,7 @@ async function handleBlingApiVps(request, reply) {
             detail: body.json?.error?.description || body.text,
           });
         }
+        blingFinanceListCache.set(cacheKey, { body: body.json || { data: [] }, cachedAt: new Date().toISOString() });
         return reply.code(200).send(body.json || { data: [] });
       }
 
@@ -3784,6 +3805,7 @@ async function handleBlingApiVps(request, reply) {
         const response = await fetch(`${base}/${endpoint}`, { method: 'POST', headers, body: JSON.stringify(request.body || {}) });
         const body = await readBlingProxyResponse(response);
         if (!response.ok) return sendFinanceError(response.status, body.json || body.text || 'Bling finance create failed', { upstreamStatus: response.status });
+        clearBlingFinanceListCache();
         return reply.code(200).send(body.json || {});
       }
 
@@ -3791,6 +3813,7 @@ async function handleBlingApiVps(request, reply) {
         const response = await fetch(`${base}/${endpoint}/${id}`, { method: 'PUT', headers, body: JSON.stringify(request.body || {}) });
         const body = await readBlingProxyResponse(response);
         if (!response.ok) return sendFinanceError(response.status, body.json || body.text || 'Bling finance update failed', { upstreamStatus: response.status });
+        clearBlingFinanceListCache();
         return reply.code(200).send(body.json || {});
       }
 
@@ -3798,12 +3821,14 @@ async function handleBlingApiVps(request, reply) {
         const response = await fetch(`${base}/${endpoint}/${id}/baixar`, { method: 'POST', headers, body: JSON.stringify(request.body || {}) });
         const body = await readBlingProxyResponse(response);
         if (!response.ok) return sendFinanceError(response.status, body.json || body.text || 'Bling finance baixar failed', { upstreamStatus: response.status });
+        clearBlingFinanceListCache();
         return reply.code(200).send(body.json || {});
       }
 
       if (action === 'cancelar' && request.method === 'DELETE' && id) {
         const response = await fetch(`${base}/${endpoint}/${id}`, { method: 'DELETE', headers });
         if (!response.ok) return sendFinanceError(response.status, `Bling error: ${response.status}`, { upstreamStatus: response.status });
+        clearBlingFinanceListCache();
         return reply.code(200).send({ success: true });
       }
 

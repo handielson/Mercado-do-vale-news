@@ -550,30 +550,10 @@ export default function FinancialPage() {
                 situacao: filtroSituacao || undefined,
             };
 
-            const cacheKey = `bling_finance_${dataInicio}_${dataFim}_${filtroSituacao || 'all'}`;
-
-            if (!forceRefresh) {
-                const cached = localStorage.getItem(cacheKey);
-                if (cached) {
-                    try {
-                        const { pagar, receber } = JSON.parse(cached);
-                        setContasPagar(pagar);
-                        setContasReceber(receber);
-                        toast.success('Contas carregadas da memória local.');
-                        setLoading(false);
-                        return;
-                    } catch (e) {
-                        // ignore corrupt cache
-                    }
-                }
-            }
-
             const [pagar, receber] = await Promise.all([
-                blingFinanceService.listContasPagar(filters),
-                blingFinanceService.listContasReceber(filters),
+                blingFinanceService.listContasPagar(filters, { forceRefresh }),
+                blingFinanceService.listContasReceber(filters, { forceRefresh }),
             ]);
-
-            localStorage.setItem(cacheKey, JSON.stringify({ pagar, receber, timestamp: Date.now() }));
 
             setContasPagar(pagar);
             setContasReceber(receber);
