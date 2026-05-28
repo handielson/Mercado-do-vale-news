@@ -165,7 +165,7 @@ export const catalogShareService = {
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: Arial, sans-serif; padding: 20px; }
           .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #3B82F6; padding-bottom: 20px; }
-          .logo { max-width: 150px; margin-bottom: 10px; }
+          .logo { width: 190px; max-width: 45%; max-height: 90px; object-fit: contain; object-position: center; margin-bottom: 12px; }
           .company-name { font-size: 24px; font-weight: bold; color: #1e293b; margin-bottom: 5px; }
           .company-info { font-size: 14px; color: #64748b; }
           .category-title { font-size: 20px; font-weight: bold; color: #3B82F6; margin: 20px 0; }
@@ -186,7 +186,7 @@ export const catalogShareService = {
       </head>
       <body>
         <div class="header">
-          ${company?.logoUrl ? `<img src="${company.logoUrl}" class="logo" alt="Logo" />` : ''}
+          ${company?.logoUrl || company?.logo || company?.receipt_logo_url ? `<img src="${company.logoUrl || company.logo || company.receipt_logo_url}" class="logo" alt="Logo" />` : ''}
           <div class="company-name">${company?.name || 'Mercado do Vale'}</div>
           <div class="company-info">
             ${company?.phone || ''} | ${company?.email || ''}

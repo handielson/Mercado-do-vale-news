@@ -83,7 +83,7 @@ Quando cliente perguntar algo no WhatsApp da loja (ex.: *"tem capa para note 14"
 | **Auto-pausa por fallbacks** | Configurável (default: 3 fallbacks → 30 min) |
 | **Pausa por solicitação humana** | Configurável (default: 60 min) |
 | **Histórico de logs** | 7 dias na VPS, depois Synology em arquivos diários `.json.gz` |
-| **Página admin** | `/admin/atendimento-automatico` com 7 abas |
+| **Página admin** | `/admin/atendimento-automatico` com 8 abas |
 | **Permissão** | Todo admin vê |
 | **Multi-canal futuro** | Mesmo webhook serve Instagram/Messenger se quiser depois |
 
@@ -216,6 +216,10 @@ CREATE TABLE autoresponder_settings (
 
   -- Fallback
   fallback_message TEXT,
+
+  -- Assinatura virtual
+  signature_enabled TINYINT(1) DEFAULT 1,
+  signature_message TEXT,
 
   -- Imagens
   send_product_images TINYINT(1) DEFAULT 1,
@@ -402,7 +406,7 @@ Ou veja todo nosso catálogo: https://mercadodovale.com.br
 **Acesso:** Todo admin (mesmo padrão de Cashback, Coupons, Promotions)
 **Item no menu:** adicionado em [layouts/AdminLayout.tsx](layouts/AdminLayout.tsx)
 
-### 7 Abas
+### 8 Abas
 
 | Aba | Função |
 |---|---|
@@ -412,6 +416,7 @@ Ou veja todo nosso catálogo: https://mercadodovale.com.br
 | **Curadoria** | Perguntas sem resposta agrupadas por frequência, botão "Criar resposta" (auto-aprendizado supervisionado) |
 | **Tags** | CRUD de `autoresponder_tags` por escopo (rule / conversation / product) |
 | **Estatísticas** | KPIs (msgs hoje/semana/mês, taxa resposta, top produtos, top regras), `?source=synology` para histórico antigo |
+| **Testes** | Simula respostas pela API da VPS sem enviar WhatsApp real, permite editar o retorno e salvar como regra |
 | **Configurações** | Settings completas: mensagens, durações, limites, mapeamento palavra→tag, link para `/admin/settings/company` (horários) |
 
 ### Template de regras pré-cadastradas (~22 itens, palavras-chave prontas, resposta vazia)
@@ -513,6 +518,7 @@ PATCH  /autoresponder/rules/:id                        requireSyncKey
 DELETE /autoresponder/rules/:id                        requireSyncKey
 POST   /autoresponder/rules/from-question              requireSyncKey
 POST   /autoresponder/upload-attachment                requireSyncKey  (Fase 3N: tenta Synology e faz fallback local)
+POST   /autoresponder/test-reply                       requireSyncKey  (simula resposta sem enviar WhatsApp real)
 
 # Tags
 GET    /autoresponder/tags                             requireSyncKey
@@ -587,9 +593,9 @@ Backend funcional rodando na VPS. Já dá pra testar mandando mensagem real no W
 
 Todos os endpoints CRUD prontos. Service `services/autoResponderService.ts` para o frontend consumir.
 
-### Fase 3 — Página admin (7 abas)
+### Fase 3 — Página admin (8 abas)
 
-`pages/admin/AutoResponderPage.tsx` completa com 7 abas. Componentes: TagPicker, ConversationCard, BlockNumberModal, AttachmentUpload. Integração TagPicker na edição de produtos.
+`pages/admin/AutoResponderPage.tsx` completa com 8 abas. Componentes: TagPicker, ConversationCard, BlockNumberModal, AttachmentUpload. Integração TagPicker na edição de produtos.
 
 ### Fase 4 — Refinamentos
 
@@ -765,7 +771,7 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 - [x] Criar `services/autoResponderService.ts` com métodos para todos os endpoints
 - [x] Tipos TypeScript em `types/autoResponder.ts`
 
-### Fase 3 — Página admin (7 abas)
+### Fase 3 — Página admin (8 abas)
 
 #### Estrutura base
 
@@ -828,10 +834,18 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 - [x] Tempo médio de resposta
 - [x] Switch para histórico Synology (?source=synology)
 
+#### Aba Testes
+
+- [x] Simular mensagem pela API da VPS sem enviar WhatsApp real
+- [x] Mostrar resposta retornada pelo mesmo motor do bot
+- [x] Editar o texto retornado antes de salvar
+- [x] Salvar alteração em regra textual existente ou criar nova regra exata
+
 #### Aba Configurações
 
 - [x] Bloco "Atendimento humano" (2 textareas + pausa)
 - [x] Bloco "Saudação"
+- [x] Bloco "Assinatura virtual" editavel
 - [x] Bloco "Auto-pausa"
 - [x] Bloco "Limites"
 - [x] Bloco "Imagens"

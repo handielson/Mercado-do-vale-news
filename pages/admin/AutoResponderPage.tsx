@@ -28,6 +28,7 @@ import type {
     AutoResponderSettings,
     AutoResponderStats,
     AutoResponderStoreStatus,
+    AutoResponderTestReplyResult,
     AutoResponderCategoryTag,
     AutoResponderConversation,
     AutoResponderBlocklistEntry,
@@ -81,6 +82,8 @@ interface SettingsFormState {
     human_pause_minutes: string;
     greeting_prefix: string;
     fallback_message: string;
+    signature_enabled: boolean;
+    signature_message: string;
     auto_pause_fallback_threshold: string;
     auto_pause_fallback_minutes: string;
     auto_pause_fallback_message: string;
@@ -117,6 +120,7 @@ const tabs = [
     { id: 'curadoria', label: 'Curadoria', icon: <Wand2 size={16} /> },
     { id: 'tags', label: 'Tags', icon: <Tags size={16} /> },
     { id: 'estatisticas', label: 'Estatísticas', icon: <BarChart3 size={16} /> },
+    { id: 'testes', label: 'Testes', icon: <Bot size={16} /> },
     { id: 'configuracoes', label: 'Configurações', icon: <Settings size={16} /> },
 ];
 
@@ -158,6 +162,8 @@ const emptySettingsForm: SettingsFormState = {
     human_pause_minutes: '60',
     greeting_prefix: '',
     fallback_message: '',
+    signature_enabled: true,
+    signature_message: 'Pitoco, assistente virtual do Mercado do Vale. Se precisar de ajuda personalizada, nossa equipe continua o atendimento por aqui.',
     auto_pause_fallback_threshold: '3',
     auto_pause_fallback_minutes: '30',
     auto_pause_fallback_message: '',
@@ -328,6 +334,8 @@ function settingsToForm(settings: AutoResponderSettings | null): SettingsFormSta
         human_pause_minutes: String(settings.human_pause_minutes ?? 60),
         greeting_prefix: settings.greeting_prefix || '',
         fallback_message: settings.fallback_message || '',
+        signature_enabled: settings.signature_enabled === undefined ? true : isEnabled(settings.signature_enabled),
+        signature_message: settings.signature_message || 'Pitoco, assistente virtual do Mercado do Vale. Se precisar de ajuda personalizada, nossa equipe continua o atendimento por aqui.',
         auto_pause_fallback_threshold: String(settings.auto_pause_fallback_threshold ?? 3),
         auto_pause_fallback_minutes: String(settings.auto_pause_fallback_minutes ?? 30),
         auto_pause_fallback_message: settings.auto_pause_fallback_message || '',
@@ -354,6 +362,8 @@ function settingsFormToInput(
         human_pause_minutes: Number(form.human_pause_minutes || 0),
         greeting_prefix: form.greeting_prefix,
         fallback_message: form.fallback_message,
+        signature_enabled: form.signature_enabled,
+        signature_message: form.signature_message,
         auto_pause_fallback_threshold: Number(form.auto_pause_fallback_threshold || 0),
         auto_pause_fallback_minutes: Number(form.auto_pause_fallback_minutes || 0),
         auto_pause_fallback_message: form.auto_pause_fallback_message,
@@ -1093,6 +1103,14 @@ const AutoResponderPage: React.FC = () => {
     const [settingsKeywordRows, setSettingsKeywordRows] = React.useState<TagKeywordRow[]>([]);
     const [isSavingSettings, setIsSavingSettings] = React.useState(false);
     const [settingsNotice, setSettingsNotice] = React.useState<string | null>(null);
+    const [testMessage, setTestMessage] = React.useState('Oi, tem iPhone?');
+    const [testSender, setTestSender] = React.useState('teste-bot');
+    const [testContactFirstName, setTestContactFirstName] = React.useState('Cliente');
+    const [testResult, setTestResult] = React.useState<AutoResponderTestReplyResult | null>(null);
+    const [editableTestReplies, setEditableTestReplies] = React.useState<string[]>([]);
+    const [isTestingReply, setIsTestingReply] = React.useState(false);
+    const [savingTestReplyIndex, setSavingTestReplyIndex] = React.useState<number | null>(null);
+    const [testNotice, setTestNotice] = React.useState<string | null>(null);
     const [error, setError] = React.useState<string | null>(null);
 
     const loadDashboard = React.useCallback(async () => {
@@ -1771,6 +1789,64 @@ const AutoResponderPage: React.FC = () => {
             setError(err instanceof Error ? err.message : 'Falha ao salvar configurações');
         } finally {
             setIsSavingSettings(false);
+        }
+    };
+
+    const testBotReply = async () => {
+        if (!testMessage.trim()) return;
+        setIsTestingReply(true);
+        setTestNotice(null);
+        setError(null);
+        try {
+            const result = await autoResponderService.testReply({
+                message: testMessage.trim(),
+                sender: testSender.trim() || 'teste-bot',
+                contactFirstName: testContactFirstName.trim(),
+            });
+            setTestResult(result);
+            setEditableTestReplies((result.replies || []).map((reply) => reply.message || ''));
+        } catch (err) {
+            console.error('[AutoResponderPage] test reply error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao testar resposta do bot');
+        } finally {
+            setIsTestingReply(false);
+        }
+    };
+
+    const updateEditableTestReply = (index: number, value: string) => {
+        setEditableTestReplies((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
+    };
+
+    const saveTestReply = async (index: number) => {
+        const replyText = (editableTestReplies[index] || '').trim();
+        if (!replyText || !testResult) return;
+        setSavingTestReplyIndex(index);
+        setTestNotice(null);
+        setError(null);
+        try {
+            if (testResult.intent === 'rule_text' && testResult.matched_rule_id) {
+                await autoResponderService.updateRule(testResult.matched_rule_id, { reply_text: replyText });
+                setTestNotice('Resposta da regra atualizada');
+            } else {
+                await autoResponderService.createRule({
+                    name: `Teste: ${testMessage.trim().slice(0, 60)}`,
+                    pattern: testMessage.trim(),
+                    match_type: 'exact',
+                    reply_type: 'text',
+                    reply_text: replyText,
+                    priority: 20,
+                    active: true,
+                    tag_ids: [],
+                });
+                setTestNotice('Nova resposta criada a partir do teste');
+            }
+            const rulesData = await autoResponderService.listRules();
+            setRules(rulesData);
+        } catch (err) {
+            console.error('[AutoResponderPage] save test reply error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao salvar resposta testada');
+        } finally {
+            setSavingTestReplyIndex(null);
         }
     };
 
@@ -2882,6 +2958,114 @@ const AutoResponderPage: React.FC = () => {
                             </div>
                         </div>
                     </TabPanel>
+                    <TabPanel id="testes">
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-slate-900">Testar respostas do bot</h2>
+                                        <p className="text-sm text-slate-500">Simule uma mensagem pela API da VPS sem enviar WhatsApp real e sem gravar conversa.</p>
+                                    </div>
+                                    {testNotice && (
+                                        <span className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                                            <CheckCircle2 size={16} />
+                                            {testNotice}
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
+                                    <label className="block">
+                                        <span className="mb-1 block text-sm font-semibold text-slate-700">Mensagem do cliente</span>
+                                        <textarea
+                                            value={testMessage}
+                                            onChange={(event) => setTestMessage(event.target.value)}
+                                            rows={4}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className="mb-1 block text-sm font-semibold text-slate-700">Remetente de teste</span>
+                                        <input
+                                            value={testSender}
+                                            onChange={(event) => setTestSender(event.target.value)}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className="mb-1 block text-sm font-semibold text-slate-700">Nome do cliente</span>
+                                        <input
+                                            value={testContactFirstName}
+                                            onChange={(event) => setTestContactFirstName(event.target.value)}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={testBotReply}
+                                    disabled={isTestingReply || !testMessage.trim()}
+                                    className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <Bot size={16} />
+                                    {isTestingReply ? 'Testando...' : 'Testar resposta'}
+                                </button>
+                            </div>
+
+                            {testResult && (
+                                <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">Intent: {testResult.intent}</span>
+                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">Matches: {formatNumber(testResult.matched_count)}</span>
+                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{formatNumber(testResult.response_time_ms)} ms</span>
+                                        {testResult.matched_rule_id && (
+                                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Regra #{testResult.matched_rule_id}</span>
+                                        )}
+                                    </div>
+                                    {testResult.warning && (
+                                        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                                            {testResult.warning}
+                                        </div>
+                                    )}
+
+                                    <div className="mt-4 space-y-4">
+                                        {editableTestReplies.length > 0 ? (
+                                            editableTestReplies.map((replyText, index) => (
+                                                <div key={`${testResult.intent}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                                        <h3 className="text-sm font-semibold text-slate-900">Resposta {index + 1}</h3>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => saveTestReply(index)}
+                                                            disabled={savingTestReplyIndex === index || !replyText.trim()}
+                                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                        >
+                                                            <Save size={16} />
+                                                            {savingTestReplyIndex === index ? 'Salvando...' : 'Salvar resposta'}
+                                                        </button>
+                                                    </div>
+                                                    <textarea
+                                                        value={replyText}
+                                                        onChange={(event) => updateEditableTestReply(index, event.target.value)}
+                                                        rows={Math.max(5, Math.min(14, replyText.split('\n').length + 2))}
+                                                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                    />
+                                                    <p className="mt-2 text-xs text-slate-500">
+                                                        Se veio de uma regra de texto, salva nela. Caso contrario, cria uma nova resposta exata para esta mensagem.
+                                                    </p>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                                                Nenhuma resposta retornada para este teste.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </TabPanel>
                     <TabPanel id="configuracoes">
                         <div className="space-y-4">
                             <div className="rounded-lg border border-slate-200 bg-white p-5">
@@ -3008,6 +3192,24 @@ const AutoResponderPage: React.FC = () => {
                                                 value={settingsForm.fallback_message}
                                                 onChange={(event) => updateSettingsForm({ fallback_message: event.target.value })}
                                                 rows={5}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                        <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={settingsForm.signature_enabled}
+                                                onChange={(event) => updateSettingsForm({ signature_enabled: event.target.checked })}
+                                                className="h-4 w-4 rounded border-slate-300"
+                                            />
+                                            <span className="text-sm font-semibold text-slate-700">Usar assinatura virtual</span>
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Assinatura das respostas</span>
+                                            <textarea
+                                                value={settingsForm.signature_message}
+                                                onChange={(event) => updateSettingsForm({ signature_message: event.target.value })}
+                                                rows={3}
                                                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                             />
                                         </label>

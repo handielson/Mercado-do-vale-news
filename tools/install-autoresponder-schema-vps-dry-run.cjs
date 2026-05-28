@@ -36,6 +36,8 @@ const SQL_SNIPPETS = [
     numbered_list_threshold INT NOT NULL DEFAULT 2,
     numbered_list_validity_minutes INT NOT NULL DEFAULT 30,
     product_tag_keywords JSON NULL,
+    signature_enabled TINYINT(1) NOT NULL DEFAULT 1,
+    signature_message TEXT NULL,
     archive_to_synology TINYINT(1) NOT NULL DEFAULT 1,
     archive_after_days INT NOT NULL DEFAULT 7,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -49,6 +51,8 @@ const SQL_SNIPPETS = [
     auto_pause_fallback_message,
     greeting_prefix,
     fallback_message,
+    signature_enabled,
+    signature_message,
     product_tag_keywords
   ) VALUES (
     1,
@@ -58,6 +62,8 @@ const SQL_SNIPPETS = [
     'Vou chamar um atendente para te ajudar melhor.',
     'Ola!',
     'Atendimento automatico em configuracao. Um atendente vai te responder em breve.',
+    1,
+    'Pitoco, assistente virtual do Mercado do Vale. Se precisar de ajuda personalizada, nossa equipe continua o atendimento por aqui.',
     JSON_OBJECT()
   )`,
 
@@ -199,6 +205,8 @@ async function main() {
   const before = await listTables();
   for (const sql of sqlSnippets) await pool.query(sql);
   const productsTagIds = await addColumnIfMissing('products', 'tag_ids', 'JSON NULL');
+  const autoresponderSignatureEnabled = await addColumnIfMissing('autoresponder_settings', 'signature_enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
+  const autoresponderSignatureMessage = await addColumnIfMissing('autoresponder_settings', 'signature_message', 'TEXT NULL');
   const after = await listTables();
   console.log(JSON.stringify({
     ok: true,
@@ -207,6 +215,8 @@ async function main() {
     tables_before: before,
     tables_after: after,
     products_tag_ids: productsTagIds,
+    autoresponder_signature_enabled: autoresponderSignatureEnabled,
+    autoresponder_signature_message: autoresponderSignatureMessage,
     forbidden_actions: [
       'pm2 is not restarted',
       'crontab is not changed',

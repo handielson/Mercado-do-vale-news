@@ -16,6 +16,7 @@ const AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS = 'Certo, vou chamar um especialista 
 const AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS = 'Certo, vou chamar um especialista. Estamos fora do horario de atendimento humano agora, mas sua mensagem ficou registrada e vamos te responder assim que possivel.';
 const AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE = 'Nao consegui localizar exatamente isso agora. Me diga o modelo do aparelho ou o tipo de produto que voce procura.';
 const AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE = 'Vou chamar um atendente para te ajudar melhor. Assim conseguimos conferir certinho pra voce.';
+const AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE = 'Pitoco, assistente virtual do Mercado do Vale. Se precisar de ajuda personalizada, nossa equipe continua o atendimento por aqui.';
 const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
 const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS = 3;
@@ -277,6 +278,30 @@ function normalizeNavigationMetadata(value) {
   return Object.keys(safe).length ? JSON.stringify(safe) : null;
 }
 
+const ADMIN_PREFERENCE_KEY_RE = /^[a-z0-9._:-]{1,80}$/i;
+
+function normalizeAdminPreferenceKey(value) {
+  const key = String(value || '').trim();
+  return ADMIN_PREFERENCE_KEY_RE.test(key) ? key : '';
+}
+
+function parseAdminPreferenceValue(value) {
+  if (value == null) return null;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeAdminPreferenceValue(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const text = JSON.stringify(value);
+  if (text.length > 10000) return null;
+  return text;
+}
+
 async function pruneAdminNavigationLogs() {
   await pool.query(
     `DELETE FROM admin_navigation_logs
@@ -336,6 +361,44 @@ fastify.get('/admin/navigation-log', { preHandler: requireSyncKeyOrAdmin }, asyn
 });
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
+fastify.get('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const key = normalizeAdminPreferenceKey(req.params?.key);
+  if (!key) return reply.code(400).send({ error: 'Invalid preference key' });
+
+  const [rows] = await pool.query(
+    'SELECT preference_key, value_json, updated_at FROM admin_preferences WHERE preference_key = ? LIMIT 1',
+    [key]
+  );
+  const row = rows?.[0] || null;
+  return {
+    ok: true,
+    key,
+    value: parseAdminPreferenceValue(row?.value_json),
+    updated_at: row?.updated_at || null,
+  };
+});
+
+fastify.patch('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const key = normalizeAdminPreferenceKey(req.params?.key);
+  if (!key) return reply.code(400).send({ error: 'Invalid preference key' });
+
+  const valueJson = normalizeAdminPreferenceValue(req.body?.value);
+  if (!valueJson) return reply.code(400).send({ error: 'Invalid preference value' });
+
+  await pool.query(
+    `INSERT INTO admin_preferences (preference_key, value_json)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = CURRENT_TIMESTAMP`,
+    [key, valueJson]
+  );
+
+  return {
+    ok: true,
+    key,
+    value: JSON.parse(valueJson),
+  };
+});
+
 function normalizeVpsProxyPath(input) {
   const value = Array.isArray(input) ? input[0] : input;
   const proxyPath = String(value || '').trim();
@@ -538,6 +601,33 @@ async function supabaseRestInsert(table, payload) {
   }
   if (!response.ok) {
     const error = new Error(`Supabase REST insert failed: ${response.status}`);
+    error.status = response.status;
+    error.body = data;
+    throw error;
+  }
+  return data;
+}
+
+async function supabaseRestDelete(table, query) {
+  const baseUrl = getSupabaseRestBaseUrl();
+  if (!baseUrl || !SUPABASE_AUTH_KEY) {
+    throw new Error('Supabase REST env vars missing');
+  }
+
+  const response = await fetch(`${baseUrl}/${table}?${query}`, {
+    method: 'DELETE',
+    headers: buildSupabaseRestHeaders(),
+    signal: AbortSignal.timeout(8000),
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (_err) {
+    data = text;
+  }
+  if (!response.ok) {
+    const error = new Error(`Supabase REST delete failed: ${response.status}`);
     error.status = response.status;
     error.body = data;
     throw error;
@@ -3801,6 +3891,13 @@ async function handleBlingApiVps(request, reply) {
         return reply.code(200).send(body.json || {});
       }
 
+      if (action === 'get-bordero' && request.method === 'GET' && id) {
+        const response = await fetch(`${base}/borderos/${id}`, { headers });
+        const body = await readBlingProxyResponse(response);
+        if (!response.ok) return sendFinanceError(response.status, `Bling bordero error: ${response.status}`, { upstreamStatus: response.status });
+        return reply.code(200).send(body.json || {});
+      }
+
       if (action === 'create' && request.method === 'POST') {
         const response = await fetch(`${base}/${endpoint}`, { method: 'POST', headers, body: JSON.stringify(request.body || {}) });
         const body = await readBlingProxyResponse(response);
@@ -5494,11 +5591,30 @@ function getAutoresponderGreetingReply(message, contactFirstName = '') {
   return `${greeting}${nameText}! 😊 Seja bem-vindo ao Mercado do Vale.\nComo posso ajudar voce hoje? ${emoji}`;
 }
 
-function formatAutoresponderReply(replyText, settings, shouldPrefixGreeting) {
+function getAutoresponderSignatureMessage(settings) {
+  if (settings?.signature_enabled === 0 || settings?.signature_enabled === false) return '';
+  return String(settings?.signature_message || AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE).trim();
+}
+
+function applyAutoresponderGreetingPrefix(replyText, settings, shouldPrefixGreeting) {
   const text = String(replyText || '').trim();
   const prefix = String(settings?.greeting_prefix || '').trim();
   if (!shouldPrefixGreeting || !prefix || text.startsWith(prefix)) return text;
   return `${prefix}\n\n${text}`;
+}
+
+function appendAutoresponderSignatureMessage(replyText, settings) {
+  const text = String(replyText || '').trim();
+  const signature = getAutoresponderSignatureMessage(settings);
+  if (!text || !signature || text.includes(signature)) return text;
+  return `${text}\n\n${signature}`;
+}
+
+function formatAutoresponderReply(replyText, settings, shouldPrefixGreeting) {
+  return appendAutoresponderSignatureMessage(
+    applyAutoresponderGreetingPrefix(replyText, settings, shouldPrefixGreeting),
+    settings
+  );
 }
 
 function appendAutoresponderRuleAttachment(replyText, rule) {
@@ -7184,10 +7300,12 @@ function formatAutoresponderReplies(replyMessages, settings, shouldPrefixGreetin
     .map((item) => String(item || '').trim())
     .filter(Boolean);
   if (messages.length === 0) return [];
-  return [
-    formatAutoresponderReply(messages[0], settings, shouldPrefixGreeting),
+  const formatted = [
+    applyAutoresponderGreetingPrefix(messages[0], settings, shouldPrefixGreeting),
     ...messages.slice(1),
   ];
+  formatted[formatted.length - 1] = appendAutoresponderSignatureMessage(formatted[formatted.length - 1], settings);
+  return formatted;
 }
 
 function appendAutoresponderReplyFooter(replyMessages, footerText) {
@@ -8064,6 +8182,8 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
     max_replies_window_hours: (v) => Number(v),
     greeting_prefix: (v) => String(v ?? ''),
     fallback_message: (v) => String(v ?? ''),
+    signature_enabled: (v) => boolInt(v),
+    signature_message: (v) => String(v ?? ''),
     send_product_images: (v) => boolInt(v),
     max_images_per_response: (v) => Number(v),
     use_numbered_lists: (v) => boolInt(v),
@@ -8681,6 +8801,187 @@ fastify.get('/autoresponder/store-status', { preHandler: requireSyncKey }, async
   return getCachedAutoresponderStoreStatus();
 });
 
+async function buildAutoresponderTestReply({ message, sender, contactFirstName }) {
+  const [settingsRows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
+  const settings = settingsRows[0];
+  if (!settings) {
+    return {
+      intent: 'settings_missing',
+      matched_count: 0,
+      replies: [],
+      warning: 'Configuracoes do AutoResponder nao encontradas.',
+    };
+  }
+
+  const detectedIntent = detectAutoresponderIntent(message);
+  const shouldPrefixGreeting = detectedIntent.greeting;
+  const normalizedSender = normalizeAutoresponderSender(sender) || 'teste-bot';
+
+  if (detectedIntent.greetingOnly) {
+    const greetingText = getAutoresponderGreetingReply(message, contactFirstName);
+    const categories = await findAutoresponderAvailableCategories();
+    const categoryListText = formatAutoresponderGreetingCategoryListReply(categories);
+    const replyMessages = formatAutoresponderReplies([greetingText, categoryListText], settings, false);
+    return {
+      intent: 'greeting_category_list',
+      matched_count: categories.length,
+      replies: formatAutoresponderProReplies(replyMessages),
+      sender: normalizedSender,
+    };
+  }
+
+  if (detectedIntent.humanRequest) {
+    const storeStatus = await getCachedAutoresponderStoreStatus();
+    const humanReplyText = isAutoresponderStoreInHumanHours(storeStatus)
+      ? (settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS)
+      : (settings.human_message_out_of_hours || settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS);
+    return {
+      intent: 'human_request',
+      matched_count: 0,
+      replies: [{ message: formatAutoresponderReply(humanReplyText, settings, shouldPrefixGreeting) }],
+      sender: normalizedSender,
+    };
+  }
+
+  const matchedRule = await findAutoresponderRuleMatch(message);
+  if (matchedRule) {
+    const replyType = String(matchedRule.reply_type || 'text');
+    if (replyType === 'product_by_tag') {
+      const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+      const rows = await findAutoresponderProductsByTag(matchedRule.reply_tag_id, pageSize + 1);
+      const products = rows.slice(0, pageSize);
+      const hasMore = rows.length > pageSize;
+      const total = await countAutoresponderProductsByTag(matchedRule.reply_tag_id);
+      const productReplyMessages = appendAutoresponderRuleAttachmentToReplies(
+        appendAutoresponderReplyFooter(
+          await formatAutoresponderProductSearchReplies(products, matchedRule.reply_text || matchedRule.name || 'produtos', settings, { offset: 0, limit: pageSize, total }),
+          formatAutoresponderProductReplyInstructions(hasMore)
+        ),
+        matchedRule
+      );
+      const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+      return {
+        intent: 'rule_product_tag',
+        matched_count: products.length,
+        matched_rule_id: matchedRule.id,
+        replies: formatAutoresponderProReplies(replyMessages),
+        sender: normalizedSender,
+      };
+    }
+
+    if (replyType === 'product_search') {
+      const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+      const ruleSearchTokens = extractAutoresponderProductSearchTokens(matchedRule.reply_search_query);
+      const rows = await findAutoresponderProductsByTokens(ruleSearchTokens, pageSize + 1);
+      const products = rows.slice(0, pageSize);
+      const hasMore = rows.length > pageSize;
+      const total = await countAutoresponderProductsByTokens(ruleSearchTokens);
+      const productReplyMessages = appendAutoresponderRuleAttachmentToReplies(
+        appendAutoresponderReplyFooter(
+          await formatAutoresponderProductSearchReplies(products, matchedRule.reply_search_query, settings, { offset: 0, limit: pageSize, total }),
+          formatAutoresponderProductReplyInstructions(hasMore)
+        ),
+        matchedRule
+      );
+      const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+      return {
+        intent: 'rule_product_search',
+        matched_count: products.length,
+        matched_rule_id: matchedRule.id,
+        replies: formatAutoresponderProReplies(replyMessages),
+        sender: normalizedSender,
+      };
+    }
+
+    const resolvedRuleText = await resolveAutoresponderReplyTemplate(
+      appendAutoresponderRuleAttachment(matchedRule.reply_text, matchedRule),
+      settings
+    );
+    return {
+      intent: 'rule_text',
+      matched_count: 1,
+      matched_rule_id: matchedRule.id,
+      replies: [{ message: formatAutoresponderReply(resolvedRuleText, settings, shouldPrefixGreeting) }],
+      sender: normalizedSender,
+    };
+  }
+
+  const productTagMatch = findAutoresponderProductTagKeyword(message, settings);
+  if (productTagMatch) {
+    const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+    const rows = await findAutoresponderProductsByTag(productTagMatch.tagId, pageSize + 1);
+    const products = rows.slice(0, pageSize);
+    const hasMore = rows.length > pageSize;
+    const total = await countAutoresponderProductsByTag(productTagMatch.tagId);
+    const productReplyMessages = appendAutoresponderReplyFooter(
+      await formatAutoresponderProductSearchReplies(products, productTagMatch.keyword, settings, { offset: 0, limit: pageSize, total }),
+      formatAutoresponderProductReplyInstructions(hasMore)
+    );
+    const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+    return {
+      intent: 'product_tag',
+      matched_count: products.length,
+      replies: formatAutoresponderProReplies(replyMessages),
+      sender: normalizedSender,
+    };
+  }
+
+  const productSearchTokens = extractAutoresponderProductSearchTokens(message);
+  if (productSearchTokens.length > 0) {
+    const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+    const rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
+    const products = rows.slice(0, pageSize);
+    const hasMore = rows.length > pageSize;
+    if (products.length > 0) {
+      const total = await countAutoresponderProductsByTokens(productSearchTokens);
+      const productReplyMessages = appendAutoresponderReplyFooter(
+        await formatAutoresponderProductSearchReplies(products, productSearchTokens.join(' '), settings, { offset: 0, limit: pageSize, total }),
+        formatAutoresponderProductReplyInstructions(hasMore)
+      );
+      const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+      return {
+        intent: 'product_search',
+        matched_count: products.length,
+        replies: formatAutoresponderProReplies(replyMessages),
+        sender: normalizedSender,
+      };
+    }
+  }
+
+  const fallbackReply = getAutoresponderFallbackReply(settings, 1);
+  return {
+    intent: 'fallback',
+    matched_count: 0,
+    replies: [{ message: formatAutoresponderReply(fallbackReply.replyText, settings, shouldPrefixGreeting) }],
+    sender: normalizedSender,
+  };
+}
+
+fastify.post('/autoresponder/test-reply', { preHandler: requireSyncKey }, async (req, reply) => {
+  const startedAt = Date.now();
+  const body = req.body || {};
+  const message = String(body.message || '').trim();
+  if (!message) return reply.code(400).send({ error: 'message is required' });
+
+  const result = await buildAutoresponderTestReply({
+    message,
+    sender: body.sender || 'teste-bot',
+    contactFirstName: body.contactFirstName || body.contact_first_name || '',
+  });
+
+  return {
+    ok: true,
+    message,
+    sender: result.sender || normalizeAutoresponderSender(body.sender) || 'teste-bot',
+    intent: result.intent || 'unknown',
+    matched_count: Number(result.matched_count || 0),
+    matched_rule_id: result.matched_rule_id || null,
+    response_time_ms: Date.now() - startedAt,
+    replies: Array.isArray(result.replies) ? result.replies : [],
+    warning: result.warning || null,
+  };
+});
+
 fastify.patch('/products/:id/tags', { preHandler: requireSyncKey }, async (req, reply) => {
   const tagIds = Array.isArray(req.body?.tag_ids) ? req.body.tag_ids.map(Number).filter(Number.isFinite) : null;
   if (!tagIds) return reply.code(400).send({ error: 'tag_ids array is required' });
@@ -8758,7 +9059,11 @@ fastify.route({
 
       const contactFlowReply = await handleAutoresponderContactNameFlow({ sender: senderKey, message, contactFirstName });
       if (contactFlowReply) {
-        const contactFlowReplies = Array.isArray(contactFlowReply) ? contactFlowReply : [contactFlowReply];
+        const contactFlowReplies = formatAutoresponderReplies(
+          Array.isArray(contactFlowReply) ? contactFlowReply : [contactFlowReply],
+          settings,
+          false
+        );
         const contactFlowReplyText = contactFlowReplies.join('\n\n');
         await logAutoresponderReply({
           sender: senderKey,
@@ -8792,7 +9097,14 @@ fastify.route({
         const categories = await findAutoresponderAvailableCategories();
         const categoryOptions = buildAutoresponderCategoryOptions(categories);
         const categoryListText = formatAutoresponderGreetingCategoryListReply(categories);
-        const replyText = [greetingText, contactPrompt.trim(), categoryListText].filter(Boolean).join('\n\n');
+        const greetingReplies = shouldConfirmContactName || shouldAskContactName
+          ? formatAutoresponderReplies(
+            [greetingText, [contactPrompt.trim(), categoryListText].filter(Boolean).join('\n\n')],
+            settings,
+            false
+          )
+          : formatAutoresponderReplies([greetingText, contactPrompt.trim(), categoryListText], settings, false);
+        const replyText = greetingReplies.join('\n\n');
         await logAutoresponderReply({
           sender: senderKey,
           message,
@@ -8808,10 +9120,7 @@ fastify.route({
           total: categoryOptions.length,
           hasMore: false,
         });
-        if (shouldConfirmContactName || shouldAskContactName) {
-          return { replies: [{ message: greetingText }, { message: [contactPrompt.trim(), categoryListText].filter(Boolean).join('\n\n') }] };
-        }
-        return { replies: [{ message: replyText }] };
+        return { replies: greetingReplies.map((replyMessage) => ({ message: replyMessage })) };
       }
 
       const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
@@ -10250,6 +10559,179 @@ fastify.delete('/field-presets/:id', { preHandler: requireSyncKey }, async (req,
 });
 
 // ─── Categories ────────────────────────────────────────────────────────────
+// Models: routed through the VPS so the frontend does not write directly to Supabase.
+const MODEL_COMPANY_SLUG = 'mercado-do-vale';
+const MODEL_PAGE_SIZE = 1000;
+
+function generateModelSlug(name) {
+  return String(name || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function mapSupabaseModel(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    brand_id: row.brand_id,
+    active: true,
+    created: row.created_at,
+    updated: row.updated_at,
+    category_id: row.category_id || undefined,
+    description: row.description || undefined,
+    template_values: row.template_values || {},
+    eans: Array.isArray(row.eans) ? row.eans : undefined,
+  };
+}
+
+async function resolveModelCompanyId(companyId) {
+  if (companyId) return companyId;
+  const rows = await supabaseRestSelect('companies', `select=id&slug=eq.${encodeURIComponent(MODEL_COMPANY_SLUG)}&limit=1`);
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row?.id) throw new Error('Default company not found for model operations');
+  return row.id;
+}
+
+async function selectModelsFromSupabase({ companyId, brandId } = {}) {
+  const resolvedCompanyId = await resolveModelCompanyId(companyId);
+  const rows = [];
+  for (let offset = 0; ; offset += MODEL_PAGE_SIZE) {
+    const parts = [
+      'select=*',
+      `company_id=eq.${encodeURIComponent(resolvedCompanyId)}`,
+      'order=name.asc',
+      `limit=${MODEL_PAGE_SIZE}`,
+      `offset=${offset}`,
+    ];
+    if (brandId) parts.splice(2, 0, `brand_id=eq.${encodeURIComponent(brandId)}`);
+    const page = await supabaseRestSelect('models', parts.join('&'));
+    const list = Array.isArray(page) ? page : [];
+    rows.push(...list);
+    if (list.length < MODEL_PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+function isSupabaseConflict(error) {
+  const text = `${error?.message || ''} ${JSON.stringify(error?.body || {})}`.toLowerCase();
+  return error?.status === 409 || text.includes('duplicate') || text.includes('unique') || text.includes('23505');
+}
+
+fastify.get('/models', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
+  const rows = await selectModelsFromSupabase({
+    companyId: req.query?.company_id,
+    brandId: req.query?.brand_id,
+  });
+  return rows.map(mapSupabaseModel);
+});
+
+fastify.get('/models/:id', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const companyId = await resolveModelCompanyId(req.query?.company_id);
+  const rows = await supabaseRestSelect(
+    'models',
+    `select=*&id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+  );
+  const model = mapSupabaseModel(Array.isArray(rows) ? rows[0] : null);
+  if (!model) return reply.code(404).send({ error: 'Modelo nao encontrado.' });
+  return model;
+});
+
+fastify.post('/models', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  if (!body.name || !body.brand_id) {
+    return reply.code(400).send({ error: 'name and brand_id are required' });
+  }
+
+  const companyId = await resolveModelCompanyId(body.company_id);
+  const slug = generateModelSlug(body.name);
+  const existing = await supabaseRestSelect(
+    'models',
+    [
+      'select=id',
+      `company_id=eq.${encodeURIComponent(companyId)}`,
+      `brand_id=eq.${encodeURIComponent(body.brand_id)}`,
+      `slug=eq.${encodeURIComponent(slug)}`,
+      'limit=1',
+    ].join('&')
+  );
+
+  if (Array.isArray(existing) && existing.length > 0) {
+    return reply.code(409).send({ error: 'Ja existe um modelo com esse nome para esta marca.' });
+  }
+
+  try {
+    const rows = await supabaseRestInsert('models', {
+      company_id: companyId,
+      brand_id: body.brand_id,
+      name: String(body.name).trim(),
+      slug,
+      category_id: body.category_id || null,
+      description: body.description || null,
+      template_values: body.template_values || {},
+      eans: Array.isArray(body.eans) && body.eans.length ? body.eans : null,
+    });
+    return reply.code(201).send(mapSupabaseModel(Array.isArray(rows) ? rows[0] : rows));
+  } catch (error) {
+    if (isSupabaseConflict(error)) {
+      return reply.code(409).send({ error: 'Ja existe um modelo com esse nome para esta marca.' });
+    }
+    throw error;
+  }
+});
+
+fastify.put('/models/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  if (!body.name || !body.brand_id) {
+    return reply.code(400).send({ error: 'name and brand_id are required' });
+  }
+
+  const companyId = await resolveModelCompanyId(body.company_id);
+  const currentRows = await supabaseRestSelect(
+    'models',
+    `select=*&id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+  );
+  const current = Array.isArray(currentRows) ? currentRows[0] : null;
+  if (!current) return reply.code(404).send({ error: 'Modelo nao encontrado.' });
+
+  const payload = {
+    name: String(body.name).trim(),
+    brand_id: body.brand_id,
+    category_id: body.category_id || null,
+    description: body.description || null,
+    template_values: body.template_values || {},
+    eans: Array.isArray(body.eans) && body.eans.length ? body.eans : null,
+  };
+  if (payload.name !== current.name) payload.slug = generateModelSlug(payload.name);
+
+  try {
+    const rows = await supabaseRestPatch(
+      'models',
+      `id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}`,
+      payload
+    );
+    return mapSupabaseModel(Array.isArray(rows) ? rows[0] : rows);
+  } catch (error) {
+    if (isSupabaseConflict(error)) {
+      return reply.code(409).send({ error: 'Ja existe um modelo com esse nome para esta marca.' });
+    }
+    throw error;
+  }
+});
+
+fastify.delete('/models/:id', { preHandler: requireSyncKey }, async (req) => {
+  const companyId = await resolveModelCompanyId(req.query?.company_id);
+  await supabaseRestDelete(
+    'models',
+    `id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}`
+  );
+  return { ok: true };
+});
+
 fastify.get('/categories', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [rows] = await pool.query(
     `SELECT id, parent_id, name, slug, config, warranty_days, production_days, sort_order,
@@ -13739,6 +14221,8 @@ async function runMigrations() {
       numbered_list_threshold INT NOT NULL DEFAULT 2,
       numbered_list_validity_minutes INT NOT NULL DEFAULT 30,
       product_tag_keywords JSON NULL,
+      signature_enabled TINYINT(1) NOT NULL DEFAULT 1,
+      signature_message TEXT NULL,
       archive_to_synology TINYINT(1) NOT NULL DEFAULT 1,
       archive_after_days INT NOT NULL DEFAULT 7,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -13754,6 +14238,8 @@ async function runMigrations() {
       auto_pause_fallback_message,
       greeting_prefix,
       fallback_message,
+      signature_enabled,
+      signature_message,
       product_tag_keywords
     ) VALUES (
       1,
@@ -13763,9 +14249,14 @@ async function runMigrations() {
       '${AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE}',
       'Ola!',
       '${AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE}',
+      1,
+      '${AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE}',
       JSON_OBJECT()
     );
   `);
+
+  await addColumnIfMissing('autoresponder_settings', 'signature_enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
+  await addColumnIfMissing('autoresponder_settings', 'signature_message', 'TEXT NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_rules (
@@ -13961,6 +14452,16 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] admin_navigation_logs table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_preferences (
+      preference_key VARCHAR(80) PRIMARY KEY,
+      value_json JSON NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] admin_preferences table: OK');
 }
 
 // Recalcula products.stock_quantity = COUNT(units WHERE status='available') para o produto.

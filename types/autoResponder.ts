@@ -16,6 +16,8 @@ export interface AutoResponderSettings {
     max_replies_window_hours: number;
     greeting_prefix: string;
     fallback_message: string;
+    signature_enabled: boolean | number;
+    signature_message: string;
     send_product_images: boolean | number;
     max_images_per_response: number;
     use_numbered_lists: boolean | number;
@@ -136,6 +138,23 @@ export interface AutoResponderStoreStatus {
     nextOpenAt?: string | null;
     now?: string;
     [key: string]: unknown;
+}
+
+export interface AutoResponderTestReply {
+    message: string;
+    delaySeconds?: number;
+}
+
+export interface AutoResponderTestReplyResult {
+    ok: boolean;
+    message: string;
+    sender: string;
+    intent: string;
+    matched_count: number;
+    matched_rule_id?: number | null;
+    response_time_ms: number;
+    replies: AutoResponderTestReply[];
+    warning?: string | null;
 }
 
 export interface AutoResponderAttachmentUpload {

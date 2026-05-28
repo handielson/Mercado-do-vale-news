@@ -17,6 +17,7 @@ import type {
     AutoResponderSettingsInput,
     AutoResponderStats,
     AutoResponderStoreStatus,
+    AutoResponderTestReplyResult,
     AutoResponderTag,
     AutoResponderTagFilters,
     AutoResponderTagInput,
@@ -146,6 +147,10 @@ export const autoResponderService = {
 
     getStoreStatus: (): Promise<AutoResponderStoreStatus> => {
         return vpsClient.get<AutoResponderStoreStatus>('/autoresponder/store-status');
+    },
+
+    testReply: (input: { message: string; sender?: string; contactFirstName?: string }): Promise<AutoResponderTestReplyResult> => {
+        return vpsClient.post<AutoResponderTestReplyResult>('/autoresponder/test-reply', input);
     },
 
     updateProductTags: (productId: string | number, tagIds: number[]): Promise<AutoResponderOk & { tag_ids: number[] }> => {

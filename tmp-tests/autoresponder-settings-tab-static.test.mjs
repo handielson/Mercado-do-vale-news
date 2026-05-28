@@ -33,6 +33,8 @@ assert(page.includes('autoResponderService.updateSettings'), 'Settings tab must 
   'Pausa humana',
   'Saudação',
   'Prefixo de saudação',
+  'Usar assinatura virtual',
+  'Assinatura das respostas',
   'Auto-pausa',
   'Limites',
   'Imagens',
@@ -51,6 +53,8 @@ assert(page.includes('autoResponderService.updateSettings'), 'Settings tab must 
   'human_pause_minutes',
   'greeting_prefix',
   'fallback_message',
+  'signature_enabled',
+  'signature_message',
   'auto_pause_fallback_threshold',
   'auto_pause_fallback_minutes',
   'auto_pause_fallback_message',
@@ -69,6 +73,7 @@ assert(page.includes('autoResponderService.updateSettings'), 'Settings tab must 
 
 assert(doc.includes('- [x] Bloco "Atendimento humano" (2 textareas + pausa)'), 'Bot_Whatsapp.md must mark human service block');
 assert(doc.includes('- [x] Bloco "Saudação"'), 'Bot_Whatsapp.md must mark greeting block');
+assert(doc.includes('- [x] Bloco "Assinatura virtual" editavel'), 'Bot_Whatsapp.md must mark virtual signature block');
 assert(doc.includes('- [x] Bloco "Auto-pausa"'), 'Bot_Whatsapp.md must mark auto-pause block');
 assert(doc.includes('- [x] Bloco "Limites"'), 'Bot_Whatsapp.md must mark limits block');
 assert(doc.includes('- [x] Bloco "Imagens"'), 'Bot_Whatsapp.md must mark images block');
