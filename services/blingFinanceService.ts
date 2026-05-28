@@ -3,9 +3,54 @@ import type { ContaPagar, ContaReceber, BaixaConta, CreateContaInput } from '../
 import { getValidToken } from './blingService';
 
 const BASE = '/api/bling?resource=finance';
+const MAX_BLING_FINANCE_RANGE_DAYS = 366;
+
+type FinanceListFilters = {
+    dataVencimentoInicio?: string;
+    dataVencimentoFim?: string;
+    situacao?: string;
+};
 
 function financeUrl(params: URLSearchParams): string {
     return `${BASE}&${params.toString()}`;
+}
+
+function parseDateOnly(value?: string): Date | null {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateOnly(date: Date): string {
+    return date.toISOString().slice(0, 10);
+}
+
+function addUtcDays(date: Date, days: number): Date {
+    const next = new Date(date);
+    next.setUTCDate(next.getUTCDate() + days);
+    return next;
+}
+
+function splitFinanceDateRange(filters?: FinanceListFilters): FinanceListFilters[] {
+    const start = parseDateOnly(filters?.dataVencimentoInicio);
+    const end = parseDateOnly(filters?.dataVencimentoFim);
+
+    if (!filters || !start || !end || start > end) return [filters || {}];
+
+    const ranges: FinanceListFilters[] = [];
+    let cursor = start;
+    while (cursor <= end) {
+        const chunkEnd = addUtcDays(cursor, MAX_BLING_FINANCE_RANGE_DAYS - 1);
+        const boundedEnd = chunkEnd < end ? chunkEnd : end;
+        ranges.push({
+            ...filters,
+            dataVencimentoInicio: formatDateOnly(cursor),
+            dataVencimentoFim: formatDateOnly(boundedEnd),
+        });
+        cursor = addUtcDays(boundedEnd, 1);
+    }
+
+    return ranges;
 }
 
 export interface BlingFinanceDebug {
@@ -90,7 +135,7 @@ function buildFinanceDebug(url: string, options: RequestInit, res: Response, jso
     };
 }
 
-// ─── Generic fetch wrapper ───────────────────────────────────
+// â”€â”€â”€ Generic fetch wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function blingFetch(url: string, options: RequestInit = {}): Promise<any> {
     const buildRequest = (rawToken: string): RequestInit => {
         const token = rawToken.startsWith('Bearer') ? rawToken : `Bearer ${rawToken}`;
@@ -116,7 +161,7 @@ async function blingFetch(url: string, options: RequestInit = {}): Promise<any> 
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-        const hint = json?.hint ? ` — ${json.hint}` : '';
+        const hint = json?.hint ? ` â€” ${json.hint}` : '';
         const detail = json?.detail || json?.error?.fields?.map((f: any) => f.msg).join(', ') || json?.message || `Erro ${res.status}`;
         throw new BlingFinanceError(`${detail}${hint}`, buildFinanceDebug(url, options, res, json, retriedAfter401));
     }
@@ -124,57 +169,44 @@ async function blingFetch(url: string, options: RequestInit = {}): Promise<any> 
 
 }
 
-// ─── Contas a Pagar ──────────────────────────────────────────
+// â”€â”€â”€ Contas a Pagar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+async function fetchFinanceList<T extends { id: number }>(
+    resourceType: 'pagar' | 'receber',
+    filters?: FinanceListFilters
+): Promise<T[]> {
+    const fetchPage = async (page: number, chunkFilters: FinanceListFilters) => {
+        const params = new URLSearchParams({ resourceType, action: 'list', limite: '100', pagina: String(page) });
+        if (chunkFilters.dataVencimentoInicio) params.set('dataVencimentoInicio', chunkFilters.dataVencimentoInicio);
+        if (chunkFilters.dataVencimentoFim) params.set('dataVencimentoFim', chunkFilters.dataVencimentoFim);
+        if (chunkFilters.situacao) params.set('situacao', chunkFilters.situacao);
+        const json = await blingFetch(financeUrl(params));
+        return (json?.data || []) as T[];
+    };
+
+    const allContas: T[] = [];
+    for (const chunkFilters of splitFinanceDateRange(filters)) {
+        if (allContas.length > 0) await new Promise(r => setTimeout(r, 400));
+        for (let page = 1; page <= 3; page++) {
+            if (page > 1) await new Promise(r => setTimeout(r, 400)); // Delay p/ evitar Rate Limit (400ms)
+            const pageData = await fetchPage(page, chunkFilters);
+            allContas.push(...pageData);
+            if (pageData.length < 100) break; // Se nÃƒÂ£o encheu a pÃƒÂ¡gina, nÃƒÂ£o tem prÃƒÂ³xima
+        }
+    }
+
+    return allContas.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+}
+
 export const blingFinanceService = {
 
-    async listContasPagar(filters?: {
-        dataVencimentoInicio?: string;
-        dataVencimentoFim?: string;
-        situacao?: string;
-    }): Promise<ContaPagar[]> {
-        const fetchPage = async (page: number) => {
-            const params = new URLSearchParams({ resourceType: 'pagar', action: 'list', limite: '100', pagina: String(page) });
-            if (filters?.dataVencimentoInicio) params.set('dataVencimentoInicio', filters.dataVencimentoInicio);
-            if (filters?.dataVencimentoFim) params.set('dataVencimentoFim', filters.dataVencimentoFim);
-            if (filters?.situacao) params.set('situacao', filters.situacao);
-            const json = await blingFetch(financeUrl(params));
-            return (json?.data || []) as ContaPagar[];
-        };
+    async listContasPagar(filters?: FinanceListFilters): Promise<ContaPagar[]> {
+        return fetchFinanceList<ContaPagar>('pagar', filters);
 
-        const allContas: ContaPagar[] = [];
-        for (let page = 1; page <= 3; page++) {
-            if (page > 1) await new Promise(r => setTimeout(r, 400)); // Delay p/ evitar Rate Limit (400ms)
-            const pageData = await fetchPage(page);
-            allContas.push(...pageData);
-            if (pageData.length < 100) break; // Se não encheu a página, não tem próxima
-        }
-
-        return allContas.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     },
 
-    async listContasReceber(filters?: {
-        dataVencimentoInicio?: string;
-        dataVencimentoFim?: string;
-        situacao?: string;
-    }): Promise<ContaReceber[]> {
-        const fetchPage = async (page: number) => {
-            const params = new URLSearchParams({ resourceType: 'receber', action: 'list', limite: '100', pagina: String(page) });
-            if (filters?.dataVencimentoInicio) params.set('dataVencimentoInicio', filters.dataVencimentoInicio);
-            if (filters?.dataVencimentoFim) params.set('dataVencimentoFim', filters.dataVencimentoFim);
-            if (filters?.situacao) params.set('situacao', filters.situacao);
-            const json = await blingFetch(financeUrl(params));
-            return (json?.data || []) as ContaReceber[];
-        };
+    async listContasReceber(filters?: FinanceListFilters): Promise<ContaReceber[]> {
+        return fetchFinanceList<ContaReceber>('receber', filters);
 
-        const allContas: ContaReceber[] = [];
-        for (let page = 1; page <= 3; page++) {
-            if (page > 1) await new Promise(r => setTimeout(r, 400)); // Delay p/ evitar Rate Limit (400ms)
-            const pageData = await fetchPage(page);
-            allContas.push(...pageData);
-            if (pageData.length < 100) break; // Se não encheu a página, não tem próxima
-        }
-
-        return allContas.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
     },
 
     async getConta(tipo: 'pagar' | 'receber', id: number): Promise<ContaPagar | ContaReceber> {
