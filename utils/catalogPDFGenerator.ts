@@ -6,10 +6,12 @@ import { formatPrice } from '@/services/installmentCalculator';
 import { vpsApiService } from '@/services/vpsApiService';
 
 interface CompanySettings {
-    name: string;
+    name?: string;
+    company_name?: string;
     phone: string;
     email: string;
     address: string;
+    cnpj?: string;
     receipt_logo_url?: string;
 }
 
@@ -188,7 +190,6 @@ export async function generateCatalogPDF(
 
     // Colors
     const primaryColor: [number, number, number] = [37, 99, 235]; // Blue-600
-    const accentColor: [number, number, number] = [59, 130, 246]; // Blue-500
     const darkColor: [number, number, number] = [30, 41, 59]; // Slate-800
     const lightGray: [number, number, number] = [248, 250, 252]; // Slate-50
     const borderColor: [number, number, number] = [226, 232, 240]; // Slate-200
@@ -203,7 +204,7 @@ export async function generateCatalogPDF(
     const addNewPage = async () => {
         doc.addPage();
         currentY = margin;
-        await addHeader();
+        await addWarrantyStyleHeader();
     };
 
     // Helper function to check if we need a new page
@@ -215,19 +216,15 @@ export async function generateCatalogPDF(
         return false;
     };
 
-    // Header function
-    const addHeader = async () => {
-        // Gradient-like header background
-        doc.setFillColor(...primaryColor);
-        doc.rect(0, 0, pageWidth, 45, 'F');
-
-        doc.setFillColor(...accentColor);
-        doc.rect(0, 45, pageWidth, 3, 'F');
-
-        // Company logo (if available)
+    // Header padrao A4, espelhando o cabecalho usado nos termos de garantia.
+    const addWarrantyStyleHeader = async () => {
+        const headerTopY = 12;
+        const headerBottomY = 43;
         const logoSize = 20;
-        const logoX = margin + 5;
-        const logoY = 12;
+        const logoX = margin;
+        const logoY = headerTopY;
+        const companyName = company.company_name || company.name || 'Mercado do Vale';
+        const documentTitle = categoryName ? `Catálogo - ${categoryName}` : 'Catálogo Completo de Produtos';
 
         let hasLogo = false;
         if (company.receipt_logo_url) {
@@ -242,52 +239,69 @@ export async function generateCatalogPDF(
             }
         }
 
-        // Company name
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(22);
-        doc.setFont('helvetica', 'bold');
-        doc.text(company.name, hasLogo ? logoX + logoSize + 5 : margin, 18);
-
-        // Catalog title
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'normal');
-        const title = categoryName ? `Catálogo - ${categoryName}` : 'Catálogo Completo de Produtos';
-        doc.text(title, hasLogo ? logoX + logoSize + 5 : margin, 28);
-
-        // Customer type badge
-        const badgeX = hasLogo ? logoX + logoSize + 5 : margin;
-        doc.setFillColor(255, 255, 255);
-        doc.roundedRect(badgeX, 32, 35, 7, 2, 2, 'F');
-        doc.setTextColor(...primaryColor);
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`${getCustomerTypeLabel(customerType)}`, badgeX + 2, 36.5);
-
-        // Date
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`${new Date().toLocaleDateString('pt-BR')}`, company.receipt_logo_url ? 82 : margin + 37, 36.5);
-
-        // Company info (right side)
-        doc.setFontSize(8);
         const rightX = pageWidth - margin;
-        let infoY = 15;
+        const infoStartY = headerTopY + 3;
 
-        if (company.phone) {
-            doc.text(`Tel: ${company.phone}`, rightX, infoY, { align: 'right' });
-            infoY += 5;
-        }
-        if (company.email) {
-            doc.text(company.email, rightX, infoY, { align: 'right' });
-            infoY += 5;
+        doc.setTextColor(...darkColor);
+        doc.setFontSize(16);
+        doc.setFont('helvetica', 'bold');
+        doc.text(documentTitle.toUpperCase(), rightX, infoStartY, { align: 'right' });
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text(companyName, rightX, infoStartY + 6, { align: 'right' });
+
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        let infoY = infoStartY + 11;
+        if (company.cnpj) {
+            doc.text(`CNPJ: ${company.cnpj}`, rightX, infoY, { align: 'right' });
+            infoY += 4;
         }
         if (company.address) {
-            doc.setFontSize(7);
-            doc.text(company.address, rightX, infoY, { align: 'right' });
+            const addressLines = doc.splitTextToSize(company.address, 82).slice(0, 2);
+            doc.text(addressLines, rightX, infoY, { align: 'right' });
+            infoY += addressLines.length * 4;
+        }
+        const contactLine = [company.phone ? `Tel: ${company.phone}` : '', company.email || '']
+            .filter(Boolean)
+            .join(' | ');
+        if (contactLine) {
+            doc.text(contactLine, rightX, infoY, { align: 'right' });
         }
 
-        currentY = 53;
+        if (!hasLogo) {
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.text(companyName, margin, headerTopY + 12);
+        }
+
+        doc.setDrawColor(51, 51, 51);
+        doc.setLineWidth(0.5);
+        doc.line(margin, headerBottomY, pageWidth - margin, headerBottomY);
+
+        const metadataY = headerBottomY + 8;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...primaryColor);
+        doc.text(getCustomerTypeLabel(customerType), margin, metadataY);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(71, 85, 105);
+        doc.text(new Date().toLocaleDateString('pt-BR'), margin + 28, metadataY);
+
+        const contactSummary: string[] = [];
+        if (company.phone) {
+            contactSummary.push(`Tel: ${company.phone}`);
+        }
+        if (company.email) {
+            contactSummary.push(company.email);
+        }
+        if (contactSummary.length > 0) {
+            doc.text(contactSummary.join(' | '), rightX, metadataY, { align: 'right' });
+        }
+
+        currentY = metadataY + 10;
     };
 
     // Footer function
@@ -320,7 +334,7 @@ export async function generateCatalogPDF(
     };
 
     // Add first page header
-    await addHeader();
+    await addWarrantyStyleHeader();
 
     // Summary box
     doc.setFillColor(...lightGray);
