@@ -12,6 +12,8 @@ interface CompanySettings {
     email: string;
     address: string;
     cnpj?: string;
+    logo?: string;
+    logoUrl?: string;
     receipt_logo_url?: string;
 }
 
@@ -42,6 +44,12 @@ async function loadImageAsBase64(url: string): Promise<string | null> {
         console.error('Error loading image:', error);
         return null;
     }
+}
+
+function detectImageFormat(dataUrl: string): 'PNG' | 'JPEG' | 'WEBP' {
+    if (/^data:image\/jpe?g/i.test(dataUrl)) return 'JPEG';
+    if (/^data:image\/webp/i.test(dataUrl)) return 'WEBP';
+    return 'PNG';
 }
 
 /**
@@ -225,13 +233,14 @@ export async function generateCatalogPDF(
         const logoY = headerTopY;
         const companyName = company.company_name || company.name || 'Mercado do Vale';
         const documentTitle = categoryName ? `Catálogo - ${categoryName}` : 'Catálogo Completo de Produtos';
+        const logoUrl = company.logo || company.logoUrl || company.receipt_logo_url || '';
 
         let hasLogo = false;
-        if (company.receipt_logo_url) {
+        if (logoUrl) {
             try {
-                const logoBase64 = await loadImageAsBase64(company.receipt_logo_url);
+                const logoBase64 = await loadImageAsBase64(logoUrl);
                 if (logoBase64) {
-                    doc.addImage(logoBase64, 'PNG', logoX, logoY, logoSize, logoSize);
+                    doc.addImage(logoBase64, detectImageFormat(logoBase64), logoX, logoY, logoSize, logoSize);
                     hasLogo = true;
                 }
             } catch (error) {

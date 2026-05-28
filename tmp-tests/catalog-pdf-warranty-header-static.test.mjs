@@ -11,6 +11,18 @@ assert.match(
 
 assert.match(
   source,
+  /const\s+logoUrl\s*=\s*company\.logo\s*\|\|\s*company\.logoUrl\s*\|\|\s*company\.receipt_logo_url\s*\|\|\s*''/,
+  'catalog PDF must use the same logo fallback as warranty headers'
+);
+
+assert.match(
+  source,
+  /detectImageFormat\(logoBase64\)/,
+  'catalog PDF must detect the logo image format before adding it to jsPDF'
+);
+
+assert.match(
+  source,
   /doc\.line\(margin,\s*headerBottomY,\s*pageWidth\s*-\s*margin,\s*headerBottomY\)/,
   'catalog PDF header must keep the standard A4 bottom divider line'
 );
