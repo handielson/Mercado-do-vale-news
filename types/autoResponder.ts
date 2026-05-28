@@ -157,6 +157,24 @@ export interface AutoResponderTestReplyResult {
     warning?: string | null;
 }
 
+export interface AutoResponderTestFlowStep {
+    index: number;
+    message: string;
+    status_code: number;
+    response_time_ms: number;
+    replies: AutoResponderTestReply[];
+    body?: unknown;
+}
+
+export interface AutoResponderTestFlowResult {
+    ok: boolean;
+    sender: string;
+    steps: AutoResponderTestFlowStep[];
+    final_purchase_flow?: unknown;
+    cleanup?: boolean;
+    warning?: string | null;
+}
+
 export interface AutoResponderAttachmentUpload {
     ok: boolean;
     url: string;

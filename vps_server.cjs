@@ -10241,6 +10241,108 @@ fastify.route({
   },
 });
 
+async function cleanupAutoresponderTestFlowSender(sender) {
+  const senderKey = normalizeAutoresponderSender(sender) || String(sender || '').trim();
+  if (!senderKey) return;
+  await pool.query('DELETE FROM autoresponder_logs WHERE sender = ?', [senderKey]);
+  await pool.query('DELETE FROM autoresponder_conversations WHERE sender = ?', [senderKey]);
+}
+
+async function runAutoresponderTestFlow({ messages, sender, contactFirstName, cleanup = true }) {
+  const senderKey = normalizeAutoresponderSender(sender) || `teste-fluxo-${Date.now()}`;
+  const token = process.env.AUTORESPONDER_TOKEN || '';
+  if (!token) {
+    return {
+      ok: false,
+      sender: senderKey,
+      steps: [],
+      final_purchase_flow: null,
+      warning: 'AUTORESPONDER_TOKEN nao configurado na VPS.',
+    };
+  }
+
+  await cleanupAutoresponderTestFlowSender(senderKey);
+  const steps = [];
+  let finalPurchaseFlow = null;
+
+  try {
+    for (let index = 0; index < messages.length; index += 1) {
+      const message = String(messages[index] || '').trim();
+      if (!message) continue;
+
+      const startedAt = Date.now();
+      const injected = await fastify.inject({
+        method: 'POST',
+        url: '/autoresponder-webhook',
+        headers: {
+          'content-type': 'application/json',
+          'x-autoresponder-token': token,
+        },
+        payload: {
+          sender: senderKey,
+          message,
+          isGroup: false,
+          name: contactFirstName || '',
+        },
+      });
+
+      let body = null;
+      try {
+        body = injected.payload ? JSON.parse(injected.payload) : null;
+      } catch {
+        body = { raw: injected.payload };
+      }
+
+      steps.push({
+        index: steps.length + 1,
+        message,
+        status_code: injected.statusCode,
+        response_time_ms: Date.now() - startedAt,
+        replies: Array.isArray(body?.replies) ? body.replies : [],
+        body,
+      });
+    }
+
+    const [conversationRows] = await pool.query(
+      'SELECT purchase_flow FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+      [senderKey]
+    );
+    finalPurchaseFlow = normalizeAutoresponderPurchaseFlow(conversationRows[0]?.purchase_flow);
+  } finally {
+    if (cleanup) {
+      await cleanupAutoresponderTestFlowSender(senderKey);
+    }
+  }
+
+  return {
+    ok: steps.every((step) => step.status_code >= 200 && step.status_code < 300),
+    sender: senderKey,
+    steps,
+    final_purchase_flow: finalPurchaseFlow,
+    cleanup,
+  };
+}
+
+fastify.post('/autoresponder/test-flow', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const messages = Array.isArray(body.messages)
+    ? body.messages.map((item) => String(item || '').trim()).filter(Boolean)
+    : String(body.messages || '')
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  if (messages.length === 0) return reply.code(400).send({ error: 'messages array is required' });
+  if (messages.length > 20) return reply.code(400).send({ error: 'maximum 20 messages per test flow' });
+
+  return runAutoresponderTestFlow({
+    messages,
+    sender: body.sender || `teste-fluxo-${Date.now()}`,
+    contactFirstName: body.contactFirstName || body.contact_first_name || '',
+    cleanup: body.cleanup !== false,
+  });
+});
+
 // POST /products/:id/upload-image  (multipart/form-data, campo "file")
 // Retorna: { url: "https://api.xiaomipetrolina.com.br/images/products/:id/img-N.webp" }
 fastify.post('/products/:id/upload-image', { preHandler: requireSyncKey }, async (req, reply) => {
