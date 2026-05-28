@@ -20,7 +20,7 @@ import { buildModelImportPrompt, normalizeModelImportPayload, parseModelImportJs
 interface ModelModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: () => void;
+    onSave: () => void | Promise<void>;
     model?: Model | null;
 }
 
@@ -31,6 +31,232 @@ const normalizeAutocompleteText = (value: string) => value
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+
+const formatModelNameToken = (part: string) => {
+    if (/^\d+[a-z]+$/i.test(part)) {
+        return part.replace(/[a-z]+$/i, (suffix) => suffix.toUpperCase());
+    }
+    if (/^(nfc|usb|gps|wifi|wi-fi|lcd|led|oled|amoled|ips|hd|fullhd|uhd|ram|rom|se)$/i.test(part)) {
+        return part.toUpperCase();
+    }
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+};
+
+const formatModelNameTitleCase = (value: string) => value.replace(
+    /[A-Za-zÀ-ÖØ-öø-ÿ0-9]+(?:[-'][A-Za-zÀ-ÖØ-öø-ÿ0-9]+)*/g,
+    (word) => word
+        .split(/([-'])/)
+        .map((part) => (
+            part === '-' || part === "'"
+                ? part
+                : formatModelNameToken(part)
+        ))
+        .join('')
+);
+
+const NON_TEMPLATE_CATEGORY_KEYS = new Set([
+    'auto_name_enabled',
+    'auto_name_fields',
+    'auto_name_template',
+    'auto_name_separator',
+    'brand',
+    'category_id',
+    'custom_fields',
+    'description',
+    'ean_autofill_config',
+    'images',
+    'keywords',
+    'meta_description',
+    'meta_title',
+    'model',
+    'name',
+    'slug',
+    'tags_venda',
+    'unique_fields',
+    'weight_kg',
+    'dimensions.width_cm',
+    'dimensions.height_cm',
+    'dimensions.depth_cm',
+]);
+
+const CATEGORY_FIELD_LABELS: Record<string, string> = {
+    antutu: 'Antutu',
+    audio: 'Audio',
+    battery_health: 'Saude da Bateria',
+    battery_mah: 'Bateria (mAh)',
+    cam_principal_mpx: 'Camera Principal (MP)',
+    cam_selfie_mpx: 'Camera Selfie (MP)',
+    carregamento: 'Carregamento',
+    celular_biometria: 'Biometria',
+    celular_fps_display: 'FPS do Display',
+    celular_slot_para_cartao: 'Slot para Cartao',
+    celular_tipo_de_protecao_de_tela: 'Protecao de Tela',
+    chipset: 'Chipset',
+    display: 'Display',
+    entrada_fone_de_ouvido: 'Entrada para Fone',
+    gpu: 'GPU',
+    keyboard_support: 'Suporte a Teclado',
+    materials: 'Materiais',
+    nfc: 'NFC',
+    peso_g: 'Peso (g)',
+    pontuacao_dxomak: 'Pontuacao DXOMARK',
+    processador: 'Processador',
+    rede_operadora: 'Rede Operadora',
+    resistencia: 'Resistencia',
+    stylus_support: 'Suporte a Caneta',
+    tipo: 'Tipo',
+    tipo_de_display: 'Tipo de Display',
+    tipo_de_tela: 'Tipo de Tela',
+    versao: 'Versao',
+    weight: 'Peso',
+    dimensions: 'Dimensoes',
+};
+
+const TEMPLATE_VALUE_EXACT_TRANSLATIONS: Record<string, string> = {
+    'yes': 'Sim',
+    'no': 'Nao',
+    'yes (magnetic)': 'Sim (magnetico)',
+    'yes (magnetic pins)': 'Sim (pinos magneticos)',
+};
+
+const TEMPLATE_VALUE_TRANSLATIONS: Array<[RegExp, string]> = [
+    [/Stereo speakers/gi, 'Alto-falantes estereo'],
+    [/Hi-Res Audio/gi, 'Audio Hi-Res'],
+    [/Glass front/gi, 'Frente de vidro'],
+    [/aluminum frame/gi, 'estrutura de aluminio'],
+    [/aluminum back/gi, 'traseira de aluminio'],
+    [/magnetic pins/gi, 'pinos magneticos'],
+    [/magnetic/gi, 'magnetico'],
+    [/\bYes\b/gi, 'Sim'],
+    [/\bNo\b/gi, 'Nao'],
+];
+
+const translateTemplateValueToPortuguese = (value: any) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    const exact = TEMPLATE_VALUE_EXACT_TRANSLATIONS[trimmed.toLowerCase()];
+    if (exact) return exact;
+
+    return TEMPLATE_VALUE_TRANSLATIONS.reduce(
+        (translated, [pattern, replacement]) => translated.replace(pattern, replacement),
+        value
+    );
+};
+
+const translateTemplateValuesToPortuguese = (values: Record<string, any>) => Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [key, translateTemplateValueToPortuguese(value)])
+);
+
+const CATEGORY_FIELD_FALLBACKS: Record<string, Partial<CustomField>> = {
+    battery_health: {
+        field_type: 'table_relation',
+        table_config: {
+            table_name: 'battery_healths',
+            value_column: 'id',
+            label_column: 'name',
+            order_by: 'name ASC',
+        },
+    },
+    color: {
+        field_type: 'table_relation',
+        table_config: {
+            table_name: 'colors',
+            value_column: 'id',
+            label_column: 'name',
+            order_by: 'name ASC',
+        },
+    },
+    ram: {
+        field_type: 'table_relation',
+        table_config: {
+            table_name: 'rams',
+            value_column: 'id',
+            label_column: 'name',
+            order_by: 'name ASC',
+        },
+    },
+    storage: {
+        field_type: 'table_relation',
+        table_config: {
+            table_name: 'storages',
+            value_column: 'id',
+            label_column: 'name',
+            order_by: 'name ASC',
+        },
+    },
+    versao: {
+        field_type: 'table_relation',
+        table_config: {
+            table_name: 'versions',
+            value_column: 'id',
+            label_column: 'name',
+            order_by: 'name ASC',
+        },
+    },
+    version: {
+        field_type: 'table_relation',
+        table_config: {
+            table_name: 'versions',
+            value_column: 'id',
+            label_column: 'name',
+            order_by: 'name ASC',
+        },
+    },
+};
+
+const formatCategoryFieldLabel = (key: string) => {
+    const dictionaryLabel = getFieldDefinition(key)?.label;
+    if (dictionaryLabel) return dictionaryLabel;
+    if (CATEGORY_FIELD_LABELS[key]) return CATEGORY_FIELD_LABELS[key];
+    return key
+        .replace(/^specs\./, '')
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const shouldCreateTemplateFieldFromCategoryConfig = (key: string, value: unknown) => {
+    if (NON_TEMPLATE_CATEGORY_KEYS.has(key)) return false;
+    if (UNIQUE_FIELDS.includes(key)) return false;
+    if (value === 'off' || value === 'hidden') return false;
+    return value !== undefined && value !== null;
+};
+
+const buildCategoryFallbackFields = (
+    categoryConfig: any,
+    existingFields: CustomField[],
+    templateValues: Record<string, any> = {}
+): CustomField[] => {
+    if ((!categoryConfig || typeof categoryConfig !== 'object') && !templateValues) return [];
+    const existingKeys = new Set(existingFields.map(field => field.key));
+    const candidateEntries = [
+        ...Object.entries(categoryConfig || {}),
+        ...Object.keys(templateValues || {}).map((key) => [key, 'template_value'] as const),
+    ];
+    const uniqueEntries = Array.from(new Map(candidateEntries).entries());
+
+    return uniqueEntries
+        .filter(([key, value]) => shouldCreateTemplateFieldFromCategoryConfig(key, value) && !existingKeys.has(key))
+        .map(([key], index) => {
+            const fallback = CATEGORY_FIELD_FALLBACKS[key] || {};
+            return ({
+            id: `category-fallback-${key}`,
+            company_id: '',
+            key,
+            label: formatCategoryFieldLabel(key),
+            category: 'spec',
+            field_type: fallback.field_type || 'text',
+            options: [],
+            validation: {},
+            placeholder: '',
+            help_text: '',
+            table_config: fallback.table_config,
+            is_system: true,
+            display_order: 1000 + index,
+            created_at: '',
+            updated_at: '',
+            } as CustomField);
+        });
+};
 
 /**
  * TemplateFieldInput Component
@@ -280,13 +506,29 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         const fieldLabel = normalizeFieldAlias(field.label);
         return fieldKey === 'tipo' || fieldLabel.includes('receptor');
     };
-    const visibleSpecFields = customFields
+    const templateFields = [
+        ...customFields,
+        ...buildCategoryFallbackFields(categoryConfig, customFields, templateValues),
+    ];
+    const hasCanonicalVersionField = templateFields.some(field => (
+        normalizeFieldAlias(field.key) === 'versao' ||
+        normalizeFieldAlias(field.label) === 'versao'
+    ));
+    const isDuplicateTemplateField = (field: CustomField) => {
+        if (!hasCanonicalVersionField) return false;
+
+        const fieldKey = normalizeFieldAlias(field.key);
+        const fieldLabel = normalizeFieldAlias(field.label);
+        return fieldKey === 'version' || fieldLabel === 'version';
+    };
+    const visibleSpecFields = templateFields
         .filter(f => f.category === 'spec')
         .filter(isFieldEnabledForCategory)
-        .filter(field => !isFieldBlockedForCategory(field));
-    const hiddenSpecFields = customFields
+        .filter(field => !isFieldBlockedForCategory(field))
+        .filter(field => !isDuplicateTemplateField(field));
+    const hiddenSpecFields = templateFields
         .filter(f => f.category === 'spec')
-        .filter(field => !isFieldEnabledForCategory(field) || isFieldBlockedForCategory(field));
+        .filter(field => !isFieldEnabledForCategory(field) || isFieldBlockedForCategory(field) || isDuplicateTemplateField(field));
     const hiddenSpecAliases = hiddenSpecFields.flatMap(field => [field.key, field.label]);
     const isHiddenSpecKey = (key: string) => hiddenSpecAliases.some(alias => {
         return normalizeFieldAlias(alias) === normalizeFieldAlias(key);
@@ -320,10 +562,11 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         const visibleTemplateValues = Object.fromEntries(
             Object.entries(normalized.templateValues || {}).filter(([key]) => !isHiddenSpecKey(key))
         );
+        const translatedTemplateValues = translateTemplateValuesToPortuguese(visibleTemplateValues);
         const appliedFields: string[] = [];
 
         if (normalized.name) {
-            setName(normalized.name);
+            setName(formatModelNameTitleCase(normalized.name));
             appliedFields.push('nome');
         }
         if (normalized.brandId) {
@@ -346,12 +589,12 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             setEans(normalized.eans);
             appliedFields.push('EANs');
         }
-        if (Object.keys(visibleTemplateValues).length > 0) {
+        if (Object.keys(translatedTemplateValues).length > 0) {
             setTemplateValues(prev => ({
                 ...prev,
-                ...visibleTemplateValues
+                ...translatedTemplateValues
             }));
-            appliedFields.push(`${Object.keys(visibleTemplateValues).length} campo(s) do template`);
+            appliedFields.push(`${Object.keys(translatedTemplateValues).length} campo(s) do template`);
         }
 
         if (normalized.missingChoices?.length) {
@@ -552,7 +795,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
     useEffect(() => {
         if (model) {
-            setName(model.name);
+            setName(formatModelNameTitleCase(model.name));
             setBrandId(model.brand_id);
             setBrandSearch(brands.find((brand) => brand.id === model.brand_id)?.name || '');
             setActive(model.active);
@@ -585,19 +828,36 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     const loadData = async () => {
         try {
             setLoading(true);
-            const [brandsData, categoriesData, fieldsData, tagsData] = await Promise.all([
+            const [brandsResult, categoriesResult, fieldsResult, tagsResult] = await Promise.allSettled([
                 brandService.list(),
                 categoryService.list(),
                 customFieldsService.list(),
                 crossSellTagsService.list()
             ]);
-            setBrands(brandsData);
-            setCategories(categoriesData);
-            setOfficialTags(tagsData);
-            // Filter out unique fields
-            setCustomFields(fieldsData.filter(f => !UNIQUE_FIELDS.includes(f.key)));
-        } catch (error) {
-            console.error('Error loading data:', error);
+
+            if (brandsResult.status === 'fulfilled') {
+                setBrands(brandsResult.value);
+            } else {
+                console.error('Error loading model brands:', brandsResult.reason);
+            }
+
+            if (categoriesResult.status === 'fulfilled') {
+                setCategories(categoriesResult.value);
+            } else {
+                console.error('Error loading model categories:', categoriesResult.reason);
+            }
+
+            if (fieldsResult.status === 'fulfilled') {
+                setCustomFields(fieldsResult.value.filter(f => !UNIQUE_FIELDS.includes(f.key)));
+            } else {
+                console.error('Error loading model custom fields:', fieldsResult.reason);
+            }
+
+            if (tagsResult.status === 'fulfilled') {
+                setOfficialTags(tagsResult.value);
+            } else {
+                console.error('Error loading model cross-sell tags:', tagsResult.reason);
+            }
         } finally {
             setLoading(false);
         }
@@ -672,7 +932,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             }
 
             const input: ModelInput = {
-                name: name.trim(),
+                name: formatModelNameTitleCase(name).trim(),
                 brand_id: brandId,
                 active,
                 category_id: categoryId || undefined,
@@ -681,16 +941,17 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 eans: finalEans.length > 0 ? finalEans : undefined
             };
 
-            if (model) {
-                await modelService.update(model.id, input);
-            } else {
-                await modelService.create(input);
-            }
+            const saved = model
+                ? await modelService.update(model.id, input)
+                : await modelService.create(input);
 
-            onSave();
+            await onSave();
+            toast.success(`Modelo "${saved.name}" salvo com sucesso.`);
             onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Erro ao salvar modelo');
+            const message = err instanceof Error ? err.message : 'Erro ao salvar modelo';
+            setError(message);
+            toast.error(message);
         } finally {
             setSaving(false);
         }
@@ -855,7 +1116,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     onChange={(e) => {
                                         const cursorPosition = e.target.selectionStart || 0;
                                         const rawValue = e.target.value;
-                                        const formatted = rawValue;
+                                        const formatted = formatModelNameTitleCase(rawValue);
                                         setName(formatted);
                                         setTimeout(() => {
                                             if (inputRef.current) {
@@ -1080,7 +1341,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         <input
                                             type="text"
                                             value={name}
-                                            onChange={(e) => setName(e.target.value)}
+                                            onChange={(e) => setName(formatModelNameTitleCase(e.target.value))}
                                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                             placeholder="Ex: Redmi A7 Pro"
                                         />

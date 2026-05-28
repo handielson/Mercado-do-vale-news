@@ -9,7 +9,7 @@ interface ProductPricingProps {
     watch: UseFormWatch<ProductInput>;
     setValue: UseFormSetValue<ProductInput>;
     errors?: any;
-    modelId?: string;  // Para buscar médias do estoque atual
+    modelId?: string;
 }
 
 interface StockAverages {
@@ -48,6 +48,11 @@ function normalizeSpecValue(value: unknown): string {
     return String(value || '').trim().toLowerCase();
 }
 
+function toPositiveNumber(value: unknown): number {
+    const numeric = Number(value || 0);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
 function readSpecs(product: any): Record<string, any> {
     if (!product?.specs) return {};
     if (typeof product.specs === 'string') {
@@ -60,15 +65,29 @@ function readSpecs(product: any): Record<string, any> {
     return product.specs;
 }
 
-function matchesMemoryVariation(product: any, selectedRam: string, selectedStorage: string): boolean {
+function readSpecCandidate(specs: Record<string, any>, keys: string[]): string {
+    for (const key of keys) {
+        const value = specs[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+            return String(value);
+        }
+    }
+    return '';
+}
+
+function matchesSmartphoneMemoryCombination(product: any, selectedRam: string, selectedStorage: string): boolean {
     const specs = readSpecs(product);
+    const productRam = readSpecCandidate(specs, ['ram', 'memoria_ram', 'memory_ram']);
+    const productStorage = readSpecCandidate(specs, ['storage', 'armazenamento', 'memoria_interna', 'internal_storage']);
     return (
-        normalizeSpecValue(specs.ram) === normalizeSpecValue(selectedRam) &&
-        normalizeSpecValue(specs.storage) === normalizeSpecValue(selectedStorage)
+        normalizeSpecValue(productRam) === normalizeSpecValue(selectedRam) &&
+        normalizeSpecValue(productStorage) === normalizeSpecValue(selectedStorage)
     );
 }
 
-export function ProductPricing({ watch, setValue, errors, modelId }: ProductPricingProps) {
+const SMARTPHONE_CATEGORY_LABEL = 'Smartphones';
+
+export function ProductPricing({ watch, setValue, errors }: ProductPricingProps) {
     const cost = watch('price_cost') || 0;
     const priceRetail = watch('price_retail') || 0;
     const priceReseller = watch('price_reseller') || 0;
@@ -119,23 +138,23 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
     const [loadingAverages, setLoadingAverages] = useState(false);
 
     useEffect(() => {
-        if (!modelId || !selectedRam || !selectedStorage) { setStockAverages(null); return; }
+        if (!categoryId || !selectedRam || !selectedStorage) { setStockAverages(null); return; }
         let cancelled = false;
         const fetch = async () => {
             setLoadingAverages(true);
             try {
                 const products = await vpsApiService.getProducts({
-                    model_id: modelId,
+                    category: categoryId,
                     status: 'active',
-                    limit: 500,
+                    limit: 5000,
                     noCache: true,
                 });
-                const data = (products || []).filter(product => matchesMemoryVariation(product, selectedRam, selectedStorage));
+                const data = (products || []).filter(product => matchesSmartphoneMemoryCombination(product, selectedRam, selectedStorage));
                 if (cancelled || data.length === 0) { setStockAverages(null); return; }
-                const totalUnits = data.reduce((s, p) => s + (p.stock_quantity || 0), 0);
+                const totalUnits = data.reduce((s, p) => s + toPositiveNumber(p.stock_quantity), 0);
                 if (totalUnits === 0) { setStockAverages(null); return; }
                 const wavg = (field: keyof typeof data[0]) =>
-                    Math.round(data.reduce((s, p) => s + ((p[field] as number) * (p.stock_quantity || 0)), 0) / totalUnits);
+                    Math.round(data.reduce((s, p) => s + (toPositiveNumber(p[field]) * toPositiveNumber(p.stock_quantity)), 0) / totalUnits);
                 if (!cancelled) setStockAverages({
                     totalUnits,
                     avg_cost: wavg('price_cost'),
@@ -149,7 +168,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
         };
         fetch();
         return () => { cancelled = true; };
-    }, [modelId, selectedRam, selectedStorage]);
+    }, [categoryId, selectedRam, selectedStorage]);
     // --- fim médias ---
 
     const rows: PriceRowConfig[] = [
@@ -215,11 +234,12 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
             )}
 
             {/* Painel de Médias do Estoque Atual */}
-            {modelId && selectedRam && selectedStorage && (
+            {categoryId && selectedRam && selectedStorage && (
                 <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
                     <div className="flex items-center gap-2 mb-3">
                         <BarChart2 size={15} className="text-amber-600" />
                         <span className="text-sm font-semibold text-amber-800">Médias do Estoque Atual</span>
+                        <span className="text-xs text-amber-700">{SMARTPHONE_CATEGORY_LABEL}</span>
                         <span className="text-xs text-amber-600">{selectedRam}/{selectedStorage}</span>
                         {loadingAverages && <span className="text-xs text-amber-500 ml-auto">carregando...</span>}
                         {stockAverages && !loadingAverages && (

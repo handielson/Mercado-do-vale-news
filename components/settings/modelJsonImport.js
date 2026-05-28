@@ -53,6 +53,12 @@ const findByIdOrName = (items, value) => {
     return item?.id || '';
 };
 
+const findExistingId = (items, value) => {
+    if (!value) return '';
+    const raw = String(value);
+    return items.some((entry) => entry.id === raw) ? raw : '';
+};
+
 const normalizeKeywords = (value) => {
     if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
     if (typeof value === 'string') {
@@ -149,8 +155,8 @@ export function normalizeModelImportPayload(data, context = {}) {
     const emptyFields = [];
 
     const name = payload.name || payload.nome || payload.modelo || payload.model;
-    const brandId = payload.brand_id || findByIdOrName(brands, payload.brand || payload.marca || payload.brand_name);
-    const categoryId = payload.category_id || findByIdOrName(categories, payload.category || payload.categoria || payload.category_name);
+    const brandId = findExistingId(brands, payload.brand_id) || findByIdOrName(brands, payload.brand || payload.marca || payload.brand_name);
+    const categoryId = findExistingId(categories, payload.category_id) || findByIdOrName(categories, payload.category || payload.categoria || payload.category_name);
     const description = payload.description || payload.descricao || payload['descrição'] || payload.default_description;
     const eans = Array.isArray(payload.eans)
         ? payload.eans.map(String).map((ean) => ean.trim()).filter(Boolean)

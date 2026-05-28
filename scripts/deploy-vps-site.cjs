@@ -5,14 +5,28 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { Client } = require('ssh2');
 
+const ROOT = path.resolve(__dirname, '..');
+
+function getEnvRoots() {
+  const roots = [ROOT];
+  const parts = ROOT.split(path.sep);
+  const worktreesIndex = parts.lastIndexOf('.worktrees');
+  if (worktreesIndex > 0) {
+    const mainRoot = parts.slice(0, worktreesIndex).join(path.sep);
+    roots.push(mainRoot);
+  }
+  return Array.from(new Set(roots));
+}
+
 try {
-  require('dotenv').config({ path: path.join(__dirname, '..', '.env.vps.local') });
-  require('dotenv').config({ path: path.join(__dirname, '..', '.env.local') });
+  for (const envRoot of getEnvRoots()) {
+    require('dotenv').config({ path: path.join(envRoot, '.env.vps.local') });
+    require('dotenv').config({ path: path.join(envRoot, '.env.local') });
+  }
 } catch (_) {
   // dotenv is optional for CI environments that inject variables directly.
 }
 
-const ROOT = path.resolve(__dirname, '..');
 const DIST_DIR = path.join(ROOT, 'dist');
 
 const config = {
@@ -184,7 +198,7 @@ async function main() {
 
     const switchCommand = [
       `mkdir -p ${shellQuote(releasesDir)}`,
-      `if [ -L ${shellQuote(currentLink)} ]; then OLD_TARGET=$(readlink ${shellQuote(currentLink)}); ln -sfn "$OLD_TARGET" ${shellQuote(previousLink)}; fi`,
+      `if [ -L ${shellQuote(currentLink)} ]; then OLD_TARGET=$(readlink -f ${shellQuote(currentLink)} || true); if [ -n "$OLD_TARGET" ] && [ "$OLD_TARGET" != ${shellQuote(previousLink)} ]; then ln -sfn "$OLD_TARGET" ${shellQuote(previousLink)}; fi; fi`,
       `ln -sfn ${shellQuote(releaseDir)} ${shellQuote(currentLink)}`,
     ].join(' && ');
 

@@ -97,6 +97,26 @@ const choiceOptions = {
 }
 
 {
+  const normalized = normalizeModelImportPayload({
+    name: 'Redmi Pad SE 11',
+    brand: 'Xiaomi',
+    category_id: 'categoria-inventada-pela-ia',
+    category: 'Tablets',
+  }, {
+    brands,
+    categories,
+    customFields,
+    choiceOptions,
+  });
+
+  assert.equal(
+    normalized.categoryId,
+    '',
+    'category_id imported from JSON must be ignored when it does not exist in the loaded categories'
+  );
+}
+
+{
   const prompt = buildModelImportPrompt({
     name: 'Galaxy A15',
     brand: 'Samsung',

@@ -33,10 +33,11 @@ async function get(modelId: string, colorId: string): Promise<ModelColorImages |
         .eq('company_id', companyId)
         .eq('model_id', modelId)
         .eq('color_id', colorId)
-        .single();
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
     if (error) {
-        if (error.code === 'PGRST116') return null; // Not found
         throw new Error(`Failed to fetch images: ${error.message}`);
     }
 
@@ -66,17 +67,37 @@ async function getByModel(modelId: string): Promise<ModelColorImages[]> {
 async function upsert(input: ModelColorImagesInput): Promise<ModelColorImages> {
     const companyId = await getCompanyId();
 
-    const { data, error } = await supabase
+    const { data: existingRows, error: selectError } = await supabase
         .from('model_color_images')
-        .upsert({
-            company_id: companyId,
-            model_id: input.model_id,
-            color_id: input.color_id,
-            images: input.images,
-            updated_at: new Date().toISOString()
-        }, {
-            onConflict: 'company_id,model_id,color_id'
-        })
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('model_id', input.model_id)
+        .eq('color_id', input.color_id)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+
+    if (selectError) throw new Error(`Failed to check existing images: ${selectError.message}`);
+
+    const existingId = existingRows?.[0]?.id;
+    const payload = {
+        company_id: companyId,
+        model_id: input.model_id,
+        color_id: input.color_id,
+        images: input.images,
+        updated_at: new Date().toISOString()
+    };
+
+    const query = existingId
+        ? supabase
+            .from('model_color_images')
+            .update(payload)
+            .eq('id', existingId)
+            .eq('company_id', companyId)
+        : supabase
+            .from('model_color_images')
+            .insert(payload);
+
+    const { data, error } = await query
         .select()
         .single();
 

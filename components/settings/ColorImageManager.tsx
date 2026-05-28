@@ -22,10 +22,37 @@ interface ColorWithImages {
     uploading: boolean;
 }
 
+type UploadDebugStage = 'compress' | 'upload_vps' | 'save_model_color_images' | 'unknown';
+
+interface UploadDebugFile {
+    name: string;
+    size: number;
+    type: string;
+    compressedSize?: number;
+    compressedType?: string;
+}
+
+interface UploadDebugEntry {
+    createdAt: string;
+    stage: UploadDebugStage;
+    modelId: string;
+    colorId: string;
+    colorName: string;
+    files: UploadDebugFile[];
+    uploadedImages: string[];
+    existingImagesCount: number;
+    errorName: string;
+    errorMessage: string;
+    stack?: string;
+    pageUrl: string;
+    userAgent: string;
+}
+
 export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId }) => {
     const [colorData, setColorData] = useState<ColorWithImages[]>([]);
     const [expandedColors, setExpandedColors] = useState<Set<string>>(new Set());
     const [initialLoading, setInitialLoading] = useState(true);
+    const [uploadDebugByColor, setUploadDebugByColor] = useState<Record<string, UploadDebugEntry>>({});
 
     useEffect(() => {
         loadAllColors();
@@ -87,20 +114,70 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
         });
     };
 
+    const describeError = (error: unknown) => {
+        if (error instanceof Error) {
+            return {
+                name: error.name || 'Error',
+                message: error.message || String(error),
+                stack: error.stack?.slice(0, 3000)
+            };
+        }
+
+        return {
+            name: typeof error,
+            message: String(error),
+            stack: undefined
+        };
+    };
+
+    const copyUploadDebug = async (colorId: string) => {
+        const debug = uploadDebugByColor[colorId];
+        if (!debug) return;
+
+        try {
+            await navigator.clipboard.writeText(JSON.stringify(debug, null, 2));
+            toast.success('Debug copiado');
+        } catch (error) {
+            console.error('Error copying upload debug:', error);
+            toast.error('Nao foi possivel copiar o debug');
+        }
+    };
+
     const handleImageUpload = async (colorId: string, e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (!files || files.length === 0) return;
 
-        // Update uploading state
+        const selectedFiles = Array.from(files);
+        const currentData = colorData.find(cd => cd.color.id === colorId);
+        const colorName = currentData?.color.name || 'esta cor';
+        const debugFiles: UploadDebugFile[] = selectedFiles.map((file) => ({
+            name: file.name,
+            size: file.size,
+            type: file.type
+        }));
+        const uploadedImages: string[] = [];
+        let currentStage: UploadDebugStage = 'unknown';
+
         setColorData(prev => prev.map(cd =>
             cd.color.id === colorId ? { ...cd, uploading: true } : cd
         ));
+        setUploadDebugByColor(prev => {
+            const next = { ...prev };
+            delete next[colorId];
+            return next;
+        });
 
         try {
-            const uploadedImages: string[] = [];
-
-            for (const file of Array.from(files)) {
+            for (const [index, file] of selectedFiles.entries()) {
+                currentStage = 'compress';
                 const compressed = await compressImage(file);
+                debugFiles[index] = {
+                    ...debugFiles[index],
+                    compressedSize: compressed.size,
+                    compressedType: compressed.type
+                };
+
+                currentStage = 'upload_vps';
                 const uploadedUrl = await uploadModelColorImageToVps(
                     compressed,
                     modelId,
@@ -109,34 +186,49 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
                 uploadedImages.push(uploadedUrl);
             }
 
-            // Get current images for this color
-            const currentData = colorData.find(cd => cd.color.id === colorId);
             const newImages = [...(currentData?.images || []), ...uploadedImages];
 
-            // Save to database
+            currentStage = 'save_model_color_images';
             await modelColorImagesService.upsert({
                 model_id: modelId,
                 color_id: colorId,
                 images: newImages
             });
 
-            // Update state
             setColorData(prev => prev.map(cd =>
                 cd.color.id === colorId
                     ? { ...cd, images: newImages, uploading: false }
                     : cd
             ));
 
-            const colorName = colorData.find(cd => cd.color.id === colorId)?.color.name || 'esta cor';
-            toast.success(`✅ ${uploadedImages.length} foto(s) adicionada(s) para ${colorName}!`);
+            toast.success(`${uploadedImages.length} foto(s) adicionada(s) para ${colorName}!`);
+            e.target.value = '';
         } catch (error) {
-            console.error('Error uploading images:', error);
-            toast.error('❌ Erro ao fazer upload das imagens');
+            const errorDetails = describeError(error);
+            const debug: UploadDebugEntry = {
+                createdAt: new Date().toISOString(),
+                stage: currentStage,
+                modelId,
+                colorId,
+                colorName,
+                files: debugFiles,
+                uploadedImages,
+                existingImagesCount: currentData?.images.length || 0,
+                errorName: errorDetails.name,
+                errorMessage: errorDetails.message,
+                stack: errorDetails.stack,
+                pageUrl: window.location.href,
+                userAgent: navigator.userAgent
+            };
 
-            // Reset uploading state
+            console.error('[ColorImageManager] Upload debug:', debug, error);
+            setUploadDebugByColor(prev => ({ ...prev, [colorId]: debug }));
+            toast.error('Erro ao fazer upload das imagens. Debug gerado abaixo.');
+
             setColorData(prev => prev.map(cd =>
                 cd.color.id === colorId ? { ...cd, uploading: false } : cd
             ));
+            e.target.value = '';
         }
     };
 
@@ -201,6 +293,7 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
             {colorData.map((cd) => {
                 const isExpanded = expandedColors.has(cd.color.id);
                 const hasImages = cd.images.length > 0;
+                const uploadDebug = uploadDebugByColor[cd.color.id];
 
                 return (
                     <div
@@ -226,7 +319,7 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
                                 )}
                             </div>
                             <span className="text-slate-400">
-                                {isExpanded ? '▼' : '▶'}
+                                {isExpanded ? 'v' : '>'}
                             </span>
                         </button>
 
@@ -249,7 +342,7 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
                                                         className="opacity-0 group-hover:opacity-100 bg-white text-slate-700 p-1.5 rounded hover:bg-slate-100 transition-all text-xs"
                                                         title="Mover para esquerda"
                                                     >
-                                                        ←
+                                                        &lt;
                                                     </button>
                                                 )}
                                                 <button
@@ -257,7 +350,7 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
                                                     className="opacity-0 group-hover:opacity-100 bg-red-500 text-white p-1.5 rounded hover:bg-red-600 transition-all text-xs"
                                                     title="Remover"
                                                 >
-                                                    🗑️
+                                                    X
                                                 </button>
                                                 {index < cd.images.length - 1 && (
                                                     <button
@@ -265,7 +358,7 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
                                                         className="opacity-0 group-hover:opacity-100 bg-white text-slate-700 p-1.5 rounded hover:bg-slate-100 transition-all text-xs"
                                                         title="Mover para direita"
                                                     >
-                                                        →
+                                                        &gt;
                                                     </button>
                                                 )}
                                             </div>
@@ -287,7 +380,7 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
                                         />
                                         {cd.uploading ? (
                                             <div className="text-center">
-                                                <div className="animate-spin text-xl mb-1">⏳</div>
+                                                <div className="animate-spin text-xl mb-1">...</div>
                                                 <span className="text-xs text-slate-500">Enviando...</span>
                                             </div>
                                         ) : (
@@ -302,6 +395,29 @@ export const ColorImageManager: React.FC<ColorImageManagerProps> = ({ modelId })
                                 {cd.images.length === 0 && (
                                     <div className="text-center py-6 text-slate-400 text-sm">
                                         Nenhuma foto cadastrada para esta cor.
+                                    </div>
+                                )}
+
+                                {uploadDebug && (
+                                    <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <div className="font-semibold">Debug do upload</div>
+                                                <div className="mt-1">
+                                                    Etapa: <span className="font-mono">{uploadDebug.stage}</span>
+                                                </div>
+                                                <div className="mt-1 break-words">
+                                                    Erro: {uploadDebug.errorMessage}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => copyUploadDebug(cd.color.id)}
+                                                className="shrink-0 rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+                                            >
+                                                Copiar debug
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>

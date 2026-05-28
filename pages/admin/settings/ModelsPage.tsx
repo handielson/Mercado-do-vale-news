@@ -25,6 +25,14 @@ function dateLabel(iso: string) {
     return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+function normalizeModelSearchText(value: string) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]+/g, '')
+        .toLowerCase()
+        .trim();
+}
+
 interface ProductRow {
     id: string;
     name: string;
@@ -474,9 +482,9 @@ export function ModelsPage() {
     // ── Filtragem + Ordenação (client-side) ──
     const filtered = models
         .filter(m => {
-            const brandName = getBrandName(m.brand_id).toLowerCase();
-            const term = search.toLowerCase();
-            if (term && !m.name.toLowerCase().includes(term) && !brandName.includes(term)) return false;
+            const brandName = normalizeModelSearchText(getBrandName(m.brand_id));
+            const term = normalizeModelSearchText(search);
+            if (term && !normalizeModelSearchText(m.name).includes(term) && !brandName.includes(term)) return false;
             
             if (filterBrand && m.brand_id !== filterBrand) return false;
             if (filterStatus === 'active' && !m.active) return false;

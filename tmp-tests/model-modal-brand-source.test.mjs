@@ -16,4 +16,106 @@ assert.doesNotMatch(
   'Model modal must not use listActive because legacy brand active flags can make the selector empty'
 );
 
+assert.match(
+  loadDataBody,
+  /Promise\.allSettled\(\[/,
+  'Model modal must tolerate a partial failure when loading brands/categories/custom fields/tags'
+);
+
+assert.match(
+  loadDataBody,
+  /brandsResult\.status === 'fulfilled'[\s\S]*setBrands\(brandsResult\.value\)/,
+  'Model modal must keep showing brands even if custom fields or cross-sell tags fail'
+);
+
+assert.match(
+  loadDataBody,
+  /fieldsResult\.status === 'fulfilled'[\s\S]*setCustomFields\(fieldsResult\.value\.filter\(f => !UNIQUE_FIELDS\.includes\(f\.key\)\)\)/,
+  'Model modal must keep category template fields isolated from unrelated loader failures'
+);
+
+assert.match(
+  source,
+  /buildCategoryFallbackFields\(categoryConfig, customFields, templateValues\)/,
+  'Model modal must rebuild template fields from category config and existing model values when custom_fields is empty or fails'
+);
+
+assert.match(
+  source,
+  /shouldCreateTemplateFieldFromCategoryConfig[\s\S]*UNIQUE_FIELDS\.includes\(key\)/,
+  'Category fallback fields must still respect unique fields that should not be saved on model templates'
+);
+
+assert.match(
+  source,
+  /templateFields = \[[\s\S]*\.\.\.customFields,[\s\S]*\.\.\.buildCategoryFallbackFields\(categoryConfig, customFields, templateValues\)/,
+  'Visible template fields must combine database fields with category-config fallback fields'
+);
+
+assert.match(
+  source,
+  /CATEGORY_FIELD_FALLBACKS[\s\S]*battery_health[\s\S]*table_name: 'battery_healths'/,
+  'Fallback model fields must preserve battery health as a table relation instead of showing raw UUIDs'
+);
+
+assert.match(
+  source,
+  /Object\.keys\(templateValues \|\| \{\}\)\.map/,
+  'Fallback model fields must include keys already saved on the model, such as memoria_ram_virtual'
+);
+
+assert.match(
+  source,
+  /hasCanonicalVersionField[\s\S]*normalizeFieldAlias\(field\.key\) === 'versao'[\s\S]*normalizeFieldAlias\(field\.label\) === 'versao'/,
+  'Model modal must detect the canonical versao field before hiding duplicated version fields'
+);
+
+assert.match(
+  source,
+  /isDuplicateTemplateField[\s\S]*fieldKey === 'version' \|\| fieldLabel === 'version'/,
+  'Model modal must treat Version (version) as a duplicate when Versao (versao) exists'
+);
+
+assert.match(
+  source,
+  /visibleSpecFields[\s\S]*\.filter\(field => !isDuplicateTemplateField\(field\)\)/,
+  'Visible model template fields must hide duplicated version fields'
+);
+
+assert.match(
+  source,
+  /hiddenSpecFields[\s\S]*isDuplicateTemplateField\(field\)/,
+  'Duplicated version fields must be sanitized with other hidden spec fields before save/import'
+);
+
+assert.match(
+  source,
+  /const formatModelNameTitleCase = \(value: string\) => value\.replace/,
+  'Model modal must have a dedicated title-case formatter for model names'
+);
+
+assert.match(
+  source,
+  /formatModelNameToken[\s\S]*\^\\d\+\[a-z\]\+\$/i,
+  'Model name formatter must uppercase technical tokens like 5G and 128GB instead of leaving them as 5g/128gb'
+);
+
+assert.match(
+  source,
+  /const formatted = formatModelNameTitleCase\(rawValue\);[\s\S]*setName\(formatted\)/,
+  'Typing in the model name field must immediately title-case every word'
+);
+
+assert.match(
+  source,
+  /name: formatModelNameTitleCase\(name\)\.trim\(\)/,
+  'Saving a model must persist the title-cased model name'
+);
+
+assert.match(
+  source,
+  /setName\(formatModelNameTitleCase\(normalized\.name\)\)/,
+  'Applying JSON must title-case the imported model name'
+);
+
 console.log('model-modal-brand-source regression passed');
