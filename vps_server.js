@@ -5743,8 +5743,8 @@ const AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES = {
   product_choice_prompt: 'Responda com o numero da opcao ou com o nome/modelo do produto.',
   fulfillment_prompt: 'Agora preciso confirmar se sera retirada na loja ou entrega.',
   delivery_cep_prompt: 'Combinado: entrega. Me envie o CEP da entrega. Pode mandar somente os numeros.',
-  pickup_reply: 'Combinado: retirada na loja. Agora vou confirmar os dados do cadastro para separar seu pedido.',
-  payment_prompt: 'Como prefere pagar? Posso verificar as opcoes de pagamento para voce.',
+  pickup_reply: 'Combinado: retirada na loja. Agora vamos combinar a forma de pagamento.',
+  payment_prompt: 'Como prefere pagar? Pix, dinheiro, debito ou cartao de credito?',
   human_handoff_reply: 'Vou chamar nossa equipe para continuar seu atendimento por aqui.',
 };
 
@@ -6426,6 +6426,43 @@ async function buildAutoresponderPurchaseActionPrompt(product, selectedOption) {
   return `${card}\n\nResponda:\n*1* Para comprar\n*2* Para detalhes`;
 }
 
+function buildAutoresponderVariationPrompt(variations) {
+  const available = filterAutoresponderAvailableProducts(variations);
+  const lines = [
+    'Antes de seguir, escolha a cor/variacao disponivel:',
+    '',
+  ];
+  available.forEach((variation, index) => {
+    const color = getAutoresponderProductColor(variation) || 'cor sob consulta';
+    const price = formatAutoresponderCurrency(getAutoresponderProductPrice(variation));
+    const stock = Number(variation?.stock_quantity || 0);
+    lines.push(`${index + 1}. ${color} - ${price}${stock > 0 ? ` (${stock} em estoque)` : ''}`);
+  });
+  lines.push('');
+  lines.push('Responda com o numero ou com a cor desejada.');
+  return lines.join('\n');
+}
+
+function findAutoresponderSelectedVariation(message, variations) {
+  const available = filterAutoresponderAvailableProducts(variations);
+  const text = normalizeAutoresponderText(message).trim();
+  const number = text.match(/^\d{1,2}$/) ? Number(text) : null;
+  if (number && available[number - 1]) return available[number - 1];
+  return available.find((variation) => {
+    const color = normalizeAutoresponderText(getAutoresponderProductColor(variation));
+    const name = normalizeAutoresponderText(variation?.name || '');
+    return (color && (color === text || color.includes(text) || text.includes(color)))
+      || (name && (name === text || name.includes(text)));
+  }) || null;
+}
+
+function shouldAutoresponderAskVariation(variations) {
+  const available = filterAutoresponderAvailableProducts(variations);
+  if (available.length <= 1) return false;
+  const colors = getAutoresponderAvailableColors(available);
+  return colors.length > 1 || available.length > 1;
+}
+
 function isAutoresponderPurchaseBuyRequest(message) {
   const text = normalizeAutoresponderText(message).trim();
   return [
@@ -6638,17 +6675,14 @@ function formatAutoresponderCep(value) {
 function parseAutoresponderNumberComplement(message) {
   const text = normalizeAutoresponderDeliveryAddress(message);
   if (!text) return null;
-  const match = text.match(/^(\d+[a-zA-Z]?|s\/n|sn|sem numero)(?:\s*[-,]\s*(.+))?$/i);
+  const match = text.match(/^(\d+[a-zA-Z]?|s\/n|sn|sem numero)(?:\s*(?:[-,]\s*)?(.+))?$/i);
   if (match) {
     return {
       number: match[1],
       complement: normalizeAutoresponderDeliveryAddress(match[2] || ''),
     };
   }
-  return {
-    number: text,
-    complement: '',
-  };
+  return null;
 }
 
 function isAutoresponderFullName(value) {
@@ -6663,7 +6697,7 @@ function buildAutoresponderFullNamePrompt(settings = null) {
 }
 
 function buildAutoresponderPickupConfirmationReply(settings = null) {
-  return getAutoresponderConversationFlowMessage(settings, 'pickup_reply', 'Combinado: retirada na loja. Agora vou confirmar os dados do cadastro para separar seu pedido.');
+  return getAutoresponderConversationFlowMessage(settings, 'pickup_reply', 'Combinado: retirada na loja. Agora vamos combinar a forma de pagamento.');
 }
 
 function buildAutoresponderDeliveryAddressPrompt(settings = null) {
@@ -6692,7 +6726,9 @@ function buildAutoresponderDeliveryCepConfirmationReply(address, shippingQuote) 
     lines.push('Nao encontrei uma regra de frete automatica para esse CEP. Vou deixar para o atendente confirmar o valor.');
     lines.push('');
   }
-  lines.push('Esta correto? Responda "sim" para confirmar ou envie outro CEP.');
+  lines.push('Se estiver correto, me envie o numero da casa.');
+  lines.push('Se tiver complemento, pode mandar junto. Ex: 123 apto 202');
+  lines.push('Se esse nao for o endereco, envie outro CEP.');
   return lines.join('\n');
 }
 
@@ -6726,8 +6762,30 @@ function buildAutoresponderDeliveryAddressSavedReply(purchaseFlow = {}) {
     lines.push(`Total com frete: ${formatAutoresponderCurrency(totals.total_cents / 100)}`);
   }
   lines.push('');
-  lines.push('Agora vou confirmar os dados do cadastro para separar seu pedido.');
+  lines.push('Agora vamos combinar a forma de pagamento.');
   return lines.join('\n');
+}
+
+async function promptAutoresponderPaymentMethod({ senderKey, message, purchaseFlow, settings, intent = 'purchase_payment_method_prompt' }) {
+  const totals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+  const nextFlow = {
+    ...purchaseFlow,
+    status: 'awaiting_payment_method',
+    totals,
+    selected_payment: null,
+  };
+  const replyText = formatAutoresponderReply(buildAutoresponderPaymentMethodPrompt(nextFlow), settings, false);
+  await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
+  await logAutoresponderReply({
+    sender: senderKey,
+    message,
+    intent,
+    replyText,
+    matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+    matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+  });
+  await upsertAutoresponderSuccessConversation(senderKey);
+  return { replies: [{ message: replyText }] };
 }
 
 async function handleAutoresponderDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep }) {
@@ -6767,6 +6825,44 @@ async function handleAutoresponderDeliveryCepLookup({ senderKey, message, purcha
     replyText,
     matchedCount: shippingOptions.length,
     matchedProducts: shippingOptions,
+  });
+  await upsertAutoresponderSuccessConversation(senderKey);
+  return { replies: [{ message: replyText }] };
+}
+
+async function handleAutoresponderDeliveryNumberInput({ senderKey, message, purchaseFlow, settings }) {
+  const numberData = parseAutoresponderNumberComplement(message);
+  if (!numberData) return null;
+
+  const lookup = purchaseFlow.delivery_address_lookup || {};
+  const deliveryAddress = {
+    cep: normalizeAutoresponderCep(lookup.cep),
+    street: lookup.street || '',
+    neighborhood: lookup.neighborhood || '',
+    city: lookup.city || '',
+    state: lookup.state || '',
+    number: numberData.number,
+    complement: numberData.complement,
+  };
+  const nextFlow = {
+    ...purchaseFlow,
+    status: 'awaiting_payment_method',
+    fulfillment: 'delivery',
+    delivery_address: deliveryAddress,
+  };
+  const replyText = formatAutoresponderReply(
+    `${buildAutoresponderDeliveryAddressSavedReply(nextFlow)}\n\n${buildAutoresponderPaymentMethodPrompt(nextFlow)}`,
+    settings,
+    false
+  );
+  await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
+  await logAutoresponderReply({
+    sender: senderKey,
+    message,
+    intent: 'purchase_delivery_number_saved',
+    replyText,
+    matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
+    matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
   });
   await upsertAutoresponderSuccessConversation(senderKey);
   return { replies: [{ message: replyText }] };
@@ -7276,7 +7372,13 @@ function formatAutoresponderAttendantOrderSummary(purchaseFlow = {}, sender = ''
 
   if (selectedPayment?.installments) {
     lines.push(`Pagamento: Cartao em ${selectedPayment.installments}x de ${formatAutoresponderCurrency(Number(selectedPayment.value_cents || selectedPayment.value || 0) / 100)}`);
+    if (Number(selectedPayment.entry_cents || 0) > 0) {
+      lines.push(`Entrada: ${formatAutoresponderCurrency(Number(selectedPayment.entry_cents || 0) / 100)}`);
+    }
     lines.push(`Total no cartao: ${formatAutoresponderCurrency(Number(selectedPayment.total_cents || selectedPayment.total || 0) / 100)}`);
+  } else if (selectedPayment?.method) {
+    lines.push(`Pagamento: ${selectedPayment.label || selectedPayment.method}`);
+    lines.push(`Total a vista: ${formatAutoresponderCurrency(Number(selectedPayment.total_cents || totals.total_cents || 0) / 100)}`);
   } else {
     lines.push('Pagamento: nao escolhido');
   }
@@ -7514,14 +7616,20 @@ function normalizeAutoresponderPriceValue(value) {
   return amount / 100;
 }
 
+function normalizeAutoresponderPriceCents(value) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return Math.round(amount);
+}
+
 function getAutoresponderProductPrice(product) {
-  const promoPrice = normalizeAutoresponderPriceValue(product?.price_promo);
-  const retailPrice = normalizeAutoresponderPriceValue(product?.price_retail);
-  return promoPrice > 0 ? promoPrice : retailPrice;
+  return getAutoresponderProductPriceCents(product) / 100;
 }
 
 function getAutoresponderProductPriceCents(product) {
-  return Math.round(getAutoresponderProductPrice(product) * 100);
+  const promoPrice = normalizeAutoresponderPriceCents(product?.price_promo);
+  const retailPrice = normalizeAutoresponderPriceCents(product?.price_retail);
+  return promoPrice > 0 ? promoPrice : retailPrice;
 }
 
 function getAutoresponderProductGroupKey(product) {
@@ -7726,6 +7834,8 @@ function buildAutoresponderSelectedInstallmentPayment(requestedInstallments, ins
     value_cents: Number(selectedOption.value || 0),
     total_cents: Number(selectedOption.total || 0),
     base_total_cents: Number(totalCents || 0),
+    entry_cents: Number(selectedOption.entry_cents || 0),
+    card_base_cents: Number(selectedOption.card_base_cents || totalCents || 0),
     applied_fee_pct: Number(selectedOption.appliedFeePct || 0),
     label: `Cartao em ${selectedOption.installments}x de ${formatAutoresponderCurrency(Number(selectedOption.value || 0) / 100)}`,
   };
@@ -7738,10 +7848,103 @@ function buildAutoresponderSelectedInstallmentReply(selectedPayment) {
   return [
     'Combinado, deixei o pagamento como:',
     `Cartao em ${selectedPayment.installments}x de ${formatAutoresponderCurrency(Number(selectedPayment.value_cents || 0) / 100)}`,
+    Number(selectedPayment.entry_cents || 0) > 0 ? `Entrada: ${formatAutoresponderCurrency(Number(selectedPayment.entry_cents || 0) / 100)}` : '',
     `Total no cartao: ${formatAutoresponderCurrency(Number(selectedPayment.total_cents || 0) / 100)}`,
     '',
-    'Agora posso seguir com o fechamento do pedido.',
+    'Agora vou confirmar os dados do cadastro para separar seu pedido.',
+  ].filter(Boolean).join('\n');
+}
+
+function buildAutoresponderPaymentMethodPrompt(purchaseFlow = {}) {
+  const totals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+  return [
+    'Como prefere pagar? Pix, dinheiro, debito ou cartao de credito?',
+    '',
+    `Total a vista: ${formatAutoresponderCurrency(Number(totals.total_cents || 0) / 100)}`,
   ].join('\n');
+}
+
+function getAutoresponderPaymentMethodChoice(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  if (/\b(pix)\b/.test(text)) return 'pix';
+  if (/\b(dinheiro|especie)\b/.test(text)) return 'cash';
+  if (/\b(debito|cartao de debito)\b/.test(text)) return 'debit';
+  if (/\b(credito|cartao|cartao de credito|parcelado|parcelar)\b/.test(text)) return 'credit';
+  return null;
+}
+
+function buildAutoresponderCashPaymentSelectedReply(method, purchaseFlow = {}) {
+  const labels = {
+    pix: 'Pix',
+    cash: 'dinheiro',
+    debit: 'debito',
+  };
+  const totals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+  return [
+    `Combinado, deixei o pagamento como ${labels[method] || 'a vista'}.`,
+    `Total a vista: ${formatAutoresponderCurrency(Number(totals.total_cents || 0) / 100)}`,
+    '',
+    'Agora vou confirmar os dados do cadastro para separar seu pedido.',
+  ].join('\n');
+}
+
+function buildAutoresponderCardEntryPrompt(purchaseFlow = {}) {
+  const totals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+  return [
+    'Vai ter entrada para abater antes de parcelar no cartao?',
+    '',
+    `Total do pedido: ${formatAutoresponderCurrency(Number(totals.total_cents || 0) / 100)}`,
+    '',
+    'Se tiver, envie o valor da entrada. Ex: 200',
+    'Se nao tiver entrada, responda "sem entrada".',
+  ].join('\n');
+}
+
+function parseAutoresponderPaymentEntryCents(message, totalCents = 0) {
+  const text = normalizeAutoresponderText(message).trim();
+  if (/^(sem entrada|nao|não|0|zero)$/.test(text)) return 0;
+  const raw = String(message || '').replace(/[^\d,\.]/g, '').trim();
+  if (!raw) return null;
+  let normalized = raw;
+  if (raw.includes(',') && raw.includes('.')) {
+    normalized = raw.replace(/\./g, '').replace(',', '.');
+  } else if (raw.includes(',')) {
+    normalized = raw.replace(',', '.');
+  }
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  const cents = Math.round(amount * 100);
+  const safeTotal = Math.max(Math.round(Number(totalCents) || 0), 0);
+  if (safeTotal > 0 && cents >= safeTotal) return safeTotal;
+  return cents;
+}
+
+function attachAutoresponderEntryToInstallments(options, entryCents, cardBaseCents) {
+  return (Array.isArray(options) ? options : []).map((option) => ({
+    ...option,
+    entry_cents: Math.max(Math.round(Number(entryCents) || 0), 0),
+    card_base_cents: Math.max(Math.round(Number(cardBaseCents) || 0), 0),
+  }));
+}
+
+function buildAutoresponderInstallmentTableReply(installmentOptions, totalCents = 0, entryCents = 0) {
+  const options = Array.isArray(installmentOptions) ? installmentOptions : [];
+  const cardBaseCents = Math.max(Number(totalCents || 0) - Number(entryCents || 0), 0);
+  const lines = [
+    'Tabela do cartao',
+    `Total do pedido: ${formatAutoresponderCurrency(Number(totalCents || 0) / 100)}`,
+  ];
+  if (Number(entryCents || 0) > 0) {
+    lines.push(`Entrada: ${formatAutoresponderCurrency(Number(entryCents || 0) / 100)}`);
+  }
+  lines.push(`Valor no cartao: ${formatAutoresponderCurrency(cardBaseCents / 100)}`);
+  lines.push('');
+  options.forEach((option) => {
+    lines.push(`${option.installments}x de ${formatAutoresponderCurrency(Number(option.value || 0) / 100)} = ${formatAutoresponderCurrency(Number(option.total || 0) / 100)}`);
+  });
+  lines.push('');
+  lines.push('Responda com a parcela escolhida. Ex: 5x');
+  return lines.join('\n');
 }
 
 function formatAutoresponderSpecificInstallmentReply(requestedInstallments, installmentOptions, totalCents) {
@@ -8012,11 +8215,21 @@ function formatAutoresponderWarrantyPeriod(days) {
   return safeDays === 1 ? '1 dia' : `${safeDays} dias`;
 }
 
+function isAutoresponderXiaomiBrand(brandName) {
+  const text = normalizeAutoresponderText(brandName);
+  return /\b(xiaomi|redmi|poco)\b/.test(text);
+}
+
+function isAutoresponderRealmeBrand(brandName) {
+  return /\brealme\b/.test(normalizeAutoresponderText(brandName));
+}
+
 function formatAutoresponderProductWarrantyLine(product) {
   const productWarrantyType = String(product?.warranty_type || 'brand').toLowerCase();
   const brandName = String(product?.brand || '').trim();
   const brandPeriod = formatAutoresponderWarrantyPeriod(product?.brand_warranty_days);
   const categoryPeriod = formatAutoresponderWarrantyPeriod(product?.category_warranty_days);
+  const period = categoryPeriod || brandPeriod;
 
   if (productWarrantyType === 'custom' || productWarrantyType === 'template' || product?.warranty_template_id) {
     return 'Garantia: conforme termo configurado neste produto.';
@@ -8030,8 +8243,15 @@ function formatAutoresponderProductWarrantyLine(product) {
     return `Garantia: ${categoryPeriod ? `${categoryPeriod} conforme configuracao deste produto` : 'conforme configuracao deste produto'}`;
   }
 
+  if (isAutoresponderXiaomiBrand(brandName)) {
+    return `Garantia: ${period ? `${period} pela loja` : 'pela loja'}`;
+  }
+
+  if (isAutoresponderRealmeBrand(brandName)) {
+    return `Garantia: ${period ? `${period} pelo fabricante` : 'pelo fabricante'}`;
+  }
+
   if (productWarrantyType === 'store' || productWarrantyType === 'loja') {
-    const period = categoryPeriod || brandPeriod;
     return `Garantia: ${period ? `${period} pela loja` : 'pela loja'}`;
   }
 
@@ -8257,7 +8477,7 @@ function formatAutoresponderProductDescriptionLine(product) {
 async function findAutoresponderProductVariations(product) {
   if (!product?.model_id) return product ? [product] : [];
   const [rows] = await pool.query(
-    `SELECT id, model_id, category_id, brand, name, slug, price_retail, price_promo, stock_quantity, specs, custom_fields
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields
      FROM products
      WHERE status = 'active'
        AND (is_parent = 0 OR is_parent IS NULL)
@@ -8283,11 +8503,21 @@ function formatAutoresponderProductVariationsBlock(variations) {
   }
 
   const lines = ['Variacoes disponiveis:'];
+  let optionNumber = 1;
   for (const group of byName.values()) {
     const colors = getAutoresponderAvailableColors(group.items);
-    const colorText = colors.length > 0 ? colors.join(', ') : 'cor sob consulta';
     const priceRange = formatAutoresponderPriceRange(group.items);
-    lines.push(`- ${group.name}: ${colorText} (${priceRange})`);
+    if (colors.length > 0) {
+      colors.forEach((color) => {
+        const colorItems = group.items.filter((item) => normalizeAutoresponderText(getAutoresponderProductColor(item)) === normalizeAutoresponderText(color));
+        const colorPrice = formatAutoresponderPriceRange(colorItems.length > 0 ? colorItems : group.items);
+        lines.push(`${optionNumber}. ${color} - ${colorPrice}`);
+        optionNumber += 1;
+      });
+    } else {
+      lines.push(`${optionNumber}. ${group.name} - ${priceRange}`);
+      optionNumber += 1;
+    }
   }
   return lines.join('\n');
 }
@@ -8306,29 +8536,34 @@ async function formatAutoresponderProductDetailReply(product, settings = null) {
     `Preco: ${formatAutoresponderCurrency(price)}`,
   ];
 
-  const descriptionLine = formatAutoresponderProductDescriptionLine(product);
-  if (descriptionLine) lines.push(descriptionLine);
-
   const variationsBlock = formatAutoresponderProductVariationsBlock(
     await findAutoresponderProductVariations(product)
   );
-  if (variationsBlock) lines.push(variationsBlock);
+  if (variationsBlock) {
+    lines.push('');
+    lines.push(variationsBlock);
+  }
 
   const installmentLine = formatAutoresponderInstallmentLine(
     await calculateAutoresponderMaxInstallment(getAutoresponderProductPriceCents(product))
   );
-  if (installmentLine) lines.push(installmentLine);
-
-  const warrantyLine = formatAutoresponderProductWarrantyLine(product);
-  if (warrantyLine) lines.push(warrantyLine);
-
-  if (product.slug) {
-    lines.push(`Link: ${getAutoresponderProductUrl(product)}`);
+  if (installmentLine) {
+    lines.push('');
+    lines.push(installmentLine.replace('Parcelamento:', 'Parcelamento no cartao:'));
   }
 
-  if (shouldAutoresponderSendProductImages(settings)) {
-    const imageUrl = getAutoresponderProductMainImage(product);
-    if (imageUrl) lines.push(`Imagem: ${imageUrl}`);
+  const warrantyLine = formatAutoresponderProductWarrantyLine(product);
+  if (warrantyLine) {
+    lines.push('');
+    lines.push(warrantyLine);
+  }
+
+  if (product.slug) {
+    lines.push('');
+    lines.push('Link do produto:');
+    lines.push(getAutoresponderProductUrl(product));
+    lines.push('');
+    lines.push('Acesse o link para ver especificacoes, fotos e video demonstrativo do produto.');
   }
 
   return lines.join('\n');
@@ -10318,12 +10553,20 @@ fastify.route({
       if (purchaseFlow.status === 'summary_ready' && hasAutoresponderCartItems(purchaseFlow)) {
         const fulfillmentChoice = getAutoresponderPurchaseFulfillmentChoice(message);
         if (fulfillmentChoice === 'pickup') {
-          const replyText = formatAutoresponderReply(buildAutoresponderPickupConfirmationReply(settings), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
+          const nextFlow = {
             ...purchaseFlow,
-            status: 'customer_data_pending',
+            status: 'awaiting_payment_method',
             fulfillment: 'pickup',
             delivery_address: null,
+          };
+          const replyText = formatAutoresponderReply(
+            `${buildAutoresponderPickupConfirmationReply(settings)}\n\n${buildAutoresponderPaymentMethodPrompt(nextFlow)}`,
+            settings,
+            false
+          );
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...nextFlow,
+            totals: calculateAutoresponderCartTotalsWithShipping(nextFlow.items, nextFlow),
           });
           await logAutoresponderReply({
             sender: senderKey,
@@ -10373,6 +10616,8 @@ fastify.route({
         if (replacementCep) {
           return await handleAutoresponderDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep: replacementCep });
         }
+        const directNumberReply = await handleAutoresponderDeliveryNumberInput({ senderKey, message, purchaseFlow, settings });
+        if (directNumberReply) return directNumberReply;
         if (isAutoresponderNo(message)) {
           const nextFlow = {
             ...purchaseFlow,
@@ -10406,30 +10651,53 @@ fastify.route({
       }
 
       if (purchaseFlow.status === 'awaiting_delivery_number' && hasAutoresponderCartItems(purchaseFlow)) {
-        const numberData = parseAutoresponderNumberComplement(message);
-        if (numberData) {
-          const lookup = purchaseFlow.delivery_address_lookup || {};
-          const deliveryAddress = {
-            cep: normalizeAutoresponderCep(lookup.cep),
-            street: lookup.street || '',
-            neighborhood: lookup.neighborhood || '',
-            city: lookup.city || '',
-            state: lookup.state || '',
-            number: numberData.number,
-            complement: numberData.complement,
+        const numberReply = await handleAutoresponderDeliveryNumberInput({ senderKey, message, purchaseFlow, settings });
+        if (numberReply) return numberReply;
+      }
+
+      if (purchaseFlow.status === 'awaiting_payment_method' && hasAutoresponderCartItems(purchaseFlow)) {
+        const paymentMethod = getAutoresponderPaymentMethodChoice(message);
+        const cartTotals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+        if (paymentMethod && ['pix', 'cash', 'debit'].includes(paymentMethod)) {
+          const selectedPayment = {
+            method: paymentMethod,
+            label: paymentMethod === 'pix' ? 'Pix' : paymentMethod === 'cash' ? 'Dinheiro' : 'Debito',
+            total_cents: cartTotals.total_cents,
+            base_total_cents: cartTotals.total_cents,
           };
           const nextFlow = {
             ...purchaseFlow,
             status: 'customer_data_pending',
-            fulfillment: 'delivery',
-            delivery_address: deliveryAddress,
+            totals: cartTotals,
+            selected_payment: selectedPayment,
           };
-          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressSavedReply(nextFlow), settings, false);
+          const replyText = formatAutoresponderReply(buildAutoresponderCashPaymentSelectedReply(paymentMethod, nextFlow), settings, false);
           await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
           await logAutoresponderReply({
             sender: senderKey,
             message,
-            intent: 'purchase_delivery_number_saved',
+            intent: 'purchase_payment_cash_selected',
+            replyText,
+            matchedCount: 1,
+            matchedProducts: [selectedPayment],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+
+        if (paymentMethod === 'credit') {
+          const nextFlow = {
+            ...purchaseFlow,
+            status: 'awaiting_card_entry',
+            totals: cartTotals,
+            payment_method: 'credit',
+          };
+          const replyText = formatAutoresponderReply(buildAutoresponderCardEntryPrompt(nextFlow), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_payment_card_entry_prompt',
             replyText,
             matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
             matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
@@ -10437,6 +10705,92 @@ fastify.route({
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: replyText }] };
         }
+
+        return await promptAutoresponderPaymentMethod({ senderKey, message, purchaseFlow, settings });
+      }
+
+      if (purchaseFlow.status === 'awaiting_card_entry' && hasAutoresponderCartItems(purchaseFlow)) {
+        const cartTotals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+        const entryCents = parseAutoresponderPaymentEntryCents(message, cartTotals.total_cents);
+        if (entryCents === null) {
+          const replyText = formatAutoresponderReply(buildAutoresponderCardEntryPrompt(purchaseFlow), settings, false);
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+        const cardBaseCents = Math.max(Number(cartTotals.total_cents || 0) - Number(entryCents || 0), 0);
+        const installmentOptions = attachAutoresponderEntryToInstallments(
+          await calculateAutoresponderInstallmentOptions(cardBaseCents, 12),
+          entryCents,
+          cardBaseCents
+        );
+        const nextFlow = {
+          ...purchaseFlow,
+          status: 'awaiting_card_installments',
+          totals: cartTotals,
+          card_entry_cents: entryCents,
+          card_base_cents: cardBaseCents,
+          installment_options: installmentOptions,
+        };
+        const replyText = formatAutoresponderReply(
+          buildAutoresponderInstallmentTableReply(installmentOptions, cartTotals.total_cents, entryCents),
+          settings,
+          false
+        );
+        await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'purchase_payment_card_installments',
+          replyText,
+          matchedCount: installmentOptions.length,
+          matchedProducts: installmentOptions,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
+      }
+
+      if (purchaseFlow.status === 'awaiting_card_installments' && hasAutoresponderCartItems(purchaseFlow)) {
+        const requestedInstallments = getAutoresponderRequestedInstallments(message);
+        const cartTotals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+        const entryCents = Number(purchaseFlow.card_entry_cents || 0);
+        const cardBaseCents = Math.max(Number(cartTotals.total_cents || 0) - entryCents, 0);
+        const installmentOptions = Array.isArray(purchaseFlow.installment_options) && purchaseFlow.installment_options.length > 0
+          ? purchaseFlow.installment_options
+          : attachAutoresponderEntryToInstallments(
+            await calculateAutoresponderInstallmentOptions(cardBaseCents, 12),
+            entryCents,
+            cardBaseCents
+          );
+        const selectedPayment = requestedInstallments
+          ? buildAutoresponderSelectedInstallmentPayment(requestedInstallments, installmentOptions, cardBaseCents)
+          : null;
+        if (selectedPayment) {
+          const nextFlow = {
+            ...purchaseFlow,
+            status: 'customer_data_pending',
+            totals: cartTotals,
+            selected_payment: selectedPayment,
+          };
+          const replyText = formatAutoresponderReply(buildAutoresponderSelectedInstallmentReply(selectedPayment), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_payment_card_selected',
+            replyText,
+            matchedCount: 1,
+            matchedProducts: [selectedPayment],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+        const replyText = formatAutoresponderReply(
+          buildAutoresponderInstallmentTableReply(installmentOptions, cartTotals.total_cents, entryCents),
+          settings,
+          false
+        );
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
       }
 
       if (purchaseFlow.status === 'awaiting_customer_full_name' && hasAutoresponderCartItems(purchaseFlow)) {
@@ -10826,6 +11180,33 @@ fastify.route({
         if (isAutoresponderPurchaseBuyRequest(message)) {
           const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
           const selectedProduct = product || purchaseFlow.selected_product;
+          const variations = await findAutoresponderProductVariations(selectedProduct);
+          if (shouldAutoresponderAskVariation(variations)) {
+            const replyText = formatAutoresponderReply(buildAutoresponderVariationPrompt(variations), settings, false);
+            await saveAutoresponderPurchaseFlow(senderKey, {
+              ...purchaseFlow,
+              status: 'awaiting_variation',
+              variation_options: variations.map((variation) => ({
+                id: variation.id,
+                name: variation.name,
+                sku: variation.sku,
+                slug: variation.slug,
+                color: getAutoresponderProductColor(variation),
+                price_cents: getAutoresponderProductPriceCents(variation),
+                stock_quantity: variation.stock_quantity == null ? null : Number(variation.stock_quantity),
+              })),
+            });
+            await logAutoresponderReply({
+              sender: senderKey,
+              message,
+              intent: 'purchase_variation_prompt',
+              replyText,
+              matchedCount: variations.length,
+              matchedProducts: variations,
+            });
+            await upsertAutoresponderSuccessConversation(senderKey);
+            return { replies: [{ message: replyText }] };
+          }
           const replyText = formatAutoresponderReply(buildAutoresponderQuantityPrompt(selectedProduct), settings, false);
           await saveAutoresponderPurchaseFlow(senderKey, {
             ...purchaseFlow,
@@ -10871,6 +11252,45 @@ fastify.route({
 
           return { replies: [{ message: replyText }] };
         }
+      }
+
+      if (purchaseFlow.status === 'awaiting_variation' && purchaseFlow.selected_product?.id) {
+        const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
+        const variations = Array.isArray(purchaseFlow.variation_options) && purchaseFlow.variation_options.length > 0
+          ? purchaseFlow.variation_options
+          : await findAutoresponderProductVariations(product || purchaseFlow.selected_product);
+        const selectedVariation = findAutoresponderSelectedVariation(message, variations);
+        if (!selectedVariation) {
+          const replyText = formatAutoresponderReply(buildAutoresponderVariationPrompt(variations), settings, false);
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+        const fullVariation = await findAutoresponderProductById(selectedVariation.id) || selectedVariation;
+        const replyText = formatAutoresponderReply(buildAutoresponderQuantityPrompt(fullVariation), settings, false);
+        await saveAutoresponderPurchaseFlow(senderKey, {
+          ...purchaseFlow,
+          status: 'awaiting_quantity',
+          selected_product: {
+            id: fullVariation.id,
+            name: fullVariation.name || selectedVariation.name || null,
+            sku: fullVariation.sku || selectedVariation.sku || null,
+            slug: fullVariation.slug || selectedVariation.slug || null,
+            color: getAutoresponderProductColor(fullVariation) || selectedVariation.color || null,
+            price_cents: getAutoresponderProductPriceCents(fullVariation),
+            stock_quantity: fullVariation.stock_quantity == null ? selectedVariation.stock_quantity || null : Number(fullVariation.stock_quantity),
+          },
+          requested_quantity: null,
+        });
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'purchase_variation_selected',
+          replyText,
+          matchedCount: 1,
+          matchedProducts: [fullVariation],
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
       }
 
       if (purchaseFlow.status === 'awaiting_quantity' && purchaseFlow.selected_product?.id) {

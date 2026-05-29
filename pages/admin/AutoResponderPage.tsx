@@ -265,8 +265,8 @@ const emptySettingsForm: SettingsFormState = {
         product_choice_prompt: 'Responda com o numero da opcao ou com o nome/modelo do produto.',
         fulfillment_prompt: 'Agora preciso confirmar se sera retirada na loja ou entrega.',
         delivery_cep_prompt: 'Combinado: entrega. Me envie o CEP da entrega. Pode mandar somente os numeros.',
-        pickup_reply: 'Combinado: retirada na loja. Agora vou confirmar os dados do cadastro para separar seu pedido.',
-        payment_prompt: 'Como prefere pagar? Posso verificar as opcoes de pagamento para voce.',
+        pickup_reply: 'Combinado: retirada na loja. Agora vamos combinar a forma de pagamento.',
+        payment_prompt: 'Como prefere pagar? Pix, dinheiro, debito ou cartao de credito?',
         human_handoff_reply: 'Vou chamar nossa equipe para continuar seu atendimento por aqui.',
     },
     ai_enabled: false,
@@ -2288,6 +2288,16 @@ const AutoResponderPage: React.FC = () => {
             rows: 2,
         },
         {
+            id: 'variation',
+            title: 'Escolher variacao',
+            subtitle: 'Antes da quantidade quando houver cores disponiveis',
+            customerLabel: 'Cliente pode dizer',
+            customerText: '1, azul, preto',
+            botLabel: 'Bot pergunta',
+            botText: 'Antes de seguir, escolha a cor/variacao disponivel:\n\n1. Azul - R$ 980,00\n2. Preto - R$ 980,00\n\nResponda com o numero ou com a cor desejada.',
+            rows: 6,
+        },
+        {
             id: 'fulfillment',
             title: 'Retirada ou entrega',
             subtitle: 'Quando existe item escolhido',
@@ -2324,7 +2334,7 @@ const AutoResponderPage: React.FC = () => {
             customerLabel: 'Cliente confirma ou troca CEP',
             customerText: 'sim, nao, outro CEP',
             botLabel: 'Bot confirma endereco',
-            botText: 'Encontrei este endereco:\nRua: Rua Marechal Deodoro\nBairro: Centro\nCidade: Petrolina - PE\nCEP: 56304-000\n\nEsta correto? Responda "sim" para confirmar ou envie outro CEP.',
+            botText: 'Encontrei este endereco:\nRua: Rua Marechal Deodoro\nBairro: Centro\nCidade: Petrolina - PE\nCEP: 56304-000\n\nSe estiver correto, me envie o numero da casa.\nSe tiver complemento, pode mandar junto. Ex: 123 apto 202\nSe esse nao for o endereco, envie outro CEP.',
             rows: 7,
         },
         {
@@ -2344,7 +2354,7 @@ const AutoResponderPage: React.FC = () => {
             customerLabel: 'Cliente enviou',
             customerText: '123 apto 202',
             botLabel: 'Bot registra endereco',
-            botText: 'Endereco anotado.\n\nEndereco de entrega:\nRua Marechal Deodoro, 123\nComplemento: apto 202\nCentro - Petrolina/PE\nCEP: 56304-000\n\nAgora vou confirmar os dados do cadastro para separar seu pedido.',
+            botText: 'Endereco anotado.\n\nEndereco de entrega:\nRua Marechal Deodoro, 123\nComplemento: apto 202\nCentro - Petrolina/PE\nCEP: 56304-000\n\nAgora vamos combinar a forma de pagamento.\n\nComo prefere pagar? Pix, dinheiro, debito ou cartao de credito?',
             rows: 8,
         },
         {
@@ -2358,14 +2368,44 @@ const AutoResponderPage: React.FC = () => {
             rows: 2,
         },
         {
-            id: 'payment',
-            title: 'Pagamento',
-            subtitle: 'Quando o cliente pergunta como pagar',
+            id: 'payment-method',
+            title: 'Forma de pagamento',
+            subtitle: 'Depois de entrega ou retirada',
             customerLabel: 'Cliente pode dizer',
-            customerText: 'pagamento, pix, cartao, boleto, crediario',
-            botLabel: 'Bot responde',
-            messageKey: 'payment_prompt',
-            rows: 2,
+            customerText: 'pix, dinheiro, debito, cartao',
+            botLabel: 'Bot pergunta',
+            botText: 'Como prefere pagar? Pix, dinheiro, debito ou cartao de credito?\n\nTotal a vista: R$ 980,00',
+            rows: 3,
+        },
+        {
+            id: 'payment-card-entry',
+            title: 'Entrada no cartao',
+            subtitle: 'Quando cliente escolhe credito',
+            customerLabel: 'Cliente pode responder',
+            customerText: '200, sem entrada',
+            botLabel: 'Bot pergunta',
+            botText: 'Vai ter entrada para abater antes de parcelar no cartao?\n\nSe tiver, envie o valor da entrada. Ex: 200\nSe nao tiver entrada, responda "sem entrada".',
+            rows: 5,
+        },
+        {
+            id: 'payment-card-installments',
+            title: 'Tabela de parcelas',
+            subtitle: 'Juros somente sobre saldo do cartao',
+            customerLabel: 'Cliente informou entrada',
+            customerText: '200',
+            botLabel: 'Bot mostra tabela',
+            botText: 'Tabela do cartao\nTotal do pedido: R$ 980,00\nEntrada: R$ 200,00\nValor no cartao: R$ 780,00\n\n1x de R$ 780,00 = R$ 780,00\n2x de R$ 410,00 = R$ 820,00\n...\n12x de R$ 78,00 = R$ 936,00',
+            rows: 8,
+        },
+        {
+            id: 'payment-card-choice',
+            title: 'Pagamento combinado',
+            subtitle: 'Depois da parcela escolhida',
+            customerLabel: 'Cliente escolheu',
+            customerText: '5x',
+            botLabel: 'Bot confirma',
+            botText: 'Combinado, deixei o pagamento como:\nCartao em 5x de R$ 180,00\nEntrada: R$ 200,00\nTotal no cartao: R$ 900,00\n\nAgora vou confirmar os dados do cadastro para separar seu pedido.',
+            rows: 6,
         },
         {
             id: 'human',
@@ -2658,7 +2698,9 @@ const AutoResponderPage: React.FC = () => {
                                         Cidade: Petrolina - PE<br />
                                         CEP: 56304-000<br />
                                         <br />
-                                        Esta correto? Responda "sim" para confirmar ou envie outro CEP.
+                                        Se estiver correto, me envie o numero da casa.
+                                        Se tiver complemento, pode mandar junto. Ex: 123 apto 202
+                                        Se esse nao for o endereco, envie outro CEP.
                                     </div>
                                     <div className="ml-auto max-w-[72%] rounded-lg rounded-tr-sm bg-[#d9fdd3] px-3 py-2 text-slate-900 shadow-sm">
                                         123 apto 202
