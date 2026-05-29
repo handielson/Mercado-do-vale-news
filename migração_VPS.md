@@ -692,6 +692,7 @@ Concluído em leitura real pela VPS:
 - OAuth preflight: revalidado live pela VPS; callback Bling sem code redireciona para `/admin/settings/bling`, exchange Bling sem credenciais retorna `400`, callback Shopee sem parâmetros retorna `400` e geração de URL Shopee retorna host oficial com redirect para `www.mercadodovale.com.br`.
 - Bling financeiro: proxy da VPS corrigido para listar contas com filtros nativos do Bling (`dataVencimentoInicial`, `dataVencimentoFinal` e `situacao` singular), evitando `404` ao buscar contas por vencimento.
 - Limpeza de Vercel no app: textos e comentarios operacionais que ainda orientavam uso de Vercel foram atualizados para VPS; o teste de NCM agora valida o proxy Fastify e confirma ausencia de `vercel.json`/`api`.
+- Corte externo read-only: verificador versionado cobre GET de webhooks Bling/Mercado Pago/Shopee e callbacks OAuth sem codigo real; guard principal subiu para `30` checks sem executar payload nem mutacao.
 
 Pendente para corte final:
 
@@ -752,6 +753,32 @@ Pendencias:
 - manter validacoes com escrita real apenas em janela controlada e explicitamente aprovada.
 
 Rollback: restaurar os arquivos alterados neste pacote e executar novo build/deploy VPS do frontend, se algum texto/fluxo precisar voltar temporariamente.
+
+### 2026-05-29 - Guard read-only para rotas externas do corte Vercel
+
+Mudanca: criado o verificador `tmp-tests/vps-external-cutover-read-only-check.cjs` e conectado ao guard principal `tmp-tests/vps-migration-guard-regression.cjs`.
+
+Objetivo: transformar os curls soltos de callbacks/webhooks em uma validacao repetivel do checklist de remocao da Vercel, sem enviar payload real e sem alterar Bling, Shopee, Mercado Pago, Vercel ou Supabase.
+
+Arquivos alterados:
+
+- `tmp-tests/vps-external-cutover-read-only-check.cjs`
+- `tmp-tests/vps-external-cutover-read-only-check-static.test.mjs`
+- `tmp-tests/vps-migration-guard-regression.cjs`
+- `tmp-tests/vps-migration-guard-regression-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- `node tmp-tests\vps-external-cutover-read-only-check-static.test.mjs`: OK.
+- `node tmp-tests\vps-external-cutover-read-only-check.cjs`: OK, `route_probe_sent=false` sem flag live.
+- `VPS_EXTERNAL_CUTOVER_LIVE=true node tmp-tests\vps-external-cutover-read-only-check.cjs`: OK; Bling webhook `200`, Mercado Pago webhook `200`, Shopee webhook GET `405`, Bling callback sem code `302`, Shopee callback sem parametros `400`.
+- `node tmp-tests\vps-migration-guard-regression-static.test.mjs`: OK.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `checked=30`, `failed=0`, `mutation_executed=false`.
+
+Resultado: o checklist agora possui uma prova versionada para as rotas externas que precisam sair da Vercel. A parte ainda pendente continua sendo conferir nos paineis oficiais se os webhooks/callbacks cadastrados apontam para `www.mercadodovale.com.br` ou `api.xiaomipetrolina.com.br`, porque isso depende de acesso aos paineis externos.
+
+Rollback: remover os dois novos testes e retirar suas entradas do guard principal.
 
 ### 2026-05-27 - Filtros nativos no Bling financeiro da VPS
 

@@ -15,10 +15,11 @@ assert.match(source, /vps-mercadopago-webhook-simulation\.cjs/, 'runner must cov
 assert.match(source, /vps-shipping-quote-guarded-simulation\.cjs/, 'runner must cover shipping quote guard');
 assert.match(source, /vps-melhor-envio-label-guarded-simulation\.cjs/, 'runner must cover Melhor Envio label guard');
 assert.match(source, /vps-oauth-preflight-check\.cjs/, 'runner must cover OAuth preflight guard');
+assert.match(source, /vps-external-cutover-read-only-check\.cjs/, 'runner must cover external cutover read-only route guard');
 assert.match(source, /vps-seo-production-host-check\.cjs/, 'runner must cover SEO production host guard');
 assert.match(source, /spawnSync\(process\.execPath/, 'runner must execute guards through Node without shell interpolation');
 assert.match(source, /mutation_executed/, 'runner must inspect mutation execution markers');
-assert.match(source, /full_catalog_executed|quote_sent|label_requested|webhook_sent|live_read|install_executed/, 'runner must inspect non-mutation guard markers');
+assert.match(source, /full_catalog_executed|quote_sent|label_requested|webhook_sent|live_read|route_probe_sent|install_executed/, 'runner must inspect non-mutation guard markers');
 assert.doesNotMatch(source, /DRY_RUN['"]?\s*:\s*['"]false|CONFIRM_.*I_UNDERSTAND/, 'runner must not set apply confirmations or disable dry-run');
 assert.doesNotMatch(source, /access_token|refresh_token|client_secret|partner_key|Authorization|CRON_SECRET|SYNC_SECRET|VPS_SYNC_KEY/i, 'runner must not mention or print secrets');
 

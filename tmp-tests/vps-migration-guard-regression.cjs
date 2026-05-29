@@ -25,6 +25,8 @@ const checks = [
   { name: 'melhor_envio_label_default', file: 'tmp-tests/vps-melhor-envio-label-guarded-simulation.cjs', mode: 'guard' },
   { name: 'oauth_preflight_static', file: 'tmp-tests/vps-oauth-preflight-check-static.test.mjs', mode: 'static' },
   { name: 'oauth_preflight_default', file: 'tmp-tests/vps-oauth-preflight-check.cjs', mode: 'guard' },
+  { name: 'external_cutover_read_only_static', file: 'tmp-tests/vps-external-cutover-read-only-check-static.test.mjs', mode: 'static' },
+  { name: 'external_cutover_read_only_default', file: 'tmp-tests/vps-external-cutover-read-only-check.cjs', mode: 'guard' },
   { name: 'seo_production_host_static', file: 'tmp-tests/vps-seo-production-host-check-static.test.mjs', mode: 'static' },
   { name: 'seo_production_host_default', file: 'tmp-tests/vps-seo-production-host-check.cjs', mode: 'guard' },
   { name: 'nginx_production_install_static', file: 'tmp-tests/vps-nginx-production-config-install-static.test.mjs', mode: 'static' },
@@ -38,6 +40,7 @@ const unsafeMarkers = [
   ['label_requested', true],
   ['webhook_sent', true],
   ['live_read', true],
+  ['route_probe_sent', true],
   ['install_executed', true],
 ];
 
