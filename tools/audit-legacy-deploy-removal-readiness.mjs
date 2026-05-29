@@ -7,6 +7,46 @@ const VPS_IP = '76.13.232.162';
 const LEGACY_APEX_IP = '76.76.21.21';
 const LEGACY_HOST = 'mercado-do-vale-news.vercel.app';
 const DNS_TIMEOUT_MS = 5000;
+const EXTERNAL_PANEL_CONFIRMATION = [
+  {
+    provider: 'Bling',
+    mode: 'manual_panel_read_only',
+    expected_urls: [
+      'https://www.mercadodovale.com.br/api/auth/callback/bling',
+      'https://www.mercadodovale.com.br/api/bling-webhook',
+    ],
+    panel_checks: [
+      'Link de redirecionamento do aplicativo aponta para a VPS',
+      'Aba Webhooks nao possui URL da Vercel',
+      'Servidores/recursos de webhook usam a rota publica da VPS',
+    ],
+  },
+  {
+    provider: 'Shopee',
+    mode: 'manual_panel_read_only',
+    expected_urls: [
+      'https://www.mercadodovale.com.br/api/shopee?action=callback',
+      'https://www.mercadodovale.com.br/api/shopee-webhook',
+    ],
+    panel_checks: [
+      'Live Redirect URL/Domain aponta para www.mercadodovale.com.br',
+      'Push Mechanism/Live Call Back URL aponta para a rota da VPS',
+      'Nenhum campo de callback/push mantem dominio Vercel',
+    ],
+  },
+  {
+    provider: 'Mercado Pago',
+    mode: 'manual_panel_read_only',
+    expected_urls: [
+      'https://www.mercadodovale.com.br/api/mercadopago-webhook',
+    ],
+    panel_checks: [
+      'Webhooks > Configurar notificacoes usa URL de producao da VPS',
+      'Eventos de pagamento necessarios continuam selecionados',
+      'Nenhuma notification_url produtiva aponta para Vercel',
+    ],
+  },
+];
 
 function readText(path) {
   return existsSync(path) ? readFileSync(path, 'utf8') : '';
@@ -83,6 +123,7 @@ async function main() {
       'painel Mercado Pago apontando para www.mercadodovale.com.br',
       'painel Shopee/Bling sem URL da Vercel',
     ],
+    external_panel_confirmation: EXTERNAL_PANEL_CONFIRMATION,
     blockers,
   }, null, 2));
   process.exit(0);

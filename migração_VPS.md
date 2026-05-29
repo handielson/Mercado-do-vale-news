@@ -693,6 +693,7 @@ Concluído em leitura real pela VPS:
 - Bling financeiro: proxy da VPS corrigido para listar contas com filtros nativos do Bling (`dataVencimentoInicial`, `dataVencimentoFinal` e `situacao` singular), evitando `404` ao buscar contas por vencimento.
 - Limpeza de Vercel no app: textos e comentarios operacionais que ainda orientavam uso de Vercel foram atualizados para VPS; o teste de NCM agora valida o proxy Fastify e confirma ausencia de `vercel.json`/`api`.
 - Corte externo read-only: verificador versionado cobre GET de webhooks Bling/Mercado Pago/Shopee e callbacks OAuth sem codigo real; guard principal subiu para `30` checks sem executar payload nem mutacao.
+- Plano de conferencia dos paineis externos: auditor de readiness agora imprime as URLs esperadas para Bling, Shopee e Mercado Pago, marcando a etapa como `manual_panel_read_only` porque os provedores documentam essa configuracao no painel do aplicativo, nao como leitura automatica segura.
 
 Pendente para corte final:
 
@@ -705,9 +706,48 @@ Pendente para corte final:
 - Shipping: cotação Frenet/Melhor Envio e etiqueta Melhor Envio com pedido de teste.
 - SEO: config Nginx de produção reinstalada na VPS; `mercadodovale.com.br` redireciona para `https://www.mercadodovale.com.br`, `www` serve `/sitemap.xml` com `1844` URLs e `1841` produtos únicos por slug; falta validar login/admin real no browser.
 - API/catalogo: `/products/by-ids` criado no Fastify da VPS e validado direto em `api.xiaomipetrolina.com.br` e via `/api/vps-proxy`, retornando `200` e preservando a ordem dos IDs enviados.
-- Operação: cron da Vercel removido do `vercel.json`; callbacks e webhooks externos restantes devem ser conferidos nos paineis oficiais antes do corte final.
+- Operação: cron da Vercel removido do `vercel.json`; callbacks e webhooks externos restantes devem ser conferidos visualmente nos paineis oficiais, sem salvar/criar nada, contra estas URLs:
+  - Bling: `https://www.mercadodovale.com.br/api/auth/callback/bling` e `https://www.mercadodovale.com.br/api/bling-webhook`.
+  - Shopee: `https://www.mercadodovale.com.br/api/shopee?action=callback` e `https://www.mercadodovale.com.br/api/shopee-webhook`.
+  - Mercado Pago: `https://www.mercadodovale.com.br/api/mercadopago-webhook`.
 
 ## Registro de Mudanças
+
+### 2026-05-29 - Trava read-only para paineis externos
+
+Mudanca: o auditor `tools/audit-legacy-deploy-removal-readiness.mjs` passou a listar a conferencia manual/read-only dos paineis Bling, Shopee e Mercado Pago com as URLs finais da VPS.
+
+Objetivo: continuar o checklist de retirada da Vercel sem criar nem alterar recursos na Vercel, Supabase ou provedores externos, deixando explicito o que precisa ser visto nos paineis antes do corte final.
+
+Arquivos alterados:
+
+- `tools/audit-legacy-deploy-removal-readiness.mjs`
+- `tmp-tests/legacy-deploy-removal-readiness-static.test.mjs`
+- `migracao_VPS.md`
+
+URLs esperadas:
+
+- Bling OAuth: `https://www.mercadodovale.com.br/api/auth/callback/bling`
+- Bling webhook: `https://www.mercadodovale.com.br/api/bling-webhook`
+- Shopee OAuth: `https://www.mercadodovale.com.br/api/shopee?action=callback`
+- Shopee webhook: `https://www.mercadodovale.com.br/api/shopee-webhook`
+- Mercado Pago webhook: `https://www.mercadodovale.com.br/api/mercadopago-webhook`
+
+Validacao:
+
+- `node tmp-tests\legacy-deploy-removal-readiness-static.test.mjs`
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`
+
+Resultado: o checklist agora separa o que ja foi validado por rota publica da VPS do que so pode ser confirmado no painel oficial. Nenhum recurso externo foi criado, salvo ou alterado.
+
+Pendencias:
+
+- abrir Bling, Shopee e Mercado Pago em modo somente leitura e comparar os campos do painel com as URLs esperadas;
+- reconectar OAuth real e testar payloads reais/simulados somente em janela controlada com confirmacao explicita.
+
+Rollback: remover a secao `external_panel_confirmation` do auditor e esta entrada do diario; nao ha mudanca de runtime.
+
+Proximo passo: conferencia visual dos paineis externos, sem salvar alteracoes, ou janela controlada para OAuth real se os paineis ja estiverem corretos.
 
 ### 2026-05-29 - Limpeza operacional de referencias Vercel no app
 
