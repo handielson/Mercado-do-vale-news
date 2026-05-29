@@ -174,7 +174,7 @@ const uploadVideoWithProgress = (
     onProgress: (progress: number) => void,
 ) => new Promise<SynologyUploadResponse>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    // Video files are too large for the Vercel proxy body limit, so upload directly to the VPS.
+    // Video files go directly to the VPS upload endpoint to avoid proxy limits.
     xhr.open('POST', `${VPS_DIRECT_BASE_URL}/synology/upload?folder=videos`);
 
     const headers = getVpsSyncHeaders();

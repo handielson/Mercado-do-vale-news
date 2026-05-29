@@ -8,7 +8,7 @@ import { QuoteCartProvider } from '../contexts/QuoteCartContext';
 import { MaintenanceGuard } from '../components/MaintenanceGuard.tsx';
 
 // Wrapper de React.lazy que recarrega a página quando o chunk falha por causa
-// de deploy novo (Vercel já purgou os hashes antigos do CDN). Flag em
+// de deploy novo ou cache antigo do navegador/CDN. Flag em
 // sessionStorage evita loop infinito caso a falha seja persistente (offline).
 const CHUNK_RELOAD_FLAG = '__chunk_reload_attempted';
 const isStaleChunkError = (e: any) => {

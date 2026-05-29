@@ -25,7 +25,7 @@ export function ShopeeLinkSection({ productId, shopeeItemId, onLink, onUnlink }:
         toast.loading('Enviando para a Shopee...', { id: 'shopee-sync' });
 
         try {
-            // Requisição para o backend Vercel, que buscará o produto completo do DB
+            // Requisição para o backend VPS, que buscará o produto completo do DB
             // assinará a request HMAC, fará upload das imagens e mandará pra Shopee.
             const res = await fetch('/api/shopee-actions', {
                 method: 'POST',

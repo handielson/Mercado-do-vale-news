@@ -10,17 +10,17 @@ const SHOPEE_API_URL = 'https://partner.shopeemobile.com';
  * usamos WebCrypto se estiver rolando no browser, mas não podemos usar o 'crypto' do Node.
  * 
  * ATUALIZAÇÃO: Como as integrações de Produtos e Estoque ocorrerão pela própria página Admin,
- * devemos preferir fazer o fetch através de Serverless API (`/api/shopee...`) ou implementar o WebCrypto aqui.
+ * devemos preferir fazer o fetch através das rotas VPS (`/api/shopee...`) ou implementar o WebCrypto aqui.
  * 
  * Por padrão, o Front não deveria fazer calls diretas a Shopee expondo o Partner Key, 
- * então toda lógica pesada v2 deve passar por um endpoint Vercel Serverless para segurança do Partner Key.
+ * então toda lógica pesada v2 deve passar por um endpoint da VPS para segurança do Partner Key.
  * Portanto, este shopeeService vai atuar chamando nossas rotas proprietárias `/api/shopee-actions`.
  */
 
 export const shopeeService = {
     /**
      * Exemplo de chamada pra consultar status da Loja
-     * Na vida real, vai bater numa API intermediária (Vercel) para assinar de forma segura.
+     * Na vida real, vai bater na API intermediária da VPS para assinar de forma segura.
      */
     getShopInfo: async () => {
         try {

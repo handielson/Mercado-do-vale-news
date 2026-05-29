@@ -733,7 +733,7 @@ async function fetchJsonStrict(url: string, init?: RequestInit): Promise<any> {
         const checkpoint = lower.includes('vercel security checkpoint') || lower.includes("we're verifying your browser");
 
         if (checkpoint) {
-            throw new Error('Vercel Security Checkpoint bloqueou temporariamente a requisicao. Aguarde alguns segundos e tente novamente.');
+            throw new Error('Checkpoint de seguranca bloqueou temporariamente a requisicao. Aguarde alguns segundos e tente novamente.');
         }
 
         if (isHtml) {

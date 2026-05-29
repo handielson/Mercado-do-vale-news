@@ -92,7 +92,7 @@ export default function ShopeePrintersTab() {
                             <p className="text-blue-700/80">
                                 O sistema precisa do nome <strong>NOME EXATO</strong> da impressora como aparece no painel de controle do Windows.
                                 Por exemplo: <code className="bg-white px-1 py-0.5 rounded border border-blue-200 text-blue-900 font-mono text-xs">Zebra TLP2844</code>.
-                                Um script local (PM2) em sua loja vai ler esses nomes do servidor Vercel e disparar a impressão dupla (Etiqueta Térmica 10x15 + Resumo do Pedido de folha de Sulfite).
+                                Um script local (PM2) em sua loja vai ler esses nomes da API VPS e disparar a impressão dupla (Etiqueta Térmica 10x15 + Resumo do Pedido de folha de Sulfite).
                             </p>
                         </div>
                     </div>

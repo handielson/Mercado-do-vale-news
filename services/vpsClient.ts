@@ -53,7 +53,7 @@ function markCheckpointBlocked(): void {
     checkpointBlockedUntil = Date.now() + CHECKPOINT_COOLDOWN_MS;
 }
 
-function looksLikeVercelSecurityCheckpoint(text: string): boolean {
+function looksLikeLegacySecurityCheckpoint(text: string): boolean {
     const lower = (text || '').toLowerCase();
     return lower.includes('vercel security checkpoint') || lower.includes("we're verifying your browser");
 }
@@ -61,8 +61,8 @@ function looksLikeVercelSecurityCheckpoint(text: string): boolean {
 function summarizeErrorBody(text: string): string {
     const trimmed = (text || '').trim();
     if (!trimmed) return '';
-    if (looksLikeVercelSecurityCheckpoint(trimmed)) {
-        return 'Vercel Security Checkpoint (bloqueio anti-bot temporario)';
+    if (looksLikeLegacySecurityCheckpoint(trimmed)) {
+        return 'checkpoint de seguranca legado (bloqueio anti-bot temporario)';
     }
     if (trimmed.length > 240) return `${trimmed.slice(0, 240)}...`;
     return trimmed;
@@ -94,7 +94,7 @@ async function handleResponse<T>(path: string, method: string, res: Response): P
     if (!res.ok) {
         const text = await res.text().catch(() => res.statusText);
         const summary = summarizeErrorBody(text);
-        if (isVpsProxyPath(path, method) && res.status === 403 && looksLikeVercelSecurityCheckpoint(text)) {
+        if (isVpsProxyPath(path, method) && res.status === 403 && looksLikeLegacySecurityCheckpoint(text)) {
             markCheckpointBlocked();
         }
         throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` — ${summary}` : ''}`);
@@ -106,7 +106,7 @@ function assertCheckpointNotBlocked(path: string, method: string = 'GET'): void 
     if (!isVpsProxyPath(path, method)) return;
     if (isCheckpointBlockedNow()) {
         const remaining = Math.max(0, Math.ceil((checkpointBlockedUntil - Date.now()) / 1000));
-        throw new Error(`[VPS] 403 ${buildVpsUrl(path, { method })} — Vercel Security Checkpoint ativo (aguarde ${remaining}s)`);
+        throw new Error(`[VPS] 403 ${buildVpsUrl(path, { method })} — checkpoint de seguranca legado ativo (aguarde ${remaining}s)`);
     }
 }
 
@@ -177,7 +177,7 @@ export const vpsClient = {
         if (!res.ok) {
             const text = await res.text().catch(() => res.statusText);
             const summary = summarizeErrorBody(text);
-            if (isVpsProxyPath(path, 'DELETE') && res.status === 403 && looksLikeVercelSecurityCheckpoint(text)) {
+            if (isVpsProxyPath(path, 'DELETE') && res.status === 403 && looksLikeLegacySecurityCheckpoint(text)) {
                 markCheckpointBlocked();
             }
             throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` — ${summary}` : ''}`);
@@ -237,7 +237,7 @@ export const vpsClient = {
                         }
                     } else {
                         const summary = summarizeErrorBody(xhr.responseText || '');
-                        if (isVpsProxyPath(path, 'POST') && xhr.status === 403 && looksLikeVercelSecurityCheckpoint(xhr.responseText || '')) {
+                        if (isVpsProxyPath(path, 'POST') && xhr.status === 403 && looksLikeLegacySecurityCheckpoint(xhr.responseText || '')) {
                             markCheckpointBlocked();
                         }
                         reject(new Error(`HTTP ${xhr.status}${summary ? `: ${summary}` : ''}`));

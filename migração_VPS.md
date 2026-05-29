@@ -679,7 +679,7 @@ Concluído em leitura real pela VPS:
 - Shopee: loja, categorias, logística, lista de itens, detalhe de item, modelos, pedidos, detalhe de pedido, rastreio e pagamento/escrow.
 - Telegram: webhook real apontando para `api.xiaomipetrolina.com.br` e comandos principais validados no chat configurado.
 - Cron dispatcher: rota protegida por segredo, cron instalado na VPS para `0 22 * * *` e primeira execução real observada com sucesso no log.
-- Guardas Vercel/Supabase: revalidados em 2026-05-27 sem criar recurso novo; deploy legado segue sem blockers versionados e o inventario Supabase segue no baseline `.from=491`, `.rpc=31`, `storage=13`, com `0` dependencias operacionais nao classificadas.
+- Guardas Vercel/Supabase: revalidados em 2026-05-29 sem criar recurso novo; deploy legado segue sem blockers versionados e o inventario Supabase segue no baseline `.from=491`, `.rpc=31`, `storage=13`, com `0` dependencias operacionais nao classificadas.
 - SEO: comparação pública de sitemap feita; produção atual redireciona para `www.mercadodovale.com.br` com 3 URLs, VPS staging retorna milhares de URLs de produtos; 8 slugs especiais do sitemap staging revalidados com canonical, OG product e JSON-LD.
 - Bling reconcile: apply real controlado executado para o plano revisado de `7` estoques e `57` nomes. A conferência pós-apply revelou que o dry-run ainda lia Supabase antigo; o reconciliador foi corrigido para montar o plano a partir do MySQL da VPS. Em 2026-05-27, o reconcile tambem foi ajustado para nao planejar nem aplicar `nameChanges`, preservando nomes locais quando o produto foi apenas vinculado ao Bling.
 - Bling diagnostics: `debug-product` e `debug-diagnostic` validados com `blingId` real pela VPS, com saída sanitizada.
@@ -691,6 +691,7 @@ Concluído em leitura real pela VPS:
 - Staging Locais de Estoque: correção do botão `Transferir` dentro do conteúdo de caixa commitada e publicada na VPS; asset novo da tela retornou `200` no staging. Falta apenas o reteste manual do usuário na Caixa 20/SKU `CTRN115G`.
 - OAuth preflight: revalidado live pela VPS; callback Bling sem code redireciona para `/admin/settings/bling`, exchange Bling sem credenciais retorna `400`, callback Shopee sem parâmetros retorna `400` e geração de URL Shopee retorna host oficial com redirect para `www.mercadodovale.com.br`.
 - Bling financeiro: proxy da VPS corrigido para listar contas com filtros nativos do Bling (`dataVencimentoInicial`, `dataVencimentoFinal` e `situacao` singular), evitando `404` ao buscar contas por vencimento.
+- Limpeza de Vercel no app: textos e comentarios operacionais que ainda orientavam uso de Vercel foram atualizados para VPS; o teste de NCM agora valida o proxy Fastify e confirma ausencia de `vercel.json`/`api`.
 
 Pendente para corte final:
 
@@ -703,9 +704,54 @@ Pendente para corte final:
 - Shipping: cotação Frenet/Melhor Envio e etiqueta Melhor Envio com pedido de teste.
 - SEO: config Nginx de produção reinstalada na VPS; `mercadodovale.com.br` redireciona para `https://www.mercadodovale.com.br`, `www` serve `/sitemap.xml` com `1844` URLs e `1841` produtos únicos por slug; falta validar login/admin real no browser.
 - API/catalogo: `/products/by-ids` criado no Fastify da VPS e validado direto em `api.xiaomipetrolina.com.br` e via `/api/vps-proxy`, retornando `200` e preservando a ordem dos IDs enviados.
-- Operação: cron da Vercel removido do `vercel.json`; callbacks restantes da Vercel ficam para depois da regressão final.
+- Operação: cron da Vercel removido do `vercel.json`; callbacks e webhooks externos restantes devem ser conferidos nos paineis oficiais antes do corte final.
 
 ## Registro de Mudanças
+
+### 2026-05-29 - Limpeza operacional de referencias Vercel no app
+
+Mudanca: atualizados textos/comentarios de fluxo atual que ainda mencionavam Vercel em telas, servicos e testes, e modernizado o teste NCM para validar a rota Fastify da VPS em vez de `vercel.json`/`api`.
+
+Objetivo: continuar o checklist de retirada da Vercel sem criar nem alterar recursos na Vercel ou Supabase, mantendo o repositorio e o painel alinhados com o caminho VPS-first.
+
+Arquivos alterados:
+
+- `components/products/ProductCard.tsx`
+- `components/products/sections/ShopeeLinkSection.tsx`
+- `pages/admin/settings/BlingPage.tsx`
+- `pages/admin/settings/RoadmapPage.tsx`
+- `pages/admin/settings/ShopeePage.tsx`
+- `pages/admin/settings/TelegramPage.tsx`
+- `pages/admin/settings/components/ShopeePrintersTab.tsx`
+- `routes/index.tsx`
+- `scripts/shopee-auto-print.cjs`
+- `services/shopeeAuthUrlService.test.mjs`
+- `services/shopeeService.ts`
+- `services/vpsClient.ts`
+- `tmp-tests/brand-service-vps-source.test.mjs`
+- `tmp-tests/ncm-brasilapi-proxy-regression.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+- `node tmp-tests\ncm-brasilapi-proxy-regression.test.mjs`: OK.
+- `node services\shopeeAuthUrlService.test.mjs`: OK.
+- `node tmp-tests\brand-service-vps-source.test.mjs`: OK.
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `blockers=[]`; DNS retornou `dns_timeout` dentro do sandbox.
+- `npm.cmd run build`: OK fora do sandbox; apenas avisos existentes de chunk/import dinamico.
+- `curl -I https://www.mercadodovale.com.br/`: `200 OK`, `Server: cloudflare`.
+- `curl -I https://www.mercadodovale.com.br/sitemap.xml`: `200 OK`, `application/xml`, `Content-Length: 441156`.
+- `curl -i "https://www.mercadodovale.com.br/api/vps-proxy?path=/status"`: `200 OK`, JSON com `mysql.ok=true`, `products.active=2466`.
+
+Resultado: o codigo versionado permanece sem `vercel.json`, sem diretorio `api`, sem runtime `@vercel/node`, sem fallback CORS para host legado e sem autorizacao por `vercel-cron/1.0`. A producao publica respondeu pelo caminho Cloudflare + VPS nos endpoints essenciais testados. Nenhum recurso foi criado ou alterado na Vercel ou Supabase.
+
+Pendencias:
+
+- conferir nos paineis externos os callbacks OAuth e webhooks de Bling, Shopee e Mercado Pago;
+- manter validacoes com escrita real apenas em janela controlada e explicitamente aprovada.
+
+Rollback: restaurar os arquivos alterados neste pacote e executar novo build/deploy VPS do frontend, se algum texto/fluxo precisar voltar temporariamente.
 
 ### 2026-05-27 - Filtros nativos no Bling financeiro da VPS
 

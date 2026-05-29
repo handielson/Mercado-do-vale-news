@@ -205,7 +205,7 @@ export default function TelegramPage() {
         try {
             toast.loading('Iniciando construção do relatório...', { id: 'cron-force' });
 
-            // Passa o ID na porta local da Vercel/Vite
+            // Passa o ID pela rota local do Vite/VPS
             const res = await fetch(`/api/cron-dispatcher?forceTemplateId=${templateIdToDps}`, {
                 method: 'POST'
             });

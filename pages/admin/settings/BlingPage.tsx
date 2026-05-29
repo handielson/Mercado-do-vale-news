@@ -2772,7 +2772,7 @@ export default function BlingPage() {
                                             <ul className="text-xs text-red-700 list-disc list-inside space-y-2 leading-relaxed">
                                                 <li><strong>O Estoque parou de atualizar:</strong> Vá no painel do Bling → <em>Integrações → Webhooks</em>. Certifique-se de que a URL não foi "Desativada" por limite de retentativas. Caso haja travamento, ative novamente por lá.</li>
                                                 <li><strong>Erro de Token Expirado (Unauthorized):</strong> Verifique se o <strong>Client ID</strong> e o <strong>Client Secret</strong> estão preenchidos na aba Configurações. Crie a conexão manual usando o botão "Reconectar com Bling".</li>
-                                                <li><strong>Logs falhos na VPS:</strong> Se o webhook na Vercel relatar Timeout ou falha de acesso à VPS, acesse a nuvem Hostinger via Terminal SSH e confira o funcionamento do Node. Digite <code>pm2 logs mdv-api</code>. Caso note falhas no banco mysql, restarte via <code>pm2 restart mdv-api</code>.</li>
+                                                <li><strong>Logs falhos na VPS:</strong> Se o webhook relatar Timeout ou falha de acesso à VPS, acesse a nuvem Hostinger via Terminal SSH e confira o funcionamento do Node. Digite <code>pm2 logs mdv-api</code>. Caso note falhas no banco mysql, restarte via <code>pm2 restart mdv-api</code>.</li>
                                             </ul>
                                         </div>
                                     </div>

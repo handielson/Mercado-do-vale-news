@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const widgetSource = readFileSync('components/admin/NcmSearchWidget.tsx', 'utf8');
-const vpsProxySource = readFileSync('api/vps-proxy.ts', 'utf8');
-const vercelConfig = readFileSync('vercel.json', 'utf8');
+const vpsServerSource = readFileSync('vps_server.cjs', 'utf8');
 
 assert.match(
   widgetSource,
@@ -18,17 +17,15 @@ assert.doesNotMatch(
 );
 
 assert.match(
-  vercelConfig,
-  /"source":\s*"\/api\/brasilapi-ncm"[\s\S]*"destination":\s*"\/api\/vps-proxy\?brasilapi=ncm"/,
-  'BrasilAPI NCM route should be rewritten to an existing serverless function'
+  widgetSource,
+  /\/api\/vps-proxy\?path=\/brasilapi-ncm&search=/,
+  'NcmSearchWidget should call the VPS proxy path for BrasilAPI NCM'
 );
 
-assert.match(vpsProxySource, /brasilapi\.com\.br\/api\/ncm\/v1/, 'proxy handler should call BrasilAPI NCM upstream');
-assert.match(vpsProxySource, /s-maxage/, 'proxy handler should define edge cache headers');
+assert.equal(existsSync('vercel.json'), false, 'NCM proxy should not depend on Vercel rewrites');
+assert.equal(existsSync('api'), false, 'NCM proxy should not depend on serverless api/ files');
+assert.match(vpsServerSource, /BRASILAPI_NCM_URL = 'https:\/\/brasilapi\.com\.br\/api\/ncm\/v1'/, 'VPS handler should call BrasilAPI NCM upstream');
+assert.match(vpsServerSource, /fastify\.get\('\/api\/brasilapi-ncm', handleBrasilapiNcmProxy\)/, 'VPS should expose /api/brasilapi-ncm directly');
+assert.match(vpsServerSource, /s-maxage/, 'VPS handler should define cache headers');
 
-const apiFunctionCount = readdirSync('api', { withFileTypes: true })
-  .filter((entry) => entry.isFile() && /\.(?:ts|js|mjs|cjs)$/u.test(entry.name))
-  .length;
-assert.ok(apiFunctionCount <= 12, `Vercel Hobby plan supports at most 12 functions, found ${apiFunctionCount}`);
-
-console.log('NCM BrasilAPI proxy regression ok');
+console.log('NCM BrasilAPI VPS proxy regression ok');

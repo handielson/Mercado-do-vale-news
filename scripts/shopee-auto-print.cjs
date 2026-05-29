@@ -61,7 +61,7 @@ async function getCompanySettings() {
 // Função para iniciar servidor web local para escolher a impressora
 function startLocalServer() {
     const server = http.createServer((req, res) => {
-        // CORS headers - needed because browser (from Vercel HTTPS) calls localhost HTTP
+        // CORS headers - needed because browser HTTPS calls localhost HTTP
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

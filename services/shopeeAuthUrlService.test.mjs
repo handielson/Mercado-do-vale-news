@@ -27,7 +27,7 @@ assert.equal(
 
 assert.equal(
   resolveShopeeAuthOrigin({
-    host: 'mercado-do-vale-news.vercel.app',
+    host: 'legacy-platform.example',
     forwardedProto: 'https',
   }),
   'https://www.mercadodovale.com.br',

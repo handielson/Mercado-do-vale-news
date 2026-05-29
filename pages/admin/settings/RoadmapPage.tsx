@@ -203,7 +203,7 @@ export const RoadmapPage = () => {
               </div>
               <div className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
-                <p><strong>Produção (Vercel):</strong> <code className="bg-slate-200 px-1 rounded">vpsClient.ts</code> usa <code className="bg-slate-200 px-1 rounded">VPS_PROXY_BASE</code> = <code className="bg-slate-200 px-1 rounded">https://api.xiaomipetrolina.com.br</code> diretamente. Header <code className="bg-slate-200 px-1 rounded">x-sync-key</code> vem de <code className="bg-slate-200 px-1 rounded">VITE_VPS_SYNC_KEY</code> (env var no Vercel).</p>
+                <p><strong>Produção (VPS):</strong> <code className="bg-slate-200 px-1 rounded">vpsClient.ts</code> usa <code className="bg-slate-200 px-1 rounded">VPS_PROXY_BASE</code> = <code className="bg-slate-200 px-1 rounded">https://api.xiaomipetrolina.com.br</code> diretamente. Header <code className="bg-slate-200 px-1 rounded">x-sync-key</code> vem de <code className="bg-slate-200 px-1 rounded">VITE_VPS_SYNC_KEY</code> no frontend.</p>
               </div>
               <div className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
