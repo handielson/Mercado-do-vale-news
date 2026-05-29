@@ -1,6 +1,10 @@
 import { vpsClient } from './vpsClient';
 import type {
     AutoResponderAttachmentUpload,
+    AutoResponderAiTraining,
+    AutoResponderAiTrainingFilters,
+    AutoResponderAiTrainingInput,
+    AutoResponderAiTrainingUpdate,
     AutoResponderBlocklistEntry,
     AutoResponderBlocklistInput,
     AutoResponderBlocklistUpdate,
@@ -48,6 +52,22 @@ export const autoResponderService = {
 
     updateSettings: (settings: AutoResponderSettingsInput): Promise<AutoResponderSettings> => {
         return vpsClient.patch<AutoResponderSettings>('/autoresponder/settings', settings);
+    },
+
+    listAiTraining: (filters: AutoResponderAiTrainingFilters = {}): Promise<AutoResponderAiTraining[]> => {
+        return vpsClient.get<AutoResponderAiTraining[]>(withQuery('/autoresponder/ai-training', filters));
+    },
+
+    createAiTraining: (input: AutoResponderAiTrainingInput): Promise<AutoResponderAiTraining> => {
+        return vpsClient.post<AutoResponderAiTraining>('/autoresponder/ai-training', input);
+    },
+
+    updateAiTraining: (id: number, updates: AutoResponderAiTrainingUpdate): Promise<AutoResponderAiTraining | null> => {
+        return vpsClient.patch<AutoResponderAiTraining | null>(`/autoresponder/ai-training/${id}`, updates);
+    },
+
+    deleteAiTraining: (id: number): Promise<void> => {
+        return vpsClient.delete(`/autoresponder/ai-training/${id}`);
     },
 
     listRules: (filters: AutoResponderRuleFilters = {}): Promise<AutoResponderRule[]> => {
