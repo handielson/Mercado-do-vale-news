@@ -2790,19 +2790,29 @@ async function safeInsertBlingWebhookLogVps(source, payload, rawBody) {
   }
 }
 
-function readBlingPayloadStockForWebhookVps(productData, body) {
+function readBlingPayloadStockForWebhookDetailsVps(productData, body) {
   const estoque = productData?.estoque || body?.data?.estoque || body?.dados?.estoque;
-  return productData?.stock_quantity
-    ?? productData?.saldoFisicoTotal
-    ?? productData?.saldoFisico
-    ?? productData?.saldoVirtualTotal
-    ?? productData?.saldoVirtual
-    ?? estoque?.saldoFisicoTotal
-    ?? estoque?.saldoFisico
-    ?? estoque?.saldoVirtualTotal
-    ?? estoque?.saldoVirtual
-    ?? body?.data?.saldoFisicoTotal
-    ?? body?.dados?.saldoFisicoTotal;
+  const candidates = [
+    { value: productData?.stock_quantity, explicitTotal: true },
+    { value: productData?.saldoFisicoTotal, explicitTotal: true },
+    { value: productData?.saldoFisico, explicitTotal: false },
+    { value: productData?.saldoVirtualTotal, explicitTotal: true },
+    { value: productData?.saldoVirtual, explicitTotal: false },
+    { value: estoque?.saldoFisicoTotal, explicitTotal: true },
+    { value: estoque?.saldoFisico, explicitTotal: false },
+    { value: estoque?.saldoVirtualTotal, explicitTotal: true },
+    { value: estoque?.saldoVirtual, explicitTotal: false },
+    { value: body?.data?.saldoFisicoTotal, explicitTotal: true },
+    { value: body?.dados?.saldoFisicoTotal, explicitTotal: true },
+    { value: body?.data?.saldoVirtualTotal, explicitTotal: true },
+    { value: body?.dados?.saldoVirtualTotal, explicitTotal: true },
+  ];
+  const found = candidates.find((candidate) => candidate.value !== undefined && candidate.value !== null && candidate.value !== '');
+  return found ? { value: found.value, hasExplicitTotal: found.explicitTotal } : { value: undefined, hasExplicitTotal: false };
+}
+
+function readBlingPayloadStockForWebhookVps(productData, body) {
+  return readBlingPayloadStockForWebhookDetailsVps(productData, body).value;
 }
 
 async function fetchBlingStockForWebhookVps(blingId, accessToken) {
@@ -2969,9 +2979,9 @@ async function handleBlingWebhookVps(request, reply) {
         stockQty = await fetchBlingStockForWebhookVps(blingId, accessToken);
       }
       if (stockQty === null) {
-        const payloadStock = readBlingPayloadStockForWebhookVps(productData, body);
-        const payloadQty = payloadStock !== undefined ? Number(payloadStock) : null;
-        if (accessToken && (payloadQty === null || payloadQty === 0)) {
+        const payloadStock = readBlingPayloadStockForWebhookDetailsVps(productData, body);
+        const payloadQty = payloadStock.value !== undefined ? Number(payloadStock.value) : null;
+        if (accessToken && (payloadQty === null || (payloadQty === 0 && !payloadStock.hasExplicitTotal))) {
           return reply.code(200).send({
             ok: false,
             message: 'API failed and payload returned 0 - update aborted to avoid an incorrect zero stock',
@@ -5719,6 +5729,38 @@ function normalizeAutoresponderTagKeywordMap(value) {
   return entries;
 }
 
+const AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_KEYWORDS = {
+  phone_list_opt_in: ['sim', 'quero', 'manda', 'pode mandar', 'lista', 'quero ver', 'manda lista'],
+};
+
+function normalizeAutoresponderConversationFlowKeywords(value) {
+  const parsed = parsePublicJson(value, value && typeof value === 'object' ? value : {});
+  const source = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  const normalized = {};
+  for (const [flowKey, defaults] of Object.entries(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_KEYWORDS)) {
+    const rawValues = Object.prototype.hasOwnProperty.call(source, flowKey) ? source[flowKey] : defaults;
+    const values = Array.isArray(rawValues) ? rawValues : String(rawValues || '').split(',');
+    normalized[flowKey] = [...new Set(values
+      .map((keyword) => normalizeAutoresponderText(keyword).trim())
+      .filter(Boolean))];
+  }
+  return normalized;
+}
+
+function getAutoresponderConversationFlowKeywords(settings, flowKey) {
+  const normalized = normalizeAutoresponderConversationFlowKeywords(settings?.conversation_flow_keywords);
+  return normalized[flowKey] || [];
+}
+
+function doesAutoresponderMessageMatchFlowKeywords(message, keywords) {
+  const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+  return (Array.isArray(keywords) ? keywords : []).some((keyword) => {
+    const normalizedKeyword = normalizeAutoresponderText(keyword).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    return normalizedKeyword && text === normalizedKeyword;
+  });
+}
+
 function findAutoresponderProductTagKeyword(message, settings) {
   const text = normalizeAutoresponderText(message);
   const entries = normalizeAutoresponderTagKeywordMap(settings?.product_tag_keywords);
@@ -8044,9 +8086,9 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
       : null;
     const title = chunkIndex === 0
       ? (modelAccessoryTitle || (keyword
-        ? `Encontrei ${total} produtos relacionados para ${keyword}. Vou enviar de ${AUTORESPONDER_PRODUCT_PAGE_SIZE} em ${AUTORESPONDER_PRODUCT_PAGE_SIZE}:`
-        : `Encontrei ${total} produtos relacionados. Vou enviar de ${AUTORESPONDER_PRODUCT_PAGE_SIZE} em ${AUTORESPONDER_PRODUCT_PAGE_SIZE}:`))
-      : `Mais opcoes (${firstNumber}-${lastNumber} de ${total}):`;
+        ? `Encontrei estas opcoes para ${keyword}:`
+        : 'Encontrei estas opcoes:'))
+      : 'Mais opcoes:';
     const lines = [title];
     lines.push(...(await Promise.all(chunk.map((group, index) => (
       formatAutoresponderProductCardLine(group, firstNumber + index)
@@ -8542,6 +8584,91 @@ async function upsertAutoresponderOptionsConversation(sender, options, paginatio
   );
 }
 
+async function hasRecentAutoresponderNeedsPrompt(sender, validityMinutes = 15) {
+  const minutes = Number(validityMinutes) > 0 ? Number(validityMinutes) : 15;
+  const [rows] = await pool.query(
+    `SELECT id
+     FROM autoresponder_logs
+     WHERE sender = ?
+       AND intent = 'greeting_needs_prompt'
+       AND created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+     ORDER BY id DESC
+     LIMIT 1`,
+    [sender, minutes]
+  );
+  return rows.length > 0;
+}
+
+async function classifyAutoresponderNeedsPromptReplyWithAi({ message, settings }) {
+  const aiReply = await callAutoresponderOpenAi({
+    input: [
+      'Classifique a resposta do cliente ao prompt: "Voce esta atras de celular novo? Quer que eu mande a lista do que temos? Ou deseja alguma outra coisa?"',
+      `Resposta do cliente: ${String(message || '').trim()}`,
+      'Responda exatamente uma destas opcoes:',
+      'phone_list_opt_in = cliente quer receber/ver a lista de celulares',
+      'other = cliente pediu outra coisa, esta confuso ou nao confirmou a lista',
+    ].join('\n'),
+    maxOutputTokens: 20,
+    settings,
+  });
+  const text = normalizeAutoresponderText(aiReply?.text || '').trim();
+  return text.includes('phone_list_opt_in') ? 'phone_list_opt_in' : 'other';
+}
+
+async function handleAutoresponderPhoneListOptIn({ sender, message, settings, shouldPrefixGreeting }) {
+  if (!(await hasRecentAutoresponderNeedsPrompt(sender))) return null;
+  const flowKeywords = getAutoresponderConversationFlowKeywords(settings, 'phone_list_opt_in');
+  const matchesBuiltInConfirmation = isAutoresponderYes(message) || isAutoresponderExplicitCatalogListRequest(message);
+  const matchesConfiguredKeyword = doesAutoresponderMessageMatchFlowKeywords(message, flowKeywords)
+    || matchesBuiltInConfirmation;
+  const classification = matchesConfiguredKeyword
+    ? 'phone_list_opt_in'
+    : await classifyAutoresponderNeedsPromptReplyWithAi({ message, settings });
+  if (classification === 'phone_list_opt_in') {
+    // Continue below and send the phone catalog.
+  } else {
+    return null;
+  }
+
+  const categories = await findAutoresponderAvailableCategories(20);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage('celulares', categories);
+  if (!selectedCategory?.id) return null;
+
+  const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
+  const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
+  const products = rows.slice(0, pageSize);
+  const hasMore = rows.length > pageSize;
+  const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+  const productOptions = buildAutoresponderProductOptions(products);
+  const productReplyMessages = appendAutoresponderReplyFooter(
+    await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name) }),
+    formatAutoresponderProductReplyInstructions(hasMore)
+  );
+  const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+  const replyText = replyMessages.join('\n\n');
+
+  await logAutoresponderReply({
+    sender,
+    message,
+    intent: 'catalog_phone_opt_in',
+    replyText,
+    matchedCount: products.length,
+    matchedProducts: productOptions,
+  });
+  await upsertAutoresponderOptionsConversation(sender, productOptions, {
+    source: 'category',
+    categoryId: selectedCategory.id,
+    keyword: selectedCategory.name,
+    offset: 0,
+    limit: pageSize,
+    total,
+    hasMore,
+    completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name),
+  });
+
+  return { replies: formatAutoresponderProReplies(replyMessages) };
+}
+
 async function applyAutoresponderRuleConversationTag(sender, tagId) {
   const numericTagId = Number(tagId);
   if (!Number.isFinite(numericTagId) || numericTagId <= 0) return;
@@ -8919,6 +9046,7 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
     numbered_list_threshold: (v) => Number(v),
     numbered_list_validity_minutes: (v) => Number(v),
     product_tag_keywords: (v) => jsonStr(v || {}),
+    conversation_flow_keywords: (v) => jsonStr(normalizeAutoresponderConversationFlowKeywords(v)),
     archive_to_synology: (v) => boolInt(v),
     archive_after_days: (v) => Number(v),
     ai_enabled: (v) => boolInt(v),
@@ -10966,6 +11094,14 @@ fastify.route({
         return { replies: [{ message: replyText }] };
       }
 
+      const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({
+        sender: senderKey,
+        message,
+        settings,
+        shouldPrefixGreeting,
+      });
+      if (phoneListOptInReply) return phoneListOptInReply;
+
       const matchedRule = await findAutoresponderRuleMatch(message);
       if (matchedRule) {
         await pool.query(
@@ -12376,7 +12512,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
   const ALLOWED_SORT = ['name', 'created_at', 'updated_at', 'price_retail', 'view_count', 'sales_count', 'stock_quantity'];
   const sortBy  = ALLOWED_SORT.includes(req.query.sort_by) ? req.query.sort_by : 'name';
   const sortDir = req.query.sort_direction === 'desc' ? 'DESC' : 'ASC';
-  sql += ` ORDER BY ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
+  sql += ` ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, CASE WHEN (is_parent = 0 OR is_parent IS NULL) THEN 0 ELSE 1 END, ${sortBy} ${sortDir} LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
 
@@ -15401,6 +15537,7 @@ async function runMigrations() {
       numbered_list_threshold INT NOT NULL DEFAULT 2,
       numbered_list_validity_minutes INT NOT NULL DEFAULT 30,
       product_tag_keywords JSON NULL,
+      conversation_flow_keywords JSON NULL,
       signature_enabled TINYINT(1) NOT NULL DEFAULT 1,
       signature_message TEXT NULL,
       ai_daily_limit INT NOT NULL DEFAULT 0,
@@ -15428,6 +15565,7 @@ async function runMigrations() {
   await addColumnIfMissing('autoresponder_settings', 'ai_input_cost_per_1m_usd', 'DECIMAL(12,6) NOT NULL DEFAULT 0');
   await addColumnIfMissing('autoresponder_settings', 'ai_output_cost_per_1m_usd', 'DECIMAL(12,6) NOT NULL DEFAULT 0');
   await addColumnIfMissing('autoresponder_settings', 'openai_admin_api_key', 'TEXT NULL');
+  await addColumnIfMissing('autoresponder_settings', 'conversation_flow_keywords', 'JSON NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_ai_training (
@@ -15455,7 +15593,8 @@ async function runMigrations() {
       fallback_message,
       signature_enabled,
       signature_message,
-      product_tag_keywords
+      product_tag_keywords,
+      conversation_flow_keywords
     ) VALUES (
       1,
       0,
@@ -15466,7 +15605,8 @@ async function runMigrations() {
       '${AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE}',
       1,
       '${AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE}',
-      JSON_OBJECT()
+      JSON_OBJECT(),
+      '${jsonStr(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_KEYWORDS)}'
     );
   `);
 

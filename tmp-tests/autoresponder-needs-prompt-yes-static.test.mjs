@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const serverFiles = ['vps_server.cjs', 'vps_server.js'];
+
+for (const fileName of serverFiles) {
+  const source = readFileSync(fileName, 'utf8');
+
+  assert.ok(
+    source.includes('async function hasRecentAutoresponderNeedsPrompt(sender'),
+    `${fileName} must detect when the customer is answering the initial needs prompt`
+  );
+
+  assert.ok(
+    source.includes('async function handleAutoresponderPhoneListOptIn({'),
+    `${fileName} must route yes/list replies after the needs prompt to the phone catalog`
+  );
+
+  assert.ok(
+    source.includes("intent: 'catalog_phone_opt_in'"),
+    `${fileName} must log phone-list opt-ins distinctly`
+  );
+
+  assert.ok(
+    source.includes("const matchesBuiltInConfirmation = isAutoresponderYes(message) || isAutoresponderExplicitCatalogListRequest(message);"),
+    `${fileName} must treat yes or lista as confirmation after the needs prompt`
+  );
+
+  assert.ok(
+    source.includes("const selectedCategory = findAutoresponderCatalogCategoryForMessage('celulares', categories);"),
+    `${fileName} must force the opt-in search to the celulares category instead of searching for sim`
+  );
+
+  const optInRouteIndex = source.indexOf('const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({');
+  const tokenSearchAfterOptInIndex = source.indexOf(
+    'const productSearchTokens = extractAutoresponderProductSearchTokens(message);',
+    optInRouteIndex
+  );
+  assert.ok(optInRouteIndex >= 0, `${fileName} must call the opt-in handler in the main route`);
+  assert.ok(
+    tokenSearchAfterOptInIndex > optInRouteIndex,
+    `${fileName} must handle opt-in replies before generic token search`
+  );
+
+  assert.doesNotMatch(
+    source,
+    /Encontrei \$\{total\} produtos relacionados/,
+    `${fileName} must not show product total counters in list titles`
+  );
+
+  assert.doesNotMatch(
+    source,
+    /Mais opcoes \(\$\{firstNumber\}-\$\{lastNumber\} de \$\{total\}\)/,
+    `${fileName} must not show pagination counters in list titles`
+  );
+}
+
+console.log('autoresponder needs prompt yes static checks passed');

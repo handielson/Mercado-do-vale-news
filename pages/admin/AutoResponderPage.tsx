@@ -25,6 +25,9 @@ import { Tabs, TabList, TabPanels } from '../../components/ui/Tabs';
 import { Tab, TabPanel } from '../../components/ui/Tab';
 import { autoResponderService } from '../../services/autoResponderService';
 import type {
+    AutoResponderAiTraining,
+    AutoResponderAiTrainingInput,
+    AutoResponderAiTrainingType,
     AutoResponderSettings,
     AutoResponderStats,
     AutoResponderStoreStatus,
@@ -76,6 +79,14 @@ interface TagFormState {
     show_on_bot: boolean;
 }
 
+interface AiTrainingFormState {
+    title: string;
+    training_type: AutoResponderAiTrainingType;
+    content: string;
+    priority: string;
+    active: boolean;
+}
+
 interface SettingsFormState {
     enabled: boolean;
     human_message_in_hours: string;
@@ -95,6 +106,21 @@ interface SettingsFormState {
     use_numbered_lists: boolean;
     numbered_list_threshold: string;
     numbered_list_validity_minutes: string;
+    conversation_flow_keywords: Record<string, string>;
+    ai_enabled: boolean;
+    ai_model: string;
+    ai_daily_limit: string;
+    ai_monthly_limit: string;
+    ai_credit_balance_usd: string;
+    ai_credit_alert_usd: string;
+    ai_input_cost_per_1m_usd: string;
+    ai_output_cost_per_1m_usd: string;
+    openai_api_key: string;
+    openai_api_key_masked: string;
+    has_openai_api_key: boolean;
+    openai_admin_api_key: string;
+    openai_admin_api_key_masked: string;
+    has_openai_admin_api_key: boolean;
     archive_to_synology: boolean;
     archive_after_days: string;
 }
@@ -115,6 +141,7 @@ const statusLabels: Record<string, string> = {
 };
 
 const tabs = [
+    { id: 'fluxos', label: 'Fluxos', icon: <MessageCircle size={16} /> },
     { id: 'respostas', label: 'Respostas', icon: <MessageSquareText size={16} /> },
     { id: 'conversas', label: 'Conversas', icon: <Users size={16} /> },
     { id: 'bloqueados', label: 'Bloqueados', icon: <Ban size={16} /> },
@@ -122,6 +149,7 @@ const tabs = [
     { id: 'tags', label: 'Tags', icon: <Tags size={16} /> },
     { id: 'estatisticas', label: 'Estatísticas', icon: <BarChart3 size={16} /> },
     { id: 'testes', label: 'Testes', icon: <Bot size={16} /> },
+    { id: 'treinamento-ia', label: 'Treinamento IA', icon: <Bot size={16} /> },
     { id: 'configuracoes', label: 'Configurações', icon: <Settings size={16} /> },
 ];
 
@@ -156,6 +184,14 @@ const emptyTagForm: TagFormState = {
     show_on_bot: true,
 };
 
+const emptyAiTrainingForm: AiTrainingFormState = {
+    title: '',
+    training_type: 'store_instruction',
+    content: '',
+    priority: '0',
+    active: true,
+};
+
 const emptySettingsForm: SettingsFormState = {
     enabled: true,
     human_message_in_hours: '',
@@ -175,6 +211,23 @@ const emptySettingsForm: SettingsFormState = {
     use_numbered_lists: true,
     numbered_list_threshold: '2',
     numbered_list_validity_minutes: '30',
+    conversation_flow_keywords: {
+        phone_list_opt_in: 'sim, quero, manda, pode mandar, lista, quero ver, manda lista',
+    },
+    ai_enabled: false,
+    ai_model: 'gpt-5-nano',
+    ai_daily_limit: '0',
+    ai_monthly_limit: '0',
+    ai_credit_balance_usd: '0',
+    ai_credit_alert_usd: '5',
+    ai_input_cost_per_1m_usd: '0',
+    ai_output_cost_per_1m_usd: '0',
+    openai_api_key: '',
+    openai_api_key_masked: '',
+    has_openai_api_key: false,
+    openai_admin_api_key: '',
+    openai_admin_api_key_masked: '',
+    has_openai_admin_api_key: false,
     archive_to_synology: false,
     archive_after_days: '7',
 };
@@ -224,6 +277,18 @@ const ruleTemplates: Array<{ label: string; patch: Partial<RuleFormState> }> = [
 function formatNumber(value: unknown): string {
     const number = Number(value || 0);
     return Number.isFinite(number) ? number.toLocaleString('pt-BR') : '0';
+}
+
+function formatUsd(value: unknown): string {
+    const number = Number(value || 0);
+    return Number.isFinite(number)
+        ? new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(number)
+        : 'US$ 0,00';
 }
 
 function getStoreStatusLabel(storeStatus: AutoResponderStoreStatus | null): string {
@@ -326,6 +391,49 @@ function tagFormToInput(form: TagFormState): AutoResponderTagInput {
     };
 }
 
+function aiTrainingFormToInput(form: AiTrainingFormState): AutoResponderAiTrainingInput {
+    return {
+        title: form.title.trim(),
+        training_type: form.training_type,
+        content: form.content.trim(),
+        priority: Number(form.priority || 0),
+        active: form.active,
+    };
+}
+
+function parseConversationFlowKeywordMap(value: AutoResponderSettings['conversation_flow_keywords']): Record<string, string> {
+    const defaults = emptySettingsForm.conversation_flow_keywords;
+    if (!value) return { ...defaults };
+    let parsed: unknown = value;
+    if (typeof value === 'string') {
+        try {
+            parsed = JSON.parse(value);
+        } catch {
+            return { ...defaults };
+        }
+    }
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return { ...defaults };
+    const next = { ...defaults };
+    Object.entries(parsed as Record<string, unknown>).forEach(([key, rawValue]) => {
+        const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+        const joined = values.map((item) => String(item ?? '').trim()).filter(Boolean).join(', ');
+        if (joined) next[key] = joined;
+    });
+    return next;
+}
+
+function conversationFlowKeywordsToInput(map: Record<string, string>): Record<string, string[]> {
+    return Object.fromEntries(
+        Object.entries(map).map(([key, value]) => [
+            key,
+            String(value || '')
+                .split(',')
+                .map((keyword) => keyword.trim())
+                .filter(Boolean),
+        ])
+    );
+}
+
 function settingsToForm(settings: AutoResponderSettings | null): SettingsFormState {
     if (!settings) return emptySettingsForm;
     return {
@@ -347,6 +455,21 @@ function settingsToForm(settings: AutoResponderSettings | null): SettingsFormSta
         use_numbered_lists: isEnabled(settings.use_numbered_lists),
         numbered_list_threshold: String(settings.numbered_list_threshold ?? 2),
         numbered_list_validity_minutes: String(settings.numbered_list_validity_minutes ?? 30),
+        conversation_flow_keywords: parseConversationFlowKeywordMap(settings.conversation_flow_keywords),
+        ai_enabled: isEnabled(settings.ai_enabled),
+        ai_model: settings.ai_model || 'gpt-5-nano',
+        ai_daily_limit: String(settings.ai_daily_limit ?? 0),
+        ai_monthly_limit: String(settings.ai_monthly_limit ?? 0),
+        ai_credit_balance_usd: String(settings.ai_credit_balance_usd ?? 0),
+        ai_credit_alert_usd: String(settings.ai_credit_alert_usd ?? 5),
+        ai_input_cost_per_1m_usd: String(settings.ai_input_cost_per_1m_usd ?? 0),
+        ai_output_cost_per_1m_usd: String(settings.ai_output_cost_per_1m_usd ?? 0),
+        openai_api_key: '',
+        openai_api_key_masked: settings.openai_api_key_masked || '',
+        has_openai_api_key: isEnabled(settings.has_openai_api_key),
+        openai_admin_api_key: '',
+        openai_admin_api_key_masked: settings.openai_admin_api_key_masked || '',
+        has_openai_admin_api_key: isEnabled(settings.has_openai_admin_api_key),
         archive_to_synology: isEnabled(settings.archive_to_synology),
         archive_after_days: String(settings.archive_after_days ?? 7),
     };
@@ -356,7 +479,7 @@ function settingsFormToInput(
     form: SettingsFormState,
     settingsKeywordRows: TagKeywordRow[]
 ): Partial<AutoResponderSettings> {
-    return {
+    const input: Partial<AutoResponderSettings> = {
         enabled: form.enabled,
         human_message_in_hours: form.human_message_in_hours,
         human_message_out_of_hours: form.human_message_out_of_hours,
@@ -375,10 +498,26 @@ function settingsFormToInput(
         use_numbered_lists: form.use_numbered_lists,
         numbered_list_threshold: Number(form.numbered_list_threshold || 0),
         numbered_list_validity_minutes: Number(form.numbered_list_validity_minutes || 0),
+        conversation_flow_keywords: conversationFlowKeywordsToInput(form.conversation_flow_keywords),
+        ai_enabled: form.ai_enabled,
+        ai_model: form.ai_model || 'gpt-5-nano',
+        ai_daily_limit: Number(form.ai_daily_limit || 0),
+        ai_monthly_limit: Number(form.ai_monthly_limit || 0),
+        ai_credit_balance_usd: Number(form.ai_credit_balance_usd || 0),
+        ai_credit_alert_usd: Number(form.ai_credit_alert_usd || 0),
+        ai_input_cost_per_1m_usd: Number(form.ai_input_cost_per_1m_usd || 0),
+        ai_output_cost_per_1m_usd: Number(form.ai_output_cost_per_1m_usd || 0),
         product_tag_keywords: keywordRowsToMap(settingsKeywordRows),
         archive_to_synology: form.archive_to_synology,
         archive_after_days: Number(form.archive_after_days || 0),
     };
+    if (form.openai_api_key.trim()) {
+        input.openai_api_key = form.openai_api_key.trim();
+    }
+    if (form.openai_admin_api_key.trim()) {
+        input.openai_admin_api_key = form.openai_admin_api_key.trim();
+    }
+    return input;
 }
 
 function createTagKeywordRow(patch: Partial<TagKeywordRow> = {}): TagKeywordRow {
@@ -645,15 +784,6 @@ const RuleEditorModal: React.FC<{
                         </label>
                     )}
 
-                    <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
-                        <input
-                            type="checkbox"
-                            checked={ruleForm.active}
-                            onChange={(event) => onChange({ active: event.target.checked })}
-                            className="h-4 w-4 rounded border-slate-300"
-                        />
-                        <span className="text-sm font-semibold text-slate-700">Resposta ativa</span>
-                    </label>
                 </div>
 
                 <div>
@@ -1098,12 +1228,18 @@ const AutoResponderPage: React.FC = () => {
     const [isRuleModalOpen, setIsRuleModalOpen] = React.useState(false);
     const [isSavingRule, setIsSavingRule] = React.useState(false);
     const [deletingRuleId, setDeletingRuleId] = React.useState<number | null>(null);
+    const [togglingRuleId, setTogglingRuleId] = React.useState<number | null>(null);
     const [isUploadingAttachment, setIsUploadingAttachment] = React.useState(false);
     const [ruleForm, setRuleForm] = React.useState<RuleFormState>(emptyRuleForm);
     const [settingsForm, setSettingsForm] = React.useState<SettingsFormState>(emptySettingsForm);
     const [settingsKeywordRows, setSettingsKeywordRows] = React.useState<TagKeywordRow[]>([]);
     const [isSavingSettings, setIsSavingSettings] = React.useState(false);
     const [settingsNotice, setSettingsNotice] = React.useState<string | null>(null);
+    const [aiTrainingEntries, setAiTrainingEntries] = React.useState<AutoResponderAiTraining[]>([]);
+    const [aiTrainingForm, setAiTrainingForm] = React.useState<AiTrainingFormState>(emptyAiTrainingForm);
+    const [editingAiTraining, setEditingAiTraining] = React.useState<AutoResponderAiTraining | null>(null);
+    const [isSavingAiTraining, setIsSavingAiTraining] = React.useState(false);
+    const [aiTrainingNotice, setAiTrainingNotice] = React.useState<string | null>(null);
     const [testMessage, setTestMessage] = React.useState('Oi, tem iPhone?');
     const [testSender, setTestSender] = React.useState('teste-bot');
     const [testContactFirstName, setTestContactFirstName] = React.useState('Cliente');
@@ -1131,6 +1267,7 @@ const AutoResponderPage: React.FC = () => {
                 conversationsData,
                 blocklistData,
                 unansweredData,
+                aiTrainingData,
             ] = await Promise.all([
                 autoResponderService.getSettings(),
                 autoResponderService.getStats({
@@ -1144,6 +1281,7 @@ const AutoResponderPage: React.FC = () => {
                 autoResponderService.listConversations({ limit: 100 }),
                 autoResponderService.listBlocklist(),
                 autoResponderService.listUnanswered({ limit: 100 }),
+                autoResponderService.listAiTraining(),
             ]);
             setSettings(settingsData);
             setSettingsForm(settingsToForm(settingsData));
@@ -1156,6 +1294,7 @@ const AutoResponderPage: React.FC = () => {
             setConversations(conversationsData);
             setBlocklist(blocklistData);
             setUnansweredQuestions(unansweredData);
+            setAiTrainingEntries(aiTrainingData);
             setConversationTagDrafts((current) => {
                 const next = { ...current };
                 conversationsData.forEach((conversation) => {
@@ -1178,6 +1317,13 @@ const AutoResponderPage: React.FC = () => {
     }, [loadDashboard]);
 
     const summary = stats?.summary || {};
+    const aiFinance = stats?.summary?.ai_finance;
+    const aiOfficialRemainingCredit = aiFinance?.openai_official_remaining_credit_usd;
+    const aiDisplayedRemainingCredit = aiOfficialRemainingCredit ?? aiFinance?.remaining_credit_usd;
+    const aiCreditAlertUsd = Number(settingsForm.ai_credit_alert_usd || aiFinance?.credit_alert_usd || 0);
+    const aiFinanceNeedsAttention = aiDisplayedRemainingCredit != null
+        && Number(aiDisplayedRemainingCredit) <= aiCreditAlertUsd;
+    const aiHasAdminKey = settingsForm.has_openai_admin_api_key || isEnabled(aiFinance?.has_openai_admin_api_key);
     const enabled = isEnabled(settings?.enabled);
     const loading = state === 'loading' || state === 'idle';
     const conversationTags = React.useMemo(
@@ -1529,6 +1675,25 @@ const AutoResponderPage: React.FC = () => {
         }
     };
 
+    const toggleRuleActive = async (rule: AutoResponderRule) => {
+        setTogglingRuleId(rule.id);
+        setError(null);
+        try {
+            await autoResponderService.updateRule(rule.id, { active: !isEnabled(rule.active) });
+            const [rulesData, statsData] = await Promise.all([
+                autoResponderService.listRules(),
+                autoResponderService.getStats(),
+            ]);
+            setRules(rulesData);
+            setStats(statsData);
+        } catch (err) {
+            console.error('[AutoResponderPage] toggle rule active error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao alterar status da resposta');
+        } finally {
+            setTogglingRuleId(null);
+        }
+    };
+
     const deleteRule = async (rule: AutoResponderRule) => {
         if (!window.confirm(`Excluir a resposta "${rule.name}"?`)) return;
         setDeletingRuleId(rule.id);
@@ -1764,6 +1929,16 @@ const AutoResponderPage: React.FC = () => {
         setSettingsForm((current) => ({ ...current, ...patch }));
     };
 
+    const updateConversationFlowKeywords = (flowKey: string, keywords: string) => {
+        setSettingsForm((current) => ({
+            ...current,
+            conversation_flow_keywords: {
+                ...current.conversation_flow_keywords,
+                [flowKey]: keywords,
+            },
+        }));
+    };
+
     const addKeywordRow = () => {
         setSettingsKeywordRows((current) => [...current, createTagKeywordRow()]);
     };
@@ -1776,6 +1951,69 @@ const AutoResponderPage: React.FC = () => {
 
     const removeKeywordRow = (rowId: string) => {
         setSettingsKeywordRows((current) => current.filter((row) => row.id !== rowId));
+    };
+
+    const reloadAiTraining = async () => {
+        setAiTrainingEntries(await autoResponderService.listAiTraining());
+    };
+
+    const openEditAiTraining = (entry: AutoResponderAiTraining) => {
+        setEditingAiTraining(entry);
+        setAiTrainingForm({
+            title: entry.title || '',
+            training_type: entry.training_type || 'store_instruction',
+            content: entry.content || '',
+            priority: String(entry.priority || 0),
+            active: isEnabled(entry.active),
+        });
+        setAiTrainingNotice(null);
+    };
+
+    const handleSaveAiTraining = async () => {
+        const input = aiTrainingFormToInput(aiTrainingForm);
+        if (!input.title || !input.content) {
+            setAiTrainingNotice('Informe titulo e conteudo do treinamento.');
+            return;
+        }
+        setIsSavingAiTraining(true);
+        setAiTrainingNotice(null);
+        try {
+            if (editingAiTraining) {
+                await autoResponderService.updateAiTraining(editingAiTraining.id, input);
+                setAiTrainingNotice('Treinamento atualizado.');
+            } else {
+                await autoResponderService.createAiTraining(input);
+                setAiTrainingNotice('Treinamento criado.');
+            }
+            setAiTrainingForm(emptyAiTrainingForm);
+            setEditingAiTraining(null);
+            await reloadAiTraining();
+        } catch (err) {
+            console.error('[AutoResponderPage] save ai training error:', err);
+            setAiTrainingNotice(err instanceof Error ? err.message : 'Nao foi possivel salvar o treinamento.');
+        } finally {
+            setIsSavingAiTraining(false);
+        }
+    };
+
+    const handleDeleteAiTraining = async (entry: AutoResponderAiTraining) => {
+        if (!window.confirm(`Excluir treinamento "${entry.title}"?`)) return;
+        setIsSavingAiTraining(true);
+        setAiTrainingNotice(null);
+        try {
+            await autoResponderService.deleteAiTraining(entry.id);
+            if (editingAiTraining?.id === entry.id) {
+                setEditingAiTraining(null);
+                setAiTrainingForm(emptyAiTrainingForm);
+            }
+            await reloadAiTraining();
+            setAiTrainingNotice('Treinamento excluido.');
+        } catch (err) {
+            console.error('[AutoResponderPage] delete ai training error:', err);
+            setAiTrainingNotice(err instanceof Error ? err.message : 'Nao foi possivel excluir o treinamento.');
+        } finally {
+            setIsSavingAiTraining(false);
+        }
     };
 
     const saveSettings = async () => {
@@ -1951,6 +2189,50 @@ const AutoResponderPage: React.FC = () => {
                 <MetricTile label="Loja" value={getStoreStatusLabel(storeStatus)} icon={<Clock size={18} />} />
             </div>
 
+            <section className={`rounded-lg border p-4 ${
+                aiFinanceNeedsAttention
+                    ? 'border-red-200 bg-red-50'
+                    : 'border-emerald-200 bg-emerald-50'
+            }`}>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <p className="text-xs font-semibold uppercase text-slate-500">Resumo financeiro da IA</p>
+                        <h2 className="mt-1 text-lg font-bold text-slate-950">
+                            Saldo oficial estimado: {aiDisplayedRemainingCredit == null ? '-' : formatUsd(aiDisplayedRemainingCredit)}
+                        </h2>
+                    </div>
+                    <a
+                        href="?aba=configuracoes#controle-financeiro-ia"
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                        <Settings size={16} />
+                        Ajustar financeiro
+                    </a>
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-lg border border-white/70 bg-white p-3">
+                        <span className="block text-xs font-semibold text-slate-500">Gasto oficial OpenAI</span>
+                        <strong className="mt-1 block text-base text-slate-950">
+                            {aiFinance?.openai_official_month_cost_usd == null ? 'Pendente' : formatUsd(aiFinance.openai_official_month_cost_usd)}
+                        </strong>
+                    </div>
+                    <div className="rounded-lg border border-white/70 bg-white p-3">
+                        <span className="block text-xs font-semibold text-slate-500">Credito informado</span>
+                        <strong className="mt-1 block text-base text-slate-950">{formatUsd(aiFinance?.credit_balance_usd)}</strong>
+                    </div>
+                    <div className="rounded-lg border border-white/70 bg-white p-3">
+                        <span className="block text-xs font-semibold text-slate-500">Gasto interno estimado</span>
+                        <strong className="mt-1 block text-base text-slate-950">{formatUsd(aiFinance?.month_estimated_cost_usd)}</strong>
+                    </div>
+                    <div className="rounded-lg border border-white/70 bg-white p-3">
+                        <span className="block text-xs font-semibold text-slate-500">Chave admin</span>
+                        <strong className={aiHasAdminKey ? 'mt-1 block text-base text-emerald-700' : 'mt-1 block text-base text-amber-700'}>
+                            {aiHasAdminKey ? 'Conectada' : 'Pendente'}
+                        </strong>
+                    </div>
+                </div>
+            </section>
+
             <Tabs defaultTab="respostas" urlParam="aba" onChange={setActiveAutoResponderTab} className="space-y-5">
                 <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                     <TabList className="min-w-max border-b-0">
@@ -1961,6 +2243,131 @@ const AutoResponderPage: React.FC = () => {
                 </div>
 
                 <TabPanels className="space-y-4">
+                    <TabPanel id="fluxos">
+                        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+                            <aside className="rounded-lg border border-slate-200 bg-white">
+                                <div className="border-b border-slate-200 px-4 py-3">
+                                    <h2 className="text-base font-semibold text-slate-900">Fluxos de conversa</h2>
+                                    <p className="mt-1 text-sm text-slate-500">Edite palavras dentro do contexto certo.</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="flex w-full items-start gap-3 border-l-4 border-emerald-500 bg-emerald-50 px-4 py-4 text-left"
+                                >
+                                    <MessageCircle size={18} className="mt-0.5 text-emerald-700" />
+                                    <span>
+                                        <span className="block text-sm font-bold text-slate-950">Lista de celulares</span>
+                                        <span className="mt-1 block text-xs text-slate-600">Depois da saudacao inicial</span>
+                                    </span>
+                                </button>
+                                <div className="space-y-2 px-4 py-4 text-sm text-slate-500">
+                                    <div className="rounded-lg border border-dashed border-slate-300 px-3 py-3">Confirmar nome</div>
+                                    <div className="rounded-lg border border-dashed border-slate-300 px-3 py-3">Escolher produto</div>
+                                    <div className="rounded-lg border border-dashed border-slate-300 px-3 py-3">Finalizar pedido</div>
+                                </div>
+                            </aside>
+
+                            <section className="rounded-lg border border-slate-200 bg-white">
+                                <div className="border-b border-slate-200 px-5 py-4">
+                                    <p className="text-xs font-semibold uppercase text-emerald-700">Fluxo ativo</p>
+                                    <h2 className="mt-1 text-lg font-bold text-slate-950">Lista de celulares</h2>
+                                    <p className="mt-1 text-sm text-slate-500">
+                                        Esse fluxo fica ativo quando o bot pergunta se o cliente quer receber a lista de celulares.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-5 px-5 py-5">
+                                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                            <Bot size={16} />
+                                            Mensagem do bot
+                                        </div>
+                                        <div className="max-w-xl rounded-lg rounded-tl-sm bg-white px-4 py-3 text-sm leading-6 text-slate-800 shadow-sm">
+                                            Voce esta atras de celular novo? Quer que eu mande a lista do que temos? Ou deseja alguma outra coisa?
+                                        </div>
+                                    </div>
+
+                                    <label className="block">
+                                        <span className="mb-2 block text-sm font-semibold text-slate-700">Cliente pode responder</span>
+                                        <textarea
+                                            value={settingsForm.conversation_flow_keywords.phone_list_opt_in || ''}
+                                            onChange={(event) => updateConversationFlowKeywords('phone_list_opt_in', event.target.value)}
+                                            rows={3}
+                                            placeholder="sim, quero, manda, pode mandar, lista"
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                        <p className="mt-2 text-xs text-slate-500">
+                                            Separe por virgula. Essas palavras so valem quando esse fluxo estiver aguardando resposta.
+                                        </p>
+                                    </label>
+
+                                    <div className="rounded-lg border border-slate-200 p-4">
+                                        <div className="mb-2 text-sm font-semibold text-slate-700">Entao o bot faz</div>
+                                        <div className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                                            <CheckCircle2 size={16} />
+                                            Enviar lista da categoria Celulares
+                                        </div>
+                                    </div>
+
+                                    <label className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                                        <input
+                                            type="checkbox"
+                                            checked={settingsForm.ai_enabled}
+                                            onChange={(event) => updateSettingsForm({ ai_enabled: event.target.checked })}
+                                            className="mt-1 h-4 w-4 rounded border-blue-300"
+                                        />
+                                        <span>
+                                            <span className="block text-sm font-bold text-blue-900">IA na linha de frente</span>
+                                            <span className="mt-1 block text-sm text-blue-800">
+                                                Quando a resposta nao bater nas palavras acima, a IA interpreta a intencao antes do bot desistir ou fazer uma busca errada.
+                                            </span>
+                                        </span>
+                                    </label>
+
+                                    <div className="flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={saveSettings}
+                                            disabled={isSavingSettings}
+                                            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                                        >
+                                            <Save size={16} />
+                                            {isSavingSettings ? 'Salvando...' : 'Salvar fluxo'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <aside className="rounded-lg border border-slate-200 bg-[#efe7dc] p-4">
+                                <div className="mb-3 flex items-center gap-2 border-b border-black/10 pb-3">
+                                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-700 text-sm font-bold text-white">M</div>
+                                    <div>
+                                        <h3 className="text-sm font-bold text-slate-900">Preview da conversa</h3>
+                                        <p className="text-xs text-slate-600">Mercado do Vale</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-3 text-sm">
+                                    <div className="max-w-[88%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
+                                        Bom dia! Seja bem-vindo ao Mercado do Vale.
+                                    </div>
+                                    <div className="max-w-[88%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
+                                        Voce esta atras de celular novo? Quer que eu mande a lista do que temos?
+                                    </div>
+                                    <div className="ml-auto max-w-[78%] rounded-lg rounded-tr-sm bg-[#d9fdd3] px-3 py-2 text-slate-900 shadow-sm">
+                                        quero
+                                    </div>
+                                    <div className="max-w-[92%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
+                                        Encontrei estas opcoes para celulares:<br />
+                                        <br />
+                                        1. Redmi Note 14<br />
+                                        2. iPhone 13<br />
+                                        3. Samsung Galaxy A16
+                                    </div>
+                                </div>
+                            </aside>
+                        </div>
+                    </TabPanel>
+
                     <TabPanel id="respostas">
                         <div className="space-y-4">
                             <div className="rounded-lg border border-slate-200 bg-white">
@@ -2045,15 +2452,21 @@ const AutoResponderPage: React.FC = () => {
                                                         <td className="px-5 py-4 text-slate-600">{rule.reply_type}</td>
                                                         <td className="px-5 py-4 text-right font-semibold text-slate-900">{formatNumber(rule.hits)}</td>
                                                         <td className="px-5 py-4">
-                                                            <span
-                                                                className={`rounded-lg px-2 py-1 text-xs font-semibold ${
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleRuleActive(rule)}
+                                                                disabled={togglingRuleId === rule.id}
+                                                                aria-label={`${isEnabled(rule.active) ? 'Desativar' : 'Ativar'} resposta ${rule.name}`}
+                                                                className={`inline-flex min-w-[92px] items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                                                                     isEnabled(rule.active)
-                                                                        ? 'bg-emerald-50 text-emerald-700'
-                                                                        : 'bg-slate-100 text-slate-500'
+                                                                        ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                                                 }`}
                                                             >
-                                                                {isEnabled(rule.active) ? 'Ativa' : 'Inativa'}
-                                                            </span>
+                                                                {togglingRuleId === rule.id
+                                                                    ? 'Salvando...'
+                                                                    : isEnabled(rule.active) ? 'Desativar' : 'Ativar'}
+                                                            </button>
                                                         </td>
                                                         <td className="px-5 py-4 text-right">
                                                             <div className="flex justify-end gap-2">
@@ -3169,6 +3582,141 @@ const AutoResponderPage: React.FC = () => {
                             )}
                         </div>
                     </TabPanel>
+                    <TabPanel id="treinamento-ia">
+                        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[420px_1fr]">
+                            <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                <h2 className="text-lg font-semibold text-slate-900">Treinamento IA</h2>
+                                <div className="mt-4 space-y-4">
+                                    <label className="block">
+                                        <span className="mb-1 block text-sm font-semibold text-slate-700">Titulo</span>
+                                        <input
+                                            value={aiTrainingForm.title}
+                                            onChange={(event) => setAiTrainingForm((current) => ({ ...current, title: event.target.value }))}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className="mb-1 block text-sm font-semibold text-slate-700">Tipo de treinamento</span>
+                                        <select
+                                            value={aiTrainingForm.training_type}
+                                            onChange={(event) => setAiTrainingForm((current) => ({ ...current, training_type: event.target.value as AutoResponderAiTrainingType }))}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        >
+                                            <option value="store_instruction">Instrucoes da loja</option>
+                                            <option value="faq">Perguntas e respostas</option>
+                                            <option value="category_guidance">Categoria/produto</option>
+                                            <option value="policy">Politicas</option>
+                                        </select>
+                                    </label>
+                                    <label className="block">
+                                        <span className="mb-1 block text-sm font-semibold text-slate-700">Conteudo</span>
+                                        <textarea
+                                            rows={8}
+                                            value={aiTrainingForm.content}
+                                            onChange={(event) => setAiTrainingForm((current) => ({ ...current, content: event.target.value }))}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Prioridade</span>
+                                            <input
+                                                type="number"
+                                                value={aiTrainingForm.priority}
+                                                onChange={(event) => setAiTrainingForm((current) => ({ ...current, priority: event.target.value }))}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                        <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={aiTrainingForm.active}
+                                                onChange={(event) => setAiTrainingForm((current) => ({ ...current, active: event.target.checked }))}
+                                                className="h-4 w-4 rounded border-slate-300"
+                                            />
+                                            <span className="text-sm font-semibold text-slate-700">Ativo</span>
+                                        </label>
+                                    </div>
+                                    {aiTrainingNotice && (
+                                        <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                                            {aiTrainingNotice}
+                                        </div>
+                                    )}
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveAiTraining}
+                                            disabled={isSavingAiTraining}
+                                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            <Save size={16} />
+                                            {editingAiTraining ? 'Atualizar treinamento' : 'Salvar treinamento'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setEditingAiTraining(null);
+                                                setAiTrainingForm(emptyAiTrainingForm);
+                                                setAiTrainingNotice(null);
+                                            }}
+                                            className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                        >
+                                            Limpar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <h3 className="text-base font-semibold text-slate-900">Itens cadastrados</h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => setActiveAutoResponderTab('testes')}
+                                        className="inline-flex items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+                                    >
+                                        Testar resposta
+                                    </button>
+                                </div>
+                                <div className="mt-4 space-y-3">
+                                    {aiTrainingEntries.map((entry) => (
+                                        <div key={entry.id} className="rounded-lg border border-slate-200 p-4">
+                                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                                <div>
+                                                    <div className="font-semibold text-slate-900">{entry.title}</div>
+                                                    <div className="mt-1 text-xs font-semibold uppercase text-slate-500">
+                                                        {entry.training_type} | prioridade {entry.priority} | {isEnabled(entry.active) ? 'ativo' : 'inativo'}
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openEditAiTraining(entry)}
+                                                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                                    >
+                                                        Editar
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteAiTraining(entry)}
+                                                        className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                                                    >
+                                                        Excluir
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{entry.content}</p>
+                                        </div>
+                                    ))}
+                                    {aiTrainingEntries.length === 0 && (
+                                        <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+                                            Nenhum treinamento cadastrado ainda.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </TabPanel>
                     <TabPanel id="configuracoes">
                         <div className="space-y-4">
                             <div className="rounded-lg border border-slate-200 bg-white p-5">
@@ -3432,6 +3980,178 @@ const AutoResponderPage: React.FC = () => {
                                                 />
                                             </label>
                                         </div>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-slate-200 bg-white p-5 xl:col-span-2">
+                                    <h3 className="text-base font-semibold text-slate-900">ChatGPT</h3>
+                                    <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px]">
+                                        <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={settingsForm.ai_enabled}
+                                                onChange={(event) => updateSettingsForm({ ai_enabled: event.target.checked })}
+                                                className="h-4 w-4 rounded border-slate-300"
+                                            />
+                                            <span className="text-sm font-semibold text-slate-700">Ativar ChatGPT nas respostas guiadas</span>
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Modelo</span>
+                                            <input
+                                                type="text"
+                                                value={settingsForm.ai_model}
+                                                onChange={(event) => updateSettingsForm({ ai_model: event.target.value })}
+                                                placeholder="gpt-5-nano"
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                    </div>
+                                    <label className="mt-4 block">
+                                        <span className="mb-1 block text-sm font-semibold text-slate-700">OPENAI_API_KEY</span>
+                                        <input
+                                            type="password"
+                                            value={settingsForm.openai_api_key}
+                                            onChange={(event) => updateSettingsForm({ openai_api_key: event.target.value })}
+                                            placeholder={settingsForm.has_openai_api_key ? `Chave salva: ${settingsForm.openai_api_key_masked}` : 'Cole uma nova chave para salvar na VPS'}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+                                    <p className="mt-2 text-xs text-slate-500">
+                                        A chave fica salva somente na VPS e nao e exibida novamente. Deixe em branco para manter a chave atual.
+                                    </p>
+                                    <label className="mt-4 block">
+                                        <span className="mb-1 block text-sm font-semibold text-slate-700">Chave Admin OpenAI</span>
+                                        <input
+                                            type="password"
+                                            value={settingsForm.openai_admin_api_key}
+                                            onChange={(event) => updateSettingsForm({ openai_admin_api_key: event.target.value })}
+                                            placeholder={settingsForm.has_openai_admin_api_key ? `Chave admin salva: ${settingsForm.openai_admin_api_key_masked}` : 'Cole uma Admin API key para buscar custos oficiais'}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+                                    <p className="mt-2 text-xs text-slate-500">
+                                        Usada somente para consultar custos oficiais da OpenAI. Deixe em branco para manter a chave admin atual.
+                                    </p>
+                                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Limite diario de IA</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={settingsForm.ai_daily_limit}
+                                                onChange={(event) => updateSettingsForm({ ai_daily_limit: event.target.value })}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-sm font-semibold text-slate-700">Limite mensal de IA</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={settingsForm.ai_monthly_limit}
+                                                onChange={(event) => updateSettingsForm({ ai_monthly_limit: event.target.value })}
+                                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                            />
+                                        </label>
+                                    </div>
+                                    <div id="controle-financeiro-ia" className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                            <h4 className="text-sm font-semibold text-emerald-950">Controle financeiro da IA</h4>
+                                            <a
+                                                href="https://platform.openai.com/usage"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs font-semibold text-emerald-700 hover:text-emerald-900"
+                                            >
+                                                Abrir uso oficial da OpenAI
+                                            </a>
+                                        </div>
+                                        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                            <label className="block">
+                                                <span className="mb-1 block text-xs font-semibold text-emerald-900">Creditos atuais (USD)</span>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={settingsForm.ai_credit_balance_usd}
+                                                    onChange={(event) => updateSettingsForm({ ai_credit_balance_usd: event.target.value })}
+                                                    className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-xs font-semibold text-emerald-900">Alerta abaixo de (USD)</span>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={settingsForm.ai_credit_alert_usd}
+                                                    onChange={(event) => updateSettingsForm({ ai_credit_alert_usd: event.target.value })}
+                                                    className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-xs font-semibold text-emerald-900">Entrada / 1M tokens</span>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.000001"
+                                                    value={settingsForm.ai_input_cost_per_1m_usd}
+                                                    onChange={(event) => updateSettingsForm({ ai_input_cost_per_1m_usd: event.target.value })}
+                                                    className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                                />
+                                            </label>
+                                            <label className="block">
+                                                <span className="mb-1 block text-xs font-semibold text-emerald-900">Saida / 1M tokens</span>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.000001"
+                                                    value={settingsForm.ai_output_cost_per_1m_usd}
+                                                    onChange={(event) => updateSettingsForm({ ai_output_cost_per_1m_usd: event.target.value })}
+                                                    className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                                />
+                                            </label>
+                                        </div>
+                                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                            <div>
+                                                <span className="block text-xs font-semibold text-emerald-800">Gasto hoje</span>
+                                                <strong className="text-sm text-emerald-950">{formatUsd(aiFinance?.today_estimated_cost_usd)}</strong>
+                                            </div>
+                                            <div>
+                                                <span className="block text-xs font-semibold text-emerald-800">Gasto no mes</span>
+                                                <strong className="text-sm text-emerald-950">{formatUsd(aiFinance?.month_estimated_cost_usd)}</strong>
+                                            </div>
+                                            <div>
+                                                <span className="block text-xs font-semibold text-emerald-800">Saldo estimado</span>
+                                                <strong className={Number(aiFinance?.remaining_credit_usd || 0) <= Number(settingsForm.ai_credit_alert_usd || 0) ? 'text-sm text-red-700' : 'text-sm text-emerald-950'}>
+                                                    {formatUsd(aiFinance?.remaining_credit_usd)}
+                                                </strong>
+                                            </div>
+                                            <div>
+                                                <span className="block text-xs font-semibold text-emerald-800">Tokens no mes</span>
+                                                <strong className="text-sm text-emerald-950">
+                                                    {formatNumber(Number(aiFinance?.month_input_tokens || 0) + Number(aiFinance?.month_output_tokens || 0))}
+                                                </strong>
+                                            </div>
+                                            <div>
+                                                <span className="block text-xs font-semibold text-emerald-800">Gasto oficial OpenAI</span>
+                                                <strong className="text-sm text-emerald-950">
+                                                    {aiFinance?.openai_official_month_cost_usd == null ? 'Admin key pendente' : formatUsd(aiFinance.openai_official_month_cost_usd)}
+                                                </strong>
+                                            </div>
+                                            <div>
+                                                <span className="block text-xs font-semibold text-emerald-800">Saldo oficial estimado</span>
+                                                <strong className={Number(aiFinance?.openai_official_remaining_credit_usd || 0) <= Number(settingsForm.ai_credit_alert_usd || 0) ? 'text-sm text-red-700' : 'text-sm text-emerald-950'}>
+                                                    {aiFinance?.openai_official_remaining_credit_usd == null ? '-' : formatUsd(aiFinance.openai_official_remaining_credit_usd)}
+                                                </strong>
+                                            </div>
+                                        </div>
+                                        <p className="mt-3 text-xs text-emerald-800">
+                                            Estimativa interna baseada nos tokens retornados pela OpenAI. Com a Chave Admin OpenAI salva, o sistema tambem consulta o gasto oficial do mes pela API de custos.
+                                        </p>
+                                    </div>
+                                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                        O ChatGPT so pode responder usando dados enviados pelo sistema. Produtos, precos, estoque, prazos e garantias fora do catalogo oficial sao bloqueados pelo prompt do servidor.
                                     </div>
                                 </div>
 

@@ -2,6 +2,7 @@ export type AutoResponderRuleMatchType = 'exact' | 'contains' | 'any_keyword' | 
 export type AutoResponderRuleReplyType = 'text' | 'product_by_tag' | 'product_search' | string;
 export type AutoResponderTagScope = 'conversation' | 'product' | 'rule' | string;
 export type AutoResponderBlockPatternType = 'exact' | 'contains' | 'prefix' | string;
+export type AutoResponderAiTrainingType = 'store_instruction' | 'faq' | 'category_guidance' | 'policy';
 
 export interface AutoResponderSettings {
     id?: number;
@@ -24,8 +25,23 @@ export interface AutoResponderSettings {
     numbered_list_threshold: number;
     numbered_list_validity_minutes: number;
     product_tag_keywords: Record<string, string[] | string> | string | null;
+    conversation_flow_keywords?: Record<string, string[] | string> | string | null;
     archive_to_synology: boolean | number;
     archive_after_days: number;
+    ai_enabled?: boolean | number;
+    ai_model?: string;
+    ai_daily_limit?: number;
+    ai_monthly_limit?: number;
+    ai_credit_balance_usd?: number;
+    ai_credit_alert_usd?: number;
+    ai_input_cost_per_1m_usd?: number;
+    ai_output_cost_per_1m_usd?: number;
+    openai_api_key?: string;
+    openai_admin_api_key?: string;
+    has_openai_api_key?: boolean | number;
+    openai_api_key_masked?: string;
+    has_openai_admin_api_key?: boolean | number;
+    openai_admin_api_key_masked?: string;
     created_at?: string;
     updated_at?: string;
 }
@@ -112,6 +128,17 @@ export interface AutoResponderUnansweredQuestion {
     last_seen_at: string;
 }
 
+export interface AutoResponderAiTraining {
+    id: number;
+    title: string;
+    training_type: AutoResponderAiTrainingType;
+    content: string;
+    priority: number;
+    active: boolean | number;
+    created_at?: string;
+    updated_at?: string;
+}
+
 export interface AutoResponderStats {
     source?: 'mysql' | 'synology';
     warning?: string;
@@ -123,6 +150,23 @@ export interface AutoResponderStats {
         product_messages?: number;
         human_requests?: number;
         avg_response_time_ms?: number;
+        ai_finance?: {
+            month_responses?: number;
+            month_input_tokens?: number;
+            month_output_tokens?: number;
+            month_estimated_cost_usd?: number;
+            today_estimated_cost_usd?: number;
+            today_input_tokens?: number;
+            today_output_tokens?: number;
+            credit_balance_usd?: number;
+            credit_alert_usd?: number;
+            remaining_credit_usd?: number;
+            has_openai_admin_api_key?: boolean | number;
+            openai_official_cost_status?: string;
+            openai_official_cost_updated_at?: string | null;
+            openai_official_month_cost_usd?: number;
+            openai_official_remaining_credit_usd?: number;
+        };
         [key: string]: unknown;
     };
     byIntent?: Array<{ intent: string; total: number }>;
@@ -193,6 +237,14 @@ export type AutoResponderTagInput = Omit<AutoResponderTag, 'id' | 'created_at' |
 export type AutoResponderTagUpdate = Partial<AutoResponderTagInput>;
 export type AutoResponderBlocklistInput = Omit<AutoResponderBlocklistEntry, 'id' | 'created_at' | 'updated_at'>;
 export type AutoResponderBlocklistUpdate = Partial<AutoResponderBlocklistInput>;
+export interface AutoResponderAiTrainingInput {
+    title: string;
+    training_type: AutoResponderAiTrainingType;
+    content: string;
+    priority: number;
+    active: boolean;
+}
+export type AutoResponderAiTrainingUpdate = Partial<AutoResponderAiTrainingInput>;
 
 export interface AutoResponderRuleFromQuestionInput {
     log_id?: number;
@@ -224,4 +276,9 @@ export interface AutoResponderConversationFilters {
 
 export interface AutoResponderUnansweredFilters {
     limit?: number;
+}
+
+export interface AutoResponderAiTrainingFilters {
+    type?: AutoResponderAiTrainingType | '';
+    active?: boolean | number | '';
 }
