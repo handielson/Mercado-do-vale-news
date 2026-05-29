@@ -5736,7 +5736,7 @@ const AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_KEYWORDS = {
 };
 
 const AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES = {
-  greeting_reply: 'Bom dia! Seja bem-vindo ao Mercado do Vale.\nComo posso ajudar voce hoje?',
+  greeting_reply: 'Bom dia! Seja bem-vindo ao Mercado do Vale. Como posso ajudar voce hoje?',
   phone_list_prompt: AUTORESPONDER_NEEDS_PROMPT_FALLBACK,
   phone_list_reply: 'Encontrei estas opcoes para celulares:',
   name_prompt: 'Qual seu nome para seguirmos com o atendimento?',
