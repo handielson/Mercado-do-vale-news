@@ -24,13 +24,19 @@ assert.match(
 assert.match(
   source,
   /function formatAutoresponderPaginationSummary\(/,
-  'expected a visible pagination summary helper',
+  'expected the legacy pagination summary helper to remain harmless',
+);
+
+assert.doesNotMatch(
+  source,
+  /Pagina \$\{page\} - encontramos \$\{safeTotal\} produtos relacionados/,
+  'product replies must not show the page/total counter line',
 );
 
 assert.match(
   source,
-  /Pagina \$\{page\} - encontramos \$\{safeTotal\} produtos relacionados/,
-  'expected replies to show current page and total',
+  /return '';\s*\}\s*\n\s*const AUTORESPONDER_COMPLETE_PRODUCT_LIST_WORDS/s,
+  'pagination summary helper should return an empty string before product list helpers',
 );
 
 assert.match(

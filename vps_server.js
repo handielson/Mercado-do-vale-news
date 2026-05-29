@@ -17,10 +17,19 @@ const AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS = 'Certo, vou chamar um especiali
 const AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE = 'Nao consegui localizar exatamente isso agora. Me diga o modelo do aparelho ou o tipo de produto que voce procura.';
 const AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE = 'Vou chamar um atendente para te ajudar melhor. Assim conseguimos conferir certinho pra voce.';
 const AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE = 'Pitoco, assistente virtual do Mercado do Vale. Se precisar de ajuda personalizada, nossa equipe continua o atendimento por aqui.';
+const AUTORESPONDER_AI_SYSTEM_PROMPT = [
+  'Voce e o atendente virtual do Mercado do Vale.',
+  'PROIBIDO responder produtos, precos, estoque, prazos, garantias, promocoes ou condicoes que nao estejam no contexto enviado pelo sistema.',
+  'Se o sistema nao enviar produtos ou dados suficientes, faca apenas uma pergunta curta para entender o que o cliente procura.',
+  'Nunca invente informacoes. Nunca diga que tem um produto sem ele aparecer no contexto oficial.',
+  'Responda em portugues do Brasil, com tom educado, direto e vendedor.',
+].join('\n');
+const AUTORESPONDER_NEEDS_PROMPT_FALLBACK = 'Voce esta atras de celular novo? Quer que eu mande a lista do que temos? Ou deseja alguma outra coisa?';
 const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
 const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS = 3;
 const AUTORESPONDER_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_PRODUCT_PAGE_SIZE * AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES;
+const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 500;
 const AUTORESPONDER_RULE_TEMPLATES = [
   { name: 'Saudacao manha', pattern: 'bom dia, oi bom dia, dia' },
   { name: 'Saudacao tarde', pattern: 'boa tarde, tarde' },
@@ -5737,6 +5746,449 @@ function formatAutoresponderGreetingCategoryListReply(categories) {
   return lines.join('\n');
 }
 
+function maskAutoresponderOpenAiKey(value) {
+  const key = String(value || '').trim();
+  if (!key) return '';
+  if (key.length <= 10) return '********';
+  return `${key.slice(0, 7)}...${key.slice(-4)}`;
+}
+
+function sanitizeAutoresponderSettings(row) {
+  if (!row) return null;
+  const openaiApiKey = String(row.openai_api_key || '').trim();
+  const openaiAdminApiKey = String(row.openai_admin_api_key || process.env.OPENAI_ADMIN_KEY || process.env.OPENAI_ADMIN_API_KEY || '').trim();
+  const { openai_api_key, openai_admin_api_key, ...safe } = row;
+  return {
+    ...safe,
+    has_openai_api_key: openaiApiKey.length > 0,
+    openai_api_key_masked: maskAutoresponderOpenAiKey(openaiApiKey),
+    has_openai_admin_api_key: openaiAdminApiKey.length > 0,
+    openai_admin_api_key_masked: maskAutoresponderOpenAiKey(openaiAdminApiKey),
+  };
+}
+
+const AUTORESPONDER_AI_TRAINING_TYPES = new Set([
+  'store_instruction',
+  'faq',
+  'category_guidance',
+  'policy',
+]);
+
+function normalizeAutoresponderAiTrainingType(value) {
+  const type = String(value || 'store_instruction').trim();
+  return AUTORESPONDER_AI_TRAINING_TYPES.has(type) ? type : 'store_instruction';
+}
+
+function sanitizeAutoresponderAiTrainingInput(body = {}, partial = false) {
+  const input = {};
+
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'title')) {
+    input.title = String(body.title || '').trim();
+    if (!input.title) throw new Error('Titulo do treinamento e obrigatorio');
+    if (input.title.length > 120) throw new Error('Titulo deve ter no maximo 120 caracteres');
+  }
+
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'training_type')) {
+    input.training_type = normalizeAutoresponderAiTrainingType(body.training_type);
+  }
+
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'content')) {
+    input.content = String(body.content || '').trim();
+    if (!input.content) throw new Error('Conteudo do treinamento e obrigatorio');
+    if (input.content.length > 8000) throw new Error('Conteudo deve ter no maximo 8000 caracteres');
+  }
+
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'priority')) {
+    const priority = Number(body.priority || 0);
+    if (!Number.isFinite(priority)) throw new Error('Prioridade invalida');
+    input.priority = Math.trunc(priority);
+  }
+
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'active')) {
+    input.active = boolInt(body.active);
+  }
+
+  return input;
+}
+
+async function loadActiveAutoresponderAiTraining(limit = 12) {
+  const [rows] = await pool.query(
+    `SELECT id, title, training_type, content, priority
+     FROM autoresponder_ai_training
+     WHERE active = 1
+     ORDER BY priority DESC, id ASC
+     LIMIT ?`,
+    [Math.max(1, Math.min(Number(limit) || 12, 30))]
+  );
+  return rows;
+}
+
+function buildAutoresponderAiTrainingContext(entries = []) {
+  if (!Array.isArray(entries) || entries.length === 0) return '';
+  const lines = ['Treinamento adicional aprovado pelo Mercado do Vale:'];
+  entries.forEach((entry, index) => {
+    lines.push(`${index + 1}. [${entry.training_type}] ${entry.title}: ${entry.content}`);
+  });
+  return lines.join('\n');
+}
+
+function getAutoresponderAiConfig(settings = null) {
+  const settingsKey = String(settings?.openai_api_key || '').trim();
+  const envKey = String(process.env.OPENAI_API_KEY || '').trim();
+  const apiKey = settingsKey || envKey;
+  const settingsEnabled = settings?.ai_enabled == null ? null : Number(settings.ai_enabled) === 1;
+  const envEnabled = String(process.env.AUTORESPONDER_AI_ENABLED || '').trim() === '1';
+  return {
+    enabled: settingsEnabled == null ? envEnabled : settingsEnabled,
+    apiKey,
+    model: String(settings?.ai_model || process.env.AUTORESPONDER_AI_MODEL || 'gpt-5-nano').trim() || 'gpt-5-nano',
+  };
+}
+
+function isAutoresponderAiEnabled(settings = null) {
+  const config = getAutoresponderAiConfig(settings);
+  return config.enabled && config.apiKey.length > 0;
+}
+
+async function isAutoresponderAiLimitReached(settings = null) {
+  const dailyLimit = Math.max(0, Number(settings?.ai_daily_limit || 0));
+  const monthlyLimit = Math.max(0, Number(settings?.ai_monthly_limit || 0));
+  if (dailyLimit <= 0 && monthlyLimit <= 0) return false;
+
+  if (dailyLimit > 0) {
+    const [[row]] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM autoresponder_logs
+       WHERE ai_assisted = 1
+         AND created_at >= CURDATE()`
+    );
+    if (Number(row?.total || 0) >= dailyLimit) return true;
+  }
+
+  if (monthlyLimit > 0) {
+    const [[row]] = await pool.query(
+      `SELECT COUNT(*) AS total
+       FROM autoresponder_logs
+       WHERE ai_assisted = 1
+         AND created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')`
+    );
+    if (Number(row?.total || 0) >= monthlyLimit) return true;
+  }
+
+  return false;
+}
+
+function calculateAutoresponderAiEstimatedCostUsd({ inputTokens = 0, outputTokens = 0, settings = null } = {}) {
+  const inputPrice = Math.max(0, Number(settings?.ai_input_cost_per_1m_usd || 0));
+  const outputPrice = Math.max(0, Number(settings?.ai_output_cost_per_1m_usd || 0));
+  const inputCost = (Math.max(0, Number(inputTokens) || 0) / 1000000) * inputPrice;
+  const outputCost = (Math.max(0, Number(outputTokens) || 0) / 1000000) * outputPrice;
+  const total = inputCost + outputCost;
+  return Number.isFinite(total) && total > 0 ? Number(total.toFixed(8)) : null;
+}
+
+function getAutoresponderOpenAiAdminKey(settings = null) {
+  return String(
+    settings?.openai_admin_api_key ||
+    process.env.OPENAI_ADMIN_KEY ||
+    process.env.OPENAI_ADMIN_API_KEY ||
+    ''
+  ).trim();
+}
+
+function getCurrentMonthUnixRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  return {
+    startTime: Math.floor(start.getTime() / 1000),
+    endTime: Math.floor(now.getTime() / 1000),
+  };
+}
+
+function sumOpenAiCostsResponseUsd(payload) {
+  let total = 0;
+  for (const bucket of Array.isArray(payload?.data) ? payload.data : []) {
+    for (const result of Array.isArray(bucket?.results) ? bucket.results : []) {
+      const currency = String(result?.amount?.currency || 'usd').toLowerCase();
+      const value = Number(result?.amount?.value || 0);
+      if (currency === 'usd' && Number.isFinite(value)) total += value;
+    }
+  }
+  return Number(total.toFixed(6));
+}
+
+async function fetchOpenAiOfficialCostsUsd({ settings = null } = {}) {
+  const apiKey = getAutoresponderOpenAiAdminKey(settings);
+  if (!apiKey) {
+    return { available: false, status: 'missing_admin_key', cost_usd: null };
+  }
+
+  const { startTime, endTime } = getCurrentMonthUnixRange();
+  let page = '';
+  let total = 0;
+
+  try {
+    for (let requestIndex = 0; requestIndex < 4; requestIndex += 1) {
+      const params = new URLSearchParams({
+        start_time: String(startTime),
+        end_time: String(endTime),
+        bucket_width: '1d',
+        limit: '31',
+      });
+      if (page) params.set('page', page);
+
+      const response = await fetch(`https://api.openai.com/v1/organization/costs?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(Number(process.env.OPENAI_COSTS_TIMEOUT_MS || 6000)),
+      });
+
+      if (!response.ok) {
+        console.warn('[autoresponder-ai-finance] OpenAI costs failed:', response.status, await response.text());
+        return { available: false, status: `openai_error_${response.status}`, cost_usd: null };
+      }
+
+      const payload = await response.json();
+      total += sumOpenAiCostsResponseUsd(payload);
+      if (!payload?.has_more || !payload?.next_page) break;
+      page = String(payload.next_page);
+    }
+
+    return {
+      available: true,
+      status: 'ok',
+      cost_usd: Number(total.toFixed(6)),
+      updated_at: new Date().toISOString(),
+    };
+  } catch (err) {
+    console.warn('[autoresponder-ai-finance] OpenAI costs unavailable:', err.message);
+    return { available: false, status: 'request_failed', cost_usd: null };
+  }
+}
+
+function extractAutoresponderOpenAiText(responseJson) {
+  if (typeof responseJson?.output_text === 'string') return responseJson.output_text.trim();
+  const chunks = [];
+  for (const item of Array.isArray(responseJson?.output) ? responseJson.output : []) {
+    for (const content of Array.isArray(item?.content) ? item.content : []) {
+      if (typeof content?.text === 'string') chunks.push(content.text);
+    }
+  }
+  return chunks.join('\n').trim();
+}
+
+function normalizeAutoresponderOpenAiUsage(responseJson, model, settings = null) {
+  const usage = responseJson?.usage || {};
+  const inputTokens = Number(usage.input_tokens ?? usage.prompt_tokens ?? 0);
+  const outputTokens = Number(usage.output_tokens ?? usage.completion_tokens ?? 0);
+  const aiInputTokens = Number.isFinite(inputTokens) && inputTokens > 0 ? Math.trunc(inputTokens) : null;
+  const aiOutputTokens = Number.isFinite(outputTokens) && outputTokens > 0 ? Math.trunc(outputTokens) : null;
+  return {
+    ai_assisted: 1,
+    ai_model: String(model || '').trim() || null,
+    ai_input_tokens: aiInputTokens,
+    ai_output_tokens: aiOutputTokens,
+    ai_estimated_cost_usd: calculateAutoresponderAiEstimatedCostUsd({
+      inputTokens: aiInputTokens || 0,
+      outputTokens: aiOutputTokens || 0,
+      settings,
+    }),
+  };
+}
+
+async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings = null }) {
+  if (!isAutoresponderAiEnabled(settings)) return null;
+  if (await isAutoresponderAiLimitReached(settings)) return null;
+  const aiConfig = getAutoresponderAiConfig(settings);
+  try {
+    const trainingContext = buildAutoresponderAiTrainingContext(await loadActiveAutoresponderAiTraining());
+    const instructions = trainingContext
+      ? `${AUTORESPONDER_AI_SYSTEM_PROMPT}\n\n${trainingContext}`
+      : AUTORESPONDER_AI_SYSTEM_PROMPT;
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${aiConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: aiConfig.model,
+        instructions,
+        input,
+        max_output_tokens: maxOutputTokens,
+      }),
+      signal: AbortSignal.timeout(Number(process.env.AUTORESPONDER_AI_TIMEOUT_MS || 5000)),
+    });
+    if (!response.ok) {
+      console.warn('[autoresponder-ai] OpenAI response failed:', response.status, await response.text());
+      return null;
+    }
+    const responseJson = await response.json();
+    const text = extractAutoresponderOpenAiText(responseJson);
+    if (!text) return null;
+    return {
+      text,
+      aiMeta: normalizeAutoresponderOpenAiUsage(responseJson, aiConfig.model, settings),
+    };
+  } catch (err) {
+    console.warn('[autoresponder-ai] skipped:', err.message);
+    return null;
+  }
+}
+
+async function buildAutoresponderNeedsPromptReply({ message, contactFirstName = '', settings = null } = {}) {
+  const name = String(contactFirstName || '').trim();
+  const needsPrompt = await callAutoresponderOpenAi({
+    input: [
+      'O cliente acabou de cumprimentar ou iniciar conversa.',
+      `Mensagem do cliente: ${String(message || '').trim() || '(vazia)'}`,
+      name ? `Nome do cliente: ${name}` : '',
+      'Nao ha produtos consultados ainda. Pergunte se ele esta atras de celular novo, se quer receber a lista do que temos ou se deseja outra coisa.',
+      'Nao cite produtos, precos, estoque, garantia, entrega ou promocoes.',
+    ].filter(Boolean).join('\n'),
+    maxOutputTokens: 90,
+    settings,
+  });
+  return {
+    text: needsPrompt?.text || AUTORESPONDER_NEEDS_PROMPT_FALLBACK,
+    aiMeta: needsPrompt?.aiMeta || null,
+  };
+}
+
+const AUTORESPONDER_GENERIC_PHONE_CATALOG_WORDS = new Set([
+  'celular', 'celulares', 'smartphone', 'smartphones', 'aparelho', 'aparelhos',
+  'telefone', 'telefones', 'phone', 'phones',
+]);
+
+const AUTORESPONDER_GENERIC_TABLET_CATALOG_WORDS = new Set([
+  'tablet', 'tablets',
+]);
+
+const AUTORESPONDER_GENERIC_RECEIVER_CATALOG_WORDS = new Set([
+  'receptor', 'receptores',
+]);
+
+const AUTORESPONDER_GENERIC_PHONE_CATALOG_FILLER_WORDS = new Set([
+  'tem', 'teria', 'vende', 'vendem', 'voces', 'voce', 'vc', 'ai', 'aqui',
+  'de', 'do', 'da', 'dos', 'das', 'um', 'uma', 'uns', 'umas', 'algum',
+  'alguns', 'alguma', 'algumas', 'novo', 'novos', 'nova', 'novas',
+  'disponivel', 'disponiveis', 'pra', 'para', 'quero', 'queria',
+  ...AUTORESPONDER_GENERIC_PHONE_CATALOG_WORDS,
+  ...AUTORESPONDER_GENERIC_TABLET_CATALOG_WORDS,
+  ...AUTORESPONDER_GENERIC_RECEIVER_CATALOG_WORDS,
+]);
+
+function isAutoresponderExplicitCatalogListRequest(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  if (!text) return false;
+  if (text === 'lista') return true;
+  return /^(lista|listar|catalogo|opcoes)\b/.test(text) || /\b(manda|mande|envia|envie|mostrar|mostra|ver)\b.*\blista\b/.test(text);
+}
+
+function isAutoresponderGenericPhoneCatalogRequest(message) {
+  return detectAutoresponderGenericDeviceCatalogFamily(message) === 'smartphone';
+}
+
+function detectAutoresponderGenericDeviceCatalogFamily(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  if (!text || isAutoresponderExplicitCatalogListRequest(text) || isAutoresponderCompleteProductListKeyword(text)) return null;
+  const tokens = text.split(/\s+/).filter(Boolean);
+  const family = tokens.some((token) => AUTORESPONDER_GENERIC_PHONE_CATALOG_WORDS.has(token))
+    ? 'smartphone'
+    : tokens.some((token) => AUTORESPONDER_GENERIC_TABLET_CATALOG_WORDS.has(token))
+      ? 'tablet'
+      : tokens.some((token) => AUTORESPONDER_GENERIC_RECEIVER_CATALOG_WORDS.has(token))
+        ? 'receptor'
+        : null;
+  if (!family) return null;
+  const meaningfulTokens = tokens.filter((token) => !AUTORESPONDER_GENERIC_PHONE_CATALOG_FILLER_WORDS.has(token));
+  return meaningfulTokens.length === 0 ? family : null;
+}
+
+function buildAutoresponderPhoneCatalogRefinementPrompt() {
+  return buildAutoresponderDeviceCatalogRefinementPrompt('smartphone');
+}
+
+function buildAutoresponderDeviceCatalogRefinementPrompt(family = 'smartphone') {
+  const introByFamily = {
+    smartphone: 'Temos celulares disponiveis sim.',
+    tablet: 'Temos tablets disponiveis sim.',
+    receptor: 'Temos receptores disponiveis sim.',
+  };
+  return [
+    introByFamily[family] || introByFamily.smartphone,
+    'Voce procura algum modelo, marca ou faixa de preco em especial?',
+    'Ex: iPhone ate R$ 2.000, Xiaomi com camera boa, Samsung barato.',
+    '',
+    'Se quiser receber a lista dos disponiveis, responda "lista".',
+  ].join('\n');
+}
+
+function isAutoresponderCatalogRequest(message) {
+  const text = normalizeAutoresponderText(message).trim();
+  if (!text) return false;
+  if (isAutoresponderCompleteProductListKeyword(text)) return true;
+  const asksForList = [
+    'qual', 'quais', 'lista', 'listar', 'opcoes', 'opcao', 'catalogo',
+    'modelos', 'disponivel', 'disponiveis', 'tem', 'voces tem', 'voce tem', 'vc tem',
+  ].some((keyword) => text.includes(keyword));
+  const asksForPhone = [
+    'celular', 'celulares', 'smartphone', 'smartphones', 'aparelho', 'aparelhos',
+    'telefone', 'telefones', 'iphone', 'iphones', 'xiaomi', 'samsung', 'motorola',
+    'tablet', 'tablets', 'tablte', 'tabltes', 'receptor', 'receptores',
+  ].some((keyword) => text.includes(keyword));
+  return asksForList && asksForPhone;
+}
+
+function findAutoresponderCatalogCategoryForMessage(message, categories) {
+  const text = normalizeAutoresponderText(message).trim();
+  const safeCategories = Array.isArray(categories) ? categories : [];
+  if (!text || safeCategories.length === 0) return null;
+
+  const directMatch = safeCategories.find((category) => {
+    const name = normalizeAutoresponderText(category?.name || '').trim();
+    return name && (text.includes(name) || name.includes(text));
+  });
+  if (directMatch) return directMatch;
+
+  const phoneCategoryHints = [
+    'celular', 'celulares', 'smartphone', 'smartphones', 'aparelho', 'aparelhos',
+    'telefone', 'telefones', 'phone', 'phones', 'iphone', 'xiaomi', 'samsung',
+    'tablet', 'tablets', 'tablte', 'tabltes', 'receptor', 'receptores',
+  ];
+  const asksForPhone = phoneCategoryHints.some((keyword) => text.includes(keyword));
+  if (!asksForPhone) return null;
+
+  return safeCategories.find((category) => {
+    const name = normalizeAutoresponderText(category?.name || '').trim();
+    return phoneCategoryHints.some((keyword) => name.includes(keyword));
+  }) || null;
+}
+
+function extractAutoresponderBudgetCents(message) {
+  const text = String(message || '').toLowerCase();
+  const budgetPattern = /(?:ate|até|maximo|max|abaixo de|menos de|por volta de|na faixa de)\s*(?:r\$\s*)?([\d.,]+)/i;
+  const match = text.match(budgetPattern);
+  if (!match) return 0;
+  const raw = String(match[1] || '').trim();
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : raw.replace(/\./g, '');
+  const amount = Number(normalized);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return Math.round(amount * 100);
+}
+
+function getAutoresponderBudgetCategoryRequest(message, categories) {
+  const budgetCents = extractAutoresponderBudgetCents(message);
+  if (budgetCents <= 0) return null;
+  const category = findAutoresponderCatalogCategoryForMessage(message, categories);
+  if (!category?.id) return null;
+  return { category, budgetCents };
+}
+
 async function resolveAutoresponderReplyTemplate(replyText, settings = null) {
   let text = String(replyText || '');
   if (!text.includes('{categorias_disponiveis}') && !/\{categoria:[^}]+\}/i.test(text)) return text;
@@ -5758,10 +6210,10 @@ async function resolveAutoresponderReplyTemplate(replyText, settings = null) {
       || categories.find((item) => normalizeAutoresponderText(item?.name || '').includes(normalizedName));
     let replacement = `Nao encontrei a categoria "${rawName}".`;
     if (category) {
-      const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+      const pageSize = getAutoresponderInitialProductPageSize(category.name);
       const total = await countAutoresponderProductsByCategory(category.id);
       const products = await findAutoresponderProductsByCategory(category.id, pageSize);
-      replacement = await formatAutoresponderProductSearchReply(products, category.name, settings, { offset: 0, limit: pageSize, total });
+      replacement = await formatAutoresponderProductSearchReply(products, category.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(category.name) });
     }
     text = text.split(match[0]).join(replacement);
   }
@@ -5864,31 +6316,45 @@ async function clearAutoresponderPurchaseFlow(sender) {
 function findAutoresponderSelectedOptionFromMessage(message, options, numberedChoice = null) {
   const safeOptions = Array.isArray(options) ? options : [];
   const choiceNumber = Number(numberedChoice || 0);
-  if (choiceNumber > 0) return safeOptions[choiceNumber - 1] || null;
+  if (choiceNumber > 0) {
+    const option = safeOptions[choiceNumber - 1] || null;
+    return option ? { ...option, option_number: choiceNumber } : null;
+  }
 
   const text = normalizeAutoresponderText(message).trim();
   if (text.length < 4) return null;
   const tokens = text.split(/\s+/).filter((token) => token.length >= 2);
   if (tokens.length < 2) return null;
 
-  return safeOptions.find((option) => {
+  const selectedIndex = safeOptions.findIndex((option) => {
     const name = normalizeAutoresponderText(option?.name || '');
     const sku = normalizeAutoresponderText(option?.sku || '');
     if (sku && sku === text) return true;
     if (!name) return false;
     return tokens.every((token) => name.includes(token));
-  }) || null;
+  });
+  return selectedIndex >= 0
+    ? { ...safeOptions[selectedIndex], option_number: selectedIndex + 1 }
+    : null;
 }
 
-function buildAutoresponderPurchaseActionPrompt(product, selectedOption) {
-  const productName = product?.name || selectedOption?.name || 'produto selecionado';
-  const priceLine = product ? `\nValor: ${formatAutoresponderCurrency(getAutoresponderProductPrice(product))}` : '';
-  return `Certo, voce escolheu:\n${productName}${priceLine}\n\nQuer comprar esse produto ou ver detalhes primeiro?\nResponda "comprar" ou "detalhes".`;
+async function buildAutoresponderPurchaseActionPrompt(product, selectedOption) {
+  const selectedProduct = product || selectedOption || {};
+  const card = await formatAutoresponderProductCardLine({
+    name: product?.name || selectedOption?.name || 'Produto selecionado',
+    representative: selectedProduct,
+    products: [selectedProduct],
+    priceRange: product ? null : undefined,
+    colors: getAutoresponderAvailableColors([selectedProduct]),
+  }, Number(selectedOption?.option_number || 1));
+
+  return `${card}\n\nResponda:\n*1* Para comprar\n*2* Para detalhes`;
 }
 
 function isAutoresponderPurchaseBuyRequest(message) {
   const text = normalizeAutoresponderText(message).trim();
   return [
+    '1',
     'comprar',
     'quero comprar',
     'vou comprar',
@@ -5903,6 +6369,7 @@ function isAutoresponderPurchaseBuyRequest(message) {
 function isAutoresponderPurchaseDetailsRequest(message) {
   const text = normalizeAutoresponderText(message).trim();
   return [
+    '2',
     'detalhes',
     'ver detalhes',
     'detalhe',
@@ -6789,7 +7256,7 @@ function buildAutoresponderCustomerDocumentSavedReply() {
 }
 
 async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
-  const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), AUTORESPONDER_PRODUCT_RESPONSE_LIMIT);
+  const safeLimit = getAutoresponderProductQueryLimit(limit);
   const safeOffset = Math.max(Number(offset) || 0, 0);
   const numericTagId = Number(tagId);
   const [rows] = await pool.query(
@@ -6829,7 +7296,7 @@ async function findAutoresponderAvailableCategories(limit = 12) {
 }
 
 async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset = 0) {
-  const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), AUTORESPONDER_PRODUCT_RESPONSE_LIMIT);
+  const safeLimit = getAutoresponderProductQueryLimit(limit);
   const safeOffset = Math.max(Number(offset) || 0, 0);
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
@@ -6858,6 +7325,46 @@ async function countAutoresponderProductsByCategory(categoryId) {
        AND stock_quantity > 0
        AND category_id = ?`,
     [categoryId]
+  );
+  return Number(rows[0]?.total || 0);
+}
+
+async function findAutoresponderProductsByCategoryBudget(categoryId, budgetCents, limit = 5, offset = 0) {
+  const safeLimit = getAutoresponderProductQueryLimit(limit);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+  const safeBudget = Math.max(Math.round(Number(budgetCents) || 0), 0);
+  if (!categoryId || safeBudget <= 0) return [];
+  const [rows] = await pool.query(
+    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+       warranty_type, warranty_template_id,
+       (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
+       (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
+       JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
+     FROM products
+     WHERE status = 'active'
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND stock_quantity > 0
+       AND category_id = ?
+       AND COALESCE(NULLIF(price_promo, 0), price_retail) <= ?
+     ORDER BY COALESCE(NULLIF(price_promo, 0), price_retail) DESC, updated_at DESC
+     LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+    [categoryId, safeBudget]
+  );
+  return rows;
+}
+
+async function countAutoresponderProductsByCategoryBudget(categoryId, budgetCents) {
+  const safeBudget = Math.max(Math.round(Number(budgetCents) || 0), 0);
+  if (!categoryId || safeBudget <= 0) return 0;
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM products
+     WHERE status = 'active'
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND stock_quantity > 0
+       AND category_id = ?
+       AND COALESCE(NULLIF(price_promo, 0), price_retail) <= ?`,
+    [categoryId, safeBudget]
   );
   return Number(rows[0]?.total || 0);
 }
@@ -7020,6 +7527,76 @@ async function calculateAutoresponderInstallmentOptions(priceCents, maxInstallme
 function formatAutoresponderInstallmentLine(plan) {
   if (!plan?.installments || !plan?.value) return '';
   return `Parcelamento: ate ${plan.installments}x de ${formatAutoresponderCurrency(plan.value / 100)}`;
+}
+
+function getAutoresponderCheapestProduct(products) {
+  const available = filterAutoresponderAvailableProducts(products);
+  return available
+    .slice()
+    .sort((a, b) => getAutoresponderProductPriceCents(a) - getAutoresponderProductPriceCents(b))[0]
+    || available[0]
+    || null;
+}
+
+function normalizeAutoresponderMemoryLabel(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const compact = text.replace(/\s+/g, '').toUpperCase();
+  const match = compact.match(/^(\d+(?:GB|G|TB|T))$/i);
+  if (!match) return text;
+  return compact
+    .replace(/(\d+)G$/i, '$1GB')
+    .replace(/(\d+)T$/i, '$1TB');
+}
+
+function getAutoresponderProductVariationLabel(product) {
+  const specs = parsePublicJson(product?.specs, product?.specs || {}) || {};
+  const customFields = parsePublicJson(product?.custom_fields, product?.custom_fields || {}) || {};
+  const ram = normalizeAutoresponderMemoryLabel(
+    specs.ram || specs.memoria_ram || specs.memory_ram || customFields.ram || customFields.memoria_ram
+  );
+  const storage = normalizeAutoresponderMemoryLabel(
+    specs.storage || specs.armazenamento || specs.memoria || specs.capacity || customFields.storage || customFields.armazenamento || customFields.memoria || customFields.capacity
+  );
+  if (ram && storage) return `${ram}/${storage}`;
+
+  const explicitVersion = String(specs.version || specs.versao || customFields.version || customFields.versao || '').trim();
+  if (explicitVersion) return explicitVersion;
+
+  const name = String(product?.name || '');
+  const slashMatch = name.match(/\b(\d+\s*(?:gb|g|tb|t))\s*\/\s*(\d+\s*(?:gb|g|tb|t))\b/i);
+  if (slashMatch) {
+    return `${normalizeAutoresponderMemoryLabel(slashMatch[1])}/${normalizeAutoresponderMemoryLabel(slashMatch[2])}`;
+  }
+  const pairMatch = name.match(/\b(\d+\s*(?:gb|g))\s+(?:ram\s+)?(\d+\s*(?:gb|g|tb|t))\b/i);
+  if (pairMatch) {
+    return `${normalizeAutoresponderMemoryLabel(pairMatch[1])}/${normalizeAutoresponderMemoryLabel(pairMatch[2])}`;
+  }
+  return '';
+}
+
+async function formatAutoresponderProductCardPaymentLine(product) {
+  const priceCents = getAutoresponderProductPriceCents(product);
+  const options = await calculateAutoresponderInstallmentOptions(priceCents, 12);
+  const plan = options.find((option) => Number(option.installments) === 12) || options[options.length - 1];
+  if (!plan?.installments || !plan?.value || !plan?.total) return '';
+  return `💳 ${plan.installments}x de ${formatAutoresponderCurrency(plan.value / 100)} (${formatAutoresponderCurrency(plan.total / 100)})`;
+}
+
+async function formatAutoresponderProductCardLine(group, number) {
+  const product = getAutoresponderCheapestProduct(group?.products) || group?.representative || {};
+  const variationLabel = getAutoresponderProductVariationLabel(product);
+  const paymentLine = await formatAutoresponderProductCardPaymentLine(product);
+  const lines = [
+    `${number}. ${group?.name || product?.name || 'Produto'}`,
+  ];
+  if (variationLabel) lines.push(`📱 ${variationLabel}`);
+  lines.push(`💰 ${group?.priceRange || formatAutoresponderCurrency(getAutoresponderProductPrice(product))} à vista`);
+  if (paymentLine) lines.push(paymentLine);
+  if (Array.isArray(group?.colors) && group.colors.length > 0) {
+    lines.push(`🎨 Cores: ${group.colors.join(', ')}`);
+  }
+  return lines.join('\n');
 }
 
 function buildAutoresponderSelectedInstallmentPayment(requestedInstallments, installmentOptions, totalCents) {
@@ -7217,11 +7794,95 @@ function getAutoresponderCatalogSearchUrl(keyword) {
 }
 
 function formatAutoresponderPaginationSummary({ offset = 0, limit = AUTORESPONDER_PRODUCT_PAGE_SIZE, total = 0 } = {}) {
-  const safeTotal = Math.max(Number(total) || 0, 0);
-  if (safeTotal <= 0) return '';
+  return '';
+}
+
+const AUTORESPONDER_COMPLETE_PRODUCT_LIST_WORDS = new Set([
+  'celular',
+  'celulares',
+  'smartphone',
+  'smartphones',
+  'tablet',
+  'tablets',
+  'tablte',
+  'tabltes',
+  'receptor',
+  'receptores',
+]);
+
+function isAutoresponderCompleteProductListKeyword(keyword) {
+  const tokens = normalizeAutoresponderText(keyword)
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  return tokens.some((token) => AUTORESPONDER_COMPLETE_PRODUCT_LIST_WORDS.has(token));
+}
+
+function getAutoresponderProductQueryLimit(limit) {
   const safeLimit = Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1);
-  const page = Math.floor(Math.max(Number(offset) || 0, 0) / safeLimit) + 1;
-  return `Pagina ${page} - encontramos ${safeTotal} produtos relacionados.`;
+  const maxLimit = safeLimit > AUTORESPONDER_PRODUCT_RESPONSE_LIMIT
+    ? AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT
+    : AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+  return Math.min(safeLimit, maxLimit);
+}
+
+const AUTORESPONDER_ACCESSORY_SEARCH_WORDS = [
+  'acessorio', 'acessorios', 'capa', 'capas', 'capinha', 'capinhas',
+  'pelicula', 'peliculas', 'case', 'cases', 'carregador', 'cabo', 'cabos',
+  'fonte', 'fontes', 'controle', 'controles', 'suporte', 'suportes',
+  'antena', 'antenas', 'adaptador', 'adaptadores', 'vidro', 'lente',
+];
+
+function detectAutoresponderDeviceFamilyFromSearch(keyword) {
+  const text = normalizeAutoresponderText(keyword).trim();
+  if (!text) return null;
+  if (/\b(tablet|tablets|tab|pad|ipad)\b/.test(text) || text.includes('redmi pad') || text.includes('galaxy tab')) {
+    return 'tablet';
+  }
+  if (/\b(receptor|receptores|btv|htv|azamerica|cinebox|duosat|globalsat|gosat|tocom)\b/.test(text) || text.includes('az america')) {
+    return 'receptor';
+  }
+  if (/\b(celular|celulares|smartphone|smartphones|iphone|iphones|xiaomi|redmi|poco|galaxy|motorola|moto|samsung)\b/.test(text)) {
+    return 'smartphone';
+  }
+  return null;
+}
+
+function isAutoresponderAccessorySearchKeyword(keyword) {
+  const text = normalizeAutoresponderText(keyword).trim();
+  return AUTORESPONDER_ACCESSORY_SEARCH_WORDS.some((word) => text.includes(word));
+}
+
+function isAutoresponderAccessoryProduct(product) {
+  const baseProduct = product?.representative || product || {};
+  const text = normalizeAutoresponderText([
+    baseProduct.name,
+    baseProduct.category_name,
+    baseProduct.categoryName,
+    baseProduct.specs,
+    baseProduct.custom_fields,
+  ].filter(Boolean).join(' '));
+  return AUTORESPONDER_ACCESSORY_SEARCH_WORDS.some((word) => text.includes(word));
+}
+
+function buildAutoresponderModelAccessorySearchTitle(products, keyword, total) {
+  const family = detectAutoresponderDeviceFamilyFromSearch(keyword);
+  if (!family || isAutoresponderAccessorySearchKeyword(keyword)) return null;
+  const safeProducts = Array.isArray(products) ? products : [];
+  if (!safeProducts.some((product) => isAutoresponderAccessoryProduct(product))) return null;
+
+  const modelText = String(keyword || '').trim();
+  const count = Math.max(Number(total) || safeProducts.length, safeProducts.length);
+  const intro = modelText
+    ? `Para ${modelText}, encontrei ${count} itens relacionados no sistema.`
+    : `Encontrei ${count} itens relacionados no sistema.`;
+  const accessoryLineByFamily = {
+    smartphone: 'Encontramos alguns acessorios para esse smartphone:',
+    tablet: 'Encontramos alguns acessorios para esse tablet:',
+    receptor: 'Encontramos alguns acessorios para esse receptor:',
+  };
+  return `${intro}\n${accessoryLineByFamily[family]}`;
 }
 
 function formatAutoresponderWarrantyPeriod(days) {
@@ -7270,8 +7931,17 @@ function formatAutoresponderProductWarrantyLine(product) {
 
 function formatAutoresponderProductReplyInstructions(hasMore) {
   const lines = ['Responda com o numero da opcao ou com o nome/modelo do produto.'];
-  if (hasMore) lines.push('Se quiser ver mais opcoes, digite "mais".');
+  if (hasMore) {
+    lines.push('Se quiser, me diga a faixa de preco, marca ou uso que eu filtro melhor.');
+    lines.push('Se quiser ver mais opcoes, digite "mais".');
+  }
   return lines.join('\n');
+}
+
+function getAutoresponderInitialProductPageSize(keyword = '') {
+  return isAutoresponderCompleteProductListKeyword(keyword)
+    ? AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT
+    : AUTORESPONDER_PRODUCT_PAGE_SIZE;
 }
 
 function chunkAutoresponderArray(items, size) {
@@ -7288,7 +7958,6 @@ function formatAutoresponderProReplies(messages) {
   return (Array.isArray(messages) ? messages : [messages])
     .map((message) => String(message || '').trim())
     .filter(Boolean)
-    .slice(0, AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES)
     .map((message, index) => ({
       message,
       delaySeconds: index * AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS,
@@ -7363,25 +8032,27 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
   const groupedProducts = groupAutoresponderProductsByModel(availableProducts);
   const total = pagination?.total || groupedProducts.length;
   const offset = Number(pagination?.offset || 0);
-  const chunks = chunkAutoresponderArray(groupedProducts, AUTORESPONDER_PRODUCT_PAGE_SIZE)
-    .slice(0, AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES);
-  const replies = chunks.map((chunk, chunkIndex) => {
+  const chunks = chunkAutoresponderArray(groupedProducts, AUTORESPONDER_PRODUCT_PAGE_SIZE);
+  const visibleChunks = pagination?.completeList
+    ? chunks
+    : chunks.slice(0, AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES);
+  const replies = await Promise.all(visibleChunks.map(async (chunk, chunkIndex) => {
     const firstNumber = offset + (chunkIndex * AUTORESPONDER_PRODUCT_PAGE_SIZE) + 1;
     const lastNumber = firstNumber + chunk.length - 1;
+    const modelAccessoryTitle = chunkIndex === 0
+      ? buildAutoresponderModelAccessorySearchTitle(chunk, keyword, total)
+      : null;
     const title = chunkIndex === 0
-      ? (keyword
+      ? (modelAccessoryTitle || (keyword
         ? `Encontrei ${total} produtos relacionados para ${keyword}. Vou enviar de ${AUTORESPONDER_PRODUCT_PAGE_SIZE} em ${AUTORESPONDER_PRODUCT_PAGE_SIZE}:`
-        : `Encontrei ${total} produtos relacionados. Vou enviar de ${AUTORESPONDER_PRODUCT_PAGE_SIZE} em ${AUTORESPONDER_PRODUCT_PAGE_SIZE}:`)
+        : `Encontrei ${total} produtos relacionados. Vou enviar de ${AUTORESPONDER_PRODUCT_PAGE_SIZE} em ${AUTORESPONDER_PRODUCT_PAGE_SIZE}:`))
       : `Mais opcoes (${firstNumber}-${lastNumber} de ${total}):`;
     const lines = [title];
-    lines.push(...chunk.map((group, index) => {
-      const colorText = Array.isArray(group.colors) && group.colors.length > 0
-        ? `\nCores disponiveis: ${group.colors.join(', ')}`
-        : '';
-      return `${firstNumber + index}. ${group.name}\nPreco: ${group.priceRange}${colorText}`;
-    }));
+    lines.push(...(await Promise.all(chunk.map((group, index) => (
+      formatAutoresponderProductCardLine(group, firstNumber + index)
+    )))));
     return lines.join('\n\n');
-  });
+  }));
 
   if (groupedProducts.length > 1 || safeProducts.length > groupedProducts.length) {
     replies[replies.length - 1] = `${replies[replies.length - 1]}\n\nVer busca no site: ${getAutoresponderCatalogSearchUrl(keyword)}`;
@@ -7446,7 +8117,7 @@ async function getAutoresponderNumberedChoiceContext(sender, validityMinutes) {
 
 async function findAutoresponderProductById(productId) {
   const [rows] = await pool.query(
-    `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
+    `SELECT id, model_id, category_id, brand, name, sku, slug, description, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
@@ -7457,6 +8128,51 @@ async function findAutoresponderProductById(productId) {
     [productId]
   );
   return rows[0] || null;
+}
+
+function formatAutoresponderProductDescriptionLine(product) {
+  const description = stripShopeeActionsHtmlVps(product?.description || '');
+  if (!description) return '';
+  const compact = description.length > 260 ? `${description.slice(0, 257).trim()}...` : description;
+  return `Descricao: ${compact}`;
+}
+
+async function findAutoresponderProductVariations(product) {
+  if (!product?.model_id) return product ? [product] : [];
+  const [rows] = await pool.query(
+    `SELECT id, model_id, category_id, brand, name, slug, price_retail, price_promo, stock_quantity, specs, custom_fields
+     FROM products
+     WHERE status = 'active'
+       AND (is_parent = 0 OR is_parent IS NULL)
+       AND stock_quantity > 0
+       AND model_id = ?
+     ORDER BY price_retail ASC, name ASC`,
+    [product.model_id]
+  );
+  return rows.length > 0 ? rows : [product];
+}
+
+function formatAutoresponderProductVariationsBlock(variations) {
+  const available = filterAutoresponderAvailableProducts(variations);
+  if (available.length === 0) return '';
+
+  const byName = new Map();
+  for (const variation of available) {
+    const name = String(variation?.name || 'Opcao disponivel').trim();
+    const key = normalizeAutoresponderText(name);
+    const existing = byName.get(key) || { name, items: [] };
+    existing.items.push(variation);
+    byName.set(key, existing);
+  }
+
+  const lines = ['Variacoes disponiveis:'];
+  for (const group of byName.values()) {
+    const colors = getAutoresponderAvailableColors(group.items);
+    const colorText = colors.length > 0 ? colors.join(', ') : 'cor sob consulta';
+    const priceRange = formatAutoresponderPriceRange(group.items);
+    lines.push(`- ${group.name}: ${colorText} (${priceRange})`);
+  }
+  return lines.join('\n');
 }
 
 async function formatAutoresponderProductDetailReply(product, settings = null) {
@@ -7472,7 +8188,14 @@ async function formatAutoresponderProductDetailReply(product, settings = null) {
     product.name,
     `Preco: ${formatAutoresponderCurrency(price)}`,
   ];
-  if (product.sku) lines.push(`SKU: ${product.sku}`);
+
+  const descriptionLine = formatAutoresponderProductDescriptionLine(product);
+  if (descriptionLine) lines.push(descriptionLine);
+
+  const variationsBlock = formatAutoresponderProductVariationsBlock(
+    await findAutoresponderProductVariations(product)
+  );
+  if (variationsBlock) lines.push(variationsBlock);
 
   const installmentLine = formatAutoresponderInstallmentLine(
     await calculateAutoresponderMaxInstallment(getAutoresponderProductPriceCents(product))
@@ -7549,7 +8272,7 @@ async function handleAutoresponderWarrantyRequest({ sender, message, settings, p
   }
 
   if (tokens.length > 0) {
-    const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+    const pageSize = getAutoresponderInitialProductPageSize();
     const rows = await findAutoresponderProductsByTokens(tokens, pageSize + 1);
     const products = rows.slice(0, pageSize);
     const hasMore = rows.length > pageSize;
@@ -7675,7 +8398,7 @@ async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) 
   const safeTokens = Array.isArray(tokens) ? tokens.slice(0, 6) : [];
   if (safeTokens.length === 0) return [];
 
-  const safeLimit = Math.min(Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1), AUTORESPONDER_PRODUCT_RESPONSE_LIMIT);
+  const safeLimit = getAutoresponderProductQueryLimit(limit);
   const safeOffset = Math.max(Number(offset) || 0, 0);
   const clauses = safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
     OR LOWER(COALESCE(sku, '')) LIKE ?
@@ -7764,11 +8487,12 @@ async function logAutoresponderReply({
   matchedCount = 0,
   matchedRuleId = null,
   matchedProducts = null,
+  aiMeta = null,
 }) {
   await pool.query(
     `INSERT INTO autoresponder_logs
-      (sender, question, intent, matched_rule_id, matched_products, matched_count, reply_text, response_time_ms, is_group)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (sender, question, intent, matched_rule_id, matched_products, matched_count, reply_text, response_time_ms, is_group, ai_assisted, ai_model, ai_input_tokens, ai_output_tokens, ai_estimated_cost_usd)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       sender,
       message || null,
@@ -7779,6 +8503,11 @@ async function logAutoresponderReply({
       replyText,
       0,
       0,
+      aiMeta?.ai_assisted ? 1 : 0,
+      aiMeta?.ai_model || null,
+      aiMeta?.ai_input_tokens == null ? null : Number(aiMeta.ai_input_tokens),
+      aiMeta?.ai_output_tokens == null ? null : Number(aiMeta.ai_output_tokens),
+      aiMeta?.ai_estimated_cost_usd == null ? null : Number(aiMeta.ai_estimated_cost_usd),
     ]
   );
 }
@@ -8165,7 +8894,7 @@ fastify.get('/health', { config: { rateLimit: { max: 60, timeWindow: '1 minute' 
 // ─── AutoResponder WhatsApp (Fase 1A/1B) ─────────────────────────────────────
 fastify.get('/autoresponder/settings', { preHandler: requireSyncKey }, async () => {
   const [rows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
-  return rows[0] || null;
+  return sanitizeAutoresponderSettings(rows[0] || null);
 });
 
 fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -8192,12 +8921,23 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
     product_tag_keywords: (v) => jsonStr(v || {}),
     archive_to_synology: (v) => boolInt(v),
     archive_after_days: (v) => Number(v),
+    ai_enabled: (v) => boolInt(v),
+    ai_model: (v) => String(v || 'gpt-5-nano').trim() || 'gpt-5-nano',
+    ai_daily_limit: (v) => Math.max(0, Number(v) || 0),
+    ai_monthly_limit: (v) => Math.max(0, Number(v) || 0),
+    ai_credit_balance_usd: (v) => Math.max(0, Number(v) || 0),
+    ai_credit_alert_usd: (v) => Math.max(0, Number(v) || 0),
+    ai_input_cost_per_1m_usd: (v) => Math.max(0, Number(v) || 0),
+    ai_output_cost_per_1m_usd: (v) => Math.max(0, Number(v) || 0),
+    openai_api_key: (v) => String(v || '').trim(),
+    openai_admin_api_key: (v) => String(v || '').trim(),
   };
 
   const sets = [];
   const values = [];
   for (const [key, normalize] of Object.entries(allowed)) {
     if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+    if ((key === 'openai_api_key' || key === 'openai_admin_api_key') && !String(body[key] || '').trim()) continue;
     const value = normalize(body[key]);
     if (typeof value === 'number' && !Number.isFinite(value)) {
       return reply.code(400).send({ error: `Invalid numeric value for ${key}` });
@@ -8213,7 +8953,79 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
   values.push(1);
   await pool.query(`UPDATE autoresponder_settings SET ${sets.join(', ')} WHERE id = ?`, values);
   const [rows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
+  return sanitizeAutoresponderSettings(rows[0] || null);
+});
+
+fastify.get('/autoresponder/ai-training', { preHandler: requireSyncKey }, async (request) => {
+  const type = String(request.query?.type || '').trim();
+  const active = request.query?.active;
+  const where = [];
+  const values = [];
+
+  if (type) {
+    where.push('training_type = ?');
+    values.push(normalizeAutoresponderAiTrainingType(type));
+  }
+  if (active !== undefined && active !== null && String(active) !== '') {
+    where.push('active = ?');
+    values.push(boolInt(active));
+  }
+
+  const sql = [
+    'SELECT * FROM autoresponder_ai_training',
+    where.length ? `WHERE ${where.join(' AND ')}` : '',
+    'ORDER BY priority DESC, id ASC',
+  ].filter(Boolean).join(' ');
+
+  const [rows] = await pool.query(sql, values);
+  return rows;
+});
+
+fastify.post('/autoresponder/ai-training', { preHandler: requireSyncKey }, async (request, reply) => {
+  let input;
+  try {
+    input = sanitizeAutoresponderAiTrainingInput(request.body || {}, false);
+  } catch (err) {
+    return reply.code(400).send({ error: err.message });
+  }
+
+  const [result] = await pool.query(
+    `INSERT INTO autoresponder_ai_training (title, training_type, content, priority, active)
+     VALUES (?, ?, ?, ?, ?)`,
+    [input.title, input.training_type, input.content, input.priority, input.active]
+  );
+  const [rows] = await pool.query('SELECT * FROM autoresponder_ai_training WHERE id = ? LIMIT 1', [result.insertId]);
   return rows[0] || null;
+});
+
+fastify.patch('/autoresponder/ai-training/:id', { preHandler: requireSyncKey }, async (request, reply) => {
+  const id = Number(request.params.id);
+  if (!Number.isFinite(id) || id <= 0) return reply.code(400).send({ error: 'Invalid id' });
+
+  let input;
+  try {
+    input = sanitizeAutoresponderAiTrainingInput(request.body || {}, true);
+  } catch (err) {
+    return reply.code(400).send({ error: err.message });
+  }
+
+  const entries = Object.entries(input);
+  if (entries.length === 0) return reply.code(400).send({ error: 'No valid training fields provided' });
+
+  const sets = entries.map(([key]) => `${key} = ?`);
+  const values = entries.map(([, value]) => value);
+  values.push(id);
+
+  await pool.query(`UPDATE autoresponder_ai_training SET ${sets.join(', ')} WHERE id = ?`, values);
+  const [rows] = await pool.query('SELECT * FROM autoresponder_ai_training WHERE id = ? LIMIT 1', [id]);
+  return rows[0] || null;
+});
+
+fastify.delete('/autoresponder/ai-training/:id', { preHandler: requireSyncKey }, async (request, reply) => {
+  const id = Number(request.params.id);
+  if (!Number.isFinite(id) || id <= 0) return reply.code(400).send({ error: 'Invalid id' });
+  await pool.query('DELETE FROM autoresponder_ai_training WHERE id = ?', [id]);
+  return reply.code(204).send();
 });
 
 function buildAutoresponderUpdateSet(body, allowed) {
@@ -8793,8 +9605,46 @@ fastify.get('/autoresponder/stats', { preHandler: requireSyncKey }, async (req) 
      ORDER BY hits DESC
      LIMIT 10`
   );
+  const [[aiFinanceRaw]] = await pool.query(
+    `SELECT
+       COUNT(*) AS month_responses,
+       COALESCE(SUM(ai_input_tokens), 0) AS month_input_tokens,
+       COALESCE(SUM(ai_output_tokens), 0) AS month_output_tokens,
+       COALESCE(SUM(ai_estimated_cost_usd), 0) AS month_estimated_cost_usd,
+       COALESCE(SUM(CASE WHEN created_at >= CURDATE() THEN ai_estimated_cost_usd ELSE 0 END), 0) AS today_estimated_cost_usd,
+       COALESCE(SUM(CASE WHEN created_at >= CURDATE() THEN ai_input_tokens ELSE 0 END), 0) AS today_input_tokens,
+       COALESCE(SUM(CASE WHEN created_at >= CURDATE() THEN ai_output_tokens ELSE 0 END), 0) AS today_output_tokens
+     FROM autoresponder_logs
+     WHERE ai_assisted = 1
+       AND created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01')`
+  );
+  const [settingsRows] = await pool.query('SELECT ai_credit_balance_usd, ai_credit_alert_usd, openai_admin_api_key FROM autoresponder_settings WHERE id = 1 LIMIT 1');
+  const aiFinanceSettings = settingsRows[0] || {};
+  const creditBalanceUsd = Number(aiFinanceSettings?.ai_credit_balance_usd || 0);
+  const monthEstimatedCostUsd = Number(aiFinanceRaw?.month_estimated_cost_usd || 0);
+  const openAiOfficialCosts = await fetchOpenAiOfficialCostsUsd({ settings: aiFinanceSettings });
+  const openAiOfficialMonthCostUsd = openAiOfficialCosts.cost_usd == null ? null : Number(openAiOfficialCosts.cost_usd);
+  const aiFinance = {
+    month_responses: Number(aiFinanceRaw?.month_responses || 0),
+    month_input_tokens: Number(aiFinanceRaw?.month_input_tokens || 0),
+    month_output_tokens: Number(aiFinanceRaw?.month_output_tokens || 0),
+    month_estimated_cost_usd: Number(monthEstimatedCostUsd.toFixed(6)),
+    today_estimated_cost_usd: Number(Number(aiFinanceRaw?.today_estimated_cost_usd || 0).toFixed(6)),
+    today_input_tokens: Number(aiFinanceRaw?.today_input_tokens || 0),
+    today_output_tokens: Number(aiFinanceRaw?.today_output_tokens || 0),
+    credit_balance_usd: creditBalanceUsd,
+    credit_alert_usd: Number(aiFinanceSettings?.ai_credit_alert_usd || 0),
+    remaining_credit_usd: Number((creditBalanceUsd - monthEstimatedCostUsd).toFixed(6)),
+    has_openai_admin_api_key: getAutoresponderOpenAiAdminKey(aiFinanceSettings).length > 0,
+    openai_official_cost_status: openAiOfficialCosts.status,
+    openai_official_cost_updated_at: openAiOfficialCosts.updated_at || null,
+    openai_official_month_cost_usd: openAiOfficialMonthCostUsd,
+    openai_official_remaining_credit_usd: openAiOfficialMonthCostUsd == null
+      ? null
+      : Number((creditBalanceUsd - openAiOfficialMonthCostUsd).toFixed(6)),
+  };
   const topProducts = await getAutoresponderTopProducts(10);
-  return { source: 'mysql', summary, byIntent, topRules, topProducts };
+  return { source: 'mysql', summary: { ...summary, ai_finance: aiFinance }, byIntent, topRules, topProducts };
 });
 
 fastify.get('/autoresponder/store-status', { preHandler: requireSyncKey }, async () => {
@@ -8819,13 +9669,24 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
 
   if (detectedIntent.greetingOnly) {
     const greetingText = getAutoresponderGreetingReply(message, contactFirstName);
-    const categories = await findAutoresponderAvailableCategories();
-    const categoryListText = formatAutoresponderGreetingCategoryListReply(categories);
-    const replyMessages = formatAutoresponderReplies([greetingText, categoryListText], settings, false);
+    const contactState = await getAutoresponderContactNameState(normalizedSender);
+    const contactNameStatus = String(contactState?.contact_name_status || '');
+    const contactNameSaved = ['saved_to_google', 'google_pending'].includes(contactNameStatus);
+    if (!contactNameSaved) {
+      return {
+        intent: 'contact_name_prompt',
+        matched_count: 0,
+        replies: [{ message: greetingText }],
+        sender: normalizedSender,
+      };
+    }
+    const needsPrompt = await buildAutoresponderNeedsPromptReply({ message, contactFirstName, settings });
+    const replyMessages = formatAutoresponderReplies([greetingText, needsPrompt.text], settings, false);
     return {
-      intent: 'greeting_category_list',
-      matched_count: categories.length,
+      intent: 'greeting_needs_prompt',
+      matched_count: 0,
       replies: formatAutoresponderProReplies(replyMessages),
+      aiMeta: needsPrompt.aiMeta,
       sender: normalizedSender,
     };
   }
@@ -8847,14 +9708,15 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   if (matchedRule) {
     const replyType = String(matchedRule.reply_type || 'text');
     if (replyType === 'product_by_tag') {
-      const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+      const keyword = matchedRule.reply_text || matchedRule.name || 'produtos';
+      const pageSize = getAutoresponderInitialProductPageSize(keyword);
       const rows = await findAutoresponderProductsByTag(matchedRule.reply_tag_id, pageSize + 1);
       const products = rows.slice(0, pageSize);
       const hasMore = rows.length > pageSize;
       const total = await countAutoresponderProductsByTag(matchedRule.reply_tag_id);
       const productReplyMessages = appendAutoresponderRuleAttachmentToReplies(
         appendAutoresponderReplyFooter(
-          await formatAutoresponderProductSearchReplies(products, matchedRule.reply_text || matchedRule.name || 'produtos', settings, { offset: 0, limit: pageSize, total }),
+          await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(keyword) }),
           formatAutoresponderProductReplyInstructions(hasMore)
         ),
         matchedRule
@@ -8870,7 +9732,8 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     }
 
     if (replyType === 'product_search') {
-      const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+      const keyword = matchedRule.reply_search_query;
+      const pageSize = getAutoresponderInitialProductPageSize(keyword);
       const ruleSearchTokens = extractAutoresponderProductSearchTokens(matchedRule.reply_search_query);
       const rows = await findAutoresponderProductsByTokens(ruleSearchTokens, pageSize + 1);
       const products = rows.slice(0, pageSize);
@@ -8878,7 +9741,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
       const total = await countAutoresponderProductsByTokens(ruleSearchTokens);
       const productReplyMessages = appendAutoresponderRuleAttachmentToReplies(
         appendAutoresponderReplyFooter(
-          await formatAutoresponderProductSearchReplies(products, matchedRule.reply_search_query, settings, { offset: 0, limit: pageSize, total }),
+          await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(keyword) }),
           formatAutoresponderProductReplyInstructions(hasMore)
         ),
         matchedRule
@@ -8908,13 +9771,13 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
 
   const productTagMatch = findAutoresponderProductTagKeyword(message, settings);
   if (productTagMatch) {
-    const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+    const pageSize = getAutoresponderInitialProductPageSize(productTagMatch.keyword);
     const rows = await findAutoresponderProductsByTag(productTagMatch.tagId, pageSize + 1);
     const products = rows.slice(0, pageSize);
     const hasMore = rows.length > pageSize;
     const total = await countAutoresponderProductsByTag(productTagMatch.tagId);
     const productReplyMessages = appendAutoresponderReplyFooter(
-      await formatAutoresponderProductSearchReplies(products, productTagMatch.keyword, settings, { offset: 0, limit: pageSize, total }),
+      await formatAutoresponderProductSearchReplies(products, productTagMatch.keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(productTagMatch.keyword) }),
       formatAutoresponderProductReplyInstructions(hasMore)
     );
     const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
@@ -8926,16 +9789,82 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     };
   }
 
+  {
+    const categories = await findAutoresponderAvailableCategories(20);
+    const budgetRequest = getAutoresponderBudgetCategoryRequest(message, categories);
+    if (budgetRequest?.category?.id) {
+      const budgetKeyword = budgetRequest.category.name;
+      const pageSize = getAutoresponderInitialProductPageSize(budgetKeyword);
+      const rows = await findAutoresponderProductsByCategoryBudget(budgetRequest.category.id, budgetRequest.budgetCents, pageSize + 1);
+      const products = rows.slice(0, pageSize);
+      const hasMore = rows.length > pageSize;
+      const total = await countAutoresponderProductsByCategoryBudget(budgetRequest.category.id, budgetRequest.budgetCents);
+      if (products.length > 0) {
+        const keyword = `${budgetKeyword} ate ${formatAutoresponderCurrency(budgetRequest.budgetCents / 100)}`;
+        const productReplyMessages = appendAutoresponderReplyFooter(
+          await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(budgetKeyword) }),
+          formatAutoresponderProductReplyInstructions(hasMore)
+        );
+        const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+        return {
+          intent: 'catalog_budget',
+          matched_count: products.length,
+          replies: formatAutoresponderProReplies(replyMessages),
+          sender: normalizedSender,
+        };
+      }
+    }
+  }
+
+  const genericDeviceCatalogFamily = detectAutoresponderGenericDeviceCatalogFamily(message);
+  if (genericDeviceCatalogFamily) {
+    const replyText = formatAutoresponderReply(
+      buildAutoresponderDeviceCatalogRefinementPrompt(genericDeviceCatalogFamily),
+      settings,
+      shouldPrefixGreeting
+    );
+    return {
+      intent: genericDeviceCatalogFamily === 'smartphone' ? 'catalog_phone_refinement' : 'catalog_device_refinement',
+      matched_count: 0,
+      replies: [{ message: replyText }],
+      sender: normalizedSender,
+    };
+  }
+
+  if (isAutoresponderCatalogRequest(message)) {
+    const categories = await findAutoresponderAvailableCategories(20);
+    const selectedCategory = findAutoresponderCatalogCategoryForMessage(message, categories);
+    if (selectedCategory?.id) {
+      const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
+      const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
+      const products = rows.slice(0, pageSize);
+      const hasMore = rows.length > pageSize;
+      const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+      const productReplyMessages = appendAutoresponderReplyFooter(
+        await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name) }),
+        formatAutoresponderProductReplyInstructions(hasMore)
+      );
+      const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+      return {
+        intent: 'catalog_category',
+        matched_count: products.length,
+        replies: formatAutoresponderProReplies(replyMessages),
+        sender: normalizedSender,
+      };
+    }
+  }
+
   const productSearchTokens = extractAutoresponderProductSearchTokens(message);
   if (productSearchTokens.length > 0) {
-    const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+    const searchKeyword = productSearchTokens.join(' ');
+    const pageSize = getAutoresponderInitialProductPageSize(searchKeyword);
     const rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
     const products = rows.slice(0, pageSize);
     const hasMore = rows.length > pageSize;
     if (products.length > 0) {
       const total = await countAutoresponderProductsByTokens(productSearchTokens);
       const productReplyMessages = appendAutoresponderReplyFooter(
-        await formatAutoresponderProductSearchReplies(products, productSearchTokens.join(' '), settings, { offset: 0, limit: pageSize, total }),
+        await formatAutoresponderProductSearchReplies(products, searchKeyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(searchKeyword) }),
         formatAutoresponderProductReplyInstructions(hasMore)
       );
       const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
@@ -9059,21 +9988,18 @@ fastify.route({
 
       const contactFlowReply = await handleAutoresponderContactNameFlow({ sender: senderKey, message, contactFirstName });
       if (contactFlowReply) {
-        const contactFlowReplies = formatAutoresponderReplies(
-          Array.isArray(contactFlowReply) ? contactFlowReply : [contactFlowReply],
-          settings,
-          false
-        );
-        const contactFlowReplyText = contactFlowReplies.join('\n\n');
+        const contactFlowReplies = Array.isArray(contactFlowReply) ? contactFlowReply : [contactFlowReply];
+        const formattedContactFlowReplies = formatAutoresponderReplies(contactFlowReplies, settings, false);
+        const contactFlowReplyText = formattedContactFlowReplies.join('\n\n');
         await logAutoresponderReply({
           sender: senderKey,
           message,
           intent: 'contact_name',
           replyText: contactFlowReplyText,
-          matchedCount: contactFlowReplies.length,
+          matchedCount: formattedContactFlowReplies.length,
         });
         await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: contactFlowReplies.map((replyMessage) => ({ message: replyMessage })) };
+        return { replies: formattedContactFlowReplies.map((replyMessage) => ({ message: replyMessage })) };
       }
 
       if (detectedIntent.greetingOnly) {
@@ -9091,36 +10017,49 @@ fastify.route({
         const contactPrompt = shouldConfirmContactName
           ? `\n\nSeu nome e ${contactFirstName}? \u{1F60A}\nResponda "sim" para confirmar ou "nao" para informar outro nome.`
           : shouldAskContactName
-            ? '\n\nComo devo chamar voce? \u{1F60A}'
+            ? '\n\nQual seu nome para seguirmos com o atendimento?'
           : '';
         const greetingText = getAutoresponderGreetingReply(message, contactFirstName);
-        const categories = await findAutoresponderAvailableCategories();
-        const categoryOptions = buildAutoresponderCategoryOptions(categories);
-        const categoryListText = formatAutoresponderGreetingCategoryListReply(categories);
-        const greetingReplies = shouldConfirmContactName || shouldAskContactName
-          ? formatAutoresponderReplies(
-            [greetingText, [contactPrompt.trim(), categoryListText].filter(Boolean).join('\n\n')],
-            settings,
-            false
-          )
-          : formatAutoresponderReplies([greetingText, contactPrompt.trim(), categoryListText], settings, false);
+        const contactNameSaved = ['saved_to_google', 'google_pending'].includes(contactNameStatus);
+        if (shouldConfirmContactName || shouldAskContactName) {
+          const replyText = [greetingText, contactPrompt.trim()].filter(Boolean).join('\n\n');
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'contact_name_prompt',
+            replyText,
+            matchedCount: 0,
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: greetingText }, { message: contactPrompt.trim() }] };
+        }
+
+        if (contactNameSaved) {
+          const greetingNeedsPrompt = await buildAutoresponderNeedsPromptReply({ message, contactFirstName, settings });
+          const needsPromptText = greetingNeedsPrompt.text;
+          const greetingReplies = formatAutoresponderReplies([greetingText, needsPromptText], settings, false);
         const replyText = greetingReplies.join('\n\n');
         await logAutoresponderReply({
           sender: senderKey,
           message,
-          intent: 'greeting_category_list',
+          intent: 'greeting_needs_prompt',
           replyText,
-          matchedCount: categoryOptions.length,
-          matchedProducts: categoryOptions,
+          matchedCount: 0,
+          aiMeta: greetingNeedsPrompt.aiMeta,
         });
-        await upsertAutoresponderOptionsConversation(senderKey, categoryOptions, {
-          source: 'category_list',
-          offset: 0,
-          limit: categoryOptions.length,
-          total: categoryOptions.length,
-          hasMore: false,
-        });
+        await upsertAutoresponderSuccessConversation(senderKey);
         return { replies: greetingReplies.map((replyMessage) => ({ message: replyMessage })) };
+        }
+
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'greeting',
+          replyText: greetingText,
+          matchedCount: 0,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: greetingText }] };
       }
 
       const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
@@ -9645,14 +10584,14 @@ fastify.route({
       if (categoryContext?.pagination?.source === 'category_list') {
         const selectedCategory = findAutoresponderSelectedCategoryFromMessage(message, categoryContext.items, detectedIntent.numberedChoice);
         if (selectedCategory?.id) {
-          const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+          const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
           const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
           const products = rows.slice(0, pageSize);
           const hasMore = rows.length > pageSize;
           const total = await countAutoresponderProductsByCategory(selectedCategory.id);
           const productOptions = buildAutoresponderProductOptions(products);
           const productReplyMessages = appendAutoresponderReplyFooter(
-            await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total }),
+            await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name) }),
             formatAutoresponderProductReplyInstructions(hasMore)
           );
           const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
@@ -9890,7 +10829,7 @@ fastify.route({
         const selectedOption = findAutoresponderSelectedOptionFromMessage(message, options, numberedChoice);
         if (selectedOption?.id) {
           const product = await findAutoresponderProductById(selectedOption.id);
-          const replyText = formatAutoresponderReply(buildAutoresponderPurchaseActionPrompt(product, selectedOption), settings, false);
+          const replyText = formatAutoresponderReply(await buildAutoresponderPurchaseActionPrompt(product, selectedOption), settings, false);
           await saveAutoresponderPurchaseFlow(senderKey, {
             status: 'awaiting_product_action',
             selected_product: {
@@ -9926,18 +10865,30 @@ fastify.route({
           const nextOffset = Number(pagination.offset || 0) + pageSize;
           const rows = pagination.source === 'tag'
             ? await findAutoresponderProductsByTag(pagination.tagId, pageSize + 1, nextOffset)
-            : await findAutoresponderProductsByTokens(pagination.tokens || [], pageSize + 1, nextOffset);
+            : pagination.source === 'category'
+              ? await findAutoresponderProductsByCategory(pagination.categoryId, pageSize + 1, nextOffset)
+              : pagination.source === 'category_budget'
+                ? await findAutoresponderProductsByCategoryBudget(pagination.categoryId, pagination.budgetCents, pageSize + 1, nextOffset)
+              : await findAutoresponderProductsByTokens(pagination.tokens || [], pageSize + 1, nextOffset);
           const products = rows.slice(0, pageSize);
           const hasMore = rows.length > pageSize;
           if (products.length > 0) {
             const productOptions = buildAutoresponderProductOptions(products);
             const keyword = pagination.source === 'tag'
               ? (pagination.keyword || 'mais produtos')
-              : (pagination.tokens || []).join(' ');
+              : pagination.source === 'category'
+                ? (pagination.keyword || 'produtos')
+                : pagination.source === 'category_budget'
+                  ? (pagination.keyword || 'produtos')
+                : (pagination.tokens || []).join(' ');
             const total = Number(pagination.total || 0) > 0
               ? Number(pagination.total)
               : (pagination.source === 'tag'
                 ? await countAutoresponderProductsByTag(pagination.tagId)
+                : pagination.source === 'category'
+                  ? await countAutoresponderProductsByCategory(pagination.categoryId)
+                  : pagination.source === 'category_budget'
+                    ? await countAutoresponderProductsByCategoryBudget(pagination.categoryId, pagination.budgetCents)
                 : await countAutoresponderProductsByTokens(pagination.tokens || []));
             const productReplyMessages = appendAutoresponderReplyFooter(
               await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: nextOffset, limit: pageSize, total }),
@@ -9964,6 +10915,23 @@ fastify.route({
 
             return { replies: formatAutoresponderProReplies(replyMessages) };
           }
+        }
+        if (pagination?.source && !pagination.hasMore) {
+          const replyText = formatAutoresponderReply(
+            'Ja te mostrei as opcoes disponiveis dessa lista. Responda com o numero ou nome do produto que eu te mando os detalhes.',
+            settings,
+            false
+          );
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'more_products_exhausted',
+            replyText,
+            matchedCount: Array.isArray(context.items) ? context.items.length : 0,
+            matchedProducts: Array.isArray(context.items) ? context.items : [],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
         }
       }
 
@@ -10006,7 +10974,8 @@ fastify.route({
         );
 
         if (String(matchedRule.reply_type || 'text') === 'product_by_tag') {
-          const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+          const keyword = matchedRule.reply_text || matchedRule.name || 'produtos';
+          const pageSize = getAutoresponderInitialProductPageSize(keyword);
           const rows = await findAutoresponderProductsByTag(matchedRule.reply_tag_id, pageSize + 1);
           const products = rows.slice(0, pageSize);
           const hasMore = rows.length > pageSize;
@@ -10014,7 +10983,7 @@ fastify.route({
           const productOptions = buildAutoresponderProductOptions(products);
           const productReplyMessages = appendAutoresponderRuleAttachmentToReplies(
             appendAutoresponderReplyFooter(
-              await formatAutoresponderProductSearchReplies(products, matchedRule.reply_text || matchedRule.name || 'produtos', settings, { offset: 0, limit: pageSize, total }),
+              await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(keyword) }),
               formatAutoresponderProductReplyInstructions(hasMore)
             ),
             matchedRule
@@ -10034,7 +11003,7 @@ fastify.route({
           await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
             source: 'tag',
             tagId: matchedRule.reply_tag_id,
-            keyword: matchedRule.reply_text || 'produtos',
+            keyword,
             offset: 0,
             limit: pageSize,
             total,
@@ -10046,7 +11015,8 @@ fastify.route({
         }
 
         if (String(matchedRule.reply_type || 'text') === 'product_search') {
-          const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+          const keyword = matchedRule.reply_search_query;
+          const pageSize = getAutoresponderInitialProductPageSize(keyword);
           const ruleSearchTokens = extractAutoresponderProductSearchTokens(matchedRule.reply_search_query);
           const rows = await findAutoresponderProductsByTokens(ruleSearchTokens, pageSize + 1);
           const products = rows.slice(0, pageSize);
@@ -10055,7 +11025,7 @@ fastify.route({
           const productOptions = buildAutoresponderProductOptions(products);
           const productReplyMessages = appendAutoresponderRuleAttachmentToReplies(
             appendAutoresponderReplyFooter(
-              await formatAutoresponderProductSearchReplies(products, matchedRule.reply_search_query, settings, { offset: 0, limit: pageSize, total }),
+              await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(keyword) }),
               formatAutoresponderProductReplyInstructions(hasMore)
             ),
             matchedRule
@@ -10111,14 +11081,14 @@ fastify.route({
 
       const productTagMatch = findAutoresponderProductTagKeyword(message, settings);
       if (productTagMatch) {
-        const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+        const pageSize = getAutoresponderInitialProductPageSize(productTagMatch.keyword);
         const rows = await findAutoresponderProductsByTag(productTagMatch.tagId, pageSize + 1);
         const products = rows.slice(0, pageSize);
         const hasMore = rows.length > pageSize;
         const total = await countAutoresponderProductsByTag(productTagMatch.tagId);
         const productOptions = buildAutoresponderProductOptions(products);
         const productReplyMessages = appendAutoresponderReplyFooter(
-          await formatAutoresponderProductSearchReplies(products, productTagMatch.keyword, settings, { offset: 0, limit: pageSize, total }),
+          await formatAutoresponderProductSearchReplies(products, productTagMatch.keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(productTagMatch.keyword) }),
           formatAutoresponderProductReplyInstructions(hasMore)
         );
         const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
@@ -10140,14 +11110,121 @@ fastify.route({
           limit: pageSize,
           total,
           hasMore,
+          completeList: isAutoresponderCompleteProductListKeyword(productTagMatch.keyword),
         });
 
         return { replies: formatAutoresponderProReplies(replyMessages) };
       }
 
+      {
+        const categories = await findAutoresponderAvailableCategories(20);
+        const budgetRequest = getAutoresponderBudgetCategoryRequest(message, categories);
+        if (budgetRequest?.category?.id) {
+          const budgetKeyword = budgetRequest.category.name;
+          const pageSize = getAutoresponderInitialProductPageSize(budgetKeyword);
+          const rows = await findAutoresponderProductsByCategoryBudget(budgetRequest.category.id, budgetRequest.budgetCents, pageSize + 1);
+          const products = rows.slice(0, pageSize);
+          const hasMore = rows.length > pageSize;
+          const total = await countAutoresponderProductsByCategoryBudget(budgetRequest.category.id, budgetRequest.budgetCents);
+          if (products.length > 0) {
+            const productOptions = buildAutoresponderProductOptions(products);
+            const keyword = `${budgetKeyword} ate ${formatAutoresponderCurrency(budgetRequest.budgetCents / 100)}`;
+            const productReplyMessages = appendAutoresponderReplyFooter(
+              await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(budgetKeyword) }),
+              formatAutoresponderProductReplyInstructions(hasMore)
+            );
+            const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+            const replyText = replyMessages.join('\n\n');
+
+            await logAutoresponderReply({
+              sender: senderKey,
+              message,
+              intent: 'catalog_budget',
+              replyText,
+              matchedCount: products.length,
+              matchedProducts: productOptions,
+            });
+            await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
+              source: 'category_budget',
+              categoryId: budgetRequest.category.id,
+              budgetCents: budgetRequest.budgetCents,
+              keyword,
+              offset: 0,
+              limit: pageSize,
+              total,
+              hasMore,
+              completeList: isAutoresponderCompleteProductListKeyword(budgetKeyword),
+            });
+
+            return { replies: formatAutoresponderProReplies(replyMessages) };
+          }
+        }
+      }
+
+      const genericDeviceCatalogFamily = detectAutoresponderGenericDeviceCatalogFamily(message);
+      if (genericDeviceCatalogFamily) {
+        const replyText = formatAutoresponderReply(
+          buildAutoresponderDeviceCatalogRefinementPrompt(genericDeviceCatalogFamily),
+          settings,
+          shouldPrefixGreeting
+        );
+
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: genericDeviceCatalogFamily === 'smartphone' ? 'catalog_phone_refinement' : 'catalog_device_refinement',
+          replyText,
+          matchedCount: 0,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+
+        return { replies: [{ message: replyText }] };
+      }
+
+      if (isAutoresponderCatalogRequest(message)) {
+        const categories = await findAutoresponderAvailableCategories(20);
+        const selectedCategory = findAutoresponderCatalogCategoryForMessage(message, categories);
+        if (selectedCategory?.id) {
+          const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
+          const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
+          const products = rows.slice(0, pageSize);
+          const hasMore = rows.length > pageSize;
+          const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+          const productOptions = buildAutoresponderProductOptions(products);
+          const productReplyMessages = appendAutoresponderReplyFooter(
+            await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name) }),
+            formatAutoresponderProductReplyInstructions(hasMore)
+          );
+          const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
+          const replyText = replyMessages.join('\n\n');
+
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'catalog_category',
+            replyText,
+            matchedCount: products.length,
+            matchedProducts: productOptions,
+          });
+          await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
+            source: 'category',
+            categoryId: selectedCategory.id,
+            keyword: selectedCategory.name,
+            offset: 0,
+            limit: pageSize,
+            total,
+            hasMore,
+            completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name),
+          });
+
+          return { replies: formatAutoresponderProReplies(replyMessages) };
+        }
+      }
+
       const productSearchTokens = extractAutoresponderProductSearchTokens(message);
       if (productSearchTokens.length > 0) {
-        const pageSize = AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+        const searchKeyword = productSearchTokens.join(' ');
+        const pageSize = getAutoresponderInitialProductPageSize(searchKeyword);
         const rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
         const products = rows.slice(0, pageSize);
         const hasMore = rows.length > pageSize;
@@ -10155,7 +11232,7 @@ fastify.route({
           const total = await countAutoresponderProductsByTokens(productSearchTokens);
           const productOptions = buildAutoresponderProductOptions(products);
           const productReplyMessages = appendAutoresponderReplyFooter(
-            await formatAutoresponderProductSearchReplies(products, productSearchTokens.join(' '), settings, { offset: 0, limit: pageSize, total }),
+            await formatAutoresponderProductSearchReplies(products, searchKeyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(searchKeyword) }),
             formatAutoresponderProductReplyInstructions(hasMore)
           );
           const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
@@ -10176,6 +11253,7 @@ fastify.route({
             limit: pageSize,
             total,
             hasMore,
+            completeList: isAutoresponderCompleteProductListKeyword(searchKeyword),
           });
 
           return { replies: formatAutoresponderProReplies(replyMessages) };
@@ -14325,6 +15403,13 @@ async function runMigrations() {
       product_tag_keywords JSON NULL,
       signature_enabled TINYINT(1) NOT NULL DEFAULT 1,
       signature_message TEXT NULL,
+      ai_daily_limit INT NOT NULL DEFAULT 0,
+      ai_monthly_limit INT NOT NULL DEFAULT 0,
+      ai_credit_balance_usd DECIMAL(12,6) NOT NULL DEFAULT 0,
+      ai_credit_alert_usd DECIMAL(12,6) NOT NULL DEFAULT 5,
+      ai_input_cost_per_1m_usd DECIMAL(12,6) NOT NULL DEFAULT 0,
+      ai_output_cost_per_1m_usd DECIMAL(12,6) NOT NULL DEFAULT 0,
+      openai_admin_api_key TEXT NULL,
       archive_to_synology TINYINT(1) NOT NULL DEFAULT 1,
       archive_after_days INT NOT NULL DEFAULT 7,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -14333,6 +15418,31 @@ async function runMigrations() {
 
   await addColumnIfMissing('autoresponder_settings', 'signature_enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('autoresponder_settings', 'signature_message', 'TEXT NULL');
+  await addColumnIfMissing('autoresponder_settings', 'ai_enabled', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumnIfMissing('autoresponder_settings', 'ai_model', "VARCHAR(80) NOT NULL DEFAULT 'gpt-5-nano'");
+  await addColumnIfMissing('autoresponder_settings', 'openai_api_key', 'TEXT NULL');
+  await addColumnIfMissing('autoresponder_settings', 'ai_daily_limit', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('autoresponder_settings', 'ai_monthly_limit', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('autoresponder_settings', 'ai_credit_balance_usd', 'DECIMAL(12,6) NOT NULL DEFAULT 0');
+  await addColumnIfMissing('autoresponder_settings', 'ai_credit_alert_usd', 'DECIMAL(12,6) NOT NULL DEFAULT 5');
+  await addColumnIfMissing('autoresponder_settings', 'ai_input_cost_per_1m_usd', 'DECIMAL(12,6) NOT NULL DEFAULT 0');
+  await addColumnIfMissing('autoresponder_settings', 'ai_output_cost_per_1m_usd', 'DECIMAL(12,6) NOT NULL DEFAULT 0');
+  await addColumnIfMissing('autoresponder_settings', 'openai_admin_api_key', 'TEXT NULL');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS autoresponder_ai_training (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(120) NOT NULL,
+      training_type ENUM('store_instruction','faq','category_guidance','policy') NOT NULL DEFAULT 'store_instruction',
+      content TEXT NOT NULL,
+      priority INT NOT NULL DEFAULT 0,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_ai_training_active_priority (active, priority, id),
+      INDEX idx_ai_training_type (training_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
 
   await pool.query(`
     INSERT IGNORE INTO autoresponder_settings (
@@ -14409,11 +15519,22 @@ async function runMigrations() {
       matched_count INT NOT NULL DEFAULT 0,
       reply_text TEXT NULL,
       response_time_ms INT NULL,
+      ai_assisted TINYINT(1) NOT NULL DEFAULT 0,
+      ai_model VARCHAR(80) NULL,
+      ai_input_tokens INT NULL,
+      ai_output_tokens INT NULL,
+      ai_estimated_cost_usd DECIMAL(14,8) NULL,
       is_group TINYINT(1) NOT NULL DEFAULT 0,
       INDEX idx_created (created_at),
       INDEX idx_unmatched (matched_count, created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await addColumnIfMissing('autoresponder_logs', 'ai_assisted', 'TINYINT(1) NOT NULL DEFAULT 0');
+  await addColumnIfMissing('autoresponder_logs', 'ai_model', 'VARCHAR(80) NULL');
+  await addColumnIfMissing('autoresponder_logs', 'ai_input_tokens', 'INT NULL');
+  await addColumnIfMissing('autoresponder_logs', 'ai_output_tokens', 'INT NULL');
+  await addColumnIfMissing('autoresponder_logs', 'ai_estimated_cost_usd', 'DECIMAL(14,8) NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_conversations (

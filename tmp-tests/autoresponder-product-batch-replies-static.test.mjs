@@ -6,7 +6,7 @@ const source = readFileSync('vps_server.cjs', 'utf8');
 assert.match(
   source,
   /const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;/,
-  'product replies must cap AutoResponder Pro messages at 10',
+  'normal product replies must keep the 10-message cap',
 );
 
 assert.match(
@@ -29,6 +29,19 @@ assert.match(
 
 assert.match(
   source,
+  /const chunks = chunkAutoresponderArray\(groupedProducts, AUTORESPONDER_PRODUCT_PAGE_SIZE\);\s*const visibleChunks = pagination\?\.completeList/s,
+  'complete device lists must keep every five-product message instead of slicing to the normal cap',
+);
+
+const proRepliesBody = source.match(/function formatAutoresponderProReplies\([\s\S]*?\n}\n\nfunction formatAutoresponderReplies/)?.[0] || '';
+assert.doesNotMatch(
+  proRepliesBody,
+  /\.slice\(0, AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES\)/,
+  'final Pro reply packaging must not cut complete lists after they are formatted',
+);
+
+assert.match(
+  source,
   /formatAutoresponderProReplies\(replyMessages\)/,
   'product reply messages must be converted to Pro replies with delay metadata',
 );
@@ -41,8 +54,44 @@ assert.match(
 
 assert.match(
   source,
-  /Math\.min\(Math\.max\(Number\(limit\) \|\| AUTORESPONDER_PRODUCT_PAGE_SIZE, 1\), AUTORESPONDER_PRODUCT_RESPONSE_LIMIT\)/,
-  'product SQL queries must allow enough rows for up to 10 five-product messages',
+  /function getAutoresponderProductQueryLimit\(limit\)/,
+  'product SQL queries must use the shared product limit helper',
+);
+
+assert.match(
+  source,
+  /AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 500/,
+  'complete device lists must allow more than the normal 50-product response cap',
+);
+
+assert.match(
+  source,
+  /function isAutoresponderCompleteProductListKeyword\(/,
+  'expected a helper to detect complete-list device keywords',
+);
+
+assert.match(
+  source,
+  /celulares[\s\S]*smartphones[\s\S]*tabltes[\s\S]*receptores/,
+  'complete-list keywords must include celulares, smartphones, typo tabltes, and receptores',
+);
+
+assert.match(
+  source,
+  /isAutoresponderCompleteProductListKeyword\(text\)\) return null/,
+  'generic device terms should continue into product/category listing instead of refinement prompt',
+);
+
+assert.match(
+  source,
+  /completeList:\s*isAutoresponderCompleteProductListKeyword\(selectedCategory\.name\)/,
+  'category listings for device families must request complete product replies',
+);
+
+assert.match(
+  source,
+  /completeList:\s*isAutoresponderCompleteProductListKeyword\(searchKeyword\)/,
+  'search listings for device families must request complete product replies',
 );
 
 console.log('autoresponder product batch replies static checks passed');
