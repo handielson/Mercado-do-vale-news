@@ -26,6 +26,7 @@ export interface AutoResponderSettings {
     numbered_list_validity_minutes: number;
     product_tag_keywords: Record<string, string[] | string> | string | null;
     conversation_flow_keywords?: Record<string, string[] | string> | string | null;
+    conversation_flow_messages?: Record<string, string> | string | null;
     archive_to_synology: boolean | number;
     archive_after_days: number;
     ai_enabled?: boolean | number;

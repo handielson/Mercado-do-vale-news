@@ -9,6 +9,9 @@ assert.ok(pageSource.includes("id: 'fluxos'"), 'AutoResponder admin must expose 
 assert.ok(pageSource.includes('Fluxos de conversa'), 'Fluxos tab must have a clear title');
 assert.ok(pageSource.includes('Preview da conversa'), 'Fluxos tab must show a conversation preview');
 assert.ok(pageSource.includes('conversation_flow_keywords'), 'Fluxos tab must edit persisted flow keywords');
+assert.ok(pageSource.includes('conversation_flow_messages'), 'Fluxos tab must edit persisted flow messages');
+assert.ok(pageSource.includes('Saudacao inicial'), 'Fluxos tab must include the initial greeting step');
+assert.ok(pageSource.includes('Atendimento pelo WhatsApp'), 'Fluxos tab must present the full WhatsApp conversation flow');
 assert.ok(pageSource.includes('settingsForm.conversation_flow_keywords.phone_list_opt_in'), 'phone list opt-in keywords must be edited in context');
 assert.ok(pageSource.includes('IA na linha de frente'), 'Fluxos tab must make the AI-first mode visible');
 assert.ok(pageSource.includes('Cliente pode responder'), 'Fluxos layout must present expected customer replies like chat context');
@@ -17,6 +20,10 @@ assert.ok(
   typesSource.includes('conversation_flow_keywords'),
   'AutoResponderSettings must type conversation flow keywords'
 );
+assert.ok(
+  typesSource.includes('conversation_flow_messages'),
+  'AutoResponderSettings must type conversation flow messages'
+);
 
 for (const fileName of serverFiles) {
   const source = readFileSync(fileName, 'utf8');
@@ -24,6 +31,10 @@ for (const fileName of serverFiles) {
   assert.ok(
     source.includes('conversation_flow_keywords: (v) => jsonStr(normalizeAutoresponderConversationFlowKeywords(v))'),
     `${fileName} must persist normalized conversation flow keywords`
+  );
+  assert.ok(
+    source.includes('conversation_flow_messages: (v) => jsonStr(normalizeAutoresponderConversationFlowMessages(v))'),
+    `${fileName} must persist normalized conversation flow messages`
   );
 
   assert.ok(
@@ -49,6 +60,10 @@ for (const fileName of serverFiles) {
   assert.ok(
     source.includes("await addColumnIfMissing('autoresponder_settings', 'conversation_flow_keywords'"),
     `${fileName} must migrate the conversation_flow_keywords settings column`
+  );
+  assert.ok(
+    source.includes("await addColumnIfMissing('autoresponder_settings', 'conversation_flow_messages'"),
+    `${fileName} must migrate the conversation_flow_messages settings column`
   );
 }
 

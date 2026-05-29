@@ -5598,7 +5598,9 @@ function getAutoresponderGreetingPeriod(message) {
   return 'night';
 }
 
-function getAutoresponderGreetingReply(message, contactFirstName = '') {
+function getAutoresponderGreetingReply(message, contactFirstName = '', settings = null) {
+  const customGreeting = getAutoresponderConversationFlowMessage(settings, 'greeting_reply', '');
+  if (customGreeting) return customGreeting;
   const period = getAutoresponderGreetingPeriod(message);
   const greeting = period === 'morning'
     ? 'Bom dia'
@@ -5733,6 +5735,19 @@ const AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_KEYWORDS = {
   phone_list_opt_in: ['sim', 'quero', 'manda', 'pode mandar', 'lista', 'quero ver', 'manda lista'],
 };
 
+const AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES = {
+  greeting_reply: 'Bom dia! Seja bem-vindo ao Mercado do Vale.\nComo posso ajudar voce hoje?',
+  phone_list_prompt: AUTORESPONDER_NEEDS_PROMPT_FALLBACK,
+  phone_list_reply: 'Encontrei estas opcoes para celulares:',
+  name_prompt: 'Qual seu nome para seguirmos com o atendimento?',
+  product_choice_prompt: 'Responda com o numero da opcao ou com o nome/modelo do produto.',
+  fulfillment_prompt: 'Agora preciso confirmar se sera retirada na loja ou entrega.',
+  delivery_cep_prompt: 'Combinado: entrega. Me envie o CEP da entrega. Pode mandar somente os numeros.',
+  pickup_reply: 'Combinado: retirada na loja. Agora vou confirmar os dados do cadastro para separar seu pedido.',
+  payment_prompt: 'Como prefere pagar? Posso verificar as opcoes de pagamento para voce.',
+  human_handoff_reply: 'Vou chamar nossa equipe para continuar seu atendimento por aqui.',
+};
+
 function normalizeAutoresponderConversationFlowKeywords(value) {
   const parsed = parsePublicJson(value, value && typeof value === 'object' ? value : {});
   const source = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
@@ -5745,6 +5760,22 @@ function normalizeAutoresponderConversationFlowKeywords(value) {
       .filter(Boolean))];
   }
   return normalized;
+}
+
+function normalizeAutoresponderConversationFlowMessages(value) {
+  const parsed = parsePublicJson(value, value && typeof value === 'object' ? value : {});
+  const source = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  const normalized = {};
+  for (const [messageKey, fallback] of Object.entries(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES)) {
+    const rawValue = Object.prototype.hasOwnProperty.call(source, messageKey) ? source[messageKey] : fallback;
+    normalized[messageKey] = String(rawValue || fallback).trim();
+  }
+  return normalized;
+}
+
+function getAutoresponderConversationFlowMessage(settings, messageKey, fallback = '') {
+  const normalized = normalizeAutoresponderConversationFlowMessages(settings?.conversation_flow_messages);
+  return normalized[messageKey] || fallback || AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES[messageKey] || '';
 }
 
 function getAutoresponderConversationFlowKeywords(settings, flowKey) {
@@ -6081,6 +6112,8 @@ async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings 
 }
 
 async function buildAutoresponderNeedsPromptReply({ message, contactFirstName = '', settings = null } = {}) {
+  const customPrompt = getAutoresponderConversationFlowMessage(settings, 'phone_list_prompt', '');
+  if (customPrompt) return { text: customPrompt, aiMeta: null };
   const name = String(contactFirstName || '').trim();
   const needsPrompt = await callAutoresponderOpenAi({
     input: [
@@ -6625,16 +6658,16 @@ function isAutoresponderFullName(value) {
   return parts.length >= 2;
 }
 
-function buildAutoresponderFullNamePrompt() {
-  return 'Para finalizar o pedido, me envie seu nome completo.';
+function buildAutoresponderFullNamePrompt(settings = null) {
+  return getAutoresponderConversationFlowMessage(settings, 'name_prompt', 'Para finalizar o pedido, me envie seu nome completo.');
 }
 
-function buildAutoresponderPickupConfirmationReply() {
-  return 'Combinado: retirada na loja. Agora vou confirmar os dados do cadastro para separar seu pedido.';
+function buildAutoresponderPickupConfirmationReply(settings = null) {
+  return getAutoresponderConversationFlowMessage(settings, 'pickup_reply', 'Combinado: retirada na loja. Agora vou confirmar os dados do cadastro para separar seu pedido.');
 }
 
-function buildAutoresponderDeliveryAddressPrompt() {
-  return 'Combinado: entrega. Me envie o CEP da entrega. Pode mandar somente os numeros.';
+function buildAutoresponderDeliveryAddressPrompt(settings = null) {
+  return getAutoresponderConversationFlowMessage(settings, 'delivery_cep_prompt', 'Combinado: entrega. Me envie o CEP da entrega. Pode mandar somente os numeros.');
 }
 
 function buildAutoresponderDeliveryCepNotFoundReply() {
@@ -9047,6 +9080,7 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
     numbered_list_validity_minutes: (v) => Number(v),
     product_tag_keywords: (v) => jsonStr(v || {}),
     conversation_flow_keywords: (v) => jsonStr(normalizeAutoresponderConversationFlowKeywords(v)),
+    conversation_flow_messages: (v) => jsonStr(normalizeAutoresponderConversationFlowMessages(v)),
     archive_to_synology: (v) => boolInt(v),
     archive_after_days: (v) => Number(v),
     ai_enabled: (v) => boolInt(v),
@@ -9796,7 +9830,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   const normalizedSender = normalizeAutoresponderSender(sender) || 'teste-bot';
 
   if (detectedIntent.greetingOnly) {
-    const greetingText = getAutoresponderGreetingReply(message, contactFirstName);
+    const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
     const contactState = await getAutoresponderContactNameState(normalizedSender);
     const contactNameStatus = String(contactState?.contact_name_status || '');
     const contactNameSaved = ['saved_to_google', 'google_pending'].includes(contactNameStatus);
@@ -10147,7 +10181,7 @@ fastify.route({
           : shouldAskContactName
             ? '\n\nQual seu nome para seguirmos com o atendimento?'
           : '';
-        const greetingText = getAutoresponderGreetingReply(message, contactFirstName);
+        const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
         const contactNameSaved = ['saved_to_google', 'google_pending'].includes(contactNameStatus);
         if (shouldConfirmContactName || shouldAskContactName) {
           const replyText = [greetingText, contactPrompt.trim()].filter(Boolean).join('\n\n');
@@ -10242,7 +10276,7 @@ fastify.route({
       if (purchaseFlow.status === 'summary_ready' && hasAutoresponderCartItems(purchaseFlow)) {
         const fulfillmentChoice = getAutoresponderPurchaseFulfillmentChoice(message);
         if (fulfillmentChoice === 'pickup') {
-          const replyText = formatAutoresponderReply(buildAutoresponderPickupConfirmationReply(), settings, false);
+          const replyText = formatAutoresponderReply(buildAutoresponderPickupConfirmationReply(settings), settings, false);
           await saveAutoresponderPurchaseFlow(senderKey, {
             ...purchaseFlow,
             status: 'customer_data_pending',
@@ -10262,7 +10296,7 @@ fastify.route({
         }
 
         if (fulfillmentChoice === 'delivery') {
-          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(), settings, false);
+          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(settings), settings, false);
           await saveAutoresponderPurchaseFlow(senderKey, {
             ...purchaseFlow,
             status: 'awaiting_delivery_address',
@@ -10321,7 +10355,7 @@ fastify.route({
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: replyText }] };
         }
-        const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(), settings, false);
+        const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(settings), settings, false);
         await upsertAutoresponderSuccessConversation(senderKey);
         return { replies: [{ message: replyText }] };
       }
@@ -10336,7 +10370,7 @@ fastify.route({
             shipping_quote: null,
           };
           await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
-          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(), settings, false);
+          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(settings), settings, false);
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: replyText }] };
         }
@@ -10445,7 +10479,7 @@ fastify.route({
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: replyText }] };
         }
-        const replyText = formatAutoresponderReply(buildAutoresponderFullNamePrompt(), settings, false);
+        const replyText = formatAutoresponderReply(buildAutoresponderFullNamePrompt(settings), settings, false);
         await upsertAutoresponderSuccessConversation(senderKey);
         return { replies: [{ message: replyText }] };
       }
@@ -10453,7 +10487,7 @@ fastify.route({
       if (purchaseFlow.status === 'customer_data_pending' && hasAutoresponderCartItems(purchaseFlow)) {
         let customerData = await getAutoresponderCustomerDataSnapshot(senderKey, payload, purchaseFlow);
         if (!isAutoresponderFullName(customerData.name)) {
-          const replyText = formatAutoresponderReply(buildAutoresponderFullNamePrompt(), settings, false);
+          const replyText = formatAutoresponderReply(buildAutoresponderFullNamePrompt(settings), settings, false);
           await saveAutoresponderPurchaseFlow(senderKey, {
             ...purchaseFlow,
             status: 'awaiting_customer_full_name',
@@ -15538,6 +15572,7 @@ async function runMigrations() {
       numbered_list_validity_minutes INT NOT NULL DEFAULT 30,
       product_tag_keywords JSON NULL,
       conversation_flow_keywords JSON NULL,
+      conversation_flow_messages JSON NULL,
       signature_enabled TINYINT(1) NOT NULL DEFAULT 1,
       signature_message TEXT NULL,
       ai_daily_limit INT NOT NULL DEFAULT 0,
@@ -15566,6 +15601,7 @@ async function runMigrations() {
   await addColumnIfMissing('autoresponder_settings', 'ai_output_cost_per_1m_usd', 'DECIMAL(12,6) NOT NULL DEFAULT 0');
   await addColumnIfMissing('autoresponder_settings', 'openai_admin_api_key', 'TEXT NULL');
   await addColumnIfMissing('autoresponder_settings', 'conversation_flow_keywords', 'JSON NULL');
+  await addColumnIfMissing('autoresponder_settings', 'conversation_flow_messages', 'JSON NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_ai_training (
@@ -15594,7 +15630,8 @@ async function runMigrations() {
       signature_enabled,
       signature_message,
       product_tag_keywords,
-      conversation_flow_keywords
+      conversation_flow_keywords,
+      conversation_flow_messages
     ) VALUES (
       1,
       0,
@@ -15606,7 +15643,8 @@ async function runMigrations() {
       1,
       '${AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE}',
       JSON_OBJECT(),
-      '${jsonStr(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_KEYWORDS)}'
+      '${jsonStr(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_KEYWORDS)}',
+      '${jsonStr(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES)}'
     );
   `);
 

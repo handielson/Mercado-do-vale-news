@@ -107,6 +107,7 @@ interface SettingsFormState {
     numbered_list_threshold: string;
     numbered_list_validity_minutes: string;
     conversation_flow_keywords: Record<string, string>;
+    conversation_flow_messages: Record<string, string>;
     ai_enabled: boolean;
     ai_model: string;
     ai_daily_limit: string;
@@ -213,6 +214,18 @@ const emptySettingsForm: SettingsFormState = {
     numbered_list_validity_minutes: '30',
     conversation_flow_keywords: {
         phone_list_opt_in: 'sim, quero, manda, pode mandar, lista, quero ver, manda lista',
+    },
+    conversation_flow_messages: {
+        greeting_reply: 'Bom dia! Seja bem-vindo ao Mercado do Vale.\nComo posso ajudar voce hoje?',
+        phone_list_prompt: 'Voce esta atras de celular novo? Quer que eu mande a lista do que temos? Ou deseja alguma outra coisa?',
+        phone_list_reply: 'Encontrei estas opcoes para celulares:',
+        name_prompt: 'Qual seu nome para seguirmos com o atendimento?',
+        product_choice_prompt: 'Responda com o numero da opcao ou com o nome/modelo do produto.',
+        fulfillment_prompt: 'Agora preciso confirmar se sera retirada na loja ou entrega.',
+        delivery_cep_prompt: 'Combinado: entrega. Me envie o CEP da entrega. Pode mandar somente os numeros.',
+        pickup_reply: 'Combinado: retirada na loja. Agora vou confirmar os dados do cadastro para separar seu pedido.',
+        payment_prompt: 'Como prefere pagar? Posso verificar as opcoes de pagamento para voce.',
+        human_handoff_reply: 'Vou chamar nossa equipe para continuar seu atendimento por aqui.',
     },
     ai_enabled: false,
     ai_model: 'gpt-5-nano',
@@ -422,6 +435,27 @@ function parseConversationFlowKeywordMap(value: AutoResponderSettings['conversat
     return next;
 }
 
+function parseConversationFlowMessageMap(value: AutoResponderSettings['conversation_flow_messages']): Record<string, string> {
+    const defaults = emptySettingsForm.conversation_flow_messages;
+    if (!value) return { ...defaults };
+    let parsed: unknown = value;
+    if (typeof value === 'string') {
+        try {
+            parsed = JSON.parse(value);
+        } catch {
+            return { ...defaults };
+        }
+    }
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return { ...defaults };
+    const next = { ...defaults };
+    Object.entries(parsed as Record<string, unknown>).forEach(([key, rawValue]) => {
+        if (Object.prototype.hasOwnProperty.call(next, key)) {
+            next[key] = String(rawValue ?? '').trim();
+        }
+    });
+    return next;
+}
+
 function conversationFlowKeywordsToInput(map: Record<string, string>): Record<string, string[]> {
     return Object.fromEntries(
         Object.entries(map).map(([key, value]) => [
@@ -431,6 +465,12 @@ function conversationFlowKeywordsToInput(map: Record<string, string>): Record<st
                 .map((keyword) => keyword.trim())
                 .filter(Boolean),
         ])
+    );
+}
+
+function conversationFlowMessagesToInput(map: Record<string, string>): Record<string, string> {
+    return Object.fromEntries(
+        Object.entries(map).map(([key, value]) => [key, String(value || '').trim()])
     );
 }
 
@@ -456,6 +496,7 @@ function settingsToForm(settings: AutoResponderSettings | null): SettingsFormSta
         numbered_list_threshold: String(settings.numbered_list_threshold ?? 2),
         numbered_list_validity_minutes: String(settings.numbered_list_validity_minutes ?? 30),
         conversation_flow_keywords: parseConversationFlowKeywordMap(settings.conversation_flow_keywords),
+        conversation_flow_messages: parseConversationFlowMessageMap(settings.conversation_flow_messages),
         ai_enabled: isEnabled(settings.ai_enabled),
         ai_model: settings.ai_model || 'gpt-5-nano',
         ai_daily_limit: String(settings.ai_daily_limit ?? 0),
@@ -499,6 +540,7 @@ function settingsFormToInput(
         numbered_list_threshold: Number(form.numbered_list_threshold || 0),
         numbered_list_validity_minutes: Number(form.numbered_list_validity_minutes || 0),
         conversation_flow_keywords: conversationFlowKeywordsToInput(form.conversation_flow_keywords),
+        conversation_flow_messages: conversationFlowMessagesToInput(form.conversation_flow_messages),
         ai_enabled: form.ai_enabled,
         ai_model: form.ai_model || 'gpt-5-nano',
         ai_daily_limit: Number(form.ai_daily_limit || 0),
@@ -1939,6 +1981,16 @@ const AutoResponderPage: React.FC = () => {
         }));
     };
 
+    const updateConversationFlowMessage = (messageKey: string, message: string) => {
+        setSettingsForm((current) => ({
+            ...current,
+            conversation_flow_messages: {
+                ...current.conversation_flow_messages,
+                [messageKey]: message,
+            },
+        }));
+    };
+
     const addKeywordRow = () => {
         setSettingsKeywordRows((current) => [...current, createTagKeywordRow()]);
     };
@@ -2139,6 +2191,112 @@ const AutoResponderPage: React.FC = () => {
         }
     };
 
+    const flowMessages = settingsForm.conversation_flow_messages;
+    const conversationEditorSteps = [
+        {
+            id: 'greeting',
+            title: 'Saudacao inicial',
+            subtitle: 'Quando o cliente chama no WhatsApp',
+            customerLabel: 'Cliente pode dizer',
+            customerText: 'bom dia, boa tarde, boa noite, oi, ola',
+            botLabel: 'Bot responde',
+            messageKey: 'greeting_reply',
+            rows: 3,
+        },
+        {
+            id: 'phone-list',
+            title: 'Lista de celulares',
+            subtitle: 'Depois da saudacao inicial',
+            customerLabel: 'Cliente pode responder',
+            customerText: settingsForm.conversation_flow_keywords.phone_list_opt_in || '',
+            customerEditable: true,
+            botLabel: 'Bot pergunta antes',
+            messageKey: 'phone_list_prompt',
+            rows: 3,
+        },
+        {
+            id: 'product-list',
+            title: 'Resultado da lista',
+            subtitle: 'Quando o cliente aceita receber celulares',
+            customerLabel: 'Cliente disse',
+            customerText: 'quero',
+            botLabel: 'Bot responde',
+            messageKey: 'phone_list_reply',
+            rows: 2,
+            helper: 'Os produtos reais entram abaixo dessa frase conforme o catalogo.',
+        },
+        {
+            id: 'name',
+            title: 'Confirmar nome',
+            subtitle: 'Antes de finalizar atendimento ou pedido',
+            customerLabel: 'Quando falta nome',
+            customerText: 'cliente ainda sem nome salvo',
+            botLabel: 'Bot pergunta',
+            messageKey: 'name_prompt',
+            rows: 2,
+        },
+        {
+            id: 'product-choice',
+            title: 'Escolher produto',
+            subtitle: 'Depois de mostrar opcoes',
+            customerLabel: 'Cliente pode dizer',
+            customerText: '1, 2, Redmi, iPhone, Samsung',
+            botLabel: 'Bot orienta',
+            messageKey: 'product_choice_prompt',
+            rows: 2,
+        },
+        {
+            id: 'fulfillment',
+            title: 'Retirada ou entrega',
+            subtitle: 'Quando existe item escolhido',
+            customerLabel: 'Cliente pode dizer',
+            customerText: 'retirada, entrega, delivery, motoboy',
+            botLabel: 'Bot pergunta',
+            messageKey: 'fulfillment_prompt',
+            rows: 2,
+        },
+        {
+            id: 'delivery',
+            title: 'Endereco de entrega',
+            subtitle: 'Quando o cliente escolhe entrega',
+            customerLabel: 'Cliente escolheu',
+            customerText: 'entrega',
+            botLabel: 'Bot pergunta',
+            messageKey: 'delivery_cep_prompt',
+            rows: 2,
+        },
+        {
+            id: 'pickup',
+            title: 'Retirada na loja',
+            subtitle: 'Quando o cliente escolhe retirada',
+            customerLabel: 'Cliente escolheu',
+            customerText: 'retirada',
+            botLabel: 'Bot responde',
+            messageKey: 'pickup_reply',
+            rows: 2,
+        },
+        {
+            id: 'payment',
+            title: 'Pagamento',
+            subtitle: 'Quando o cliente pergunta como pagar',
+            customerLabel: 'Cliente pode dizer',
+            customerText: 'pagamento, pix, cartao, boleto, crediario',
+            botLabel: 'Bot responde',
+            messageKey: 'payment_prompt',
+            rows: 2,
+        },
+        {
+            id: 'human',
+            title: 'Atendente humano',
+            subtitle: 'Quando precisa passar para equipe',
+            customerLabel: 'Cliente pode dizer',
+            customerText: 'atendente, humano, vendedor, falar com alguem',
+            botLabel: 'Bot responde',
+            messageKey: 'human_handoff_reply',
+            rows: 2,
+        },
+    ];
+
     return (
         <div className="mx-auto max-w-7xl space-y-6 pb-16">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -2248,66 +2406,90 @@ const AutoResponderPage: React.FC = () => {
                             <aside className="rounded-lg border border-slate-200 bg-white">
                                 <div className="border-b border-slate-200 px-4 py-3">
                                     <h2 className="text-base font-semibold text-slate-900">Fluxos de conversa</h2>
-                                    <p className="mt-1 text-sm text-slate-500">Edite palavras dentro do contexto certo.</p>
+                                    <p className="mt-1 text-sm text-slate-500">A conversa completa, etapa por etapa.</p>
                                 </div>
-                                <button
-                                    type="button"
-                                    className="flex w-full items-start gap-3 border-l-4 border-emerald-500 bg-emerald-50 px-4 py-4 text-left"
-                                >
-                                    <MessageCircle size={18} className="mt-0.5 text-emerald-700" />
-                                    <span>
-                                        <span className="block text-sm font-bold text-slate-950">Lista de celulares</span>
-                                        <span className="mt-1 block text-xs text-slate-600">Depois da saudacao inicial</span>
-                                    </span>
-                                </button>
-                                <div className="space-y-2 px-4 py-4 text-sm text-slate-500">
-                                    <div className="rounded-lg border border-dashed border-slate-300 px-3 py-3">Confirmar nome</div>
-                                    <div className="rounded-lg border border-dashed border-slate-300 px-3 py-3">Escolher produto</div>
-                                    <div className="rounded-lg border border-dashed border-slate-300 px-3 py-3">Finalizar pedido</div>
+                                <div className="divide-y divide-slate-100">
+                                    {conversationEditorSteps.map((step, index) => (
+                                        <div
+                                            key={step.id}
+                                            className={`flex items-start gap-3 px-4 py-3 ${
+                                                index < 3 ? 'border-l-4 border-emerald-500 bg-emerald-50' : 'border-l-4 border-transparent'
+                                            }`}
+                                        >
+                                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-700 shadow-sm">
+                                                {index + 1}
+                                            </span>
+                                            <span>
+                                                <span className="block text-sm font-bold text-slate-950">{step.title}</span>
+                                                <span className="mt-1 block text-xs text-slate-600">{step.subtitle}</span>
+                                            </span>
+                                        </div>
+                                    ))}
                                 </div>
                             </aside>
 
                             <section className="rounded-lg border border-slate-200 bg-white">
                                 <div className="border-b border-slate-200 px-5 py-4">
-                                    <p className="text-xs font-semibold uppercase text-emerald-700">Fluxo ativo</p>
-                                    <h2 className="mt-1 text-lg font-bold text-slate-950">Lista de celulares</h2>
+                                    <p className="text-xs font-semibold uppercase text-emerald-700">Fluxo completo</p>
+                                    <h2 className="mt-1 text-lg font-bold text-slate-950">Atendimento pelo WhatsApp</h2>
                                     <p className="mt-1 text-sm text-slate-500">
-                                        Esse fluxo fica ativo quando o bot pergunta se o cliente quer receber a lista de celulares.
+                                        Edite a fala do bot e as palavras que fazem cada etapa continuar sem sair do contexto.
                                     </p>
                                 </div>
 
                                 <div className="space-y-5 px-5 py-5">
-                                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                            <Bot size={16} />
-                                            Mensagem do bot
-                                        </div>
-                                        <div className="max-w-xl rounded-lg rounded-tl-sm bg-white px-4 py-3 text-sm leading-6 text-slate-800 shadow-sm">
-                                            Voce esta atras de celular novo? Quer que eu mande a lista do que temos? Ou deseja alguma outra coisa?
-                                        </div>
-                                    </div>
+                                    {conversationEditorSteps.map((step, index) => (
+                                        <div key={step.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                                <div>
+                                                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                                                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs text-blue-700">
+                                                            {index + 1}
+                                                        </span>
+                                                        {step.title}
+                                                    </div>
+                                                    <p className="mt-1 text-xs text-slate-500">{step.subtitle}</p>
+                                                </div>
+                                                <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-500">
+                                                    {step.customerEditable ? 'palavras editaveis' : 'resposta editavel'}
+                                                </span>
+                                            </div>
 
-                                    <label className="block">
-                                        <span className="mb-2 block text-sm font-semibold text-slate-700">Cliente pode responder</span>
-                                        <textarea
-                                            value={settingsForm.conversation_flow_keywords.phone_list_opt_in || ''}
-                                            onChange={(event) => updateConversationFlowKeywords('phone_list_opt_in', event.target.value)}
-                                            rows={3}
-                                            placeholder="sim, quero, manda, pode mandar, lista"
-                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                                        />
-                                        <p className="mt-2 text-xs text-slate-500">
-                                            Separe por virgula. Essas palavras so valem quando esse fluxo estiver aguardando resposta.
-                                        </p>
-                                    </label>
+                                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                                                <label className="block">
+                                                    <span className="mb-2 block text-sm font-semibold text-slate-700">{step.customerLabel}</span>
+                                                    {step.customerEditable ? (
+                                                        <textarea
+                                                            value={settingsForm.conversation_flow_keywords.phone_list_opt_in || ''}
+                                                            onChange={(event) => updateConversationFlowKeywords('phone_list_opt_in', event.target.value)}
+                                                            rows={3}
+                                                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                        />
+                                                    ) : (
+                                                        <div className="min-h-[76px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-600">
+                                                            {step.customerText}
+                                                        </div>
+                                                    )}
+                                                </label>
 
-                                    <div className="rounded-lg border border-slate-200 p-4">
-                                        <div className="mb-2 text-sm font-semibold text-slate-700">Entao o bot faz</div>
-                                        <div className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
-                                            <CheckCircle2 size={16} />
-                                            Enviar lista da categoria Celulares
+                                                <label className="block">
+                                                    <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                                        <Bot size={16} />
+                                                        {step.botLabel}
+                                                    </span>
+                                                    <textarea
+                                                        value={flowMessages[step.messageKey] || ''}
+                                                        onChange={(event) => updateConversationFlowMessage(step.messageKey, event.target.value)}
+                                                        rows={step.rows}
+                                                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                    />
+                                                    {step.helper && (
+                                                        <p className="mt-2 text-xs text-slate-500">{step.helper}</p>
+                                                    )}
+                                                </label>
+                                            </div>
                                         </div>
-                                    </div>
+                                    ))}
 
                                     <label className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
                                         <input
@@ -2348,20 +2530,35 @@ const AutoResponderPage: React.FC = () => {
                                 </div>
                                 <div className="space-y-3 text-sm">
                                     <div className="max-w-[88%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
-                                        Bom dia! Seja bem-vindo ao Mercado do Vale.
+                                        {flowMessages.greeting_reply}
                                     </div>
                                     <div className="max-w-[88%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
-                                        Voce esta atras de celular novo? Quer que eu mande a lista do que temos?
+                                        {flowMessages.phone_list_prompt}
                                     </div>
                                     <div className="ml-auto max-w-[78%] rounded-lg rounded-tr-sm bg-[#d9fdd3] px-3 py-2 text-slate-900 shadow-sm">
                                         quero
                                     </div>
                                     <div className="max-w-[92%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
-                                        Encontrei estas opcoes para celulares:<br />
+                                        {flowMessages.phone_list_reply}<br />
                                         <br />
                                         1. Redmi Note 14<br />
                                         2. iPhone 13<br />
                                         3. Samsung Galaxy A16
+                                    </div>
+                                    <div className="max-w-[88%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
+                                        {flowMessages.name_prompt}
+                                    </div>
+                                    <div className="ml-auto max-w-[72%] rounded-lg rounded-tr-sm bg-[#d9fdd3] px-3 py-2 text-slate-900 shadow-sm">
+                                        Handielson Amorim
+                                    </div>
+                                    <div className="max-w-[88%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
+                                        {flowMessages.fulfillment_prompt}
+                                    </div>
+                                    <div className="ml-auto max-w-[72%] rounded-lg rounded-tr-sm bg-[#d9fdd3] px-3 py-2 text-slate-900 shadow-sm">
+                                        entrega
+                                    </div>
+                                    <div className="max-w-[88%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
+                                        {flowMessages.delivery_cep_prompt}
                                     </div>
                                 </div>
                             </aside>
