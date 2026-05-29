@@ -114,13 +114,6 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
                     }
                 `}
             >
-                {/* Badge de quantidade sutil */}
-                {!isActive && category.count !== undefined && category.count > 0 && (
-                    <span className="absolute top-2 right-2 text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 rounded-full">
-                        {category.count}
-                    </span>
-                )}
-                
                 <div className={`mb-2 transition-colors duration-300 ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-800'}`}>
                     {category.icon}
                 </div>
@@ -177,7 +170,7 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
                             {isExpanded ? (
                                 <>Ver menos <ChevronUp className="w-4 h-4" /></>
                             ) : (
-                                <>Ver mais categorias ({hiddenCategories.length}) <ChevronDown className="w-4 h-4" /></>
+                                <>Ver mais categorias <ChevronDown className="w-4 h-4" /></>
                             )}
                         </button>
                     </motion.div>
@@ -202,7 +195,7 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
                                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                     }`}
                                 >
-                                    Todos ({allCategories.find(c => c.id === activeRootId)?.count || 0})
+                                    Todos
                                 </button>
                                 {activeRootChildren.map(child => (
                                     <button 
@@ -214,7 +207,7 @@ export const CategoryNav: React.FC<CategoryNavProps> = ({
                                                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                         }`}
                                     >
-                                        {child.name} {child.count > 0 && `(${child.count})`}
+                                        {child.name}
                                     </button>
                                 ))}
                             </div>
