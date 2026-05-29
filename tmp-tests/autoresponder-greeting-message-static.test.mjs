@@ -17,7 +17,7 @@ assert.match(
 
 assert.match(
   source,
-  /function getAutoresponderGreetingReply\(message, contactFirstName = ''\)/,
+  /function getAutoresponderGreetingReply\(message, contactFirstName = '', settings = null\)/,
   'autoresponder must build a dedicated greeting reply',
 );
 
@@ -35,7 +35,7 @@ assert.match(
 
 assert.match(
   source,
-  /getAutoresponderGreetingReply\(message, contactFirstName\)/,
+  /getAutoresponderGreetingReply\(message, contactFirstName, settings\)/,
   'greeting replies must receive the contact first name',
 );
 

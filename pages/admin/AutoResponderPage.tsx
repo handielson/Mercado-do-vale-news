@@ -132,6 +132,48 @@ interface TagKeywordRow {
     keywords: string;
 }
 
+interface AutoResizeTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+    minRows?: number;
+}
+
+const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({ minRows = 2, className = '', style, value, onChange, ...props }) => {
+    const ref = React.useRef<HTMLTextAreaElement | null>(null);
+
+    const resize = React.useCallback(() => {
+        const textarea = ref.current;
+        if (!textarea) return;
+        const computed = window.getComputedStyle(textarea);
+        const lineHeight = Number.parseFloat(computed.lineHeight) || 24;
+        const paddingY = Number.parseFloat(computed.paddingTop) + Number.parseFloat(computed.paddingBottom);
+        const borderY = Number.parseFloat(computed.borderTopWidth) + Number.parseFloat(computed.borderBottomWidth);
+        const minHeight = (lineHeight * minRows) + paddingY + borderY;
+
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.max(textarea.scrollHeight, minHeight)}px`;
+    }, [minRows]);
+
+    React.useLayoutEffect(() => {
+        resize();
+    }, [resize, value]);
+
+    const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+        onChange?.(event);
+        requestAnimationFrame(resize);
+    };
+
+    return (
+        <textarea
+            {...props}
+            ref={ref}
+            value={value}
+            onChange={handleChange}
+            rows={minRows}
+            className={`${className} resize-none overflow-hidden`}
+            style={style}
+        />
+    );
+};
+
 const isEnabled = (value: unknown): boolean => value === true || value === 1 || value === '1';
 
 const statusLabels: Record<string, string> = {
@@ -2266,6 +2308,46 @@ const AutoResponderPage: React.FC = () => {
             rows: 2,
         },
         {
+            id: 'delivery-cep-input',
+            title: 'CEP da entrega',
+            subtitle: 'Cliente pode mandar com ponto, traco ou texto',
+            customerLabel: 'Cliente informa CEP',
+            customerText: '56.304-000, 56304000',
+            botLabel: 'Bot busca',
+            botText: 'O sistema le somente os numeros, consulta BrasilAPI e prepara o endereco para confirmacao.',
+            rows: 3,
+        },
+        {
+            id: 'delivery-cep-confirm',
+            title: 'Confirmar endereco',
+            subtitle: 'Depois da consulta do CEP',
+            customerLabel: 'Cliente confirma ou troca CEP',
+            customerText: 'sim, nao, outro CEP',
+            botLabel: 'Bot confirma endereco',
+            botText: 'Encontrei este endereco:\nRua: Rua Marechal Deodoro\nBairro: Centro\nCidade: Petrolina - PE\nCEP: 56304-000\n\nEsta correto? Responda "sim" para confirmar ou envie outro CEP.',
+            rows: 7,
+        },
+        {
+            id: 'delivery-number',
+            title: 'Numero e complemento',
+            subtitle: 'Quando o endereco do CEP esta certo',
+            customerLabel: 'Cliente pode responder',
+            customerText: '123, 123 apto 202, s/n',
+            botLabel: 'Bot pede numero',
+            botText: 'Agora me envie o numero da casa/predio. Se tiver complemento, pode mandar junto. Ex: 123, apto 202',
+            rows: 3,
+        },
+        {
+            id: 'delivery-address-saved',
+            title: 'Endereco completo',
+            subtitle: 'Depois de numero e complemento',
+            customerLabel: 'Cliente enviou',
+            customerText: '123 apto 202',
+            botLabel: 'Bot registra endereco',
+            botText: 'Endereco anotado.\n\nEndereco de entrega:\nRua Marechal Deodoro, 123\nComplemento: apto 202\nCentro - Petrolina/PE\nCEP: 56304-000\n\nAgora vou confirmar os dados do cadastro para separar seu pedido.',
+            rows: 8,
+        },
+        {
             id: 'pickup',
             title: 'Retirada na loja',
             subtitle: 'Quando o cliente escolhe retirada',
@@ -2459,10 +2541,10 @@ const AutoResponderPage: React.FC = () => {
                                                 <label className="block">
                                                     <span className="mb-2 block text-sm font-semibold text-slate-700">{step.customerLabel}</span>
                                                     {step.customerEditable ? (
-                                                        <textarea
+                                                        <AutoResizeTextarea
                                                             value={settingsForm.conversation_flow_keywords.phone_list_opt_in || ''}
                                                             onChange={(event) => updateConversationFlowKeywords('phone_list_opt_in', event.target.value)}
-                                                            rows={3}
+                                                            minRows={3}
                                                             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                                                         />
                                                     ) : (
@@ -2477,12 +2559,18 @@ const AutoResponderPage: React.FC = () => {
                                                         <Bot size={16} />
                                                         {step.botLabel}
                                                     </span>
-                                                    <textarea
-                                                        value={flowMessages[step.messageKey] || ''}
-                                                        onChange={(event) => updateConversationFlowMessage(step.messageKey, event.target.value)}
-                                                        rows={step.rows}
-                                                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                                                    />
+                                                    {step.messageKey ? (
+                                                        <AutoResizeTextarea
+                                                            value={flowMessages[step.messageKey] || ''}
+                                                            onChange={(event) => updateConversationFlowMessage(step.messageKey, event.target.value)}
+                                                            minRows={step.rows}
+                                                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                        />
+                                                    ) : (
+                                                        <div className="whitespace-pre-line rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-600">
+                                                            {step.botText}
+                                                        </div>
+                                                    )}
                                                     {step.helper && (
                                                         <p className="mt-2 text-xs text-slate-500">{step.helper}</p>
                                                     )}
@@ -2559,6 +2647,30 @@ const AutoResponderPage: React.FC = () => {
                                     </div>
                                     <div className="max-w-[88%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
                                         {flowMessages.delivery_cep_prompt}
+                                    </div>
+                                    <div className="ml-auto max-w-[72%] rounded-lg rounded-tr-sm bg-[#d9fdd3] px-3 py-2 text-slate-900 shadow-sm">
+                                        56.304-000
+                                    </div>
+                                    <div className="max-w-[92%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
+                                        Encontrei este endereco:<br />
+                                        Rua: Rua Marechal Deodoro<br />
+                                        Bairro: Centro<br />
+                                        Cidade: Petrolina - PE<br />
+                                        CEP: 56304-000<br />
+                                        <br />
+                                        Esta correto? Responda "sim" para confirmar ou envie outro CEP.
+                                    </div>
+                                    <div className="ml-auto max-w-[72%] rounded-lg rounded-tr-sm bg-[#d9fdd3] px-3 py-2 text-slate-900 shadow-sm">
+                                        123 apto 202
+                                    </div>
+                                    <div className="max-w-[92%] rounded-lg rounded-tl-sm bg-white px-3 py-2 text-slate-800 shadow-sm">
+                                        Endereco anotado.<br />
+                                        <br />
+                                        Endereco de entrega:<br />
+                                        Rua Marechal Deodoro, 123<br />
+                                        Complemento: apto 202<br />
+                                        Centro - Petrolina/PE<br />
+                                        CEP: 56304-000
                                     </div>
                                 </div>
                             </aside>

@@ -5582,26 +5582,26 @@ async function handleAutoresponderContactNameFlow({ sender, message, contactFirs
   return null;
 }
 
-function getAutoresponderGreetingPeriod(message) {
-  const text = normalizeAutoresponderText(message);
-  if (text.includes('bom dia') || text === 'bomdia') return 'morning';
-  if (text.includes('boa tarde') || text === 'boatarde') return 'afternoon';
-  if (text.includes('boa noite') || text === 'boanoite') return 'night';
-
+function getAutoresponderGreetingPeriod(now = new Date()) {
   const hour = Number(new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     hour: '2-digit',
     hour12: false,
-  }).format(new Date()));
+  }).format(now));
   if (hour >= 5 && hour < 12) return 'morning';
   if (hour >= 12 && hour < 18) return 'afternoon';
   return 'night';
 }
 
+function isAutoresponderDefaultGreetingFlowMessage(value) {
+  const text = normalizeAutoresponderText(value).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  return text === 'bom dia seja bem vindo ao mercado do vale como posso ajudar voce hoje';
+}
+
 function getAutoresponderGreetingReply(message, contactFirstName = '', settings = null) {
   const customGreeting = getAutoresponderConversationFlowMessage(settings, 'greeting_reply', '');
-  if (customGreeting) return customGreeting;
-  const period = getAutoresponderGreetingPeriod(message);
+  if (customGreeting && !isAutoresponderDefaultGreetingFlowMessage(customGreeting)) return customGreeting;
+  const period = getAutoresponderGreetingPeriod();
   const greeting = period === 'morning'
     ? 'Bom dia'
     : period === 'afternoon'
@@ -6728,6 +6728,48 @@ function buildAutoresponderDeliveryAddressSavedReply(purchaseFlow = {}) {
   lines.push('');
   lines.push('Agora vou confirmar os dados do cadastro para separar seu pedido.');
   return lines.join('\n');
+}
+
+async function handleAutoresponderDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep }) {
+  const normalizedCep = normalizeAutoresponderCep(cep || message);
+  if (!normalizedCep) return null;
+
+  const cepAddress = await lookupAutoresponderCep(normalizedCep);
+  if (!cepAddress) {
+    const replyText = formatAutoresponderReply(buildAutoresponderDeliveryCepNotFoundReply(), settings, false);
+    await logAutoresponderReply({
+      sender: senderKey,
+      message,
+      intent: 'purchase_delivery_cep_not_found',
+      replyText,
+      matchedCount: 0,
+      matchedProducts: [],
+    });
+    await upsertAutoresponderSuccessConversation(senderKey);
+    return { replies: [{ message: replyText }] };
+  }
+
+  const shippingOptions = await calculateAutoresponderShippingOptions(normalizedCep, purchaseFlow.items, cepAddress);
+  const shippingQuote = shippingOptions[0] || null;
+  const replyText = formatAutoresponderReply(buildAutoresponderDeliveryCepConfirmationReply(cepAddress, shippingQuote), settings, false);
+  await saveAutoresponderPurchaseFlow(senderKey, {
+    ...purchaseFlow,
+    status: 'awaiting_delivery_cep_confirmation',
+    fulfillment: 'delivery',
+    delivery_address_lookup: cepAddress,
+    shipping_options: shippingOptions,
+    shipping_quote: shippingQuote,
+  });
+  await logAutoresponderReply({
+    sender: senderKey,
+    message,
+    intent: 'purchase_delivery_cep_quote',
+    replyText,
+    matchedCount: shippingOptions.length,
+    matchedProducts: shippingOptions,
+  });
+  await upsertAutoresponderSuccessConversation(senderKey);
+  return { replies: [{ message: replyText }] };
 }
 
 async function getAutoresponderCustomerDataSnapshot(sender, payload = {}, purchaseFlow = {}) {
@@ -10319,41 +10361,7 @@ fastify.route({
       if (purchaseFlow.status === 'awaiting_delivery_address' && hasAutoresponderCartItems(purchaseFlow)) {
         const cep = normalizeAutoresponderCep(message);
         if (cep) {
-          const cepAddress = await lookupAutoresponderCep(cep);
-          if (!cepAddress) {
-            const replyText = formatAutoresponderReply(buildAutoresponderDeliveryCepNotFoundReply(), settings, false);
-            await logAutoresponderReply({
-              sender: senderKey,
-              message,
-              intent: 'purchase_delivery_cep_not_found',
-              replyText,
-              matchedCount: 0,
-              matchedProducts: [],
-            });
-            await upsertAutoresponderSuccessConversation(senderKey);
-            return { replies: [{ message: replyText }] };
-          }
-          const shippingOptions = await calculateAutoresponderShippingOptions(cep, purchaseFlow.items, cepAddress);
-          const shippingQuote = shippingOptions[0] || null;
-          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryCepConfirmationReply(cepAddress, shippingQuote), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...purchaseFlow,
-            status: 'awaiting_delivery_cep_confirmation',
-            fulfillment: 'delivery',
-            delivery_address_lookup: cepAddress,
-            shipping_options: shippingOptions,
-            shipping_quote: shippingQuote,
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_delivery_cep_quote',
-            replyText,
-            matchedCount: shippingOptions.length,
-            matchedProducts: shippingOptions,
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
+          return await handleAutoresponderDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep });
         }
         const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(settings), settings, false);
         await upsertAutoresponderSuccessConversation(senderKey);
@@ -10361,7 +10369,11 @@ fastify.route({
       }
 
       if (purchaseFlow.status === 'awaiting_delivery_cep_confirmation' && hasAutoresponderCartItems(purchaseFlow)) {
-        if (isAutoresponderNo(message) || normalizeAutoresponderCep(message)) {
+        const replacementCep = normalizeAutoresponderCep(message);
+        if (replacementCep) {
+          return await handleAutoresponderDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep: replacementCep });
+        }
+        if (isAutoresponderNo(message)) {
           const nextFlow = {
             ...purchaseFlow,
             status: 'awaiting_delivery_address',

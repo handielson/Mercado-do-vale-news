@@ -36,13 +36,17 @@ for (const fileName of serverFiles) {
   });
 
   const deliveryFlowIndex = source.indexOf("purchaseFlow.status === 'awaiting_delivery_address'");
-  const cepLookupIndex = source.indexOf('lookupAutoresponderCep(cep)', deliveryFlowIndex);
-  const shippingCalcIndex = source.indexOf('calculateAutoresponderShippingOptions(cep', cepLookupIndex);
+  const helperIndex = source.indexOf('async function handleAutoresponderDeliveryCepLookup');
+  const cepLookupIndex = source.indexOf('lookupAutoresponderCep(normalizedCep)', helperIndex);
+  const shippingCalcIndex = source.indexOf('calculateAutoresponderShippingOptions(normalizedCep', cepLookupIndex);
+  const deliveryHandlerCallIndex = source.indexOf('handleAutoresponderDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep })', deliveryFlowIndex);
   assert(
     deliveryFlowIndex >= 0 &&
-      deliveryFlowIndex < cepLookupIndex &&
-      cepLookupIndex < shippingCalcIndex,
-    `${fileName} must look up CEP before calculating shipping`
+      helperIndex >= 0 &&
+      cepLookupIndex > helperIndex &&
+      cepLookupIndex < shippingCalcIndex &&
+      deliveryHandlerCallIndex > deliveryFlowIndex,
+    `${fileName} must look up CEP before calculating shipping through the shared delivery handler`
   );
 }
 
