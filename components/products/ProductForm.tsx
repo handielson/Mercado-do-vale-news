@@ -44,11 +44,19 @@ import { buildSerializedBatchPlan, findSerializedBatchDuplicates, hasSerializedI
 
 interface ProductFormProps {
     initialData?: Product;
-    onSubmit: (data: ProductInput) => Promise<void>;
+    onSubmit: (data: ProductInput) => Promise<Product | void>;
     onCancel: () => void;
     onBatchComplete?: () => void;
     isLoading?: boolean;
 }
+
+type ProductSaveResult = Product & {
+    priceAdjustment?: {
+        updated: number;
+        ram?: string;
+        storage?: string;
+    };
+};
 
 const DEFAULT_PRODUCT_VERSION = 'Global';
 const DEFAULT_BATTERY_HEALTH = '100';
@@ -67,6 +75,17 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
     // Estado para rastrear se o nome foi editado manualmente
     const [nameManuallyEdited, setNameManuallyEdited] = useState(false);
+
+    const showVariationPriceAdjustmentToast = (savedProduct: Product | void) => {
+        const adjustment = (savedProduct as ProductSaveResult | undefined)?.priceAdjustment;
+        if (!adjustment?.updated) return;
+
+        const variation = [adjustment.ram, adjustment.storage].filter(Boolean).join('/');
+        toast.warning('Preços padronizados para esta variação', {
+            duration: 6000,
+            description: `${adjustment.updated} produto(s) em estoque${variation ? ` (${variation})` : ''} foram ajustados para o mesmo preço de venda.`,
+        });
+    };
 
     // Lista de produtos para entrada em massa
     interface BatchItem {
@@ -226,6 +245,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [selectedBrandId, setSelectedBrandId] = useState<string>('');
     const currentSerializedIdentity = hasSerializedIdentity(watch('specs') || {});
     const isSerializedStockCalculated = serialList.length > 0 || (currentSerializedIdentity && !initialData);
+    const blocksSubmitForDuplicateEAN = isDuplicateEAN && !isSerializedStockCalculated;
 
     useEffect(() => {
         if (serialList.length > 0) {
@@ -909,7 +929,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 const duplicates: string[] = [];
                 const duplicateIdentifiers = findSerializedBatchDuplicates(serialList);
                 const existingProducts = await vpsApiService.getProducts({
-                    status: 'all',
+                    status: 'active',
                     limit: 5000,
                     noCache: true,
                 }) || [];
@@ -993,7 +1013,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         fallbackImages: mergedData.images,
                     });
                     const itemData = { ...batchPlan.items[index], images: itemImages };
-                    await onSubmit(itemData);
+                    const savedProduct = await onSubmit(itemData);
+                    showVariationPriceAdjustmentToast(savedProduct);
                 }
                 toast.success(`${serialList.length} produto(s) cadastrado(s) com sucesso!`);
                 setSerialList([]);
@@ -1002,7 +1023,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 // Produto único — verificar serial/IMEI do campo se preenchido
                 const uniqueFields = ['serial', 'imei1', 'imei2'] as const;
                 const existingProducts = await vpsApiService.getProducts({
-                    status: 'all',
+                    status: 'active',
                     limit: 5000,
                     noCache: true,
                 }) || [];
@@ -1022,7 +1043,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 if (hasSerializedIdentity(mergedData.specs || {})) {
                     mergedData.stock_quantity = 1;
                 }
-                await onSubmit(mergedData);
+                const savedProduct = await onSubmit(mergedData);
+                showVariationPriceAdjustmentToast(savedProduct);
                 if (!initialData) {
                     toast.success('Produto cadastrado com sucesso!');
                 }
@@ -1030,7 +1052,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             }
 
             // 2. Calcular preço médio se for novo produto com variação
-            if (!initialData && selectedBrandId && mergedData.specs?.ram && mergedData.specs?.storage) {
+            if (false && !initialData && selectedBrandId && mergedData.specs?.ram && mergedData.specs?.storage) {
                 try {
                     console.log('📊 Calculating average prices...');
                     const result = await averagePriceService.updateAveragePrices({
@@ -1581,13 +1603,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 </button>
                 <button
                     type="submit"
-                    disabled={isLoading || isCompressing || isDuplicateEAN}
-                    className={`px-4 py-2 text-white text-sm font-medium rounded-md shadow-lg transition-colors ${isDuplicateEAN
+                    disabled={isLoading || isCompressing || blocksSubmitForDuplicateEAN}
+                    className={`px-4 py-2 text-white text-sm font-medium rounded-md shadow-lg transition-colors ${blocksSubmitForDuplicateEAN
                         ? 'bg-gray-400 cursor-not-allowed'
                         : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
                         } disabled:opacity-50`}
                 >
-                    {isDuplicateEAN ? '⚠️ EAN Duplicado - Não Permitido' : isLoading ? 'Salvando...' : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
+                    {blocksSubmitForDuplicateEAN ? '⚠️ EAN Duplicado - Não Permitido' : isLoading ? 'Salvando...' : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
                 </button>
             </div>
         </form >

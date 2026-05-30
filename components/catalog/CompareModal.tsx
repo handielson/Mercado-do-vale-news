@@ -6,6 +6,7 @@ import { formatPrice } from '../../services/installmentCalculator';
 import { useSupabaseAuth } from '../../contexts/SupabaseAuthContext';
 import { getEffectivePrice } from '../../hooks/useEffectiveCustomerType';
 import { supabase } from '../../services/supabase';
+import { modelService } from '../../services/models';
 
 interface CompareModalProps {
     onClose: () => void;
@@ -211,12 +212,8 @@ export function CompareModal({ onClose }: CompareModalProps) {
                 Promise.all(
                     selected.map(async (p) => {
                         if (!p.model_id) return null;
-                        const { data } = await supabase
-                            .from('models')
-                            .select('template_values')
-                            .eq('id', p.model_id)
-                            .single();
-                        return (data?.template_values as Record<string, unknown>) || null;
+                        const model = await modelService.getById(p.model_id);
+                        return (model?.template_values as Record<string, unknown>) || null;
                     })
                 ),
                 supabase.from('versions').select('id, name')

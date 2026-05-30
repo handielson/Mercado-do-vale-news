@@ -3,13 +3,16 @@ import { ProductStatus } from '../utils/field-standards';
 import { supabase } from './supabase';
 import { logPriceChange } from './priceHistoryService';
 import { vpsApiService } from './vpsApiService';
+import { categoryService } from './categories';
+import { modelService } from './models';
+import { brandService } from './brands';
 import { buildProductVideoUrl } from '../utils/video-url';
 import { getCompanyId } from './companyContext';
 import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
 
 /**
  * PRODUCT SERVICE — VPS MySQL (fonte exclusiva de verdade)
- * Supabase ainda é usado para: models, companies, price_history (dados relacionais que não estão na VPS)
+ * Supabase ainda é usado para: companies, price_history (dados relacionais que não estão na VPS)
  */
 
 // ─── Transform ─────────────────────────────────────────────────────────────
@@ -72,6 +75,109 @@ function transformFromDB(row: any): Product {
         production_days: row.production_days ?? null,
         created: row.created_at,
         updated: row.updated_at,
+    };
+}
+
+async function isSerializedProductCategory(categoryId: string | null | undefined): Promise<boolean> {
+    if (!categoryId) return false;
+    const category = await categoryService.getById(categoryId);
+    const categoryName = category?.name?.toUpperCase() || '';
+    return ['CELULAR', 'SMARTPHONE', 'TABLET', 'RECEPTOR'].some((keyword) => categoryName.includes(keyword));
+}
+
+async function resolveModelBrandName(modelData: any, fallback?: string | null): Promise<string | undefined> {
+    const embeddedBrand = Array.isArray(modelData?.brand) ? modelData.brand[0] : modelData?.brand;
+    const embeddedName = embeddedBrand?.name || modelData?.brand_name;
+    if (embeddedName) return embeddedName;
+    if (fallback) return fallback;
+    if (!modelData?.brand_id) return undefined;
+
+    const brand = await brandService.getById(modelData.brand_id);
+    return brand?.name;
+}
+
+function isActiveProductForCatalog(product: Product): boolean {
+    return String(product.status || '').toLowerCase() === ProductStatus.ACTIVE;
+}
+
+interface VariationPriceAdjustment {
+    updated: number;
+    targetIds: string[];
+    ram: string;
+    storage: string;
+    prices: {
+        price_retail: number;
+        price_reseller: number;
+        price_wholesale: number;
+    };
+}
+
+type ProductWithPriceAdjustment = Product & {
+    priceAdjustment?: VariationPriceAdjustment;
+};
+
+function normalizeVariationSpec(value: unknown): string {
+    return String(value || '').trim().toLowerCase();
+}
+
+function hasSellableStock(product: Product): boolean {
+    return !product.track_inventory || (product.stock_quantity || 0) > 0;
+}
+
+function salePricesDiffer(product: Product, source: Product): boolean {
+    return Number(product.price_retail || 0) !== Number(source.price_retail || 0) ||
+        Number(product.price_reseller || 0) !== Number(source.price_reseller || 0) ||
+        Number(product.price_wholesale || 0) !== Number(source.price_wholesale || 0);
+}
+
+async function syncVariationPrices(source: Product): Promise<VariationPriceAdjustment | null> {
+    const modelId = String(source.model_id || '').trim();
+    const ram = normalizeVariationSpec(source.specs?.ram);
+    const storage = normalizeVariationSpec(source.specs?.storage);
+
+    if (!modelId || !ram || !storage) return null;
+
+    const rows = await vpsApiService.getProducts({
+        model_id: modelId,
+        status: 'active',
+        limit: 500,
+        noCache: true,
+    });
+
+    const peers = (rows || [])
+        .map(transformFromDB)
+        .filter((product) =>
+            product.id !== source.id &&
+            hasSellableStock(product) &&
+            normalizeVariationSpec(product.specs?.ram) === ram &&
+            normalizeVariationSpec(product.specs?.storage) === storage &&
+            salePricesDiffer(product, source)
+        );
+
+    if (peers.length === 0) return null;
+
+    const updates = peers.map((product) => ({
+        id: product.id,
+        price_retail: source.price_retail,
+        price_reseller: source.price_reseller,
+        price_wholesale: source.price_wholesale,
+    }));
+
+    const result = await vpsApiService.bulkSyncPricesStock(updates);
+    if (!result.ok) {
+        throw new Error('Falha ao padronizar preços da mesma variação no estoque.');
+    }
+
+    return {
+        updated: peers.length,
+        targetIds: peers.map((product) => product.id),
+        ram: String(source.specs?.ram || ''),
+        storage: String(source.specs?.storage || ''),
+        prices: {
+            price_retail: source.price_retail,
+            price_reseller: source.price_reseller,
+            price_wholesale: source.price_wholesale,
+        },
     };
 }
 
@@ -155,11 +261,7 @@ async function getById(id: string): Promise<Product | null> {
     // Enrich with model name if missing but we have model_id
     if (!product.model && product.model_id) {
         try {
-            const { data: modelData } = await supabase
-                .from('models')
-                .select('name')
-                .eq('id', product.model_id)
-                .single();
+            const modelData = await modelService.getById(product.model_id);
             if (modelData) {
                 product.model = modelData.name;
             }
@@ -174,7 +276,7 @@ async function getById(id: string): Promise<Product | null> {
 async function getByEan(ean: string): Promise<Product | null> {
     const data = await vpsApiService.getProductByEan(ean);
     if (!data || data.length === 0) return null;
-    return transformFromDB(data[0]);
+    return data.map(transformFromDB).find(isActiveProductForCatalog) || null;
 }
 
 async function search(query: string): Promise<Product[]> {
@@ -184,7 +286,7 @@ async function search(query: string): Promise<Product[]> {
 
 async function searchByEAN(ean: string): Promise<Product[]> {
     const data = await vpsApiService.getProductByEan(ean);
-    return (data || []).map(transformFromDB);
+    return (data || []).map(transformFromDB).filter(isActiveProductForCatalog);
 }
 
 async function listChildren(parentId: string): Promise<Product[]> {
@@ -194,7 +296,7 @@ async function listChildren(parentId: string): Promise<Product[]> {
 
 // ─── WRITE ─────────────────────────────────────────────────────────────────
 
-async function create(input: ProductInput): Promise<Product> {
+async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> {
     const id = crypto.randomUUID();
 
     // Validate model_id
@@ -202,28 +304,16 @@ async function create(input: ProductInput): Promise<Product> {
         throw new Error('Model ID é obrigatório. Por favor, escaneie um EAN ou selecione um modelo.');
     }
 
-    // Fetch model via Supabase (models table não está na VPS)
-    const { data: modelData, error: modelError } = await supabase
-        .from('models')
-        .select('id, name, brand_id, category_id, template_values, brand:brands(name)')
-        .eq('id', input.model_id)
-        .single();
-    if (modelError) throw new Error(`Failed to fetch model: ${modelError.message}`);
+    const modelData = await modelService.getById(input.model_id);
+    if (!modelData) throw new Error('Failed to fetch model: Modelo nao encontrado na VPS');
 
-    const brand = (modelData.brand as any)?.[0]?.name || input.brand;
+    const brand = await resolveModelBrandName(modelData, input.brand);
     // Respeita override manual de categoria no formulário.
     const category_id = input.category_id || modelData.category_id;
     const dimensions = input.dimensions || modelData.template_values?.dimensions;
     const weight_kg = input.weight_kg || modelData.template_values?.weight_kg;
 
-    // Categorias de produtos físicos serializados onde múltiplos itens podem compartilhar o mesmo SKU
-    let isSerializedCategory = false;
-    if (category_id) {
-        const { data: catData } = await supabase.from('categories').select('name').eq('id', category_id).single();
-        if (catData && ['CELULAR', 'SMARTPHONE', 'TABLET', 'RECEPTOR'].some(kw => catData.name.toUpperCase().includes(kw))) {
-            isSerializedCategory = true;
-        }
-    }
+    const isSerializedCategory = await isSerializedProductCategory(category_id);
 
     // SKU uniqueness check — busca exata na VPS (fonte da verdade)
     // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
@@ -318,10 +408,16 @@ async function create(input: ProductInput): Promise<Product> {
     const result = await vpsApiService.createProduct(payload);
     if (result.errors.length > 0) throw new Error(`Failed to create product: ${result.errors[0].error}`);
 
-    return transformFromDB(payload);
+    const savedProduct = transformFromDB(payload) as ProductWithPriceAdjustment;
+    const priceAdjustment = await syncVariationPrices(savedProduct);
+    if (priceAdjustment) {
+        savedProduct.priceAdjustment = priceAdjustment;
+    }
+
+    return savedProduct;
 }
 
-async function update(id: string, input: ProductInput): Promise<Product> {
+async function update(id: string, input: ProductInput): Promise<ProductWithPriceAdjustment> {
     // Carrega produto existente — preserva model_id legado e serve de base para price history/Shopee sync.
     const oldProduct = await getById(id);
     if (!oldProduct) throw new Error(`Produto não encontrado: ${id}`);
@@ -334,35 +430,22 @@ async function update(id: string, input: ProductInput): Promise<Product> {
     // model_id preservado de legado segue sem enriquecimento.
     let modelData: any = null;
     if (effectiveModelId) {
-        const { data, error: modelError } = await supabase
-            .from('models')
-            .select('id, name, brand_id, category_id, template_values, brand:brands(name)')
-            .eq('id', effectiveModelId)
-            .single();
-        if (modelError) {
+        modelData = await modelService.getById(effectiveModelId);
+        if (!modelData) {
             if (trimmedInputModelId) {
-                throw new Error(`Failed to fetch model: ${modelError.message}`);
+                throw new Error('Failed to fetch model: Modelo nao encontrado na VPS');
             }
             console.warn(`[productService.update] Modelo ${effectiveModelId} não encontrado; seguindo sem enriquecimento de template.`);
-        } else {
-            modelData = data;
         }
     }
 
-    const brand = (modelData?.brand as any)?.[0]?.name || input.brand || oldProduct.brand;
+    const brand = await resolveModelBrandName(modelData, input.brand || oldProduct.brand);
     // Respeita override manual de categoria no formulário.
     const category_id = input.category_id || modelData?.category_id || oldProduct.category_id;
     const dimensions = input.dimensions || modelData?.template_values?.dimensions || oldProduct.dimensions;
     const weight_kg = input.weight_kg || modelData?.template_values?.weight_kg || oldProduct.weight_kg;
 
-    // Categorias de produtos físicos serializados onde múltiplos itens podem compartilhar o mesmo SKU
-    let isSerializedCategory = false;
-    if (category_id) {
-        const { data: catData } = await supabase.from('categories').select('name').eq('id', category_id).single();
-        if (catData && ['CELULAR', 'SMARTPHONE', 'TABLET', 'RECEPTOR'].some(kw => catData.name.toUpperCase().includes(kw))) {
-            isSerializedCategory = true;
-        }
-    }
+    const isSerializedCategory = await isSerializedProductCategory(category_id);
 
     // SKU uniqueness check — busca exata na VPS (fonte da verdade), excluindo o próprio produto editado
     // Ignora códigos de unidade do Bling (PCS, UN, PC, CX) que não são SKUs reais
@@ -489,7 +572,13 @@ async function update(id: string, input: ProductInput): Promise<Product> {
         });
     }
 
-    return transformFromDB(payload);
+    const savedProduct = transformFromDB(payload) as ProductWithPriceAdjustment;
+    const priceAdjustment = await syncVariationPrices(savedProduct);
+    if (priceAdjustment) {
+        savedProduct.priceAdjustment = priceAdjustment;
+    }
+
+    return savedProduct;
 }
 
 async function deleteProduct(id: string): Promise<void> {

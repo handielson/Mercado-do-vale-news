@@ -1,7 +1,6 @@
 /**
  * Shipping Service v2 — single-tenant, sem company_id
  */
-import { supabase } from './supabase';
 import type {
     ShippingSettings,
     ShippingSettingsInput,
@@ -77,55 +76,20 @@ export const shippingService = {
     // ── Settings ──────────────────────────────────────────────────────────────
 
     async getSettings(): Promise<ShippingSettings | null> {
-        try {
-            const data = await vpsApiService.getShippingSettings();
-            if (data) {
-                // Expande extra_config para os campos de configuração extendida
-                const extraConfig = data.extra_config || {};
-                return {
-                    ...data,
-                    fast_delivery_config: extraConfig.fast_delivery_config ?? null,
-                } as ShippingSettings;
-            }
-        } catch (e) {
-            console.error('[shippingService] getSettings fallback to supabase:', e);
+        const data = await vpsApiService.getShippingSettings();
+        if (!data) {
+            return null;
         }
-        // Fallback or old data
-        const { data } = await supabase
-            .from('shipping_settings')
-            .select('*')
-            .limit(1)
-            .maybeSingle();
-        return data as ShippingSettings | null;
+        const extraConfig = data.extra_config || {};
+        return {
+            ...data,
+            fast_delivery_config: extraConfig.fast_delivery_config ?? null,
+        } as ShippingSettings;
     },
 
     async saveSettings(input: ShippingSettingsInput): Promise<void> {
-        // Salva simultaneamente no banco local/Supabase e no VPS (Master)
         const existing = await shippingService.getSettings();
-
-        // Remove campos que ainda não existem no schema do Supabase local para evitar 400 Bad Request
-        const {
-            enable_progressive_shipping_subsidy,
-            min_order_value_for_subsidy,
-            default_subsidy_discount_percent,
-            profit_margin_percentage_cap,
-            fast_delivery_config,
-            ...supabaseInput
-        } = input;
-
-        let localError;
-        if (existing?.id) {
-            const { error } = await supabase
-                .from('shipping_settings')
-                .update({ ...supabaseInput, updated_at: new Date().toISOString() })
-                .eq('id', existing.id);
-            localError = error;
-        } else {
-            const { error } = await supabase
-                .from('shipping_settings')
-                .insert({ ...supabaseInput, updated_at: new Date().toISOString() });
-            localError = error;
-        }
+        const { fast_delivery_config } = input;
 
         // Monta extra_config agrupando todas as configurações estendidas
         // Preserva chaves existentes em extra_config que não foram enviadas agora
@@ -137,70 +101,49 @@ export const shippingService = {
             ...(fast_delivery_config !== undefined ? { fast_delivery_config } : {}),
         };
 
-        // Envia ao VPS com extra_config embutido (Source of Truth)
-        try {
-            await vpsApiService.syncShippingSettings({
-                ...input,
-                extra_config: Object.keys(nextExtra).length > 0 ? nextExtra : null,
-            });
-        } catch (e) {
-            console.warn('[shippingService] Failed to sync shipping_settings with VPS', e);
-        }
-
-        if (localError) throw localError;
+        const ok = await vpsApiService.syncShippingSettings({
+            ...input,
+            extra_config: Object.keys(nextExtra).length > 0 ? nextExtra : null,
+        });
+        if (!ok) throw new Error('Falha ao salvar configurações de frete na VPS');
     },
 
     // ── Zones ────────────────────────────────────────────────────────────────
 
     async getZones(): Promise<ShippingZone[]> {
-        const { data, error } = await supabase
-            .from('shipping_zones')
-            .select('*, price_ranges:shipping_price_ranges(*)')
-            .order('display_order');
-        if (error) {
-            console.error('[shippingService] getZones error:', error);
-            return [];
-        }
-        return (data as any[]) ?? [];
+        return await vpsApiService.getShippingZones() ?? [];
     },
 
     async saveZone(input: ShippingZoneInput, id?: string): Promise<ShippingZone> {
-        const query = id
-            ? supabase.from('shipping_zones').update(input).eq('id', id).select().single()
-            : supabase.from('shipping_zones').insert(input).select().single();
-        const { data, error } = await query;
-        if (error) throw error;
+        const data = id
+            ? await vpsApiService.updateShippingZone(id, input)
+            : await vpsApiService.createShippingZone(input);
+        if (!data) throw new Error('Falha ao salvar zona de frete na VPS');
         return data;
     },
 
     async deleteZone(id: string): Promise<void> {
-        const { error } = await supabase.from('shipping_zones').delete().eq('id', id);
-        if (error) throw error;
+        const ok = await vpsApiService.deleteShippingZone(id);
+        if (!ok) throw new Error('Falha ao remover zona de frete na VPS');
     },
 
     // ── Price Ranges ─────────────────────────────────────────────────────────
 
     async getPriceRanges(zoneId: string): Promise<ShippingPriceRange[]> {
-        const { data } = await supabase
-            .from('shipping_price_ranges')
-            .select('*')
-            .eq('zone_id', zoneId)
-            .order('min_km');
-        return data ?? [];
+        return await vpsApiService.getShippingPriceRanges(zoneId) ?? [];
     },
 
     async savePriceRange(input: ShippingPriceRangeInput, id?: string): Promise<ShippingPriceRange> {
-        const query = id
-            ? supabase.from('shipping_price_ranges').update(input).eq('id', id).select().single()
-            : supabase.from('shipping_price_ranges').insert(input).select().single();
-        const { data, error } = await query;
-        if (error) throw error;
+        const data = id
+            ? await vpsApiService.updateShippingPriceRange(id, input)
+            : await vpsApiService.createShippingPriceRange(input);
+        if (!data) throw new Error('Falha ao salvar faixa de frete na VPS');
         return data;
     },
 
     async deletePriceRange(id: string): Promise<void> {
-        const { error } = await supabase.from('shipping_price_ranges').delete().eq('id', id);
-        if (error) throw error;
+        const ok = await vpsApiService.deleteShippingPriceRange(id);
+        if (!ok) throw new Error('Falha ao remover faixa de frete na VPS');
     },
 
     // ── Calculation ───────────────────────────────────────────────────────────

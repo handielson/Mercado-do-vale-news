@@ -119,7 +119,6 @@ const ColorsPage = lazy(() => import('../pages/admin/settings/ColorsPage').then(
 const CustomerListPage = lazy(() => import('../pages/customers/CustomerListPage'));
 const PDVPage = lazy(() => import('../pages/pdv/PDVPage'));
 const CatalogConfigPage = lazy(() => import('../pages/admin/CatalogConfigPage'));
-const CatalogEditorPage = lazy(() => import('../pages/admin/catalog-editor'));
 const MarketingPage = lazy(() => import('../pages/admin/settings/MarketingPage'));
 const SalesPage = lazy(() => import('../pages/admin/sales/SalesPage'));
 const BlingPage = lazy(() => import('../pages/admin/settings/BlingPage'));
@@ -713,14 +712,6 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CatalogSettingsPage /></AdminLayout>
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: "/admin/catalog-editor",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <CatalogEditorPage />
       </ProtectedRoute>
     )
   },

@@ -11,8 +11,8 @@ assert(start >= 0 && end > start, 'Could not isolate ProductForm serialized uniq
 const block = source.slice(start, end);
 
 assert(
-  /vpsApiService\.getProducts\(\{\s*status:\s*'all'[\s\S]*limit:\s*5000[\s\S]*noCache:\s*true/.test(block),
-  'ProductForm should validate serial/IMEI uniqueness against VPS products',
+  /vpsApiService\.getProducts\(\{\s*status:\s*'active'[\s\S]*limit:\s*5000[\s\S]*noCache:\s*true/.test(block),
+  'ProductForm should validate serial/IMEI uniqueness against active VPS products',
 );
 
 assert(
@@ -25,4 +25,4 @@ assert(
   'ProductForm must not read product uniqueness directly from Supabase',
 );
 
-console.log('ProductForm unique validation reads products from VPS');
+console.log('ProductForm unique validation reads active products from VPS');

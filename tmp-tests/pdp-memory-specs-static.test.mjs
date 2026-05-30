@@ -23,8 +23,20 @@ assert.match(
 
 assert.match(
   source,
-  /\.select\('description, template_values, brands\(name\)'\)/,
-  'PDP product fetch must load model template_values so new model fields appear without re-saving each product',
+  /import\s+\{\s*modelService\s+\}\s+from\s+['"]@\/services\/models['"]/,
+  'PDP product fetch must import modelService to load model template_values through VPS',
+);
+
+assert.match(
+  source,
+  /modelService\.getById\(data\.model_id\)/,
+  'PDP product fetch must load model template_values through modelService/VPS so new model fields appear without re-saving each product',
+);
+
+assert.doesNotMatch(
+  source,
+  /supabase\s*\.\s*from\('models'\)|\.from\('models'\)/,
+  'PDP product fetch must not read models directly from Supabase',
 );
 
 assert.match(

@@ -13,16 +13,25 @@ for (const fileName of ['vps_server.cjs', 'vps_server.js']) {
 
   [
     'function findAutoresponderSelectedOptionFromMessage',
-    'function buildAutoresponderPurchaseActionPrompt',
+    'async function buildAutoresponderPurchaseActionPrompt',
     "status: 'awaiting_product_action'",
     'selected_product',
     'saveAutoresponderPurchaseFlow(senderKey',
     "intent: 'purchase_product_selected'",
-    'Quer comprar esse produto ou ver detalhes primeiro?',
-    'Responda "comprar" ou "detalhes".',
+    'formatAutoresponderProductCardLine',
+    'option_number: choiceNumber',
+    'Responda:\\n*1* Para comprar\\n*2* Para detalhes',
+    'await buildAutoresponderPurchaseActionPrompt(product, selectedOption)',
+    "'1'",
+    "'2'",
   ].forEach((token) => {
     assert(source.includes(token), `${fileName} must include ${token}`);
   });
+
+  assert(
+    !source.includes('Responda "comprar" ou "detalhes".'),
+    `${fileName} must not use the old text commands after product selection`
+  );
 
   assert(
     source.indexOf('findAutoresponderSelectedOptionFromMessage') < source.indexOf("intent: 'purchase_product_selected'"),
@@ -34,6 +43,10 @@ const doc = fs.readFileSync(docPath, 'utf8');
 assert(
   doc.includes('- [x] Quando cliente responder numero/nome do produto, perguntar se deseja comprar ou ver detalhes'),
   'Bot_Whatsapp.md must mark product selection purchase prompt checklist item'
+);
+assert(
+  doc.includes('tmp-tests/autoresponder-purchase-selection-static.test.mjs'),
+  'Bot_Whatsapp.md must mention purchase selection test'
 );
 
 console.log('autoresponder purchase selection static checks passed');

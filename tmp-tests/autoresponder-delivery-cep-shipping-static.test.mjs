@@ -27,9 +27,12 @@ for (const fileName of serverFiles) {
     "status: 'awaiting_delivery_cep_confirmation'",
     "status: 'awaiting_delivery_number'",
     "intent: 'purchase_delivery_cep_quote'",
+    'async function handleAutoresponderDeliveryNumberInput',
     "intent: 'purchase_delivery_number_saved'",
     'shipping_quote',
     'Frete:',
+    'Se estiver correto, me envie o numero da casa',
+    'Se tiver complemento, pode mandar junto',
     'Total com frete:',
   ].forEach((needle) => {
     assert(source.includes(needle), `${fileName} must include ${needle}`);
@@ -40,6 +43,9 @@ for (const fileName of serverFiles) {
   const cepLookupIndex = source.indexOf('lookupAutoresponderCep(normalizedCep)', helperIndex);
   const shippingCalcIndex = source.indexOf('calculateAutoresponderShippingOptions(normalizedCep', cepLookupIndex);
   const deliveryHandlerCallIndex = source.indexOf('handleAutoresponderDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep })', deliveryFlowIndex);
+  const confirmationIndex = source.indexOf("purchaseFlow.status === 'awaiting_delivery_cep_confirmation'");
+  const directNumberIndex = source.indexOf('handleAutoresponderDeliveryNumberInput({ senderKey, message, purchaseFlow, settings })', confirmationIndex);
+  const yesIndex = source.indexOf('isAutoresponderYes(message)', confirmationIndex);
   assert(
     deliveryFlowIndex >= 0 &&
       helperIndex >= 0 &&
@@ -47,6 +53,13 @@ for (const fileName of serverFiles) {
       cepLookupIndex < shippingCalcIndex &&
       deliveryHandlerCallIndex > deliveryFlowIndex,
     `${fileName} must look up CEP before calculating shipping through the shared delivery handler`
+  );
+
+  assert(
+    confirmationIndex >= 0 &&
+      directNumberIndex > confirmationIndex &&
+      directNumberIndex < yesIndex,
+    `${fileName} must accept house number/complement directly after CEP confirmation before requiring "sim"`
   );
 }
 

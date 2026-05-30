@@ -22,6 +22,8 @@ export interface ContaPagar {
     situacao: SituacaoConta;
     tipo?: string;
     dataEmissao?: string;
+    borderos?: number[];
+    borderoDetalhes?: ContaBordero[];
 }
 
 export interface ContaReceber {
@@ -37,6 +39,23 @@ export interface ContaReceber {
     portador?: { id: number; descricao: string };
     situacao: SituacaoConta;
     dataEmissao?: string;
+    borderos?: number[];
+    borderoDetalhes?: ContaBordero[];
+}
+
+export interface ContaBorderoPagamento {
+    valorPago?: number;
+    juros?: number;
+    desconto?: number;
+    acrescimo?: number;
+    tarifa?: number;
+}
+
+export interface ContaBordero {
+    id: number;
+    data?: string;
+    historico?: string;
+    pagamentos?: ContaBorderoPagamento[];
 }
 
 export interface BaixaConta {

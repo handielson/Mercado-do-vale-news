@@ -4,8 +4,8 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const SCAN_DIRS = ['services', 'pages', 'components', 'hooks', 'contexts', 'utils'];
 const EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.cjs', '.mjs']);
-const MAX_BASELINE_FROM_CALLS = 491;
-const MAX_BASELINE_RPC_CALLS = 31;
+const MAX_BASELINE_FROM_CALLS = 430;
+const MAX_BASELINE_RPC_CALLS = 29;
 const MAX_BASELINE_STORAGE_CALLS = 13;
 const MAX_UNCLASSIFIED_OPERATIONAL_MATCHES = 0;
 
@@ -181,7 +181,7 @@ const ALLOWED_OPERATIONAL_DEPENDENCIES = [
   },
   {
     reason: 'catalog-analytics-rpc-temporary',
-    targets: ['increment_banner_clicks', 'increment_banner_views', 'increment_coin_promo_uses', 'increment_product_views'],
+    targets: ['increment_coin_promo_uses', 'increment_product_views'],
     kinds: ['rpc'],
     files: ['services/', 'components/', 'pages/'],
   },

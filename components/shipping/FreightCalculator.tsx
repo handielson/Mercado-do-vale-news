@@ -5,6 +5,7 @@ import { supabase } from '../../services/supabase';
 import { vpsApiService } from '../../services/vpsApiService';
 import { shippingService } from '../../services/shippingService';
 import { melhorEnvioService } from '../../services/melhorEnvio';
+import { modelService } from '../../services/models';
 import type { ShippingSettings } from '../../types/shipping';
 import { cn } from '../../utils/cn';
 
@@ -257,7 +258,7 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
         setLoadingProducts(true);
 
         // ── Passo 1: Buscar dados de produto (preço, sku, nome) — VPS-first ────
-        // VPS é a fonte verdadeira de preços. Se falhar → fallback para Supabase.
+        // VPS é a fonte verdadeira de preços.
         let products: any[] = [];
 
         try {
@@ -269,37 +270,39 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
                 console.log(`[FreightCalculator] VPS retornou ${vpsProducts.length} produtos (preços atualizados).`);
             }
         } catch {
-            console.warn('[FreightCalculator] VPS indisponível — usando preços do Supabase como backup.');
+            console.warn('[FreightCalculator] VPS indisponível — cálculo de frete sem produtos.');
         }
 
-        // ── Passo 2: Buscar produtos do Supabase (model_id + fallback de preço) ─
+        // ── Passo 2: garantir produtos carregados da VPS ─
         if (products.length === 0) {
             setAllProducts([]);
             setLoadingProducts(false);
             return;
         }
 
-        // ── Passo 3: Buscar dimensões do Supabase (models.template_values) ──────
-        // VPS não armazena dimensões — Supabase é a única fonte para esse dado.
+        // ── Passo 3: Buscar dimensões pela VPS (models.template_values) ──────
         const modelIds = [...new Set(products.map((p: any) => p.model_id).filter(Boolean))];
-        const { data: models } = await supabase
-            .from('models')
-            .select('id, template_values')
-            .in('id', modelIds);
+        const models = await Promise.all(modelIds.map(async (modelId) => {
+            try {
+                return await modelService.getById(modelId);
+            } catch {
+                return null;
+            }
+        }));
 
-        const modelMap = new Map((models ?? []).map((m: any) => [m.id, m.template_values ?? {}]));
+        const modelMap = new Map(models.filter(Boolean).map((m: any) => [m.id, m.template_values ?? {}]));
 
-        // ── Passo 4: Mesclar VPS (preço) + Supabase (dimensões) ──────────────────
+        // ── Passo 4: Mesclar produto + dimensões da VPS ──────────────────
         setAllProducts(products.map((p: any) => {
             const tv: any = modelMap.get(p.model_id) ?? {};
 
-            // Dimensões — sempre do Supabase
+            // Dimensões vindas do template do modelo na VPS
             const rawWeight = tv['weight_kg'] != null ? tv['weight_kg'] * 1000 : null;
             const height_cm = tv['dimensions.height_cm'] ?? null;
             const width_cm  = tv['dimensions.width_cm'] ?? null;
             const length_cm = tv['dimensions.depth_cm'] ?? null;
 
-            // Preço — VPS tem prioridade; Supabase como fallback
+            // Preço vindo da VPS
             const price = parseFloat(String(p.price_retail ?? p.price ?? 0)) || 0;
             const price_cost = parseFloat(String(p.price_cost ?? 0)) || 0;
 

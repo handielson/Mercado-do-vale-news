@@ -13,6 +13,8 @@ function assert(condition, message) {
   'Cliente informa CEP',
   '56.304-000, 56304000',
   'Bot confirma endereco',
+  'Se estiver correto, me envie o numero da casa',
+  'Se tiver complemento, pode mandar junto',
   'Cliente confirma ou troca CEP',
   'sim, nao, outro CEP',
   'Numero e complemento',

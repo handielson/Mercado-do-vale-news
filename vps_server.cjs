@@ -456,6 +456,7 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
     pathname === '/public/company-settings' ||
     pathname === '/public/check-video' ||
     pathname === '/rams' ||
+    pathname === '/shipping/price-ranges' ||
     pathname === '/shipping/settings' ||
     pathname === '/shipping/zones' ||
     pathname === '/status' ||
@@ -1081,43 +1082,6 @@ async function handleShopeeWebhookVps(request, reply) {
   if (request.method !== 'POST') return reply.code(405).send({ error: 'Method Not Allowed' });
 
   try {
-    const payload = request.body || {};
-    if (payload.code === 3 && payload.data) {
-      const { ordersn, status } = payload.data;
-      const shopId = payload.shop_id;
-
-      try {
-        const rows = await supabaseRestSelect('company_settings', 'select=n8n_webhook_url&limit=1');
-        const settings = Array.isArray(rows) ? rows[0] : null;
-        if (settings?.n8n_webhook_url) {
-          await fetch(settings.n8n_webhook_url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              source: 'shopee',
-              event: 'order_status_update',
-              order_sn: ordersn,
-              status,
-              shop_id: shopId,
-            }),
-            signal: AbortSignal.timeout(10000),
-          }).catch((err) => {
-            console.error('[shopee-webhook] n8n relay failed:', buildCopyableDebug('shopee-webhook', {
-              step: 'relay to n8n',
-              orderSn: String(ordersn || ''),
-              rawMessage: err.message,
-            }));
-          });
-        }
-      } catch (err) {
-        console.error('[shopee-webhook] settings lookup failed:', buildCopyableDebug('shopee-webhook', {
-          step: 'load n8n webhook url',
-          orderSn: String(ordersn || ''),
-          rawMessage: err.message,
-        }));
-      }
-    }
-
     return reply.code(200).send({ message: 'success' });
   } catch (err) {
     console.error('[shopee-webhook] fatal:', buildCopyableDebug('shopee-webhook', {
@@ -14575,7 +14539,10 @@ fastify.patch('/shipping/settings', { preHandler: requireSyncKey }, async (req, 
 fastify.get('/shipping/zones', async (req, reply) => {
   const [zones] = await pool.query(
     `SELECT z.*, JSON_ARRAYAGG(
-       IF(r.id IS NULL, NULL, JSON_OBJECT('id',r.id,'min_order',r.min_order,'max_order',r.max_order,'price',r.price))
+       IF(r.id IS NULL, NULL, JSON_OBJECT(
+         'id',r.id,'zone_id',r.zone_id,'label',r.label,'min_km',r.min_km,'max_km',r.max_km,
+         'price',r.price,'estimated_days_min',r.estimated_days_min,'estimated_days_max',r.estimated_days_max
+       ))
      ) as price_ranges
      FROM shipping_zones z
      LEFT JOIN shipping_price_ranges r ON r.zone_id = z.id
@@ -14586,9 +14553,9 @@ fastify.get('/shipping/zones', async (req, reply) => {
   return zones.map(z => ({
     ...z,
     enabled: z.enabled === 1,
-    cities: z.cities ? JSON.parse(z.cities) : null,
-    cep_ranges: z.cep_ranges ? JSON.parse(z.cep_ranges) : null,
-    price_ranges: (z.price_ranges ? JSON.parse(z.price_ranges) : []).filter(Boolean),
+    cities: parsePublicJson(z.cities, []),
+    cep_ranges: parsePublicJson(z.cep_ranges, []),
+    price_ranges: parsePublicJson(z.price_ranges, []).filter(Boolean),
   }));
 });
 
@@ -14620,6 +14587,47 @@ fastify.patch('/shipping/zones/:id', { preHandler: requireSyncKey }, async (req,
 
 fastify.delete('/shipping/zones/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   await pool.query('DELETE FROM shipping_zones WHERE id=?', [req.params.id]);
+  return { ok: true };
+});
+
+fastify.get('/shipping/price-ranges', async (req, reply) => {
+  const zoneId = String(req.query?.zone_id || '').trim();
+  if (!zoneId) return reply.code(400).send({ error: 'zone_id obrigatorio' });
+  const [rows] = await pool.query(
+    'SELECT * FROM shipping_price_ranges WHERE zone_id=? ORDER BY min_km ASC',
+    [zoneId]
+  );
+  reply.header('Cache-Control', 'public, max-age=300');
+  return rows;
+});
+
+fastify.post('/shipping/price-ranges', { preHandler: requireSyncKey }, async (req, reply) => {
+  const r = req.body;
+  const id = r.id || require('crypto').randomUUID();
+  await pool.query(
+    `INSERT INTO shipping_price_ranges
+     (id,zone_id,label,min_km,max_km,price,estimated_days_min,estimated_days_max)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    [id,r.zone_id,r.label,r.min_km??0,r.max_km??null,r.price??0,
+     r.estimated_days_min??0,r.estimated_days_max??1]
+  );
+  return { ok: true, id };
+});
+
+fastify.patch('/shipping/price-ranges/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const r = req.body;
+  await pool.query(
+    `UPDATE shipping_price_ranges SET
+     zone_id=?,label=?,min_km=?,max_km=?,price=?,estimated_days_min=?,estimated_days_max=?
+     WHERE id=?`,
+    [r.zone_id,r.label,r.min_km??0,r.max_km??null,r.price??0,
+     r.estimated_days_min??0,r.estimated_days_max??1,req.params.id]
+  );
+  return { ok: true };
+});
+
+fastify.delete('/shipping/price-ranges/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  await pool.query('DELETE FROM shipping_price_ranges WHERE id=?', [req.params.id]);
   return { ok: true };
 });
 
@@ -14696,13 +14704,29 @@ fastify.post('/coupons/:code/use', { preHandler: requireSyncKey }, async (req, r
 });
 
 // ─── Banners ────────────────────────────────────────────────────────────────
+function mapBannerRow(r) {
+  return {
+    ...r,
+    active: r.active === 1,
+    clicks_count: r.clicks_count ?? r.click_count ?? 0,
+    views_count: r.views_count ?? r.view_count ?? 0,
+  };
+}
+
 fastify.get('/banners', async (req, reply) => {
   const where = req.query.active === 'true' ? 'WHERE active=1' : '';
   const [rows] = await pool.query(
     `SELECT * FROM banners ${where} ORDER BY display_order ASC, created_at DESC`
   );
   reply.header('Cache-Control', 'public, max-age=120');
-  return rows.map(r => ({ ...r, active: r.active === 1 }));
+  return rows.map(mapBannerRow);
+});
+
+fastify.get('/banners/:id', async (req, reply) => {
+  const [rows] = await pool.query('SELECT * FROM banners WHERE id=?', [req.params.id]);
+  if (!rows[0]) return reply.code(404).send({ error: 'Not found' });
+  reply.header('Cache-Control', 'no-store');
+  return mapBannerRow(rows[0]);
 });
 
 fastify.post('/banners', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -14713,17 +14737,33 @@ fastify.post('/banners', { preHandler: requireSyncKey }, async (req, reply) => {
      VALUES (?,?,?,?,?,?,?,?)`,
     [id,b.title||null,b.image_url||null,b.link_url||b.link_target||null,b.active?1:0,b.display_order||0,b.start_date||null,b.end_date||null]
   );
-  return { ok: true, id };
+  const [rows] = await pool.query('SELECT * FROM banners WHERE id=?', [id]);
+  return mapBannerRow(rows[0]);
 });
 
 fastify.patch('/banners/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   const b = req.body;
-  await pool.query(
-    `UPDATE banners SET title=?,image_url=?,link_url=?,active=?,display_order=?,start_date=?,end_date=?
-     WHERE id=?`,
-    [b.title||null,b.image_url||null,b.link_url||b.link_target||null,b.active?1:0,b.display_order||0,b.start_date||null,b.end_date||null,req.params.id]
-  );
-  return { ok: true };
+  const allowedBannerFields = ['title', 'image_url', 'link_url', 'link_target', 'active', 'display_order', 'start_date', 'end_date'];
+  const sets = [];
+  const params = [];
+  for (const field of allowedBannerFields) {
+    if (b[field] === undefined) continue;
+    if (field === 'link_target') {
+      sets.push('link_url=?');
+      params.push(b[field] || null);
+      continue;
+    }
+    sets.push(`${field}=?`);
+    params.push(field === 'active' ? (b[field] ? 1 : 0) : b[field]);
+  }
+  if (sets.length > 0) {
+    sets.push('updated_at=CURRENT_TIMESTAMP');
+    params.push(req.params.id);
+    await pool.query(`UPDATE banners SET ${sets.join(', ')} WHERE id=?`, params);
+  }
+  const [rows] = await pool.query('SELECT * FROM banners WHERE id=?', [req.params.id]);
+  if (!rows[0]) return reply.code(404).send({ error: 'Not found' });
+  return mapBannerRow(rows[0]);
 });
 
 fastify.delete('/banners/:id', { preHandler: requireSyncKey }, async (req, reply) => {

@@ -8,6 +8,7 @@ import { blingFinanceService } from '../../../services/blingFinanceService';
 import type { ContaPagar, ContaReceber, BaixaConta, CreateContaInput, FinancialSummary } from '../../../types/finance';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { companySettingsService } from '../../../services/companySettingsService';
+import { financialPreferencesService, type FinancialFiltersPreference } from '../../../services/financialPreferencesService';
 import { printContaReceipt } from '../../../utils/printContaReceipt';
 import { printPaymentReceipt } from '../../../utils/printPaymentReceipt';
 import { printDebtClearance } from '../../../utils/printDebtClearance';
@@ -50,9 +51,10 @@ function isVencido(vencimento: string, situacao: any): boolean {
 function calcSummary(contas: (ContaPagar | ContaReceber)[]): FinancialSummary {
     let totalEmAberto = 0, totalVencido = 0, totalPago = 0;
     for (const c of contas) {
-        if (c.situacao === 'pago') totalPago += c.valor;
+        const norm = normalizeSituacao(c.situacao);
+        if (norm === 'pago') totalPago += c.valor;
         else if (isVencido(c.vencimento, c.situacao)) totalVencido += c.saldo ?? c.valor;
-        else if (c.situacao === 'em_aberto' || c.situacao === 'parcial') totalEmAberto += c.saldo ?? c.valor;
+        else if (norm === 'em_aberto' || norm === 'parcial') totalEmAberto += c.saldo ?? c.valor;
     }
     return { totalEmAberto, totalVencido, totalPago, count: contas.length };
 }
@@ -64,6 +66,34 @@ function getDefaultRange(): { inicio: string; fim: string } {
     return {
         inicio: inicio.toISOString().split('T')[0],
         fim: fim.toISOString().split('T')[0],
+    };
+}
+
+function isDateOnly(value: unknown): value is string {
+    return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function getFallbackFinanceFilters(range: { inicio: string; fim: string }): FinancialFiltersPreference {
+    return {
+        tab: 'pagar',
+        dataInicio: range.inicio,
+        dataFim: range.fim,
+        filtroSituacao: '',
+        searchTerm: '',
+    };
+}
+
+function normalizeFinanceFiltersPreference(
+    value: Partial<FinancialFiltersPreference> | null | undefined,
+    range: { inicio: string; fim: string }
+): FinancialFiltersPreference {
+    const fallback = getFallbackFinanceFilters(range);
+    return {
+        tab: value?.tab === 'receber' ? 'receber' : 'pagar',
+        dataInicio: isDateOnly(value?.dataInicio) ? value.dataInicio : fallback.dataInicio,
+        dataFim: isDateOnly(value?.dataFim) ? value.dataFim : fallback.dataFim,
+        filtroSituacao: typeof value?.filtroSituacao === 'string' ? value.filtroSituacao : '',
+        searchTerm: typeof value?.searchTerm === 'string' ? value.searchTerm : '',
     };
 }
 
@@ -90,6 +120,36 @@ function financeDebugText(entry: FinanceDebugState): string {
         message: entry.message,
         debug: entry.debug,
     }, null, 2);
+}
+
+function pickLongerText(a?: string, b?: string): string | undefined {
+    const cleanA = typeof a === 'string' ? a.trim() : '';
+    const cleanB = typeof b === 'string' ? b.trim() : '';
+    if (!cleanA) return cleanB || undefined;
+    if (!cleanB) return cleanA;
+    return cleanB.length > cleanA.length ? cleanB : cleanA;
+}
+
+function mergeContaForPrint<T extends ContaPagar | ContaReceber>(conta: T, detalhe?: ContaPagar | ContaReceber | null): T {
+    if (!detalhe) return conta;
+
+    return {
+        ...conta,
+        ...detalhe,
+        historico: pickLongerText(conta.historico, detalhe.historico),
+        contato: conta.contato || detalhe.contato
+            ? {
+                ...(conta.contato || {}),
+                ...(detalhe.contato || {}),
+                nome: pickLongerText(conta.contato?.nome, detalhe.contato?.nome) || 'Não informado',
+            }
+            : undefined,
+        categoria: detalhe.categoria || conta.categoria,
+        portador: detalhe.portador || conta.portador,
+        dataEmissao: detalhe.dataEmissao || conta.dataEmissao,
+        borderos: detalhe.borderos || conta.borderos,
+        borderoDetalhes: detalhe.borderoDetalhes || conta.borderoDetalhes,
+    } as T;
 }
 
 // ─── Modal: Baixar Conta ────────────────────────────────────────────────────
@@ -490,20 +550,23 @@ export default function FinancialPage() {
         }).catch(console.error);
     }, []);
 
-    const range = getDefaultRange();
-    const [tab, setTab] = useState<Tab>('pagar');
+    const [range] = useState(() => getDefaultRange());
+    const [initialFilters] = useState(() => getFallbackFinanceFilters(range));
+    const [tab, setTab] = useState<Tab>(initialFilters.tab);
     const [contasPagar, setContasPagar] = useState<ContaPagar[]>([]);
     const [contasReceber, setContasReceber] = useState<ContaReceber[]>([]);
     const [loading, setLoading] = useState(false);
-    const [dataInicio, setDataInicio] = useState(range.inicio);
-    const [dataFim, setDataFim] = useState(range.fim);
-    const [filtroSituacao, setFiltroSituacao] = useState('');
-    const [searchTerm, setSearchTerm] = useState('');
+    const [dataInicio, setDataInicio] = useState(initialFilters.dataInicio);
+    const [dataFim, setDataFim] = useState(initialFilters.dataFim);
+    const [filtroSituacao, setFiltroSituacao] = useState(initialFilters.filtroSituacao);
+    const [searchTerm, setSearchTerm] = useState(initialFilters.searchTerm);
 
     const [baixaTarget, setBaixaTarget] = useState<(ContaPagar | ContaReceber) | null>(null);
     const [lancarTipo, setLancarTipo] = useState<Tab | null>(null);
     const [editTarget, setEditTarget] = useState<(ContaPagar | ContaReceber) | null>(null);
     const [lastDebug, setLastDebug] = useState<FinanceDebugState | null>(null);
+    const [filtersLoaded, setFiltersLoaded] = useState(false);
+    const [initialLoadDone, setInitialLoadDone] = useState(false);
 
     const contasOriginais = tab === 'pagar' ? contasPagar : contasReceber;
 
@@ -517,6 +580,47 @@ export default function FinancialPage() {
     });
 
     const summary = calcSummary(contas);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        financialPreferencesService.getFilters()
+            .then((saved) => {
+                if (cancelled) return;
+                const next = normalizeFinanceFiltersPreference(saved, range);
+                setTab(next.tab);
+                setDataInicio(next.dataInicio);
+                setDataFim(next.dataFim);
+                setFiltroSituacao(next.filtroSituacao);
+                setSearchTerm(next.searchTerm);
+                setFiltersLoaded(true);
+            })
+            .catch((err) => {
+                console.warn('Nao foi possivel carregar filtros financeiros da VPS:', err);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [range]);
+
+    useEffect(() => {
+        if (!filtersLoaded) return;
+
+        const timer = window.setTimeout(() => {
+            financialPreferencesService.saveFilters({
+                tab,
+                dataInicio,
+                dataFim,
+                filtroSituacao,
+                searchTerm,
+            }).catch((err) => {
+                console.warn('Nao foi possivel salvar filtros financeiros na VPS:', err);
+            });
+        }, 500);
+
+        return () => window.clearTimeout(timer);
+    }, [filtersLoaded, tab, dataInicio, dataFim, filtroSituacao, searchTerm]);
 
     async function copyFinanceDebug(entry: FinanceDebugState | null = lastDebug) {
         if (!entry) return;
@@ -565,6 +669,13 @@ export default function FinancialPage() {
         }
     }, [dataInicio, dataFim, filtroSituacao]);
 
+    useEffect(() => {
+        if (!filtersLoaded || initialLoadDone) return;
+
+        setInitialLoadDone(true);
+        load(false);
+    }, [filtersLoaded, initialLoadDone, load]);
+
     async function handleBaixar(baixa: BaixaConta, imprimirRecibo: boolean) {
         if (!baixaTarget) return;
         try {
@@ -600,12 +711,33 @@ export default function FinancialPage() {
         }
     }
 
+    async function enrichContaBorderos<T extends ContaPagar | ContaReceber>(conta: T): Promise<T> {
+        const borderoIds = Array.isArray(conta.borderos)
+            ? conta.borderos.map(Number).filter((id) => Number.isFinite(id) && id > 0)
+            : [];
+
+        if (borderoIds.length === 0) return conta;
+
+        const borderoDetalhes = await Promise.all(
+            borderoIds.map((id) => blingFinanceService.getBordero(tab, id).catch((err) => {
+                console.warn(`Erro ao buscar bordero ${id}:`, err);
+                return null;
+            }))
+        );
+
+        const validBorderos = borderoDetalhes.filter(Boolean);
+        if (validBorderos.length === 0) return conta;
+
+        return { ...conta, borderoDetalhes: validBorderos } as T;
+    }
+
     async function handlePrint(conta: ContaPagar | ContaReceber) {
         const tId = toast.loading('Carregando histórico detalhado do Bling...');
         try {
             const detalhe = await blingFinanceService.getConta(tab, (conta as any).id);
+            const contaParaImprimir = await enrichContaBorderos(mergeContaForPrint(conta, detalhe));
             toast.dismiss(tId);
-            printContaReceipt(detalhe || conta, fullSettings, tab);
+            printContaReceipt(contaParaImprimir, fullSettings, tab);
         } catch (err: any) {
             toast.dismiss(tId);
             handleFinanceError('Erro ao trazer detalhes', err);
@@ -617,8 +749,9 @@ export default function FinancialPage() {
         const tId = toast.loading('Carregando dados da conta para recibo...');
         try {
             const detalhe = await blingFinanceService.getConta(tab, (conta as any).id);
+            const contaParaImprimir = await enrichContaBorderos(mergeContaForPrint(conta, detalhe));
             toast.dismiss(tId);
-            printPaymentReceipt(detalhe || conta, fullSettings, tab);
+            printPaymentReceipt(contaParaImprimir, fullSettings, tab);
         } catch (err: any) {
             toast.dismiss(tId);
             handleFinanceError('Erro ao trazer dados do recibo', err);
@@ -630,8 +763,9 @@ export default function FinancialPage() {
         const tId = toast.loading('Carregando dados para Carta de Quitação...');
         try {
             const detalhe = await blingFinanceService.getConta(tab, (conta as any).id);
+            const contaParaImprimir = await enrichContaBorderos(mergeContaForPrint(conta, detalhe));
             toast.dismiss(tId);
-            printDebtClearance(detalhe || conta, fullSettings);
+            printDebtClearance(contaParaImprimir, fullSettings);
         } catch (err: any) {
             toast.dismiss(tId);
             handleFinanceError('Erro ao trazer dados da quitação', err);

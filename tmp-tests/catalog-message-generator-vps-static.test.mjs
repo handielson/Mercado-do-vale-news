@@ -25,8 +25,8 @@ assert(
 );
 
 assert(
-  source.includes('Qual desses aparelhos deseja mais informações?'),
-  'copied catalog message must ask the customer to choose by number or model so the bot can answer with the product link',
+  source.includes('Gostou de algum desses?'),
+  'copied catalog message must end with the short customer question',
 );
 
 assert(

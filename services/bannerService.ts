@@ -1,6 +1,4 @@
-import { supabase } from './supabase';
 import { vpsClient } from './vpsClient';
-import { USE_VPS } from '@/config/migration';
 import type { Banner } from '@/types/catalog';
 import { toBrowserSafeMediaUrl } from '@/utils/media-url';
 
@@ -92,40 +90,16 @@ export const bannerService = {
      * Buscar todos os banners (uso admin — sem filtro de ativo/data)
      */
     getAllBanners: async (): Promise<Banner[]> => {
-        if (USE_VPS.banners) {
-            const data = await vpsClient.get<any[]>('/banners');
-            return data.map(mapFromVPS);
-        }
-
-        const { data, error } = await supabase
-            .from('catalog_banners')
-            .select('*')
-            .order('display_order', { ascending: true });
-
-        if (error) throw error;
-        return (data || []) as Banner[];
+        const data = await vpsClient.get<any[]>('/banners');
+        return data.map(mapFromVPS);
     },
 
     /**
      * Buscar banner por ID
      */
     getBannerById: async (id: string): Promise<Banner | null> => {
-        if (USE_VPS.banners) {
-            const data = await vpsClient.get<any>(`/banners/${id}`);
-            return data ? mapFromVPS(data) : null;
-        }
-
-        const { data, error } = await supabase
-            .from('catalog_banners')
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (error) {
-            if (error.code === 'PGRST116') return null;
-            throw error;
-        }
-        return data as Banner;
+        const data = await vpsClient.get<any>(`/banners/${id}`);
+        return data ? mapFromVPS(data) : null;
     },
 
     /**
@@ -134,53 +108,23 @@ export const bannerService = {
     createBanner: async (
         banner: Omit<Banner, 'id' | 'created_at' | 'updated_at' | 'clicks_count' | 'views_count'>
     ): Promise<Banner> => {
-        if (USE_VPS.banners) {
-            const data = await vpsClient.post<any>('/banners', mapToVPS(banner));
-            return mapFromVPS(data);
-        }
-
-        const { data, error } = await supabase
-            .from('catalog_banners')
-            .insert(banner)
-            .select()
-            .single();
-
-        if (error) throw error;
-        return data as Banner;
+        const data = await vpsClient.post<any>('/banners', mapToVPS(banner));
+        return mapFromVPS(data);
     },
 
     /**
      * Atualizar banner
      */
     updateBanner: async (id: string, updates: Partial<Banner>): Promise<Banner> => {
-        if (USE_VPS.banners) {
-            const data = await vpsClient.patch<any>(`/banners/${id}`, mapToVPS(updates));
-            return mapFromVPS(data);
-        }
-
-        const { data, error } = await supabase
-            .from('catalog_banners')
-            .update({ ...updates, updated_at: new Date().toISOString() })
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) throw error;
-        return data as Banner;
+        const data = await vpsClient.patch<any>(`/banners/${id}`, mapToVPS(updates));
+        return mapFromVPS(data);
     },
 
     /**
      * Deletar banner
      */
     deleteBanner: async (id: string): Promise<void> => {
-        if (USE_VPS.banners) return vpsClient.delete(`/banners/${id}`);
-
-        const { error } = await supabase
-            .from('catalog_banners')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
+        return vpsClient.delete(`/banners/${id}`);
     },
 
     /**
@@ -199,19 +143,8 @@ export const bannerService = {
             is_active: false,
         };
 
-        if (USE_VPS.banners) {
-            const data = await vpsClient.post<any>('/banners', mapToVPS(payload));
-            return mapFromVPS(data);
-        }
-
-        const { data, error } = await supabase
-            .from('catalog_banners')
-            .insert(payload)
-            .select()
-            .single();
-
-        if (error) throw error;
-        return data as Banner;
+        const data = await vpsClient.post<any>('/banners', mapToVPS(payload));
+        return mapFromVPS(data);
     },
 
     /**
@@ -242,59 +175,26 @@ export const bannerService = {
     },
 
     /**
-     * Reordenar banners — Bug fix: usa Promise.all em vez de loop sequencial
+     * Reordenar banners pela VPS.
      */
     reorderBanners: async (updates: Array<{ id: string; display_order: number }>): Promise<void> => {
         await Promise.all(
-            updates.map(u =>
-                supabase
-                    .from('catalog_banners')
-                    .update({ display_order: u.display_order })
-                    .eq('id', u.id)
-            )
+            updates.map(u => vpsClient.patch(`/banners/${u.id}`, { display_order: u.display_order }))
         );
     },
 
     /**
-     * Registrar clique no banner via RPC
+     * Registrar clique no banner na VPS.
      */
     trackBannerClick: async (bannerId: string): Promise<void> => {
-        if (USE_VPS.banners) {
-            await vpsClient.post(`/banners/${bannerId}/click`, {});
-            return;
-        }
-        await supabase.rpc('increment_banner_clicks', { banner_id: bannerId });
+        await vpsClient.post(`/banners/${bannerId}/click`, {});
     },
 
     /**
-     * Registrar visualização do banner via RPC
+     * Registrar visualizacao do banner na VPS.
      */
     trackBannerView: async (bannerId: string): Promise<void> => {
-        if (USE_VPS.banners) {
-            await vpsClient.post(`/banners/${bannerId}/view`, {});
-            return;
-        }
-        await supabase.rpc('increment_banner_views', { banner_id: bannerId });
+        await vpsClient.post(`/banners/${bannerId}/view`, {});
     },
 };
 
-// ─── RPCs necessárias no Supabase (executar uma vez) ─────────────────────────
-/*
-CREATE OR REPLACE FUNCTION increment_banner_clicks(banner_id UUID)
-RETURNS void AS $$
-BEGIN
-  UPDATE catalog_banners
-  SET clicks_count = COALESCE(clicks_count, 0) + 1
-  WHERE id = banner_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE FUNCTION increment_banner_views(banner_id UUID)
-RETURNS void AS $$
-BEGIN
-  UPDATE catalog_banners
-  SET views_count = COALESCE(views_count, 0) + 1
-  WHERE id = banner_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-*/

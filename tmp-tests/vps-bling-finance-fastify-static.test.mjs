@@ -14,6 +14,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /situacao === 'pago' \? 2 : situacao === 'cancelado' \? 5 : situacao === 'em_aberto' \? 1 : situacao/, `${file} must preserve finance situacao mapping`);
   assert.doesNotMatch(source, /dataInicial|dataFinal|situacoes\[\]/, `${file} must not use non-native finance filters`);
   assert.match(source, /action === 'get' && request\.method === 'GET' && id/, `${file} must support finance get`);
+  assert.match(source, /action === 'get-bordero' && request\.method === 'GET' && id/, `${file} must support finance bordero reads`);
+  assert.match(source, /\/borderos\/\$\{id\}/, `${file} must call the Bling borderos detail endpoint`);
   assert.match(source, /action === 'create' && request\.method === 'POST'/, `${file} must support finance create`);
   assert.match(source, /action === 'update' && request\.method === 'PUT' && id/, `${file} must support finance update`);
   assert.match(source, /action === 'baixar' && request\.method === 'POST' && id/, `${file} must support finance baixar`);

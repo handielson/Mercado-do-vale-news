@@ -6,6 +6,7 @@
 
 import { supabase } from './supabase';
 import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
+import type { ShippingPriceRange, ShippingPriceRangeInput, ShippingZone, ShippingZoneInput } from '../types/shipping';
 
 const TIMEOUT_MS = 15000; // Increased to 15s to support full catalog downloads
 const PUBLIC_STOREFRONT_TIMEOUT_MS = 3500;
@@ -517,6 +518,14 @@ class VpsApiService {
     return this.fetchSafe<any>('/shipping/settings');
   }
 
+  async getShippingZones(): Promise<ShippingZone[] | null> {
+    return this.fetchSafe<ShippingZone[]>('/shipping/zones', true);
+  }
+
+  async getShippingPriceRanges(zoneId: string): Promise<ShippingPriceRange[] | null> {
+    return this.fetchSafe<ShippingPriceRange[]>(`/shipping/price-ranges?zone_id=${encodeURIComponent(zoneId)}`, true);
+  }
+
   async checkVideoBySku(sku: string, options: { noCache?: boolean } = {}): Promise<{ exists: boolean; url?: string } | null> {
     if (!sku?.trim()) return null;
     const normalizedSku = sku.trim();
@@ -855,6 +864,64 @@ class VpsApiService {
   async syncShippingSettings(settings: any): Promise<boolean> {
     this.cache.delete('/shipping/settings');
     return this.writeSafe('PATCH', '/shipping/settings', settings);
+  }
+
+  async createShippingZone(data: ShippingZoneInput): Promise<ShippingZone | null> {
+    this.cache.delete('/shipping/zones');
+    try {
+      const res = await fetch(proxyUrl('/shipping/zones', 'POST'), {
+        method: 'POST',
+        headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      if (!res.ok) return null;
+      const json = await res.json() as { id?: string };
+      return { ...data, id: json.id || '', created_at: new Date().toISOString() } as ShippingZone;
+    } catch {
+      return null;
+    }
+  }
+
+  async updateShippingZone(id: string, data: ShippingZoneInput): Promise<ShippingZone | null> {
+    this.cache.delete('/shipping/zones');
+    const ok = await this.writeSafe('PATCH', `/shipping/zones/${id}`, data);
+    return ok ? { ...data, id } as ShippingZone : null;
+  }
+
+  async deleteShippingZone(id: string): Promise<boolean> {
+    this.cache.delete('/shipping/zones');
+    return this.writeSafe('DELETE', `/shipping/zones/${id}`);
+  }
+
+  async createShippingPriceRange(data: ShippingPriceRangeInput): Promise<ShippingPriceRange | null> {
+    this.cache.delete('/shipping/zones');
+    this.cache.delete(`/shipping/price-ranges?zone_id=${encodeURIComponent(data.zone_id)}`);
+    try {
+      const res = await fetch(proxyUrl('/shipping/price-ranges', 'POST'), {
+        method: 'POST',
+        headers: await this.authHeaders({ 'Content-Type': 'application/json', Accept: 'application/json' }),
+        body: JSON.stringify(data),
+        signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
+      });
+      if (!res.ok) return null;
+      const json = await res.json() as { id?: string };
+      return { ...data, id: json.id || '' } as ShippingPriceRange;
+    } catch {
+      return null;
+    }
+  }
+
+  async updateShippingPriceRange(id: string, data: ShippingPriceRangeInput): Promise<ShippingPriceRange | null> {
+    this.cache.delete('/shipping/zones');
+    this.cache.delete(`/shipping/price-ranges?zone_id=${encodeURIComponent(data.zone_id)}`);
+    const ok = await this.writeSafe('PATCH', `/shipping/price-ranges/${id}`, data);
+    return ok ? { ...data, id } as ShippingPriceRange : null;
+  }
+
+  async deleteShippingPriceRange(id: string): Promise<boolean> {
+    this.cache.delete('/shipping/zones');
+    return this.writeSafe('DELETE', `/shipping/price-ranges/${id}`);
   }
 
   clearCache(): void {

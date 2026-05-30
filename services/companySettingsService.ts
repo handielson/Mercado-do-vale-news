@@ -1,6 +1,4 @@
-import { supabase } from './supabase';
 import { CompanySettings, CompanySettingsInput } from '../types/companySettings';
-import { USE_VPS } from '../config/migration';
 import { vpsClient } from './vpsClient';
 
 /**
@@ -9,7 +7,7 @@ import { vpsClient } from './vpsClient';
  *
  * CACHE STRATEGY (two layers):
  *  1. In-memory: 5 minutes — zero latency for same-session reloads
- *  2. localStorage: 30 minutes — zero Supabase queries on cold reload
+ *  2. localStorage: 30 minutes — zero VPS queries on cold reload
  */
 
 const LS_KEY = 'mdv_company_settings';
@@ -39,24 +37,33 @@ function _invalidateCache(): void {
     try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
 }
 
+function normalizeCompanySettings(data: CompanySettings | null, defaults: Partial<CompanySettings>): CompanySettings | null {
+    if (!data) return null;
+    const normalized = { ...data } as any;
+    if (!normalized.address && normalized.address_street) {
+        const parts = [];
+        parts.push(`${normalized.address_street}, ${normalized.address_number || 'S/N'}`);
+        if (normalized.address_complement) parts.push(normalized.address_complement);
+        if (normalized.address_neighborhood) parts.push(normalized.address_neighborhood);
+        const cityState = [];
+        if (normalized.address_city) cityState.push(normalized.address_city);
+        if (normalized.address_state) cityState.push(normalized.address_state);
+        if (cityState.length > 0) parts.push(cityState.join(' - '));
+        if (normalized.address_zip_code) parts.push(`CEP: ${normalized.address_zip_code}`);
+        normalized.address = parts.filter(Boolean).join(' - ');
+    }
+    normalized.payment_receipt_template = normalized.payment_receipt_template || defaults.payment_receipt_template;
+    normalized.debt_clearance_template = normalized.debt_clearance_template || defaults.debt_clearance_template;
+    normalized.extended_warranty_template = normalized.extended_warranty_template || defaults.extended_warranty_template;
+    return normalized as CompanySettings;
+}
+
 export const companySettingsService = {
     /**
      * Get company settings
-     * VPS: lê direto do MySQL sem cache local
-     * Supabase: usa cache duplo (memória + localStorage)
+     * VPS: lê direto do MySQL com cache duplo (memória + localStorage)
      */
     async get(): Promise<CompanySettings | null> {
-        // ── VPS path ──────────────────────────────────────────────────────
-        if (USE_VPS.company) {
-            try {
-                return await vpsClient.get<CompanySettings>('/company-settings');
-            } catch (error) {
-                console.error('[companySettingsService] VPS get error:', error);
-                return null;
-            }
-        }
-
-        // ── Supabase path (com cache) ─────────────────────────────────────
         if (_memCache && Date.now() < _memCache.expiresAt) return _memCache.data;
 
         const cached = _readLocalStorage();
@@ -64,36 +71,12 @@ export const companySettingsService = {
             _memCache = { data: cached, expiresAt: Date.now() + MEM_TTL };
             return cached;
         }
+
         try {
-            const { data, error } = await supabase
-                .from('company_settings')
-                .select('*')
-                .limit(1)
-                .single();
-
-            if (error) {
-                if (error.code === 'PGRST116') return null;
-                throw error;
-            }
-
-            if (data) {
-                if (!data.address && data.address_street) {
-                    const parts = [];
-                    parts.push(`${data.address_street}, ${data.address_number || 'S/N'}`);
-                    if (data.address_complement) parts.push(data.address_complement);
-                    if (data.address_neighborhood) parts.push(data.address_neighborhood);
-                    const cityState = [];
-                    if (data.address_city) cityState.push(data.address_city);
-                    if (data.address_state) cityState.push(data.address_state);
-                    if (cityState.length > 0) parts.push(cityState.join(' - '));
-                    if (data.address_zip_code) parts.push(`CEP: ${data.address_zip_code}`);
-                    data.address = parts.filter(Boolean).join(' - ');
-                }
-                const defaults = this.getDefaults();
-                data.payment_receipt_template = data.payment_receipt_template || defaults.payment_receipt_template;
-                data.debt_clearance_template = data.debt_clearance_template || defaults.debt_clearance_template;
-                data.extended_warranty_template = data.extended_warranty_template || defaults.extended_warranty_template;
-            }
+            const data = normalizeCompanySettings(
+                await vpsClient.get<CompanySettings>('/company-settings'),
+                this.getDefaults(),
+            );
 
             if (data) {
                 _memCache = { data, expiresAt: Date.now() + MEM_TTL };
@@ -102,51 +85,30 @@ export const companySettingsService = {
 
             return data;
         } catch (error) {
-            console.error('Error fetching company settings:', error);
-            throw error;
+            console.error('[companySettingsService] VPS get error:', error);
+            return null;
         }
     },
 
     /**
      * Update company settings
-     * VPS: PATCH direto no MySQL
-     * Supabase: upsert com invalidação de cache
+     * VPS: PATCH direto no MySQL com invalidação de cache
      */
     async update(settings: CompanySettingsInput): Promise<CompanySettings> {
-        // ── VPS path ──────────────────────────────────────────────────────
-        if (USE_VPS.company) {
-            try {
-                return await vpsClient.patch<CompanySettings>('/company-settings', settings);
-            } catch (error) {
-                console.error('[companySettingsService] VPS update error:', error);
-                throw error;
-            }
-        }
-
-        // ── Supabase path ─────────────────────────────────────────────────
         _invalidateCache();
         try {
-            const existing = await this.get();
-            if (existing) {
-                const { data, error } = await supabase
-                    .from('company_settings')
-                    .update(settings)
-                    .eq('id', existing.id)
-                    .select()
-                    .single();
-                if (error) throw error;
-                return data;
-            } else {
-                const { data, error } = await supabase
-                    .from('company_settings')
-                    .insert(settings)
-                    .select()
-                    .single();
-                if (error) throw error;
+            const data = normalizeCompanySettings(
+                await vpsClient.patch<CompanySettings>('/company-settings', settings),
+                this.getDefaults(),
+            );
+            if (data) {
+                _memCache = { data, expiresAt: Date.now() + MEM_TTL };
+                _writeLocalStorage(data);
                 return data;
             }
+            throw new Error('Configurações da empresa não encontradas na VPS');
         } catch (error) {
-            console.error('Error updating company settings:', error);
+            console.error('[companySettingsService] VPS update error:', error);
             throw error;
         }
     },

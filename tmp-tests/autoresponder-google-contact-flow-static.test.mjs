@@ -68,8 +68,8 @@ assert.match(
 
 assert.match(
   source,
-  /Como devo chamar voce\?/,
-  'pure greeting without contact name must ask how to call the customer',
+  /Qual seu nome para seguirmos com o atendimento\?/,
+  'pure greeting without contact name must ask for the customer name professionally',
 );
 
 assert.match(

@@ -9,6 +9,7 @@ Webhook integrado com o app **AutoResponder for WA Pro** (TK Studio / autorespon
 - [Objetivo](#objetivo)
 - [Stack e infraestrutura](#stack-e-infraestrutura)
 - [Decisões consolidadas](#decisões-consolidadas)
+- [Decisões atuais para IA e atendimento](#decisões-atuais-para-ia-e-atendimento)
 - [Arquitetura](#arquitetura)
 - [Fluxo do webhook (16 passos)](#fluxo-do-webhook-16-passos)
 - [Schema do banco (6 tabelas)](#schema-do-banco-6-tabelas)
@@ -19,6 +20,7 @@ Webhook integrado com o app **AutoResponder for WA Pro** (TK Studio / autorespon
 - [Storage Synology](#storage-synology)
 - [Plano de implementação em fases](#plano-de-implementação-em-fases)
 - [Checklist de implementação](#checklist-de-implementação)
+- [Checklist de implantação das novas decisões](#checklist-de-implantação-das-novas-decisões)
 - [Diário de implantação](#diário-de-implantação)
 - [Pendências abertas](#pendências-abertas)
 
@@ -86,6 +88,44 @@ Quando cliente perguntar algo no WhatsApp da loja (ex.: *"tem capa para note 14"
 | **Página admin** | `/admin/atendimento-automatico` com 8 abas |
 | **Permissão** | Todo admin vê |
 | **Multi-canal futuro** | Mesmo webhook serve Instagram/Messenger se quiser depois |
+
+---
+
+## Decisões atuais para IA e atendimento
+
+Estas decisões guiam a próxima evolução do atendimento automático. O objetivo é crescer sem transformar o AutoResponder em uma tela única difícil de manter.
+
+| Tema | Decisão |
+|---|---|
+| **Papel do AutoResponder** | Continua sendo o motor principal: recebe mensagem, identifica intenção, busca dados oficiais, aplica regras, pausa/retoma conversa e envia resposta. |
+| **Papel do ChatGPT** | Atua como camada inteligente apenas quando o sistema enviar contexto oficial. Não substitui regras, catálogo, preços, estoque, garantia ou parcelamento calculado pelo backend. |
+| **Fonte de verdade** | Produtos, preços, estoque, variações, cores, parcelamento, garantia e links vêm do sistema/VPS. O ChatGPT fica proibido de inventar dados. |
+| **Infraestrutura nova** | Tudo que for criado para IA, treinamento e central de atendimento deve ficar na VPS ou Synology. Nada novo deve depender de Supabase ou Vercel. |
+| **Migração de dependências antigas** | Ao encontrar algo do AutoResponder/WhatsApp/IA ligado a Supabase ou Vercel, registrar no checklist e migrar para VPS/Synology como parte do trabalho, sem deixar para depois. |
+| **Chave OpenAI** | `OPENAI_API_KEY` pode ser alterada pelo painel do sistema, fica salva na VPS, não é exibida novamente e aparece apenas como status/máscara. |
+| **Treinamento IA** | Criar área para ensinar tom, regras, políticas, exemplos de respostas e limites do ChatGPT. Treinamento é configuração do robô, não atendimento diário. |
+| **Central de Atendimento** | Criar página separada no menu, idealmente `WhatsApp > Central de Atendimento`, para operação diária da equipe. |
+| **Pausa do bot** | Quando um atendente assumir ou responder manualmente, o bot deve pausar a conversa. Deve existir botão para `Pausar bot` e `Retomar bot`. |
+| **Escalabilidade de telas** | AutoResponder fica para automação/configuração. Central de Atendimento fica para mensagens e operação. Treinamento IA pode começar dentro do AutoResponder e virar página própria se crescer. |
+
+### Fluxo alvo com IA
+
+```text
+Cliente no WhatsApp
+  -> AutoResponder Pro
+  -> Webhook VPS
+  -> AutoResponder identifica intenção
+  -> Busca dados oficiais na VPS/Sistema
+  -> Se necessário, chama ChatGPT com contexto restrito
+  -> AutoResponder formata e envia resposta
+```
+
+Regras importantes:
+
+1. ChatGPT não consulta livremente a internet nem inventa produtos.
+2. ChatGPT só responde usando o contexto enviado pelo backend.
+3. Se não houver dados suficientes, deve fazer pergunta curta para entender a necessidade do cliente ou encaminhar para humano.
+4. Respostas de produto devem manter o padrão com variações, cores disponíveis, preço à vista, parcelamento máximo em 12x, garantia e link quando aplicável.
 
 ---
 
@@ -987,7 +1027,293 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 
 ---
 
+## Checklist de implantação das novas decisões
+
+Este checklist registra as decisões tomadas para a próxima evolução: ChatGPT treinável, Central de Atendimento e operação humana organizada. Todas as novas entregas devem ser implantadas na VPS/Synology, sem criar dependência nova de Supabase ou Vercel.
+
+### Fase 6 — ChatGPT controlado pelo AutoResponder
+
+- [x] Manter AutoResponder como motor principal do fluxo.
+- [x] Adicionar campos `ai_enabled`, `ai_model` e `openai_api_key` em `autoresponder_settings` na VPS.
+- [x] Criar campo no painel para trocar `OPENAI_API_KEY`.
+- [x] Não devolver `openai_api_key` crua na API; retornar somente `has_openai_api_key` e `openai_api_key_masked`.
+- [x] Ignorar chave vazia no PATCH para preservar a chave atual.
+- [x] Aplicar prompt de segurança: proibido inventar produtos, preços, estoque, prazos, garantias, promoções ou condições fora do contexto oficial.
+- [x] Fazer a saudação/resposta 2 perguntar o que o cliente procura, em vez de listar categorias automaticamente.
+- [x] Enviar a pergunta comercial da saudação somente depois que o nome do cliente estiver captado/salvo.
+- [x] Ao listar celulares/produtos, mostrar variação, preço à vista, parcelamento máximo em 12x e cores disponíveis.
+- [x] Remover SKU das respostas para cliente.
+- [x] Criar log específico quando a resposta usar IA (`intent`/metadado `ai_assisted`) para medir custo e qualidade.
+- [x] Registrar consumo aproximado de tokens por resposta quando a OpenAI devolver uso.
+- [x] Criar limite diário/mensal opcional para respostas com IA.
+- [x] Criar controle financeiro estimado de tokens/créditos da IA.
+- [x] Consultar gasto oficial da OpenAI via Admin API Key quando configurada.
+- [ ] Criar fallback seguro se a OpenAI falhar: pergunta curta ou atendimento humano, nunca resposta inventada.
+
+### Fase 7 — Página de Treinamento IA
+
+Objetivo: permitir ensinar o ChatGPT sem editar código, mantendo tudo salvo na VPS.
+
+- [x] Criar aba **Treinamento IA** dentro de `/admin/atendimento-automatico`.
+- [x] Salvar treinamento em tabela nova na VPS, por exemplo `autoresponder_ai_training`.
+- [x] Separar treinamento por tipos:
+  - [x] Instruções da loja: tom, regras, limites e estilo.
+  - [x] Perguntas e respostas prontas.
+  - [x] Conhecimento por categoria/produto, sempre vinculado a dados oficiais.
+  - [x] Políticas: pagamento, garantia, entrega, troca, assistência e atendimento humano.
+- [x] Permitir ativar/desativar cada item de treinamento.
+- [x] Permitir prioridade/ordem de aplicação.
+- [ ] Criar campo de busca/filtro por tipo e status.
+- [x] Criar botão **Testar resposta** usando o mesmo motor de teste do AutoResponder.
+- [ ] Criar preview do contexto que será enviado para o ChatGPT, sem expor a chave OpenAI.
+- [ ] Impedir instruções perigosas, como "ignore o sistema", "invente preço" ou "responda qualquer coisa".
+- [ ] Versionar alterações do treinamento com `updated_at` e, se possível, usuário responsável.
+- [x] Criar testes estáticos garantindo que a página usa VPS e não Supabase/Vercel.
+
+### Fase 8 — Central de Atendimento
+
+Objetivo: separar operação diária da configuração do robô.
+
+- [ ] Criar página separada no menu: **WhatsApp > Central de Atendimento**.
+- [ ] Criar rota frontend dedicada, por exemplo `/admin/whatsapp/atendimento`.
+- [ ] Reaproveitar `autoresponder_conversations` como base inicial da lista.
+- [ ] Mostrar lista de conversas com status:
+  - [ ] Bot ativo
+  - [ ] Humano atendendo
+  - [ ] Pausado
+  - [ ] Aguardando cliente
+  - [ ] Pedido em andamento
+- [ ] Criar botão **Assumir atendimento**.
+- [ ] Criar botão **Pausar bot**.
+- [ ] Criar botão **Retomar bot**.
+- [ ] Mostrar histórico de mensagens da conversa.
+- [ ] Criar campo para resposta manual quando houver integração de envio disponível.
+- [ ] Validar se a integração atual permite exibir "digitando..." no WhatsApp; se permitir, acionar antes de respostas geradas pelo bot/IA.
+- [ ] Permitir aplicar tags de conversa.
+- [ ] Filtros: não respondidas, pausadas, pedido em andamento, por tag e por período.
+- [ ] Mostrar resumo interno do pedido quando `purchase_flow.attendant_summary` existir.
+- [ ] Preparar estrutura para múltiplos atendentes no futuro, mesmo que o MVP seja single-user.
+
+### Fase 9 — Pausa automática por atendimento humano
+
+Objetivo: impedir que bot e humano respondam ao mesmo tempo.
+
+- [x] No AutoResponder Pro, manter opção "Don't reply if I have answered manually" ativada no celular.
+- [x] Manter endpoint de pausa e retomada por conversa.
+- [ ] Criar ação **Assumir atendimento** que pause a conversa por padrão por 60 minutos ou até retomada manual.
+- [ ] Criar `pause_reason = human_takeover` quando um atendente assumir.
+- [ ] Criar `pause_reason = manual_pause` quando usar apenas Pausar bot.
+- [ ] Criar indicador visual de tempo restante da pausa.
+- [ ] Criar botão **Retomar bot agora** na Central de Atendimento.
+- [ ] Criar regra: se atendente responder manualmente pelo painel, pausar bot automaticamente.
+- [ ] Decidir se mensagem manual enviada pelo WhatsApp fora do painel deve ser detectada pela integração atual ou se continuará dependente do AutoResponder Pro.
+
+### Fase 10 — Organização e crescimento
+
+- [ ] AutoResponder fica focado em automação, regras, treinamento, testes e configurações.
+- [ ] Central de Atendimento fica focada em mensagens, fila, pausa/retomada e operação humana.
+- [ ] Se Treinamento IA crescer demais, mover para página própria no menu `IA > Treinamento`.
+- [ ] Criar documentação curta para equipe: quando usar AutoResponder, Central de Atendimento e Treinamento IA.
+- [ ] Criar métricas: conversas com IA, conversas assumidas por humano, pedidos gerados e taxa de fallback.
+- [ ] Revisar segurança: nunca expor chaves, tokens, dados sensíveis de cliente ou prompt interno para o navegador sem necessidade.
+
+### Fase 11 — Auditoria e migração para VPS/Synology
+
+Objetivo: eliminar dependências novas e antigas de Vercel/Supabase no fluxo de WhatsApp, AutoResponder, IA e atendimento.
+
+- [x] Regra permanente documentada: nenhuma nova tabela, rota, storage, função, cron ou configuração do AutoResponder/WhatsApp/IA deve nascer em Vercel ou Supabase.
+- [ ] Antes de implementar cada nova função, procurar por uso de `supabase`, `vercel`, `VITE_SUPABASE`, `SUPABASE`, `vercel.json`, `npx vercel` e rotas serverless relacionadas ao escopo.
+- [ ] Se encontrar dependência ligada ao AutoResponder/WhatsApp/IA, registrar no checklist desta fase antes de continuar.
+- [ ] Migrar dados/configurações encontrados para MySQL na VPS, arquivos na Synology ou storage público controlado na VPS/Synology.
+- [ ] Criar endpoints Fastify na VPS para substituir qualquer leitura/escrita antiga feita direto no Supabase.
+- [ ] Atualizar frontend para usar `vpsClient` ou serviço VPS equivalente, nunca cliente Supabase direto nas telas novas.
+- [ ] Remover ou isolar código antigo que ainda aponte para Vercel/Supabase depois da migração.
+- [ ] Criar testes estáticos para impedir regressão, verificando que arquivos novos do escopo não usam Supabase/Vercel.
+- [ ] Validar deploy somente por scripts VPS/Synology: `npm.cmd run deploy:vps-site` e `node deploy-vps-server-only.cjs`.
+- [ ] Não usar `npx vercel`, Vercel dashboard, Supabase migrations, Supabase Edge Functions ou Supabase Storage para novas entregas do AutoResponder/WhatsApp/IA.
+
+#### Itens conhecidos para auditar/migrar quando tocados
+
+- [ ] `company_settings.business_hours`: hoje ainda aparece documentado como origem Supabase em partes antigas; migrar leitura usada pelo AutoResponder para fonte VPS quando a tela/rotina for alterada.
+- [ ] Imagens de produtos em Supabase Storage: manter até plano próprio de mídia; quando mexer em mensagens com imagens, avaliar migração para Synology/VPS.
+- [ ] Qualquer rota antiga de webhook/API em Vercel relacionada a WhatsApp/IA: substituir por Fastify na VPS.
+- [ ] Qualquer configuração pública ou privada consumida por tela nova via Supabase: criar endpoint VPS antes de usar.
+
+---
+
 ## Diário de implantação
+
+### 2026-05-29 - Fase 6 controle financeiro da IA
+
+**Objetivo da etapa:** mostrar no painel uma estimativa de gasto de tokens/créditos do ChatGPT para orientar quando comprar novos créditos.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `types/autoResponder.ts`
+- `pages/admin/AutoResponderPage.tsx`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-ai-finance-static.test.mjs`
+
+**Entregue nesta etapa:**
+- `autoresponder_settings` ganhou saldo manual, alerta e preços por 1M tokens: `ai_credit_balance_usd`, `ai_credit_alert_usd`, `ai_input_cost_per_1m_usd` e `ai_output_cost_per_1m_usd`.
+- `autoresponder_logs` ganhou `ai_estimated_cost_usd`.
+- O backend calcula custo estimado por resposta usando tokens de entrada/saida e preços configurados.
+- `GET /autoresponder/stats` agora retorna `summary.ai_finance` com gasto de hoje, gasto do mes, tokens do mes, saldo manual e saldo restante estimado.
+- A seção ChatGPT do painel ganhou o bloco `Controle financeiro da IA`, com link para o painel oficial da OpenAI.
+- Checklist da Fase 6 atualizado no item de controle financeiro estimado.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-ai-finance-static.test.mjs`
+- `node tmp-tests\autoresponder-ai-logging-static.test.mjs`
+- `node tmp-tests\autoresponder-ai-limits-static.test.mjs`
+- `node --check vps_server.cjs`
+- `node --check vps_server.js`
+
+---
+
+### 2026-05-29 - Fase 6 custo oficial OpenAI
+
+**Objetivo da etapa:** complementar o controle financeiro com o custo oficial retornado pela API de custos da OpenAI, usando uma chave admin separada.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `types/autoResponder.ts`
+- `pages/admin/AutoResponderPage.tsx`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-ai-finance-static.test.mjs`
+
+**Entregue nesta etapa:**
+- `autoresponder_settings` ganhou `openai_admin_api_key`, mascarada na API como status/chave parcial.
+- O PATCH preserva a chave admin atual quando o campo vier vazio.
+- `GET /autoresponder/stats` consulta `https://api.openai.com/v1/organization/costs` quando existir chave admin.
+- `summary.ai_finance` agora expõe gasto oficial do mês, status da consulta e saldo restante estimado pelo custo oficial.
+- O painel ganhou campo `Chave Admin OpenAI` e indicadores `Gasto oficial OpenAI` e `Saldo oficial estimado`.
+- Checklist da Fase 6 atualizado no item de custo oficial OpenAI.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-ai-finance-static.test.mjs`
+
+---
+
+### 2026-05-29 - Fase 6 resumo financeiro visivel
+
+**Objetivo da etapa:** reduzir o caminho para acompanhar saldo e gasto da IA no dia a dia.
+
+**Arquivos criados/alterados:**
+- `pages/admin/AutoResponderPage.tsx`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-ai-finance-static.test.mjs`
+
+**Entregue nesta etapa:**
+- A pagina do AutoResponder ganhou o bloco `Resumo financeiro da IA` logo abaixo dos indicadores principais.
+- O resumo mostra saldo oficial estimado, gasto oficial OpenAI, credito informado, gasto interno estimado e status da chave admin.
+- O botao `Ajustar financeiro` leva direto para `Configurações > Controle financeiro da IA`.
+- Valores em USD passaram a usar formato de moeda mais limpo, com duas casas.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-ai-finance-static.test.mjs`
+
+---
+
+### 2026-05-29 - Busca ampla com resposta curta
+
+**Objetivo da etapa:** evitar listas cansativas no WhatsApp quando o cliente faz uma pergunta ampla, como `tem tablet?`.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `tmp-tests/autoresponder-catalog-request-static.test.mjs`
+- `Bot_Whatsapp.md`
+
+**Entregue nesta etapa:**
+- A primeira resposta de produto passou a usar uma pagina curta com `AUTORESPONDER_PRODUCT_PAGE_SIZE`, hoje 5 itens.
+- O bot deixa de enviar ate 50 produtos na primeira resposta.
+- Quando houver mais resultados, o rodape pede filtro por faixa de preco, marca ou uso antes de sugerir `mais`.
+- A paginacao por `mais` continua disponivel para o cliente que realmente quiser ver outras opcoes.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-catalog-request-static.test.mjs`
+- `node tmp-tests\autoresponder-choice-instructions-static.test.mjs`
+- `node tmp-tests\autoresponder-pagination-count-static.test.mjs`
+
+---
+
+### 2026-05-29 - Saudacao aguarda nome salvo
+
+**Objetivo da etapa:** evitar que o bot pergunte o nome e a necessidade de compra na mesma resposta inicial.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-greeting-name-gate-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Saudacao sem nome salvo agora responde somente com a captura/confirmacao do nome.
+- A pergunta de captura manual de nome ficou: `Qual seu nome para seguirmos com o atendimento?`
+- A pergunta comercial so aparece depois que `contact_name_status` esta como `saved_to_google` ou `google_pending`.
+- A pergunta comercial padrao mudou para: `Voce esta atras de celular novo? Quer que eu mande a lista do que temos? Ou deseja alguma outra coisa?`
+- O fluxo de contato manteve suporte a multiplas respostas separadas no AutoResponder Pro.
+- Checklist da Fase 6 atualizado no item de saudacao condicionada ao nome salvo.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-greeting-name-gate-static.test.mjs`
+- `node tmp-tests\autoresponder-google-contact-flow-static.test.mjs`
+- `node tmp-tests\autoresponder-catalog-request-static.test.mjs`
+- `node tmp-tests\autoresponder-ai-logging-static.test.mjs`
+- `node --check vps_server.cjs`
+- `node --check vps_server.js`
+
+---
+
+### 2026-05-28 - Fase 6 limites de uso da IA
+
+**Objetivo da etapa:** permitir limite diario e mensal opcional para respostas com ChatGPT, usando logs da VPS como fonte de contagem.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `types/autoResponder.ts`
+- `pages/admin/AutoResponderPage.tsx`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-ai-limits-static.test.mjs`
+
+**Entregue nesta etapa:**
+- `autoresponder_settings` ganhou `ai_daily_limit` e `ai_monthly_limit`, ambos com `0` como limite desativado.
+- PATCH de configurações aceita os dois limites e normaliza valores negativos/vazios para `0`.
+- Antes de chamar a OpenAI, o backend conta logs `ai_assisted = 1` do dia e do mes atual.
+- Quando um limite é atingido, a chamada de IA e pulada e o bot usa o fallback seguro ja existente.
+- Painel do AutoResponder ganhou campos de limite diario e mensal na secao ChatGPT.
+- Checklist da Fase 6 atualizado no item de limites de IA.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-ai-limits-static.test.mjs`
+
+---
+
+### 2026-05-28 - Fase 6 logs de IA
+
+**Objetivo da etapa:** registrar quando uma resposta do AutoResponder usa IA e guardar o consumo aproximado de tokens retornado pela OpenAI.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-ai-logging-static.test.mjs`
+
+**Entregue nesta etapa:**
+- `autoresponder_logs` ganhou os campos `ai_assisted`, `ai_model`, `ai_input_tokens` e `ai_output_tokens`.
+- Migracao idempotente com `addColumnIfMissing()` para VPS existente.
+- Helper `normalizeAutoresponderOpenAiUsage()` normaliza `usage.input_tokens` e `usage.output_tokens` quando a OpenAI devolver esses dados.
+- O fluxo de saudacao/pergunta curta passa a salvar metadados de IA no log quando a resposta usar ChatGPT.
+- Checklist da Fase 6 atualizado nos itens de log de IA e consumo aproximado de tokens.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-ai-logging-static.test.mjs`
+
+---
 
 ### 2026-05-07 — Saudacao com categorias numeradas
 
@@ -4038,6 +4364,31 @@ node tools\test-autoresponder-archive-vps-write.cjs
 
 ---
 
+### 2026-05-29 — Fase 4B ajuste do card apos selecao
+
+**Objetivo da etapa:** padronizar a resposta depois que o cliente escolhe um produto, usando o mesmo card comercial da lista e opcoes numericas para continuar.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `tmp-tests/autoresponder-purchase-selection-static.test.mjs`
+- `Bot_Whatsapp.md`
+
+**Entregue nesta etapa:**
+- `buildAutoresponderPurchaseActionPrompt()` passou a montar o card com nome, memoria/versao, preco a vista, parcelamento e cores quando disponiveis.
+- A resposta agora encerra com `Responda:`, `*1* Para comprar` e `*2* Para detalhes`.
+- A escolha numerica preserva `option_number` para manter o numero original do item no card.
+- O fluxo `awaiting_product_action` agora aceita `1` como comprar e `2` como detalhes, alem dos textos anteriores.
+- Removido o texto antigo `Responda "comprar" ou "detalhes".`.
+
+**Verificacoes executadas:**
+- `node tmp-tests\autoresponder-purchase-selection-static.test.mjs`
+
+**Resultado esperado:**
+- Cliente que escolhe um produto recebe o card no padrao de venda e responde `1` para comprar ou `2` para ver detalhes.
+
+---
+
 ### 2026-05-06 — Fase 4C pergunta de quantidade
 
 **Objetivo da etapa:** depois que o cliente escolhe um produto e confirma que quer comprar, pedir a quantidade desejada antes de montar o carrinho.
@@ -4323,6 +4674,50 @@ node tools\test-autoresponder-archive-vps-write.cjs
 
 ---
 
+### 2026-05-29 - Busca generica de celulares com refinamento
+
+**Objetivo da etapa:** evitar que palavras amplas como "celular", "celulares", "smartphone", "smartphones", "tablet", "tablets", "receptor" ou "receptores" disparem uma lista grande de produtos sem confirmar a intencao do cliente.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-catalog-request-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `detectAutoresponderGenericDeviceCatalogFamily()` para identificar pedidos genericos de celulares/smartphones, tablets e receptores.
+- Helper `isAutoresponderGenericPhoneCatalogRequest()` mantido para compatibilidade com a regra de celulares.
+- Helper `buildAutoresponderDeviceCatalogRefinementPrompt()` com pergunta de refinamento antes da listagem.
+- Novo intent `catalog_phone_refinement` para celulares e `catalog_device_refinement` para tablets/receptores.
+- Pedidos especificos continuam seguindo a busca normal; exemplo: "iPhone", "Xiaomi ate R$ 1.000", "Redmi Pad", "BTV" ou "lista de celulares".
+
+**Verificacoes executadas:**
+- `node tmp-tests/autoresponder-catalog-request-static.test.mjs`
+
+---
+
+### 2026-05-29 - Busca de modelo com acessorios relacionados
+
+**Objetivo da etapa:** quando o cliente perguntar no vazio por um modelo de smartphone, tablet ou receptor, contextualizar a resposta antes da lista e indicar quando os itens encontrados forem acessorios relacionados.
+
+**Arquivos criados/alterados:**
+- `vps_server.cjs`
+- `vps_server.js`
+- `Bot_Whatsapp.md`
+- `tmp-tests/autoresponder-model-accessory-context-static.test.mjs`
+
+**Entregue nesta etapa:**
+- Helper `detectAutoresponderDeviceFamilyFromSearch()` para reconhecer familias smartphone, tablet e receptor.
+- Helper `isAutoresponderAccessoryProduct()` para identificar acessorios por nome/categoria/dados do produto.
+- Helper `buildAutoresponderModelAccessorySearchTitle()` para montar o texto antes da lista.
+- A lista passa a abrir com contexto como "Para iPhone 11..." e, quando fizer sentido, "Encontramos alguns acessorios para esse smartphone/tablet/receptor:".
+- Buscas diretas por acessorios, como "capinha iPhone 11", continuam como lista objetiva de produtos.
+
+**Verificacoes executadas:**
+- `node tmp-tests/autoresponder-model-accessory-context-static.test.mjs`
+
+---
+
 ## Pendências abertas
 
 1. **Token secreto:** `AUTORESPONDER_TOKEN` gerado/configurado fora do código e app AutoResponder liberado. Concluído; manter sem hardcode no repositório.
@@ -4348,5 +4743,5 @@ node tools\test-autoresponder-archive-vps-write.cjs
 
 ---
 
-_Última atualização: 2026-05-07_
-_Versão do plano: v13_
+_Última atualização: 2026-05-29_
+_Versão do plano: v14_

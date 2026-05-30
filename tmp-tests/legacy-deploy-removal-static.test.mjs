@@ -3,11 +3,14 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 const packageLock = existsSync('package-lock.json') ? readFileSync('package-lock.json', 'utf8') : '';
+const tsconfig = existsSync('tsconfig.json') ? readFileSync('tsconfig.json', 'utf8') : '';
 
 assert.equal(existsSync('vercel.json'), false, 'legacy platform config should be removed after VPS cutover');
 assert.equal(existsSync('api'), false, 'legacy serverless api/ functions should be removed after VPS cutover');
+assert.equal(existsSync('pages/api'), false, 'legacy Next/Vercel pages/api functions should be removed after VPS cutover');
 assert.equal(packageJson.dependencies?.['@vercel/node'], undefined, 'legacy platform runtime should not remain as an app dependency');
 assert.equal(packageLock.includes('"@vercel/node"'), false, 'package-lock should not retain legacy platform runtime');
+assert.equal(tsconfig.includes('pages/api'), false, 'tsconfig should not retain deleted Next/Vercel page API references');
 
 const rootFiles = readdirSync('.', { withFileTypes: true }).map(entry => entry.name);
 assert.equal(rootFiles.includes('vercel.json'), false, 'root should not contain legacy platform deployment config');

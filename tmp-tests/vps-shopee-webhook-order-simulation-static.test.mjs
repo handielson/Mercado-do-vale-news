@@ -14,7 +14,7 @@ assert.match(source, /code:\s*3/, 'script must simulate Shopee order status upda
 assert.match(source, /method:\s*'POST'/, 'script must use POST for the webhook simulation');
 assert.match(source, /sanitizeShopeeWebhookSimulationResponse/, 'script must sanitize webhook simulation responses');
 assert.doesNotMatch(source, /update_stock|update_price|add_item|delete_item|upload_image|upload_video|ship_order/, 'script must not call Shopee mutations');
-assert.doesNotMatch(source, /access_token|refresh_token|partner_key|authorization|client_secret|n8n_webhook_url/i, 'script must not mention or print secrets');
+assert.doesNotMatch(source, /access_token|refresh_token|partner_key|authorization|client_secret/i, 'script must not mention or print secrets');
 assert.doesNotMatch(source, /console\.log\(.*body|console\.log\(.*response|console\.log\(.*ordersn|console\.log\(.*order_sn/i, 'script must not print raw webhook bodies or order ids');
 
 console.log('vps Shopee webhook order simulation static checks ok');

@@ -6,6 +6,9 @@ import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { supabase } from '@/services/supabase';
 import { vpsApiService } from '@/services/vpsApiService';
+import { brandService } from '@/services/brands';
+import { categoryService } from '@/services/categories';
+import { modelService } from '@/services/models';
 import { customFieldsService, CustomField } from '@/services/custom-fields';
 import { ProductReviewsList } from './ProductReviewsList';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
@@ -194,17 +197,17 @@ export function ProductDetailsModal({
             try {
                 setLoadingTemplate(true);
 
-                const [{ data, error }, { data: versionsData }] = await Promise.all([
-                    supabase.from('models').select('template_values, description').eq('id', product.model_id).single(),
+                const [modelData, { data: versionsData }] = await Promise.all([
+                    modelService.getById(product.model_id),
                     supabase.from('versions').select('id, name')
                 ]);
 
                 if (cancelled) return;
 
-                if (!error && data) {
-                    if (data.template_values) setTemplateValues(data.template_values);
+                if (modelData) {
+                    if (modelData.template_values) setTemplateValues(modelData.template_values);
                     else setTemplateValues(null);
-                    setModelDescription(data.description || null);
+                    setModelDescription(modelData.description || null);
                 } else {
                     setTemplateValues(null);
                 }
@@ -246,12 +249,11 @@ export function ProductDetailsModal({
                 };
 
                 if (warrantyType === 'brand') {
-                    // Busca warranty_days da marca pelo nome (product.brand)
                     const brandName = p.brand;
                     if (brandName) {
-                        const { data } = await supabase
-                            .from('brands').select('warranty_days').eq('name', brandName).single();
-                        if (data?.warranty_days) setWarrantyDays(data.warranty_days);
+                        const brands = await brandService.listActive();
+                        const brand = brands.find((item) => item.name === brandName);
+                        if (brand?.warranty_days) setWarrantyDays(brand.warranty_days);
                     }
                 } else if (warrantyType === 'category') {
                     let categoryId = p.category_id;
@@ -259,9 +261,8 @@ export function ProductDetailsModal({
                         categoryId = (await getVpsProductDetails())?.category_id;
                     }
                     if (categoryId) {
-                        const { data } = await supabase
-                            .from('categories').select('warranty_days').eq('id', categoryId).single();
-                        if (data?.warranty_days) setWarrantyDays(data.warranty_days);
+                        const category = await categoryService.getById(categoryId);
+                        if (category?.warranty_days) setWarrantyDays(category.warranty_days);
                     }
                 } else if (warrantyType === 'custom') {
                     let templateId = p.warranty_template_id;

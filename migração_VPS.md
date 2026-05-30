@@ -21,6 +21,27 @@ A VPS deve ser tratada como o centro da aplicação:
 
 Tudo que não puder ir para a VPS deve ter justificativa clara e alternativa proposta.
 
+## 2026-05-28 - Historico de baixas no financeiro Bling
+
+Mudanca: adicionada a acao de leitura `get-bordero` em `/api/bling?resource=finance`, usando o endpoint oficial do Bling `/borderos/{id}`. A tela financeira passa a buscar os `borderos` associados ao detalhe da conta antes de imprimir comprovantes.
+
+Objetivo: preencher o Historico Detalhado do comprovante de Conta a Pagar/Receber com as baixas/pagamentos reais, em vez de mostrar apenas o `historico` curto da conta.
+
+Escopo e seguranca:
+
+- somente leitura, sem criacao, baixa, cancelamento ou atualizacao de contas;
+- reutiliza a autenticacao existente do recurso financeiro;
+- nao altera webhooks, `reconcile` ou `sync-prices-vps`;
+- respostas de validacao continuam sanitizadas, sem imprimir nomes, documentos, valores brutos, tokens ou corpos completos.
+
+Validacao:
+
+- `node tmp-tests/finance-receipt-print-static.test.mjs`
+- `node tmp-tests/vps-bling-finance-fastify-static.test.mjs`
+- `node tmp-tests/vps-bling-finance-live-read-check-static.test.mjs`
+- `node tmp-tests/vps-bling-finance-live-read-check.cjs`: OK, incluindo `receber_bordero_get` e `pagar_bordero_get`.
+- `npm.cmd run deploy:vps-site`: OK, release `/var/www/mdv-site/releases/20260528-064351`.
+
 ## Regra 1 - VPS Primeiro
 
 Antes de escolher qualquer serviço externo, perguntar:
@@ -659,7 +680,7 @@ Esta seção deve ser alimentada ao longo da migração.
 | `/api/shopee` | Vercel Function | VPS Fastify | vps-staging-validado-http | oauth/api | Shopee assinatura | `node tmp-tests/vps-shopee-oauth-fastify-static.test.mjs`; `node tmp-tests/vps-oauth-preflight-check-static.test.mjs`; `OAUTH_PREFLIGHT_LIVE=true node tmp-tests/vps-oauth-preflight-check.cjs`; `curl /api/shopee?action=callback` sem parâmetros; `curl /api/shopee` sem action | OAuth `auth`/`callback` migrado; preflight sanitizado validou URL Shopee; falta reconexão real com código Shopee válido antes de atualizar callback definitivo |
 | `/api/shopee-catalog` | Vercel Function | VPS Fastify | vps-staging-validado-http | api | admin | `node tmp-tests/vps-shopee-catalog-read-fastify-static.test.mjs`; `node tmp-tests/vps-shopee-catalog-mutations-fastify-static.test.mjs`; `node tmp-tests/vps-shopee-catalog-media-full-fastify-static.test.mjs`; `node tmp-tests/vps-shopee-add-item-media-guarded-check-static.test.mjs`; `node tmp-tests/vps-shopee-add-item-media-guarded-check.cjs`; `curl /api/shopee-catalog?action=attributes`; `curl /api/shopee-catalog?action=search_attribute_values`; `curl /api/shopee-catalog?action=get_item_base_info`; `curl GET /api/shopee-catalog?action=update_stock`; `curl GET /api/shopee-catalog?action=upload_image`; `curl GET /api/shopee-catalog?action=upload_video` | ações de leitura, mutações diretas, upload de imagem/vídeo e `get_full_catalog` migrados; guard de upload de mídia preparado sem execução real; falta validação real controlada antes do corte final |
 | `/api/shopee-actions` | Vercel Function | VPS Fastify | vps-staging-validado-http | api | admin | `node tmp-tests/vps-shopee-actions-read-fastify-static.test.mjs`; `node tmp-tests/vps-shopee-actions-refresh-fastify-static.test.mjs`; `node tmp-tests/vps-shopee-actions-mutations-fastify-static.test.mjs`; `node tmp-tests/vps-shopee-actions-add-item-fastify-static.test.mjs`; `node tmp-tests/vps-shopee-mutation-guarded-check-static.test.mjs`; `node tmp-tests/vps-shopee-mutation-guarded-check.cjs`; `node tmp-tests/vps-shopee-ship-order-guarded-check-static.test.mjs`; `node tmp-tests/vps-shopee-ship-order-guarded-check.cjs`; `node tmp-tests/vps-shopee-add-item-media-guarded-check-static.test.mjs`; `node tmp-tests/vps-shopee-add-item-media-guarded-check.cjs`; `curl /api/shopee-actions`; `curl /api/shopee-actions?action=get_order_detail`; `curl /api/shopee-actions?action=get_tracking_info`; `curl GET /api/shopee-actions?action=update_stock&product_id=test&stock=1`; `curl GET /api/shopee-actions?action=ship_order&order_sn=TEST`; `curl GET /api/shopee-actions?action=add_item&product_id=test` | ações de leitura, `refresh_token`, `ship_order`, `update_stock`, `update_price` e `add_item` migrados; guards de escrita preparados sem execução real; falta validação real controlada antes do corte final |
-| `/api/shopee-webhook` | Vercel Function | VPS Fastify | vps-staging-validado-http | webhook | assinatura Shopee | `node tmp-tests/vps-shopee-webhook-fastify-static.test.mjs`; `node tmp-tests/vps-shopee-webhook-order-simulation-static.test.mjs`; `node --check tmp-tests/vps-shopee-webhook-order-simulation.cjs`; `node tmp-tests/vps-shopee-webhook-order-simulation.cjs`; `curl GET /api/shopee-webhook`; `curl POST /api/shopee-webhook {}` | handler deployado; POST vazio retorna sucesso sem acionar n8n; guard de payload `code=3` preparado e validado sem envio; falta payload real/simulado de pedido em janela controlada |
+| `/api/shopee-webhook` | Vercel Function | VPS Fastify | vps-staging-validado-http | webhook | assinatura Shopee | `node tmp-tests/vps-shopee-webhook-fastify-static.test.mjs`; `node tmp-tests/vps-shopee-webhook-order-simulation-static.test.mjs`; `node --check tmp-tests/vps-shopee-webhook-order-simulation.cjs`; `node tmp-tests/vps-shopee-webhook-order-simulation.cjs`; `curl GET /api/shopee-webhook`; `curl POST /api/shopee-webhook {}` | handler deployado; POST vazio retorna sucesso sem relay externo; guard de payload `code=3` preparado e validado sem envio; falta payload real/simulado de pedido em janela controlada |
 | `/api/shipping` | Vercel Function | VPS Fastify | vps-staging-validado-http | api | admin/public conforme uso | `node tmp-tests/vps-shipping-fastify-static.test.mjs`; `node tmp-tests/vps-shipping-quote-guarded-simulation-static.test.mjs`; `node --check tmp-tests/vps-shipping-quote-guarded-simulation.cjs`; `node tmp-tests/vps-shipping-quote-guarded-simulation.cjs`; `node tmp-tests/vps-melhor-envio-label-guarded-simulation-static.test.mjs`; `node --check tmp-tests/vps-melhor-envio-label-guarded-simulation.cjs`; `node tmp-tests/vps-melhor-envio-label-guarded-simulation.cjs`; `node --check vps_server.js`; `node --check vps_server.cjs`; `curl POST /api/shipping?provider=frenet&action=calculate`; `curl POST /api/shipping?provider=melhor-envio&action=calculate` sem token | rota compatível deployada no staging para Frenet e Melhor Envio; guards de cotacao e etiqueta preparados e validados sem envio; validação real com token/pedido fica para regressão controlada |
 | `/api/telegram-webhook` | Vercel Function | VPS Fastify | vps-staging-validado-http | webhook | `TELEGRAM_WEBHOOK_SECRET` configurado na VPS | `node tmp-tests/vps-telegram-webhook-fastify-static.test.mjs`; `node tmp-tests/vps-telegram-set-webhook-static.test.mjs`; `node tmp-tests/vps-telegram-webhook-ping-static.test.mjs`; `node tmp-tests/vps-telegram-webhook-command-static.test.mjs`; `curl GET /api/telegram-webhook`; `curl POST {}`; `curl POST payload /ping sem segredo`; `node tmp-tests/vps-telegram-set-webhook.cjs`; `node tmp-tests/vps-telegram-webhook-ping.cjs`; `node tmp-tests/vps-telegram-webhook-command.cjs /vendas`; `node tmp-tests/vps-telegram-webhook-command.cjs /estoque`; `node tmp-tests/vps-telegram-webhook-command.cjs /relatorio`; `node tmp-tests/vps-telegram-webhook-command.cjs /top10`; `node tmp-tests/vps-telegram-webhook-command.cjs /pedidos`; `node tmp-tests/vps-telegram-webhook-command.cjs /clientes`; `node tmp-tests/vps-telegram-webhook-command.cjs "/modelo iphone"`; `node tmp-tests/vps-telegram-webhook-command.cjs "/categoria celulares"` | handler Fastify publicado; comandos migrados; webhook real do Telegram aponta para `api.xiaomipetrolina.com.br`; comandos principais reais controlados validados via chat configurado |
 | `/api/cron-dispatcher` | Vercel Cron/Function | VPS cron + Fastify/script | vps-staging-validado-http | cron | `CRON_SECRET` configurado na VPS | `node tmp-tests/vps-cron-dispatcher-fastify-static.test.mjs`; `node tmp-tests/vps-migration-secrets-set-static.test.mjs`; `node tmp-tests/vps-cron-dispatcher-install-static.test.mjs`; `curl /api/cron-dispatcher` sem segredo; `crontab -l` | handler Fastify publicado; chamada pública sem segredo retorna `401`; cron instalado na VPS em `0 22 * * *`; entradas antigas para `www.mercadodovale.com.br/api/cron-dispatcher` removidas |
@@ -694,6 +715,21 @@ Concluído em leitura real pela VPS:
 - Limpeza de Vercel no app: textos e comentarios operacionais que ainda orientavam uso de Vercel foram atualizados para VPS; o teste de NCM agora valida o proxy Fastify e confirma ausencia de `vercel.json`/`api`.
 - Corte externo read-only: verificador versionado cobre GET de webhooks Bling/Mercado Pago/Shopee e callbacks OAuth sem codigo real; guard principal subiu para `30` checks sem executar payload nem mutacao.
 - Plano de conferencia dos paineis externos: auditor de readiness agora imprime as URLs esperadas para Bling, Shopee e Mercado Pago, marcando a etapa como `manual_panel_read_only` porque os provedores documentam essa configuracao no painel do aplicativo, nao como leitura automatica segura.
+- Checklist seguro read-only: revalidado em 2026-05-29 com `30` checks, `failed=0`, `mutation_executed=false`; auditor Vercel sem blockers; inventario Supabase em `.from=478`, `.rpc=29`, `storage=13`, com `0` dependencias operacionais nao classificadas; SEO publico `www` com sitemap `200`, `1843` URLs e `1840` produtos.
+- Checkpoint de consolidacao read-only: revalidado em 2026-05-30 antes de novos cortes; `node tmp-tests\vps-migration-guard-regression.cjs` retornou `checked=30`, `failed=0`, `mutation_executed=false`; `node tools\audit-supabase-operational-dependencies.mjs` retornou `.from=446`, `.rpc=29`, `storage=13`, `unclassifiedOperationalMatches=0`; `npm.cmd run build` passou fora do sandbox; `node tools\audit-legacy-deploy-removal-readiness.mjs` retornou `ready_to_remove_legacy_deploy=true` e `blockers=[]`; probes read-only de webhooks/callbacks em `https://www.mercadodovale.com.br` passaram; SEO publico `www` retornou sitemap `200`, `1843` URLs e `1840` produtos.
+- Paineis externos: conferencia visual/read-only confirmada pelo usuario em 2026-05-30 para Bling, Shopee e Mercado Pago contra as URLs finais `www.mercadodovale.com.br`, sem registrar criacao ou salvamento de configuracao durante este checkpoint.
+- Banners: CRUD do `bannerService`, telemetria `click`/`view` e reordenacao `display_order` migrados para endpoints da VPS.
+- Garantia no detalhe de produto: `ProductDetailsModal` deixou de consultar `brands` e `categories` diretamente no Supabase para dias de garantia, usando `brandService`/`categoryService` pela VPS.
+- Validação de SKU serializado: `services/products.ts` deixou de consultar `categories` diretamente no Supabase para detectar categorias serializadas, usando `categoryService.getById()` pela VPS.
+- Preço médio por variação: `averagePriceService` já lia produtos pela VPS e agora também propaga os preços médios por `vpsApiService.updateProduct()`, sem escrita direta em `products` no Supabase.
+- Template do modelo no detalhe de produto: `ProductDetailsModal` deixou de consultar `models` diretamente no Supabase para `template_values` e descricao herdada, usando `modelService.getById()` pela VPS.
+- Template do modelo na comparacao: `CompareModal` deixou de consultar `models` diretamente no Supabase para `template_values`, usando `modelService.getById()` pela VPS.
+- Template do modelo na PDP publica: `PublicProductPage` deixou de consultar `models` diretamente no Supabase para `template_values`, descricao herdada e marca de fallback, usando `modelService.getById()` pela VPS.
+- Dimensoes de modelo no frete: `FreightCalculator` deixou de consultar `models` diretamente no Supabase para `template_values`, usando `modelService.getById()` pela VPS; auditor Supabase travado em `.from=447`, `.rpc=29`, `storage=13`.
+- Nome do modelo no servico de produtos: `productService.getById` deixou de consultar `models` diretamente no Supabase para enriquecer `product.model`, usando `modelService.getById()` pela VPS; auditor Supabase travado em `.from=446`, `.rpc=29`, `storage=13`.
+- Modelo em criacao/edicao de produtos: `productService.create` e `productService.update` deixaram de consultar `models` diretamente no Supabase para `template_values`, categoria e marca, usando `modelService.getById()` pela VPS e `brandService.getById()` como fallback de nome; auditor Supabase travado em `.from=444`, `.rpc=29`, `storage=13`.
+- Configuracao de frete: `shippingService` deixou de usar Supabase para `shipping_settings`, `shipping_zones` e `shipping_price_ranges`; settings, zonas e faixas agora passam pelos endpoints VPS, incluindo CRUD de `/shipping/price-ranges`; auditor Supabase travado em `.from=433`, `.rpc=29`, `storage=13`.
+- Configuracoes da empresa: `companySettingsService` deixou de manter fallback Supabase para `company_settings`; leitura e escrita agora sao VPS-only via `/company-settings`, preservando cache local e defaults de templates; auditor Supabase travado em `.from=430`, `.rpc=29`, `storage=13`.
 
 Pendente para corte final:
 
@@ -706,12 +742,597 @@ Pendente para corte final:
 - Shipping: cotação Frenet/Melhor Envio e etiqueta Melhor Envio com pedido de teste.
 - SEO: config Nginx de produção reinstalada na VPS; `mercadodovale.com.br` redireciona para `https://www.mercadodovale.com.br`, `www` serve `/sitemap.xml` com `1844` URLs e `1841` produtos únicos por slug; falta validar login/admin real no browser.
 - API/catalogo: `/products/by-ids` criado no Fastify da VPS e validado direto em `api.xiaomipetrolina.com.br` e via `/api/vps-proxy`, retornando `200` e preservando a ordem dos IDs enviados.
-- Operação: cron da Vercel removido do `vercel.json`; callbacks e webhooks externos restantes devem ser conferidos visualmente nos paineis oficiais, sem salvar/criar nada, contra estas URLs:
-  - Bling: `https://www.mercadodovale.com.br/api/auth/callback/bling` e `https://www.mercadodovale.com.br/api/bling-webhook`.
-  - Shopee: `https://www.mercadodovale.com.br/api/shopee?action=callback` e `https://www.mercadodovale.com.br/api/shopee-webhook`.
-  - Mercado Pago: `https://www.mercadodovale.com.br/api/mercadopago-webhook`.
+- Operacao: cron da Vercel removido do `vercel.json`; conferencia visual/read-only dos paineis Bling, Shopee e Mercado Pago marcada como concluida em 2026-05-30 por confirmacao do usuario.
 
 ## Registro de Mudanças
+
+### 2026-05-30 - companySettingsService via VPS-only
+
+Mudanca: `companySettingsService` deixou de importar Supabase e de manter branch fallback para `company_settings`. A leitura usa `vpsClient.get('/company-settings')` e a escrita usa `vpsClient.patch('/company-settings')`; o cache em memoria/localStorage foi preservado e a normalizacao de endereco/templates padrao passou a ser aplicada sobre a resposta da VPS.
+
+Objetivo: remover o Supabase do caminho operacional central de configuracoes da empresa, que alimenta recibos, documentos, PDV, garantias e paineis administrativos.
+
+Arquivos alterados:
+
+- `services/companySettingsService.ts`
+- `tmp-tests/company-settings-service-vps-only-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\company-settings-service-vps-only-static.test.mjs` falhou enquanto `companySettingsService` ainda importava Supabase.
+- GREEN: `node tmp-tests\company-settings-service-vps-only-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 430`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `checked=30`, `failed=0`, `mutation_executed=false`.
+- `npm.cmd run build`: OK fora do sandbox; a primeira tentativa no sandbox falhou por `Access is denied` do Vite/esbuild ao carregar `vite.config.ts`.
+
+Resultado: tres chamadas `.from('company_settings')` foram removidas do servico central de configuracoes da empresa, reduzindo o baseline do auditor de `433` para `430`.
+
+Pendencias:
+
+- migrar os acessos diretos restantes a `company_settings` em telas/servicos especificos de Bling, Shopee, feedback e utilitarios.
+
+Rollback: restaurar o branch Supabase de `companySettingsService` e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `433`; nao recomendado porque reintroduz dependencia Supabase em configuracoes centrais.
+
+### 2026-05-30 - Configuracao de frete via VPS
+
+Mudanca: `shippingService` deixou de importar Supabase e de consultar/escrever diretamente `shipping_settings`, `shipping_zones` e `shipping_price_ranges`. As operacoes de settings, zonas e faixas de preco agora usam `vpsApiService`; o Fastify da VPS passou a expor CRUD para `/shipping/price-ranges` e a retornar `price_ranges` de `/shipping/zones` com o contrato atual por `min_km`/`max_km`.
+
+Objetivo: remover o Supabase do caminho operacional de configuracao de frete, mantendo a VPS/MySQL como fonte principal para regras locais de entrega.
+
+Arquivos alterados:
+
+- `services/shippingService.ts`
+- `services/vpsApiService.ts`
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/shipping-service-vps-only-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\shipping-service-vps-only-static.test.mjs` falhou enquanto `shippingService` ainda importava Supabase.
+- GREEN: `node tmp-tests\shipping-service-vps-only-static.test.mjs`: OK.
+- `node --check vps_server.js`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node tmp-tests\vps-shipping-fastify-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 433`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `checked=30`, `failed=0`, `mutation_executed=false`.
+- `npm.cmd run build`: OK fora do sandbox; a primeira tentativa no sandbox falhou por `Access is denied` do Vite/esbuild ao carregar `vite.config.ts`.
+
+Resultado: onze chamadas `.from(...)` de frete sairam do inventario operacional Supabase, reduzindo o baseline de `444` para `433`.
+
+Pendencias:
+
+- validar em janela controlada um fluxo administrativo real de criar/editar/remover zona/faixa de frete na VPS;
+- manter a validacao real de cotacao Frenet/Melhor Envio e etiqueta Melhor Envio como etapa separada do checklist.
+
+Rollback: restaurar o fallback Supabase de `shippingService` e remover temporariamente as rotas `/shipping/price-ranges`; nao recomendado porque reintroduz Supabase no CRUD de configuracao de frete.
+
+### 2026-05-30 - Modelo em productService.create/update via VPS
+
+Mudanca: `productService.create` e `productService.update` deixaram de consultar `models` diretamente no Supabase para buscar `template_values`, categoria, dimensoes, peso e marca do modelo. A leitura agora usa `modelService.getById()` pela VPS; quando a resposta da VPS nao traz o nome da marca embutido, `brandService.getById()` resolve o nome pela rota atual de marcas na VPS.
+
+Objetivo: remover duas dependencias operacionais Supabase do fluxo central de cadastro/edicao de produtos, mantendo VPS/MySQL como fonte principal para dados de modelo.
+
+Arquivos alterados:
+
+- `services/products.ts`
+- `tmp-tests/product-service-model-write-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Rotas afetadas:
+
+- `GET /models/:id`, via `modelService.getById()`.
+- `GET /brands`, via `brandService.getById()` quando a marca nao vem embutida no modelo.
+- `POST /products` e `PUT/PATCH /products/:id`, via `vpsApiService`.
+
+Validacao:
+
+- RED: `node tmp-tests\product-service-model-write-vps-static.test.mjs` falhou enquanto `productService.create` ainda lia `supabase.from('models')`.
+- GREEN: `node tmp-tests\product-service-model-write-vps-static.test.mjs`: OK.
+- `node tmp-tests\product-service-getbyid-model-name-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: OK, `.from(...) = 444`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: duas leituras diretas Supabase em `models` foram removidas de `services/products.ts`, e o baseline do auditor foi reduzido de `446` para `444`.
+
+Pendencias:
+
+- migrar leituras/escritas restantes de `products`, `models` e `shopee_products` em `blingService`, `dataSyncService`, `ShopeePage`, SEO e banco de imagens;
+- avaliar expor `brand_name` diretamente em `GET /models/:id` para evitar a chamada adicional de fallback em telas de alto volume.
+
+Rollback: restaurar as consultas diretas a `supabase.from('models')` em `create`/`update` e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `446`; nao recomendado porque reintroduz dependencia Supabase no cadastro de produtos.
+
+### 2026-05-29 - Nome do modelo em productService.getById via VPS
+
+Mudanca: `productService.getById` deixou de consultar `models` diretamente no Supabase para preencher o nome do modelo quando o produto vindo da VPS nao possui `model`. A leitura agora usa `modelService.getById()` pela VPS.
+
+Objetivo: remover mais uma dependencia operacional Supabase do servico central de produtos, mantendo a VPS/MySQL como origem para produto e enriquecimento de modelo.
+
+Arquivos alterados:
+
+- `services/products.ts`
+- `tmp-tests/product-service-getbyid-model-name-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `GET /products/:id`, via `vpsApiService.getProductById()`.
+- `GET /models/:id`, via `modelService.getById()`.
+
+Validacao:
+
+- `node tmp-tests\product-service-getbyid-model-name-vps-static.test.mjs`: primeiro falhou por falta de `modelService`; depois passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: primeiro falhou com baseline `.from=447`; depois passou com `.from=446`.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 446`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: uma leitura direta Supabase em `models` foi removida de `productService.getById` e o baseline do auditor foi reduzido de `447` para `446`.
+
+Pendencias:
+
+- migrar as leituras restantes de `models` em `services/products.ts` nos fluxos de criacao/atualizacao, `blingService`, `dataSyncService` e utilitarios legados;
+- avaliar reaproveitamento de dados de modelo ja retornados pela VPS para reduzir chamadas adicionais em telas de alto volume.
+
+Rollback: restaurar a consulta direta a `supabase.from('models')` no `productService.getById` e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `447`; nao recomendado como estado final.
+
+### 2026-05-29 - Dimensoes de modelo no frete via VPS
+
+Mudanca: `FreightCalculator` deixou de consultar `models` diretamente no Supabase para carregar `template_values` com peso e dimensoes usadas no calculo de frete. A leitura agora usa `modelService.getById()` pela VPS.
+
+Objetivo: remover mais uma dependencia operacional Supabase do fluxo de frete, mantendo VPS/MySQL como fonte principal de produto, preco e dimensoes herdadas do modelo.
+
+Arquivos alterados:
+
+- `components/shipping/FreightCalculator.tsx`
+- `tmp-tests/freight-calculator-model-dimensions-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `GET /models/:id`, via `modelService.getById()`.
+
+Validacao:
+
+- `node tmp-tests\freight-calculator-model-dimensions-vps-static.test.mjs`: primeiro falhou por falta de `modelService`; depois passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: primeiro falhou com baseline `.from=448`; depois passou com `.from=447`.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 447`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: uma leitura direta Supabase em `models` foi removida do calculador de frete e o baseline do auditor foi reduzido de `448` para `447`.
+
+Pendencias:
+
+- migrar as leituras restantes de `models` em `services/products.ts`, `blingService`, `dataSyncService` e utilitarios legados;
+- avaliar otimizacao futura para buscar modelos em lote pela VPS caso o frete carregue muitos produtos.
+
+Rollback: restaurar a consulta direta a `supabase.from('models')` no `FreightCalculator` e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `448`; nao recomendado como estado final.
+
+### 2026-05-29 - Template do modelo na PDP publica via VPS
+
+Mudanca: `PublicProductPage` deixou de consultar `models` diretamente no Supabase para carregar `template_values`, descricao herdada e marca de fallback. A leitura agora usa `modelService.getById()` pela VPS.
+
+Objetivo: remover mais uma dependencia operacional Supabase da PDP publica e manter a VPS/MySQL como fonte principal de dados de modelo.
+
+Arquivos alterados:
+
+- `pages/store/PublicProductPage.tsx`
+- `tmp-tests/pdp-memory-specs-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `GET /models/:id`, via `modelService.getById()`.
+
+Validacao:
+
+- `node tmp-tests\pdp-memory-specs-static.test.mjs`: primeiro falhou por falta de `modelService`; depois passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: primeiro falhou com baseline `.from=449`; depois passou com `.from=448`.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 448`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: uma leitura direta Supabase em `models` foi removida da PDP publica e o baseline do auditor foi reduzido de `449` para `448`.
+
+Pendencias:
+
+- migrar as leituras restantes de `models` em frete e servicos de produto/Bling/dataSync;
+- validar se a resposta VPS de `GET /models/:id` deve expor formalmente `brand`/`brand_name` no tipo `Model`, ou se a marca deve sempre vir do produto.
+
+Rollback: restaurar a consulta direta a `supabase.from('models')` no `PublicProductPage` e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `449`; nao recomendado como estado final.
+
+### 2026-05-29 - Template do modelo na comparacao via VPS
+
+Mudanca: `CompareModal` deixou de consultar `models` diretamente no Supabase para carregar `template_values` dos produtos comparados. A leitura agora usa `modelService.getById()` pela VPS.
+
+Objetivo: reduzir mais uma dependencia operacional Supabase no catalogo publico/admin e manter a VPS/MySQL como fonte principal de dados de modelo.
+
+Arquivos alterados:
+
+- `components/catalog/CompareModal.tsx`
+- `tmp-tests/compare-modal-model-template-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `GET /models/:id`, via `modelService.getById()`.
+
+Validacao:
+
+- `node tmp-tests\compare-modal-model-template-vps-static.test.mjs`: primeiro falhou por falta de `modelService`; depois passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: primeiro falhou com baseline `.from=450`; depois passou com `.from=449`.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 449`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: uma leitura direta Supabase em `models` foi removida do comparador e o baseline do auditor foi reduzido de `450` para `449`.
+
+Pendencias:
+
+- migrar as leituras restantes de `models` em PDP publica, frete e servicos de produto/Bling;
+- avaliar a leitura de `versions` do comparador em bloco separado, porque ainda pertence ao grupo de versionamento temporario.
+
+Rollback: restaurar a consulta direta a `supabase.from('models')` no `CompareModal` e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `450`; nao recomendado como estado final.
+
+### 2026-05-29 - Template do modelo no detalhe via VPS
+
+Mudanca: `ProductDetailsModal` deixou de consultar `models` diretamente no Supabase para carregar `template_values` e descricao herdada do modelo. A leitura agora usa `modelService.getById()` pela VPS.
+
+Objetivo: reduzir mais uma dependencia operacional Supabase no catalogo publico/admin, mantendo a VPS/MySQL como fonte principal de dados de modelo.
+
+Arquivos alterados:
+
+- `components/catalog/ProductDetailsModal.tsx`
+- `tmp-tests/product-details-modal-warranty-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `GET /models/:id`, via `modelService.getById()`.
+
+Validacao:
+
+- `node tmp-tests\product-details-modal-warranty-vps-static.test.mjs`: primeiro falhou por falta de `modelService`; depois passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: primeiro falhou com baseline `.from=451`; depois passou com `.from=450`.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 450`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: uma leitura direta Supabase em `models` foi removida do modal e o baseline do auditor foi reduzido de `451` para `450`.
+
+Pendencias:
+
+- migrar as leituras restantes de `models` em comparacao, PDP publica, frete e servicos de produto/Bling;
+- avaliar a leitura de `versions` do proprio modal em bloco separado, porque ainda pertence ao grupo de versionamento temporario.
+
+Rollback: restaurar a consulta direta a `supabase.from('models')` no `ProductDetailsModal` e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `451`; nao recomendado como estado final.
+
+### 2026-05-29 - Propagacao de preco medio via VPS
+
+Mudanca: `averagePriceService.updateAveragePrices()` deixou de escrever diretamente em `products` no Supabase para propagar preco medio por variacao. A leitura de produtos da variacao ja era pela VPS; agora a escrita tambem usa `vpsApiService.updateProduct()` para cada produto afetado.
+
+Objetivo: remover mais uma dependencia operacional Supabase do modulo de produto, mantendo a VPS/MySQL como fonte principal de preco/estoque.
+
+Arquivos alterados:
+
+- `services/averagePriceService.ts`
+- `tmp-tests/order-average-vps-products-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `PUT /products/:id`, via `vpsApiService.updateProduct()`.
+
+Validacao:
+
+- `node tmp-tests\order-average-vps-products-static.test.mjs`: primeiro falhou por ainda haver `supabase.from('products')`; depois passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 451`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: a escrita de preco medio saiu do Supabase e o baseline do auditor foi reduzido de `452` para `451`.
+
+Pendencias:
+
+- validar em janela controlada um cadastro de produto novo com variacao para confirmar a propagacao real pela VPS;
+- continuar migrando escritas restantes em `products` nos fluxos de planilha, imagem, SEO e Bling.
+
+Rollback: restaurar a escrita direta em `supabase.from('products')` no `averagePriceService` e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `452`; nao recomendado como estado final.
+
+### 2026-05-29 - Categoria serializada do produto via VPS
+
+Mudanca: `services/products.ts` deixou de consultar `categories` diretamente no Supabase durante `create` e `update` para decidir se uma categoria permite SKUs repetidos por produto serializado. A regra foi centralizada em `isSerializedProductCategory()` e agora usa `categoryService.getById()` pela VPS.
+
+Objetivo: reduzir dependencias operacionais Supabase no servico de produtos sem mudar a regra de negocio de categorias serializadas (`CELULAR`, `SMARTPHONE`, `TABLET`, `RECEPTOR`).
+
+Arquivos alterados:
+
+- `services/products.ts`
+- `tmp-tests/product-service-serialized-category-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- nenhuma rota nova; impacto indireto em criacao/atualizacao de produto ao validar conflito de SKU.
+
+Validacao:
+
+- `node tmp-tests\product-service-serialized-category-vps-static.test.mjs`: primeiro falhou por falta de `categoryService`; depois passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 452`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: duas leituras diretas Supabase em `categories` foram removidas de `services/products.ts`, e o baseline do auditor foi reduzido de `454` para `452`.
+
+Pendencias:
+
+- migrar leituras restantes de `models` usadas para enriquecer produto no create/update;
+- continuar cortes de `brands`, `categories`, `models` e `products` nos fluxos Bling/produtos.
+
+Rollback: restaurar as consultas diretas a `categories` no servico de produtos e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `454`; nao recomendado como estado final.
+
+### 2026-05-29 - Garantia do modal de produto via VPS
+
+Mudanca: `ProductDetailsModal` deixou de consultar `brands` e `categories` diretamente no Supabase para resolver dias de garantia por marca ou categoria, usando `brandService.listActive()` e `categoryService.getById()` como fontes VPS.
+
+Objetivo: reduzir dependencias operacionais Supabase no catalogo publico/admin e manter a VPS como fonte principal de taxonomia de produto.
+
+Arquivos alterados:
+
+- `components/catalog/ProductDetailsModal.tsx`
+- `tmp-tests/product-details-modal-warranty-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- nenhuma rota nova; impacto no modal de detalhe de produto ao calcular garantia por marca/categoria.
+
+Validacao:
+
+- `node tmp-tests\product-details-modal-warranty-vps-static.test.mjs`: primeiro falhou por falta de `brandService`/`categoryService`; depois passou.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: passou.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 454`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: duas leituras diretas Supabase foram removidas do modal e o baseline do auditor foi reduzido de `456` para `454`.
+
+Pendencias:
+
+- migrar a garantia por template customizado (`warranty_templates`) para VPS em bloco separado;
+- continuar cortes de `brands`, `categories`, `models` e `products` nos servicos de produto/Bling.
+
+Rollback: restaurar as leituras diretas de `brands`/`categories` no modal e voltar temporariamente `MAX_BASELINE_FROM_CALLS` para `456`; nao recomendado como estado final.
+
+### 2026-05-29 - Remocao de automacao externa do projeto
+
+Mudanca: removido do projeto o relay externo do webhook Shopee, os artefatos soltos de bot/fluxo e a view SQL dedicada a esse caminho. Tambem foi adicionado um guard global para impedir retorno dessas referencias no codigo, testes e documentacao ativa.
+
+Objetivo: alinhar o projeto com a regra de manter a migracao concentrada em VPS/Synology e excluir dependencias de automacao externa que nao fazem mais parte do alvo operacional.
+
+Arquivos alterados/removidos:
+
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/vps-shopee-webhook-fastify-static.test.mjs`
+- `tmp-tests/vps-shopee-webhook-order-simulation-static.test.mjs`
+- `tmp-tests/forbidden-automation-static.test.mjs`
+- `supabase/create_ai_catalog_view.sql`
+- `whatsapp-ai-bot-guide.md`
+- `whatsapp-sales-agent.json`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `POST /api/shopee-webhook`
+
+Validacao:
+
+- RED: `node tmp-tests\forbidden-automation-static.test.mjs` falhou listando as referencias restantes no runtime, testes, SQL, docs e diario.
+- GREEN: `node tmp-tests\forbidden-automation-static.test.mjs`: OK.
+
+Resultado: o webhook Shopee continua respondendo `{ "message": "success" }` para evitar retries, mas nao tenta mais buscar URL externa nem encaminhar evento de pedido para ferramenta fora da VPS. Os artefatos soltos foram removidos do repositorio ativo.
+
+Rollback: restaurar o relay externo, os tres artefatos removidos e retirar o guard global; nao recomendado porque contraria a regra atual da migracao.
+
+Proximo passo: seguir removendo dependencias operacionais Supabase por modulo ou migrar o editor legado de catalogo.
+
+### 2026-05-29 - Editor legado de catalogo aposentado
+
+Mudanca: removida a rota `/admin/catalog-editor`, o servico `catalogEditorService.ts` e o componente `BannerEditor.tsx`, que mantinham fluxo draft/publicacao direto em `catalog_banners` e `catalog_settings` no Supabase. O atalho em Configuracoes do Catalogo agora abre `/admin/settings/banners`, que usa o fluxo atual de banners pela VPS.
+
+Objetivo: eliminar o caminho legado em vez de criar contrato novo de draft/publicacao, reduzindo dependencias operacionais Supabase e evitando divergencia entre Supabase e MySQL/VPS.
+
+Arquivos alterados:
+
+- `routes/index.tsx`
+- `pages/admin/settings/CatalogSettingsPage.tsx`
+- `services/catalogEditorService.ts`
+- `pages/admin/catalog-editor.tsx`
+- `components/admin/BannerEditor.tsx`
+- `tmp-tests/catalog-editor-legacy-retirement-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\catalog-editor-legacy-retirement-static.test.mjs` falhou enquanto o servico legado ainda existia.
+- RED: `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` falhou ao baixar o baseline `.from` para `456` antes do auditor ser ajustado.
+- GREEN: `node tmp-tests\catalog-editor-legacy-retirement-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: OK, `.from=456`, `.rpc=29`, `storage=13`, `unclassifiedOperationalMatches=0`.
+- `rg -n "catalog-editor|catalogEditorService|BannerEditor" routes pages components services -S`: OK, sem ocorrencias ativas.
+- `npm.cmd run build`: OK fora do sandbox; a primeira tentativa dentro do sandbox falhou por bloqueio de leitura do `vite.config.ts`.
+
+Resultado: o editor legado saiu do bundle ativo, o botao de edicao do catalogo agora aponta para a gestao de banners atual e o baseline operacional Supabase ficou 22 chamadas `.from(...)` menor.
+
+Rollback: restaurar a rota, o servico e o componente removidos; nao recomendado porque reintroduz escrita/leitura direta de draft/publicacao no Supabase.
+
+### 2026-05-29 - CRUD de banners sem fallback Supabase
+
+Mudanca: `bannerService.ts` deixou de manter fallback direto em `catalog_banners` e passou a usar somente a VPS para listar, buscar por ID, criar, atualizar, duplicar, excluir, reordenar e registrar telemetria de banners.
+
+Objetivo: continuar a reducao de dependencias Supabase no modulo de banners e corrigir o contrato da VPS antes de remover o fallback, garantindo que o backend responda o mesmo formato esperado pelo frontend.
+
+Arquivos alterados:
+
+- `services/bannerService.ts`
+- `vps_server.js`
+- `vps_server.cjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/banner-vps-crud-contract-static.test.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `GET /banners`
+- `GET /banners/:id`
+- `POST /banners`
+- `PATCH /banners/:id`
+- `DELETE /banners/:id`
+
+Validacao:
+
+- RED: `node tmp-tests\banner-vps-crud-contract-static.test.mjs` falhou enquanto a VPS nao expunha `GET /banners/:id` e ainda fazia PATCH destrutivo em campos ausentes.
+- RED: `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` falhou ao baixar o alvo `.from` para `478` antes do auditor ser ajustado.
+- GREEN: `node tmp-tests\banner-vps-crud-contract-static.test.mjs`: OK.
+- `node tmp-tests\banner-telemetry-vps-only-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: OK, `.from=478`, `.rpc=29`, `storage=13`, `unclassifiedOperationalMatches=0`; `catalog_banners` caiu de `18` para `12` ocorrencias.
+- `node --check vps_server.js`: OK.
+- `node --check vps_server.cjs`: OK.
+
+Resultado: a API de banners da VPS agora tem leitura por ID, retorna a linha salva em `POST`/`PATCH`, normaliza contadores `clicks_count`/`views_count`, e `PATCH /banners/:id` passou a ser parcial para nao apagar `title`, `image_url`, `active` ou datas quando o frontend envia apenas `display_order`. Nenhuma chamada real de escrita foi executada durante a mudanca.
+
+Rollback: restaurar os fallbacks Supabase em `bannerService.ts`, remover `GET /banners/:id`/PATCH parcial da VPS e voltar temporariamente o baseline `.from` para `484`; nao recomendado porque reintroduz risco de divergencia entre Supabase e MySQL.
+
+Proximo passo: continuar removendo dependencias operacionais Supabase por modulo.
+
+### 2026-05-29 - Banner telemetry e reordenacao somente pela VPS
+
+Mudanca: removido o fallback Supabase RPC da telemetria de banners (`click`/`view`), migrada a reordenacao `display_order` para `PATCH /banners/:id` na VPS e fixado o auditor Supabase nos novos baselines reduzidos.
+
+Objetivo: continuar a reducao de dependencias Supabase ja que `USE_VPS.banners=true` e os endpoints da VPS `/banners/:id/click`, `/banners/:id/view` e `PATCH /banners/:id` ja existem no Fastify.
+
+Arquivos alterados:
+
+- `services/bannerService.ts`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/banner-telemetry-vps-only-static.test.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `POST /banners/:id/click`
+- `POST /banners/:id/view`
+- `PATCH /banners/:id`
+
+Validacao:
+
+- RED: `node tmp-tests\banner-telemetry-vps-only-static.test.mjs` falhou enquanto `services/bannerService.ts` ainda continha `increment_banner_clicks`/`increment_banner_views`.
+- RED: `node tmp-tests\banner-telemetry-vps-only-static.test.mjs` falhou enquanto `reorderBanners` ainda escrevia em `supabase.from('catalog_banners')`.
+- RED: `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` falhou ao baixar o alvo `.from` para `484` antes do auditor ser ajustado.
+- GREEN: `node tmp-tests\banner-telemetry-vps-only-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: OK, `.from=484`, `.rpc=29`, `storage=13`, `unclassifiedOperationalMatches=0`.
+- `npm.cmd run build`: OK fora do sandbox; a primeira tentativa dentro do sandbox falhou por bloqueio de leitura do `vite.config.ts`.
+
+Resultado: a telemetria publica e a reordenacao de banners passam a usar somente VPS, e o baseline do auditor impede retorno dos dois RPCs Supabase removidos ou crescimento do `.from(...)`. Nenhuma chamada real de clique/view/reordenacao foi executada durante a mudanca.
+
+Pendencias:
+
+- O editor legado de catalogo ainda usa `catalog_banners` direto no Supabase e deve virar pacote separado, porque exige confirmar todos os contratos de publicacao/CRUD no backend VPS.
+
+Rollback: restaurar o fallback RPC/reorder Supabase em `bannerService.ts`, recolocar `increment_banner_clicks`/`increment_banner_views` na allowlist, subir o baseline RPC para `31` e o `.from` para `485`; nao recomendado salvo falha confirmada nos endpoints VPS de banner.
+
+Proximo passo: migrar publicacao/CRUD restante de banners para endpoints VPS ou continuar reduzindo Supabase em outro modulo pequeno.
+
+### 2026-05-29 - Rodada tecnica do checklist sem paineis externos
+
+Mudanca: reexecutada a parte tecnica segura do checklist de corte Vercel/VPS, sem abrir paineis externos e sem executar payloads reais ou escritas.
+
+Objetivo: continuar o checklist da migracao pela trilha automatizada/read-only, confirmando que os guardas continuam bloqueando mutacoes por padrao, que nao ha retorno de artefatos Vercel versionados e que producao publica segue respondendo pela VPS.
+
+Arquivos/infra alterados:
+
+- `migracao_VPS.md`
+
+Validacao:
+
+- `node tmp-tests\vps-migration-guard-regression.cjs`: OK, `checked=30`, `failed=0`, `mutation_executed=false`.
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+- `node tmp-tests\legacy-deploy-removal-readiness-static.test.mjs`: OK.
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `blockers=[]`, `legacy_config_present=false`, `legacy_api_files_count=0`, `legacy_crons_disabled=true`, `cors_allows_legacy_fallback=false`, `legacy_cron_user_agent_allowed=false`; DNS retornou `dns_timeout` no sandbox local.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: OK, `.from=485`, `.rpc=31`, `storage=13`, `unclassifiedOperationalMatches=0`.
+- Busca textual por `vercel`, `@vercel`, `pages/api`, host legado e comandos `npx vercel` fora de `node_modules`, `dist` e deste diario: sem ocorrencias operacionais.
+- `VPS_EXTERNAL_CUTOVER_LIVE=true node tmp-tests\vps-external-cutover-read-only-check.cjs`: OK; Bling webhook `200`, Mercado Pago webhook `200`, Shopee webhook GET `405`, Bling callback sem code `302`, Shopee callback sem parametros `400`.
+- `SEO_PRODUCTION_HOST_LIVE=true node tmp-tests\vps-seo-production-host-check.cjs`: OK; apex redireciona `301` para `www`, sitemap `200` com `1843` URLs e `1840` URLs de produto, produtos amostrados com canonical `www`, `og:type=product` e `2` JSON-LD.
+- `OAUTH_PREFLIGHT_LIVE=true node tmp-tests\vps-oauth-preflight-check.cjs`: OK; Bling callback sem code `302`, exchange Bling sem credenciais `400`, Shopee callback sem parametros `400`, URL de autorizacao Shopee com `auth_host=partner.shopeemobile.com` e `redirect_host=www.mercadodovale.com.br`.
+
+Resultado: a trilha tecnica do checklist continua verde e nao-mutante. O dominio publico responde pela Cloudflare + VPS nos endpoints seguros testados, o SEO publico segue consistente e a auditoria do repositorio nao encontrou retorno de dependencia operacional da Vercel. Nenhum recurso foi criado ou alterado na Vercel, Supabase, Bling, Shopee, Mercado Pago, VPS, Nginx, PM2 ou DNS.
+
+Pendencias:
+
+- paineis Bling/Shopee/Mercado Pago ainda precisam ser conferidos por sessao autenticada, sem salvar alteracoes;
+- escritas Bling/Shopee/shipping, payloads reais/simulados de webhooks e reconexao OAuth real continuam restritos a janela controlada com alvo e confirmacao explicitos.
+
+Rollback: remover esta entrada do diario; nao houve mudanca de runtime ou infraestrutura.
+
+Proximo passo: escolher uma janela controlada e um alvo explicito para o proximo item mutante do checklist, ou continuar reduzindo dependencias Supabase por modulo em pacote separado.
+
+### 2026-05-29 - Revalidacao read-only das rotas externas finais
+
+Mudanca: reexecutados os guards de remocao do deploy legado e a sonda HTTP read-only das rotas externas que precisam estar fora da Vercel.
+
+Objetivo: continuar a retirada da Vercel confirmando que o codigo versionado continua sem runtime/rotas serverless legadas e que as URLs finais da VPS respondem com contratos seguros antes da conferencia visual nos paineis oficiais.
+
+Arquivos/infra alterados:
+
+- `migracao_VPS.md`
+
+Rotas afetadas:
+
+- `GET /api/bling-webhook`
+- `GET /api/mercadopago-webhook`
+- `GET /api/shopee-webhook`
+- `GET /api/auth/callback/bling`
+- `GET /api/shopee?action=callback`
+
+Validacao:
+
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+- `node tmp-tests\legacy-deploy-removal-readiness-static.test.mjs`: OK.
+- `node tmp-tests\vps-external-cutover-read-only-check-static.test.mjs`: OK.
+- `node tmp-tests\vps-migration-guard-regression-static.test.mjs`: OK.
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `blockers=[]`, `legacy_config_present=false`, `legacy_api_files_count=0`; DNS retornou `dns_timeout` no sandbox local.
+- `node tmp-tests\vps-external-cutover-read-only-check.cjs`: OK em modo guard, `route_probe_sent=false`.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: OK, `checked=30`, `failed=0`, `mutation_executed=false`.
+- `VPS_EXTERNAL_CUTOVER_LIVE=true node tmp-tests\vps-external-cutover-read-only-check.cjs`: OK fora do sandbox; Bling webhook `200`, Mercado Pago webhook `200`, Shopee webhook GET `405`, Bling callback sem code `302`, Shopee callback sem parametros `400`.
+
+Resultado: as rotas externas finais responderam pela producao publica Cloudflare + VPS com os status esperados e nenhum payload real foi enviado. O repositorio continua sem `vercel.json`, sem `pages/api`, sem runtime `@vercel/node`, sem fallback CORS para host Vercel legado e sem autorizacao por `vercel-cron/1.0`.
+
+Pendencias:
+
+- conferir visualmente, em modo somente leitura, os paineis Bling, Shopee e Mercado Pago contra as URLs finais da VPS;
+- executar reconexao OAuth real e payloads reais/simulados apenas em janela controlada com confirmacao explicita.
+
+Rollback: remover esta entrada do diario; nao houve mudanca de runtime, DNS, Vercel, Supabase, VPS, Nginx ou PM2.
+
+Proximo passo: conferir os paineis oficiais somente com sessao/autorizacao explicita; enquanto isso, seguir pela trilha tecnica read-only ou por reducao de dependencias Supabase por modulo.
 
 ### 2026-05-29 - Trava read-only para paineis externos
 
@@ -748,6 +1369,63 @@ Pendencias:
 Rollback: remover a secao `external_panel_confirmation` do auditor e esta entrada do diario; nao ha mudanca de runtime.
 
 Proximo passo: conferencia visual dos paineis externos, sem salvar alteracoes, ou janela controlada para OAuth real se os paineis ja estiverem corretos.
+
+### 2026-05-29 - Remocao dos handlers Next/Vercel restantes
+
+Mudanca: removidos os handlers legados em `pages/api`, que pertenciam ao modelo Next/Vercel e nao eram referenciados pelo app Vite/Fastify.
+
+Objetivo: continuar a limpeza de Vercel no codigo versionado, evitando que rotas serverless antigas voltem a parecer parte do caminho operacional.
+
+Arquivos alterados:
+
+- `pages/api/ai/generate-seo.ts`
+- `pages/api/patch.ts`
+- `tmp-tests/legacy-deploy-removal-static.test.mjs`
+- `migracao_VPS.md`
+
+Validacao:
+
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`
+- `node tmp-tests\legacy-deploy-removal-readiness-static.test.mjs`
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`
+- `npm.cmd run build`
+
+Resultado: o guard de remocao do deploy legado agora tambem falha se `pages/api` voltar a existir. As rotas removidas nao tinham chamadas internas encontradas por busca textual e a geracao SEO operacional segue pelo backend VPS/Fastify. O auditor retornou `ready_to_remove_legacy_deploy=true`, `blockers=[]`, `legacy_config_present=false`, `legacy_api_files_count=0`, `legacy_crons_disabled=true`, `cors_allows_legacy_fallback=false` e `legacy_cron_user_agent_allowed=false`; DNS retornou `dns_timeout` no ambiente local. O build Vite passou apos reparar dependencias opcionais do Rollup com `npm.cmd install`.
+
+Pendencias:
+
+- conferencia visual read-only dos paineis externos antes de salvar/trocar qualquer callback.
+
+Rollback: restaurar os dois arquivos removidos e retirar a assercao de `pages/api` do teste; nao recomendado porque reintroduz artefato de runtime Next/Vercel.
+
+Proximo passo: conferencia visual read-only dos paineis Bling, Shopee e Mercado Pago contra as URLs finais da VPS.
+
+### 2026-05-29 - Limpeza da referencia Next/Vercel no TypeScript
+
+Mudanca: removida do `tsconfig.json` a referencia morta a `pages/api/ai/generate-seo.ts`, arquivo ja removido na limpeza dos handlers Next/Vercel.
+
+Objetivo: evitar que o projeto mantenha no TypeScript qualquer trilha operacional ou documental de rotas `pages/api` apos a retirada do runtime Next/Vercel.
+
+Arquivos alterados:
+
+- `tsconfig.json`
+- `tmp-tests/legacy-deploy-removal-static.test.mjs`
+- `migracao_VPS.md`
+
+Validacao:
+
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`
+- `npm.cmd run build`
+
+Resultado: o guard de remocao do deploy legado agora tambem falha se `tsconfig.json` voltar a referenciar `pages/api`. O build Vite passou; a primeira tentativa no sandbox falhou por bloqueio de acesso do esbuild ao carregar `vite.config.ts`, e a repeticao autorizada fora do sandbox concluiu com sucesso. Nenhum recurso externo foi criado ou alterado.
+
+Pendencias:
+
+- conferencia visual read-only dos paineis Bling, Shopee e Mercado Pago contra as URLs finais da VPS.
+
+Rollback: recolocar a entrada removida no `tsconfig.json` e retirar a assercao do teste; nao recomendado porque reintroduz referencia a um handler Next/Vercel inexistente.
+
+Proximo passo: conferencia visual read-only dos paineis Bling, Shopee e Mercado Pago contra as URLs finais da VPS.
 
 ### 2026-05-29 - Limpeza operacional de referencias Vercel no app
 
@@ -2644,7 +3322,7 @@ Rollback: remover os dois arquivos `tmp-tests/vps-bling-webhook-simulation*`; ne
 
 ### 2026-05-22 - Guard para simulacao de payload Shopee webhook
 
-Mudanca: criado runner guardado para validar payload simulado de pedido no `/api/shopee-webhook` sem acionar envio para n8n por acidente.
+Mudanca: criado runner guardado para validar payload simulado de pedido no `/api/shopee-webhook` sem acionar relay externo por acidente.
 
 Objetivo: preparar a validacao controlada do Push Mechanism da Shopee (`code=3`, status de pedido) antes de trocar callbacks definitivos, mantendo dupla trava para qualquer envio real de simulacao.
 
@@ -2667,7 +3345,7 @@ Resultado: a simulacao de payload Shopee ficou preparada, mas nenhum webhook `co
 Pendencias:
 
 - executar a simulacao em janela controlada com pedido/loja de teste explicitamente aprovados;
-- validar logs/n8n apos a simulacao;
+- validar logs da VPS apos a simulacao;
 - depois validar recebimento real da Shopee antes de apontar webhook definitivo.
 
 Rollback: remover os dois arquivos `tmp-tests/vps-shopee-webhook-order-simulation*`; nenhuma infra foi alterada.
@@ -3850,7 +4528,7 @@ Rollback: restaurar `/var/www/mdv-api/.codex-backups/server.js.20260521122840.ba
 
 Mudança: adicionada a rota `/api/shopee-webhook` ao Fastify da VPS.
 
-Objetivo: mover para a VPS o receptor de Push Mechanism da Shopee, preservando `POST` com resposta `{ "message": "success" }` para evitar retry e encaminhamento opcional de eventos de pedido para `n8n_webhook_url`.
+Objetivo: mover para a VPS o receptor de Push Mechanism da Shopee, preservando `POST` com resposta `{ "message": "success" }` para evitar retry.
 
 Arquivos/infra alterados:
 
@@ -3880,7 +4558,7 @@ Validação:
 - `curl -i -X POST "https://api.xiaomipetrolina.com.br/api/shopee-webhook" --data "{}"`: `200 OK`, `{ "message": "success" }`.
 - `curl -i https://api.xiaomipetrolina.com.br/status`: `200 OK`, confirmando API atual online após restart.
 
-Resultado: webhook Shopee passa pelo VPS em staging; a validação segura não aciona n8n porque não envia `code=3` com dados de pedido.
+Resultado: webhook Shopee passa pelo VPS em staging; a validação segura não executa relay externo porque não envia `code=3` com dados de pedido.
 
 Pendências:
 

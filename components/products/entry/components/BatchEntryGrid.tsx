@@ -164,7 +164,7 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
         setCheckingDb(prev => new Set(prev).add(key));
 
         try {
-            const products = await vpsApiService.getProducts({ status: 'all', limit: 5000, noCache: true });
+            const products = await vpsApiService.getProducts({ status: 'active', limit: 5000, noCache: true });
             const alreadyExists = (products || []).some((product: any) =>
                 String(product.specs?.[field] || '') === value
             );

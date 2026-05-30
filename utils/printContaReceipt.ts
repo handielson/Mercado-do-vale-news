@@ -6,6 +6,52 @@ const fmt = (v: number) => `R$ ${(v || 0).toFixed(2).replace('.', ',')}`;
 
 import { buildGlobalHeader, getHeaderTemplate } from './headerBuilder';
 
+function escapeHtml(value: string): string {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatBlingDate(d?: string): string {
+    if (!d) return '—';
+    const parts = d.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return d;
+}
+
+function formatBorderoDetails(conta: ContaPagar | ContaReceber): string {
+    const baseHistorico = escapeHtml(conta.historico || 'Sem histórico')
+        .replace(/\n/g, '<br>')
+        .replace(/\r/g, '');
+    const borderos = Array.isArray(conta.borderoDetalhes) ? conta.borderoDetalhes : [];
+
+    if (borderos.length === 0) return baseHistorico;
+
+    const borderosHtml = borderos.map((bordero, index) => {
+        const pagamentos = Array.isArray(bordero.pagamentos) ? bordero.pagamentos : [];
+        const valorPago = pagamentos.reduce((sum, pagamento) => sum + (Number(pagamento.valorPago) || 0), 0);
+        const acrescimos = pagamentos.reduce((sum, pagamento) => sum + (Number(pagamento.juros) || 0) + (Number(pagamento.acrescimo) || 0), 0);
+        const descontos = pagamentos.reduce((sum, pagamento) => sum + (Number(pagamento.desconto) || 0), 0);
+        const tarifas = pagamentos.reduce((sum, pagamento) => sum + (Number(pagamento.tarifa) || 0), 0);
+        const details = [
+            `<strong>Baixa ${index + 1}</strong>`,
+            `Data: ${escapeHtml(formatBlingDate(bordero.data))}`,
+            `Histórico: ${escapeHtml(bordero.historico || 'Sem histórico da baixa')}`,
+            `Valor pago: ${fmt(valorPago)}`,
+            acrescimos ? `Acréscimos/Juros: ${fmt(acrescimos)}` : '',
+            descontos ? `Desconto: ${fmt(descontos)}` : '',
+            tarifas ? `Tarifa: ${fmt(tarifas)}` : '',
+        ].filter(Boolean);
+
+        return details.join('<br>');
+    }).join('<br><br>');
+
+    return `${baseHistorico}<br><br>${borderosHtml}`;
+}
+
 export function printContaReceipt(
     conta: ContaPagar | ContaReceber,
     settings: CompanySettings,
@@ -16,20 +62,12 @@ export function printContaReceipt(
     const mainColor = isPagar ? '#dc2626' : '#16a34a'; // Red for Pagar, Green for Receber
     const companyName = settings.company_name || 'Mercado do Vale';
 
-    // Format dates
-    const formatBlingDate = (d: string) => {
-        if (!d) return '—';
-        const parts = d.split('-');
-        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-        return d;
-    };
-
     const vencimento = formatBlingDate(conta.vencimento);
     const emissao = formatBlingDate(conta.dataEmissao || '');
 
-    const contatoNome = conta.contato?.nome || 'Não informado';
-    const categoriaDesc = conta.categoria?.descricao || 'Sem categoria';
-    const portadorDesc = conta.portador?.descricao || 'Não informado';
+    const contatoNome = escapeHtml(conta.contato?.nome || 'Não informado');
+    const categoriaDesc = escapeHtml(conta.categoria?.descricao || 'Sem categoria');
+    const portadorDesc = escapeHtml(conta.portador?.descricao || 'Não informado');
 
     const situacaoMap: Record<string, string> = {
         '1': 'Em aberto', 'em_aberto': 'Em aberto',
@@ -37,11 +75,9 @@ export function printContaReceipt(
         '3': 'Parcial', 'parcial': 'Parcial',
         '4': 'Cancelado', 'cancelado': 'Cancelado',
     };
-    const situacaoFormatada = situacaoMap[String(conta.situacao).toLowerCase()] || String(conta.situacao);
+    const situacaoFormatada = escapeHtml(situacaoMap[String(conta.situacao).toLowerCase()] || String(conta.situacao));
 
-    const historicoFormatado = (conta.historico || 'Sem histórico')
-        .replace(/\n/g, '<br>')
-        .replace(/\r/g, '');
+    const historicoFormatado = formatBorderoDetails(conta);
 
     const rawCabecalho = getHeaderTemplate('default_thermal_header', settings);
     const cabecalhoTermicoHTML = buildGlobalHeader(rawCabecalho, settings, title);
@@ -66,8 +102,9 @@ export function printContaReceipt(
     .section { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #e5e7eb; }
     .section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
     
-    .row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: #374151; line-height: 1.4; }
-    .row strong { font-weight: 600; color: #111827; }
+    .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px; font-size: 12px; color: #374151; line-height: 1.4; }
+    .row span { flex: 0 0 auto; }
+    .row strong { min-width: 0; max-width: 58mm; font-weight: 600; color: #111827; text-align: right; overflow-wrap: anywhere; word-break: break-word; }
     .row.large { font-size: 14px; margin-top: 6px; }
     .row.large strong { font-size: 16px; }
     
@@ -81,6 +118,8 @@ export function printContaReceipt(
         font-family: monospace;
         margin-top: 4px;
         white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
     
     .footer { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #d1d5db; text-align: center; font-size: 10px; color: #9ca3af; }

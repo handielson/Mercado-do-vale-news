@@ -65,20 +65,21 @@ export const ProductFormPage: React.FC = () => {
         }
     };
 
-    const handleSubmit = async (data: ProductInput) => {
+    const handleSubmit = async (data: ProductInput): Promise<Product | void> => {
         try {
             setIsLoading(true);
 
             if (isEditMode && id) {
                 // Update existing product
-                await productService.update(id, data);
+                const savedProduct = await productService.update(id, data);
                 toast.success('Produto atualizado com sucesso!');
                 // Navegar após edição (produto único)
                 navigate('/admin/products');
+                return savedProduct;
             } else {
                 // Create new product (pode ser chamado várias vezes no batch)
                 // Navegação controlada pelo ProductForm via onBatchComplete
-                await productService.create(data);
+                return await productService.create(data);
             }
         } catch (error) {
             console.error('Error saving product:', error);

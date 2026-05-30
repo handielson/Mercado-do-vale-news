@@ -59,8 +59,8 @@ assert.match(
 
 assert.match(
   source,
-  /await formatAutoresponderProductCaption\(topProduct, topGroup\)/,
-  'expected product search replies to await async captions',
+  /formatAutoresponderProductCardLine\(group, firstNumber \+ index\)/,
+  'expected product search replies to await async catalog card formatting',
 );
 
 assert.match(

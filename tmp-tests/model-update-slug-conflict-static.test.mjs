@@ -1,30 +1,31 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const source = readFileSync('services/models.ts', 'utf8');
+const service = readFileSync('services/models.ts', 'utf8');
+const server = readFileSync('vps_server.js', 'utf8');
 
 assert.match(
-  source,
-  /const current = await getById\(id\)/,
-  'model update must load the current row before deciding whether to regenerate slug',
+  service,
+  /async function update\(id: string, input: ModelInput\): Promise<Model> \{[\s\S]*vpsClient\.put<Model>\(`\/models\/\$\{encodeURIComponent\(id\)\}`, input\)/,
+  'model update must go through PUT /models/:id on the VPS',
 );
 
 assert.match(
-  source,
-  /const shouldRegenerateSlug = input\.name\.trim\(\) !== current\.name/,
-  'model update must preserve the current slug when the model name did not change',
+  server,
+  /const currentRows = await supabaseRestSelect\([\s\S]*select=\*&id=eq\.\$\{encodeURIComponent\(req\.params\.id\)\}/,
+  'VPS model update must load the current row before deciding whether to regenerate slug',
 );
 
 assert.match(
-  source,
-  /if \(shouldRegenerateSlug\) updatePayload\.slug = generateSlug\(input\.name\)/,
-  'model update must only send slug when the name actually changes',
+  server,
+  /if \(payload\.name !== current\.name\) payload\.slug = generateModelSlug\(payload\.name\)/,
+  'VPS model update must only send slug when the name actually changes',
 );
 
 assert.match(
-  source,
+  server,
   /Ja existe um modelo com esse nome para esta marca\./,
-  'model update must show a friendly duplicate model message instead of the raw database constraint',
+  'VPS model update must return a friendly duplicate model message instead of the raw database constraint',
 );
 
 console.log('model update slug conflict static checks passed');

@@ -49,7 +49,7 @@ export function ProductSpecifications({
         if (!value || !DB_UNIQUE_FIELDS.includes(field)) return;
         setCheckingField(field);
         try {
-            const products = await vpsApiService.getProducts({ status: 'all', limit: 5000, noCache: true });
+            const products = await vpsApiService.getProducts({ status: 'active', limit: 5000, noCache: true });
             const alreadyExists = (products || []).some((product: any) =>
                 product.id !== currentProductId && String(product.specs?.[field] || '') === value
             );

@@ -12,8 +12,8 @@ for (const file of files) {
   const source = readFileSync(resolve(file), 'utf8');
 
   assert(
-    /vpsApiService\.getProducts\(\{\s*status:\s*'all'[\s\S]*limit:\s*5000/.test(source),
-    `${file} should check unique product specs through VPS products`,
+    /vpsApiService\.getProducts\(\{\s*status:\s*'active'[\s\S]*limit:\s*5000/.test(source),
+    `${file} should check unique product specs through active VPS products`,
   );
 
   assert(
@@ -27,4 +27,4 @@ for (const file of files) {
   );
 }
 
-console.log('unique validation VPS product static checks passed');
+console.log('unique validation active VPS product static checks passed');

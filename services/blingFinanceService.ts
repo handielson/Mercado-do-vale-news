@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { ContaPagar, ContaReceber, BaixaConta, CreateContaInput } from '../types/finance';
+import type { ContaPagar, ContaReceber, BaixaConta, ContaBordero, CreateContaInput } from '../types/finance';
 import { getValidToken } from './blingService';
 
 const BASE = '/api/bling?resource=finance';
@@ -219,6 +219,12 @@ export const blingFinanceService = {
         const params = new URLSearchParams({ resourceType: tipo, action: 'get', id: String(id) });
         const json = await blingFetch(financeUrl(params));
         return json?.data;
+    },
+
+    async getBordero(tipo: 'pagar' | 'receber', id: number): Promise<ContaBordero | null> {
+        const params = new URLSearchParams({ resourceType: tipo, action: 'get-bordero', id: String(id) });
+        const json = await blingFetch(financeUrl(params));
+        return json?.data || null;
     },
 
     async createConta(input: CreateContaInput): Promise<void> {

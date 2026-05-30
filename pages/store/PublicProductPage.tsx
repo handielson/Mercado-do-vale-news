@@ -27,6 +27,7 @@ import { trackViewItem } from '@/utils/analytics';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogSettings } from '@/types/catalogSettings';
 import { vpsApiService } from '@/services/vpsApiService';
+import { modelService } from '@/services/models';
 import { buildProductVideoPlaylist, isMp4VideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
 import { getPublicProductRouteTarget } from './productRouteTarget.js';
@@ -300,7 +301,7 @@ export const PublicProductPage: React.FC = () => {
                     return;
                 }
 
-                // Busca marca/descrição do modelo no Supabase como fallback quando a VPS não envia.
+                // Busca marca/descrição do modelo pela VPS como fallback quando o produto não envia.
                 // Modelo guarda uma descrição padrão herdada por todos os produtos do mesmo modelo.
                 // Trata descrições obviamente inválidas ('0', '<p>0</p>', muito curtas) como
                 // ausentes — defensivo contra dados-lixo que surgem em alguns paths de save.
@@ -317,22 +318,18 @@ export const PublicProductPage: React.FC = () => {
                 if (!isMeaningfulDesc(data.description)) data.description = null;
                 if (data.model_id) {
                     try {
-                        const { data: modelData } = await supabase
-                            .from('models')
-                            .select('description, template_values, brands(name)')
-                            .eq('id', data.model_id)
-                            .single();
+                        const modelData = await modelService.getById(data.model_id);
 
                         modelTemplateValues = modelData?.template_values || {};
-                        if (needsBrand && modelData?.brands && typeof modelData.brands === 'object') {
-                            const bRaw: any = modelData.brands;
-                            data.brand = Array.isArray(bRaw) ? bRaw[0]?.name : bRaw.name;
+                        const modelBrand = (modelData as any)?.brand || (modelData as any)?.brand_name;
+                        if (needsBrand && modelBrand) {
+                            data.brand = modelBrand;
                         }
                         if (needsDescription && modelData?.description) {
                             data.description = modelData.description;
                         }
                     } catch (e) {
-                        console.warn('Falha ao tentar recuperar marca/descrição do Supabase', e);
+                        console.warn('Falha ao tentar recuperar marca/descrição da VPS', e);
                     }
                 }
 

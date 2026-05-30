@@ -12,14 +12,14 @@ const source = readFileSync(guardPath, 'utf8');
 
 assert.match(
   source,
-  /MAX_BASELINE_FROM_CALLS\s*=\s*491/,
+  /MAX_BASELINE_FROM_CALLS\s*=\s*430/,
   'guard should pin the current .from(...) baseline so new operational dependencies fail review',
 );
 
 assert.match(
   source,
-  /MAX_BASELINE_RPC_CALLS\s*=\s*31/,
-  'guard should pin the current rpc(...) baseline so new Supabase RPC dependencies fail review',
+  /MAX_BASELINE_RPC_CALLS\s*=\s*29/,
+  'guard should pin the reduced rpc(...) baseline so removed Supabase RPC dependencies do not return',
 );
 
 assert.match(
@@ -38,6 +38,12 @@ assert.match(
   source,
   /ALLOWED_OPERATIONAL_DEPENDENCIES\s*=\s*\[/,
   'guard should keep an explicit temporary allowlist for operational Supabase dependencies',
+);
+
+assert.doesNotMatch(
+  source,
+  /increment_banner_(?:clicks|views)/,
+  'removed banner telemetry RPCs must not remain allowlisted',
 );
 
 assert.match(

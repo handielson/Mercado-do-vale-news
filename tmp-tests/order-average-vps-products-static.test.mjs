@@ -25,8 +25,12 @@ assert(
 const productFromMatches = averagePriceService.match(/from\('products'\)|supabase\s*\.\s*from\('products'\)/g) || [];
 assert.equal(
   productFromMatches.length,
-  1,
-  'averagePriceService should only keep the remaining Supabase products write for price propagation',
+  0,
+  'averagePriceService must not read or write products directly through Supabase',
+);
+assert(
+  /vpsApiService\.updateProduct\([^,]+,\s*\{\s*price_cost:/s.test(averagePriceService),
+  'averagePriceService should propagate average prices through VPS product updates',
 );
 
 console.log('order and average price VPS product static checks passed');

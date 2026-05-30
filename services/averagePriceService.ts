@@ -1,4 +1,3 @@
-import { supabase } from './supabase';
 import { Product, ProductInput } from '../types/product';
 import { calculateAllAveragePrices } from '../utils/calculateAveragePrice';
 import { vpsApiService } from './vpsApiService';
@@ -140,19 +139,17 @@ export async function updateAveragePrices(newProduct: ProductInput & { model_id:
 
         // 4. Update all products of this variation (if there are existing products)
         if (existingProducts.length > 0) {
-            const productIds = existingProducts.map(p => p.id);
-
-            const { error } = await supabase
-                .from('products')
-                .update({
+            const updateResults = await Promise.all(existingProducts.map((product) =>
+                vpsApiService.updateProduct(product.id, {
                     price_cost: averages.price_cost.averagePrice,
                     price_retail: averages.price_retail.averagePrice,
                     price_reseller: averages.price_reseller.averagePrice,
                     price_wholesale: averages.price_wholesale.averagePrice
                 })
-                .in('id', productIds);
+            ));
 
-            if (error) {
+            if (updateResults.some((ok) => !ok)) {
+                const error = new Error('Falha ao atualizar precos medios na VPS');
                 console.error('❌ Error updating product prices:', error);
                 throw error;
             }

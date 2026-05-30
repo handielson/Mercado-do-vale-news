@@ -32,6 +32,13 @@ function extractFirstFinanceId(body) {
   return first ? String(first.id) : null;
 }
 
+function extractFirstBorderoId(body) {
+  const data = body && typeof body === 'object' ? body.data || (body.id != null ? body : null) : null;
+  const borderos = Array.isArray(data?.borderos) ? data.borderos : [];
+  const first = borderos.find((id) => id != null);
+  return first ? String(first) : null;
+}
+
 function sanitizeBlingFinanceReadResponse(name, status, body, options = {}) {
   const data = body && typeof body === 'object' ? body.data || (body.id != null ? body : null) : null;
   const error = body && typeof body === 'object' ? body.error || body.message || null : null;
@@ -99,6 +106,19 @@ async function run() {
       const detailPath = `/api/bling?resource=finance&resourceType=${check.resourceType}&action=get&id=${encodeURIComponent(id)}`;
       const detail = await fetchBlingFinanceRead(detailPath, token);
       results.push(sanitizeBlingFinanceReadResponse(`bling_finance_${check.resourceType}_get`, detail.status, detail.body));
+
+      const borderoId = extractFirstBorderoId(detail.body);
+      if (borderoId) {
+        await delay(5000);
+        const borderoPath = `/api/bling?resource=finance&resourceType=${check.resourceType}&action=get-bordero&id=${encodeURIComponent(borderoId)}`;
+        const bordero = await fetchBlingFinanceRead(borderoPath, token);
+        results.push(sanitizeBlingFinanceReadResponse(`bling_finance_${check.resourceType}_bordero_get`, bordero.status, bordero.body));
+      } else {
+        results.push(sanitizeBlingFinanceReadResponse(`bling_finance_${check.resourceType}_bordero_get`, 0, null, {
+          skipped: true,
+          reason: 'no_bordero_id_discovered',
+        }));
+      }
     } else {
       results.push(sanitizeBlingFinanceReadResponse(`bling_finance_${check.resourceType}_get`, 0, null, {
         skipped: true,

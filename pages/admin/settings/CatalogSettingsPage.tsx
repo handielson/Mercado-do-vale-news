@@ -77,7 +77,7 @@ export const CatalogSettingsPage: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => navigate('/admin/catalog-editor')}
+                        onClick={() => navigate('/admin/settings/banners')}
                         className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
                     >
                         <Edit className="w-5 h-5" />

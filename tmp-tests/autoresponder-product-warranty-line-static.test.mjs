@@ -23,7 +23,7 @@ for (const fileName of ['vps_server.cjs', 'vps_server.js']) {
     assert(source.includes(token), `${fileName} must include ${token}`);
   });
 
-  const detailBody = source.match(/async function formatAutoresponderProductDetailReply[\s\S]*?\n}\n\nconst AUTORESPONDER_PRODUCT_SEARCH_STOPWORDS/)?.[0] || '';
+  const detailBody = source.match(/async function formatAutoresponderProductDetailReply[\s\S]*?return lines\.join\('\\n'\);\n}/)?.[0] || '';
   assert(
     detailBody.includes('formatAutoresponderProductWarrantyLine(product)'),
     `${fileName} product detail reply must include warranty line`

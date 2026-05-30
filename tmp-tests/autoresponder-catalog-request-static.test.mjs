@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const serverFiles = ['vps_server.cjs', 'vps_server.js'];
+
+for (const fileName of serverFiles) {
+  const source = readFileSync(fileName, 'utf8');
+
+  assert.ok(source.includes('isAutoresponderCatalogRequest'), `${fileName} must detect generic catalog requests`);
+  assert.ok(source.includes('detectAutoresponderGenericDeviceCatalogFamily'), `${fileName} must detect generic device catalog requests before listing products`);
+  assert.ok(source.includes('isAutoresponderGenericPhoneCatalogRequest'), `${fileName} must preserve generic phone catalog detection compatibility`);
+  assert.ok(source.includes('buildAutoresponderPhoneCatalogRefinementPrompt'), `${fileName} must ask for refinement on generic phone catalog requests`);
+  assert.ok(source.includes('buildAutoresponderDeviceCatalogRefinementPrompt'), `${fileName} must ask for refinement on generic tablets and receivers too`);
+  assert.ok(source.includes('Temos tablets disponiveis sim.'), `${fileName} must refine broad tablet requests`);
+  assert.ok(source.includes('Temos receptores disponiveis sim.'), `${fileName} must refine broad receiver requests`);
+  assert.ok(source.includes('catalog_phone_refinement'), `${fileName} must log generic phone refinement replies distinctly`);
+  assert.ok(source.includes('catalog_device_refinement'), `${fileName} must log generic tablet and receiver refinement replies distinctly`);
+  assert.ok(
+    source.includes('Se quiser receber a lista dos disponiveis, responda "lista".'),
+    `${fileName} must offer an explicit list opt-in for generic phone requests`
+  );
+  assert.ok(
+    source.indexOf('detectAutoresponderGenericDeviceCatalogFamily(message)') < source.indexOf('if (isAutoresponderCatalogRequest(message))'),
+    `${fileName} must ask refinement before the generic category catalog flow`
+  );
+  assert.ok(source.includes('findAutoresponderCatalogCategoryForMessage'), `${fileName} must map catalog requests to a category`);
+  assert.ok(source.includes("intent: 'catalog_category'"), `${fileName} must log category catalog replies distinctly`);
+  assert.ok(source.includes("source: 'category'"), `${fileName} must preserve category pagination context`);
+  assert.ok(source.includes("pagination.source === 'category'"), `${fileName} must paginate catalog category replies`);
+  assert.ok(source.includes("intent: 'more_products_exhausted'"), `${fileName} must not run a fresh product search when 'mais' has no next page`);
+  assert.ok(source.includes('formatAutoresponderProductDescriptionLine'), `${fileName} must include a short description in product details when available`);
+  assert.ok(source.includes('findAutoresponderProductVariations'), `${fileName} must fetch related product variations for details`);
+  assert.ok(source.includes('formatAutoresponderProductVariationsBlock'), `${fileName} must format variations and colors in details`);
+  assert.ok(!source.includes('lines.push(`SKU: ${product.sku}`)'), `${fileName} must not show SKU in customer-facing product details`);
+  assert.ok(source.includes('formatAutoresponderProductCardLine'), `${fileName} must format catalog cards with the WhatsApp sales pattern`);
+  assert.ok(source.includes('formatAutoresponderProductCardPaymentLine'), `${fileName} must show card installment total in catalog cards`);
+  assert.ok(source.includes('function getAutoresponderInitialProductPageSize'), `${fileName} must centralize the initial product page size`);
+  assert.ok(source.includes('const pageSize = getAutoresponderInitialProductPageSize();'), `${fileName} must keep initial product replies short`);
+  assert.ok(
+    source.includes('Se quiser, me diga a faixa de preco, marca ou uso que eu filtro melhor.'),
+    `${fileName} must ask the customer to refine broad product searches`
+  );
+  assert.ok(source.includes('calculateAutoresponderInstallmentOptions(priceCents, 12)'), `${fileName} must calculate 12x installment options for catalog cards`);
+  assert.ok(source.includes('💰'), `${fileName} must show cash price in the requested pattern`);
+  assert.ok(source.includes('💳'), `${fileName} must show card installment in the requested pattern`);
+  assert.ok(source.includes('🎨'), `${fileName} must show colors in the requested pattern`);
+  assert.ok(source.includes('AUTORESPONDER_AI_SYSTEM_PROMPT'), `${fileName} must define a strict AI system prompt`);
+  assert.ok(source.includes('PROIBIDO'), `${fileName} must explicitly forbid answers outside system data`);
+  assert.ok(source.includes('buildAutoresponderNeedsPromptReply'), `${fileName} must ask what the customer is looking for instead of listing categories on greeting`);
+  assert.ok(!source.includes('formatAutoresponderReplies([greetingText, categoryListText], settings, false)'), `${fileName} greeting test reply must not list categories as response 2`);
+  assert.ok(source.includes('extractAutoresponderBudgetCents'), `${fileName} must understand customer budget messages`);
+  assert.ok(source.includes('findAutoresponderProductsByCategoryBudget'), `${fileName} must answer budget requests from VPS category products`);
+  assert.ok(source.includes("intent: 'catalog_budget'"), `${fileName} must log budget catalog replies distinctly`);
+}
+
+const checklist = readFileSync('Bot_Whatsapp.md', 'utf8');
+assert.ok(checklist.includes('Busca generica de celulares com refinamento'), 'Bot_Whatsapp.md must document generic phone refinement progress');
+assert.ok(checklist.includes('tmp-tests/autoresponder-catalog-request-static.test.mjs'), 'Bot_Whatsapp.md must mention the catalog request static test');
+
+console.log('autoresponder catalog request static checks passed');
