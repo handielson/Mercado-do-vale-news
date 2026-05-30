@@ -730,6 +730,7 @@ Concluído em leitura real pela VPS:
 - Modelo em criacao/edicao de produtos: `productService.create` e `productService.update` deixaram de consultar `models` diretamente no Supabase para `template_values`, categoria e marca, usando `modelService.getById()` pela VPS e `brandService.getById()` como fallback de nome; auditor Supabase travado em `.from=444`, `.rpc=29`, `storage=13`.
 - Configuracao de frete: `shippingService` deixou de usar Supabase para `shipping_settings`, `shipping_zones` e `shipping_price_ranges`; settings, zonas e faixas agora passam pelos endpoints VPS, incluindo CRUD de `/shipping/price-ranges`; auditor Supabase travado em `.from=433`, `.rpc=29`, `storage=13`.
 - Configuracoes da empresa: `companySettingsService` deixou de manter fallback Supabase para `company_settings`; leitura e escrita agora sao VPS-only via `/company-settings`, preservando cache local e defaults de templates; auditor Supabase travado em `.from=430`, `.rpc=29`, `storage=13`.
+- Configuracao do catalogo: `catalogConfigService.getSettings/saveSettings` deixou de usar Supabase para `catalog_settings`; leitura e escrita agora passam pela VPS em `/catalog-settings`, com PATCH protegido por sync key e filtro dinamico de colunas no MySQL; auditor Supabase travado em `.from=428`, `.rpc=29`, `storage=13`.
 
 Pendente para corte final:
 
@@ -745,6 +746,37 @@ Pendente para corte final:
 - Operacao: cron da Vercel removido do `vercel.json`; conferencia visual/read-only dos paineis Bling, Shopee e Mercado Pago marcada como concluida em 2026-05-30 por confirmacao do usuario.
 
 ## Registro de Mudanças
+
+### 2026-05-30 - catalogConfigService via VPS-only para catalog_settings
+
+Mudanca: `catalogConfigService.getSettings` e `catalogConfigService.saveSettings` deixaram de consultar/gravar `catalog_settings` pelo Supabase. A leitura usa `vpsApiService.getCatalogSettings()` e a escrita usa `vpsApiService.syncCatalogSettings()` contra `PATCH /catalog-settings` no Fastify da VPS.
+
+Objetivo: remover o Supabase do caminho operacional de configuracao visual/publica do catalogo, mantendo a VPS/MySQL como origem das regras globais de exibicao.
+
+Arquivos alterados:
+
+- `services/catalogConfigService.ts`
+- `services/vpsApiService.ts`
+- `vps_server.js`
+- `vps_server.cjs`
+- `tmp-tests/catalog-config-service-vps-only-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\catalog-config-service-vps-only-static.test.mjs` falhou enquanto `catalogConfigService` ainda usava `supabase.from('catalog_settings')`.
+- GREEN: `node tmp-tests\catalog-config-service-vps-only-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 428`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: duas chamadas diretas Supabase em `catalog_settings` foram removidas. O endpoint de escrita na VPS descobre colunas reais com `DESCRIBE catalog_settings`, ignora campos bloqueados (`id`, `created_at`, `user_id`) e atualiza/cria a linha global de configuracao.
+
+Pendencias:
+
+- migrar `welcomeMessageService`, que ainda usa `catalog_settings` para `welcome_message_template`;
+- migrar `category_display_config` em corte separado para evitar misturar configuracao global com taxonomia visual de categorias.
+
+Rollback: restaurar temporariamente o fallback Supabase de `catalogConfigService` e voltar `MAX_BASELINE_FROM_CALLS` para `430`; nao recomendado porque reintroduz Supabase na configuracao global do catalogo.
 
 ### 2026-05-30 - companySettingsService via VPS-only
 

@@ -14341,6 +14341,57 @@ fastify.get('/catalog-settings', async (req, reply) => {
   return rows[0] || null;
 });
 
+fastify.patch('/catalog-settings', { preHandler: requireSyncKey }, async (req, reply) => {
+  const payload = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+  const [columns] = await pool.query('DESCRIBE catalog_settings');
+  const columnNames = new Set(columns.map(column => column.Field));
+  const blockedColumns = new Set(['id', 'created_at', 'user_id']);
+  const writableEntries = Object.entries(payload).filter(([key]) => (
+    columnNames.has(key) && !blockedColumns.has(key)
+  ));
+
+  if (writableEntries.length === 0) {
+    return reply.code(400).send({ error: 'no writable catalog settings fields provided' });
+  }
+
+  const normalizeValue = value => {
+    if (value !== null && typeof value === 'object') return JSON.stringify(value);
+    return value;
+  };
+
+  const [existingRows] = await pool.query('SELECT id FROM catalog_settings LIMIT 1');
+  const hasUpdatedAt = columnNames.has('updated_at');
+  const quoted = name => `\`${name}\``;
+
+  if (existingRows.length > 0) {
+    const setClauses = writableEntries.map(([key]) => `${quoted(key)} = ?`);
+    const params = writableEntries.map(([, value]) => normalizeValue(value));
+    if (hasUpdatedAt) {
+      setClauses.push('`updated_at` = CURRENT_TIMESTAMP');
+    }
+    params.push(existingRows[0].id);
+    await pool.query(`UPDATE catalog_settings SET ${setClauses.join(', ')} WHERE id = ?`, params);
+  } else {
+    const insertEntries = [...writableEntries];
+    if (columnNames.has('id')) insertEntries.unshift(['id', require('crypto').randomUUID()]);
+    const insertColumns = insertEntries.map(([key]) => quoted(key));
+    const placeholders = insertEntries.map(() => '?');
+    const params = insertEntries.map(([, value]) => normalizeValue(value));
+    if (hasUpdatedAt) {
+      insertColumns.push('`updated_at`');
+      placeholders.push('CURRENT_TIMESTAMP');
+    }
+    await pool.query(
+      `INSERT INTO catalog_settings (${insertColumns.join(', ')}) VALUES (${placeholders.join(', ')})`,
+      params,
+    );
+  }
+
+  const [rows] = await pool.query('SELECT * FROM catalog_settings LIMIT 1');
+  reply.header('Cache-Control', 'no-store');
+  return rows[0] || null;
+});
+
 // ─── PDP Section Headers ───────────────────────────────────────────────────
 // Lista de frases que viram cabeçalhos com quebra de parágrafo + negrito na PDP.
 fastify.get('/pdp-section-headers', async (req, reply) => {

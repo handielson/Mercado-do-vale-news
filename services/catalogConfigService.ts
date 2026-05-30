@@ -12,40 +12,16 @@ class CatalogConfigService {
      */
     async getSettings(userId?: string): Promise<CatalogSettings> {
         try {
-            const cacheKey = userId ? `settings_${userId}` : 'settings_global';
+            const cacheKey = 'settings_global';
             const cached = this.cache.get(cacheKey);
             if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
                 return cached.data;
             }
 
-            // Tentar VPS API primeiro (apenas para leitura pública, sem userId)
-            if (!userId) {
-                const vpsData = await vpsApiService.getCatalogSettings();
-                if (vpsData) {
-                    const settings = { ...DEFAULT_CATALOG_SETTINGS, ...vpsData } as CatalogSettings;
-                    this.cache.set(cacheKey, { data: settings, timestamp: Date.now() });
-                    return settings;
-                }
-            }
-
-            // Fallback: Supabase
-            let query = supabase.from('catalog_settings').select('*');
-            if (userId) {
-                query = query.eq('user_id', userId);
-            }
-
-            const { data, error } = await query.limit(1).single();
-
-            if (error && error.code !== 'PGRST116') {
-                if (error.code === '20' || error.message?.includes('aborted') || error.message?.includes('abort')) {
-                    return { ...DEFAULT_CATALOG_SETTINGS } as CatalogSettings;
-                }
-                console.error('Erro ao buscar catalog_settings:', error);
-            }
-
-            const settings = data || { ...DEFAULT_CATALOG_SETTINGS, user_id: userId };
+            const vpsData = await vpsApiService.getCatalogSettings();
+            const settings = { ...DEFAULT_CATALOG_SETTINGS, ...(vpsData || {}) } as CatalogSettings;
             this.cache.set(cacheKey, { data: settings, timestamp: Date.now() });
-            return settings as CatalogSettings;
+            return settings;
         } catch (error: any) {
             if (error.name !== 'AbortError' && error.message !== 'AbortError' && !error.message?.includes('aborted')) {
                 console.error('Erro ao buscar configurações:', error);
@@ -59,9 +35,6 @@ class CatalogConfigService {
      */
     async saveSettings(settings: Partial<CatalogSettings>): Promise<void> {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('Usuário não autenticado');
-
             // Envia apenas colunas que existem em catalog_settings (evita erro de schema cache)
             const allowedKeys: Array<keyof CatalogSettings> = [
                 'catalog_name', 'catalog_description', 'catalog_subtitle', 'welcome_message',
@@ -86,10 +59,7 @@ class CatalogConfigService {
                 'custom_css', 'custom_header_html', 'custom_footer_html', 'enable_cache', 'cache_duration_minutes'
             ];
 
-            const dataToSave: Record<string, unknown> = {
-                user_id: user.id,
-                updated_at: new Date().toISOString()
-            };
+            const dataToSave: Record<string, unknown> = {};
 
             for (const key of allowedKeys) {
                 const value = settings[key];
@@ -98,17 +68,12 @@ class CatalogConfigService {
                 }
             }
 
-            const { error } = await supabase
-                .from('catalog_settings')
-                .upsert(dataToSave, { onConflict: 'user_id' });
-
-            if (error) {
-                console.error('❌ Erro:', error?.message, error?.code);
-                throw error;
+            const ok = await vpsApiService.syncCatalogSettings(dataToSave);
+            if (!ok) {
+                throw new Error('Falha ao salvar configuracoes do catalogo na VPS');
             }
 
             console.log('✅ Salvo com sucesso!');
-            this.cache.delete(`settings_${user.id}`);
             this.cache.delete('settings_global');
         } catch (error: any) {
             console.error('❌ Erro ao salvar configurações:', error);

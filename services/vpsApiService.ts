@@ -510,6 +510,11 @@ class VpsApiService {
     return this.fetchSafe<any>('/catalog-settings');
   }
 
+  async syncCatalogSettings(settings: any): Promise<boolean> {
+    this.cache.delete('/catalog-settings');
+    return this.writeSafe('PATCH', '/catalog-settings', settings);
+  }
+
   async getCompanySettings(): Promise<any | null> {
     return this.fetchSafe<any>('/company-settings');
   }
