@@ -4,7 +4,7 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const SCAN_DIRS = ['services', 'pages', 'components', 'hooks', 'contexts', 'utils'];
 const EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.cjs', '.mjs']);
-const MAX_BASELINE_FROM_CALLS = 426;
+const MAX_BASELINE_FROM_CALLS = 425;
 const MAX_BASELINE_RPC_CALLS = 29;
 const MAX_BASELINE_STORAGE_CALLS = 13;
 const MAX_UNCLASSIFIED_OPERATIONAL_MATCHES = 0;

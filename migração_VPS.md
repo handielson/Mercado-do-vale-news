@@ -732,6 +732,7 @@ Concluído em leitura real pela VPS:
 - Configuracoes da empresa: `companySettingsService` deixou de manter fallback Supabase para `company_settings`; leitura e escrita agora sao VPS-only via `/company-settings`, preservando cache local e defaults de templates; auditor Supabase travado em `.from=430`, `.rpc=29`, `storage=13`.
 - Configuracao do catalogo: `catalogConfigService.getSettings/saveSettings` deixou de usar Supabase para `catalog_settings`; leitura e escrita agora passam pela VPS em `/catalog-settings`, com PATCH protegido por sync key e filtro dinamico de colunas no MySQL; auditor Supabase travado em `.from=428`, `.rpc=29`, `storage=13`.
 - Template de boas-vindas: `welcomeMessageService` deixou de usar Supabase para `catalog_settings/welcome_message_template`; leitura e escrita reutilizam `/catalog-settings` na VPS; auditor Supabase travado em `.from=426`, `.rpc=29`, `storage=13`.
+- Telefone do WhatsApp em orcamentos: `whatsappMessageGenerator.generateWhatsAppLink` deixou de consultar `company_settings` no Supabase; agora usa `publicCompanySettingsService` e a rota publica da VPS quando `USE_VPS.company` esta ativo; auditor Supabase travado em `.from=425`, `.rpc=29`, `storage=13`.
 
 Pendente para corte final:
 
@@ -747,6 +748,34 @@ Pendente para corte final:
 - Operacao: cron da Vercel removido do `vercel.json`; conferencia visual/read-only dos paineis Bling, Shopee e Mercado Pago marcada como concluida em 2026-05-30 por confirmacao do usuario.
 
 ## Registro de Mudanças
+
+### 2026-05-30 - telefone WhatsApp de orcamento via settings publicas
+
+Mudanca: `utils/whatsappMessageGenerator.ts` deixou de importar Supabase e de consultar `company_settings` para buscar o telefone usado em links de WhatsApp. `generateWhatsAppLink` agora usa `publicCompanySettingsService.get()`, que prioriza `/public/company-settings` na VPS quando `USE_VPS.company` esta ativo.
+
+Objetivo: remover uma dependencia Supabase simples do fluxo publico de orcamento/WhatsApp, sem mexer no restante da formatacao da mensagem.
+
+Arquivos alterados:
+
+- `utils/whatsappMessageGenerator.ts`
+- `tmp-tests/whatsapp-message-generator-vps-company-phone-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\whatsapp-message-generator-vps-company-phone-static.test.mjs` falhou enquanto o util ainda importava Supabase.
+- GREEN: `node tmp-tests\whatsapp-message-generator-vps-company-phone-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 425`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `company_settings` caiu de `17` para `16` chamadas diretas no auditor, e `utils/` nao precisa mais de Supabase para gerar o link de WhatsApp de orcamento.
+
+Pendencias:
+
+- migrar `feedbackService.getDefaultCompanyId` para obter company id por rota VPS antes de mexer no CRUD de feedbacks;
+- reduzir os usos restantes de `company_settings` em telas/configuracoes Bling/Shopee.
+
+Rollback: restaurar a consulta direta de `company_settings` em `whatsappMessageGenerator` e voltar `MAX_BASELINE_FROM_CALLS` para `426`; nao recomendado porque a rota publica da VPS ja fornece o telefone.
 
 ### 2026-05-30 - welcomeMessageService via VPS-only
 

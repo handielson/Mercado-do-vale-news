@@ -4,7 +4,7 @@ import type { Address } from '@/services/addressLookup';
 import type { VariantSpecs } from '@/services/productVariants';
 import type { ShippingOption } from '@/types/shipping';
 import type { MixedPaymentState } from '@/components/catalog/MixedPaymentSimulator';
-import { supabase } from '@/services/supabase';
+import { publicCompanySettingsService } from '@/services/publicCompanySettings';
 
 /**
  * Delivery option type
@@ -245,23 +245,15 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
  */
 export async function generateWhatsAppLink(message: string): Promise<string> {
     try {
-        // Fetch company phone from company_settings
-        const { data, error } = await supabase
-            .from('company_settings')
-            .select('phone')
-            .single();
+        const settings = await publicCompanySettingsService.get();
+        const phone = settings?.phone;
 
-        if (error) {
-            console.error('Supabase error fetching phone:', error);
-            throw new Error(`Erro ao buscar configurações: ${error.message}`);
-        }
-
-        if (!data?.phone) {
+        if (!phone) {
             throw new Error('Número do WhatsApp não está configurado nas configurações da empresa');
         }
 
         // Clean phone number (remove non-numeric characters)
-        const cleanPhone = data.phone.replace(/\D/g, '');
+        const cleanPhone = phone.replace(/\D/g, '');
 
         if (!cleanPhone || cleanPhone.length < 10) {
             throw new Error('Número do WhatsApp inválido nas configurações');

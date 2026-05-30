@@ -12,7 +12,7 @@ const source = readFileSync(guardPath, 'utf8');
 
 assert.match(
   source,
-  /MAX_BASELINE_FROM_CALLS\s*=\s*426/,
+  /MAX_BASELINE_FROM_CALLS\s*=\s*425/,
   'guard should pin the current .from(...) baseline so new operational dependencies fail review',
 );
 
