@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { vpsApiService } from './vpsApiService';
 import { Customer } from '../types/customer';
 
 const DEFAULT_TEMPLATE = `Olá {nome}! Seja muito bem-vindo(a) ao Mercado do Vale. Agradecemos a preferência! Seu cadastro foi realizado com sucesso em nosso sistema.
@@ -78,16 +78,8 @@ export function buildWhatsAppUrl(phone: string, message: string): string {
 class WelcomeMessageService {
     async getTemplate(): Promise<string> {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return DEFAULT_TEMPLATE;
-
-            const { data, error } = await supabase
-                .from('catalog_settings')
-                .select('welcome_message_template')
-                .eq('user_id', user.id)
-                .single();
-
-            if (error || !data?.welcome_message_template) return DEFAULT_TEMPLATE;
+            const data = await vpsApiService.getCatalogSettings();
+            if (!data?.welcome_message_template) return DEFAULT_TEMPLATE;
             return data.welcome_message_template;
         } catch {
             return DEFAULT_TEMPLATE;
@@ -95,17 +87,8 @@ class WelcomeMessageService {
     }
 
     async saveTemplate(template: string): Promise<void> {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Usuário não autenticado');
-
-        const { error } = await supabase
-            .from('catalog_settings')
-            .upsert(
-                { user_id: user.id, welcome_message_template: template, updated_at: new Date().toISOString() },
-                { onConflict: 'user_id' }
-            );
-
-        if (error) throw error;
+        const ok = await vpsApiService.syncCatalogSettings({ welcome_message_template: template });
+        if (!ok) throw new Error('Erro ao salvar template de boas-vindas na VPS');
     }
 
     getDefaultTemplate(): string {

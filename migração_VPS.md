@@ -731,6 +731,7 @@ Concluído em leitura real pela VPS:
 - Configuracao de frete: `shippingService` deixou de usar Supabase para `shipping_settings`, `shipping_zones` e `shipping_price_ranges`; settings, zonas e faixas agora passam pelos endpoints VPS, incluindo CRUD de `/shipping/price-ranges`; auditor Supabase travado em `.from=433`, `.rpc=29`, `storage=13`.
 - Configuracoes da empresa: `companySettingsService` deixou de manter fallback Supabase para `company_settings`; leitura e escrita agora sao VPS-only via `/company-settings`, preservando cache local e defaults de templates; auditor Supabase travado em `.from=430`, `.rpc=29`, `storage=13`.
 - Configuracao do catalogo: `catalogConfigService.getSettings/saveSettings` deixou de usar Supabase para `catalog_settings`; leitura e escrita agora passam pela VPS em `/catalog-settings`, com PATCH protegido por sync key e filtro dinamico de colunas no MySQL; auditor Supabase travado em `.from=428`, `.rpc=29`, `storage=13`.
+- Template de boas-vindas: `welcomeMessageService` deixou de usar Supabase para `catalog_settings/welcome_message_template`; leitura e escrita reutilizam `/catalog-settings` na VPS; auditor Supabase travado em `.from=426`, `.rpc=29`, `storage=13`.
 
 Pendente para corte final:
 
@@ -746,6 +747,34 @@ Pendente para corte final:
 - Operacao: cron da Vercel removido do `vercel.json`; conferencia visual/read-only dos paineis Bling, Shopee e Mercado Pago marcada como concluida em 2026-05-30 por confirmacao do usuario.
 
 ## Registro de Mudanças
+
+### 2026-05-30 - welcomeMessageService via VPS-only
+
+Mudanca: `welcomeMessageService` deixou de importar Supabase, de exigir `supabase.auth.getUser()` e de consultar/gravar `catalog_settings` diretamente. O template `welcome_message_template` agora e lido por `vpsApiService.getCatalogSettings()` e salvo por `vpsApiService.syncCatalogSettings({ welcome_message_template: template })`.
+
+Objetivo: remover o Supabase do fluxo de mensagem inicial enviada ao cliente, reaproveitando o endpoint global de configuracao do catalogo na VPS.
+
+Arquivos alterados:
+
+- `services/welcomeMessageService.ts`
+- `tmp-tests/welcome-message-service-vps-only-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\welcome-message-service-vps-only-static.test.mjs` falhou enquanto o servico ainda importava Supabase.
+- GREEN: `node tmp-tests\welcome-message-service-vps-only-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 426`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: as duas ultimas chamadas diretas a `catalog_settings` dentro de `services/` foram removidas, ficando `catalog_settings` pendente apenas em outras superficies administrativas/legadas se aparecerem no auditor.
+
+Pendencias:
+
+- migrar `category_display_config` em corte separado;
+- revalidar no navegador a tela que edita o template quando houver janela de teste admin real.
+
+Rollback: restaurar o branch Supabase de `welcomeMessageService` e voltar `MAX_BASELINE_FROM_CALLS` para `428`; nao recomendado porque reintroduz auth/tabela Supabase no fluxo de mensagem do cliente.
 
 ### 2026-05-30 - catalogConfigService via VPS-only para catalog_settings
 
@@ -773,7 +802,7 @@ Resultado: duas chamadas diretas Supabase em `catalog_settings` foram removidas.
 
 Pendencias:
 
-- migrar `welcomeMessageService`, que ainda usa `catalog_settings` para `welcome_message_template`;
+- `welcomeMessageService` ja migrado em corte seguinte;
 - migrar `category_display_config` em corte separado para evitar misturar configuracao global com taxonomia visual de categorias.
 
 Rollback: restaurar temporariamente o fallback Supabase de `catalogConfigService` e voltar `MAX_BASELINE_FROM_CALLS` para `430`; nao recomendado porque reintroduz Supabase na configuracao global do catalogo.
