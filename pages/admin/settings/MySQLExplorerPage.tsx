@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import * as XLSX from 'xlsx';
 import {
     Database, Table, ChevronDown, ChevronRight, RefreshCw, Search,
     Rows, LayoutList, Plus, Trash2, Pencil, Upload, Download, X, Save, AlertTriangle
 } from 'lucide-react';
 import { buildAuthHeaders } from '../../../services/authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../../services/vpsProxyBase';
+import { readExcelObjects, writeExcelRows, writeExcelTemplate } from '../../../utils/excel';
 const PAGE_SIZE = 50;
 
 // Tabelas somente-leitura (sistema interno — sem CRUD)
@@ -255,29 +255,20 @@ function BulkModal({ tableName, cols, onClose, onSuccess }: {
         }
     };
 
-    const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         setFileName(file.name);
         setGlobalError(null); setResult(null); setPreview(null);
-        const reader = new FileReader();
-        reader.onload = ev => {
-            try {
-                const wb = XLSX.read(ev.target!.result, { type: 'array' });
-                const ws = wb.Sheets[wb.SheetNames[0]];
-                const data = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: null });
-                if (!data.length) throw new Error('Planilha vazia ou sem dados na primeira aba');
-                analyzeRows(data);
-            } catch (err: any) { setGlobalError(err.message); }
-        };
-        reader.readAsArrayBuffer(file);
+        try {
+            const data = await readExcelObjects(file);
+            if (!data.length) throw new Error('Planilha vazia ou sem dados na primeira aba');
+            analyzeRows(data);
+        } catch (err: any) { setGlobalError(err.message); }
     };
 
-    const downloadTemplate = () => {
-        const ws = XLSX.utils.aoa_to_sheet([templateCols.map(c => c.field)]);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, tableName);
-        XLSX.writeFile(wb, `template_${tableName}.xlsx`);
+    const downloadTemplate = async () => {
+        await writeExcelTemplate(`template_${tableName}.xlsx`, templateCols.map(c => c.field));
     };
 
     const handleImport = async () => {
@@ -601,10 +592,7 @@ function DataView({ tableName, cols }: { tableName: string; cols: Column[] }) {
     const handleExport = async () => {
         try {
             const exportedRows = await apiFetch(`/table-data/${tableName}/export`);
-            const ws = XLSX.utils.json_to_sheet(exportedRows);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, tableName);
-            XLSX.writeFile(wb, `${tableName}_backup.xlsx`);
+            await writeExcelRows(`${tableName}_backup.xlsx`, exportedRows, cols.map(c => c.field));
             showToast(`✅ Exportado: ${tableName}_backup.xlsx (${exportedRows.length} linhas)`);
         } catch (e: any) { showToast(`❌ ${e.message}`); }
     };

@@ -1,42 +1,26 @@
-import * as XLSX from 'xlsx';
 import { BulkProductRow, BulkProductValidation, BulkProductPreview, BulkUploadResult } from '../types/bulk-product';
 import { productService } from './products';
 import { categoryService } from './categories';
+import { readExcelObjects } from '../utils/excel';
 
 /**
  * Parse Excel file to array of product rows
  */
 export async function parseExcelFile(file: File): Promise<BulkProductRow[]> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
+    try {
+        const jsonData = await readExcelObjects(file);
 
-        reader.onload = (e) => {
-            try {
-                const data = e.target?.result;
-                const workbook = XLSX.read(data, { type: 'binary' });
-                const sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet) as BulkProductRow[];
-
-                // Normalize column names to lowercase
-                const normalized = jsonData.map(row => {
-                    const normalizedRow: BulkProductRow = { ean: '' };
-                    Object.keys(row).forEach(key => {
-                        const lowerKey = key.toLowerCase().trim();
-                        normalizedRow[lowerKey] = row[key];
-                    });
-                    return normalizedRow;
-                });
-
-                resolve(normalized);
-            } catch (error) {
-                reject(new Error('Erro ao processar arquivo Excel'));
-            }
-        };
-
-        reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
-        reader.readAsBinaryString(file);
-    });
+        return jsonData.map(row => {
+            const normalizedRow: BulkProductRow = { ean: '' };
+            Object.keys(row).forEach(key => {
+                const lowerKey = key.toLowerCase().trim();
+                normalizedRow[lowerKey] = row[key];
+            });
+            return normalizedRow;
+        });
+    } catch (error) {
+        throw new Error('Erro ao processar arquivo Excel');
+    }
 }
 
 /**
