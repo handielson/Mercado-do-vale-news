@@ -39,6 +39,7 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
 }) => {
     const [availableFields, setAvailableFields] = useState<DynamicField[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [hasLoaded, setHasLoaded] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -61,9 +62,11 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
 
             allFields.sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
             setAvailableFields(allFields);
+            setHasLoaded(true);
         } catch (error) {
             console.error('Error loading custom fields:', error);
             setLoadError('Erro ao carregar campos. Verifique sua conexão e tente novamente.');
+            setHasLoaded(true);
         } finally {
             setIsRefreshing(false);
         }
@@ -110,9 +113,14 @@ export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
                     ⚠️ {loadError}
                     <button onClick={loadAvailableFields} className="ml-2 underline font-medium">Tentar novamente</button>
                 </div>
-            ) : availableFields.length === 0 ? (
+            ) : isRefreshing && !hasLoaded ? (
                 <div className="text-center py-8 text-slate-500">
                     Carregando campos disponíveis...
+                </div>
+            ) : availableFields.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                    Nenhum campo basic ou spec foi encontrado na VPS.
+                    <button onClick={loadAvailableFields} className="ml-2 underline font-medium">Atualizar</button>
                 </div>
             ) : (
                 <>

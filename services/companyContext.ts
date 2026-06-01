@@ -1,6 +1,6 @@
 import { publicCompanySettingsService } from './publicCompanySettings';
 
-const DEFAULT_COMPANY_ID = '9717131e-7b14-4aec-84a4-4317c0489985';
+export const DEFAULT_COMPANY_ID = '9717131e-7b14-4aec-84a4-4317c0489985';
 
 let cachedCompanyId: string | null = null;
 let inFlight: Promise<string> | null = null;
@@ -19,8 +19,12 @@ export async function getCompanyId(): Promise<string> {
         try {
             const settings = await publicCompanySettingsService.get();
             if (settings?.id) {
-                cachedCompanyId = String(settings.id);
-                return cachedCompanyId;
+                const publicSettingsId = String(settings.id);
+                if (publicSettingsId !== DEFAULT_COMPANY_ID) {
+                    return useDefaultCompanyId(`public settings id ${publicSettingsId} is not the VPS data company_id`);
+                }
+                cachedCompanyId = publicSettingsId;
+                return publicSettingsId;
             }
             return useDefaultCompanyId('public company id not found');
         } catch (error) {
