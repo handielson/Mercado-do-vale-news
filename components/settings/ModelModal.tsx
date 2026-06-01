@@ -98,11 +98,13 @@ const CATEGORY_FIELD_LABELS: Record<string, string> = {
     keyboard_support: 'Suporte a Teclado',
     materials: 'Materiais',
     nfc: 'NFC',
+    iks: 'IKS',
     peso_g: 'Peso (g)',
     pontuacao_dxomak: 'Pontuacao DXOMARK',
     processador: 'Processador',
     rede_operadora: 'Rede Operadora',
     resistencia: 'Resistencia',
+    sks: 'SKS',
     stylus_support: 'Suporte a Caneta',
     tipo: 'Tipo',
     tipo_de_display: 'Tipo de Display',
@@ -148,6 +150,14 @@ const translateTemplateValuesToPortuguese = (values: Record<string, any>) => Obj
 );
 
 const CATEGORY_FIELD_FALLBACKS: Record<string, Partial<CustomField>> = {
+    iks: {
+        field_type: 'select',
+        options: ['Sim', 'Não', 'Consulte'],
+    },
+    sks: {
+        field_type: 'select',
+        options: ['Sim', 'Não', 'Consulte'],
+    },
     battery_health: {
         field_type: 'table_relation',
         table_config: {
@@ -244,7 +254,7 @@ const buildCategoryFallbackFields = (
             label: formatCategoryFieldLabel(key),
             category: 'spec',
             field_type: fallback.field_type || 'text',
-            options: [],
+            options: fallback.options || [],
             validation: {},
             placeholder: '',
             help_text: '',
