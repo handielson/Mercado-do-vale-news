@@ -419,15 +419,16 @@ export const PublicProductPage: React.FC = () => {
                 setLoading(false);
 
                 // -- Siblings (Variantes do mesmo modelo) via VPS --
-                // IMPORTANTE: a API da VPS pode ignorar o filtro model_id/parent_id e devolver
-                // produtos aleatórios. Por isso validamos cada resultado: só consideramos sibling
-                // um produto que realmente compartilha o mesmo model_id (ou parent_id) do produto atual.
+                // IMPORTANTE: model_id pode ser generico em produtos importados. Reusamos
+                // a mesma chave segura do catalogo para separar produtos sem variacao real.
                 if (data.model_id && String(data.model_id) !== '0' && String(data.model_id) !== 'null') {
+                    const currentGroupKey = generateGroupKey(data as unknown as CatalogProduct);
                     const sibs = await vpsApiService.getProducts({ model_id: data.model_id, status: 'active', limit: 50 });
                     if (sibs) {
                         const cleanSibs = sibs.map(s => normalizeProduct(s)).filter(s =>
                             (!s.offer_type || s.offer_visibility !== 'hidden') &&
-                            String(s.model_id) === String(data.model_id)  // ← validação: só produtos do mesmo modelo
+                            String(s.model_id) === String(data.model_id) &&
+                            generateGroupKey(s as unknown as CatalogProduct) === currentGroupKey
                         );
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
                     }
