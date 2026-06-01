@@ -1131,6 +1131,20 @@ function isVpsProxyPublicProductReadPath(pathname) {
   return /^\/products\/[^/]+$/u.test(pathname);
 }
 
+const VPS_PROXY_PUBLIC_TABLE_DATA_READ_TABLES = new Set([
+  'cashback_settings',
+  'colors',
+  'companies',
+  'model_color_images',
+  'product_reviews',
+  'promotions',
+]);
+
+function isVpsProxyPublicTableDataReadPath(pathname) {
+  const match = pathname.match(/^\/table-data\/([a-zA-Z0-9_]+)$/u);
+  return Boolean(match && VPS_PROXY_PUBLIC_TABLE_DATA_READ_TABLES.has(match[1]));
+}
+
 function isVpsProxyPublicPath(proxyPath, method = 'GET') {
   const normalizedMethod = String(method || 'GET').toUpperCase();
   const pathname = proxyPath.split('?')[0] || '/';
@@ -1168,6 +1182,7 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
   if (pathname.startsWith('/coupons/validate/')) return true;
   if (pathname.startsWith('/video/')) return true;
   if (/^\/versions\/[^/]+$/u.test(pathname)) return true;
+  if (isVpsProxyPublicTableDataReadPath(pathname)) return true;
 
   return isVpsProxyPublicProductReadPath(pathname);
 }
@@ -6025,11 +6040,12 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
     if (!auth.isAdmin && (!bodyCustomerId || auth.customerId !== bodyCustomerId)) {
       return reply.code(403).send({ error: 'Forbidden for this customer' });
     }
-  } else if (((isWrite && !isPublicPath) || isVpsProxySensitiveGetPath(vpsProxyTargetPath)) && !auth.isAdmin) {
+  } else if (!isPublicPath && (isWrite || isVpsProxySensitiveGetPath(vpsProxyTargetPath)) && !auth.isAdmin) {
     return reply.code(403).send({ error: 'Admin required' });
   }
 
-  if (!isPublicPath && !process.env.SYNC_SECRET) {
+  const needsInternalSyncKey = !isPublicPath || isVpsProxyPublicTableDataReadPath(vpsProxyTargetPath.split('?')[0] || '/');
+  if (needsInternalSyncKey && !process.env.SYNC_SECRET) {
     return reply.code(500).send({ error: 'SYNC_SECRET not configured on server' });
   }
 
@@ -6038,7 +6054,7 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
   };
   const contentType = request.headers['content-type'];
   if (contentType) headers['content-type'] = String(contentType);
-  if (!isPublicPath) headers['x-sync-key'] = process.env.SYNC_SECRET;
+  if (needsInternalSyncKey) headers['x-sync-key'] = process.env.SYNC_SECRET;
 
   const response = await fastify.inject({
     method,
