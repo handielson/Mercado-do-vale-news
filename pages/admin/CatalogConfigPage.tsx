@@ -7,6 +7,7 @@ import { useVpsAuth } from '@/hooks/useVpsAuth';
 import { SectionsTab } from '@/components/admin/SectionsTab';
 import { PdpSectionHeadersPanel } from '@/components/settings/PdpSectionHeadersPanel';
 import { categoryService } from '@/services/categories';
+import { getEnabledCatalogCollections } from '@/pages/catalog/catalogCollections.js';
 
 type TabType = 'display' | 'categories' | 'appearance' | 'seo' | 'sharing' | 'sections' | 'description';
 
@@ -939,6 +940,32 @@ function AppearanceTab({ settings, updateSetting }: TabProps) {
                             <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: settings.primary_color }} />
                             <span className="font-bold text-lg" style={{ color: settings.text_primary }}>Meu Catálogo</span>
                         </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-6">
+                        <span
+                            className="px-3 py-1.5 rounded-full border text-xs font-semibold"
+                            style={{
+                                backgroundColor: settings.primary_color,
+                                borderColor: settings.primary_color,
+                                color: '#ffffff',
+                            }}
+                        >
+                            Todos os Produtos
+                        </span>
+                        {getEnabledCatalogCollections().map(collection => (
+                            <span
+                                key={collection.key}
+                                className="px-3 py-1.5 rounded-full border text-xs font-semibold"
+                                style={{
+                                    backgroundColor: settings.card_background || '#ffffff',
+                                    borderColor: settings.primary_color + '40',
+                                    color: settings.text_primary,
+                                }}
+                            >
+                                {collection.label}
+                            </span>
+                        ))}
                     </div>
 
                     {/* Cards de Produto */}
