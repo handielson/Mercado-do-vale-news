@@ -1,4 +1,3 @@
-import { USE_VPS } from '../config/migration';
 import type { BusinessHours, LocalHoliday, WarrantyOption } from '../types/companySettings';
 import type { Company } from '../types/company';
 import { defaultCompany } from '../types/company';
@@ -61,56 +60,6 @@ const LS_KEY = 'mdv_public_company_settings';
 const LS_TTL = 10 * 60 * 1000;
 const MEM_TTL = 5 * 60 * 1000;
 const PUBLIC_FETCH_TIMEOUT_MS = 3500;
-
-const PUBLIC_COMPANY_SETTINGS_COLUMNS = [
-  'id',
-  'company_name',
-  'name',
-  'razao_social',
-  'cnpj',
-  'data_abertura',
-  'phone',
-  'email',
-  'logo',
-  'receipt_logo_url',
-  'favicon',
-  'address',
-  'address_zip_code',
-  'address_street',
-  'address_number',
-  'address_complement',
-  'address_neighborhood',
-  'address_city',
-  'address_state',
-  'address_lat',
-  'address_lng',
-  'social_instagram',
-  'social_facebook',
-  'social_youtube',
-  'social_website',
-  'google_reviews_link',
-  'google_analytics_id',
-  'pix_discount_percentage',
-  'business_hours',
-  'holiday_overrides',
-  'local_holidays',
-  'business_hours_display_text',
-  'store_label_open',
-  'store_label_closed',
-  'store_label_closing_soon',
-  'store_label_lunch',
-  'extended_warranty_options',
-  'extended_warranty_terms_text',
-  'synology_video_base_url',
-  'synology_video_extension',
-  'description',
-  'catalog_footer_text',
-  'about_us_text',
-  'about_us_image_url',
-  'maintenance_mode',
-  'maintenance_message',
-  'updated_at',
-].join(',');
 
 let memCache: { data: PublicCompanySettings; expiresAt: number } | null = null;
 let settingsPromise: Promise<PublicCompanySettings | null> | null = null;
@@ -188,23 +137,6 @@ function writeLocalStorage(data: PublicCompanySettings): void {
   } catch {
     // localStorage can be full or unavailable in private contexts.
   }
-}
-
-async function loadFromSupabase(): Promise<unknown | null> {
-  const { supabase } = await import('./supabase');
-
-  const { data, error } = await supabase
-    .from('company_settings')
-    .select(PUBLIC_COMPANY_SETTINGS_COLUMNS)
-    .limit(1)
-    .single();
-
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
-
-  return data;
 }
 
 async function loadFromPublicVps(): Promise<unknown | null> {
@@ -376,9 +308,7 @@ export const publicCompanySettingsService = {
     if (!settingsPromise) {
       settingsPromise = (async () => {
         try {
-          const raw = USE_VPS.company
-            ? await loadFromPublicVps()
-            : await loadFromSupabase();
+          const raw = await loadFromPublicVps();
           const sanitized = sanitizePublicCompanySettings(raw as Record<string, any>);
 
           if (sanitized) {
@@ -388,19 +318,6 @@ export const publicCompanySettingsService = {
 
           return sanitized;
         } catch {
-          if (USE_VPS.company) {
-            try {
-              const fallback = sanitizePublicCompanySettings((await loadFromSupabase()) as Record<string, any>);
-              if (fallback) {
-                memCache = { data: fallback, expiresAt: Date.now() + MEM_TTL };
-                writeLocalStorage(fallback);
-              }
-              return fallback;
-            } catch {
-              return null;
-            }
-          }
-
           return null;
         }
       })().finally(() => {

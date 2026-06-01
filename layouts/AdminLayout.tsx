@@ -1,14 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart, Barcode, Boxes, Printer } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart, Barcode, Boxes, Printer, Mail } from 'lucide-react';
 
-import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
+import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
 import { usePageTitle } from '../hooks/usePageTitle';
 
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, customer, signOut } = useSupabaseAuth();
+  const { user, customer, signOut } = useVpsAuth();
   const { settings } = useTheme();
   const location = useLocation();
   const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
@@ -53,6 +53,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/atendimento-automatico', icon: <Bot size={18} />, label: 'AutoResponder', keywords: 'whatsapp autoresponder respostas automaticas bot atendimento' },
         { to: '/admin/settings/telegram', icon: <Bot size={18} />, label: 'Automações Bot', keywords: 'robo respostas' },
         { to: '/admin/settings/messages', icon: <MessageCircle size={18} />, label: 'Mensagens Auto', keywords: 'automaticas template' },
+        { to: '/admin/settings/email', icon: <Mail size={18} />, label: 'E-mail', keywords: 'email templates html cadastro promocao compra' },
         { to: '/admin/feedbacks', icon: <MessageSquareDashed size={18} />, label: 'Fale Conosco', keywords: 'SAC contato reclamacoes' },
         { to: '/admin/avaliacoes', icon: <Star size={18} />, label: 'Avaliações', keywords: 'estrelas reviews' },
       ]
@@ -94,8 +95,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/settings/synology-cdn', icon: <Server size={18} />, label: 'CDN Synology', keywords: 'arquivos imagens videos upload nas' },
         { to: '/admin/settings/synology-config', icon: <Shield size={18} />, label: 'Config Synology', keywords: 'tunel cloudflare runbook restaurar diagnostico' },
         { to: '/admin/settings/roadmap', icon: <Rocket size={18} />, label: 'Roadmap & Docs', keywords: 'futuro documentacao novidades' },
-        { to: '/admin/import', icon: <HardDrive size={18} />, label: 'Importação & Sync VPS', keywords: 'importar sincronizar vps preco estoque planilha supabase' },
-        { to: '/admin/migration', icon: <Database size={18} />, label: 'Migração', keywords: 'supabase vps transferir' },
+        { to: '/admin/import', icon: <HardDrive size={18} />, label: 'Importação & Sync VPS', keywords: 'importar sincronizar vps preco estoque planilha banco' },
+        { to: '/admin/migration', icon: <Database size={18} />, label: 'Migração', keywords: 'vps banco transferir' },
         { to: '/test-tabs', icon: <Tags size={18} />, label: '🧪 Teste de Abas', keywords: 'dev teste' },
       ]
     }

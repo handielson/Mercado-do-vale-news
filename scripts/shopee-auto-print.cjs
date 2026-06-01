@@ -1,4 +1,3 @@
-const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const crypto = require('crypto');
 const http = require('http');
@@ -9,12 +8,8 @@ require('dotenv').config({ path: path.join(__dirname, '.env.local') });
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
 
-// Configs fixas
-const DB_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://cqbdyxxzmkgeghwkozts.supabase.co"; 
-const DB_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxYmR5eHh6bWtnZWdod2tvenRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5MDczOTYsImV4cCI6MjA4NTQ4MzM5Nn0.fqbVtqM6x-BuHbREQqXXJpX_T5l4z1Exw_4DEgPr3nU";
 const POLLING_INTERVAL = 5 * 60 * 1000; // 5 minutos
 
-const supabase = createClient(DB_URL, DB_KEY);
 const printedDir = path.join(__dirname, 'shopee_printed');
 
 if (!fs.existsSync(printedDir)) {
@@ -27,34 +22,48 @@ function generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, sh
     return crypto.createHmac('sha256', partnerKey).update(baseStr).digest('hex');
 }
 
-const VPS_API_URL = process.env.VITE_VPS_URL || 'https://api.xiaomipetrolina.com.br';
+const VPS_API_URL = (process.env.VITE_VPS_URL || 'https://api.xiaomipetrolina.com.br').replace(/\/+$/, '');
+const VPS_SYNC_KEY = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || process.env.SYNC_SECRET || '';
+
+async function getFetch() {
+    if (typeof fetch === 'function') return fetch;
+    const mod = await import('node-fetch');
+    return mod.default;
+}
 
 async function getCompanySettings() {
-    console.log("-> Lendo extensoes do banco Split-Brain (VPS para Impressoras, Supabase para Tokens)...");
+    console.log("-> Lendo configuracoes Shopee e impressoras da VPS...");
+    if (!VPS_SYNC_KEY) {
+        throw new Error('VITE_VPS_SYNC_KEY, VPS_SYNC_KEY ou SYNC_SECRET precisa estar configurado para ler /company-settings.');
+    }
     let vpsData = {};
     try {
-        const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-        const res = await fetch(`${VPS_API_URL}/company-settings`);
+        const requestFetch = await getFetch();
+        const res = await requestFetch(`${VPS_API_URL}/company-settings`, {
+            headers: { 'x-sync-key': VPS_SYNC_KEY },
+        });
         if (res.ok) {
             vpsData = await res.json();
+        } else {
+            const text = await res.text().catch(() => '');
+            throw new Error(`HTTP ${res.status}${text ? ` - ${text}` : ''}`);
         }
     } catch (e) {
         console.error('Falha não-critica ao ler impressoras da VPS:', e.message);
     }
 
-    // A fonte de verdade dos TOKENS da Shopee e do Partner Key é o Supabase original!
-    const { data: supaData, error } = await supabase
-        .from('company_settings')
-        .select('shopee_partner_id, shopee_partner_key, shopee_shop_id, shopee_access_token, shopee_refresh_token')
-        .limit(1)
-        .single();
+    // A fonte de verdade dos TOKENS da Shopee e do Partner Key é o banco legado original!
+    const vpsSettings = vpsData;
+    const error = !vpsSettings || typeof vpsSettings !== 'object' || !vpsSettings.shopee_partner_id
+        ? new Error('Resposta vazia ou incompleta ao ler /company-settings na VPS.')
+        : null;
     
     if (error) throw error;
 
     return {
-        ...supaData,
-        shopee_printer_thermal: vpsData.shopee_printer_thermal || supaData.shopee_printer_thermal,
-        shopee_printer_a4: vpsData.shopee_printer_a4 || supaData.shopee_printer_a4
+        ...vpsSettings,
+        shopee_printer_thermal: vpsData.shopee_printer_thermal || vpsSettings.shopee_printer_thermal,
+        shopee_printer_a4: vpsData.shopee_printer_a4 || vpsSettings.shopee_printer_a4
     };
 }
 

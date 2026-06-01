@@ -5,16 +5,36 @@ import './index.css';
 import App from './App';
 import { prefetchCashbackSettings } from './components/catalog/CashbackBadge';
 
+const MV_LEGACY_HOST = 'mv.mercadodovale.com.br';
+const CANONICAL_MERCADO_ORIGIN = 'https://www.mercadodovale.com.br';
+const MV_CATALOG_REDIRECT_URL = 'https://www.mercadodovale.com.br/?categoria=Smartphones';
+
+function redirectMvHostUrl(): boolean {
+  const { location } = window;
+  if (location.hostname !== MV_LEGACY_HOST) return false;
+
+  const redirectUrl = location.hash === '#/catalog'
+    ? MV_CATALOG_REDIRECT_URL
+    : `${CANONICAL_MERCADO_ORIGIN}${location.pathname}${location.search}${location.hash}`;
+
+  window.location.replace(redirectUrl);
+  return true;
+}
+
+const isRedirectingMvHost = redirectMvHostUrl();
+
 // Pré-carrega cashback settings em paralelo ao bundle JS pra que o cache esteja
 // populado antes dos product cards renderizarem. Sem isso, cada card decide
 // "render badge ou não" depois do fetch resolver, causando layout shift em N
 // cards simultâneos (CLS ~0.4 medido no PageSpeed).
-prefetchCashbackSettings().catch(() => { /* ignora — cards seguem sem badge */ });
+if (!isRedirectingMvHost) {
+  prefetchCashbackSettings().catch(() => { /* ignora — cards seguem sem badge */ });
+}
 
 // Build Version: 2026-02-07-18:00 - Force clean build
 
 // ─── Auto-reload em falha de chunk após deploy novo ───────────────────────────
-// Quando o Vercel deploya, o index.html antigo (em cache do browser/CDN) aponta
+// Quando o deploy legado deploya, o index.html antigo (em cache do browser/CDN) aponta
 // pra chunks com hash que já não existem. Vite emite "vite:preloadError" e o
 // browser dispara um "error" global. Damos um reload único — sessionStorage flag
 // evita loop infinito caso a falha seja persistente (ex.: rede offline real).
@@ -123,10 +143,12 @@ window.addEventListener('load', () => {
   setInterval(checkForNewVersion, 5 * 60 * 1000);
 });
 
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
-}
+if (!isRedirectingMvHost) {
+  const rootElement = document.getElementById('root');
+  if (!rootElement) {
+    throw new Error("Could not find root element to mount to");
+  }
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(<App />);
+  const root = ReactDOM.createRoot(rootElement);
+  root.render(<App />);
+}

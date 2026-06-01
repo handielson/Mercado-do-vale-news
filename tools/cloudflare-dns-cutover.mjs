@@ -27,6 +27,14 @@ const desiredRecords = [
     proxied: PROXIED,
     ttl: 1,
   },
+  {
+    label: 'mv',
+    name: `mv.${ZONE_NAME}`,
+    type: 'CNAME',
+    content: ZONE_NAME,
+    proxied: PROXIED,
+    ttl: 1,
+  },
 ];
 
 function fail(message, extra = {}) {
@@ -102,7 +110,8 @@ async function main() {
 
   const records = await cf(`/zones/${zone.id}/dns_records?per_page=100&name=${encodeURIComponent(ZONE_NAME)}`);
   const wwwRecords = await cf(`/zones/${zone.id}/dns_records?per_page=100&name=${encodeURIComponent(`www.${ZONE_NAME}`)}`);
-  const allRecords = [...records, ...wwwRecords];
+  const mvRecords = await cf(`/zones/${zone.id}/dns_records?per_page=100&name=${encodeURIComponent(`mv.${ZONE_NAME}`)}`);
+  const allRecords = [...records, ...wwwRecords, ...mvRecords];
   const plan = buildPlan(allRecords);
 
   mkdirSync('reports', { recursive: true });

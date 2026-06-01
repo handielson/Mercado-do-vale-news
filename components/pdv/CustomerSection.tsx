@@ -87,18 +87,10 @@ export default function CustomerSection({
 
     const fetchRecentCustomers = async () => {
         try {
-            const { supabase } = await import('../../services/supabase');
+            const data = await customerService.list({ is_active: true });
 
             // Buscar últimos 3 clientes que fizeram compras (TODO: ordenar por última compra)
-            const { data, error } = await supabase
-                .from('customers')
-                .select('id, name, cpf_cnpj, email, phone, birth_date')
-                .eq('is_active', true)
-                .order('created_at', { ascending: false })
-                .limit(3);
-
-            if (error) throw error;
-            setRecentCustomers(data || []);
+            setRecentCustomers(data.slice(0, 3));
         } catch (error) {
             console.error('Erro ao buscar clientes recentes:', error);
         }
@@ -144,38 +136,14 @@ export default function CustomerSection({
         setShowResults(true);
 
         try {
-            const { supabase } = await import('../../services/supabase');
             const term = searchTerm.trim().toLowerCase();
-            const digits = onlyDigits(term);
-            const searchTokens = new Set([term]);
-            if (digits) {
-                searchTokens.add(digits);
-                searchTokens.add(formatPhone(digits));
-                searchTokens.add(formatCpfCnpj(digits));
-            }
-            const orFilter = [...searchTokens]
-                .filter(Boolean)
-                .flatMap(token => [
-                    `name.ilike.%${token}%`,
-                    `cpf_cnpj.ilike.%${token}%`,
-                    `phone.ilike.%${token}%`,
-                    `email.ilike.%${token}%`,
-                ])
-                .join(',');
+            const data = (await customerService.list({ search: term, is_active: true }))
+                .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+                .slice(0, 10);
 
-            const { data, error } = await supabase
-                .from('customers')
-                .select('id, name, cpf_cnpj, email, phone, birth_date')
-                .or(orFilter)
-                .eq('is_active', true)
-                .order('name', { ascending: true })
-                .limit(10);
+            setSearchResults(data);
 
-            if (error) throw error;
-
-            setSearchResults(data || []);
-
-            if (!data || data.length === 0) {
+            if (data.length === 0) {
                 toast.info('Nenhum cliente encontrado');
             } else {
                 toast.success(`${data.length} cliente(s) encontrado(s)`);

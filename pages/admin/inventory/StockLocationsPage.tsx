@@ -1106,22 +1106,6 @@ export function StockLocationsPage() {
     setBatchToLocationId(selected?.id || '');
   };
 
-  const getBatchFallbackSource = (excludeLocationId = '') => {
-    const defaultDepositId = deposits.find((deposit) => deposit.is_default)?.id || deposits[0]?.id || '';
-    const sourceLocations = locations.filter((location) => location.is_active && location.id !== excludeLocationId);
-    const fallbackLocation =
-      sourceLocations.find((location) => location.deposit_id === defaultDepositId && location.is_default) ||
-      sourceLocations.find((location) => location.deposit_id === defaultDepositId) ||
-      sourceLocations[0];
-
-    if (!fallbackLocation) return null;
-
-    return {
-      depositId: fallbackLocation.deposit_id || defaultDepositId,
-      locationId: fallbackLocation.id,
-    };
-  };
-
   const getDistributionAvailable = (distribution: ProductStockLocation) => {
     return Math.max(0, Number(distribution.quantity || 0) - Number(distribution.reserved_quantity || 0));
   };
@@ -1142,10 +1126,16 @@ export function StockLocationsPage() {
     return Math.max(0, productStockQuantity - localStockQuantity);
   };
 
+  const getBatchExcessLocationQuantity = (item: BatchItem) => {
+    const productStockQuantity = Math.max(0, Math.trunc(Number(item.product.stock_quantity || 0)));
+    const localStockQuantity = item.distribution.reduce((sum, source) => sum + Math.max(0, Number(source.quantity || 0)), 0);
+    return Math.max(0, localStockQuantity - productStockQuantity);
+  };
+
   const getBatchTransferAvailable = (item: BatchItem, toLocationId = batchToLocationId) => {
     const sourceAvailable = getBatchTransferSources(item, toLocationId)
       .reduce((sum, source) => sum + getDistributionAvailable(source), 0);
-    return item.fromLocationId ? sourceAvailable : sourceAvailable + getBatchUndistributedQuantity(item);
+    return item.fromLocationId ? sourceAvailable : 0;
   };
 
   const handleBatchOriginChange = (productId: string, selectedOriginLocationId: string) => {
@@ -1162,39 +1152,6 @@ export function StockLocationsPage() {
         available: getBatchTransferAvailable(next),
       };
     }));
-  };
-
-  const materializeBatchItemDistribution = async (
-    product: StockLocationProductSearchResult,
-    distribution: ProductStockLocation[],
-    requestedQuantity: number,
-    toLocationId = batchToLocationId
-  ) => {
-    const productStockQuantity = Math.max(0, Math.trunc(Number(product.stock_quantity || 0)));
-    const localStockQuantity = distribution.reduce((sum, source) => sum + Math.max(0, Number(source.quantity || 0)), 0);
-    const transferableAvailableQuantity = distribution
-      .filter((source) => source.location_id !== toLocationId)
-      .reduce((sum, source) => sum + getDistributionAvailable(source), 0);
-    const missingQuantity = Math.max(0, productStockQuantity - localStockQuantity);
-    const neededQuantity = Math.max(0, Math.trunc(Number(requestedQuantity || 0)) - transferableAvailableQuantity);
-    const quantityToMaterialize = Math.min(missingQuantity, neededQuantity);
-
-    if (quantityToMaterialize <= 0) return distribution;
-
-    const fallbackSource = getBatchFallbackSource(toLocationId);
-    if (!fallbackSource) return distribution;
-
-    const existingFallback = distribution.find((source) => source.location_id === fallbackSource.locationId);
-    await stockLocationService.adjustStockLocation({
-      product_id: product.id,
-      deposit_id: fallbackSource.depositId,
-      location_id: fallbackSource.locationId,
-      quantity: Number(existingFallback?.quantity || 0) + quantityToMaterialize,
-      reason: 'Distribuição automática para transferência em lote',
-      notes: `Saldo total do produto existia sem local suficiente; materializado somente ${quantityToMaterialize} unidade(s) solicitada(s) antes da transferência.`,
-    });
-
-    return stockLocationService.getProductStockDistribution(product.id);
   };
 
   /**
@@ -1274,7 +1231,6 @@ export function StockLocationsPage() {
 
     try {
       const distribution = await stockLocationService.getProductStockDistribution(product.id);
-      const available = distribution.reduce((sum, source) => sum + getDistributionAvailable(source), 0);
       const availableSources = distribution.filter(source => getDistributionAvailable(source) > 0);
       const productStockQuantity = Math.max(0, Math.trunc(Number(product.stock_quantity || 0)));
       const localStockQuantity = distribution.reduce((sum, source) => sum + Math.max(0, Number(source.quantity || 0)), 0);
@@ -1284,7 +1240,7 @@ export function StockLocationsPage() {
         product,
         fromDepositId: defaultSource?.deposit_id || '',
         fromLocationId: defaultSource?.location_id || '',
-        available,
+        available: defaultSource ? getDistributionAvailable(defaultSource) : 0,
         quantity: '1',
         distribution,
       };
@@ -1338,28 +1294,15 @@ export function StockLocationsPage() {
       return;
     }
 
-    let preparedBatchItems = batchItems;
-    try {
-      preparedBatchItems = await Promise.all(batchItems.map(async (item) => {
-        const quantity = Number(item.quantity);
-        if (!Number.isFinite(quantity) || quantity <= 0) return item;
+    const preparedBatchItems = batchItems.map((item) => ({
+      ...item,
+      available: getBatchTransferAvailable(item, batchToLocationId),
+    }));
+    setBatchItems(preparedBatchItems);
 
-        let distribution = item.distribution;
-        const transferableSourceAvailable = getBatchTransferSources(item, batchToLocationId)
-          .reduce((sum, source) => sum + getDistributionAvailable(source), 0);
-        if (quantity > transferableSourceAvailable) {
-          distribution = await materializeBatchItemDistribution(item.product, distribution, quantity, batchToLocationId);
-        }
-
-        const nextItem = { ...item, distribution };
-        return {
-          ...nextItem,
-          available: getBatchTransferAvailable(nextItem, batchToLocationId),
-        };
-      }));
-      setBatchItems(preparedBatchItems);
-    } catch (err: any) {
-      setBatchError(err?.message || 'Nao foi possivel preparar as origens do lote.');
+    const missingOrigin = preparedBatchItems.find((item) => !item.fromLocationId);
+    if (missingOrigin) {
+      setBatchError(`Escolha a origem de cada produto antes de transferir. Falta origem para ${missingOrigin.product.sku || missingOrigin.product.name}.`);
       return;
     }
 
@@ -2429,20 +2372,23 @@ export function StockLocationsPage() {
                 <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="px-3 py-3">Produto</th>
-                    <th className="px-3 py-3">Origem</th>
+                    <th className="px-3 py-3">Saindo de</th>
                     <th className="px-3 py-3 text-right">Disponível</th>
-                    <th className="px-3 py-3 text-center">Quantidade</th>
+                    <th className="px-3 py-3 text-center">Quantidade a movimentar</th>
                     <th className="px-3 py-3 text-right">&nbsp;</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {batchItems.map((item) => {
-                    const originLocations = getBatchTransferSources(item);
                     const originOptions = item.distribution
-                      .filter((source) => source.location_id !== batchToLocationId && getDistributionAvailable(source) > 0)
+                      .filter((source) => getDistributionAvailable(source) > 0)
                       .sort((a, b) => getDistributionAvailable(b) - getDistributionAvailable(a));
+                    const originSummaryRows = item.distribution
+                      .sort((a, b) => Math.max(0, Number(b.quantity || 0)) - Math.max(0, Number(a.quantity || 0)));
+                    const transferableOriginCount = originOptions.filter((source) => source.location_id !== batchToLocationId).length;
                     const selectedOriginLocationId = item.fromLocationId || '';
                     const undistributedQuantity = getBatchUndistributedQuantity(item);
+                    const excessLocationQuantity = getBatchExcessLocationQuantity(item);
                     const transferAvailable = getBatchTransferAvailable(item);
                     return (
                       <tr key={item.product.id}>
@@ -2454,30 +2400,61 @@ export function StockLocationsPage() {
                           </p>
                         </td>
                         <td className="px-3 py-3">
-                          <div className="text-xs text-slate-600">
-                            {originOptions.length > 1 ? (
-                              <select
-                                value={selectedOriginLocationId}
-                                onChange={(event) => handleBatchOriginChange(item.product.id, event.target.value)}
-                                className="h-9 w-full min-w-56 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                                title="Escolher origem da transferência"
-                              >
-                                <option value="">Todas as origens com saldo ({originOptions.length} locais)</option>
+                          <div className="space-y-2 text-xs text-slate-600">
+                            <label className="block">
+                                <span className="mb-1 block font-semibold text-slate-700">Estoque de origem</span>
+                                <select
+                                  value={selectedOriginLocationId}
+                                  onChange={(event) => handleBatchOriginChange(item.product.id, event.target.value)}
+                                  className="h-9 w-full min-w-56 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                                  title="Escolher origem da transferência"
+                                >
+                                  <option value="">
+                                  {transferableOriginCount === 1 ? 'Selecione a origem (1 local)' : `Selecione a origem (${transferableOriginCount} locais)`}
+                                </option>
                                 {originOptions.map((source) => (
-                                  <option key={source.location_id} value={source.location_id}>
+                                  <option
+                                    key={source.location_id}
+                                    value={source.location_id}
+                                    disabled={source.location_id === batchToLocationId}
+                                  >
                                     {source.deposit?.name || '-'} / {getLocationDisplayName(source.location)} - {getDistributionAvailable(source)} disp.
+                                    {source.location_id === batchToLocationId ? ' - ja esta no destino' : ''}
                                   </option>
                                 ))}
-                              </select>
-                            ) : (
-                              <>
-                                <p className="font-semibold text-slate-800">
-                                  {originLocations[0] ? `${originLocations[0].deposit?.name || '-'} / ${getLocationDisplayName(originLocations[0].location)}` : 'Sem saldo'}
-                                </p>
-                                {undistributedQuantity > 0 && !selectedOriginLocationId && (
-                                  <p className="mt-0.5 text-slate-500">+ {undistributedQuantity} sem local definido</p>
-                                )}
-                              </>
+                                </select>
+                              </label>
+                            {originSummaryRows.length > 0 && (
+                              <div className="space-y-1">
+                                <p className="font-semibold text-slate-700">Estoque registrado por origem</p>
+                                {originSummaryRows.map((source) => {
+                                  const isSelected = source.location_id === selectedOriginLocationId;
+                                  const physicalQuantity = Math.max(0, Number(source.quantity || 0));
+                                  const availableQuantity = getDistributionAvailable(source);
+                                  return (
+                                    <div
+                                      key={`${source.location_id}-summary`}
+                                      className={`flex items-center justify-between gap-3 rounded-md border px-2 py-1 ${
+                                        isSelected ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-100 bg-slate-50 text-slate-600'
+                                      }`}
+                                    >
+                                      <span className="truncate">{source.deposit?.name || '-'} / {getLocationDisplayName(source.location)}</span>
+                                      <span className="shrink-0 font-bold">
+                                        {physicalQuantity} unidade{physicalQuantity === 1 ? '' : 's'}
+                                        {availableQuantity !== physicalQuantity ? ` (${availableQuantity} disp.)` : ''}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {undistributedQuantity > 0 && (
+                              <p className="text-amber-700">+ {undistributedQuantity} sem local definido, ajuste a origem antes de transferir</p>
+                            )}
+                            {excessLocationQuantity > 0 && (
+                              <p className="text-red-700">
+                                Locais somam {excessLocationQuantity} unidade{excessLocationQuantity === 1 ? '' : 's'} a mais que o estoque total; confira a divergencia antes de transferir.
+                              </p>
                             )}
                           </div>
                         </td>
@@ -3760,7 +3737,7 @@ function formatMovementDate(value: string): string {
 
 function formatMovementProduct(movement: StockLocationMovement): string {
   const product = movement.product;
-  if (!product) return movement.product_id;
+  if (!product) return 'Produto não encontrado';
 
   // Nome | Variação | SKU
   const specs = product.specs || {};

@@ -32,13 +32,13 @@ const CONFIG = {
   // Informações do sistema (contexto para a IA)
   sistema: {
     nome: 'Mercado do Vale — E-commerce B2B/B2C',
-    stack: 'React + Vite (frontend), Node.js/Express (VPS), Supabase (auth/pedidos)',
+    stack: 'React + Vite (frontend), Node.js/Fastify (VPS), MySQL + Synology',
     fonteDaVerdade: 'VPS MySQL — produtos e catálogo',
-    urlProducao: 'https://mercado-do-vale-news.vercel.app',
-    urlAdmin: 'https://mercado-do-vale-news.vercel.app/admin/dashboard',
+    urlProducao: 'https://mercadodovale.com.br',
+    urlAdmin: 'https://mercadodovale.com.br/admin/dashboard',
     bancoVPS: 'MySQL — banco: mercado_do_vale',
-    deploy: 'Vercel (automático via push na branch main)',
-    pm2Service: 'server — gerenciado pelo PM2 na VPS',
+    deploy: 'VPS/Synology (build Vite publicado no Nginx da VPS)',
+    pm2Service: 'mdv-api — gerenciado pelo PM2 na VPS',
   }
 };
 
@@ -179,12 +179,12 @@ ${formatarArquivos(git.arquivos)}
 
 ${linhaMenor}
 [DEPENDÊNCIAS CRÍTICAS DO SISTEMA]
-  ⚠ Token OAuth Bling   : Renovado automaticamente, salvo no Supabase
-  ⚠ Variáveis de Ambiente: Configuradas no Vercel (Settings → Env Vars)
+  ⚠ Token OAuth Bling   : Renovado automaticamente pela API da VPS
+  ⚠ Variáveis de Ambiente: Configuradas no .env operacional da VPS
   ⚠ VPS MySQL           : Deve estar online para webhooks funcionarem
-  ⚠ PM2 na VPS          : Gerencia server.js. Reiniciar com: pm2 restart server
-  ⚠ Supabase RLS        : Políticas de segurança ativas em todas as tabelas
-  ⚠ GitHub Actions      : Deploy automático na Vercel via push na main
+  ⚠ PM2 na VPS          : Gerencia a API. Reiniciar com: pm2 restart mdv-api
+  ⚠ Synology            : Armazena backups e midias operacionais
+  ⚠ Nginx na VPS        : Serve o build web e encaminha APIs
 
 ${linhaMenor}
 [COMO VERIFICAR SE O SISTEMA ESTÁ FUNCIONANDO]
@@ -224,7 +224,7 @@ ${linhaMenor}
     
     Passo 1: git revert ${git.hashCurto || '<HASH>'} --no-edit
     Passo 2: git push origin main
-    Passo 3: Aguardar deploy automático na Vercel (aproximadamente 2 minutos)
+    Passo 3: Executar o build e publicar o release no Nginx da VPS
     Passo 4: Acessar ${CONFIG.sistema.urlProducao} e verificar funcionamento
     Passo 5: Executar checklist de verificação (seção acima)
 
@@ -253,7 +253,7 @@ ${linhaMenor}
     Passo 2: Encontrar o ZIP anterior a este backup
     Passo 3: Extrair e substituir a pasta do projeto
     Passo 4: Executar: npm install
-    Passo 5: Executar: npx vercel --prod (para fazer deploy manual)
+    Passo 5: Executar o script de deploy VPS/Synology do projeto
 
 ${linhaMenor}
 [NOTAS DO DESENVOLVEDOR]

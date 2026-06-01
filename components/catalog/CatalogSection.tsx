@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
 import { ModernProductCard } from './ModernProductCard';
 import { catalogSectionsService } from '@/services/catalogSectionsService';
@@ -25,7 +25,7 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
     const [products, setProducts] = useState<CatalogProduct[]>([]);
     const [loading, setLoading] = useState(true);
     const [colorHexMap, setColorHexMap] = useState<Record<string, string>>({});
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
 
     useEffect(() => {
         loadProducts();

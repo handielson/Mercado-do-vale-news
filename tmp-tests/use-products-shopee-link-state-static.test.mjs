@@ -5,8 +5,8 @@ const source = readFileSync('hooks/useProducts.ts', 'utf8');
 
 assert.match(
   source,
-  /import \{ supabase \} from '\.\.\/services\/supabase';/,
-  'useProducts should be able to read Shopee link metadata directly'
+  /import \{ shopeeProductService \} from '\.\.\/services\/shopeeProducts';/,
+  'useProducts should read Shopee link metadata through the VPS service'
 );
 
 assert.match(
@@ -17,8 +17,14 @@ assert.match(
 
 assert.match(
   source,
-  /from\('shopee_products'\)[\s\S]*select\('product_id,\s*shopee_item_id'\)/,
-  'admin product hook should read product_id and shopee_item_id from shopee_products'
+  /shopeeProductService\.getItemIdByProductIdMap\(\)/,
+  'admin product hook should read product_id and shopee_item_id from the VPS service'
+);
+
+assert.doesNotMatch(
+  source,
+  /from\('shopee_products'\)/,
+  'admin product hook must not read shopee_products directly from Supabase'
 );
 
 assert.match(

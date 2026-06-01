@@ -1,6 +1,6 @@
 -- ============================================================
 -- MIGRATION 004: Gestão de Unidades Serializadas (IMEI)
--- Aplicar no Supabase SQL Editor
+-- Aplicar no SQL da VPS
 -- Data: 2026-04-02
 -- ============================================================
 

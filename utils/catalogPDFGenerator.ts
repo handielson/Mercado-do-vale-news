@@ -2,8 +2,10 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { Product } from '@/types/product';
 import type { CustomerType } from './catalogMessageGenerator';
-import { formatPrice } from '@/services/installmentCalculator';
+import { calculateInstallmentFromFees, calculatePixPrice, formatPrice } from '@/services/installmentCalculator';
+import { paymentFeesService, type PaymentFee } from '@/services/payment-fees';
 import { vpsApiService } from '@/services/vpsApiService';
+import { publicCompanySettingsService } from '@/services/publicCompanySettings';
 
 interface CompanySettings {
     name?: string;
@@ -69,20 +71,9 @@ function getPriceForCustomer(product: Product, customerType: CustomerType): numb
 }
 
 /**
- * Calculate installment (10x with 16% interest)
- */
-function calculateInstallment(price: number): { value: number; total: number } {
-    const installments = 10;
-    const interestRate = 0.16;
-    const total = price * (1 + interestRate);
-    const value = total / installments;
-    return { value, total };
-}
-
-/**
  * Group products by variant
  */
-function groupProducts(products: Product[], customerType: CustomerType): GroupedProduct[] {
+function groupProducts(products: Product[], customerType: CustomerType, paymentFees: PaymentFee[], pixDiscountPercent: number): GroupedProduct[] {
     const grouped = new Map<string, GroupedProduct>();
 
     products.forEach(product => {
@@ -94,7 +85,8 @@ function groupProducts(products: Product[], customerType: CustomerType): Grouped
         const key = `${product.model || cleanName}-${variant}`;
 
         const price = getPriceForCustomer(product, customerType);
-        const installment = calculateInstallment(price);
+        const pixPrice = calculatePixPrice(price, pixDiscountPercent);
+        const installment = calculateInstallmentFromFees(price, paymentFees, 12);
 
         if (grouped.has(key)) {
             const existing = grouped.get(key)!;
@@ -106,7 +98,7 @@ function groupProducts(products: Product[], customerType: CustomerType): Grouped
                 name: cleanName,
                 variant,
                 colors: [color],
-                priceRetail: price,
+                priceRetail: pixPrice,
                 priceInstallment: installment.value,
                 installmentTotal: installment.total,
                 imageUrl: product.images?.[0] // Add product image
@@ -190,7 +182,12 @@ export async function generateCatalogPDF(
     const company = await getCompanySettings();
 
     // Group products
-    const grouped = groupProducts(products, customerType);
+    const [paymentFees, publicSettings] = await Promise.all([
+        paymentFeesService.list(),
+        publicCompanySettingsService.get(),
+    ]);
+    const pixDiscountPercent = Number(publicSettings?.pix_discount_percentage || 0);
+    const grouped = groupProducts(products, customerType, paymentFees, pixDiscountPercent);
 
     // Debug logging
     console.log('PDF Generation - Customer Type:', customerType);
@@ -441,7 +438,7 @@ export async function generateCatalogPDF(
         // Cash price (always shown)
         doc.setFontSize(7);
         doc.setTextColor(71, 85, 105);
-        doc.text('A VISTA', priceX, priceY);
+        doc.text('A VISTA PIX', priceX, priceY);
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(34, 197, 94);
@@ -452,7 +449,7 @@ export async function generateCatalogPDF(
             doc.setFontSize(7);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(71, 85, 105);
-            doc.text('10x de', priceX + 30, priceY);
+            doc.text('12x de', priceX + 30, priceY);
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(59, 130, 246);

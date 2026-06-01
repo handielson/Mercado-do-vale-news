@@ -54,10 +54,22 @@ function required(name) {
   return value;
 }
 
-function getSupabaseRestBaseUrl() {
-  const url = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\\/+$/, '');
-  if (!url) throw new Error('SUPABASE_URL missing');
-  return url + '/rest/v1';
+async function queryTelegramSettings() {
+  const mysql = require('mysql2/promise');
+  const pool = mysql.createPool({
+    host: required('DB_HOST'),
+    user: required('DB_USER'),
+    password: required('DB_PASS'),
+    database: required('DB_NAME'),
+    waitForConnections: true,
+    connectionLimit: 1,
+  });
+  try {
+    const [rows] = await pool.query('SELECT active, chat_id FROM telegram_settings LIMIT 1');
+    return Array.isArray(rows) ? rows[0] : null;
+  } finally {
+    await pool.end();
+  }
 }
 
 function sanitizeTelegramCommandResult(result) {
@@ -71,14 +83,7 @@ function sanitizeTelegramCommandResult(result) {
 }
 
 (async () => {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
-  if (!key) throw new Error('Supabase auth key missing');
-  const response = await fetch(getSupabaseRestBaseUrl() + '/telegram_settings?select=active,chat_id&limit=1', {
-    headers: { apikey: key, Authorization: 'Bearer ' + key, Accept: 'application/json' },
-  });
-  const rows = await response.json().catch(() => []);
-  if (!response.ok) throw new Error('telegram_settings fetch failed: ' + response.status);
-  const settings = Array.isArray(rows) ? rows[0] : null;
+  const settings = await queryTelegramSettings();
   if (!settings?.active || !settings?.chat_id) throw new Error('Telegram settings inactive or chat_id missing');
 
   const secret = required('TELEGRAM_WEBHOOK_SECRET');

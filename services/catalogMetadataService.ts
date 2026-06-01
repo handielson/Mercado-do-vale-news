@@ -91,7 +91,7 @@ export const catalogMetadataService = {
 
     /**
      * Buscar todas as marcas únicas com contagem
-     * Fonte: VPS /catalog/metadata (sem Supabase)
+     * Fonte: VPS /catalog/metadata (sem VPS)
      */
     getAllBrands: async (): Promise<Array<{ name: string; count: number }>> => {
         const meta = await getMetadata();
@@ -100,7 +100,7 @@ export const catalogMetadataService = {
 
     /**
      * Buscar faixa de preços (min/max) dos produtos do catálogo
-     * Fonte: VPS /catalog/metadata (sem Supabase)
+     * Fonte: VPS /catalog/metadata (sem VPS)
      */
     getPriceRange: async (): Promise<{ min: number; max: number } | null> => {
         const meta = await getMetadata();

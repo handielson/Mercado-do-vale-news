@@ -1,6 +1,6 @@
 import { Category, CategoryInput } from '../types/category';
 import { vpsApiService } from './vpsApiService';
-import { supabase } from './supabase';
+import { buildAuthHeaders } from './authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
 /**
@@ -54,7 +54,7 @@ async function list(noCache = false): Promise<Category[]> {
 
 async function create(input: CategoryInput): Promise<Category> {
     const slug = input.slug || generateSlug(input.name);
-    // Gerar UUID v4 no cliente para garantir que o ID seja igual Supabase-style
+    // Gerar UUID v4 no cliente para garantir que o ID seja igual UUID v4
     const id = crypto.randomUUID();
     const ok = await vpsApiService.syncCategory({
         id,
@@ -111,15 +111,12 @@ async function remove(id: string): Promise<void> {
 }
 
 async function updateSortOrder(orders: { id: string; sort_order: number; parent_id?: string | null }[]): Promise<void> {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
     await fetch(proxyUrl('/categories/sort-order', 'PATCH'), {
         method: 'PATCH',
-        headers: {
+        headers: await buildAuthHeaders({
             'Content-Type': 'application/json',
             ...getVpsSyncHeaders(),
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        }),
         body: JSON.stringify(orders),
     });
 }

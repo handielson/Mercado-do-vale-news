@@ -20,7 +20,7 @@ import {
 import { toast } from 'sonner';
 import { legacyAPI, LegacySale, LegacyProduct, LegacyBrand } from '../../services/legacyAPI';
 import { vpsClient } from '../../services/vpsClient';
-import { supabase } from '../../services/supabase';
+import { customerService } from '../../services/customers';
 import { companySettingsService } from '../../services/companySettingsService';
 import { generateLegacySalePdf, LegacyReceiptItem } from '../../utils/legacySalePdfGenerator';
 
@@ -60,6 +60,16 @@ interface PdfProgress {
   errors: string[];
 }
 
+interface TableDataResponse<T> {
+  rows?: T[];
+}
+
+interface LegacyImportedSaleRow {
+  id: string;
+  legacy_sale_id?: string | null;
+  legacy_pdf_url?: string | null;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function mapPaymentMethod(method: string, totalCents: number) {
@@ -83,6 +93,36 @@ function fmtBRL(cents: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 }
 
+async function loadLegacyImportedSales(): Promise<LegacyImportedSaleRow[]> {
+  const rows: LegacyImportedSaleRow[] = [];
+  const pageSize = 200;
+
+  for (let offset = 0; ; offset += pageSize) {
+    const data = await vpsClient.get<TableDataResponse<LegacyImportedSaleRow>>(
+      `/table-data/sales?limit=${pageSize}&offset=${offset}`
+    );
+    const pageRows = Array.isArray(data.rows) ? data.rows : [];
+    rows.push(...pageRows.filter(row => row.legacy_sale_id));
+    if (pageRows.length < pageSize) break;
+  }
+
+  return rows;
+}
+
+async function deleteLegacyImportedSale(id: string): Promise<void> {
+  await vpsClient.delete(`/table-data/sales/${encodeURIComponent(id)}?pk=id`);
+}
+
+async function updateLegacySalePdfUrl(legacySaleId: string, pdfUrl: string): Promise<void> {
+  const sale = (await loadLegacyImportedSales())
+    .find(row => String(row.legacy_sale_id || '') === String(legacySaleId));
+  if (!sale?.id) return;
+
+  await vpsClient.patch(`/table-data/sales/${encodeURIComponent(sale.id)}?pk=id`, {
+    legacy_pdf_url: pdfUrl,
+  });
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 type Phase = 'idle' | 'loading' | 'diagnostic' | 'testing' | 'done' | 'generating';
@@ -102,33 +142,17 @@ export const LegacySalesImportTab: React.FC = () => {
 
     setClearing(true);
     try {
-      // 1. Busca todos os IDs de vendas legadas
-      const { data: legacySales, error: fetchErr } = await supabase
-        .from('sales')
-        .select('id')
-        .not('legacy_sale_id', 'is', null);
-
-      if (fetchErr) throw fetchErr;
-      const ids = (legacySales || []).map(s => s.id);
+      const legacySales = await loadLegacyImportedSales();
+      const ids = legacySales.map(s => s.id);
 
       if (ids.length === 0) {
         toast.info('Nenhuma venda importada encontrada.');
         return;
       }
 
-      // 2. Apaga itens
-      const { error: itemsErr } = await supabase
-        .from('sale_items')
-        .delete()
-        .in('sale_id', ids);
-      if (itemsErr) throw itemsErr;
-
-      // 3. Apaga vendas
-      const { error: salesErr } = await supabase
-        .from('sales')
-        .delete()
-        .in('id', ids);
-      if (salesErr) throw salesErr;
+      for (const id of ids) {
+        await deleteLegacyImportedSale(id);
+      }
 
       toast.success(`${ids.length} venda(s) importada(s) apagada(s). Reimporte agora.`);
       setResult(null);
@@ -153,9 +177,9 @@ export const LegacySalesImportTab: React.FC = () => {
       const legacySales = await legacyAPI.getSales();
 
       toast.loading('Comparando com clientes do novo sistema...', { id: 'diag' });
-      const [{ data: newCustomers }, { data: existingSales }] = await Promise.all([
-        supabase.from('customers').select('id, name, cpf_cnpj'),
-        supabase.from('sales').select('legacy_sale_id, legacy_pdf_url').not('legacy_sale_id', 'is', null),
+      const [newCustomers, existingSales] = await Promise.all([
+        customerService.list(),
+        loadLegacyImportedSales(),
       ]);
 
       const cpfMap = new Map<string, { id: string; name: string }>();
@@ -240,26 +264,21 @@ export const LegacySalesImportTab: React.FC = () => {
     const saleTotal = ls.total ?? ls.total_amount ?? 0;
     const totalCents = Math.round(saleTotal * 100);
 
-    const { data: sale, error: saleErr } = await supabase
-      .from('sales')
-      .insert({
-        customer_id:     newCustomerId,
-        subtotal:        totalCents,
-        discount_total:  Math.round((ls.discount_amount || 0) * 100),
-        total:           totalCents,
-        cost_total:      0,
-        profit:          0,
-        payment_methods: mapPaymentMethod(ls.payment_method || '', totalCents),
-        status:          'completed',
-        notes:           `[Migrado do MV-Gestao em ${new Date().toLocaleDateString('pt-BR')}]`,
-        legacy_sale_id:  ls.id,
-        legacy_pdf_url:  pdfUrl,
-        created_at:      saleDate,
-      })
-      .select()
-      .single();
-
-    if (saleErr) throw saleErr;
+    const sale = await vpsClient.post<any>('/table-data/sales', {
+      id: crypto.randomUUID(),
+      customer_id:     newCustomerId,
+      subtotal:        totalCents,
+      discount_total:  Math.round((ls.discount_amount || 0) * 100),
+      total:           totalCents,
+      cost_total:      0,
+      profit:          0,
+      payment_methods: mapPaymentMethod(ls.payment_method || '', totalCents),
+      status:          'completed',
+      notes:           `[Migrado do MV-Gestao em ${new Date().toLocaleDateString('pt-BR')}]`,
+      legacy_sale_id:  ls.id,
+      legacy_pdf_url:  pdfUrl,
+      created_at:      saleDate,
+    });
 
     const items: any[] = ls.items || [];
     if (items.length > 0) {
@@ -283,6 +302,7 @@ export const LegacySalesImportTab: React.FC = () => {
         const imeiLine = [phone?.imei1, phone?.imei2].filter(Boolean).join(' / ');
 
         return {
+          id:           crypto.randomUUID(),
           sale_id:      sale.id,
           product_id:   null,
           product_name: displayName,
@@ -296,7 +316,7 @@ export const LegacySalesImportTab: React.FC = () => {
           is_gift:      item.type === 'GIFT',
         };
       });
-      await supabase.from('sale_items').insert(saleItems);
+      await vpsClient.post('/table-data/sale_items/bulk', saleItems);
     }
     return sale;
   };
@@ -510,11 +530,7 @@ export const LegacySalesImportTab: React.FC = () => {
 
           const pdfUrl = `${ARQUIVOS_CDN}/${pdfName}`;
 
-          // Atualizar legacy_pdf_url no banco
-          await supabase
-            .from('sales')
-            .update({ legacy_pdf_url: pdfUrl })
-            .eq('legacy_sale_id', legacySale.id);
+          await updateLegacySalePdfUrl(legacySale.id, pdfUrl);
 
           // Atualizar estado local
           setResult(prev => {

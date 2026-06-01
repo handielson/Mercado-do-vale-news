@@ -1,21 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Pencil, Save, X } from 'lucide-react';
-import { supabase } from '../../../services/supabase';
-
-interface CustomField {
-    id: string;
-    company_id: string;
-    key: string;
-    label: string;
-    category: 'basic' | 'spec' | 'price' | 'fiscal' | 'logistics';
-    field_type: string;
-    options?: string[];
-    validation?: { min?: number; max?: number };
-    placeholder?: string;
-    help_text?: string;
-    is_system: boolean;
-    display_order: number;
-}
+import { Trash2, Pencil, Save, X } from 'lucide-react';
+import { customFieldsService, type CustomField } from '../../../services/custom-fields';
 
 export function CustomFieldsLibraryPage() {
     const [fields, setFields] = useState<CustomField[]>([]);
@@ -29,13 +14,7 @@ export function CustomFieldsLibraryPage() {
 
     const loadFields = async () => {
         try {
-            const { data, error } = await supabase
-                .from('custom_fields')
-                .select('*')
-                .order('display_order');
-
-            if (error) throw error;
-            setFields(data || []);
+            setFields(await customFieldsService.list());
         } catch (error) {
             console.error('Error loading fields:', error);
         } finally {
@@ -52,20 +31,15 @@ export function CustomFieldsLibraryPage() {
         if (!editingId) return;
 
         try {
-            const { error } = await supabase
-                .from('custom_fields')
-                .update({
-                    label: editForm.label,
-                    field_type: editForm.field_type,
-                    category: editForm.category,
-                    options: editForm.options,
-                    validation: editForm.validation,
-                    placeholder: editForm.placeholder,
-                    help_text: editForm.help_text
-                })
-                .eq('id', editingId);
-
-            if (error) throw error;
+            await customFieldsService.update(editingId, {
+                label: editForm.label,
+                field_type: editForm.field_type as any,
+                category: editForm.category,
+                options: editForm.options,
+                validation: editForm.validation,
+                placeholder: editForm.placeholder,
+                help_text: editForm.help_text,
+            });
 
             await loadFields();
             setEditingId(null);
@@ -90,12 +64,7 @@ export function CustomFieldsLibraryPage() {
         if (!confirm('Tem certeza que deseja excluir este campo?')) return;
 
         try {
-            const { error } = await supabase
-                .from('custom_fields')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
+            await customFieldsService.delete(id);
             await loadFields();
         } catch (error) {
             console.error('Error deleting field:', error);

@@ -15,7 +15,7 @@ import {
     WalletCards,
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useSupabaseAuth } from '../../hooks/useSupabaseAuth';
+import { useVpsAuth } from '../../hooks/useVpsAuth';
 import { PersonalInfoTab } from '../../components/customer/profile/PersonalInfoTab';
 import { PurchaseHistoryTab } from '../../components/customer/profile/PurchaseHistoryTab';
 import { TypeUpgradeTab } from '../../components/customer/profile/TypeUpgradeTab';
@@ -45,7 +45,7 @@ const accountTypeLabel: Record<string, string> = {
 export const CustomerProfilePage: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { customer, isLoading } = useSupabaseAuth();
+    const { customer, isLoading } = useVpsAuth();
     const [activeTab, setActiveTab] = useState<TabType>(() => getInitialTab(location));
 
     useEffect(() => {

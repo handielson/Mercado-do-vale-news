@@ -1,9 +1,8 @@
 /**
  * Sale Service
- * Service for managing sales (PDV) in Supabase
+ * Service for managing sales (PDV) in VPS
  */
 
-import { supabase } from './supabase';
 import {
     Sale,
     SaleInput,
@@ -16,28 +15,12 @@ import { calculateSaleTotals } from '../utils/saleCalculations';
 import { promotionService } from './promotionService';
 import { benefitService } from './benefitService';
 import { syncStockToBling } from './blingService';
-import { cancelReferralReward } from './cashbackService';
+import { cancelReferralReward, processReferralReward } from './cashbackService';
 import { unitService } from './units';
 import { stockLocationService } from './stockLocationService';
 import { vpsApiService } from './vpsApiService';
-
-const shouldFallbackToLegacyStock = (error: unknown): boolean => {
-    const message = error instanceof Error ? error.message : String((error as any)?.message || error || '');
-    const lowerMessage = message.toLowerCase();
-
-    return [
-        'decrement_product_stock_by_priority',
-        'could not find the function',
-        'function',
-        'does not exist',
-        'schema cache',
-        'pgrst202',
-        'stock_deposits',
-        'stock_locations',
-        'product_stock_locations',
-        'stock_location_movements',
-    ].some(fragment => lowerMessage.includes(fragment));
-};
+import { vpsClient } from './vpsClient';
+import { deliveryCreditService } from './deliveryCreditService';
 
 const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Promise<void> => {
     if (!item.product_id) return;
@@ -53,39 +36,13 @@ const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Pro
         });
         return;
     } catch (priorityError) {
-        if (!shouldFallbackToLegacyStock(priorityError)) {
-            console.error(`[saleService] Falha na baixa por prioridade do produto ${item.product_id}:`, priorityError);
-            return;
-        }
-
-        console.warn(
-            `[saleService] Baixa por prioridade indisponivel; usando decrement_stock legado para produto ${item.product_id}.`,
-            priorityError
-        );
-    }
-
-    const { error: stockError } = await supabase.rpc('decrement_stock', {
-        p_product_id: item.product_id,
-        p_quantity: item.quantity
-    });
-    if (stockError) {
-        console.error(`Falha ao atualizar estoque do produto ${item.product_id}:`, stockError);
+        console.error(`[saleService] Falha na baixa por prioridade do produto ${item.product_id}:`, priorityError);
     }
 };
 
 type SaleStockRestoreItem = {
     product_id: string | null;
     quantity: number;
-};
-
-const shouldFallbackToLegacyStockRestore = (error: unknown): boolean => {
-    const message = error instanceof Error ? error.message : String((error as any)?.message || error || '');
-    const lowerMessage = message.toLowerCase();
-
-    return shouldFallbackToLegacyStock(error) || [
-        'restore_product_stock_from_sale_movements',
-        'sale_location_movements_not_found',
-    ].some(fragment => lowerMessage.includes(fragment));
 };
 
 const restoreSaleStockForItems = async (
@@ -101,32 +58,160 @@ const restoreSaleStockForItems = async (
         });
         return;
     } catch (restoreError) {
-        if (!shouldFallbackToLegacyStockRestore(restoreError)) {
-            console.error(`[saleService] Falha ao restaurar estoque por local da venda ${saleId}:`, restoreError);
-            return;
-        }
-
-        console.warn(
-            `[saleService] Restauracao por local indisponivel; usando increment_stock legado para venda ${saleId}.`,
-            restoreError
-        );
-    }
-
-    if (!items) return;
-
-    for (const item of items) {
-        if (!item.product_id) continue;
-
-        const { error: stockError } = await supabase.rpc('increment_stock', {
-            p_product_id: item.product_id,
-            p_quantity: item.quantity
-        });
-
-        if (stockError) {
-            console.error(`Falha ao restaurar estoque do produto ${item.product_id}:`, stockError);
-        }
+        console.error(`[saleService] Falha ao restaurar estoque por local da venda ${saleId}:`, restoreError);
     }
 };
+
+interface TableDataResponse<T> {
+    rows?: T[];
+    total?: number;
+}
+
+function parseJsonField<T>(value: unknown, fallback: T): T {
+    if (value == null || value === '') return fallback;
+    if (typeof value !== 'string') return value as T;
+    try {
+        return JSON.parse(value) as T;
+    } catch {
+        return fallback;
+    }
+}
+
+function createLocalId(): string {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+        return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function serializeJsonValue(value: unknown): unknown {
+    if (value == null || value === '') return null;
+    if (typeof value === 'string') return value;
+    return JSON.stringify(value);
+}
+
+function serializeSaleRowForTable<T extends Record<string, unknown>>(row: T): T {
+    return {
+        ...row,
+        payment_methods: serializeJsonValue(row.payment_methods),
+    };
+}
+
+function normalizeSaleRow(row: any): Sale {
+    return {
+        ...row,
+        subtotal: Number(row.subtotal) || 0,
+        discount_total: Number(row.discount_total) || 0,
+        total: Number(row.total) || 0,
+        cost_total: Number(row.cost_total) || 0,
+        profit: Number(row.profit) || 0,
+        delivery_cost_store: Number(row.delivery_cost_store) || 0,
+        delivery_cost_customer: Number(row.delivery_cost_customer) || 0,
+        delivery_total: Number(row.delivery_total) || 0,
+        promotional_discount: Number(row.promotional_discount) || 0,
+        payment_methods: parseJsonField(row.payment_methods, []),
+    } as Sale;
+}
+
+function normalizeSaleItemRow(row: any): SaleItem {
+    return {
+        ...row,
+        quantity: Number(row.quantity) || 0,
+        unit_price: Number(row.unit_price) || 0,
+        unit_cost: Number(row.unit_cost) || 0,
+        discount: Number(row.discount) || 0,
+        subtotal: Number(row.subtotal) || 0,
+        total: Number(row.total) || 0,
+        is_gift: row.is_gift === true || row.is_gift === 1,
+    } as SaleItem;
+}
+
+async function loadTableRows<T>(tableName: string): Promise<T[]> {
+    const allRows: T[] = [];
+    const pageSize = 200;
+
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<TableDataResponse<T>>(
+            `/table-data/${encodeURIComponent(tableName)}?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows.push(...rows);
+        if (rows.length < pageSize) break;
+    }
+
+    return allRows;
+}
+
+async function loadSaleRows(): Promise<Sale[]> {
+    const rows = await loadTableRows<any>('sales');
+    return rows.map(normalizeSaleRow);
+}
+
+async function loadSaleItemsBySaleId(saleId: string): Promise<SaleItem[]> {
+    const rows = await loadTableRows<any>('sale_items');
+    return rows
+        .filter(row => String(row.sale_id || '') === String(saleId))
+        .map(normalizeSaleItemRow);
+}
+
+async function loadSaleWithItemsById(saleId: string): Promise<SaleWithItems | null> {
+    const sales = await loadSaleRows();
+    const sale = sales.find(row => String(row.id) === String(saleId));
+    if (!sale) return null;
+
+    const [items, customers, teamMembers] = await Promise.all([
+        loadSaleItemsBySaleId(saleId),
+        loadTableRows<any>('customers'),
+        loadTableRows<any>('team_members'),
+    ]);
+
+    const customer = customers.find(row => String(row.id || '') === String(sale.customer_id));
+    const seller = teamMembers.find(row => String(row.id || '') === String(sale.seller_id || ''));
+
+    return {
+        ...sale,
+        items,
+        customer: customer ? {
+            id: String(customer.id),
+            name: String(customer.name || ''),
+            cpf_cnpj: customer.cpf_cnpj ? String(customer.cpf_cnpj) : undefined,
+        } : undefined,
+        seller: seller ? {
+            id: String(seller.id),
+            name: String(seller.name || ''),
+        } : undefined,
+    };
+}
+
+async function loadCustomerNameById(customerId?: string | null): Promise<string> {
+    if (!customerId) return 'Cliente';
+
+    const customers = await loadTableRows<any>('customers');
+    const customer = customers.find(row => String(row.id || '') === String(customerId));
+    return String(customer?.name || 'Cliente');
+}
+
+function saleMatchesFilters(sale: Sale, filters?: SaleFilters): boolean {
+    if (filters?.customer_id && String(sale.customer_id || '') !== String(filters.customer_id)) return false;
+    if (filters?.seller_id && String(sale.seller_id || '') !== String(filters.seller_id)) return false;
+    if (filters?.status && sale.status !== filters.status) return false;
+    if (filters?.start_date && String(sale.created_at || '') < String(filters.start_date)) return false;
+    if (filters?.end_date && String(sale.created_at || '') > String(filters.end_date)) return false;
+    if (filters?.min_total && sale.total < filters.min_total) return false;
+    if (filters?.max_total && sale.total > filters.max_total) return false;
+    return true;
+}
+
+async function patchSale(id: string, patch: Partial<Sale>): Promise<Sale> {
+    return normalizeSaleRow(await vpsClient.patch<any>(
+        `/table-data/sales/${encodeURIComponent(id)}?pk=id`,
+        patch
+    ));
+}
+
+async function deleteSaleRow(id: string): Promise<void> {
+    await vpsClient.delete(`/table-data/sales/${encodeURIComponent(id)}?pk=id`);
+}
 
 /**
  * Create a new sale
@@ -144,7 +229,9 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         const isValidUUID = (id?: string) =>
             !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
+        const saleId = createLocalId();
         const saleData = {
+            id: saleId,
             customer_id: saleInput.customer_id,
             seller_id: saleInput.seller_id,
             subtotal: totals.subtotal,
@@ -168,13 +255,10 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         };
 
         // Insert sale
-        const { data: sale, error: saleError } = await supabase
-            .from('sales')
-            .insert(saleData)
-            .select()
-            .single();
-
-        if (saleError) throw saleError;
+        const sale = normalizeSaleRow(await vpsClient.post<Sale>(
+            '/table-data/sales',
+            serializeSaleRowForTable(saleData)
+        ));
         if (!sale) throw new Error('Failed to create sale');
 
         // Insert sale items (persiste serialized_unit_id pra rastreio do IMEI)
@@ -193,13 +277,11 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             serialized_unit_id: (item as any).serialized_unit?.unitId || null,
         }));
 
-        const { error: itemsError } = await supabase
-            .from('sale_items')
-            .insert(saleItems);
-
-        if (itemsError) {
+        try {
+            await vpsClient.post('/table-data/sale_items/bulk', saleItems);
+        } catch (itemsError) {
             // Rollback: delete sale if items insertion fails
-            await supabase.from('sales').delete().eq('id', sale.id);
+            await deleteSaleRow(sale.id);
             throw itemsError;
         }
 
@@ -242,11 +324,9 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
                 status: 'pending' as const
             };
 
-            const { error: creditError } = await supabase
-                .from('delivery_credits')
-                .insert(deliveryCredit);
-
-            if (creditError) {
+            try {
+                await deliveryCreditService.create(deliveryCredit);
+            } catch (creditError) {
                 console.error('Failed to create delivery credit:', creditError);
                 // Don't rollback sale, just log the error
             }
@@ -274,32 +354,23 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         // Process referral code if provided
         if (saleInput.referral_code) {
             try {
-                // Get customer name for the log
-                const { data: customer } = await supabase
-                    .from('customers')
-                    .select('name')
-                    .eq('id', saleInput.customer_id)
-                    .single();
-
-                const buyerName = customer?.name || 'Cliente';
+                const buyerName = await loadCustomerNameById(saleInput.customer_id);
 
                 const productTotalReais = Math.max(0, totals.subtotal - totals.discount_total - promotionalDiscount) / 100;
 
-                const { data: rpcResult, error: rpcError } = await supabase.rpc('process_referral_reward', {
-                    p_referral_code: saleInput.referral_code,
-                    p_buyer_id: saleInput.customer_id,
-                    p_purchase_value: productTotalReais,
-                    p_reference_id: sale.id,
-                    p_reference_type: 'sale',
-                    p_buyer_name: buyerName
+                const referralResult = await processReferralReward({
+                    referralCode: saleInput.referral_code,
+                    buyerId: saleInput.customer_id,
+                    purchaseValue: productTotalReais,
+                    referenceId: sale.id,
+                    referenceType: 'sale',
+                    buyerName,
                 });
 
-                if (rpcError) {
-                    console.error('RPC Error processing referral:', rpcError);
-                } else if (rpcResult?.success) {
-                    console.log(`Referral reward applied: ${rpcResult.coins_awarded} coins`);
+                if (referralResult.success) {
+                    console.log(`Referral reward applied: ${referralResult.coins_awarded} coins`);
                 } else {
-                    console.warn('Referral reward failed or ignored:', rpcResult?.error);
+                    console.warn('Referral reward failed or ignored:', referralResult.error);
                 }
             } catch (refError) {
                 console.error('Unexpected error processing referral:', refError);
@@ -318,30 +389,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
  */
 export const getSaleById = async (id: string): Promise<SaleWithItems | null> => {
     try {
-        const { data: sale, error: saleError } = await supabase
-            .from('sales')
-            .select(`
-                *,
-                customer:customers(id, name, cpf_cnpj),
-                seller:team_members!seller_id(id, name)
-            `)
-            .eq('id', id)
-            .single();
-
-        if (saleError) throw saleError;
-        if (!sale) return null;
-
-        const { data: items, error: itemsError } = await supabase
-            .from('sale_items')
-            .select('*')
-            .eq('sale_id', id);
-
-        if (itemsError) throw itemsError;
-
-        return {
-            ...sale,
-            items: items || []
-        };
+        return loadSaleWithItemsById(id);
     } catch (error) {
         console.error('Error fetching sale:', error);
         throw error;
@@ -353,46 +401,38 @@ export const getSaleById = async (id: string): Promise<SaleWithItems | null> => 
  */
 export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> => {
     try {
-        let query = supabase
-            .from('sales')
-            .select(`
-                *,
-                customer:customers(id, name, cpf_cnpj),
-                seller:team_members!seller_id(id, name),
-                items:sale_items(*)
-            `)
-            .order('created_at', { ascending: false });
+        const [sales, saleItems, customers, teamMembers] = await Promise.all([
+            loadSaleRows(),
+            loadTableRows<any>('sale_items'),
+            loadTableRows<any>('customers'),
+            loadTableRows<any>('team_members'),
+        ]);
 
-        // Apply filters
-        if (filters?.customer_id) {
-            query = query.eq('customer_id', filters.customer_id);
-        }
-        if (filters?.seller_id) {
-            query = query.eq('seller_id', filters.seller_id);
-        }
-        if (filters?.status) {
-            query = query.eq('status', filters.status);
-        }
-        if (filters?.start_date) {
-            query = query.gte('created_at', filters.start_date);
-        }
-        if (filters?.end_date) {
-            query = query.lte('created_at', filters.end_date);
-        }
-        if (filters?.min_total) {
-            query = query.gte('total', filters.min_total);
-        }
-        if (filters?.max_total) {
-            query = query.lte('total', filters.max_total);
-        }
+        const customerById = new Map(customers.map(row => [String(row.id), row]));
+        const sellerById = new Map(teamMembers.map(row => [String(row.id), row]));
 
-        const { data: sales, error: salesError } = await query;
-
-        if (salesError) throw salesError;
-        if (!sales) return [];
-
-        // Convert the returned data to the correct type since items is nested via Join
-        return sales as SaleWithItems[];
+        return sales
+            .filter(sale => saleMatchesFilters(sale, filters))
+            .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+            .map((sale) => {
+                const customer = customerById.get(String(sale.customer_id || ''));
+                const seller = sellerById.get(String(sale.seller_id || ''));
+                return {
+                    ...sale,
+                    items: saleItems
+                        .filter(row => String(row.sale_id || '') === String(sale.id))
+                        .map(normalizeSaleItemRow),
+                    customer: customer ? {
+                        id: String(customer.id),
+                        name: String(customer.name || ''),
+                        cpf_cnpj: customer.cpf_cnpj ? String(customer.cpf_cnpj) : undefined,
+                    } : undefined,
+                    seller: seller ? {
+                        id: String(seller.id),
+                        name: String(seller.name || ''),
+                    } : undefined,
+                } as SaleWithItems;
+            });
     } catch (error) {
         console.error('Error fetching sales:', error);
         throw error;
@@ -405,25 +445,14 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
 export const cancelSale = async (id: string): Promise<void> => {
     try {
         // Fetch items before cancelling to restore stock
-        const { data: items } = await supabase
-            .from('sale_items')
-            .select('product_id, quantity')
-            .eq('sale_id', id);
+        const items = await loadSaleItemsBySaleId(id);
 
-        const { error } = await supabase
-            .from('sales')
-            .update({ status: 'cancelled' })
-            .eq('id', id);
-
-        if (error) throw error;
+        await patchSale(id, { status: 'cancelled' });
 
         await restoreSaleStockForItems(id, items, `Cancelamento PDV #${id}`);
 
         // Cancel associated delivery credits
-        await supabase
-            .from('delivery_credits')
-            .update({ status: 'cancelled' })
-            .eq('sale_id', id);
+        await deliveryCreditService.cancelBySaleId(id);
 
         // Estorna moedas de indicação (se existirem e já tiverem sido pagas)
         cancelReferralReward(id).catch(e => console.error("Erro cancelando moedas de indicação:", e));
@@ -439,25 +468,14 @@ export const cancelSale = async (id: string): Promise<void> => {
 export const refundSale = async (id: string): Promise<void> => {
     try {
         // Fetch items before refunding to restore stock
-        const { data: items } = await supabase
-            .from('sale_items')
-            .select('product_id, quantity')
-            .eq('sale_id', id);
+        const items = await loadSaleItemsBySaleId(id);
 
-        const { error } = await supabase
-            .from('sales')
-            .update({ status: 'refunded' })
-            .eq('id', id);
-
-        if (error) throw error;
+        await patchSale(id, { status: 'refunded' });
 
         await restoreSaleStockForItems(id, items, `Estorno PDV #${id}`);
 
         // Cancel associated delivery credits
-        await supabase
-            .from('delivery_credits')
-            .update({ status: 'cancelled' })
-            .eq('sale_id', id);
+        await deliveryCreditService.cancelBySaleId(id);
 
         // Estorna moedas de indicação (se existirem e já tiverem sido pagas)
         cancelReferralReward(id).catch(e => console.error("Erro cancelando moedas de indicação:", e));
@@ -473,20 +491,12 @@ export const refundSale = async (id: string): Promise<void> => {
 export const deleteSale = async (id: string): Promise<void> => {
     try {
         // Restore stock before deleting
-        const { data: items } = await supabase
-            .from('sale_items')
-            .select('product_id, quantity')
-            .eq('sale_id', id);
+        const items = await loadSaleItemsBySaleId(id);
 
         await restoreSaleStockForItems(id, items, `Exclusao PDV #${id}`);
 
         // Delete sale (cascade will delete sale_items and delivery_credits)
-        const { error } = await supabase
-            .from('sales')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
+        await deleteSaleRow(id);
     } catch (error) {
         console.error('Error deleting sale:', error);
         throw error;
@@ -498,28 +508,10 @@ export const deleteSale = async (id: string): Promise<void> => {
  */
 export const getSalesSummary = async (filters?: SaleFilters): Promise<SaleSummary> => {
     try {
-        let query = supabase
-            .from('sales')
-            .select('total, profit, cost_total')
-            .eq('status', 'completed');
+        const sales = (await loadSaleRows())
+            .filter(sale => sale.status === 'completed')
+            .filter(sale => saleMatchesFilters(sale, filters));
 
-        // Apply filters
-        if (filters?.customer_id) {
-            query = query.eq('customer_id', filters.customer_id);
-        }
-        if (filters?.seller_id) {
-            query = query.eq('seller_id', filters.seller_id);
-        }
-        if (filters?.start_date) {
-            query = query.gte('created_at', filters.start_date);
-        }
-        if (filters?.end_date) {
-            query = query.lte('created_at', filters.end_date);
-        }
-
-        const { data: sales, error } = await query;
-
-        if (error) throw error;
         if (!sales || sales.length === 0) {
             return {
                 total_sales: 0,

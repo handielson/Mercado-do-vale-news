@@ -2,7 +2,7 @@ import { vpsClient } from './vpsClient';
 import type { Banner } from '@/types/catalog';
 import { toBrowserSafeMediaUrl } from '@/utils/media-url';
 
-// ─── Adapters VPS <-> Supabase ────────────────────────────────────────────────
+// ─── Adapters VPS <-> VPS ────────────────────────────────────────────────
 
 function mapFromVPS(vpsBanner: any): Banner {
     let link_type: Banner['link_type'] = 'none';
@@ -151,7 +151,7 @@ export const bannerService = {
      * Estatísticas consolidadas de banners (uso admin)
      */
     getBannerStats: async (): Promise<BannerStats> => {
-        // Usa a source of truth correta (VPS ou Supabase)
+        // Usa a source of truth correta (VPS ou VPS)
         const banners = await bannerService.getAllBanners();
         const now = new Date();
 

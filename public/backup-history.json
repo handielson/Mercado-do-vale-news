@@ -9,7 +9,6 @@
     "motivo": "inicial",
     "files": [
       "backup_vps.cjs",
-      "check_supabase.cjs",
       "deploy_server.cjs",
       "fix-missing-skus.cjs",
       "fix-null-slugs.cjs",
@@ -28,7 +27,7 @@
     "commitMsg": "fix: resolve ordenação do catalogo VPS e contagem de estoque",
     "type": "Automático (pós-commit)",
     "summary": "Refatorado server.js (API de produtos) para calcular in_stock_count diretamente no SQL da VPS e habilitada a ordenação dinâmica para consertar a aba de Mais Recentes. Configuração do catalogMetadataService também atualizada.",
-    "motivo": "Produtos e categorias (ex: Tablets) não apareciam publicamente pois o contador de estoque dependia do Supabase não sincronizado. A aba \"Mais Recentes\" estava falhando pois o backend travava a ordenação em formato alfabético.",
+    "motivo": "Produtos e categorias (ex: Tablets) não apareciam publicamente pois o contador de estoque dependia do banco legado não sincronizado. A aba \"Mais Recentes\" estava falhando pois o backend travava a ordenação em formato alfabético.",
     "files": [
       "hooks/useCatalog.ts",
       "server.js",

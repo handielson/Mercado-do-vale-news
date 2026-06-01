@@ -7,7 +7,16 @@ import {
   resolveVpsBase,
 } from './vpsTransport.js';
 
-const env = (import.meta as any).env ?? {};
+const viteEnv = (import.meta as any).env ?? {};
+const env = {
+  DEV: Boolean(viteEnv.DEV),
+  MODE: String(viteEnv.MODE || ''),
+  VITE_ALLOW_DIRECT_PUBLIC_VPS: viteEnv.VITE_ALLOW_DIRECT_PUBLIC_VPS,
+  VITE_FORCE_LOCAL_VPS_PROXY: viteEnv.VITE_FORCE_LOCAL_VPS_PROXY,
+  VITE_FORCE_VPS_PROXY: viteEnv.VITE_FORCE_VPS_PROXY,
+  VITE_VPS_BASE_URL: viteEnv.VITE_VPS_BASE_URL,
+  VITE_VPS_SYNC_KEY: viteEnv.VITE_VPS_SYNC_KEY,
+};
 const runtimeHostname = typeof window !== 'undefined' ? window.location.hostname : undefined;
 
 export const VPS_PROXY_BASE = resolveVpsBase(env, runtimeHostname);

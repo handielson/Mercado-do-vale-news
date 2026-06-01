@@ -12,6 +12,7 @@ assert.match(source, /I_UNDERSTAND_DNS_CUTOVER/, 'script must require deliberate
 assert.match(source, /cloudflare-dns-before-/, 'script must save a before-change backup report');
 assert.match(source, /type:\s*'A'[\s\S]*content:\s*VPS_IP/, 'script must plan apex A record to VPS IP');
 assert.match(source, /type:\s*'CNAME'[\s\S]*content:\s*ZONE_NAME/, 'script must plan www CNAME to apex');
+assert.match(source, /name:\s*`mv\.\$\{ZONE_NAME\}`[\s\S]*type:\s*'CNAME'[\s\S]*content:\s*ZONE_NAME/, 'script must plan mv CNAME to the VPS-backed apex');
 assert.doesNotMatch(source, /Bearer\s+[A-Za-z0-9_-]{20,}/, 'script must not contain literal bearer tokens');
 assert.doesNotMatch(source, /password\s*[:=]\s*['"][^'"]+['"]/i, 'script must not contain literal passwords');
 

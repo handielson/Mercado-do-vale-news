@@ -18,7 +18,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /unit\.status !== 'available'/, `${file} must avoid mutating unavailable/sold units`);
   assert.match(source, /UPDATE units[\s\S]*SET \$\{sets\.join/, `${file} must mark matched units as sold with schema-compatible fields`);
   assert.match(source, /await syncProductStock\(unit\.product_id\)/, `${file} must recalculate VPS product stock from available units`);
-  assert.match(source, /supabaseRestPatch\('products'[\s\S]*stock_quantity: productStock/, `${file} must mirror serialized stock back to Supabase`);
+  assert.match(source, /vpsDbPatch\('products'[\s\S]*stock_quantity: productStock/, `${file} must mirror serialized stock back to the local database`);
   assert.match(source, /const serialSales = await syncBlingSerialSalesFromRecentOrdersVps/, `${file} must run serial sale sync as part of reconcile`);
   assert.match(source, /serial-sales-sync\|finance/, `${file} must advertise the migrated serial-sales-sync resource`);
 

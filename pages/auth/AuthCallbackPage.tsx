@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
+import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 
 export const AuthCallbackPage: React.FC = () => {
     const [status, setStatus] = useState('Processando autenticação...');

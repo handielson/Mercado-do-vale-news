@@ -15,13 +15,13 @@ for (const section of [
 }
 
 for (const requiredItem of [
-  '`commit.md`',
+  '`publicar.md`',
   'Stagear somente arquivos desta frente',
   'Fazer push por padrao',
-  'Levar para `main` se precisar refletir na Vercel',
+  'Levar para `main` se precisar refletir em producao',
   'Avaliar deploy VPS apenas se o commit mexer em runtime/servicos da VPS',
   '`Estoque.md`',
-  '`supabase/migrations/20260509000001_multi_deposit_stock.sql`',
+  '`migrations/20260509000001_multi_deposit_stock.sql`',
   '`services/stockLocationService.ts`',
   '`services/saleService.ts`',
   '`services/orderService.ts`',

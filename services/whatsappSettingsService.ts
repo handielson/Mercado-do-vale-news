@@ -1,43 +1,43 @@
-import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
 import { WhatsAppSettings } from '../types/whatsapp';
 
-export const getWhatsAppSettings = async (): Promise<WhatsAppSettings | null> => {
-    const { data, error } = await supabase
-        .from('whatsapp_settings')
-        .select('*')
-        .limit(1)
-        .single();
+interface TableDataResponse {
+    rows?: WhatsAppSettings[];
+}
 
-    if (error && error.code !== 'PGRST116') {
-        console.error('Erro ao buscar configurações do WhatsApp:', error);
+const DEFAULT_WHATSAPP_SETTINGS: WhatsAppSettings = {
+    id: '',
+    api_url: '',
+    api_key: '',
+    instance_name: '',
+    phone_number: '',
+    is_active: false
+};
+
+export const getWhatsAppSettings = async (): Promise<WhatsAppSettings | null> => {
+    try {
+        const data = await vpsClient.get<TableDataResponse>('/table-data/whatsapp_settings?limit=1&offset=0');
+        return data.rows?.[0] || DEFAULT_WHATSAPP_SETTINGS;
+    } catch (error) {
+        console.error('Erro ao buscar configuracoes do WhatsApp:', error);
         return null;
     }
-
-    return data || {
-        api_url: '',
-        api_key: '',
-        instance_name: '',
-        phone_number: '',
-        is_active: false
-    } as WhatsAppSettings;
 };
 
 export const updateWhatsAppSettings = async (settings: Partial<WhatsAppSettings>): Promise<WhatsAppSettings | null> => {
     const { id, created_at, updated_at, ...updateData } = settings;
 
-    let query;
-    if (id) {
-        query = supabase.from('whatsapp_settings').update(updateData).eq('id', id);
-    } else {
-        query = supabase.from('whatsapp_settings').insert([updateData]);
-    }
+    try {
+        if (id) {
+            return await vpsClient.patch<WhatsAppSettings>(
+                `/table-data/whatsapp_settings/${encodeURIComponent(id)}?pk=id`,
+                updateData
+            );
+        }
 
-    const { data, error } = await query.select('*').single();
-
-    if (error) {
-        console.error('Erro ao salvar configurações do WhatsApp:', error);
+        return await vpsClient.post<WhatsAppSettings>('/table-data/whatsapp_settings', updateData);
+    } catch (error) {
+        console.error('Erro ao salvar configuracoes do WhatsApp:', error);
         throw error;
     }
-
-    return data;
 };

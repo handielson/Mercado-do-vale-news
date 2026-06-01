@@ -25,6 +25,27 @@ export interface StockDeposit {
   updated_at: string;
 }
 
+export type StockPathDeactivationTarget = 'deposit' | 'location';
+
+export interface StockPathDeactivationItem {
+  product_id: string;
+  product_name: string;
+  sku?: string | null;
+  deposit_id: string;
+  deposit_name: string | null;
+  location_id: string;
+  location_name: string | null;
+  quantity: number;
+  reserved_quantity: number;
+}
+
+export interface StockPathDeactivationCheck {
+  target_type: StockPathDeactivationTarget;
+  target_id: string;
+  can_deactivate: boolean;
+  pending_items: StockPathDeactivationItem[];
+}
+
 export interface StockDepositInput {
   name: string;
   code?: string;
@@ -90,6 +111,13 @@ export interface StockLocationMovement {
   id: string;
   company_id: string;
   product_id: string;
+  product?: {
+    id: string;
+    name: string;
+    sku?: string | null;
+    ean?: string | null;
+    specs?: Record<string, unknown> | null;
+  } | null;
   from_deposit_id?: string | null;
   from_location_id?: string | null;
   to_deposit_id?: string | null;

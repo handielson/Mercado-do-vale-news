@@ -1,15 +1,17 @@
-import { supabase } from './supabase';
+import { buildAuthHeaders } from './authSession';
 import { modelColorImagesService } from './model-color-images';
 import { modelService } from './models';
+import { brandService } from './brands';
 import { crossSellTagsService } from './cross-sell-tags';
 import { vpsApiService } from './vpsApiService';
 import { buildVpsUrl, getVpsSyncHeaders, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
+import { companySettingsService } from './companySettingsService';
+import { getCompanyId } from './companyContext';
 import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
 import { buildComboStockDeductionTargets, type BlingComboSelection } from './blingComboStock';
 import { resolveBlingDescription } from './blingDescription.js';
 
 const BLING_API_BASE = 'https://www.bling.com.br/Api/v3';
-const COMPANY_SLUG = 'mercado-do-vale';
 const parentDetailCache = new Map<number, any>();
 
 function normalizeSlug(value: string): string {
@@ -21,75 +23,24 @@ function normalizeSlug(value: string): string {
         .replace(/^-+|-+$/g, '');
 }
 
-async function resolveSupabaseBrandForModel(brandName: string, companyId: string): Promise<string> {
+async function resolveBrandForModel(brandName: string, companyId: string): Promise<string> {
     const slug = normalizeSlug(brandName);
 
-    const { data: existingBrands, error: existingError } = await supabase
-        .from('brands')
-        .select('id, name, slug, active, warranty_days, created_at, updated_at, company_id')
-        .eq('company_id', companyId)
-        .eq('slug', slug)
-        .order('created_at', { ascending: false })
-        .limit(1);
+    const existingBrands = await brandService.list();
+    const existingBrand = existingBrands.find((brand) => (
+        brand.slug === slug || brand.name.toLowerCase() === brandName.toLowerCase()
+    ));
 
-    if (existingError) {
-        throw new Error(`Failed to resolve brand for model: ${existingError.message}`);
+    if (existingBrand) {
+        return existingBrand.id;
     }
 
-    if (existingBrands && existingBrands.length > 0) {
-        return existingBrands[0].id;
-    }
-
-    const { data: existingByName, error: existingByNameError } = await supabase
-        .from('brands')
-        .select('id, name, slug, active, warranty_days, created_at, updated_at, company_id')
-        .eq('company_id', companyId)
-        .ilike('name', brandName)
-        .order('created_at', { ascending: false })
-        .limit(1);
-
-    if (existingByNameError) {
-        throw new Error(`Failed to resolve brand for model: ${existingByNameError.message}`);
-    }
-
-    if (existingByName && existingByName.length > 0) {
-        return existingByName[0].id;
-    }
-
-    const payload = {
-        company_id: companyId,
+    const newBrand = await brandService.create({
         name: brandName,
-        slug,
         warranty_days: 90,
         active: true,
-    };
+    });
 
-    const { data: newBrand, error: createError } = await supabase
-        .from('brands')
-        .insert(payload)
-        .select('id, name, slug, active, warranty_days, created_at, updated_at, company_id')
-        .single();
-
-    if (createError) {
-        const msg = (createError.message || '').toLowerCase();
-        const isConflict = createError.code === '23505' || msg.includes('duplicate') || msg.includes('unique') || msg.includes('409');
-        if (isConflict) {
-            const { data: conflictBrand, error: conflictError } = await supabase
-                .from('brands')
-                .select('id')
-                .eq('company_id', companyId)
-                .eq('slug', slug)
-                .maybeSingle();
-
-            if (!conflictError && conflictBrand?.id) {
-                return conflictBrand.id;
-            }
-        }
-
-        throw new Error(`Failed to create brand for model: ${createError.message}`);
-    }
-
-    vpsApiService.syncBrand(newBrand).catch(console.warn);
     return newBrand.id;
 }
 
@@ -508,28 +459,12 @@ interface BlingTokenData {
     bling_token_expires_at: string | null;
 }
 
-// ------- Internal: get company_id -------
-
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', COMPANY_SLUG)
-        .single();
-    if (error || !data) throw new Error('Empresa não encontrada.');
-    return data.id;
-}
-
 // ------- Token management -------
 
 export async function getValidToken(options: { forceRefresh?: boolean } = {}): Promise<string> {
-    const { data, error } = await supabase
-        .from('company_settings')
-        .select('id, bling_access_token, bling_refresh_token, bling_token_expires_at, bling_client_id, bling_client_secret')
-        .limit(1)
-        .maybeSingle();
+    const data = await companySettingsService.get();
 
-    if (error || !data?.bling_access_token) {
+    if (!data?.bling_access_token) {
         throw new Error('Bling não está conectado. Acesse Configurações → Bling e clique em "Conectar".');
     }
 
@@ -566,21 +501,34 @@ async function refreshToken(tokenData: BlingTokenData): Promise<string> {
         }),
     });
 
-    if (!res.ok) throw new Error('Erro ao renovar token do Bling. Reconecte manualmente.');
+    if (!res.ok) {
+        await clearStoredBlingConnection();
+        throw new Error('Erro ao renovar token do Bling. Reconecte manualmente.');
+    }
 
     const tokens = await res.json();
     const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
 
-    await supabase
-        .from('company_settings')
-        .update({
-            bling_access_token: tokens.access_token,
-            bling_refresh_token: tokens.refresh_token || tokenData.bling_refresh_token,
-            bling_token_expires_at: expiresAt,
-        })
-        .eq('id', tokenData.id);
+    await companySettingsService.update({
+        bling_access_token: tokens.access_token,
+        bling_refresh_token: tokens.refresh_token || tokenData.bling_refresh_token,
+        bling_token_expires_at: expiresAt,
+    });
 
     return tokens.access_token;
+}
+
+async function clearStoredBlingConnection(): Promise<void> {
+    await companySettingsService.update({
+        bling_access_token: null,
+        bling_refresh_token: null,
+        bling_token_expires_at: null,
+    });
+}
+
+export function isBlingReconnectRequired(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error || '');
+    return message.includes('Erro ao renovar token do Bling') || message.includes('Bling não está conectado');
 }
 
 // ------- Bling API calls -------
@@ -597,6 +545,12 @@ async function blingGet(path: string, accessToken: string): Promise<any> {
     if (!res.ok) throw new Error(`Bling API error ${res.status}: ${await res.text()}`);
 
     return res.json();
+}
+
+function isBlingAuthFailure(status: number, payload?: any, text: string = ''): boolean {
+    if (status === 401) return true;
+    const raw = `${text} ${JSON.stringify(payload || {})}`.toLowerCase();
+    return raw.includes('invalid_token') || raw.includes('token_expired') || raw.includes('token expired') || raw.includes('401 unauthorized');
 }
 
 async function fetchProductsPage(accessToken: string, page: number): Promise<{ items: any[]; total: number }> {
@@ -846,7 +800,7 @@ export async function syncStockToBling(
     options?: { comboSelections?: BlingComboSelection[] }
 ): Promise<void> {
     try {
-        // Busca o bling_id do produto pela VPS para manter leituras operacionais fora do Supabase.
+        // Busca o bling_id do produto pela VPS para manter leituras operacionais fora do VPS.
         const product = await vpsApiService.getProductById(productId, true);
 
         if (product?.is_combo) {
@@ -963,7 +917,7 @@ export async function checkExistingBlingProducts(blingIds: number[]): Promise<Se
     if (blingIds.length === 0) return new Set();
 
     // Fonte da verdade: VPS (mesma fonte da listagem /admin/products).
-    // Antes consultava Supabase, mas produtos podiam existir lá sem ter sincronizado com a VPS,
+    // Antes consultava VPS, mas produtos podiam existir lá sem ter sincronizado com a VPS,
     // gerando falso-positivo "já importado" que bloqueava reimportação de produtos órfãos.
     const pageSize = 300;
     const maxRecords = 10000;
@@ -996,7 +950,8 @@ export async function checkExistingBlingProducts(blingIds: number[]): Promise<Se
 }
 
 export async function searchBlingProducts(query: string, onProgress?: (p: FetchProgress) => void): Promise<BlingProduct[]> {
-    const accessToken = await getValidToken();
+    let accessToken = await getValidToken();
+    let hasRetriedAfterAuthFailure = false;
 
     // O estoque será buscado *depois* que os produtos forem carregados
 
@@ -1032,6 +987,12 @@ export async function searchBlingProducts(query: string, onProgress?: (p: FetchP
                 query,
                 payload: errorPayload || errorText,
             });
+
+            if (!hasRetriedAfterAuthFailure && isBlingAuthFailure(res.status, errorPayload, errorText)) {
+                hasRetriedAfterAuthFailure = true;
+                accessToken = await getValidToken({ forceRefresh: true });
+                continue;
+            }
 
             throw new Error(`${errorPayload?.message || errorPayload?.error || `Bling API error ${res.status}`}${debugSummary}`);
         }
@@ -1104,7 +1065,7 @@ export async function findBlingProductByExactSku(sku: string): Promise<BlingProd
 }
 
 
-/** Traduz erros técnicos do PostgreSQL/Supabase para mensagens amigáveis em português */
+/** Traduz erros técnicos do persistência para mensagens amigáveis em português */
 function humanizeImportError(operation: string, rawMessage: string): string {
     const msg = rawMessage.toLowerCase();
 
@@ -1221,13 +1182,10 @@ function extensionFromImage(sourceUrl: string, contentType: string | null): stri
 }
 
 async function blingImageUploadHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    return {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    return buildAuthHeaders({
         ...getVpsSyncHeaders(),
         ...extra,
-    };
+    });
 }
 
 async function fetchBlingImageBlob(sourceUrl: string): Promise<Blob> {
@@ -1318,72 +1276,26 @@ export async function importBlingProducts(
         sampleMappings: categoryMappings.slice(0, 10),
     });
 
-    // Garante que todos os category_ids (principal + mapeados) existem no Supabase para evitar FK violation.
-    // Categorias novas criadas pos-migracao existem apenas na VPS; precisamos espelha-las no Supabase.
-    const { supabase } = await import('./supabase');
+    // Garante que todos os category_ids (principal + mapeados) existem na VPS antes de importar.
     const { categoryService } = await import('./categories');
     const allVpsCategories = await categoryService.list();
+    const categoryById = new Map(allVpsCategories.map((category: any) => [category.id, category]));
     const validVpsCategoryIds = new Set(allVpsCategories.map(c => c.id));
-
-    async function ensureCategoryInSupabase(catId: string): Promise<void> {
-        if (!catId) return;
-        const { data: exists } = await supabase
-            .from('categories')
-            .select('id')
-            .eq('id', catId)
-            .eq('company_id', companyId)
-            .maybeSingle();
-        if (exists) {
-            console.log('[bling:category-sync] already-exists', { catId, companyId });
-            return;
-        }
-
-        const allCats = await categoryService.list();
-        const cat = allCats.find(c => c.id === catId);
-        if (!cat) {
-            throw new Error(`Categoria ${catId} nao encontrada na VPS para espelhamento.`);
-        }
-
-        console.log('[bling:category-sync] syncing-from-vps', {
-            catId,
-            companyId,
-            catName: cat.name,
-        });
-
-        const { error: syncError } = await supabase.from('categories').upsert({
-            id: cat.id,
-            company_id: companyId,
-            name: cat.name,
-            slug: cat.slug,
-            config: cat.config || {},
-            warranty_days: cat.warranty_days || 90,
-            extended_warranty_enabled: cat.extended_warranty_enabled ?? false,
-            margin_wholesale: cat.margin_wholesale || null,
-            margin_reseller: cat.margin_reseller || null,
-        }, { onConflict: 'id', ignoreDuplicates: false });
-
-        if (syncError) {
-            throw new Error(`Falha ao espelhar categoria ${catId} no Supabase: ${syncError.message}`);
-        }
-
-        console.log('[bling:category-sync] synced-ok', { catId, companyId });
-    }
 
     // Sincroniza categoryId principal e todos os IDs mapeados para categorias do Bling
     const allMappedCatIds = new Set<string>();
     if (categoryId) allMappedCatIds.add(categoryId);
     loadCategoryMappings().forEach(m => { if (m.ourCategoryId) allMappedCatIds.add(m.ourCategoryId); });
-    await Promise.all(Array.from(allMappedCatIds).map(id => ensureCategoryInSupabase(id)));
+    const missingCategoryIds = Array.from(allMappedCatIds).filter(id => !validVpsCategoryIds.has(id));
+    if (missingCategoryIds.length > 0) {
+        throw new Error(`Categorias nao encontradas na VPS para importacao Bling: ${missingCategoryIds.join(', ')}`);
+    }
 
     // Fetch Category Margins
     let marginWholesale = 0;
     let marginReseller = 0;
     if (categoryId) {
-        const { data: catData } = await supabase
-            .from('categories')
-            .select('margin_wholesale, margin_reseller')
-            .eq('id', categoryId)
-            .maybeSingle();
+        const catData = categoryById.get(categoryId);
         marginWholesale = catData?.margin_wholesale || 0;
         marginReseller = catData?.margin_reseller || 0;
     }
@@ -1397,8 +1309,8 @@ export async function importBlingProducts(
         noCache: true,
     })) || [];
 
-    const formatSupabaseError = (error: any): string => {
-        if (!error) return 'Erro desconhecido no Supabase';
+    const formatPersistenceError = (error: any): string => {
+        if (!error) return 'Erro desconhecido no VPS';
         const parts = [error.message, error.details, error.hint, error.code].filter(Boolean);
         return parts.join(' | ');
     };
@@ -1418,13 +1330,11 @@ export async function importBlingProducts(
     const updateWithColumnFallback = async (id: string, initialFields: Record<string, any>): Promise<void> => {
         let fields = { ...initialFields };
         for (let attempt = 1; attempt <= 6; attempt++) {
-            const { error } = await supabase
-                .from('products')
-                .update(fields)
-                .eq('id', id);
+            const ok = await vpsApiService.updateProduct(id, fields);
+            const error = ok ? null : { message: 'Falha ao atualizar produto na VPS.' };
             if (!error) return;
 
-            const fullMsg = formatSupabaseError(error);
+            const fullMsg = formatPersistenceError(error);
 
             // Trata conflitos de unique constraint: remove o campo conflitante e tenta novamente
             if (fullMsg.toLowerCase().includes('duplicate key') || fullMsg.toLowerCase().includes('unique')) {
@@ -1462,14 +1372,16 @@ export async function importBlingProducts(
     const insertWithColumnFallback = async (initialRow: Record<string, any>): Promise<{ id: string; resolvedRow: Record<string, any> }> => {
         let row = { ...initialRow };
         for (let attempt = 1; attempt <= 6; attempt++) {
-            const { data: insertedData, error } = await supabase
-                .from('products')
-                .insert(row)
-                .select('id')
-                .single();
+            const rowWithId = { ...row, id: row.id || crypto.randomUUID() };
+            const created = await vpsApiService.createProduct(rowWithId);
+            const insertedData = { id: rowWithId.id };
+            const error = created.upserted && !created.errors?.length
+                ? null
+                : { message: created.errors?.[0]?.error || 'Falha ao criar produto na VPS.' };
+            row = rowWithId;
             if (!error) return { id: insertedData?.id, resolvedRow: row };
 
-            const fullMsg = formatSupabaseError(error);
+            const fullMsg = formatPersistenceError(error);
 
             // Unique conflicts comuns na importação de variações
             if (fullMsg.toLowerCase().includes('duplicate key') || fullMsg.toLowerCase().includes('unique')) {
@@ -1510,15 +1422,12 @@ export async function importBlingProducts(
     let modelDescription: string | null = null;
     let validImportModelId = modelId;
     if (modelId) {
-        const { data: modelData } = await supabase
-            .from('models')
-            .select('name, description, brand_id, brands(name)')
-            .eq('id', modelId)
-            .maybeSingle();
+        const modelData = await modelService.getById(modelId);
         if (modelData) {
-            modelBrandName = (modelData?.brands as any)?.name || null;
-            modelName = modelData?.name || null;
-            modelDescription = (modelData as any)?.description || null;
+            const brand = modelData.brand_id ? await brandService.getById(modelData.brand_id) : null;
+            modelBrandName = brand?.name || null;
+            modelName = modelData.name || null;
+            modelDescription = modelData.description || null;
         } else {
             console.warn('[bling:selected-model-missing]', {
                 modelId,
@@ -1588,16 +1497,11 @@ export async function importBlingProducts(
 
             resolvedCategoryForDebug = row.category_id || null;
 
-            // Debug hard-stop: mostra exatamente quando category_id resolvido nao existe no Supabase
+            // Debug hard-stop: mostra exatamente quando category_id resolvido nao existe na VPS
             if (row.category_id) {
-                const { data: resolvedCategory, error: resolvedCategoryError } = await supabase
-                    .from('categories')
-                    .select('id, name')
-                    .eq('id', row.category_id)
-                    .eq('company_id', companyId)
-                    .maybeSingle();
+                const resolvedCategory = categoryById.get(row.category_id);
 
-                if (resolvedCategoryError || !resolvedCategory) {
+                if (!resolvedCategory) {
                     throw new Error(
                         `category_sync_missing: resolved_category_id=${row.category_id}; default_category_id=${categoryId}; bling_category_id=${enriched?.categoria?.id ?? 'null'}; product_id=${item.id}; product_name=${item.nome}`
                     );
@@ -1637,7 +1541,7 @@ export async function importBlingProducts(
             
             let resolvedBrandId = brandCache.get(brandName);
             if (!resolvedBrandId) {
-                resolvedBrandId = await resolveSupabaseBrandForModel(brandName, companyId);
+                resolvedBrandId = await resolveBrandForModel(brandName, companyId);
                 brandCache.set(brandName, resolvedBrandId);
             }
             
@@ -1820,12 +1724,12 @@ export async function importBlingProducts(
         try {
             const ok = await vpsApiService.syncProducts(vpsRows);
             if (!ok) {
-                // Sync parcial: alguns produtos podem ter ficado só no Supabase (órfãos),
+                // Sync parcial: alguns produtos podem ter ficado só no VPS (órfãos),
                 // não aparecendo na listagem /admin/products. Surface para o usuário retryar.
                 result.errors.push({
                     name: `Sincronização parcial com VPS (${vpsRows.length} produto(s))`,
                     sku: '',
-                    reason: 'Um ou mais produtos foram salvos no Supabase mas falharam ao sincronizar com a VPS. Eles podem não aparecer na listagem. Verifique o console do navegador e rode o script de reconciliação de órfãos.',
+                    reason: 'Um ou mais produtos foram salvos no VPS mas falharam ao sincronizar com a VPS. Eles podem não aparecer na listagem. Verifique o console do navegador e rode o script de reconciliação de órfãos.',
                 });
             }
         } catch (err: any) {
@@ -1833,7 +1737,7 @@ export async function importBlingProducts(
             result.errors.push({
                 name: `Sincronização com VPS falhou (${vpsRows.length} produto(s))`,
                 sku: '',
-                reason: `Produtos salvos no Supabase podem não aparecer na listagem: ${err?.message || String(err)}. Rode o script de reconciliação de órfãos para recuperar.`,
+                reason: `Produtos salvos no VPS podem não aparecer na listagem: ${err?.message || String(err)}. Rode o script de reconciliação de órfãos para recuperar.`,
             });
         }
     }
@@ -1845,14 +1749,9 @@ export async function pushModelDimensionsToBling(modelId: string): Promise<{ ok:
     const companyId = await getCompanyId();
 
     // 1. Fetch Model dimensions from template_values
-    const { data: model, error: modelErr } = await supabase
-        .from('models')
-        .select('name, template_values')
-        .eq('id', modelId)
-        .eq('company_id', companyId)
-        .single();
+    const model = await modelService.getById(modelId);
 
-    if (modelErr || !model) {
+    if (!model) {
         throw new Error('Modelo não encontrado ou erro ao buscar.');
     }
 
@@ -1931,12 +1830,7 @@ export async function pullModelDimensionsFromBling(modelId: string): Promise<{ o
         }
 
         // 3. Fetch existing template_values first so we don't overwrite other fields
-        const { data: existingModel } = await supabase
-            .from('models')
-            .select('template_values')
-            .eq('id', modelId)
-            .eq('company_id', companyId)
-            .single();
+        const existingModel = await modelService.getById(modelId);
 
         const newTemplateValues = {
             ...(existingModel?.template_values || {}),
@@ -1947,11 +1841,17 @@ export async function pullModelDimensionsFromBling(modelId: string): Promise<{ o
         };
 
         // 4. Update Model
-        const { error: updateErr } = await supabase
-            .from('models')
-            .update({ template_values: newTemplateValues })
-            .eq('id', modelId)
-            .eq('company_id', companyId);
+        if (!existingModel) throw new Error('Modelo nao encontrado para salvar dimensoes.');
+        await modelService.update(modelId, {
+            name: existingModel.name,
+            brand_id: existingModel.brand_id,
+            category_id: existingModel.category_id,
+            active: existingModel.active,
+            description: existingModel.description,
+            template_values: newTemplateValues,
+            eans: existingModel.eans,
+        });
+        const updateErr = null;
 
         if (updateErr) throw new Error('Falha ao salvar as dimensões importadas no modelo local.');
 
@@ -2017,7 +1917,8 @@ export async function reimportModelProductsFromBling(modelId: string): Promise<n
         // Não sobrescrever nome, categoria para não estragar edições passadas do usuário.
         
         if (Object.keys(updateData).length > 0) {
-            await supabase.from('products').update(updateData).eq('id', p.id);
+            const updated = await vpsApiService.updateProduct(p.id, updateData);
+            if (!updated) throw new Error(`Falha ao atualizar produto ${p.id} na VPS`);
             count++;
         }
     }

@@ -1,4 +1,4 @@
-import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
+import { useVpsAuth } from '../contexts/VpsAuthContext';
 
 /**
  * Get the effective customer type for pricing
@@ -6,7 +6,7 @@ import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
  * - Otherwise, return the actual customer type
  */
 export function useEffectiveCustomerType(): 'retail' | 'resale' | 'wholesale' {
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
 
     // If admin, check for preview type in customer object
     if (customer?.customer_type === 'ADMIN') {

@@ -1,33 +1,33 @@
-import { supabase } from './supabase';
-import { getCompanyId } from './companyContext';
 import { vpsApiService } from './vpsApiService';
+import { vpsClient } from './vpsClient';
 import {
+  LocationContentItem,
   ProductStockLocation,
   StockDeposit,
   StockDepositInput,
+  StockDepositUpdateInput,
   StockLocation,
   StockLocationAdjustmentInput,
   StockLocationDivergence,
   StockLocationEntryInput,
+  StockLocationInput,
   StockLocationMovement,
   StockLocationMovementFilters,
   StockLocationMovementInput,
+  StockLocationOrderReservationInput,
+  StockLocationOrderReservationResult,
+  StockLocationOrderRestoreInput,
+  StockLocationOrderRestoreResult,
   StockLocationPriorityDecrementInput,
   StockLocationPriorityDecrementResult,
   StockLocationPriorityReservationInput,
   StockLocationPriorityReservationResult,
-  StockLocationOrderReservationInput,
-  StockLocationOrderReservationResult,
   StockLocationProductSearchResult,
-  LocationContentItem,
-  StockLocationTransferInput,
-  StockLocationOrderRestoreInput,
-  StockLocationOrderRestoreResult,
   StockLocationSaleRestoreInput,
   StockLocationSaleRestoreResult,
-  StockLocationInput,
-  StockDepositUpdateInput,
+  StockLocationTransferInput,
   StockLocationUpdateInput,
+  StockPathDeactivationCheck,
 } from '../types/stock-location';
 
 function normalizeLocationCode(value: string): string {
@@ -42,263 +42,101 @@ function normalizeLocationCode(value: string): string {
 
 class StockLocationService {
   async listDeposits(): Promise<StockDeposit[]> {
-    const { data, error } = await supabase
-      .from('stock_deposits')
-      .select('*')
-      .eq('is_active', true)
-      .order('is_default', { ascending: false })
-      .order('name', { ascending: true });
-
-    if (error) {
-      throw error;
-    }
-
-    return (data || []) as StockDeposit[];
+    return vpsClient.get<StockDeposit[]>('/stock-locations/deposits');
   }
 
   async createDeposit(input: StockDepositInput): Promise<StockDeposit> {
-    const companyId = await getCompanyId();
     const name = input.name.trim();
     const code = normalizeLocationCode(input.code || input.name);
 
-    if (!name) {
-      throw new Error('Informe o nome do deposito.');
-    }
+    if (!name) throw new Error('Informe o nome do deposito.');
+    if (!code) throw new Error('Informe um codigo valido para o deposito.');
 
-    if (!code) {
-      throw new Error('Informe um codigo valido para o deposito.');
-    }
-
-    const payload = {
-      company_id: companyId,
+    return vpsClient.post<StockDeposit>('/stock-locations/deposits', {
       name,
       code,
       type: input.type || 'warehouse',
       cep: input.cep?.trim() || null,
       address: input.address?.trim() || null,
       is_default: Boolean(input.is_default),
-      is_active: true,
-    };
-
-    const { data, error } = await supabase
-      .from('stock_deposits')
-      .insert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return data as StockDeposit;
+    });
   }
 
   async updateDeposit(id: string, input: StockDepositUpdateInput): Promise<StockDeposit> {
     const name = input.name.trim();
     const code = normalizeLocationCode(input.code || input.name);
 
-    if (!id) {
-      throw new Error('Deposito obrigatorio.');
-    }
+    if (!id) throw new Error('Deposito obrigatorio.');
+    if (!name) throw new Error('Informe o nome do deposito.');
+    if (!code) throw new Error('Informe um codigo valido para o deposito.');
 
-    if (!name) {
-      throw new Error('Informe o nome do deposito.');
-    }
-
-    if (!code) {
-      throw new Error('Informe um codigo valido para o deposito.');
-    }
-
-    const { data, error } = await supabase
-      .from('stock_deposits')
-      .update({
-        name,
-        code,
-        type: input.type || 'warehouse',
-        cep: input.cep?.trim() || null,
-        address: input.address?.trim() || null,
-        is_default: Boolean(input.is_default),
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return data as StockDeposit;
+    return vpsClient.patch<StockDeposit>(`/stock-locations/deposits/${encodeURIComponent(id)}`, {
+      name,
+      code,
+      type: input.type || 'warehouse',
+      cep: input.cep?.trim() || null,
+      address: input.address?.trim() || null,
+      is_default: Boolean(input.is_default),
+    });
   }
 
   async listLocations(depositId?: string): Promise<StockLocation[]> {
-    let query = supabase
-      .from('stock_locations')
-      .select('*')
-      .eq('is_active', true)
-      .order('is_default', { ascending: false })
-      .order('name', { ascending: true });
-
-    if (depositId) {
-      query = query.eq('deposit_id', depositId);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw error;
-    }
-
-    return (data || []) as StockLocation[];
+    const query = depositId ? `?deposit_id=${encodeURIComponent(depositId)}` : '';
+    return vpsClient.get<StockLocation[]>(`/stock-locations/locations${query}`);
   }
 
   async createLocation(input: StockLocationInput): Promise<StockLocation> {
-    const companyId = await getCompanyId();
     const name = input.name.trim();
     const code = normalizeLocationCode(input.code || input.name);
 
-    if (!input.deposit_id) {
-      throw new Error('Selecione o deposito do local.');
-    }
+    if (!input.deposit_id) throw new Error('Selecione o deposito do local.');
+    if (!name) throw new Error('Informe o nome do local.');
+    if (!code) throw new Error('Informe um codigo valido para o local.');
 
-    if (!name) {
-      throw new Error('Informe o nome do local.');
-    }
-
-    if (!code) {
-      throw new Error('Informe um codigo valido para o local.');
-    }
-
-    const payload = {
-      company_id: companyId,
+    return vpsClient.post<StockLocation>('/stock-locations/locations', {
       deposit_id: input.deposit_id,
       name,
       code,
       description: input.description?.trim() || null,
       is_default: Boolean(input.is_default),
-      is_active: true,
-    };
-
-    const { data, error } = await supabase
-      .from('stock_locations')
-      .insert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return data as StockLocation;
+    });
   }
 
   async updateLocation(id: string, input: StockLocationUpdateInput): Promise<StockLocation> {
     const name = input.name.trim();
     const code = normalizeLocationCode(input.code || input.name);
 
-    if (!id) {
-      throw new Error('Local obrigatorio.');
-    }
+    if (!id) throw new Error('Local obrigatorio.');
+    if (!input.deposit_id) throw new Error('Selecione o deposito do local.');
+    if (!name) throw new Error('Informe o nome do local.');
+    if (!code) throw new Error('Informe um codigo valido para o local.');
 
-    if (!input.deposit_id) {
-      throw new Error('Selecione o deposito do local.');
-    }
-
-    if (!name) {
-      throw new Error('Informe o nome do local.');
-    }
-
-    if (!code) {
-      throw new Error('Informe um codigo valido para o local.');
-    }
-
-    const { data, error } = await supabase
-      .from('stock_locations')
-      .update({
-        deposit_id: input.deposit_id,
-        name,
-        code,
-        description: input.description?.trim() || null,
-        is_default: Boolean(input.is_default),
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return data as StockLocation;
+    return vpsClient.patch<StockLocation>(`/stock-locations/locations/${encodeURIComponent(id)}`, {
+      deposit_id: input.deposit_id,
+      name,
+      code,
+      description: input.description?.trim() || null,
+      is_default: Boolean(input.is_default),
+    });
   }
 
   async getProductStockDistribution(productId: string): Promise<ProductStockLocation[]> {
-    const { data, error } = await supabase
-      .from('product_stock_locations')
-      .select(`
-        *,
-        deposit:stock_deposits(*),
-        location:stock_locations(*)
-      `)
-      .eq('product_id', productId)
-      .order('quantity', { ascending: false });
-
-    if (error) {
-      throw error;
-    }
-
-    return (data || []) as ProductStockLocation[];
+    return vpsClient.get<ProductStockLocation[]>(
+      `/stock-locations/products/${encodeURIComponent(productId)}/distribution`
+    );
   }
 
-  /**
-   * Lista todos os produtos que têm saldo num local específico, com nome/SKU/EAN
-   * e quantidades (físico/reservado/disponível).
-   */
   async getLocationContents(locationId: string): Promise<LocationContentItem[]> {
-    const { data, error } = await supabase
-      .from('product_stock_locations')
-      .select(`
-        product_id,
-        quantity,
-        reserved_quantity,
-        deposit:stock_deposits(id, name),
-        location:stock_locations(id, name, code),
-        product:products(id, name, sku, ean, stock_quantity, images, specs)
-      `)
-      .eq('location_id', locationId)
-      .gt('quantity', 0)
-      .order('quantity', { ascending: false });
-
-    if (error) throw error;
-
-    return (data || [])
-      .map((row: any) => ({
-      product_id: row.product_id,
-      product_name: row.product?.name || '(sem nome)',
-      sku: row.product?.sku || null,
-      ean: row.product?.ean || null,
-      product_image: Array.isArray(row.product?.images) ? row.product.images[0] || null : null,
-      total_stock: Number(row.product?.stock_quantity || 0),
-      quantity: Number(row.quantity || 0),
-      reserved_quantity: Number(row.reserved_quantity || 0),
-      available: Number(row.quantity || 0) - Number(row.reserved_quantity || 0),
-      deposit_id: row.deposit?.id,
-      deposit_name: row.deposit?.name || null,
-      location_id: row.location?.id,
-      location_name: row.location?.name || null,
-      specs: row.product?.specs || null,
-    })) as LocationContentItem[];
+    return vpsClient.get<LocationContentItem[]>(
+      `/stock-locations/locations/${encodeURIComponent(locationId)}/contents`
+    );
   }
 
   async searchProducts(term: string): Promise<StockLocationProductSearchResult[]> {
     const cleanTerm = term.trim();
-
-    if (cleanTerm.length < 2) {
-      return [];
-    }
+    if (cleanTerm.length < 2) return [];
 
     const searchTerm = cleanTerm.replace(/[,%]/g, '');
-
-    // Busca direto na VPS (fonte de verdade) — já trás is_parent e estoque agregado.
     const rows = await vpsApiService.getProducts({
       search: searchTerm,
       status: 'all',
@@ -311,8 +149,7 @@ class StockLocationService {
         const qty = Number(p?.stock_quantity || 0);
         if (qty <= 0) return false;
         const isParent = p?.is_parent;
-        if (isParent === true || isParent === 1) return false;
-        return true;
+        return !(isParent === true || isParent === 1);
       })
       .slice(0, 8)
       .map((p: any) => ({
@@ -326,345 +163,159 @@ class StockLocationService {
   }
 
   async getStockDivergences(): Promise<StockLocationDivergence[]> {
-    const { data, error } = await supabase
-      .from('stock_location_divergences')
-      .select('*')
-      .neq('difference', 0)
-      .order('product_name', { ascending: true });
-
-    if (error) {
-      throw error;
-    }
-
-    return (data || []) as StockLocationDivergence[];
+    return vpsClient.get<StockLocationDivergence[]>('/stock-locations/divergences');
   }
 
   async listMovements(filters: StockLocationMovementFilters = {}): Promise<StockLocationMovement[]> {
     const safeLimit = Math.min(Math.max(filters.limit || 50, 1), 200);
-
-    let query = supabase
-      .from('stock_location_movements')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(safeLimit);
-
-    if (filters.productId) {
-      query = query.eq('product_id', filters.productId);
-    }
-
-    if (filters.locationId) {
-      query = query.or(`from_location_id.eq.${filters.locationId},to_location_id.eq.${filters.locationId}`);
-    }
-
-    if (filters.movementType) {
-      query = query.eq('movement_type', filters.movementType);
-    }
-
-    if (filters.referenceType) {
-      query = query.eq('reference_type', filters.referenceType);
-    }
-
-    if (filters.referenceId) {
-      query = query.eq('reference_id', filters.referenceId);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw error;
-    }
-
-    return (data || []) as StockLocationMovement[];
+    const qs = new URLSearchParams({ limit: String(safeLimit) });
+    if (filters.productId) qs.set('productId', filters.productId);
+    if (filters.locationId) qs.set('locationId', filters.locationId);
+    if (filters.movementType) qs.set('movementType', filters.movementType);
+    if (filters.referenceType) qs.set('referenceType', filters.referenceType);
+    if (filters.referenceId) qs.set('referenceId', filters.referenceId);
+    return vpsClient.get<StockLocationMovement[]>(`/stock-locations/movements?${qs.toString()}`);
   }
 
   async recordMovement(input: StockLocationMovementInput): Promise<StockLocationMovement> {
-    const companyId = await getCompanyId();
-    const user = await supabase.auth.getUser();
-
-    const payload = {
-      ...input,
-      company_id: companyId,
-      created_by: user.data.user?.id || null,
-    };
-
-    const { data, error } = await supabase
-      .from('stock_location_movements')
-      .insert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return data as StockLocationMovement;
+    const movement = await vpsClient.post<StockLocationMovement>('/stock-locations/movements', input);
+    return movement;
   }
 
   async adjustStockLocation(input: StockLocationAdjustmentInput): Promise<ProductStockLocation> {
     const quantity = Number(input.quantity);
-
     if (!Number.isFinite(quantity) || quantity < 0) {
       throw new Error('Informe uma quantidade valida para o ajuste.');
     }
+    if (!input.reason.trim()) throw new Error('Informe o motivo do ajuste.');
 
-    if (!input.reason.trim()) {
-      throw new Error('Informe o motivo do ajuste.');
-    }
-
-    const user = await supabase.auth.getUser();
-
-    const { data, error } = await supabase
-      .rpc('adjust_product_stock_location', {
-        target_product_id: input.product_id,
-        target_deposit_id: input.deposit_id,
-        target_location_id: input.location_id,
-        target_quantity: input.quantity,
-        adjustment_reason: input.reason.trim(),
-        adjustment_notes: input.notes?.trim() || null,
-        actor_id: user.data.user?.id || null,
-      });
-
-    if (error) {
-      throw error;
-    }
-
-    return data as ProductStockLocation;
+    return vpsClient.post<ProductStockLocation>('/stock-locations/adjustments', {
+      ...input,
+      quantity,
+      reason: input.reason.trim(),
+      notes: input.notes?.trim() || null,
+    });
   }
 
   async transferStockLocation(input: StockLocationTransferInput): Promise<ProductStockLocation[]> {
     const quantity = Number(input.quantity);
-
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      throw new Error('Informe uma quantidade válida para a transferência.');
+      throw new Error('Informe uma quantidade valida para a transferencia.');
     }
-
     if (input.from_location_id === input.to_location_id) {
       throw new Error('A origem e destino precisam ser diferentes.');
     }
 
-    const user = await supabase.auth.getUser();
-
-    const { data, error } = await supabase
-      .rpc('transfer_product_stock_location', {
-        target_product_id: input.product_id,
-        from_deposit_id: input.from_deposit_id,
-        from_location_id: input.from_location_id,
-        to_deposit_id: input.to_deposit_id,
-        to_location_id: input.to_location_id,
-        transfer_quantity: quantity,
-        transfer_reason: input.reason.trim() || 'Transferência interna',
-        transfer_notes: input.notes?.trim() || null,
-        actor_id: user.data.user?.id || null,
-      });
-
-    if (error) {
-      throw error;
-    }
-
-    return (data || []) as ProductStockLocation[];
+    return vpsClient.post<ProductStockLocation[]>('/stock-locations/transfers', {
+      ...input,
+      quantity,
+      reason: input.reason.trim() || 'Transferencia interna',
+      notes: input.notes?.trim() || null,
+    });
   }
 
   async addStockLocation(input: StockLocationEntryInput): Promise<ProductStockLocation> {
     const quantity = Number(input.quantity);
-
     if (!input.product_id || !input.deposit_id || !input.location_id) {
       throw new Error('Produto, deposito e local sao obrigatorios.');
     }
-
     if (!Number.isFinite(quantity) || quantity <= 0) {
       throw new Error('Informe uma quantidade valida para a entrada.');
     }
+    if (!input.reason.trim()) throw new Error('Informe o motivo da entrada.');
 
-    if (!input.reason.trim()) {
-      throw new Error('Informe o motivo da entrada.');
-    }
+    return vpsClient.post<ProductStockLocation>('/stock-locations/entries', {
+      ...input,
+      quantity,
+      reason: input.reason.trim(),
+      notes: input.notes?.trim() || null,
+    });
+  }
 
-    const user = await supabase.auth.getUser();
+  async getDepositDeactivationCheck(id: string): Promise<StockPathDeactivationCheck> {
+    return vpsClient.get<StockPathDeactivationCheck>(
+      `/stock-locations/deposits/${encodeURIComponent(id)}/deactivation-check`
+    );
+  }
 
-    const { data, error } = await supabase
-      .rpc('add_product_stock_location', {
-        target_product_id: input.product_id,
-        target_deposit_id: input.deposit_id,
-        target_location_id: input.location_id,
-        entry_quantity: quantity,
-        entry_reason: input.reason.trim(),
-        entry_notes: input.notes?.trim() || null,
-        actor_id: user.data.user?.id || null,
-      });
+  async getLocationDeactivationCheck(id: string): Promise<StockPathDeactivationCheck> {
+    return vpsClient.get<StockPathDeactivationCheck>(
+      `/stock-locations/locations/${encodeURIComponent(id)}/deactivation-check`
+    );
+  }
 
-    if (error) {
-      throw error;
-    }
+  async deactivateDeposit(id: string): Promise<void> {
+    await vpsClient.post<{ ok: boolean }>(`/stock-locations/deposits/${encodeURIComponent(id)}/deactivate`, {});
+  }
 
-    return data as ProductStockLocation;
+  async deactivateLocation(id: string): Promise<void> {
+    await vpsClient.post<{ ok: boolean }>(`/stock-locations/locations/${encodeURIComponent(id)}/deactivate`, {});
   }
 
   async decrementStockByPriority(
     input: StockLocationPriorityDecrementInput
   ): Promise<StockLocationPriorityDecrementResult[]> {
-    const quantity = Number(input.quantity);
-
-    if (!input.product_id) {
-      throw new Error('Produto obrigatorio.');
-    }
-
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      throw new Error('Informe uma quantidade valida.');
-    }
-
-    if (!input.reason.trim()) {
-      throw new Error('Informe o motivo da baixa.');
-    }
-
-    const { data, error } = await supabase
-      .rpc('decrement_product_stock_by_priority', {
-        p_product_id: input.product_id,
-        p_quantity: quantity,
-        p_reason: input.reason.trim(),
-        p_reference_type: input.reference_type || null,
-        p_reference_id: input.reference_id || null,
-        p_notes: input.notes?.trim() || null,
-      });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return (data || []) as StockLocationPriorityDecrementResult[];
+    return vpsClient.post<StockLocationPriorityDecrementResult[]>('/stock-locations/priority-decrements', {
+      ...input,
+      quantity: Number(input.quantity),
+      reason: input.reason.trim(),
+      reference_type: input.reference_type || null,
+      reference_id: input.reference_id || null,
+      notes: input.notes?.trim() || null,
+    });
   }
 
   async reserveStockByPriority(
     input: StockLocationPriorityReservationInput
   ): Promise<StockLocationPriorityReservationResult[]> {
-    const quantity = Number(input.quantity);
-
-    if (!input.product_id) {
-      throw new Error('Produto obrigatorio.');
-    }
-
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      throw new Error('Informe uma quantidade valida.');
-    }
-
-    if (!input.reason.trim()) {
-      throw new Error('Informe o motivo da reserva.');
-    }
-
-    const { data, error } = await supabase
-      .rpc('reserve_product_stock_by_priority', {
-        p_product_id: input.product_id,
-        p_quantity: quantity,
-        p_reason: input.reason.trim(),
-        p_reference_type: input.reference_type || null,
-        p_reference_id: input.reference_id || null,
-        p_notes: input.notes?.trim() || null,
-      });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return (data || []) as StockLocationPriorityReservationResult[];
+    return vpsClient.post<StockLocationPriorityReservationResult[]>('/stock-locations/priority-reservations', {
+      ...input,
+      quantity: Number(input.quantity),
+      reason: input.reason.trim(),
+      reference_type: input.reference_type || null,
+      reference_id: input.reference_id || null,
+      notes: input.notes?.trim() || null,
+    });
   }
 
   async consumeOrderStockReservations(
     input: StockLocationOrderReservationInput
   ): Promise<StockLocationOrderReservationResult[]> {
-    if (!input.order_id) {
-      throw new Error('Pedido obrigatorio.');
-    }
-
-    if (!input.reason.trim()) {
-      throw new Error('Informe o motivo da baixa.');
-    }
-
-    const { data, error } = await supabase
-      .rpc('consume_order_stock_reservations', {
-        p_order_id: input.order_id,
-        p_reason: input.reason.trim(),
-        p_notes: input.notes?.trim() || null,
-      });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return (data || []) as StockLocationOrderReservationResult[];
+    return vpsClient.post<StockLocationOrderReservationResult[]>('/stock-locations/order-reservations/consume', {
+      order_id: input.order_id,
+      reason: input.reason.trim(),
+      notes: input.notes?.trim() || null,
+    });
   }
 
   async releaseOrderStockReservations(
     input: StockLocationOrderReservationInput
   ): Promise<StockLocationOrderReservationResult[]> {
-    if (!input.order_id) {
-      throw new Error('Pedido obrigatorio.');
-    }
-
-    if (!input.reason.trim()) {
-      throw new Error('Informe o motivo da liberacao.');
-    }
-
-    const { data, error } = await supabase
-      .rpc('release_order_stock_reservations', {
-        p_order_id: input.order_id,
-        p_reason: input.reason.trim(),
-        p_notes: input.notes?.trim() || null,
-      });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return (data || []) as StockLocationOrderReservationResult[];
+    return vpsClient.post<StockLocationOrderReservationResult[]>('/stock-locations/order-reservations/release', {
+      order_id: input.order_id,
+      reason: input.reason.trim(),
+      notes: input.notes?.trim() || null,
+    });
   }
 
   async restoreSaleStockByLocation(
     input: StockLocationSaleRestoreInput
   ): Promise<StockLocationSaleRestoreResult[]> {
-    if (!input.sale_id) {
-      throw new Error('Venda obrigatoria.');
-    }
-
-    if (!input.reason.trim()) {
-      throw new Error('Informe o motivo da devolucao.');
-    }
-
-    const { data, error } = await supabase
-      .rpc('restore_product_stock_from_sale_movements', {
-        p_sale_id: input.sale_id,
-        p_reason: input.reason.trim(),
-        p_notes: input.notes?.trim() || null,
-      });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return (data || []) as StockLocationSaleRestoreResult[];
+    return vpsClient.post<StockLocationSaleRestoreResult[]>('/stock-locations/sale-restores', {
+      sale_id: input.sale_id,
+      reason: input.reason.trim(),
+      notes: input.notes?.trim() || null,
+    });
   }
 
   async restoreOrderStockByLocation(
     input: StockLocationOrderRestoreInput
   ): Promise<StockLocationOrderRestoreResult[]> {
-    if (!input.order_id) {
-      throw new Error('Pedido obrigatorio.');
-    }
-
-    if (!input.reason.trim()) {
-      throw new Error('Informe o motivo da devolucao.');
-    }
-
-    const { data, error } = await supabase
-      .rpc('restore_product_stock_from_order_movements', {
-        p_order_id: input.order_id,
-        p_reason: input.reason.trim(),
-        p_notes: input.notes?.trim() || null,
-      });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return (data || []) as StockLocationOrderRestoreResult[];
+    return vpsClient.post<StockLocationOrderRestoreResult[]>('/stock-locations/order-restores', {
+      order_id: input.order_id,
+      reason: input.reason.trim(),
+      notes: input.notes?.trim() || null,
+    });
   }
 }
 

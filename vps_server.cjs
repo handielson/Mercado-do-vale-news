@@ -81,8 +81,8 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 });
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const SUPABASE_AUTH_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const VPS_AUTH_SECRET = process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET || 'dev-vps-auth-secret';
+const VPS_AUTH_TOKEN_TTL_SECONDS = Number(process.env.VPS_AUTH_TOKEN_TTL_SECONDS || 60 * 60 * 24 * 30);
 const BRASILAPI_NCM_URL = 'https://brasilapi.com.br/api/ncm/v1';
 const ADMIN_NAVIGATION_LOG_LIMIT = 5000;
 const blingFinanceListCache = new Map();
@@ -209,54 +209,495 @@ function getBearerToken(request) {
   return auth.slice(7).trim();
 }
 
-async function getSupabaseBearerAuthContext(request) {
-  if (!SUPABASE_URL || !SUPABASE_AUTH_KEY) {
-    return { userId: null, customerId: null, isAdmin: false };
+function base64UrlEncode(value) {
+  return Buffer.from(value).toString('base64url');
+}
+
+function base64UrlJson(value) {
+  return base64UrlEncode(JSON.stringify(value));
+}
+
+function signVpsAuthToken(payload) {
+  const header = base64UrlJson({ alg: 'HS256', typ: 'JWT' });
+  const now = Math.floor(Date.now() / 1000);
+  const body = base64UrlJson({
+    ...payload,
+    iat: now,
+    exp: now + VPS_AUTH_TOKEN_TTL_SECONDS,
+  });
+  const unsigned = `${header}.${body}`;
+  const signature = crypto.createHmac('sha256', VPS_AUTH_SECRET).update(unsigned).digest('base64url');
+  return `${unsigned}.${signature}`;
+}
+
+function verifyVpsAuthToken(token) {
+  const [header, body, signature] = String(token || '').split('.');
+  if (!header || !body || !signature) return null;
+  const unsigned = `${header}.${body}`;
+  const expected = crypto.createHmac('sha256', VPS_AUTH_SECRET).update(unsigned).digest('base64url');
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+  if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+  return payload;
+}
+
+function normalizeAuthDocument(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeAuthCustomerType(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'admin') return 'ADMIN';
+  if (normalized === 'resale' || normalized === 'wholesale' || normalized === 'reseller') return 'RESELLER';
+  return 'CUSTOMER';
+}
+
+function normalizeAuthEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isAuthEmailConfirmationRequired() {
+  const normalized = String(process.env.VPS_AUTH_REQUIRE_EMAIL_CONFIRMATION || 'false').trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+}
+
+function publicCustomer(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    user_id: row.user_id || row.id,
+    company_id: row.company_id,
+    name: row.name,
+    cpf_cnpj: row.cpf_cnpj,
+    customer_type: row.customer_type,
+    email: row.email,
+    phone: row.phone,
+    birth_date: row.birth_date,
+    instagram: row.instagram,
+    facebook: row.facebook,
+    address: typeof row.address === 'string' ? safeJsonParse(row.address, null) : row.address,
+    custom_data: typeof row.custom_data === 'string' ? safeJsonParse(row.custom_data, null) : row.custom_data,
+    referral_code: row.referral_code,
+    avatar_url: row.avatar_url,
+    is_active: row.is_active === true || row.is_active === 1 || row.is_active === '1',
+    account_status: row.account_status || 'active',
+    admin_preview_type: row.admin_preview_type,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function safeJsonParse(value, fallback) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
   }
-  const token = getBearerToken(request);
-  if (!token) return { userId: null, customerId: null, isAdmin: false };
+}
+
+async function ensureCustomerAuthTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_auth (
+      customer_id VARCHAR(80) NOT NULL PRIMARY KEY,
+      email VARCHAR(255) NULL,
+      cpf_cnpj VARCHAR(32) NULL,
+      password_hash TEXT NOT NULL,
+      salt VARCHAR(64) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_customer_auth_email (email),
+      UNIQUE KEY uniq_customer_auth_cpf (cpf_cnpj)
+    )
+  `);
+}
+
+async function ensurePasswordResetTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_auth_password_resets (
+      id VARCHAR(80) NOT NULL PRIMARY KEY,
+      customer_id VARCHAR(80) NOT NULL,
+      token_hash VARCHAR(128) NOT NULL,
+      expires_at DATETIME NOT NULL,
+      used_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_customer_auth_password_reset_token (token_hash),
+      KEY idx_customer_auth_password_reset_customer (customer_id),
+      KEY idx_customer_auth_password_reset_expires (expires_at)
+    )
+  `);
+}
+
+function hashAuthResetToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function getPublicAppUrl() {
+  return String(process.env.APP_PUBLIC_URL || process.env.VITE_APP_PUBLIC_URL || 'https://www.mercadodovale.com.br').replace(/\/+$/, '');
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getCustomerFirstName(customer) {
+  return String(customer?.name || 'cliente').split(' ')[0] || 'cliente';
+}
+
+function buildPasswordResetEmail({ customer, resetLink, expiresMinutes }) {
+  const firstName = getCustomerFirstName(customer);
+  const text = [
+    `Ola, ${firstName}.`,
+    '',
+    'Recebemos uma solicitacao para redefinir sua senha no Mercado do Vale.',
+    `Use este link para criar uma nova senha: ${resetLink}`,
+    '',
+    `Este link expira em ${expiresMinutes} minutos.`,
+    'Se voce nao solicitou esta alteracao, ignore este e-mail.',
+  ].join('\n');
+  const html = `
+    <p>Ola, ${escapeHtml(firstName)}.</p>
+    <p>Recebemos uma solicitacao para redefinir sua senha no Mercado do Vale.</p>
+    <p><a href="${escapeHtml(resetLink)}">Clique aqui para criar uma nova senha</a>.</p>
+    <p>Este link expira em ${expiresMinutes} minutos.</p>
+    <p>Se voce nao solicitou esta alteracao, ignore este e-mail.</p>
+  `;
+
+  return {
+    subject: 'Redefinicao de senha - Mercado do Vale',
+    text,
+    html,
+  };
+}
+
+function buildPasswordChangedEmail({ customer }) {
+  const firstName = getCustomerFirstName(customer);
+  const loginUrl = `${getPublicAppUrl()}/cliente/login`;
+  const text = [
+    `Ola, ${firstName}.`,
+    '',
+    'Sua senha do Mercado do Vale foi alterada com sucesso.',
+    `Se foi voce, nenhuma acao adicional e necessaria. Para entrar novamente, acesse: ${loginUrl}`,
+    '',
+    'Se voce nao fez esta alteracao, entre em contato com a loja imediatamente.',
+  ].join('\n');
+  const html = `
+    <p>Ola, ${escapeHtml(firstName)}.</p>
+    <p>Sua senha do Mercado do Vale foi alterada com sucesso.</p>
+    <p>Se foi voce, nenhuma acao adicional e necessaria. Para entrar novamente, acesse <a href="${escapeHtml(loginUrl)}">o login da sua conta</a>.</p>
+    <p>Se voce nao fez esta alteracao, entre em contato com a loja imediatamente.</p>
+  `;
+
+  return {
+    subject: 'Senha alterada - Mercado do Vale',
+    text,
+    html,
+  };
+}
+
+function getSmtpConfig() {
+  const host = String(process.env.SMTP_HOST || '').trim();
+  const user = String(process.env.SMTP_USER || '').trim();
+  const pass = String(process.env.SMTP_PASS || '').trim();
+  const from = String(process.env.SMTP_FROM || user || '').trim();
+  if (!host || !user || !pass || !from) return null;
+  const port = Number(process.env.SMTP_PORT || 465);
+  const secureValue = String(process.env.SMTP_SECURE || '').trim().toLowerCase();
+  return {
+    host,
+    port,
+    secure: secureValue ? ['1', 'true', 'yes'].includes(secureValue) : port === 465,
+    user,
+    pass,
+    from,
+  };
+}
+
+function encodeSmtpHeader(value) {
+  return String(value || '').replace(/[\r\n]+/g, ' ').trim();
+}
+
+async function smtpReadResponse(state) {
+  while (true) {
+    const newline = state.buffer.indexOf('\n');
+    if (newline >= 0) break;
+    await new Promise((resolve, reject) => {
+      state.waiters.push({ resolve, reject });
+    });
+  }
+  const lines = [];
+  while (true) {
+    const newline = state.buffer.indexOf('\n');
+    if (newline < 0) break;
+    const line = state.buffer.slice(0, newline + 1);
+    state.buffer = state.buffer.slice(newline + 1);
+    lines.push(line.trim());
+    if (/^\d{3}\s/.test(line)) break;
+  }
+  const last = lines[lines.length - 1] || '';
+  const code = Number(last.slice(0, 3));
+  return { code, message: lines.join('\n') };
+}
+
+async function smtpWrite(socket, state, command, expectedCodes) {
+  socket.write(`${command}\r\n`);
+  const response = await smtpReadResponse(state);
+  const expected = Array.isArray(expectedCodes) ? expectedCodes : [expectedCodes];
+  if (!expected.includes(response.code)) {
+    throw new Error(`SMTP command failed: ${response.code}`);
+  }
+  return response;
+}
+
+async function sendSmtpMail(config, message) {
+  const net = require('net');
+  const tls = require('tls');
+  let socket = config.secure
+    ? tls.connect({ host: config.host, port: config.port, servername: config.host })
+    : net.createConnection({ host: config.host, port: config.port });
+  const state = { buffer: '', waiters: [] };
+  socket.on('data', (chunk) => {
+    state.buffer += chunk.toString('utf8');
+    const waiters = state.waiters.splice(0);
+    for (const waiter of waiters) waiter.resolve();
+  });
+  socket.on('error', (err) => {
+    const waiters = state.waiters.splice(0);
+    for (const waiter of waiters) waiter.reject(err);
+  });
 
   try {
-    const authRes = await fetch(`${SUPABASE_URL.replace(/\/+$/, '')}/auth/v1/user`, {
-      headers: {
-        apikey: SUPABASE_AUTH_KEY,
-        Authorization: `Bearer ${token}`,
-      },
-      signal: AbortSignal.timeout(5000),
+    await smtpReadResponse(state);
+    await smtpWrite(socket, state, `EHLO ${config.host}`, 250);
+    if (!config.secure && String(process.env.SMTP_STARTTLS || 'true').toLowerCase() !== 'false') {
+      await smtpWrite(socket, state, 'STARTTLS', 220);
+      socket = tls.connect({ socket, servername: config.host });
+      state.buffer = '';
+      await smtpWrite(socket, state, `EHLO ${config.host}`, 250);
+    }
+    await smtpWrite(socket, state, 'AUTH LOGIN', 334);
+    await smtpWrite(socket, state, Buffer.from(config.user).toString('base64'), 334);
+    await smtpWrite(socket, state, Buffer.from(config.pass).toString('base64'), 235);
+    await smtpWrite(socket, state, `MAIL FROM:<${config.from}>`, 250);
+    await smtpWrite(socket, state, `RCPT TO:<${message.to}>`, [250, 251]);
+    await smtpWrite(socket, state, 'DATA', 354);
+    const boundary = `mdv-${crypto.randomBytes(12).toString('hex')}`;
+    const raw = [
+      `From: ${encodeSmtpHeader(process.env.SMTP_FROM_NAME || 'Mercado do Vale')} <${config.from}>`,
+      `To: <${message.to}>`,
+      `Subject: ${encodeSmtpHeader(message.subject)}`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/plain; charset=UTF-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      message.text,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      message.html,
+      '',
+      `--${boundary}--`,
+      '.',
+      '',
+    ].join('\r\n');
+    socket.write(raw);
+    const dataResponse = await smtpReadResponse(state);
+    if (dataResponse.code !== 250) throw new Error(`SMTP DATA failed: ${dataResponse.code}`);
+    await smtpWrite(socket, state, 'QUIT', 221).catch(() => null);
+    return { sent: true };
+  } finally {
+    socket.end();
+  }
+}
+
+async function sendTransactionalEmail(message) {
+  const config = getSmtpConfig();
+  if (!config) return { sent: false, reason: 'smtp_not_configured' };
+  return sendSmtpMail(config, message);
+}
+
+function hashVpsPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(String(password || ''), salt, 64, (err, derivedKey) => {
+      if (err) reject(err);
+      else resolve({ salt, hash: derivedKey.toString('hex') });
     });
-    if (!authRes.ok) return { userId: null, customerId: null, isAdmin: false };
+  });
+}
 
-    const user = await authRes.json();
-    const userId = user?.id;
-    if (!userId) return { userId: null, customerId: null, isAdmin: false };
+async function verifyVpsPassword(password, salt, expectedHash) {
+  const { hash } = await hashVpsPassword(password, salt);
+  return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(String(expectedHash), 'hex'));
+}
 
-    const customerRes = await fetch(
-      `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/customers?select=id,customer_type&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
-      {
-        headers: {
-          apikey: SUPABASE_AUTH_KEY,
-          Authorization: `Bearer ${SUPABASE_AUTH_KEY}`,
-        },
-        signal: AbortSignal.timeout(5000),
-      }
+function getDefaultAdminAuthConfig() {
+  const email = normalizeAuthEmail(
+    process.env.MDV_ADMIN_EMAIL ||
+    process.env.ADMIN_EMAIL ||
+    process.env.VPS_ADMIN_EMAIL ||
+    process.env.DEFAULT_ADMIN_EMAIL ||
+    'admin@mercadodovale.com.br'
+  );
+  const password = String(
+    process.env.MDV_ADMIN_PASSWORD ||
+    process.env.ADMIN_PASSWORD ||
+    process.env.VPS_ADMIN_PASSWORD ||
+    process.env.DEFAULT_ADMIN_PASSWORD ||
+    ''
+  );
+  const name = String(
+    process.env.MDV_ADMIN_NAME ||
+    process.env.ADMIN_NAME ||
+    process.env.VPS_ADMIN_NAME ||
+    'Administrador Mercado do Vale'
+  ).trim();
+  const cpfCnpj = normalizeAuthDocument(
+    process.env.MDV_ADMIN_CPF_CNPJ ||
+    process.env.ADMIN_CPF_CNPJ ||
+    process.env.VPS_ADMIN_CPF_CNPJ ||
+    ''
+  );
+  const companyId = String(process.env.COMPANY_ID || process.env.VITE_COMPANY_ID || '9717131e-7b14-4aec-84a4-4317c0489985');
+  return { email, password, name, cpfCnpj, companyId };
+}
+
+async function ensureDefaultAdminAccount() {
+  await ensureCustomerAuthTable();
+  const { email, password, name, cpfCnpj, companyId } = getDefaultAdminAuthConfig();
+  if (!email) {
+    console.warn('[auth] Admin bootstrap skipped: missing MDV_ADMIN_EMAIL/ADMIN_EMAIL.');
+    return null;
+  }
+
+  let customer = await findCustomerForAuth({ email, cpfCnpj });
+  if (!customer) {
+    const [admins] = await pool.query('SELECT * FROM customers WHERE customer_type = "ADMIN" ORDER BY updated_at DESC, created_at DESC LIMIT 1');
+    customer = admins?.[0] || null;
+  }
+
+  if (!customer) {
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO customers
+       (id, user_id, company_id, name, cpf_cnpj, email, customer_type, is_active, account_status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'ADMIN', 1, 'active', NOW(), NOW())`,
+      [id, id, companyId, name || 'Administrador Mercado do Vale', cpfCnpj || null, email]
     );
-    if (!customerRes.ok) return { userId, customerId: null, isAdmin: false };
+    customer = await findCustomerForAuth({ customerId: id });
+  } else {
+    await pool.query(
+      `UPDATE customers
+       SET user_id = COALESCE(user_id, id),
+           name = COALESCE(NULLIF(name, ''), ?),
+           email = ?,
+           cpf_cnpj = COALESCE(NULLIF(cpf_cnpj, ''), ?),
+           customer_type = 'ADMIN',
+           is_active = 1,
+           account_status = 'active',
+           updated_at = NOW()
+       WHERE id = ?`,
+      [name || 'Administrador Mercado do Vale', email, cpfCnpj || null, customer.id]
+    );
+    customer = await findCustomerForAuth({ customerId: customer.id });
+  }
 
-    const customers = await customerRes.json();
-    const customer = customers?.[0] || null;
+  if (!password) {
+    const [existingAuth] = await pool.query('SELECT customer_id FROM customer_auth WHERE customer_id = ? LIMIT 1', [customer.id]);
+    if (!existingAuth?.[0]) {
+      console.warn('[auth] Admin customer exists but has no VPS login. Set MDV_ADMIN_PASSWORD or ADMIN_PASSWORD and restart.');
+    }
+    return customer;
+  }
+
+  if (password.length < 6) {
+    console.warn('[auth] Admin bootstrap skipped: admin password must have at least 6 characters.');
+    return customer;
+  }
+
+  const authEmail = normalizeAuthEmail(customer.email || email);
+  const authCpfCnpj = normalizeAuthDocument(customer.cpf_cnpj || cpfCnpj) || null;
+  const { salt, hash } = await hashVpsPassword(password);
+  await pool.query(
+    `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE email = VALUES(email), cpf_cnpj = VALUES(cpf_cnpj), password_hash = VALUES(password_hash), salt = VALUES(salt), updated_at = NOW()`,
+    [customer.id, authEmail, authCpfCnpj, hash, salt]
+  );
+  console.log(`[auth] Default admin VPS login ensured for ${authEmail}`);
+  return customer;
+}
+
+async function findCustomerForAuth({ email, cpfCnpj, customerId }) {
+  const where = [];
+  const params = [];
+  if (customerId) {
+    where.push('id = ?');
+    params.push(customerId);
+  }
+  if (email) {
+    where.push('LOWER(email) = ?');
+    params.push(normalizeAuthEmail(email));
+  }
+  if (cpfCnpj) {
+    where.push('REPLACE(REPLACE(REPLACE(cpf_cnpj, ".", ""), "-", ""), "/", "") = ?');
+    params.push(normalizeAuthDocument(cpfCnpj));
+  }
+  if (!where.length) return null;
+  const [rows] = await pool.query(`SELECT * FROM customers WHERE ${where.join(' OR ')} LIMIT 1`, params);
+  return rows?.[0] || null;
+}
+
+function authResponseForCustomer(customer) {
+  const safeCustomer = publicCustomer(customer);
+  const user = {
+    id: safeCustomer.user_id || safeCustomer.id,
+    email: safeCustomer.email || '',
+    user_metadata: {
+      full_name: safeCustomer.name,
+      cpf_cnpj: safeCustomer.cpf_cnpj,
+    },
+  };
+  const token = signVpsAuthToken({
+    userId: user.id,
+    customerId: safeCustomer.id,
+    customerType: safeCustomer.customer_type || 'retail',
+  });
+  return { token, user, customer: safeCustomer, emailConfirmationRequired: isAuthEmailConfirmationRequired() };
+}
+
+async function getVpsBearerAuthContext(request) {
+  const token = getBearerToken(request);
+  if (!token) {
+    return { userId: null, customerId: null, isAdmin: false };
+  }
+
+  try {
+    const payload = verifyVpsAuthToken(token);
+    if (!payload?.customerId) return { userId: null, customerId: null, isAdmin: false };
+    const [rows] = await pool.query('SELECT id, user_id, customer_type FROM customers WHERE id = ? LIMIT 1', [payload.customerId]);
+    const customer = rows?.[0] || null;
     return {
-      userId,
+      userId: payload.userId || customer?.user_id || customer?.id || null,
       customerId: customer?.id || null,
       isAdmin: customer?.customer_type === 'ADMIN',
     };
   } catch (err) {
-    console.warn('[auth] Supabase admin Bearer validation failed:', err.message);
+    console.warn('[auth] VPS Bearer validation failed:', err.message);
     return { userId: null, customerId: null, isAdmin: false };
   }
 }
 
 async function isAdminBearerToken(request) {
-  const auth = await getSupabaseBearerAuthContext(request);
+  const auth = await getVpsBearerAuthContext(request);
   return auth.isAdmin;
 }
 
@@ -266,6 +707,263 @@ async function requireSyncKeyOrAdmin(request, reply) {
   if (await isAdminBearerToken(request)) return;
   return reply.code(401).send({ error: 'Unauthorized' });
 }
+
+fastify.post('/auth/login', async (request, reply) => {
+  await ensureCustomerAuthTable();
+  const body = request.body || {};
+  const email = normalizeAuthEmail(body.email);
+  const cpfCnpj = normalizeAuthDocument(body.cpf_cnpj || body.cpf || body.document);
+  const password = String(body.password || '');
+  if ((!email && !cpfCnpj) || !password) {
+    return reply.code(400).send({ error: 'Email/CPF e senha sao obrigatorios' });
+  }
+
+  const clauses = [];
+  const params = [];
+  if (email) {
+    clauses.push('ca.email = ?');
+    params.push(email);
+  }
+  if (cpfCnpj) {
+    clauses.push('ca.cpf_cnpj = ?');
+    params.push(cpfCnpj);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT c.*, ca.password_hash, ca.salt
+     FROM customer_auth ca
+     JOIN customers c ON c.id = ca.customer_id
+     WHERE ${clauses.join(' OR ')}
+     LIMIT 1`,
+    params
+  );
+  const row = rows?.[0] || null;
+  if (!row || !(await verifyVpsPassword(password, row.salt, row.password_hash))) {
+    return reply.code(401).send({ error: 'Credenciais invalidas' });
+  }
+  if (row.is_active === 0 || row.account_status === 'pending') {
+    return reply.code(403).send({ error: 'Conta pendente ou inativa' });
+  }
+
+  return authResponseForCustomer(row);
+});
+
+fastify.post('/auth/register', async (request, reply) => {
+  await ensureCustomerAuthTable();
+  const body = request.body || {};
+  const email = normalizeAuthEmail(body.email);
+  const cpfCnpj = normalizeAuthDocument(body.cpf_cnpj);
+  const password = String(body.password || '');
+  const name = String(body.name || '').trim();
+  if (!email || !cpfCnpj || !password || !name) {
+    return reply.code(400).send({ error: 'Nome, email, CPF/CNPJ e senha sao obrigatorios' });
+  }
+  if (password.length < 6) {
+    return reply.code(400).send({ error: 'A senha deve ter pelo menos 6 caracteres' });
+  }
+
+  let customer = await findCustomerForAuth({ email, cpfCnpj });
+  const [existingAuth] = await pool.query(
+    'SELECT customer_id FROM customer_auth WHERE email = ? OR cpf_cnpj = ? LIMIT 1',
+    [email, cpfCnpj]
+  );
+  if (existingAuth?.[0]) {
+    return reply.code(409).send({ error: 'Este email ou CPF/CNPJ ja possui login' });
+  }
+
+  const companyId = String(body.company_id || process.env.COMPANY_ID || process.env.VITE_COMPANY_ID || '9717131e-7b14-4aec-84a4-4317c0489985');
+  if (!customer) {
+    const id = crypto.randomUUID();
+    const referralCode = `MV-${id.replace(/-/g, '').slice(0, 5).toUpperCase()}`;
+    await pool.query(
+      `INSERT INTO customers
+       (id, user_id, company_id, name, cpf_cnpj, email, phone, birth_date, customer_type, is_active, account_status, address, referral_code, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, NOW(), NOW())`,
+      [
+        id,
+        id,
+        companyId,
+        name,
+        cpfCnpj,
+        email,
+        body.phone || null,
+        body.birth_date || null,
+        normalizeAuthCustomerType(body.customer_type),
+        body.address ? JSON.stringify(body.address) : null,
+        referralCode,
+      ]
+    );
+    customer = await findCustomerForAuth({ customerId: id });
+  } else {
+    await pool.query(
+      `UPDATE customers
+       SET user_id = COALESCE(user_id, id), email = COALESCE(NULLIF(email, ''), ?), phone = COALESCE(NULLIF(phone, ''), ?), account_status = 'active', updated_at = NOW()
+       WHERE id = ?`,
+      [email, body.phone || null, customer.id]
+    );
+    customer = await findCustomerForAuth({ customerId: customer.id });
+  }
+
+  const { salt, hash } = await hashVpsPassword(password);
+  await pool.query(
+    `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
+     VALUES (?, ?, ?, ?, ?)`,
+    [customer.id, email, cpfCnpj, hash, salt]
+  );
+
+  return reply.code(201).send(authResponseForCustomer(customer));
+});
+
+fastify.get('/auth/me', async (request, reply) => {
+  const auth = await getVpsBearerAuthContext(request);
+  if (!auth.customerId) return reply.code(401).send({ error: 'Unauthorized' });
+  const [rows] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [auth.customerId]);
+  const customer = rows?.[0] || null;
+  if (!customer) return reply.code(401).send({ error: 'Unauthorized' });
+  return authResponseForCustomer(customer);
+});
+
+fastify.post('/auth/password', async (request, reply) => {
+  await ensureCustomerAuthTable();
+  const auth = await getVpsBearerAuthContext(request);
+  if (!auth.customerId) return reply.code(401).send({ error: 'Unauthorized' });
+  const password = String(request.body?.password || '');
+  if (password.length < 6) return reply.code(400).send({ error: 'A senha deve ter pelo menos 6 caracteres' });
+  const [customers] = await pool.query('SELECT id, email, cpf_cnpj FROM customers WHERE id = ? LIMIT 1', [auth.customerId]);
+  const customer = customers?.[0] || null;
+  if (!customer) return reply.code(404).send({ error: 'Cliente nao encontrado' });
+  const { salt, hash } = await hashVpsPassword(password);
+  await pool.query(
+    `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash), salt = VALUES(salt), updated_at = NOW()`,
+    [customer.id, normalizeAuthEmail(customer.email), normalizeAuthDocument(customer.cpf_cnpj), hash, salt]
+  );
+  return { ok: true };
+});
+
+fastify.post('/auth/password-reset/request', async (request, reply) => {
+  await ensureCustomerAuthTable();
+  await ensurePasswordResetTable();
+  const email = normalizeAuthEmail(request.body?.email);
+  if (!email || !email.includes('@')) {
+    return reply.code(400).send({ error: 'Informe um e-mail valido' });
+  }
+
+  const genericResponse = { ok: true };
+  const [rows] = await pool.query(
+    `SELECT c.id, c.name, c.email
+     FROM customer_auth ca
+     JOIN customers c ON c.id = ca.customer_id
+     WHERE ca.email = ?
+     LIMIT 1`,
+    [email]
+  );
+  const customer = rows?.[0] || null;
+  if (!customer) return genericResponse;
+
+  const token = crypto.randomBytes(32).toString('base64url');
+  const tokenHash = hashAuthResetToken(token);
+  const expiresMinutes = Math.max(10, Number(process.env.VPS_AUTH_PASSWORD_RESET_TTL_MINUTES || 60));
+  await pool.query(
+    `INSERT INTO customer_auth_password_resets (id, customer_id, token_hash, expires_at)
+     VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
+    [crypto.randomUUID(), customer.id, tokenHash, expiresMinutes]
+  );
+
+  const resetLink = `${getPublicAppUrl()}/redefinir-senha?token=${encodeURIComponent(token)}`;
+  const emailMessage = buildPasswordResetEmail({ customer, resetLink, expiresMinutes });
+
+  try {
+    const result = await sendTransactionalEmail({
+      to: email,
+      ...emailMessage,
+    });
+    if (!result.sent) console.warn('[auth] Password reset email not sent:', result.reason);
+  } catch (err) {
+    console.warn('[auth] Password reset email failed:', err.message);
+  }
+
+  return genericResponse;
+});
+
+fastify.post('/auth/password-reset/confirm', async (request, reply) => {
+  await ensureCustomerAuthTable();
+  await ensurePasswordResetTable();
+  const token = String(request.body?.token || '').trim();
+  const password = String(request.body?.password || '');
+  if (!token || password.length < 6) {
+    return reply.code(400).send({ error: 'Token e senha valida sao obrigatorios' });
+  }
+
+  const tokenHash = hashAuthResetToken(token);
+  const [rows] = await pool.query(
+    `SELECT customer_id, expires_at, used_at
+     FROM customer_auth_password_resets
+     WHERE token_hash = ?
+     LIMIT 1`,
+    [tokenHash]
+  );
+  const reset = rows?.[0] || null;
+  if (!reset || reset.used_at || new Date(reset.expires_at).getTime() < Date.now()) {
+    return reply.code(400).send({ error: 'Link de recuperacao invalido ou expirado' });
+  }
+
+  const [customers] = await pool.query('SELECT id, email, cpf_cnpj FROM customers WHERE id = ? LIMIT 1', [reset.customer_id]);
+  const customer = customers?.[0] || null;
+  if (!customer) return reply.code(400).send({ error: 'Link de recuperacao invalido ou expirado' });
+
+  const { salt, hash } = await hashVpsPassword(password);
+  await pool.query(
+    `UPDATE customer_auth
+     SET password_hash = ?, salt = ?, updated_at = NOW()
+     WHERE customer_id = ?`,
+    [hash, salt, customer.id]
+  );
+  await pool.query(
+    'UPDATE customer_auth_password_resets SET used_at = NOW() WHERE token_hash = ?',
+    [tokenHash]
+  );
+
+  try {
+    const email = normalizeAuthEmail(customer.email);
+    if (email) {
+      const emailMessage = buildPasswordChangedEmail({ customer });
+      const result = await sendTransactionalEmail({
+        to: email,
+        ...emailMessage,
+      });
+      if (!result.sent) console.warn('[auth] Password changed email not sent:', result.reason);
+    }
+  } catch (err) {
+    console.warn('[auth] Password changed email failed:', err.message);
+  }
+
+  return { ok: true };
+});
+
+fastify.post('/auth/admin/users', { preHandler: requireSyncKeyOrAdmin }, async (request, reply) => {
+  await ensureCustomerAuthTable();
+  const body = request.body || {};
+  const customerId = String(body.customer_id || '').trim();
+  const email = normalizeAuthEmail(body.email);
+  const cpfCnpj = normalizeAuthDocument(body.cpf_cnpj);
+  const password = String(body.password || '');
+  if (!customerId || !email || !cpfCnpj || password.length < 6) {
+    return reply.code(400).send({ error: 'customer_id, email, cpf_cnpj e senha valida sao obrigatorios' });
+  }
+  const [customers] = await pool.query('SELECT id FROM customers WHERE id = ? LIMIT 1', [customerId]);
+  if (!customers?.[0]) return reply.code(404).send({ error: 'Cliente nao encontrado' });
+  const { salt, hash } = await hashVpsPassword(password);
+  await pool.query(
+    `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE email = VALUES(email), cpf_cnpj = VALUES(cpf_cnpj), password_hash = VALUES(password_hash), salt = VALUES(salt), updated_at = NOW()`,
+    [customerId, email, cpfCnpj, hash, salt]
+  );
+  await pool.query('UPDATE customers SET user_id = COALESCE(user_id, id), account_status = "active", updated_at = NOW() WHERE id = ?', [customerId]);
+  return { ok: true, customer_id: customerId };
+});
 
 function limitText(value, maxLength) {
   const text = String(value || '').trim();
@@ -325,7 +1023,7 @@ async function pruneAdminNavigationLogs() {
 
 fastify.post('/admin/navigation-log', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const body = req.body || {};
-  const auth = await getSupabaseBearerAuthContext(req);
+  const auth = await getVpsBearerAuthContext(req);
   const pathname = limitText(body.pathname || body.path, 512);
   if (!pathname || (!pathname.startsWith('/admin') && !pathname.startsWith('/pdv'))) {
     return reply.code(400).send({ error: 'Invalid navigation path' });
@@ -516,164 +1214,197 @@ function buildCopyableDebug(operation, details = {}) {
   };
 }
 
-function getSupabaseRestBaseUrl() {
-  if (!SUPABASE_URL) return '';
-  return `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1`;
+function quoteSqlIdentifier(identifier) {
+  const value = String(identifier || '').trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+    throw new Error(`Invalid SQL identifier: ${value}`);
+  }
+  return `\`${value}\``;
 }
 
-function buildSupabaseRestHeaders(extra = {}) {
+function normalizeDbPayload(payload = {}) {
+  return Object.fromEntries(Object.entries(payload).map(([key, value]) => [
+    key,
+    normalizeDbValue(value),
+  ]));
+}
+
+function normalizeDbValue(value) {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)) {
+    return value.slice(0, 19).replace('T', ' ');
+  }
+  return value && typeof value === 'object' ? JSON.stringify(value) : value;
+}
+
+function splitTopLevelCommas(value = '') {
+  const parts = [];
+  let current = '';
+  let depth = 0;
+  let quoted = false;
+  for (const char of String(value)) {
+    if (char === '"') quoted = !quoted;
+    if (!quoted && char === '(') depth += 1;
+    if (!quoted && char === ')') depth -= 1;
+    if (!quoted && depth === 0 && char === ',') {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+function cleanVpsFilterValue(value) {
+  return String(value ?? '').replace(/^"|"$/g, '');
+}
+
+function buildVpsDbFilter(column, rawExpression) {
+  const field = quoteSqlIdentifier(column);
+  const expression = String(rawExpression || '');
+  const opMatch = expression.match(/^([a-z.]+)\.(.*)$/i);
+  if (!opMatch) throw new Error(`Unsupported filter expression: ${column}=${expression}`);
+  const op = opMatch[1];
+  const rawValue = cleanVpsFilterValue(opMatch[2]);
+
+  if (op === 'eq') return { sql: `${field} = ?`, params: [rawValue] };
+  if (op === 'neq') return { sql: `${field} <> ?`, params: [rawValue] };
+  if (op === 'gt') return { sql: `${field} > ?`, params: [rawValue] };
+  if (op === 'gte') return { sql: `${field} >= ?`, params: [rawValue] };
+  if (op === 'lt') return { sql: `${field} < ?`, params: [rawValue] };
+  if (op === 'lte') return { sql: `${field} <= ?`, params: [rawValue] };
+  if (op === 'ilike') return { sql: `${field} LIKE ?`, params: [rawValue.replace(/\*/g, '%')] };
+  if (op === 'is' && rawValue === 'null') return { sql: `${field} IS NULL`, params: [] };
+  if (op === 'not.is' && rawValue === 'null') return { sql: `${field} IS NOT NULL`, params: [] };
+  if (op === 'in') {
+    const list = rawValue.replace(/^\(|\)$/g, '');
+    const values = splitTopLevelCommas(list).map((item) => cleanVpsFilterValue(item.trim())).filter(Boolean);
+    if (!values.length) return { sql: '1 = 0', params: [] };
+    return { sql: `${field} IN (${values.map(() => '?').join(', ')})`, params: values };
+  }
+
+  throw new Error(`Unsupported filter operator: ${op}`);
+}
+
+function buildVpsDbOrFilter(rawExpression) {
+  const inner = String(rawExpression || '').replace(/^\(|\)$/g, '');
+  const filters = splitTopLevelCommas(inner).map((part) => {
+    const match = part.match(/^([A-Za-z_][A-Za-z0-9_]*)\.([a-z.]+)\.(.*)$/i);
+    if (!match) throw new Error(`Unsupported OR filter: ${part}`);
+    return buildVpsDbFilter(match[1], `${match[2]}.${match[3]}`);
+  });
   return {
-    apikey: SUPABASE_AUTH_KEY,
-    Authorization: `Bearer ${SUPABASE_AUTH_KEY}`,
-    Accept: 'application/json',
-    ...extra,
+    sql: `(${filters.map((filter) => filter.sql).join(' OR ')})`,
+    params: filters.flatMap((filter) => filter.params),
   };
 }
 
-async function supabaseRestSelect(table, query) {
-  const baseUrl = getSupabaseRestBaseUrl();
-  if (!baseUrl || !SUPABASE_AUTH_KEY) {
-    throw new Error('Supabase REST env vars missing');
+function parseVpsDbQuery(query = '') {
+  const params = new URLSearchParams(String(query || ''));
+  const where = [];
+  const values = [];
+  let orderSql = '';
+  let limitSql = '';
+  let selectSql = '*';
+
+  const select = params.get('select');
+  if (select && select !== '*') {
+    selectSql = select.split(',').map((field) => quoteSqlIdentifier(field.trim())).join(', ');
   }
 
-  const response = await fetch(`${baseUrl}/${table}?${query}`, {
-    headers: buildSupabaseRestHeaders(),
-    signal: AbortSignal.timeout(8000),
-  });
-  const text = await response.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch (_err) {
-    data = text;
+  for (const [key, value] of params.entries()) {
+    if (['select', 'order', 'limit', 'offset', 'on_conflict'].includes(key)) continue;
+    const filter = key === 'or' ? buildVpsDbOrFilter(value) : buildVpsDbFilter(key, value);
+    where.push(filter.sql);
+    values.push(...filter.params);
   }
-  if (!response.ok) {
-    const error = new Error(`Supabase REST select failed: ${response.status}`);
-    error.status = response.status;
-    error.body = data;
-    throw error;
+
+  const order = params.get('order');
+  if (order) {
+    const [column, direction = 'asc'] = order.split('.');
+    const normalizedDirection = String(direction).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+    orderSql = ` ORDER BY ${quoteSqlIdentifier(column)} ${normalizedDirection}`;
   }
-  return data;
+
+  const limit = Number(params.get('limit'));
+  const offset = Number(params.get('offset'));
+  if (Number.isFinite(limit) && limit >= 0) {
+    limitSql = ' LIMIT ?';
+    values.push(limit);
+    if (Number.isFinite(offset) && offset > 0) {
+      limitSql += ' OFFSET ?';
+      values.push(offset);
+    }
+  }
+
+  return {
+    selectSql,
+    whereSql: where.length ? ` WHERE ${where.join(' AND ')}` : '',
+    orderSql,
+    limitSql,
+    values,
+  };
 }
 
-async function supabaseRestPatch(table, query, payload) {
-  const baseUrl = getSupabaseRestBaseUrl();
-  if (!baseUrl || !SUPABASE_AUTH_KEY) {
-    throw new Error('Supabase REST env vars missing');
-  }
-
-  const response = await fetch(`${baseUrl}/${table}?${query}`, {
-    method: 'PATCH',
-    headers: buildSupabaseRestHeaders({
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    }),
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(8000),
-  });
-  const text = await response.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch (_err) {
-    data = text;
-  }
-  if (!response.ok) {
-    const error = new Error(`Supabase REST patch failed: ${response.status}`);
-    error.status = response.status;
-    error.body = data;
-    throw error;
-  }
-  return data;
+async function vpsDbSelect(table, query) {
+  const parsed = parseVpsDbQuery(query);
+  const [rows] = await pool.query(
+    `SELECT ${parsed.selectSql} FROM ${quoteSqlIdentifier(table)}${parsed.whereSql}${parsed.orderSql}${parsed.limitSql}`,
+    parsed.values,
+  );
+  return rows;
 }
 
-async function supabaseRestInsert(table, payload) {
-  const baseUrl = getSupabaseRestBaseUrl();
-  if (!baseUrl || !SUPABASE_AUTH_KEY) {
-    throw new Error('Supabase REST env vars missing');
-  }
-
-  const response = await fetch(`${baseUrl}/${table}`, {
-    method: 'POST',
-    headers: buildSupabaseRestHeaders({
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-    }),
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(8000),
-  });
-  const text = await response.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch (_err) {
-    data = text;
-  }
-  if (!response.ok) {
-    const error = new Error(`Supabase REST insert failed: ${response.status}`);
-    error.status = response.status;
-    error.body = data;
-    throw error;
-  }
-  return data;
+async function vpsDbPatch(table, query, payload) {
+  const normalized = normalizeDbPayload(payload);
+  const entries = Object.entries(normalized);
+  if (!entries.length) return vpsDbSelect(table, query);
+  const parsed = parseVpsDbQuery(query);
+  const setSql = entries.map(([key]) => `${quoteSqlIdentifier(key)} = ?`).join(', ');
+  await pool.query(
+    `UPDATE ${quoteSqlIdentifier(table)} SET ${setSql}${parsed.whereSql}`,
+    [...entries.map(([, value]) => value), ...parsed.values],
+  );
+  return vpsDbSelect(table, query);
 }
 
-async function supabaseRestDelete(table, query) {
-  const baseUrl = getSupabaseRestBaseUrl();
-  if (!baseUrl || !SUPABASE_AUTH_KEY) {
-    throw new Error('Supabase REST env vars missing');
-  }
-
-  const response = await fetch(`${baseUrl}/${table}?${query}`, {
-    method: 'DELETE',
-    headers: buildSupabaseRestHeaders(),
-    signal: AbortSignal.timeout(8000),
-  });
-  const text = await response.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch (_err) {
-    data = text;
-  }
-  if (!response.ok) {
-    const error = new Error(`Supabase REST delete failed: ${response.status}`);
-    error.status = response.status;
-    error.body = data;
-    throw error;
-  }
-  return data;
+async function vpsDbInsert(table, payload) {
+  const normalized = normalizeDbPayload(payload);
+  const entries = Object.entries(normalized);
+  if (!entries.length) throw new Error('Insert payload is empty');
+  const columns = entries.map(([key]) => quoteSqlIdentifier(key)).join(', ');
+  const placeholders = entries.map(() => '?').join(', ');
+  const [result] = await pool.query(
+    `INSERT INTO ${quoteSqlIdentifier(table)} (${columns}) VALUES (${placeholders})`,
+    entries.map(([, value]) => value),
+  );
+  const id = normalized.id ?? result.insertId;
+  return id ? vpsDbSelect(table, `select=*&id=eq.${encodeURIComponent(String(id))}&limit=1`) : [payload];
 }
 
-async function supabaseRestUpsert(table, query, payload) {
-  const baseUrl = getSupabaseRestBaseUrl();
-  if (!baseUrl || !SUPABASE_AUTH_KEY) {
-    throw new Error('Supabase REST env vars missing');
-  }
+async function vpsDbDelete(table, query) {
+  const parsed = parseVpsDbQuery(query);
+  await pool.query(`DELETE FROM ${quoteSqlIdentifier(table)}${parsed.whereSql}`, parsed.values);
+  return [];
+}
 
-  const response = await fetch(`${baseUrl}/${table}?${query}`, {
-    method: 'POST',
-    headers: buildSupabaseRestHeaders({
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates,return=representation',
-    }),
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(8000),
-  });
-  const text = await response.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch (_err) {
-    data = text;
-  }
-  if (!response.ok) {
-    const error = new Error(`Supabase REST upsert failed: ${response.status}`);
-    error.status = response.status;
-    error.body = data;
-    throw error;
-  }
-  return data;
+async function vpsDbUpsert(table, query, payload) {
+  const params = new URLSearchParams(String(query || ''));
+  const conflictColumn = params.get('on_conflict') || 'id';
+  const normalized = normalizeDbPayload(payload);
+  const entries = Object.entries(normalized);
+  const columns = entries.map(([key]) => quoteSqlIdentifier(key)).join(', ');
+  const placeholders = entries.map(() => '?').join(', ');
+  const updates = entries
+    .filter(([key]) => key !== conflictColumn)
+    .map(([key]) => `${quoteSqlIdentifier(key)} = VALUES(${quoteSqlIdentifier(key)})`)
+    .join(', ');
+  await pool.query(
+    `INSERT INTO ${quoteSqlIdentifier(table)} (${columns}) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updates || `${quoteSqlIdentifier(conflictColumn)} = ${quoteSqlIdentifier(conflictColumn)}`}`,
+    entries.map(([, value]) => value),
+  );
+  return vpsDbSelect(table, `select=*&${conflictColumn}=eq.${encodeURIComponent(String(normalized[conflictColumn]))}&limit=1`);
 }
 
 function isMercadoPagoWebhookPayload(body) {
@@ -690,7 +1421,7 @@ async function handleMercadoPagoWebhookVps(body) {
   }
 
   try {
-    const integrations = await supabaseRestSelect('payment_integrations', 'select=access_token,is_active&gateway_name=eq.mercado_pago&is_active=eq.true&limit=1');
+    const integrations = await vpsDbSelect('payment_integrations', 'select=access_token,is_active&gateway_name=eq.mercado_pago&is_active=eq.true&limit=1');
     const integration = Array.isArray(integrations) ? integrations[0] : null;
     if (!integration?.access_token) {
       return {
@@ -736,7 +1467,7 @@ async function handleMercadoPagoWebhookVps(body) {
     }
 
     const gatewayPaymentId = String(payment.id);
-    const orders = await supabaseRestSelect(
+    const orders = await vpsDbSelect(
       'orders',
       `select=id,status&gateway_payment_id=eq.${encodeURIComponent(gatewayPaymentId)}&limit=1`
     );
@@ -762,7 +1493,7 @@ async function handleMercadoPagoWebhookVps(body) {
       return { status: 200, body: { message: 'already processed', order_id: order.id } };
     }
 
-    await supabaseRestPatch('orders', `id=eq.${encodeURIComponent(order.id)}`, { status: 'paid', payment_status: 'paid' });
+    await vpsDbPatch('orders', `id=eq.${encodeURIComponent(order.id)}`, { status: 'paid', payment_status: 'paid' });
 
     return { status: 200, body: { message: 'success', order_id: order.id } };
   } catch (err) {
@@ -1000,7 +1731,7 @@ async function handleShopeeOAuthVps(request, reply) {
 
   if (action === 'auth') {
     try {
-      const rows = await supabaseRestSelect('company_settings', 'select=shopee_partner_id,shopee_partner_key&limit=1');
+      const rows = await vpsDbSelect('company_settings', 'select=shopee_partner_id,shopee_partner_key&limit=1');
       const settings = Array.isArray(rows) ? rows[0] : null;
       if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
         return reply.code(400).send({ error: 'Shopee Partner ID e Key não configurados no painel.' });
@@ -1029,7 +1760,7 @@ async function handleShopeeOAuthVps(request, reply) {
       return reply.type('text/html; charset=utf-8').code(400).send('<h1>Falha na autorização</h1><p>Parâmetros ausentes (code, shop_id).</p>');
     }
     try {
-      const rows = await supabaseRestSelect('company_settings', 'select=id,shopee_partner_id,shopee_partner_key&limit=1');
+      const rows = await vpsDbSelect('company_settings', 'select=id,shopee_partner_id,shopee_partner_key&limit=1');
       const settings = Array.isArray(rows) ? rows[0] : null;
       if (!settings?.shopee_partner_id || !settings?.shopee_partner_key) {
         return reply.type('text/html; charset=utf-8').code(500).send('<h1>Erro Interno</h1><p>Credenciais da Shopee não encontradas.</p>');
@@ -1050,7 +1781,7 @@ async function handleShopeeOAuthVps(request, reply) {
       if (tokenData?.error) {
         return reply.type('text/html; charset=utf-8').code(400).send(`<h1>Erro na comunicação com a Shopee</h1><p>${tokenData.error}: ${tokenData.message || ''}</p>`);
       }
-      await supabaseRestPatch('company_settings', `id=eq.${encodeURIComponent(String(settings.id))}`, {
+      await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(String(settings.id))}`, {
         shopee_shop_id: activeShopId.toString(),
         shopee_access_token: tokenData.access_token,
         shopee_refresh_token: tokenData.refresh_token,
@@ -1111,7 +1842,7 @@ async function readShopeeCatalogJsonResponseVps(response) {
 }
 
 async function getShopeeCatalogCredentialsVps() {
-  const rows = await supabaseRestSelect('company_settings', 'select=shopee_partner_id,shopee_partner_key,shopee_access_token,shopee_shop_id,shopee_refresh_token&limit=1');
+  const rows = await vpsDbSelect('company_settings', 'select=shopee_partner_id,shopee_partner_key,shopee_access_token,shopee_shop_id,shopee_refresh_token&limit=1');
   const settings = Array.isArray(rows) ? rows[0] : null;
   if (!settings?.shopee_partner_id || !settings?.shopee_partner_key || !settings?.shopee_access_token || !settings?.shopee_shop_id) {
     throw new Error('Shopee não autenticada. Configure as credenciais no painel.');
@@ -1145,7 +1876,7 @@ async function refreshShopeeCatalogTokenVps(creds) {
   if (!response.ok || tokenData?.error) {
     throw new Error(tokenData?.message || tokenData?.error || 'Erro ao renovar token Shopee');
   }
-  await supabaseRestPatch('company_settings', 'shopee_partner_id=not.is.null', {
+  await vpsDbPatch('company_settings', 'shopee_partner_id=not.is.null', {
     shopee_access_token: tokenData.access_token,
     shopee_refresh_token: tokenData.refresh_token,
   });
@@ -1759,7 +2490,7 @@ async function assertShopeeActionsProductNotLinkedVps(productId, product) {
     return { linked: true, itemId: linkedItemId };
   }
 
-  const rows = await supabaseRestSelect('shopee_products', `select=shopee_item_id&product_id=eq.${encodeURIComponent(String(productId))}&shopee_item_id=not.is.null&limit=1`);
+  const rows = await vpsDbSelect('shopee_products', `select=shopee_item_id&product_id=eq.${encodeURIComponent(String(productId))}&shopee_item_id=not.is.null&limit=1`);
   const fallbackItemId = Number(Array.isArray(rows) ? rows[0]?.shopee_item_id : 0);
   if (Number.isFinite(fallbackItemId) && fallbackItemId > 0) {
     return { linked: true, itemId: fallbackItemId };
@@ -2196,7 +2927,7 @@ async function refreshBlingStoredAccessTokenVps(settings) {
     return settings.bling_access_token || '';
   }
 
-  await supabaseRestPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, {
+  await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, {
     bling_access_token: data.access_token,
     bling_refresh_token: data.refresh_token || settings.bling_refresh_token,
     bling_token_expires_at: new Date(Date.now() + Number(data.expires_in || 3600) * 1000).toISOString(),
@@ -2208,7 +2939,7 @@ async function refreshBlingStoredAccessTokenVps(settings) {
 async function getBlingProductDetailAuthHeaderVps(request) {
   if (request.headers.authorization) return request.headers.authorization;
 
-  const settingsRows = await supabaseRestSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
+  const settingsRows = await vpsDbSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
   const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
   if (!settings?.bling_access_token) return '';
 
@@ -2240,38 +2971,12 @@ function getVpsBatchBaseUrl(request) {
   return `${proto}://${host}`;
 }
 
-async function loadSupabaseProductsForBlingSyncPrices(from, to) {
-  const baseUrl = getSupabaseRestBaseUrl();
-  if (!baseUrl || !SUPABASE_AUTH_KEY) {
-    throw new Error('Supabase REST env vars missing');
-  }
-
+async function loadVpsProductsForBlingSyncPrices(from, to) {
   const select = 'select=id,name,sku,status,category_id,price_retail,price_reseller,price_wholesale,price_cost,stock_quantity,track_inventory,bling_id,bling_parent_id,parent_id';
-  const response = await fetch(`${baseUrl}/products?${select}`, {
-    headers: buildSupabaseRestHeaders({
-      'Range-Unit': 'items',
-      Range: `${from}-${to}`,
-      Prefer: 'count=exact',
-    }),
-    signal: AbortSignal.timeout(12000),
-  });
-  const text = await response.text();
-  let products = [];
-  try {
-    products = text ? JSON.parse(text) : [];
-  } catch {
-    products = [];
-  }
-  if (!response.ok) {
-    const error = new Error(`Supabase products fetch failed: ${response.status}`);
-    error.status = response.status;
-    error.body = text.slice(0, 500);
-    throw error;
-  }
-
-  const contentRange = response.headers.get('content-range') || '';
-  const totalMatch = contentRange.match(/\/(\d+|\*)$/);
-  const total = totalMatch && totalMatch[1] !== '*' ? Number(totalMatch[1]) : products.length;
+  const limit = Math.max(0, Number(to) - Number(from) + 1);
+  const products = await vpsDbSelect('products', `${select}&limit=${limit}&offset=${Number(from) || 0}`);
+  const [countRows] = await pool.query('SELECT COUNT(*) AS total FROM products');
+  const total = Number(countRows?.[0]?.total || products.length);
   return { products, total: Number.isFinite(total) ? total : products.length };
 }
 
@@ -2304,7 +3009,7 @@ function isBlingReconcileAuthorizedVps(request) {
 }
 
 async function getValidBlingAccessTokenForReconcileVps() {
-  const settingsRows = await supabaseRestSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
+  const settingsRows = await vpsDbSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
   const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
   if (!settings?.bling_access_token) throw new Error('Bling not connected');
 
@@ -2498,7 +3203,7 @@ async function applyReconcileStockChangesVps(changes, request) {
   const failed = [];
   for (const change of changes) {
     try {
-      await supabaseRestPatch('products', `id=eq.${encodeURIComponent(change.productId)}`, { stock_quantity: change.nextStock });
+      await vpsDbPatch('products', `id=eq.${encodeURIComponent(change.productId)}`, { stock_quantity: change.nextStock });
       const vpsUpdated = await patchVpsForReconcileVps('/products/stock', change.blingId ? { bling_id: change.blingId, stock_quantity: change.nextStock } : { sku: change.sku, stock_quantity: change.nextStock }, request);
       applied.push({ ...change, vpsUpdated });
     } catch (err) {
@@ -2513,7 +3218,7 @@ async function applyReconcileNameChangesVps(changes, request) {
   const failed = [];
   for (const change of changes) {
     try {
-      await supabaseRestPatch('products', `id=eq.${encodeURIComponent(change.productId)}`, { name: change.nextName });
+      await vpsDbPatch('products', `id=eq.${encodeURIComponent(change.productId)}`, { name: change.nextName });
       const vpsUpdated = change.sku ? await patchVpsForReconcileVps('/products/name', { sku: change.sku, name: change.nextName }, request) : false;
       applied.push({ ...change, vpsUpdated });
     } catch (err) {
@@ -2657,7 +3362,7 @@ async function markUnitSoldFromBlingSerialSaleVps(unit, order, dryRun) {
 
   const productStock = await syncProductStock(unit.product_id);
   if (productStock !== null && productStock !== undefined) {
-    await supabaseRestPatch('products', `id=eq.${encodeURIComponent(unit.product_id)}`, { stock_quantity: productStock });
+    await vpsDbPatch('products', `id=eq.${encodeURIComponent(unit.product_id)}`, { stock_quantity: productStock });
   }
   return { updated: true, productStock };
 }
@@ -2744,7 +3449,8 @@ async function safeInsertBlingWebhookLogVps(source, payload, rawBody) {
     const storedPayload = payload && typeof payload === 'object'
       ? { ...payload, _route: source }
       : { rawBody, _route: source };
-    await supabaseRestInsert('webhook_logs', {
+    await vpsDbInsert('webhook_logs', {
+      id: crypto.randomUUID(),
       source: source,
       payload: storedPayload,
       received_at: new Date().toISOString(),
@@ -2923,7 +3629,7 @@ async function handleBlingWebhookVps(request, reply) {
 
     if (!event) return reply.code(200).send({ ok: true, message: 'No event type - ignored' });
 
-    const settingsRows = await supabaseRestSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
+    const settingsRows = await vpsDbSelect('company_settings', 'select=id,bling_access_token,bling_refresh_token,bling_token_expires_at,bling_client_id,bling_client_secret&limit=1');
     const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
     let accessToken = settings?.bling_access_token || null;
     if (settings?.bling_token_expires_at && new Date(settings.bling_token_expires_at).getTime() < Date.now()) {
@@ -2963,16 +3669,16 @@ async function handleBlingWebhookVps(request, reply) {
 
       let resolvedSku = sku;
       if (!resolvedSku && blingId) {
-        const rows = await supabaseRestSelect('products', `select=sku&bling_id=eq.${encodeURIComponent(String(blingId))}&limit=1`);
+        const rows = await vpsDbSelect('products', `select=sku&bling_id=eq.${encodeURIComponent(String(blingId))}&limit=1`);
         resolvedSku = Array.isArray(rows) ? rows[0]?.sku : null;
       }
 
       const vpsPayload = blingId ? { bling_id: blingId, stock_quantity: stockQty } : { sku: resolvedSku, stock_quantity: stockQty };
       const vpsStockResult = await patchVpsJsonForWebhookVps(request, '/products/stock', vpsPayload);
       if (blingId) {
-        await supabaseRestPatch('products', `bling_id=eq.${encodeURIComponent(String(blingId))}`, { stock_quantity: stockQty });
+        await vpsDbPatch('products', `bling_id=eq.${encodeURIComponent(String(blingId))}`, { stock_quantity: stockQty });
       } else if (resolvedSku) {
-        await supabaseRestPatch('products', `sku=eq.${encodeURIComponent(String(resolvedSku))}`, { stock_quantity: stockQty });
+        await vpsDbPatch('products', `sku=eq.${encodeURIComponent(String(resolvedSku))}`, { stock_quantity: stockQty });
       }
       const shopeeStockSync = await syncShopeeStockFromBlingTargetsVps(vpsStockResult?.stockTargets || []);
       return reply.code(200).send({ ok: true, event, sku: resolvedSku, bling_id: blingId, stock_quantity: stockQty, stockSource, vpsUpdated: Boolean(vpsStockResult?.ok), shopeeStockSync });
@@ -2993,7 +3699,7 @@ async function handleBlingWebhookVps(request, reply) {
         resolvedSku = resolvedSku || detail?.codigo;
       }
       if (!resolvedSku && blingId) {
-        const rows = await supabaseRestSelect('products', `select=sku,name&bling_id=eq.${encodeURIComponent(String(blingId))}&limit=1`);
+        const rows = await vpsDbSelect('products', `select=sku,name&bling_id=eq.${encodeURIComponent(String(blingId))}&limit=1`);
         const product = Array.isArray(rows) ? rows[0] : null;
         resolvedSku = product?.sku;
         resolvedName = resolvedName || product?.name;
@@ -3013,7 +3719,7 @@ async function handleBlingWebhookVps(request, reply) {
 
       let childPriceTargets = [];
       if (blingId && updates.price_retail !== undefined) {
-        const children = await supabaseRestSelect('products', `select=sku&bling_parent_id=eq.${encodeURIComponent(String(blingId))}`);
+        const children = await vpsDbSelect('products', `select=sku&bling_parent_id=eq.${encodeURIComponent(String(blingId))}`);
         childPriceTargets = Array.isArray(children) ? children : [];
       }
       const priceTargetSkus = updates.price_retail !== undefined ? buildBlingPriceTargetSkusVps(resolvedSku, childPriceTargets) : [resolvedSku];
@@ -3030,9 +3736,9 @@ async function handleBlingWebhookVps(request, reply) {
             : { products: [{ sku: resolvedSku, ...pickBlingPriceStockUpdatesVps(updates) }] }
         )
         : { ok: true, stockTargets: [] };
-      if (blingId) await supabaseRestPatch('products', `bling_id=eq.${encodeURIComponent(String(blingId))}`, updates);
+      if (blingId) await vpsDbPatch('products', `bling_id=eq.${encodeURIComponent(String(blingId))}`, updates);
       if (updates.price_retail !== undefined && childPriceTargets.length > 0) {
-        await supabaseRestPatch('products', `bling_parent_id=eq.${encodeURIComponent(String(blingId))}`, { price_retail: updates.price_retail });
+        await vpsDbPatch('products', `bling_parent_id=eq.${encodeURIComponent(String(blingId))}`, { price_retail: updates.price_retail });
       }
       const shopeeStockSync = updates.stock_quantity !== undefined
         ? await syncShopeeStockFromBlingTargetsVps(vpsPriceStockResult?.stockTargets || [])
@@ -3066,7 +3772,7 @@ async function handleBlingOAuthCallbackVps(request, reply) {
   }
 
   try {
-    const settingsRows = await supabaseRestSelect('company_settings', 'select=id,bling_client_id,bling_client_secret,bling_callback_url&limit=1');
+    const settingsRows = await vpsDbSelect('company_settings', 'select=id,bling_client_id,bling_client_secret,bling_callback_url&limit=1');
     const settings = Array.isArray(settingsRows) ? settingsRows[0] : null;
 
     if (!settings?.bling_client_id || !settings?.bling_client_secret) {
@@ -3080,11 +3786,19 @@ async function handleBlingOAuthCallbackVps(request, reply) {
 
     const { response, data } = await requestBlingToken(tokenParams, settings.bling_client_id, settings.bling_client_secret);
     if (!response.ok) {
-      return blingRedirect(reply, `/admin/settings/bling?error=token_exchange_failed&status=${response.status}`);
+      const detail = sanitizeBlingOAuthErrorMessage(data);
+      console.warn('[bling-oauth-callback] token exchange failed', {
+        status: response.status,
+        detail,
+        redirectHost: (() => {
+          try { return new URL(buildBlingCallbackUrl(request, settings.bling_callback_url)).host; } catch { return null; }
+        })(),
+      });
+      return blingRedirect(reply, `/admin/settings/bling?error=token_exchange_failed&status=${response.status}&detail=${encodeURIComponent(detail)}`);
     }
 
     const expiresAt = new Date(Date.now() + Number(data?.expires_in || 3600) * 1000).toISOString();
-    await supabaseRestPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, {
+    await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, {
       bling_access_token: data?.access_token || null,
       bling_refresh_token: data?.refresh_token || null,
       bling_token_expires_at: expiresAt,
@@ -3111,11 +3825,58 @@ async function handleBlingApiVps(request, reply) {
   if (resource === 'webhook-logs') {
     if (request.method !== 'GET') return reply.code(405).send({ error: 'Method not allowed' });
     try {
-      const logs = await supabaseRestSelect('webhook_logs', 'select=id, source, payload, received_at&order=received_at.desc&limit=20');
+      const logs = await vpsDbSelect('webhook_logs', 'select=id, source, payload, received_at&order=received_at.desc&limit=20');
       return reply.code(200).send({ ok: true, tableExists: true, logs: Array.isArray(logs) ? logs : [] });
     } catch (err) {
       return reply.code(200).send({ ok: false, tableExists: false, error: err.message, logs: [] });
     }
+  }
+
+  if (resource === 'webhook-test') {
+    if (request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
+    const body = request.body || {};
+    const type = String(body.type || query.type || '').toLowerCase();
+    const config = {
+      names: {
+        event: 'diagnostic.product.name',
+        label: 'Nomes',
+        data: { produto: { id: 0, nome: 'Teste de webhook - nome' } },
+      },
+      prices: {
+        event: 'diagnostic.product.price',
+        label: 'Precos',
+        data: { produto: { id: 0, preco: 199.9 }, preco: 199.9 },
+      },
+      stock: {
+        event: 'diagnostic.stock',
+        label: 'Estoque',
+        data: { produto: { id: 0 }, saldoFisicoTotal: 10, saldoVirtualTotal: 10 },
+      },
+    }[type];
+
+    if (!config) return reply.code(400).send({ error: 'Invalid webhook test type. Use names, prices or stock.' });
+
+    const callbackUrl = buildBlingCallbackUrl(request);
+    const publicBaseUrl = callbackUrl.replace(/\/api\/auth\/callback\/bling$/, '');
+    const payload = {
+      eventId: crypto.randomUUID(),
+      event: config.event,
+      diagnostic: true,
+      webhookKind: type,
+      label: config.label,
+      status: 'online',
+      source: 'admin-bling-integration',
+      captured_at: new Date().toISOString(),
+      urls: {
+        webhook: `${publicBaseUrl}/api/bling-webhook`,
+        callback: callbackUrl,
+        legacyWebhook: `${publicBaseUrl}/api/bling?resource=webhook`,
+      },
+      data: config.data,
+    };
+
+    await safeInsertBlingWebhookLogVps('bling-diagnostic', payload, null);
+    return reply.code(200).send({ ok: true, type, event: config.event, logged: true, payload });
   }
 
   if (resource === 'exchange') {
@@ -3369,7 +4130,7 @@ async function handleBlingApiVps(request, reply) {
       if (parsedUrl.protocol !== 'https:') return reply.code(400).send({ error: 'Only https URLs are supported' });
 
       const allowedExactHosts = new Set(['orgbling.s3.amazonaws.com', 'i.imgur.com', 'imgur.com']);
-      const allowedSuffixes = ['xiaomipetrolina.com.br', 'mercadodovale.com.br', 'supabase.co'];
+      const allowedSuffixes = ['xiaomipetrolina.com.br', 'mercadodovale.com.br'];
       const vpsBase = process.env.VITE_VPS_BASE_URL || process.env.VPS_BASE_URL;
       if (vpsBase) {
         try {
@@ -3478,10 +4239,10 @@ async function handleBlingApiVps(request, reply) {
     if (!userId) return reply.code(400).send({ error: 'userId is required' });
 
     try {
-      const companyRows = await supabaseRestSelect('companies', 'select=id&slug=eq.mercado-do-vale&limit=1');
+      const companyRows = await vpsDbSelect('companies', 'select=id&slug=eq.mercado-do-vale&limit=1');
       const company = Array.isArray(companyRows) ? companyRows[0] : null;
       if (!company) return reply.code(404).send({ error: 'Company not found' });
-      const profileRows = await supabaseRestUpsert('profiles', 'on_conflict=id', { id: userId, company_id: company.id });
+      const profileRows = await vpsDbUpsert('profiles', 'on_conflict=id', { id: userId, company_id: company.id });
       return reply.code(200).send({ ok: true, profile: Array.isArray(profileRows) ? profileRows[0] : profileRows, company_id: company.id });
     } catch (err) {
       return reply.code(500).send({
@@ -3502,18 +4263,18 @@ async function handleBlingApiVps(request, reply) {
     if (!model_id || !brand_name) return reply.code(400).send({ error: 'model_id and brand_name are required' });
 
     try {
-      const modelRows = await supabaseRestSelect('models', `select=id,brand_id,company_id&id=eq.${encodeURIComponent(String(model_id))}&limit=1`);
+      const modelRows = await vpsDbSelect('models', `select=id,brand_id,company_id&id=eq.${encodeURIComponent(String(model_id))}&limit=1`);
       const model = Array.isArray(modelRows) ? modelRows[0] : null;
       if (!model) return reply.code(404).send({ error: 'Model not found' });
 
       const slug = normalizeBlingAdminSlugVps(brand_name);
-      const brandRows = await supabaseRestSelect('brands', `select=id,name,slug,active,warranty_days&company_id=eq.${encodeURIComponent(String(model.company_id))}&name=ilike.${encodeURIComponent(String(brand_name))}&limit=1`);
+      const brandRows = await vpsDbSelect('brands', `select=id,name,slug,active,warranty_days&company_id=eq.${encodeURIComponent(String(model.company_id))}&name=ilike.${encodeURIComponent(String(brand_name))}&limit=1`);
       let brandRow = Array.isArray(brandRows) ? brandRows[0] : null;
       let brandId = brandRow?.id;
       let wasCreated = false;
 
       if (!brandId) {
-        const inserted = await supabaseRestInsert('brands', {
+        const inserted = await vpsDbInsert('brands', {
           company_id: model.company_id,
           name: brand_name,
           slug,
@@ -3526,7 +4287,7 @@ async function handleBlingApiVps(request, reply) {
       }
 
       if (!brandId) return reply.code(500).send({ error: 'Failed to resolve brand' });
-      await supabaseRestPatch('models', `id=eq.${encodeURIComponent(String(model_id))}`, { brand_id: brandId });
+      await vpsDbPatch('models', `id=eq.${encodeURIComponent(String(model_id))}`, { brand_id: brandId });
 
       const vpsBrandPayload = { ...brandRow, company_id: model.company_id };
       const vpsSync = await patchVpsJsonForBlingAdminVps(request, wasCreated ? 'POST' : 'PUT', wasCreated ? '/brands' : `/brands/${encodeURIComponent(String(brandId))}`, vpsBrandPayload);
@@ -3551,9 +4312,9 @@ async function handleBlingApiVps(request, reply) {
     if (!sku || !blingId) return reply.code(400).send({ error: 'sku e blingId são obrigatórios' });
 
     try {
-      const beforeRows = await supabaseRestSelect('products', `select=id,sku,bling_id,stock_quantity&sku=eq.${encodeURIComponent(String(sku))}&limit=1`);
+      const beforeRows = await vpsDbSelect('products', `select=id,sku,bling_id,stock_quantity&sku=eq.${encodeURIComponent(String(sku))}&limit=1`);
       const before = Array.isArray(beforeRows) ? beforeRows[0] : null;
-      const updatedRows = await supabaseRestPatch('products', `sku=eq.${encodeURIComponent(String(sku))}`, { bling_id: Number(blingId) });
+      const updatedRows = await vpsDbPatch('products', `sku=eq.${encodeURIComponent(String(sku))}`, { bling_id: Number(blingId) });
       return reply.code(200).send({ ok: true, before, after: Array.isArray(updatedRows) ? updatedRows[0] : updatedRows });
     } catch (err) {
       return reply.code(200).send({
@@ -3691,7 +4452,7 @@ async function handleBlingApiVps(request, reply) {
     const to = from + pageSize - 1;
 
     try {
-      const { products, total } = await loadSupabaseProductsForBlingSyncPrices(from, to);
+      const { products, total } = await loadVpsProductsForBlingSyncPrices(from, to);
       if (!products || products.length === 0) {
         return reply.code(200).send({ ok: true, synced: 0, total, hasMore: false, nextPage: null });
       }
@@ -4104,7 +4865,7 @@ async function handleBlingApiVps(request, reply) {
     }
   }
 
-  return reply.code(400).send({ error: 'Invalid resource. Migrated on VPS: oauth-callback|exchange|categories|products|product-detail|product-update-fiscal|product-update-dimensions|image-proxy|debug-product|debug-diagnostic|fix-profile|sync-model-brand|fix-bling-id|stock|stock-sync|sync-prices-vps|reconcile|serial-sales-sync|finance|nfe|nfce|nf-detail|webhook|webhook-logs' });
+  return reply.code(400).send({ error: 'Invalid resource. Migrated on VPS: oauth-callback|exchange|categories|products|product-detail|product-update-fiscal|product-update-dimensions|image-proxy|debug-product|debug-diagnostic|fix-profile|sync-model-brand|fix-bling-id|stock|stock-sync|sync-prices-vps|reconcile|serial-sales-sync|finance|nfe|nfce|nf-detail|webhook|webhook-logs|webhook-test' });
 }
 
 const TELEGRAM_BOT_MANUAL_VPS = `*Manual do Bot - Mercado do Vale*
@@ -4200,7 +4961,7 @@ async function sendTelegramWebhookMessageVps(token, chatId, text, parseMode = 'M
 async function telegramWebhookSalesTodayVps(now) {
   const { start, end } = telegramWebhookSaoPauloDayRangeVps(now);
   const query = `select=total,profit,created_at,payment_method&status=eq.completed&created_at=gte.${encodeURIComponent(start.toISOString())}&created_at=lte.${encodeURIComponent(end.toISOString())}&order=created_at.desc`;
-  const sales = await supabaseRestSelect('sales', query);
+  const sales = await vpsDbSelect('sales', query);
   return Array.isArray(sales) ? sales : [];
 }
 
@@ -4234,8 +4995,8 @@ async function handleTelegramWebhookCommandVps({ token, chatId, text, command, a
   if (command === '/relatorio') {
     await sendTelegramWebhookMessageVps(token, chatId, 'Gerando relatorio completo...');
     const sales = await telegramWebhookSalesTodayVps(now);
-    const products = await supabaseRestSelect('products', 'select=stock_quantity&status=eq.active&stock_quantity=gt.0');
-    const pendingOrders = await supabaseRestSelect('orders', 'select=id&status=eq.pending');
+    const products = await vpsDbSelect('products', 'select=stock_quantity&status=eq.active&stock_quantity=gt.0');
+    const pendingOrders = await vpsDbSelect('orders', 'select=id&status=eq.pending');
     const revenue = sales.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
     const profit = sales.reduce((sum, row) => sum + (Number(row.profit) || 0), 0);
     const totalStock = (Array.isArray(products) ? products : []).reduce((sum, product) => sum + (Number(product.stock_quantity) || 0), 0);
@@ -4250,7 +5011,7 @@ async function handleTelegramWebhookCommandVps({ token, chatId, text, command, a
 
   if (command === '/top10') {
     await sendTelegramWebhookMessageVps(token, chatId, 'Buscando produtos mais vendidos...');
-    const items = await supabaseRestSelect('sale_items', 'select=product_name,quantity,created_at&order=created_at.desc&limit=500');
+    const items = await vpsDbSelect('sale_items', 'select=product_name,quantity,created_at&order=created_at.desc&limit=500');
     const rows = Array.isArray(items) ? items : [];
     if (!rows.length) {
       await sendTelegramWebhookMessageVps(token, chatId, 'Nenhuma venda registrada ainda.');
@@ -4272,7 +5033,7 @@ async function handleTelegramWebhookCommandVps({ token, chatId, text, command, a
 
   if (command === '/estoque') {
     const searchFilter = args ? `&name=ilike.*${encodeURIComponent(args)}*` : '&limit=30';
-    const products = await supabaseRestSelect('products', `select=name,stock_quantity,specs,price_pix,price_card&status=eq.active&stock_quantity=gt.0${searchFilter}&order=name.asc`);
+    const products = await vpsDbSelect('products', `select=name,stock_quantity,specs,price_pix,price_card&status=eq.active&stock_quantity=gt.0${searchFilter}&order=name.asc`);
     const rows = Array.isArray(products) ? products : [];
     if (!rows.length) {
       await sendTelegramWebhookMessageVps(token, chatId, args ? `Nenhum produto encontrado com *"${args}"*` : 'Nenhum produto em estoque no momento.');
@@ -4297,7 +5058,7 @@ async function handleTelegramWebhookCommandVps({ token, chatId, text, command, a
       await sendTelegramWebhookMessageVps(token, chatId, 'Informe o produto. Ex: `/preco iphone 15 pro`');
       return;
     }
-    const products = await supabaseRestSelect('products', `select=name,stock_quantity,specs,price_pix,price_card&status=eq.active&name=ilike.*${encodeURIComponent(args)}*&order=name.asc&limit=5`);
+    const products = await vpsDbSelect('products', `select=name,stock_quantity,specs,price_pix,price_card&status=eq.active&name=ilike.*${encodeURIComponent(args)}*&order=name.asc&limit=5`);
     const rows = Array.isArray(products) ? products : [];
     if (!rows.length) {
       await sendTelegramWebhookMessageVps(token, chatId, `Produto *"${args}"* nao encontrado.`);
@@ -4317,7 +5078,7 @@ async function handleTelegramWebhookCommandVps({ token, chatId, text, command, a
   }
 
   if (command === '/pedidos') {
-    const orders = await supabaseRestSelect('orders', 'select=id,customer_name,total,status,created_at,items&status=in.(pending,confirmed)&order=created_at.desc&limit=10');
+    const orders = await vpsDbSelect('orders', 'select=id,customer_name,total,status,created_at,items&status=in.(pending,confirmed)&order=created_at.desc&limit=10');
     const rows = Array.isArray(orders) ? orders : [];
     if (!rows.length) {
       await sendTelegramWebhookMessageVps(token, chatId, 'Nenhum pedido pendente no momento.');
@@ -4336,7 +5097,7 @@ async function handleTelegramWebhookCommandVps({ token, chatId, text, command, a
   if (command === '/clientes') {
     const weekAgo = new Date(now);
     weekAgo.setDate(weekAgo.getDate() - 7);
-    const clients = await supabaseRestSelect('customers', `select=name,phone,type,created_at&created_at=gte.${encodeURIComponent(weekAgo.toISOString())}&order=created_at.desc&limit=15`);
+    const clients = await vpsDbSelect('customers', `select=name,phone,type,created_at&created_at=gte.${encodeURIComponent(weekAgo.toISOString())}&order=created_at.desc&limit=15`);
     const rows = Array.isArray(clients) ? clients : [];
     if (!rows.length) {
       await sendTelegramWebhookMessageVps(token, chatId, 'Nenhum cliente novo nos ultimos 7 dias.');
@@ -4359,7 +5120,7 @@ async function handleTelegramWebhookCommandVps({ token, chatId, text, command, a
       await sendTelegramWebhookMessageVps(token, chatId, 'Informe o modelo. Ex: `/modelo iphone 15`');
       return;
     }
-    const products = await supabaseRestSelect('products', `select=name,stock_quantity,specs,price_cost&status=eq.active&stock_quantity=gt.0&name=ilike.*${encodeURIComponent(args)}*&order=name.asc`);
+    const products = await vpsDbSelect('products', `select=name,stock_quantity,specs,price_cost&status=eq.active&stock_quantity=gt.0&name=ilike.*${encodeURIComponent(args)}*&order=name.asc`);
     const rows = Array.isArray(products) ? products : [];
     if (!rows.length) {
       await sendTelegramWebhookMessageVps(token, chatId, `Nenhum produto em estoque encontrado para *"${args}"*.`);
@@ -4392,19 +5153,19 @@ async function handleTelegramWebhookCommandVps({ token, chatId, text, command, a
       await sendTelegramWebhookMessageVps(token, chatId, 'Informe a categoria. Ex: `/categoria celulares`');
       return;
     }
-    const categories = await supabaseRestSelect('categories', `select=id,name&name=ilike.*${encodeURIComponent(args)}*&limit=5`);
+    const categories = await vpsDbSelect('categories', `select=id,name&name=ilike.*${encodeURIComponent(args)}*&limit=5`);
     const category = Array.isArray(categories) ? categories[0] : null;
     if (!category) {
       await sendTelegramWebhookMessageVps(token, chatId, `Categoria *"${args}"* nao encontrada.`);
       return;
     }
     await sendTelegramWebhookMessageVps(token, chatId, `Carregando estoque de *${category.name}*...`);
-    const models = await supabaseRestSelect('models', `select=id&category_id=eq.${encodeURIComponent(category.id)}`);
+    const models = await vpsDbSelect('models', `select=id&category_id=eq.${encodeURIComponent(category.id)}`);
     const modelIds = (Array.isArray(models) ? models : []).map((model) => model.id).filter(Boolean);
     const relationFilter = modelIds.length
       ? `or=(category_id.eq.${encodeURIComponent(category.id)},model_id.in.(${modelIds.map((id) => `"${String(id).replace(/"/g, '')}"`).join(',')}))`
       : `category_id=eq.${encodeURIComponent(category.id)}`;
-    const products = await supabaseRestSelect('products', `select=name,stock_quantity,specs,price_cost,brand&status=eq.active&stock_quantity=gt.0&${relationFilter}&order=name.asc`);
+    const products = await vpsDbSelect('products', `select=name,stock_quantity,specs,price_cost,brand&status=eq.active&stock_quantity=gt.0&${relationFilter}&order=name.asc`);
     const rows = Array.isArray(products) ? products : [];
     if (!rows.length) {
       await sendTelegramWebhookMessageVps(token, chatId, `Nenhum produto em estoque na categoria *${category.name}*.`);
@@ -4457,7 +5218,7 @@ async function handleTelegramWebhookVps(request, reply) {
     if (!message?.text) return reply.code(200).send({ ok: true });
     if (!telegramWebhookSecretConfigured) return reply.code(503).send({ error: 'TELEGRAM_WEBHOOK_SECRET not configured' });
 
-    const rows = await supabaseRestSelect('telegram_settings', 'select=*&limit=1');
+    const rows = await vpsDbSelect('telegram_settings', 'select=*&limit=1');
     const settings = Array.isArray(rows) ? rows[0] : null;
     if (!settings?.active || !settings?.bot_token) return reply.code(200).send({ ok: true });
 
@@ -4560,7 +5321,7 @@ function buildCronDispatcherScheduleTextVps(slots = []) {
 
 async function loadCronDispatcherCompanyVariablesVps() {
   try {
-    const rows = await supabaseRestSelect('company_settings', 'select=name,phone,email,social_instagram,business_hours,address_street,address_city,address_state,address_number,address_neighborhood&limit=1');
+    const rows = await vpsDbSelect('company_settings', 'select=name,phone,email,social_instagram,business_hours,address_street,address_city,address_state,address_number,address_neighborhood&limit=1');
     const company = cronDispatcherFirstRowVps(rows);
     if (!company) return {};
     const address = [
@@ -4588,7 +5349,7 @@ async function loadCronDispatcherSalesVariablesVps(now) {
   const { start, end } = cronDispatcherSaoPauloDayRangeVps(now);
   try {
     const query = `select=total,profit&status=eq.completed&created_at=gte.${encodeURIComponent(start.toISOString())}&created_at=lte.${encodeURIComponent(end.toISOString())}`;
-    const sales = await supabaseRestSelect('sales', query);
+    const sales = await vpsDbSelect('sales', query);
     const rows = Array.isArray(sales) ? sales : [];
     const faturamento = rows.reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
     const lucroTotal = rows.reduce((sum, sale) => sum + (Number(sale.profit) || 0), 0);
@@ -4608,7 +5369,7 @@ async function loadCronDispatcherSalesVariablesVps(now) {
 
 async function loadCronDispatcherStockVariablesVps() {
   try {
-    const products = await supabaseRestSelect('products', 'select=name,stock_quantity,specs,category_id,model_id,price_cost&status=eq.active&stock_quantity=gt.0');
+    const products = await vpsDbSelect('products', 'select=name,stock_quantity,specs,category_id,model_id,price_cost&status=eq.active&stock_quantity=gt.0');
     const rows = Array.isArray(products) ? products : [];
     const phoneWords = ['iphone', 'samsung', 'xiaomi', 'motorola', 'smartphone', 'galaxy', 'poco', 'redmi', 'realme'];
     let estoqueCelulares = 0;
@@ -4656,7 +5417,7 @@ async function loadCronDispatcherStockVariablesVps() {
 
 async function loadCronDispatcherInstagramScheduleVps() {
   try {
-    const slots = await supabaseRestSelect('instagram_schedule', 'select=*&active=eq.true&order=day_of_week.asc,scheduled_time.asc');
+    const slots = await vpsDbSelect('instagram_schedule', 'select=*&active=eq.true&order=day_of_week.asc,scheduled_time.asc');
     return Array.isArray(slots) ? slots : [];
   } catch {
     return [];
@@ -4679,18 +5440,18 @@ async function resolveCronDispatcherTagInlineVps(tag, now) {
     case 'count_products': {
       const status = cfg.status ? `&status=eq.${encodeURIComponent(cfg.status)}` : '';
       const minStock = cfg.min_stock != null ? `&stock_quantity=gt.${encodeURIComponent(Number(cfg.min_stock) - 1)}` : '';
-      const products = await supabaseRestSelect('products', `select=id${status}${minStock}`);
+      const products = await vpsDbSelect('products', `select=id${status}${minStock}`);
       return String(Array.isArray(products) ? products.length : 0);
     }
     case 'sum_products_stock': {
       const status = cfg.status ? `&status=eq.${encodeURIComponent(cfg.status)}` : '';
-      const products = await supabaseRestSelect('products', `select=stock_quantity${status}`);
+      const products = await vpsDbSelect('products', `select=stock_quantity${status}`);
       return String((Array.isArray(products) ? products : []).reduce((sum, product) => sum + (Number(product.stock_quantity) || 0), 0));
     }
     case 'list_products': {
       const limit = Number(cfg.limit || 30);
       const format = cfg.format || '- {qty}x - {name} - {color} - {ram}/{storage}';
-      const rows = await supabaseRestSelect('products', 'select=name,stock_quantity,specs,price_pix,price_card&status=eq.active&stock_quantity=gt.0');
+      const rows = await vpsDbSelect('products', 'select=name,stock_quantity,specs,price_pix,price_card&status=eq.active&stock_quantity=gt.0');
       const products = Array.isArray(rows) ? rows : [];
       if (!products.length) return 'Nenhum item em estoque.';
       const phoneWords = ['iphone', 'samsung', 'xiaomi', 'motorola', 'galaxy', 'poco', 'redmi', 'smartphone'];
@@ -4729,14 +5490,14 @@ async function resolveCronDispatcherTagInlineVps(tag, now) {
     case 'count_sales_today': {
       const { start, end } = cronDispatcherSaoPauloDayRangeVps(now);
       const status = cfg.status ? `&status=eq.${encodeURIComponent(cfg.status)}` : '';
-      const rows = await supabaseRestSelect('sales', `select=id&created_at=gte.${encodeURIComponent(start.toISOString())}&created_at=lte.${encodeURIComponent(end.toISOString())}${status}`);
+      const rows = await vpsDbSelect('sales', `select=id&created_at=gte.${encodeURIComponent(start.toISOString())}&created_at=lte.${encodeURIComponent(end.toISOString())}${status}`);
       return String(Array.isArray(rows) ? rows.length : 0);
     }
     case 'sum_sales_today': {
       const { start, end } = cronDispatcherSaoPauloDayRangeVps(now);
       const field = String(cfg.field || 'total').replace(/[^a-zA-Z0-9_]/g, '') || 'total';
       const status = cfg.status ? `&status=eq.${encodeURIComponent(cfg.status)}` : '';
-      const rows = await supabaseRestSelect('sales', `select=${field}&created_at=gte.${encodeURIComponent(start.toISOString())}&created_at=lte.${encodeURIComponent(end.toISOString())}${status}`);
+      const rows = await vpsDbSelect('sales', `select=${field}&created_at=gte.${encodeURIComponent(start.toISOString())}&created_at=lte.${encodeURIComponent(end.toISOString())}${status}`);
       const total = (Array.isArray(rows) ? rows : []).reduce((sum, row) => sum + (Number(row[field]) || 0), 0);
       return formatCronDispatcherMoneyVps(total);
     }
@@ -4747,7 +5508,7 @@ async function resolveCronDispatcherTagInlineVps(tag, now) {
 
 async function loadCronDispatcherCustomTagVariablesVps(now) {
   try {
-    const tags = await supabaseRestSelect('system_tags', 'select=*&active=eq.true&resolver_type=neq.system_injected');
+    const tags = await vpsDbSelect('system_tags', 'select=*&active=eq.true&resolver_type=neq.system_injected');
     const dict = {};
     for (const tag of Array.isArray(tags) ? tags : []) {
       try {
@@ -4799,7 +5560,7 @@ async function maybeSendCronDispatcherInstagramReminderVps(settings, now, hour) 
   const dayOfWeek = dayMap[weekdayName.toLowerCase()];
   if (dayOfWeek === undefined) return false;
 
-  const rows = await supabaseRestSelect('instagram_schedule', `select=*&day_of_week=eq.${dayOfWeek}&active=eq.true&send_telegram_reminder=eq.true&order=scheduled_time.asc`);
+  const rows = await vpsDbSelect('instagram_schedule', `select=*&day_of_week=eq.${dayOfWeek}&active=eq.true&send_telegram_reminder=eq.true&order=scheduled_time.asc`);
   const slots = Array.isArray(rows) ? rows : [];
   if (!slots.length) return false;
 
@@ -4830,7 +5591,7 @@ async function handleCronDispatcherVps(request, reply) {
   }
 
   try {
-    const rows = await supabaseRestSelect('telegram_settings', 'select=*&limit=1');
+    const rows = await vpsDbSelect('telegram_settings', 'select=*&limit=1');
     const settings = cronDispatcherFirstRowVps(rows);
     const hasConfiguredTelegramCredential = !!settings?.bot_token;
     if (!settings || !settings.active || !settings.bot_token || !settings.chat_id) {
@@ -5248,7 +6009,7 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
     return reply.code(400).send({ error: 'Missing or invalid query param: path' });
   }
 
-  const auth = await getSupabaseBearerAuthContext(request);
+  const auth = await getVpsBearerAuthContext(request);
   const isWrite = method !== 'GET' && method !== 'HEAD';
   const isPublicPath = isVpsProxyPublicPath(vpsProxyTargetPath, method);
   const favoritesCustomerId = extractVpsProxyFavoritesCustomerId(vpsProxyTargetPath);
@@ -5555,6 +6316,13 @@ function getAutoresponderGreetingPeriod(now = new Date()) {
   if (hour >= 5 && hour < 12) return 'morning';
   if (hour >= 12 && hour < 18) return 'afternoon';
   return 'night';
+}
+
+function sanitizeBlingOAuthErrorMessage(data) {
+  const raw = data?.error?.description || data?.error_description || data?.message || data?.error || 'Bling token exchange failed';
+  return String(raw)
+    .replace(/[A-Za-z0-9_-]{24,}/g, '[redacted]')
+    .slice(0, 180);
 }
 
 function isAutoresponderDefaultGreetingFlowMessage(value) {
@@ -7091,22 +7859,8 @@ let autoresponderCompanyIdCache = null;
 
 async function getAutoresponderCompanyId() {
   if (autoresponderCompanyIdCache) return autoresponderCompanyIdCache;
-  if (!SUPABASE_URL || !SUPABASE_AUTH_KEY) return null;
-
-  const endpoint = `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/companies?select=id&slug=eq.mercado-do-vale&limit=1`;
   try {
-    const res = await fetch(endpoint, {
-      headers: {
-        apikey: SUPABASE_AUTH_KEY,
-        Authorization: `Bearer ${SUPABASE_AUTH_KEY}`,
-      },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) {
-      console.warn('[autoresponder] company lookup failed:', res.status);
-      return null;
-    }
-    const rows = await res.json();
+    const rows = await vpsDbSelect('companies', 'select=id&slug=eq.mercado-do-vale&limit=1');
     autoresponderCompanyIdCache = rows?.[0]?.id || null;
     return autoresponderCompanyIdCache;
   } catch (err) {
@@ -7116,29 +7870,17 @@ async function getAutoresponderCompanyId() {
 }
 
 async function findAutoresponderExistingCustomer(customerData = {}) {
-  if (!SUPABASE_URL || !SUPABASE_AUTH_KEY) return null;
   const candidates = buildAutoresponderCustomerLookupCandidates(customerData);
   if (candidates.length === 0) return null;
 
-  const endpointBase = `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/customers?select=id,name,cpf_cnpj,email,phone,address,is_active`;
   const query = [
+    'select=id,name,cpf_cnpj,email,phone,address,is_active',
     `or=(${buildAutoresponderCustomerLookupFilter(candidates)})`,
     'limit=1',
   ].join('&');
 
   try {
-    const res = await fetch(`${endpointBase}&${query}`, {
-      headers: {
-        apikey: SUPABASE_AUTH_KEY,
-        Authorization: `Bearer ${SUPABASE_AUTH_KEY}`,
-      },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) {
-      console.warn('[autoresponder] customer lookup failed:', res.status);
-      return null;
-    }
-    const rows = await res.json();
+    const rows = await vpsDbSelect('customers', query);
     return normalizeAutoresponderExistingCustomer(rows?.[0]);
   } catch (err) {
     console.warn('[autoresponder] customer lookup error:', err.message);
@@ -7219,16 +7961,8 @@ async function buildAutoresponderCustomerPayload(customerData = {}, purchaseFlow
 }
 
 async function createOrUpdateAutoresponderCustomer(customerData = {}, purchaseFlow = {}, sender = '') {
-  if (!SUPABASE_URL || !SUPABASE_AUTH_KEY) return null;
   const payload = await buildAutoresponderCustomerPayload(customerData, purchaseFlow, sender);
   const existingCustomer = purchaseFlow?.existing_customer || null;
-  const baseUrl = `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/customers`;
-  const headers = {
-    apikey: SUPABASE_AUTH_KEY,
-    Authorization: `Bearer ${SUPABASE_AUTH_KEY}`,
-    'Content-Type': 'application/json',
-    Prefer: 'return=representation',
-  };
 
   try {
     if (existingCustomer?.id) {
@@ -7240,17 +7974,7 @@ async function createOrUpdateAutoresponderCustomer(customerData = {}, purchaseFl
       Object.keys(updatePayload).forEach((key) => {
         if (updatePayload[key] == null || updatePayload[key] === '') delete updatePayload[key];
       });
-      const res = await fetch(`${baseUrl}?id=eq.${encodeURIComponent(existingCustomer.id)}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify(updatePayload),
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) {
-        console.warn('[autoresponder] customer update failed:', res.status);
-        return existingCustomer;
-      }
-      const rows = await res.json();
+      const rows = await vpsDbPatch('customers', `id=eq.${encodeURIComponent(existingCustomer.id)}`, updatePayload);
       return normalizeAutoresponderExistingCustomer(rows?.[0]) || existingCustomer;
     }
 
@@ -7260,17 +7984,7 @@ async function createOrUpdateAutoresponderCustomer(customerData = {}, purchaseFl
       referral_code: buildAutoresponderReferralCode(newId),
       ...payload,
     };
-    const res = await fetch(baseUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(insertPayload),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) {
-      console.warn('[autoresponder] customer create failed:', res.status);
-      return null;
-    }
-    const rows = await res.json();
+    const rows = await vpsDbInsert('customers', insertPayload);
     return normalizeAutoresponderExistingCustomer(rows?.[0]);
   } catch (err) {
     console.warn('[autoresponder] customer upsert error:', err.message);
@@ -12305,7 +13019,7 @@ fastify.delete('/field-presets/:id', { preHandler: requireSyncKey }, async (req,
 });
 
 // ─── Categories ────────────────────────────────────────────────────────────
-// Models: routed through the VPS so the frontend does not write directly to Supabase.
+// Models: routed through the VPS so the frontend uses VPS database endpoints.
 const MODEL_COMPANY_SLUG = 'mercado-do-vale';
 const MODEL_PAGE_SIZE = 1000;
 
@@ -12318,32 +13032,42 @@ function generateModelSlug(name) {
     .replace(/^-+|-+$/g, '');
 }
 
-function mapSupabaseModel(row) {
+function mapVpsModel(row) {
   if (!row) return null;
+  const templateValues = parseJsonCell(row.template_values, {});
+  const eans = parseJsonCell(row.eans, null);
+  const name = String(row.name || '').trim();
   return {
     id: row.id,
-    name: row.name,
-    slug: row.slug,
+    name,
+    slug: row.slug || generateModelSlug(name || row.id),
     brand_id: row.brand_id,
-    active: true,
+    active: row.active === undefined || row.active === null ? true : Boolean(row.active),
     created: row.created_at,
     updated: row.updated_at,
     category_id: row.category_id || undefined,
     description: row.description || undefined,
-    template_values: row.template_values || {},
-    eans: Array.isArray(row.eans) ? row.eans : undefined,
+    template_values: templateValues && typeof templateValues === 'object' ? templateValues : {},
+    eans: Array.isArray(eans) ? eans : undefined,
   };
+}
+
+function parseJsonCell(value, fallback) {
+  if (value === null || value === undefined || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
 }
 
 async function resolveModelCompanyId(companyId) {
   if (companyId) return companyId;
-  const rows = await supabaseRestSelect('companies', `select=id&slug=eq.${encodeURIComponent(MODEL_COMPANY_SLUG)}&limit=1`);
-  const row = Array.isArray(rows) ? rows[0] : null;
-  if (!row?.id) throw new Error('Default company not found for model operations');
-  return row.id;
+  return getDefaultCompanyIdForCatalog();
 }
 
-async function selectModelsFromSupabase({ companyId, brandId } = {}) {
+async function selectModelsFromVpsDb({ companyId, brandId, backfilled = false } = {}) {
   const resolvedCompanyId = await resolveModelCompanyId(companyId);
   const rows = [];
   for (let offset = 0; ; offset += MODEL_PAGE_SIZE) {
@@ -12355,34 +13079,81 @@ async function selectModelsFromSupabase({ companyId, brandId } = {}) {
       `offset=${offset}`,
     ];
     if (brandId) parts.splice(2, 0, `brand_id=eq.${encodeURIComponent(brandId)}`);
-    const page = await supabaseRestSelect('models', parts.join('&'));
+    const page = await vpsDbSelect('models', parts.join('&'));
     const list = Array.isArray(page) ? page : [];
     rows.push(...list);
     if (list.length < MODEL_PAGE_SIZE) break;
   }
+  if (rows.length === 0 && !backfilled) {
+    await backfillModelsFromVpsProducts(resolvedCompanyId);
+    return selectModelsFromVpsDb({ companyId: resolvedCompanyId, brandId, backfilled: true });
+  }
   return rows;
 }
 
-function isSupabaseConflict(error) {
+function firstTextValue(...values) {
+  for (const value of values) {
+    const text = String(value || '').trim();
+    if (text && text.toLowerCase() !== 'null' && text.toLowerCase() !== 'undefined') return text;
+  }
+  return '';
+}
+
+async function backfillModelsFromVpsProducts(companyId) {
+  const [productModels] = await pool.query(
+    `SELECT
+       p.model_id AS id,
+       MIN(p.name) AS product_name,
+       MIN(p.category_id) AS category_id,
+       MIN(COALESCE(b.id, p.brand)) AS brand_id,
+       MIN(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(p.custom_fields, '$.model')), 'null')) AS custom_model,
+       MIN(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(p.specs, '$.model')), 'null')) AS specs_model
+     FROM products p
+     LEFT JOIN brands b ON CAST(b.id AS CHAR) = p.brand OR b.name = p.brand
+     WHERE p.model_id IS NOT NULL AND p.model_id <> ''
+     GROUP BY p.model_id`
+  );
+
+  for (const row of productModels) {
+    const name = firstTextValue(row.custom_model, row.specs_model, row.product_name, row.id);
+    const brandId = firstTextValue(row.brand_id);
+    if (!row.id || !name || !brandId) continue;
+
+    await vpsDbInsert('models', {
+      id: row.id,
+      company_id: companyId,
+      brand_id: brandId,
+      category_id: row.category_id || null,
+      name,
+      slug: generateModelSlug(name),
+      template_values: {},
+      active: 1,
+    }).catch((error) => {
+      if (!isVpsDbConflict(error)) throw error;
+    });
+  }
+}
+
+function isVpsDbConflict(error) {
   const text = `${error?.message || ''} ${JSON.stringify(error?.body || {})}`.toLowerCase();
   return error?.status === 409 || text.includes('duplicate') || text.includes('unique') || text.includes('23505');
 }
 
 fastify.get('/models', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
-  const rows = await selectModelsFromSupabase({
+  const rows = await selectModelsFromVpsDb({
     companyId: req.query?.company_id,
     brandId: req.query?.brand_id,
   });
-  return rows.map(mapSupabaseModel);
+  return rows.map(mapVpsModel);
 });
 
 fastify.get('/models/:id', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const companyId = await resolveModelCompanyId(req.query?.company_id);
-  const rows = await supabaseRestSelect(
+  const rows = await vpsDbSelect(
     'models',
     `select=*&id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
   );
-  const model = mapSupabaseModel(Array.isArray(rows) ? rows[0] : null);
+  const model = mapVpsModel(Array.isArray(rows) ? rows[0] : null);
   if (!model) return reply.code(404).send({ error: 'Modelo nao encontrado.' });
   return model;
 });
@@ -12395,7 +13166,7 @@ fastify.post('/models', { preHandler: requireSyncKey }, async (req, reply) => {
 
   const companyId = await resolveModelCompanyId(body.company_id);
   const slug = generateModelSlug(body.name);
-  const existing = await supabaseRestSelect(
+  const existing = await vpsDbSelect(
     'models',
     [
       'select=id',
@@ -12411,7 +13182,9 @@ fastify.post('/models', { preHandler: requireSyncKey }, async (req, reply) => {
   }
 
   try {
-    const rows = await supabaseRestInsert('models', {
+    const modelId = body.id || crypto.randomUUID();
+    const rows = await vpsDbInsert('models', {
+      id: modelId,
       company_id: companyId,
       brand_id: body.brand_id,
       name: String(body.name).trim(),
@@ -12421,9 +13194,9 @@ fastify.post('/models', { preHandler: requireSyncKey }, async (req, reply) => {
       template_values: body.template_values || {},
       eans: Array.isArray(body.eans) && body.eans.length ? body.eans : null,
     });
-    return reply.code(201).send(mapSupabaseModel(Array.isArray(rows) ? rows[0] : rows));
+    return reply.code(201).send(mapVpsModel(Array.isArray(rows) ? rows[0] : rows));
   } catch (error) {
-    if (isSupabaseConflict(error)) {
+    if (isVpsDbConflict(error)) {
       return reply.code(409).send({ error: 'Ja existe um modelo com esse nome para esta marca.' });
     }
     throw error;
@@ -12437,7 +13210,7 @@ fastify.put('/models/:id', { preHandler: requireSyncKey }, async (req, reply) =>
   }
 
   const companyId = await resolveModelCompanyId(body.company_id);
-  const currentRows = await supabaseRestSelect(
+  const currentRows = await vpsDbSelect(
     'models',
     `select=*&id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
   );
@@ -12455,14 +13228,14 @@ fastify.put('/models/:id', { preHandler: requireSyncKey }, async (req, reply) =>
   if (payload.name !== current.name) payload.slug = generateModelSlug(payload.name);
 
   try {
-    const rows = await supabaseRestPatch(
+    const rows = await vpsDbPatch(
       'models',
       `id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}`,
       payload
     );
-    return mapSupabaseModel(Array.isArray(rows) ? rows[0] : rows);
+    return mapVpsModel(Array.isArray(rows) ? rows[0] : rows);
   } catch (error) {
-    if (isSupabaseConflict(error)) {
+    if (isVpsDbConflict(error)) {
       return reply.code(409).send({ error: 'Ja existe um modelo com esse nome para esta marca.' });
     }
     throw error;
@@ -12471,7 +13244,7 @@ fastify.put('/models/:id', { preHandler: requireSyncKey }, async (req, reply) =>
 
 fastify.delete('/models/:id', { preHandler: requireSyncKey }, async (req) => {
   const companyId = await resolveModelCompanyId(req.query?.company_id);
-  await supabaseRestDelete(
+  await vpsDbDelete(
     'models',
     `id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}`
   );
@@ -12684,7 +13457,7 @@ fastify.get('/products/category-counts', { config: { rateLimit: { max: 240, time
 });
 
 // ─── Catalog Metadata (1 chamada = categorias+counts+marcas+preços) ─────────
-// Substitui 3-4 queries separadas ao Supabase. Resultado cacheável por 5 min.
+// Substitui 3-4 queries separadas ao banco da VPS. Resultado cacheável por 5 min.
 fastify.get('/catalog/metadata', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
   const [[categories], [counts], [brands], [priceRow]] = await Promise.all([
     // 1. Todas as categorias com parent_id e sort_order
@@ -13127,6 +13900,1185 @@ fastify.get('/products/:id/combo', async (req, reply) => {
 // ─── Products (write) ──────────────────────────────────────────────────────
 
 // Batch upsert — used by Bling import and admin writes
+function normalizeStockLocationCode(value = '') {
+  return String(value || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toUpperCase();
+}
+
+function stockBool(value) {
+  return value === true || value === 1 || value === '1';
+}
+
+function stockNumber(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseStockJson(value, fallback = null) {
+  if (value == null || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+async function getDefaultStockCompanyId() {
+  const [companyRows] = await pool.query('SELECT id FROM companies ORDER BY created_at ASC LIMIT 1').catch(() => [null]);
+  if (companyRows?.[0]?.id) return companyRows[0].id;
+  const [productRows] = await pool.query('SELECT company_id AS id FROM products WHERE company_id IS NOT NULL LIMIT 1').catch(() => [null]);
+  if (productRows?.[0]?.id) return productRows[0].id;
+  return '00000000-0000-0000-0000-000000000000';
+}
+
+async function ensureDefaultStockLocation(companyId) {
+  const targetCompanyId = companyId || await getDefaultStockCompanyId();
+  const [existingDeposits] = await pool.query(
+    'SELECT id FROM stock_deposits WHERE company_id = ? AND code = ? LIMIT 1',
+    [targetCompanyId, 'LOJA-PRINCIPAL']
+  );
+  let depositId = existingDeposits?.[0]?.id;
+  if (!depositId) {
+    depositId = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO stock_deposits (id, company_id, name, code, type, is_default, is_active)
+       VALUES (?, ?, 'Loja Principal', 'LOJA-PRINCIPAL', 'store', 1, 1)`,
+      [depositId, targetCompanyId]
+    );
+  } else {
+    await pool.query(
+      `UPDATE stock_deposits
+       SET name='Loja Principal', type='store', is_default=1, is_active=1, updated_at=CURRENT_TIMESTAMP
+       WHERE id=?`,
+      [depositId]
+    );
+  }
+
+  const [existingLocations] = await pool.query(
+    'SELECT id FROM stock_locations WHERE deposit_id = ? AND code = ? LIMIT 1',
+    [depositId, 'ESTOQUE-GERAL']
+  );
+  let locationId = existingLocations?.[0]?.id;
+  if (!locationId) {
+    locationId = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO stock_locations (id, company_id, deposit_id, name, code, description, is_default, is_active)
+       VALUES (?, ?, ?, 'Estoque Geral', 'ESTOQUE-GERAL', 'Local padrao criado automaticamente para migracao inicial de estoque.', 1, 1)`,
+      [locationId, targetCompanyId, depositId]
+    );
+  } else {
+    await pool.query(
+      `UPDATE stock_locations
+       SET name='Estoque Geral', description='Local padrao criado automaticamente para migracao inicial de estoque.',
+           is_default=1, is_active=1, updated_at=CURRENT_TIMESTAMP
+       WHERE id=?`,
+      [locationId]
+    );
+  }
+
+  return { depositId, locationId, companyId: targetCompanyId };
+}
+
+async function ensureIncomingStockLocation(companyId) {
+  const targetCompanyId = companyId || await getDefaultStockCompanyId();
+  const [existingDeposits] = await pool.query(
+    'SELECT id FROM stock_deposits WHERE company_id = ? AND code = ? LIMIT 1',
+    [targetCompanyId, 'DEPOSITO']
+  );
+  let depositId = existingDeposits?.[0]?.id;
+  if (!depositId) {
+    depositId = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO stock_deposits (id, company_id, name, code, type, is_default, is_active)
+       VALUES (?, ?, 'Deposito', 'DEPOSITO', 'warehouse', 0, 1)`,
+      [depositId, targetCompanyId]
+    );
+  } else {
+    await pool.query(
+      `UPDATE stock_deposits
+       SET name='Deposito', type='warehouse', is_active=1, updated_at=CURRENT_TIMESTAMP
+       WHERE id=?`,
+      [depositId]
+    );
+  }
+
+  const [existingLocations] = await pool.query(
+    'SELECT id FROM stock_locations WHERE deposit_id = ? AND code = ? LIMIT 1',
+    [depositId, 'ENTRADA-CONFERENCIA']
+  );
+  let locationId = existingLocations?.[0]?.id;
+  if (!locationId) {
+    locationId = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO stock_locations (id, company_id, deposit_id, name, code, description, is_default, is_active)
+       VALUES (?, ?, ?, 'Entrada / Conferencia', 'ENTRADA-CONFERENCIA', 'Local automatico para saldo recebido de integracoes antes da conferencia fisica.', 0, 1)`,
+      [locationId, targetCompanyId, depositId]
+    );
+  } else {
+    await pool.query(
+      `UPDATE stock_locations
+       SET name='Entrada / Conferencia', description='Local automatico para saldo recebido de integracoes antes da conferencia fisica.',
+           is_active=1, updated_at=CURRENT_TIMESTAMP
+       WHERE id=?`,
+      [locationId]
+    );
+  }
+
+  return { depositId, locationId, companyId: targetCompanyId };
+}
+
+async function seedDefaultStockLocations() {
+  const [companies] = await pool.query('SELECT id FROM companies').catch(() => [null]);
+  if (companies?.length) {
+    for (const company of companies) {
+      await ensureDefaultStockLocation(company.id);
+      await ensureIncomingStockLocation(company.id);
+    }
+    return;
+  }
+  const companyId = await getDefaultStockCompanyId();
+  await ensureDefaultStockLocation(companyId);
+  await ensureIncomingStockLocation(companyId);
+}
+
+async function backfillProductStockLocations() {
+  const [companies] = await pool.query('SELECT DISTINCT company_id AS id FROM products WHERE company_id IS NOT NULL');
+  for (const company of companies || []) {
+    await ensureDefaultStockLocation(company.id);
+  }
+
+  const [productsToBackfill] = await pool.query(`
+    SELECT p.id, p.company_id, COALESCE(p.stock_quantity, 0) AS stock_quantity
+    FROM products p
+    WHERE COALESCE(p.stock_quantity, 0) > 0
+      AND NOT EXISTS (SELECT 1 FROM product_stock_locations psl WHERE psl.product_id = p.id)
+  `);
+
+  for (const product of productsToBackfill || []) {
+    const target = await ensureDefaultStockLocation(product.company_id);
+    await pool.query(
+      `INSERT INTO product_stock_locations
+        (id, company_id, product_id, deposit_id, location_id, quantity, reserved_quantity)
+       VALUES (?, ?, ?, ?, ?, ?, 0)
+       ON DUPLICATE KEY UPDATE quantity = VALUES(quantity), updated_at = CURRENT_TIMESTAMP`,
+      [crypto.randomUUID(), target.companyId, product.id, target.depositId, target.locationId, stockNumber(product.stock_quantity)]
+    );
+    await pool.query(
+      `INSERT INTO stock_location_movements
+        (id, company_id, product_id, to_deposit_id, to_location_id, quantity, movement_type, reason, reference_type,
+         previous_to_quantity, new_to_quantity, notes)
+       SELECT ?, ?, ?, ?, ?, ?, 'sync', 'inventory', 'initial_migration', 0, ?,
+              'Saldo inicial migrado de products.stock_quantity para Loja Principal / Estoque Geral.'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM stock_location_movements
+         WHERE product_id = ? AND reference_type = 'initial_migration'
+       )`,
+      [
+        crypto.randomUUID(),
+        target.companyId,
+        product.id,
+        target.depositId,
+        target.locationId,
+        stockNumber(product.stock_quantity),
+        stockNumber(product.stock_quantity),
+        product.id,
+      ]
+    );
+  }
+}
+
+async function syncProductStockFromLocations(productId) {
+  const [[row]] = await pool.query(
+    'SELECT COALESCE(SUM(quantity), 0) AS quantity FROM product_stock_locations WHERE product_id = ?',
+    [productId]
+  );
+  const quantity = stockNumber(row?.quantity);
+  await pool.query('UPDATE products SET stock_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [quantity, productId]);
+  return quantity;
+}
+
+async function materializeProductUndistributedStock(productId, reason = 'undistributed_stock', notes = null) {
+  const [[product]] = await pool.query(
+    'SELECT id, company_id, COALESCE(stock_quantity, 0) AS stock_quantity FROM products WHERE id = ? LIMIT 1',
+    [productId]
+  );
+  if (!product) return { ok: false, materialized: 0 };
+
+  const [[sumRow]] = await pool.query(
+    'SELECT COALESCE(SUM(quantity), 0) AS quantity FROM product_stock_locations WHERE product_id = ?',
+    [productId]
+  );
+  const target = Math.max(0, Math.trunc(stockNumber(product.stock_quantity)));
+  const currentTotal = Math.max(0, Math.trunc(stockNumber(sumRow?.quantity)));
+  const delta = target - currentTotal;
+  if (delta <= 0) return { ok: true, materialized: 0 };
+
+  const companyId = product.company_id || await getDefaultStockCompanyId();
+  const incoming = await ensureIncomingStockLocation(companyId);
+  const current = await getStockLocationRow(productId, incoming.depositId, incoming.locationId, true);
+  const previous = stockNumber(current?.quantity);
+  const reserved = stockNumber(current?.reserved_quantity);
+  const next = previous + delta;
+  await upsertStockLocationBalance({
+    companyId,
+    productId,
+    depositId: incoming.depositId,
+    locationId: incoming.locationId,
+    quantity: next,
+    reservedQuantity: reserved,
+  });
+  await pool.query(
+    `INSERT INTO stock_location_movements
+      (id, company_id, product_id, to_deposit_id, to_location_id, quantity, movement_type, reason,
+       reference_type, previous_to_quantity, new_to_quantity, notes)
+     VALUES (?, ?, ?, ?, ?, ?, 'sync', ?, 'undistributed_stock', ?, ?, ?)`,
+    [
+      crypto.randomUUID(),
+      companyId,
+      productId,
+      incoming.depositId,
+      incoming.locationId,
+      delta,
+      reason,
+      previous,
+      next,
+      notes || 'Saldo sem local definido materializado em Deposito / Entrada-Conferencia para permitir transferencia.',
+    ]
+  );
+
+  return { ok: true, materialized: delta };
+}
+
+async function reconcileProductStockLocationsToTotal(productId, targetQuantity, reason = 'external_stock_sync', notes = null) {
+  const target = Math.max(0, Math.trunc(stockNumber(targetQuantity)));
+  const [[product]] = await pool.query('SELECT id, company_id FROM products WHERE id = ? LIMIT 1', [productId]);
+  if (!product) return { ok: false, appliedDelta: 0 };
+
+  const [[sumRow]] = await pool.query(
+    'SELECT COALESCE(SUM(quantity), 0) AS quantity FROM product_stock_locations WHERE product_id = ?',
+    [productId]
+  );
+  const currentTotal = Math.max(0, Math.trunc(stockNumber(sumRow?.quantity)));
+  let delta = target - currentTotal;
+  if (delta === 0) {
+    await syncProductStockFromLocations(productId);
+    return { ok: true, appliedDelta: 0 };
+  }
+
+  const companyId = product.company_id || await getDefaultStockCompanyId();
+
+  if (delta > 0) {
+    const incoming = await ensureIncomingStockLocation(companyId);
+    const current = await getStockLocationRow(productId, incoming.depositId, incoming.locationId, true);
+    const previous = stockNumber(current?.quantity);
+    const reserved = stockNumber(current?.reserved_quantity);
+    const next = previous + delta;
+    await upsertStockLocationBalance({
+      companyId,
+      productId,
+      depositId: incoming.depositId,
+      locationId: incoming.locationId,
+      quantity: next,
+      reservedQuantity: reserved,
+    });
+    await pool.query(
+      `INSERT INTO stock_location_movements
+        (id, company_id, product_id, to_deposit_id, to_location_id, quantity, movement_type, reason,
+         reference_type, previous_to_quantity, new_to_quantity, notes)
+       VALUES (?, ?, ?, ?, ?, ?, 'sync', ?, ?, ?, ?, ?)`,
+      [crypto.randomUUID(), companyId, productId, incoming.depositId, incoming.locationId, delta, reason, 'external_stock_total', previous, next, notes || 'Saldo recebido de integracao externa em Deposito / Entrada-Conferencia.']
+    );
+  } else {
+    let remaining = Math.abs(delta);
+    const [sources] = await pool.query(
+      `SELECT psl.*
+       FROM product_stock_locations psl
+       LEFT JOIN stock_deposits sd ON sd.id = psl.deposit_id
+       LEFT JOIN stock_locations sl ON sl.id = psl.location_id
+       WHERE psl.product_id = ? AND (psl.quantity - psl.reserved_quantity) > 0
+       ORDER BY sd.is_default DESC, sl.is_default DESC, psl.quantity DESC
+       FOR UPDATE`,
+      [productId]
+    );
+
+    for (const source of sources || []) {
+      if (remaining <= 0) break;
+      const previous = stockNumber(source.quantity);
+      const available = Math.max(0, previous - stockNumber(source.reserved_quantity));
+      const decrement = Math.min(remaining, available);
+      if (decrement <= 0) continue;
+      const next = previous - decrement;
+      await upsertStockLocationBalance({
+        companyId,
+        productId,
+        depositId: source.deposit_id,
+        locationId: source.location_id,
+        quantity: next,
+        reservedQuantity: stockNumber(source.reserved_quantity),
+      });
+      await pool.query(
+        `INSERT INTO stock_location_movements
+          (id, company_id, product_id, from_deposit_id, from_location_id, quantity, movement_type, reason,
+           reference_type, previous_from_quantity, new_from_quantity, notes)
+         VALUES (?, ?, ?, ?, ?, ?, 'sync', ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), companyId, productId, source.deposit_id, source.location_id, decrement, reason, 'external_stock_total', previous, next, notes]
+      );
+      remaining -= decrement;
+    }
+  }
+
+  const syncedTotal = await syncProductStockFromLocations(productId);
+  return { ok: syncedTotal === target, appliedDelta: delta, syncedTotal };
+}
+
+async function getStockLocationRow(productId, depositId, locationId, lock = false) {
+  const [rows] = await pool.query(
+    `SELECT * FROM product_stock_locations
+     WHERE product_id = ? AND deposit_id = ? AND location_id = ?
+     ${lock ? 'FOR UPDATE' : ''}`,
+    [productId, depositId, locationId]
+  );
+  return rows?.[0] || null;
+}
+
+async function upsertStockLocationBalance({ companyId, productId, depositId, locationId, quantity, reservedQuantity = 0 }) {
+  await pool.query(
+    `INSERT INTO product_stock_locations
+      (id, company_id, product_id, deposit_id, location_id, quantity, reserved_quantity)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       quantity = VALUES(quantity),
+       reserved_quantity = VALUES(reserved_quantity),
+       updated_at = CURRENT_TIMESTAMP`,
+    [crypto.randomUUID(), companyId, productId, depositId, locationId, quantity, reservedQuantity]
+  );
+  return getStockLocationRow(productId, depositId, locationId);
+}
+
+function mapStockDeposit(row) {
+  return { ...row, is_default: Boolean(row.is_default), is_active: Boolean(row.is_active) };
+}
+
+function mapStockLocation(row) {
+  return { ...row, is_default: Boolean(row.is_default), is_active: Boolean(row.is_active) };
+}
+
+function mapProductStockLocation(row) {
+  return {
+    id: row.id,
+    company_id: row.company_id,
+    product_id: row.product_id,
+    deposit_id: row.deposit_id,
+    location_id: row.location_id,
+    quantity: stockNumber(row.quantity),
+    reserved_quantity: stockNumber(row.reserved_quantity),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    deposit: row.deposit_name ? {
+      id: row.deposit_id,
+      company_id: row.company_id,
+      name: row.deposit_name,
+      code: row.deposit_code,
+      type: row.deposit_type,
+      cep: row.deposit_cep,
+      address: row.deposit_address,
+      is_default: Boolean(row.deposit_is_default),
+      is_active: Boolean(row.deposit_is_active),
+      created_at: row.deposit_created_at,
+      updated_at: row.deposit_updated_at,
+    } : null,
+    location: row.location_name ? {
+      id: row.location_id,
+      company_id: row.company_id,
+      deposit_id: row.deposit_id,
+      name: row.location_name,
+      code: row.location_code,
+      description: row.location_description,
+      is_default: Boolean(row.location_is_default),
+      is_active: Boolean(row.location_is_active),
+      created_at: row.location_created_at,
+      updated_at: row.location_updated_at,
+    } : null,
+  };
+}
+
+fastify.get('/stock-locations/deposits', { preHandler: requireSyncKey }, async () => {
+  const [rows] = await pool.query(`
+    SELECT *
+    FROM stock_deposits
+    WHERE is_active = 1
+    ORDER BY is_default DESC, name ASC
+  `);
+  return rows.map(mapStockDeposit);
+});
+
+const STOCK_LOCATION_IMPORT_TABLES = [
+  'stock_deposits',
+  'stock_locations',
+  'product_stock_locations',
+  'stock_location_movements',
+];
+
+const STOCK_LOCATION_IMPORT_DELETE_ORDER = [
+  'stock_location_movements',
+  'product_stock_locations',
+  'stock_locations',
+  'stock_deposits',
+];
+
+const STOCK_LOCATION_IMPORT_INSERT_ORDER = [
+  'stock_deposits',
+  'stock_locations',
+  'product_stock_locations',
+  'stock_location_movements',
+];
+
+async function getTableColumnsForImport(connection, tableName) {
+  const [columns] = await connection.query(`DESCRIBE \`${tableName}\``);
+  return new Set(columns.map((column) => column.Field));
+}
+
+function normalizeImportedRows(rows, columns) {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter((row) => row && typeof row === 'object' && !Array.isArray(row))
+    .map((row) => Object.fromEntries(
+      Object.entries(row)
+        .filter(([key]) => columns.has(key))
+        .map(([key, value]) => [key, value === undefined ? null : value])
+    ))
+    .filter((row) => Object.keys(row).length > 0);
+}
+
+async function bulkInsertImportedRows(connection, tableName, rows) {
+  if (!rows.length) return 0;
+  const columns = Object.keys(rows[0]);
+  const colList = columns.map((column) => `\`${column}\``).join(', ');
+  let inserted = 0;
+
+  for (let index = 0; index < rows.length; index += 250) {
+    const chunk = rows.slice(index, index + 250);
+    const placeholders = chunk.map(() => `(${columns.map(() => '?').join(', ')})`).join(', ');
+    const values = chunk.flatMap((row) => columns.map((column) => row[column] ?? null));
+    await connection.query(`INSERT INTO \`${tableName}\` (${colList}) VALUES ${placeholders}`, values);
+    inserted += chunk.length;
+  }
+
+  return inserted;
+}
+
+async function replaceStockLocationTablesFromImport(input) {
+  const connection = await pool.getConnection();
+  const result = { deleted: {}, inserted: {} };
+
+  try {
+    await connection.beginTransaction();
+
+    for (const table of STOCK_LOCATION_IMPORT_DELETE_ORDER) {
+      const [deleteResult] = await connection.query(`DELETE FROM \`${table}\``);
+      result.deleted[table] = Number(deleteResult.affectedRows || 0);
+    }
+
+    for (const table of STOCK_LOCATION_IMPORT_INSERT_ORDER) {
+      const columns = await getTableColumnsForImport(connection, table);
+      const rows = normalizeImportedRows(input?.[table], columns);
+      result.inserted[table] = await bulkInsertImportedRows(connection, table, rows);
+    }
+
+    await connection.commit();
+    return result;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+fastify.post('/admin/stock-locations/import', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  for (const table of STOCK_LOCATION_IMPORT_TABLES) {
+    if (!Array.isArray(body[table])) {
+      return reply.code(400).send({ error: `Missing array for ${table}` });
+    }
+  }
+
+  return replaceStockLocationTablesFromImport(body);
+});
+
+fastify.post('/stock-locations/deposits', { preHandler: requireSyncKey }, async (req, reply) => {
+  const input = req.body || {};
+  const name = String(input.name || '').trim();
+  const code = normalizeStockLocationCode(input.code || input.name);
+  if (!name) return reply.code(400).send({ error: 'Informe o nome do deposito.' });
+  if (!code) return reply.code(400).send({ error: 'Informe um codigo valido para o deposito.' });
+
+  const companyId = input.company_id || await getDefaultStockCompanyId();
+  const id = crypto.randomUUID();
+  if (stockBool(input.is_default)) {
+    await pool.query('UPDATE stock_deposits SET is_default = 0 WHERE company_id = ?', [companyId]);
+  }
+  await pool.query(
+    `INSERT INTO stock_deposits
+      (id, company_id, name, code, type, cep, address, is_default, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [id, companyId, name, code, input.type || 'warehouse', input.cep || null, input.address || null, stockBool(input.is_default) ? 1 : 0]
+  );
+  const [rows] = await pool.query('SELECT * FROM stock_deposits WHERE id = ?', [id]);
+  return mapStockDeposit(rows[0]);
+});
+
+fastify.patch('/stock-locations/deposits/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const input = req.body || {};
+  const name = String(input.name || '').trim();
+  const code = normalizeStockLocationCode(input.code || input.name);
+  if (!name) return reply.code(400).send({ error: 'Informe o nome do deposito.' });
+  if (!code) return reply.code(400).send({ error: 'Informe um codigo valido para o deposito.' });
+
+  const [[current]] = await pool.query('SELECT company_id FROM stock_deposits WHERE id = ? LIMIT 1', [req.params.id]);
+  if (!current) return reply.code(404).send({ error: 'Deposito nao encontrado.' });
+  if (stockBool(input.is_default)) {
+    await pool.query('UPDATE stock_deposits SET is_default = 0 WHERE company_id = ?', [current.company_id]);
+  }
+  await pool.query(
+    `UPDATE stock_deposits
+     SET name=?, code=?, type=?, cep=?, address=?, is_default=?, updated_at=CURRENT_TIMESTAMP
+     WHERE id=?`,
+    [name, code, input.type || 'warehouse', input.cep || null, input.address || null, stockBool(input.is_default) ? 1 : 0, req.params.id]
+  );
+  const [rows] = await pool.query('SELECT * FROM stock_deposits WHERE id = ?', [req.params.id]);
+  return mapStockDeposit(rows[0]);
+});
+
+fastify.get('/stock-locations/locations', { preHandler: requireSyncKey }, async (req) => {
+  const params = [];
+  let where = 'WHERE is_active = 1';
+  if (req.query?.deposit_id) {
+    where += ' AND deposit_id = ?';
+    params.push(String(req.query.deposit_id));
+  }
+  const [rows] = await pool.query(`
+    SELECT *
+    FROM stock_locations
+    ${where}
+    ORDER BY is_default DESC, name ASC
+  `, params);
+  return rows.map(mapStockLocation);
+});
+
+fastify.post('/stock-locations/locations', { preHandler: requireSyncKey }, async (req, reply) => {
+  const input = req.body || {};
+  const name = String(input.name || '').trim();
+  const code = normalizeStockLocationCode(input.code || input.name);
+  if (!input.deposit_id) return reply.code(400).send({ error: 'Selecione o deposito do local.' });
+  if (!name) return reply.code(400).send({ error: 'Informe o nome do local.' });
+  if (!code) return reply.code(400).send({ error: 'Informe um codigo valido para o local.' });
+
+  const [[deposit]] = await pool.query('SELECT company_id FROM stock_deposits WHERE id = ? LIMIT 1', [input.deposit_id]);
+  if (!deposit) return reply.code(404).send({ error: 'Deposito nao encontrado.' });
+  if (stockBool(input.is_default)) {
+    await pool.query('UPDATE stock_locations SET is_default = 0 WHERE deposit_id = ?', [input.deposit_id]);
+  }
+  const id = crypto.randomUUID();
+  await pool.query(
+    `INSERT INTO stock_locations
+      (id, company_id, deposit_id, name, code, description, is_default, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+    [id, deposit.company_id, input.deposit_id, name, code, input.description || null, stockBool(input.is_default) ? 1 : 0]
+  );
+  const [rows] = await pool.query('SELECT * FROM stock_locations WHERE id = ?', [id]);
+  return mapStockLocation(rows[0]);
+});
+
+fastify.patch('/stock-locations/locations/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const input = req.body || {};
+  const name = String(input.name || '').trim();
+  const code = normalizeStockLocationCode(input.code || input.name);
+  if (!input.deposit_id) return reply.code(400).send({ error: 'Selecione o deposito do local.' });
+  if (!name) return reply.code(400).send({ error: 'Informe o nome do local.' });
+  if (!code) return reply.code(400).send({ error: 'Informe um codigo valido para o local.' });
+
+  const [[deposit]] = await pool.query('SELECT company_id FROM stock_deposits WHERE id = ? LIMIT 1', [input.deposit_id]);
+  if (!deposit) return reply.code(404).send({ error: 'Deposito nao encontrado.' });
+  if (stockBool(input.is_default)) {
+    await pool.query('UPDATE stock_locations SET is_default = 0 WHERE deposit_id = ?', [input.deposit_id]);
+  }
+  await pool.query(
+    `UPDATE stock_locations
+     SET company_id=?, deposit_id=?, name=?, code=?, description=?, is_default=?, updated_at=CURRENT_TIMESTAMP
+     WHERE id=?`,
+    [deposit.company_id, input.deposit_id, name, code, input.description || null, stockBool(input.is_default) ? 1 : 0, req.params.id]
+  );
+  const [rows] = await pool.query('SELECT * FROM stock_locations WHERE id = ?', [req.params.id]);
+  return rows[0] ? mapStockLocation(rows[0]) : reply.code(404).send({ error: 'Local nao encontrado.' });
+});
+
+fastify.get('/stock-locations/products/:productId/distribution', { preHandler: requireSyncKey }, async (req) => {
+  await materializeProductUndistributedStock(
+    req.params.productId,
+    'distribution_open',
+    'Saldo sem local definido materializado automaticamente ao abrir a distribuicao.'
+  );
+  const [rows] = await pool.query(`
+    SELECT
+      psl.*,
+      sd.name AS deposit_name, sd.code AS deposit_code, sd.type AS deposit_type, sd.cep AS deposit_cep,
+      sd.address AS deposit_address, sd.is_default AS deposit_is_default, sd.is_active AS deposit_is_active,
+      sd.created_at AS deposit_created_at, sd.updated_at AS deposit_updated_at,
+      sl.name AS location_name, sl.code AS location_code, sl.description AS location_description,
+      sl.is_default AS location_is_default, sl.is_active AS location_is_active,
+      sl.created_at AS location_created_at, sl.updated_at AS location_updated_at
+    FROM product_stock_locations psl
+    LEFT JOIN stock_deposits sd ON sd.id = psl.deposit_id
+    LEFT JOIN stock_locations sl ON sl.id = psl.location_id
+    WHERE psl.product_id = ?
+    ORDER BY psl.quantity DESC, sd.is_default DESC, sd.name ASC, sl.is_default DESC, sl.name ASC
+  `, [req.params.productId]);
+  return rows.map(mapProductStockLocation);
+});
+
+fastify.get('/stock-locations/locations/:locationId/contents', { preHandler: requireSyncKey }, async (req) => {
+  const [rows] = await pool.query(`
+    SELECT
+      psl.product_id, psl.quantity, psl.reserved_quantity,
+      sd.id AS deposit_id, sd.name AS deposit_name,
+      sl.id AS location_id, sl.name AS location_name,
+      p.name AS product_name, p.sku, p.ean, p.stock_quantity AS total_stock, p.images, p.specs
+    FROM product_stock_locations psl
+    JOIN products p ON p.id = psl.product_id
+    LEFT JOIN stock_deposits sd ON sd.id = psl.deposit_id
+    LEFT JOIN stock_locations sl ON sl.id = psl.location_id
+    WHERE psl.location_id = ? AND psl.quantity > 0
+    ORDER BY psl.quantity DESC
+  `, [req.params.locationId]);
+  return rows.map((row) => {
+    const images = parseStockJson(row.images, []);
+    return {
+      product_id: row.product_id,
+      product_name: row.product_name || '(sem nome)',
+      sku: row.sku || null,
+      ean: row.ean || null,
+      product_image: Array.isArray(images) ? images[0] || null : null,
+      total_stock: stockNumber(row.total_stock),
+      quantity: stockNumber(row.quantity),
+      reserved_quantity: stockNumber(row.reserved_quantity),
+      available: stockNumber(row.quantity) - stockNumber(row.reserved_quantity),
+      deposit_id: row.deposit_id,
+      deposit_name: row.deposit_name || null,
+      location_id: row.location_id,
+      location_name: row.location_name || null,
+      specs: parseStockJson(row.specs, null),
+    };
+  });
+});
+
+fastify.get('/stock-locations/movements', { preHandler: requireSyncKey }, async (req) => {
+  const where = [];
+  const params = [];
+  if (req.query?.productId) { where.push('product_id = ?'); params.push(String(req.query.productId)); }
+  if (req.query?.movementType) { where.push('movement_type = ?'); params.push(String(req.query.movementType)); }
+  if (req.query?.referenceType) { where.push('reference_type = ?'); params.push(String(req.query.referenceType)); }
+  if (req.query?.referenceId) { where.push('reference_id = ?'); params.push(String(req.query.referenceId)); }
+  if (req.query?.locationId) {
+    where.push('(from_location_id = ? OR to_location_id = ?)');
+    params.push(String(req.query.locationId), String(req.query.locationId));
+  }
+  const limit = Math.min(Math.max(Number(req.query?.limit || 50), 1), 200);
+  const [rows] = await pool.query(`
+    SELECT slm.*,
+      p.name AS product_name, p.sku AS product_sku, p.ean AS product_ean, p.specs AS product_specs
+    FROM stock_location_movements slm
+    LEFT JOIN products p ON p.id = slm.product_id
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY slm.created_at DESC
+    LIMIT ${limit}
+  `, params);
+  return rows.map((row) => ({
+    ...row,
+    quantity: stockNumber(row.quantity),
+    previous_from_quantity: row.previous_from_quantity == null ? null : stockNumber(row.previous_from_quantity),
+    new_from_quantity: row.new_from_quantity == null ? null : stockNumber(row.new_from_quantity),
+    previous_to_quantity: row.previous_to_quantity == null ? null : stockNumber(row.previous_to_quantity),
+    new_to_quantity: row.new_to_quantity == null ? null : stockNumber(row.new_to_quantity),
+    product: row.product_name ? {
+      id: row.product_id,
+      name: row.product_name,
+      sku: row.product_sku || null,
+      ean: row.product_ean || null,
+      specs: parseStockJson(row.product_specs, null),
+    } : null,
+  }));
+});
+
+fastify.post('/stock-locations/entries', { preHandler: requireSyncKey }, async (req, reply) => {
+  const input = req.body || {};
+  const quantity = stockNumber(input.quantity);
+  if (!input.product_id || !input.deposit_id || !input.location_id) return reply.code(400).send({ error: 'Produto, deposito e local sao obrigatorios.' });
+  if (quantity <= 0) return reply.code(400).send({ error: 'Informe uma quantidade valida para a entrada.' });
+  if (!String(input.reason || '').trim()) return reply.code(400).send({ error: 'Informe o motivo da entrada.' });
+
+  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
+  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
+  const current = await getStockLocationRow(input.product_id, input.deposit_id, input.location_id, true);
+  const previous = stockNumber(current?.quantity);
+  const reserved = stockNumber(current?.reserved_quantity);
+  const next = previous + quantity;
+  const row = await upsertStockLocationBalance({
+    companyId: product.company_id || await getDefaultStockCompanyId(),
+    productId: input.product_id,
+    depositId: input.deposit_id,
+    locationId: input.location_id,
+    quantity: next,
+    reservedQuantity: reserved,
+  });
+  await pool.query(
+    `INSERT INTO stock_location_movements
+      (id, company_id, product_id, to_deposit_id, to_location_id, quantity, movement_type, reason, reference_type,
+       previous_to_quantity, new_to_quantity, notes)
+     VALUES (?, ?, ?, ?, ?, ?, 'in', ?, 'manual_entry', ?, ?, ?)`,
+    [crypto.randomUUID(), product.company_id, input.product_id, input.deposit_id, input.location_id, quantity, String(input.reason).trim(), previous, next, input.notes || null]
+  );
+  await syncProductStockFromLocations(input.product_id);
+  return row;
+});
+
+fastify.post('/stock-locations/adjustments', { preHandler: requireSyncKey }, async (req, reply) => {
+  const input = req.body || {};
+  const targetQuantity = stockNumber(input.quantity);
+  if (targetQuantity < 0) return reply.code(400).send({ error: 'Informe uma quantidade valida para o ajuste.' });
+  if (!String(input.reason || '').trim()) return reply.code(400).send({ error: 'Informe o motivo do ajuste.' });
+
+  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
+  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
+  const current = await getStockLocationRow(input.product_id, input.deposit_id, input.location_id, true);
+  const previous = stockNumber(current?.quantity);
+  const reserved = stockNumber(current?.reserved_quantity);
+  if (targetQuantity < reserved) return reply.code(400).send({ error: 'A quantidade ajustada nao pode ficar menor que o saldo reservado atual.' });
+  const row = await upsertStockLocationBalance({
+    companyId: product.company_id || await getDefaultStockCompanyId(),
+    productId: input.product_id,
+    depositId: input.deposit_id,
+    locationId: input.location_id,
+    quantity: targetQuantity,
+    reservedQuantity: reserved,
+  });
+  await pool.query(
+    `INSERT INTO stock_location_movements
+      (id, company_id, product_id, from_deposit_id, from_location_id, to_deposit_id, to_location_id, quantity,
+       movement_type, reason, reference_type, previous_from_quantity, new_from_quantity, previous_to_quantity, new_to_quantity, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'adjustment', ?, 'manual_adjustment', ?, ?, ?, ?, ?)`,
+    [crypto.randomUUID(), product.company_id, input.product_id, input.deposit_id, input.location_id, input.deposit_id, input.location_id,
+      Math.abs(targetQuantity - previous), String(input.reason).trim(), previous, targetQuantity, previous, targetQuantity, input.notes || null]
+  );
+  await syncProductStockFromLocations(input.product_id);
+  return row;
+});
+
+fastify.post('/stock-locations/transfers', { preHandler: requireSyncKey }, async (req, reply) => {
+  const input = req.body || {};
+  const quantity = stockNumber(input.quantity);
+  if (quantity <= 0) return reply.code(400).send({ error: 'Informe uma quantidade valida para a transferencia.' });
+  if (input.from_location_id === input.to_location_id) return reply.code(400).send({ error: 'A origem e destino precisam ser diferentes.' });
+
+  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
+  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
+  const source = await getStockLocationRow(input.product_id, input.from_deposit_id, input.from_location_id, true);
+  const sourceQuantity = stockNumber(source?.quantity);
+  const sourceReserved = stockNumber(source?.reserved_quantity);
+  if (sourceQuantity - sourceReserved < quantity) return reply.code(400).send({ error: 'Saldo disponivel insuficiente na origem.' });
+  const target = await getStockLocationRow(input.product_id, input.to_deposit_id, input.to_location_id, true);
+  const targetQuantity = stockNumber(target?.quantity);
+  const targetReserved = stockNumber(target?.reserved_quantity);
+
+  await upsertStockLocationBalance({
+    companyId: product.company_id || await getDefaultStockCompanyId(),
+    productId: input.product_id,
+    depositId: input.from_deposit_id,
+    locationId: input.from_location_id,
+    quantity: sourceQuantity - quantity,
+    reservedQuantity: sourceReserved,
+  });
+  await upsertStockLocationBalance({
+    companyId: product.company_id || await getDefaultStockCompanyId(),
+    productId: input.product_id,
+    depositId: input.to_deposit_id,
+    locationId: input.to_location_id,
+    quantity: targetQuantity + quantity,
+    reservedQuantity: targetReserved,
+  });
+  await pool.query(
+    `INSERT INTO stock_location_movements
+      (id, company_id, product_id, from_deposit_id, from_location_id, to_deposit_id, to_location_id, quantity,
+       movement_type, reason, reference_type, previous_from_quantity, new_from_quantity, previous_to_quantity, new_to_quantity, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'transfer', ?, 'manual_transfer', ?, ?, ?, ?, ?)`,
+    [crypto.randomUUID(), product.company_id, input.product_id, input.from_deposit_id, input.from_location_id, input.to_deposit_id, input.to_location_id,
+      quantity, String(input.reason || 'Transferencia interna').trim(), sourceQuantity, sourceQuantity - quantity, targetQuantity, targetQuantity + quantity, input.notes || null]
+  );
+  await syncProductStockFromLocations(input.product_id);
+  const [rows] = await pool.query(`
+    SELECT psl.*
+    FROM product_stock_locations psl
+    WHERE psl.product_id = ? AND psl.location_id IN (?, ?)
+    ORDER BY psl.updated_at DESC
+  `, [input.product_id, input.from_location_id, input.to_location_id]);
+  return rows;
+});
+
+async function getPriorityStockSources(productId) {
+  const [rows] = await pool.query(
+    `SELECT psl.*, sd.is_default AS deposit_is_default, sl.is_default AS location_is_default
+     FROM product_stock_locations psl
+     LEFT JOIN stock_deposits sd ON sd.id = psl.deposit_id
+     LEFT JOIN stock_locations sl ON sl.id = psl.location_id
+     WHERE psl.product_id = ? AND (psl.quantity - psl.reserved_quantity) > 0
+     ORDER BY sd.is_default DESC, sl.is_default DESC, psl.quantity DESC`,
+    [productId]
+  );
+  return rows || [];
+}
+
+async function insertStockMovement(row) {
+  await pool.query(
+    `INSERT INTO stock_location_movements
+      (id, company_id, product_id, from_deposit_id, from_location_id, to_deposit_id, to_location_id, quantity,
+       movement_type, reason, reference_type, reference_id, previous_from_quantity, new_from_quantity,
+       previous_to_quantity, new_to_quantity, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      crypto.randomUUID(),
+      row.company_id,
+      row.product_id,
+      row.from_deposit_id || null,
+      row.from_location_id || null,
+      row.to_deposit_id || null,
+      row.to_location_id || null,
+      row.quantity,
+      row.movement_type,
+      row.reason,
+      row.reference_type || null,
+      row.reference_id || null,
+      row.previous_from_quantity == null ? null : row.previous_from_quantity,
+      row.new_from_quantity == null ? null : row.new_from_quantity,
+      row.previous_to_quantity == null ? null : row.previous_to_quantity,
+      row.new_to_quantity == null ? null : row.new_to_quantity,
+      row.notes || null,
+    ]
+  );
+}
+
+fastify.post('/stock-locations/priority-decrements', { preHandler: requireSyncKey }, async (req, reply) => {
+  const input = req.body || {};
+  const quantity = stockNumber(input.quantity);
+  if (!input.product_id || quantity <= 0) return reply.code(400).send({ error: 'Produto e quantidade sao obrigatorios.' });
+  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
+  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
+  const sources = await getPriorityStockSources(input.product_id);
+  const totalAvailable = sources.reduce((sum, row) => sum + Math.max(0, stockNumber(row.quantity) - stockNumber(row.reserved_quantity)), 0);
+  if (totalAvailable < quantity) return reply.code(400).send({ error: 'insufficient_stock_by_location' });
+
+  let remaining = quantity;
+  const result = [];
+  for (const source of sources) {
+    if (remaining <= 0) break;
+    const previous = stockNumber(source.quantity);
+    const available = Math.max(0, previous - stockNumber(source.reserved_quantity));
+    const decrement = Math.min(remaining, available);
+    if (decrement <= 0) continue;
+    const next = previous - decrement;
+    await upsertStockLocationBalance({
+      companyId: source.company_id || product.company_id,
+      productId: input.product_id,
+      depositId: source.deposit_id,
+      locationId: source.location_id,
+      quantity: next,
+      reservedQuantity: stockNumber(source.reserved_quantity),
+    });
+    await insertStockMovement({
+      company_id: source.company_id || product.company_id,
+      product_id: input.product_id,
+      from_deposit_id: source.deposit_id,
+      from_location_id: source.location_id,
+      quantity: decrement,
+      movement_type: 'sale',
+      reason: String(input.reason || '').trim() || 'Baixa por prioridade',
+      reference_type: input.reference_type || null,
+      reference_id: input.reference_id || null,
+      previous_from_quantity: previous,
+      new_from_quantity: next,
+      notes: input.notes || null,
+    });
+    result.push({ stock_location_id: source.id, deposit_id: source.deposit_id, location_id: source.location_id, quantity_decremented: decrement, previous_quantity: previous, new_quantity: next });
+    remaining -= decrement;
+  }
+  await syncProductStockFromLocations(input.product_id);
+  return result;
+});
+
+fastify.post('/stock-locations/priority-reservations', { preHandler: requireSyncKey }, async (req, reply) => {
+  const input = req.body || {};
+  const quantity = stockNumber(input.quantity);
+  if (!input.product_id || quantity <= 0) return reply.code(400).send({ error: 'Produto e quantidade sao obrigatorios.' });
+  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
+  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
+  const sources = await getPriorityStockSources(input.product_id);
+  const totalAvailable = sources.reduce((sum, row) => sum + Math.max(0, stockNumber(row.quantity) - stockNumber(row.reserved_quantity)), 0);
+  if (totalAvailable < quantity) return reply.code(400).send({ error: 'insufficient_stock_by_location' });
+
+  let remaining = quantity;
+  const result = [];
+  for (const source of sources) {
+    if (remaining <= 0) break;
+    const previousReserved = stockNumber(source.reserved_quantity);
+    const available = Math.max(0, stockNumber(source.quantity) - previousReserved);
+    const reserve = Math.min(remaining, available);
+    if (reserve <= 0) continue;
+    const nextReserved = previousReserved + reserve;
+    await upsertStockLocationBalance({
+      companyId: source.company_id || product.company_id,
+      productId: input.product_id,
+      depositId: source.deposit_id,
+      locationId: source.location_id,
+      quantity: stockNumber(source.quantity),
+      reservedQuantity: nextReserved,
+    });
+    await insertStockMovement({
+      company_id: source.company_id || product.company_id,
+      product_id: input.product_id,
+      from_deposit_id: source.deposit_id,
+      from_location_id: source.location_id,
+      quantity: reserve,
+      movement_type: 'reservation',
+      reason: String(input.reason || '').trim() || 'Reserva por prioridade',
+      reference_type: input.reference_type || 'order_reservation',
+      reference_id: input.reference_id || null,
+      previous_from_quantity: stockNumber(source.quantity),
+      new_from_quantity: stockNumber(source.quantity),
+      notes: input.notes || null,
+    });
+    result.push({ stock_location_id: source.id, deposit_id: source.deposit_id, location_id: source.location_id, quantity_reserved: reserve, previous_reserved_quantity: previousReserved, new_reserved_quantity: nextReserved });
+    remaining -= reserve;
+  }
+  return result;
+});
+
+async function processOrderReservation(orderId, mode, reason, notes) {
+  const targetReferenceType = mode === 'consume' ? 'order' : 'order_release';
+  const targetMovementType = mode === 'consume' ? 'sale' : 'release_reservation';
+  const [existing] = await pool.query(
+    'SELECT id FROM stock_location_movements WHERE reference_type = ? AND reference_id = ? AND movement_type = ? LIMIT 1',
+    [targetReferenceType, orderId, targetMovementType]
+  );
+  if (existing?.length) return [];
+  const [reservations] = await pool.query(
+    `SELECT * FROM stock_location_movements
+     WHERE reference_type = 'order_reservation' AND reference_id = ? AND movement_type = 'reservation'
+     ORDER BY created_at ASC`,
+    [orderId]
+  );
+  const result = [];
+  for (const reservation of reservations || []) {
+    const current = await getStockLocationRow(reservation.product_id, reservation.from_deposit_id, reservation.from_location_id, false);
+    if (!current) throw new Error('order_reservation_stock_inconsistent');
+    const previousQuantity = stockNumber(current.quantity);
+    const previousReserved = stockNumber(current.reserved_quantity);
+    const quantity = stockNumber(reservation.quantity);
+    if (previousReserved < quantity || (mode === 'consume' && previousQuantity < quantity)) throw new Error('order_reservation_stock_inconsistent');
+    const nextQuantity = mode === 'consume' ? previousQuantity - quantity : previousQuantity;
+    const nextReserved = previousReserved - quantity;
+    await upsertStockLocationBalance({
+      companyId: current.company_id,
+      productId: reservation.product_id,
+      depositId: reservation.from_deposit_id,
+      locationId: reservation.from_location_id,
+      quantity: nextQuantity,
+      reservedQuantity: nextReserved,
+    });
+    await insertStockMovement({
+      company_id: current.company_id,
+      product_id: reservation.product_id,
+      from_deposit_id: reservation.from_deposit_id,
+      from_location_id: reservation.from_location_id,
+      quantity,
+      movement_type: targetMovementType,
+      reason,
+      reference_type: targetReferenceType,
+      reference_id: orderId,
+      previous_from_quantity: previousQuantity,
+      new_from_quantity: nextQuantity,
+      notes,
+    });
+    result.push({ reservation_movement_id: reservation.id, product_id: reservation.product_id, deposit_id: reservation.from_deposit_id, location_id: reservation.from_location_id, quantity_processed: quantity, previous_quantity: previousQuantity, new_quantity: nextQuantity, previous_reserved_quantity: previousReserved, new_reserved_quantity: nextReserved });
+    if (mode === 'consume') await syncProductStockFromLocations(reservation.product_id);
+  }
+  return result;
+}
+
+fastify.post('/stock-locations/order-reservations/consume', { preHandler: requireSyncKey }, async (req) => {
+  const input = req.body || {};
+  return processOrderReservation(input.order_id, 'consume', String(input.reason || '').trim() || 'Baixa de reserva', input.notes || null);
+});
+
+fastify.post('/stock-locations/order-reservations/release', { preHandler: requireSyncKey }, async (req) => {
+  const input = req.body || {};
+  return processOrderReservation(input.order_id, 'release', String(input.reason || '').trim() || 'Liberacao de reserva', input.notes || null);
+});
+
+async function restoreStockFromMovements(referenceType, restoreReferenceType, referenceId, reason, notes) {
+  const [existing] = await pool.query(
+    'SELECT id FROM stock_location_movements WHERE reference_type = ? AND reference_id = ? AND movement_type = ? LIMIT 1',
+    [restoreReferenceType, referenceId, 'cancel']
+  );
+  if (existing?.length) return [];
+  const [movements] = await pool.query(
+    `SELECT * FROM stock_location_movements
+     WHERE reference_type = ? AND reference_id = ? AND movement_type = 'sale'
+     ORDER BY created_at ASC`,
+    [referenceType, referenceId]
+  );
+  const result = [];
+  for (const movement of movements || []) {
+    const current = await getStockLocationRow(movement.product_id, movement.from_deposit_id, movement.from_location_id, false);
+    const previous = stockNumber(current?.quantity);
+    const quantity = stockNumber(movement.quantity);
+    const next = previous + quantity;
+    await upsertStockLocationBalance({
+      companyId: movement.company_id || current?.company_id || await getDefaultStockCompanyId(),
+      productId: movement.product_id,
+      depositId: movement.from_deposit_id,
+      locationId: movement.from_location_id,
+      quantity: next,
+      reservedQuantity: stockNumber(current?.reserved_quantity),
+    });
+    await insertStockMovement({
+      company_id: movement.company_id || current?.company_id || await getDefaultStockCompanyId(),
+      product_id: movement.product_id,
+      to_deposit_id: movement.from_deposit_id,
+      to_location_id: movement.from_location_id,
+      quantity,
+      movement_type: 'cancel',
+      reason,
+      reference_type: restoreReferenceType,
+      reference_id: referenceId,
+      previous_to_quantity: previous,
+      new_to_quantity: next,
+      notes,
+    });
+    await syncProductStockFromLocations(movement.product_id);
+    result.push({ [`${referenceType}_movement_id`]: movement.id, product_id: movement.product_id, deposit_id: movement.from_deposit_id, location_id: movement.from_location_id, quantity_restored: quantity, previous_quantity: previous, new_quantity: next });
+  }
+  return result;
+}
+
+fastify.post('/stock-locations/sale-restores', { preHandler: requireSyncKey }, async (req) => {
+  const input = req.body || {};
+  return restoreStockFromMovements('sale', 'sale_restore', input.sale_id, String(input.reason || '').trim() || 'Restauracao de venda', input.notes || null);
+});
+
+fastify.post('/stock-locations/order-restores', { preHandler: requireSyncKey }, async (req) => {
+  const input = req.body || {};
+  return restoreStockFromMovements('order', 'order_restore', input.order_id, String(input.reason || '').trim() || 'Restauracao de pedido', input.notes || null);
+});
+
+async function buildStockPathDeactivationCheck(type, id) {
+  const where = type === 'deposit' ? 'psl.deposit_id = ?' : 'psl.location_id = ?';
+  const [rows] = await pool.query(`
+    SELECT
+      psl.product_id, p.name AS product_name, p.sku, psl.deposit_id, psl.location_id,
+      sd.name AS deposit_name, sl.name AS location_name,
+      psl.quantity, psl.reserved_quantity
+    FROM product_stock_locations psl
+    JOIN products p ON p.id = psl.product_id
+    LEFT JOIN stock_deposits sd ON sd.id = psl.deposit_id
+    LEFT JOIN stock_locations sl ON sl.id = psl.location_id
+    WHERE ${where} AND (psl.quantity > 0 OR psl.reserved_quantity > 0)
+    ORDER BY p.name ASC
+  `, [id]);
+  const pendingItems = rows.map((row) => ({
+    product_id: row.product_id,
+    product_name: row.product_name || '(sem nome)',
+    sku: row.sku || null,
+    deposit_id: row.deposit_id,
+    deposit_name: row.deposit_name || null,
+    location_id: row.location_id,
+    location_name: row.location_name || null,
+    quantity: stockNumber(row.quantity),
+    reserved_quantity: stockNumber(row.reserved_quantity),
+  }));
+  return { target_type: type, target_id: id, can_deactivate: pendingItems.length === 0, pending_items: pendingItems };
+}
+
+fastify.get('/stock-locations/deposits/:id/deactivation-check', { preHandler: requireSyncKey }, async (req) => {
+  return buildStockPathDeactivationCheck('deposit', req.params.id);
+});
+
+fastify.get('/stock-locations/locations/:id/deactivation-check', { preHandler: requireSyncKey }, async (req) => {
+  return buildStockPathDeactivationCheck('location', req.params.id);
+});
+
+fastify.post('/stock-locations/deposits/:id/deactivate', { preHandler: requireSyncKey }, async (req, reply) => {
+  const check = await buildStockPathDeactivationCheck('deposit', req.params.id);
+  if (!check.can_deactivate) return reply.code(409).send(check);
+  await pool.query('UPDATE stock_deposits SET is_active = 0, is_default = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [req.params.id]);
+  await pool.query('UPDATE stock_locations SET is_active = 0, is_default = 0, updated_at = CURRENT_TIMESTAMP WHERE deposit_id = ?', [req.params.id]);
+  return { ok: true };
+});
+
+fastify.post('/stock-locations/locations/:id/deactivate', { preHandler: requireSyncKey }, async (req, reply) => {
+  const check = await buildStockPathDeactivationCheck('location', req.params.id);
+  if (!check.can_deactivate) return reply.code(409).send(check);
+  await pool.query('UPDATE stock_locations SET is_active = 0, is_default = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [req.params.id]);
+  return { ok: true };
+});
+
+fastify.get('/stock-locations/divergences', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [rows] = await pool.query(`
+    SELECT
+      p.company_id,
+      p.id AS product_id,
+      p.name AS product_name,
+      p.sku,
+      COALESCE(p.stock_quantity, 0) AS product_stock_quantity,
+      COALESCE(SUM(psl.quantity), 0) AS location_stock_quantity,
+      (COALESCE(SUM(psl.quantity), 0) - COALESCE(p.stock_quantity, 0)) AS difference
+    FROM products p
+    LEFT JOIN product_stock_locations psl ON psl.product_id = p.id
+    GROUP BY p.company_id, p.id, p.name, p.sku, p.stock_quantity
+    HAVING difference <> 0
+    ORDER BY product_name ASC
+  `);
+  return rows.map(row => ({
+    ...row,
+    product_stock_quantity: Number(row.product_stock_quantity || 0),
+    location_stock_quantity: Number(row.location_stock_quantity || 0),
+    difference: Number(row.difference || 0),
+  }));
+});
+
+fastify.post('/products/:id/view', { preHandler: requireSyncKey }, async (req, reply) => {
+  const productId = String(req.params.id || '').trim();
+  if (!productId) return reply.code(400).send({ error: 'product id required' });
+
+  const { customer_id, session_id } = req.body || {};
+  await pool.query(
+    `INSERT INTO product_views (product_id, customer_id, session_id)
+     VALUES (?, ?, ?)`,
+    [
+      productId,
+      customer_id ? String(customer_id) : null,
+      session_id ? String(session_id) : null,
+    ]
+  );
+
+  const [result] = await pool.query(
+    `UPDATE products SET view_count=COALESCE(view_count,0)+1, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+    [productId]
+  );
+
+  return { ok: true, affectedRows: result.affectedRows };
+});
+
 fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, reply) => {
   const products = req.body;
   if (!Array.isArray(products) || products.length === 0) {
@@ -13275,6 +15227,7 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
   ];
   const results = { updated: 0, skipped: 0, errors: [] };
   const changedProductIds = [];
+  const locationSync = [];
 
   for (const p of products) {
     try {
@@ -13303,7 +15256,18 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
       if (result.affectedRows && p.stock_quantity !== undefined) {
         const lookupWhere = p.id ? 'id=?' : 'sku=?';
         const [changedRows] = await pool.query(`SELECT id FROM products WHERE ${lookupWhere}`, [p.id || p.sku]);
-        changedRows.forEach(row => changedProductIds.push(row.id));
+        for (const row of changedRows || []) {
+          changedProductIds.push(row.id);
+          locationSync.push({
+            product_id: row.id,
+            ...(await reconcileProductStockLocationsToTotal(
+              row.id,
+              p.stock_quantity,
+              'prices_stock_update',
+              'Total de estoque atualizado por sincronizacao comercial e reconciliado com os locais.'
+            )),
+          });
+        }
       }
     } catch (err) {
       results.errors.push({ id: p.id, sku: p.sku, error: err.message });
@@ -13311,6 +15275,7 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
   }
 
   results.stockTargets = await getShopeeStockTargetsForProductIds(changedProductIds);
+  results.locationSync = locationSync;
   return results;
 });
 
@@ -13428,8 +15393,12 @@ fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, rep
     );
     [changedRows] = await pool.query('SELECT id FROM products WHERE bling_id=?', [String(bling_id)]);
   }
+  const locationSync = [];
+  for (const row of changedRows || []) {
+    locationSync.push(await reconcileProductStockLocationsToTotal(row.id, qty, 'bling_stock_sync', 'Total externo de estoque sincronizado para manter a distribuicao por local.'));
+  }
   const stockTargets = await getShopeeStockTargetsForProductIds(changedRows.map(row => row.id));
-  return { ok: true, affectedRows: result.affectedRows, stockTargets };
+  return { ok: true, affectedRows: result.affectedRows, locationSync, stockTargets };
 });
 
 // Update product name by SKU (used by Bling webhook — produto event)
@@ -13581,16 +15550,26 @@ fastify.patch('/products/:id/category', { preHandler: requireSyncKey }, async (r
 
 // Lista unidades — filtra por product_id, order_id ou sale_id (FIFO por created_at)
 fastify.get('/units', async (req, reply) => {
-  const { product_id, order_id, sale_id, status } = req.query;
+  const { product_id, order_id, sale_id, status, company_id, ids } = req.query;
   const conds = [];
   const params = [];
-  if (product_id) { conds.push('product_id = ?'); params.push(product_id); }
-  if (order_id)   { conds.push('order_id = ?');   params.push(order_id); }
-  if (sale_id)    { conds.push('sale_id = ?');    params.push(sale_id); }
-  if (status && status !== 'all') { conds.push('status = ?'); params.push(status); }
-  if (conds.length === 0) return reply.code(400).send({ error: 'product_id, order_id or sale_id required' });
+  const idList = String(ids || '').split(',').map((id) => id.trim()).filter(Boolean);
+  if (product_id) { conds.push('u.product_id = ?'); params.push(product_id); }
+  if (order_id)   { conds.push('u.order_id = ?');   params.push(order_id); }
+  if (sale_id)    { conds.push('u.sale_id = ?');    params.push(sale_id); }
+  if (company_id) { conds.push('p.company_id = ?'); params.push(company_id); }
+  if (idList.length > 0) {
+    conds.push(`u.id IN (${idList.map(() => '?').join(', ')})`);
+    params.push(...idList);
+  }
+  if (status && status !== 'all') { conds.push('u.status = ?'); params.push(status); }
+  if (conds.length === 0) return reply.code(400).send({ error: 'product_id, order_id, sale_id, company_id or ids required' });
   const [rows] = await pool.query(
-    `SELECT * FROM units WHERE ${conds.join(' AND ')} ORDER BY created_at ASC`,
+    `SELECT u.*, p.company_id, p.name AS product_name, p.sku AS product_sku
+       FROM units u
+       LEFT JOIN products p ON p.id = u.product_id
+      WHERE ${conds.join(' AND ')}
+      ORDER BY u.created_at ASC`,
     params
   );
   return rows;
@@ -13997,6 +15976,8 @@ fastify.patch('/company-settings', { preHandler: requireSyncKey }, async (req, r
     // Shopee Integration
     'shopee_partner_id', 'shopee_partner_key', 'shopee_shop_id', 
     'shopee_access_token', 'shopee_refresh_token',
+    'bling_client_id', 'bling_client_secret', 'bling_callback_url',
+    'bling_access_token', 'bling_refresh_token', 'bling_token_expires_at',
 
     // Campos de Endereço Extensos
     'address_zip_code', 'address_street', 'address_number', 'address_complement',
@@ -14079,6 +16060,92 @@ fastify.delete('/versions/:id', { preHandler: requireSyncKey }, async (req, repl
   return { ok: true };
 });
 // ─── Table Data Viewer (protegido por X-Sync-Key) ────────────────────────────
+const LEGACY_RESOURCE_TABLES = {
+  customers: process.env.LEGACY_CUSTOMERS_TABLE || 'legacy_customers',
+  phones: process.env.LEGACY_PHONES_TABLE || 'legacy_phones',
+  brands: process.env.LEGACY_BRANDS_TABLE || 'legacy_brands',
+  categories: process.env.LEGACY_CATEGORIES_TABLE || 'legacy_categories',
+  sales: process.env.LEGACY_SALES_TABLE || 'legacy_sales',
+};
+
+const LEGACY_FILTER_COLUMNS = new Set([
+  'id',
+  'cpf',
+  'cpf_cnpj',
+  'imei1',
+  'status',
+  'device_type',
+  'customer_id',
+]);
+
+function parseLegacyOrder(rawOrder) {
+  const value = String(rawOrder || '').trim();
+  if (!value) return '';
+  const [column, direction = 'asc'] = value.split('.');
+  if (!isValidTable(column)) return '';
+  return ` ORDER BY \`${column}\` ${String(direction).toLowerCase() === 'desc' ? 'DESC' : 'ASC'}`;
+}
+
+function buildLegacyWhere(query = {}) {
+  const clauses = [];
+  const params = [];
+
+  for (const column of LEGACY_FILTER_COLUMNS) {
+    const value = query[column];
+    if (value == null || value === '') continue;
+    clauses.push(`\`${column}\` = ?`);
+    params.push(String(value));
+  }
+
+  if (query.startDate) {
+    clauses.push('`date` >= ?');
+    params.push(String(query.startDate));
+  }
+  if (query.endDate) {
+    clauses.push('`date` <= ?');
+    params.push(String(query.endDate));
+  }
+
+  return {
+    sql: clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '',
+    params,
+  };
+}
+
+fastify.get('/legacy/:resource', { preHandler: requireSyncKey }, async (req, reply) => {
+  const resource = String(req.params.resource || '');
+  const table = LEGACY_RESOURCE_TABLES[resource];
+  if (!table || !isValidTable(table)) {
+    return reply.code(404).send({ error: 'Legacy resource not configured' });
+  }
+
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 500, 1), 5000);
+  const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+  const where = buildLegacyWhere(req.query);
+  const order = parseLegacyOrder(req.query.order);
+
+  try {
+    const [[countRow]] = await pool.query(`SELECT COUNT(*) AS total FROM \`${table}\`${where.sql}`, where.params);
+    const [rows] = await pool.query(
+      `SELECT * FROM \`${table}\`${where.sql}${order} LIMIT ? OFFSET ?`,
+      [...where.params, limit, offset],
+    );
+    return {
+      resource,
+      table,
+      total: Number(countRow?.total || 0),
+      limit,
+      offset,
+      rows,
+    };
+  } catch (error) {
+    if (error?.code === 'ER_NO_SUCH_TABLE') {
+      return reply.code(404).send({ error: 'Legacy table not found', table });
+    }
+    throw error;
+  }
+});
+
 fastify.get('/table-data/:name', { preHandler: requireSyncKey }, async (req, reply) => {
   const { name } = req.params;
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
@@ -14221,6 +16288,12 @@ function isValidTable(name) {
   return /^[a-zA-Z0-9_]+$/.test(name);
 }
 
+function normalizeTableDataValue(value) {
+  if (value === undefined) return null;
+  if (value !== null && typeof value === 'object') return JSON.stringify(value);
+  return value;
+}
+
 // INSERT individual
 fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, reply) => {
   const { name } = req.params;
@@ -14231,8 +16304,12 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
     return reply.code(400).send({ error: 'Body must be a JSON object' });
   }
 
-  const cols = Object.keys(body);
-  const vals = Object.values(body);
+  const pk = await getPrimaryKey(pool, name);
+  const insertBody = { ...body };
+  if (pk === 'id' && !insertBody.id) insertBody.id = crypto.randomUUID();
+
+  const cols = Object.keys(insertBody);
+  const vals = Object.values(insertBody).map(normalizeTableDataValue);
   const placeholders = cols.map(() => '?').join(', ');
   const colList = cols.map(c => `\`${c}\``).join(', ');
 
@@ -14241,10 +16318,9 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
     vals
   );
 
-  const pk = await getPrimaryKey(pool, name);
   const [rows] = await pool.query(
     `SELECT * FROM \`${name}\` WHERE \`${pk}\` = ? LIMIT 1`,
-    [body[pk] ?? vals[0]]
+    [insertBody[pk] ?? vals[0]]
   );
 
   reply.code(201);
@@ -14261,11 +16337,18 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
     return reply.code(400).send({ error: 'Body must be a non-empty array' });
   }
 
-  const cols = Object.keys(rows[0]);
+  const pk = await getPrimaryKey(pool, name);
+  const insertRows = rows.map(row => {
+    const next = { ...row };
+    if (pk === 'id' && !next.id) next.id = crypto.randomUUID();
+    return next;
+  });
+
+  const cols = Object.keys(insertRows[0]);
   const colList = cols.map(c => `\`${c}\``).join(', ');
   const placeholders = `(${cols.map(() => '?').join(', ')})`;
-  const allPlaceholders = rows.map(() => placeholders).join(', ');
-  const allValues = rows.flatMap(r => cols.map(c => r[c] ?? null));
+  const allPlaceholders = insertRows.map(() => placeholders).join(', ');
+  const allValues = insertRows.flatMap(r => cols.map(c => normalizeTableDataValue(r[c])));
 
   await pool.query(
     `INSERT INTO \`${name}\` (${colList}) VALUES ${allPlaceholders}`,
@@ -14290,7 +16373,7 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
   if (!entries.length) return reply.code(400).send({ error: 'No fields to update' });
 
   const setClauses = entries.map(([k]) => `\`${k}\` = ?`).join(', ');
-  const vals = [...entries.map(([, v]) => v), pkValue];
+  const vals = [...entries.map(([, v]) => normalizeTableDataValue(v)), pkValue];
 
   await pool.query(`UPDATE \`${name}\` SET ${setClauses} WHERE \`${pkCol}\` = ?`, vals);
 
@@ -14638,7 +16721,13 @@ fastify.patch('/shipping/zones/:id', { preHandler: requireSyncKey }, async (req,
 
 fastify.delete('/shipping/zones/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   await pool.query('DELETE FROM shipping_zones WHERE id=?', [req.params.id]);
-  return { ok: true };
+  const locationSync = await reconcileProductStockLocationsToTotal(
+    req.params.id,
+    p.stock_quantity || 0,
+    'product_update',
+    'Total de estoque editado no cadastro e reconciliado com os locais.'
+  );
+  return { ok: true, locationSync };
 });
 
 fastify.get('/shipping/price-ranges', async (req, reply) => {
@@ -15081,7 +17170,7 @@ function sanitizeDeliveryTeamMemberPayload(input = {}) {
 fastify.post('/team/delivery', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   try {
     const payload = sanitizeDeliveryTeamMemberPayload(req.body || {});
-    const rows = await supabaseRestInsert('team_members', payload);
+    const rows = await vpsDbInsert('team_members', payload);
     const created = Array.isArray(rows) ? rows[0] : rows;
     return reply.code(201).send(created);
   } catch (err) {
@@ -15983,6 +18072,20 @@ async function addIndexIfMissing(table, indexName, column) {
   }
 }
 
+async function dropIndexIfExists(table, indexName) {
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [table, indexName]
+  );
+  if (Number(row.cnt) > 0) {
+    await pool.query(`ALTER TABLE \`${table}\` DROP INDEX \`${indexName}\``);
+    console.log(`[migration] Dropped index ${table}.${indexName}`);
+  } else {
+    console.log(`[migration] index ${table}.${indexName} not found - skip`);
+  }
+}
+
 async function seedAutoresponderRuleTemplates() {
   for (const template of AUTORESPONDER_RULE_TEMPLATES) {
     await pool.query(
@@ -16003,6 +18106,129 @@ async function seedAutoresponderRuleTemplates() {
       ]
     );
   }
+}
+
+const DEFAULT_EMAIL_TEMPLATES = [
+  {
+    id: 'email-order-success',
+    slug: 'order_success',
+    name: 'Compra realizada com sucesso',
+    category: 'sales',
+    trigger_key: 'order_success',
+    subject: 'Recebemos seu pedido #{pedido_numero}',
+    preheader: 'Seu pedido foi registrado e ja esta em processamento.',
+    html_body: '<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;"><h1>Pedido confirmado</h1><p>Ola, {{cliente_nome}}.</p><p>Recebemos sua compra <strong>#{{pedido_numero}}</strong> no valor de <strong>{{pedido_total}}</strong>.</p><p>{{pedido_itens}}</p><p><a href="{{pedido_link}}">Ver pedido</a></p></div>',
+    text_body: 'Ola, {{cliente_nome}}. Recebemos sua compra #{{pedido_numero}} no valor de {{pedido_total}}. Acompanhe: {{pedido_link}}',
+    variables: ['{{cliente_nome}}', '{{pedido_numero}}', '{{pedido_total}}', '{{pedido_itens}}', '{{pedido_link}}'],
+  },
+  {
+    id: 'email-promotions',
+    slug: 'promotions',
+    name: 'Promocoes',
+    category: 'marketing',
+    trigger_key: 'promotions',
+    subject: '{{promocao_titulo}} no Mercado do Vale',
+    preheader: 'Ofertas selecionadas para voce.',
+    html_body: '<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;"><h1>{{promocao_titulo}}</h1><p>{{promocao_descricao}}</p><p><a href="{{promocao_link}}">Ver ofertas</a></p><p>Valido ate {{promocao_validade}}.</p></div>',
+    text_body: '{{promocao_titulo}} - {{promocao_descricao}} Ver ofertas: {{promocao_link}}',
+    variables: ['{{cliente_nome}}', '{{promocao_titulo}}', '{{promocao_descricao}}', '{{promocao_link}}', '{{promocao_validade}}'],
+  },
+  {
+    id: 'email-new-items',
+    slug: 'new_items',
+    name: 'Itens novos',
+    category: 'catalog',
+    trigger_key: 'new_items',
+    subject: 'Novidades chegaram ao Mercado do Vale',
+    preheader: 'Confira os produtos que acabaram de entrar.',
+    html_body: '<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;"><h1>Novidades na loja</h1><p>Ola, {{cliente_nome}}.</p><p>Separamos os itens novos que chegaram hoje:</p><div>{{produtos_novos}}</div><p><a href="{{catalogo_link}}">Abrir catalogo</a></p></div>',
+    text_body: 'Novidades na loja: {{produtos_novos}}. Veja o catalogo: {{catalogo_link}}',
+    variables: ['{{cliente_nome}}', '{{produtos_novos}}', '{{catalogo_link}}'],
+  },
+  {
+    id: 'email-password-reset',
+    slug: 'password_reset',
+    name: 'Recuperacao de senha',
+    category: 'auth',
+    trigger_key: 'password_reset',
+    subject: 'Redefinicao de senha - Mercado do Vale',
+    preheader: 'Use o link para criar uma nova senha.',
+    html_body: '<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;"><p>Ola, {{cliente_nome}}.</p><p>Recebemos uma solicitacao para redefinir sua senha no Mercado do Vale.</p><p><a href="{{reset_link}}">Clique aqui para criar uma nova senha</a>.</p><p>Este link expira em {{expira_em_minutos}} minutos.</p><p>Se voce nao solicitou esta alteracao, ignore este e-mail.</p></div>',
+    text_body: 'Ola, {{cliente_nome}}. Use este link para criar uma nova senha: {{reset_link}}.',
+    variables: ['{{cliente_nome}}', '{{reset_link}}', '{{expira_em_minutos}}'],
+  },
+  {
+    id: 'email-password-changed',
+    slug: 'password_changed',
+    name: 'Senha alterada',
+    category: 'auth',
+    trigger_key: 'password_changed',
+    subject: 'Senha alterada - Mercado do Vale',
+    preheader: 'Aviso de seguranca da sua conta.',
+    html_body: '<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;"><p>Ola, {{cliente_nome}}.</p><p>Sua senha do Mercado do Vale foi alterada com sucesso.</p><p>Se foi voce, nenhuma acao adicional e necessaria. Para entrar novamente, acesse <a href="{{login_link}}">o login da sua conta</a>.</p><p>Se voce nao fez esta alteracao, entre em contato com a loja imediatamente.</p></div>',
+    text_body: 'Ola, {{cliente_nome}}. Sua senha foi alterada. Se nao foi voce, entre em contato com a loja imediatamente.',
+    variables: ['{{cliente_nome}}', '{{login_link}}'],
+  },
+  {
+    id: 'email-registration-confirmation',
+    slug: 'registration_confirmation',
+    name: 'Confirmacao de cadastro',
+    category: 'auth',
+    trigger_key: 'registration_confirmation',
+    subject: 'Confirme seu cadastro no Mercado do Vale',
+    preheader: 'Falta pouco para ativar sua conta.',
+    html_body: '<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6;"><p>Ola, {{cliente_nome}}.</p><p>Para confirmar seu cadastro no Mercado do Vale, clique no link abaixo:</p><p><a href="{{confirmacao_link}}">Confirmar cadastro</a></p><p>Se voce nao criou esta conta, ignore este e-mail.</p></div>',
+    text_body: 'Ola, {{cliente_nome}}. Confirme seu cadastro: {{confirmacao_link}}',
+    variables: ['{{cliente_nome}}', '{{confirmacao_link}}'],
+  },
+];
+
+async function seedDefaultEmailTemplates() {
+  for (const template of DEFAULT_EMAIL_TEMPLATES) {
+    await pool.query(
+      `INSERT INTO email_templates
+        (id, slug, name, category, trigger_key, subject, preheader, html_body, text_body, variables, active, is_system)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
+       ON DUPLICATE KEY UPDATE
+        name = VALUES(name),
+        category = VALUES(category),
+        trigger_key = VALUES(trigger_key),
+        variables = VALUES(variables),
+        is_system = 1`,
+      [
+        template.id,
+        template.slug,
+        template.name,
+        template.category,
+        template.trigger_key,
+        template.subject,
+        template.preheader,
+        template.html_body,
+        template.text_body,
+        JSON.stringify(template.variables),
+      ]
+    );
+  }
+}
+
+async function getDefaultCompanyIdForCatalog() {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id FROM companies WHERE slug = 'mercado-do-vale' LIMIT 1"
+    );
+    if (rows?.[0]?.id) return rows[0].id;
+  } catch (error) {
+    console.warn('[migration] default company lookup by slug failed:', error.message);
+  }
+
+  try {
+    const [rows] = await pool.query('SELECT id FROM companies LIMIT 1');
+    if (rows?.[0]?.id) return rows[0].id;
+  } catch (error) {
+    console.warn('[migration] fallback company lookup failed:', error.message);
+  }
+
+  return '9717131e-7b14-4aec-84a4-4317c0489985';
 }
 
 async function runMigrations() {
@@ -16036,6 +18262,17 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_product_combos_combo (combo_product_id),
       INDEX idx_product_combos_child (child_product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS product_views (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      product_id CHAR(36) NOT NULL,
+      customer_id VARCHAR(255) NULL,
+      session_id VARCHAR(255) NULL,
+      viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_product_views_product (product_id, viewed_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
@@ -16073,6 +18310,28 @@ async function runMigrations() {
       UNIQUE KEY idx_fee_unique (method, installments, channel)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS email_templates (
+      id VARCHAR(80) PRIMARY KEY,
+      slug VARCHAR(120) NOT NULL UNIQUE,
+      name VARCHAR(160) NOT NULL,
+      category VARCHAR(40) NOT NULL DEFAULT 'custom',
+      trigger_key VARCHAR(120) NULL,
+      subject VARCHAR(255) NOT NULL,
+      preheader VARCHAR(255) NULL,
+      html_body MEDIUMTEXT NOT NULL,
+      text_body TEXT NULL,
+      variables JSON NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      is_system TINYINT(1) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_email_templates_category (category),
+      INDEX idx_email_templates_trigger (trigger_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await seedDefaultEmailTemplates();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_settings (
@@ -16298,6 +18557,336 @@ async function runMigrations() {
   `);
   console.log('[migration] field_presets table: OK');
 
+  const defaultCompanyId = await getDefaultCompanyIdForCatalog();
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS catalog_sections (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      user_id CHAR(36) NOT NULL,
+      section_type VARCHAR(40) NOT NULL DEFAULT 'custom',
+      title VARCHAR(255) NOT NULL,
+      subtitle TEXT NULL,
+      is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+      display_order INT NOT NULL DEFAULT 0,
+      max_products INT NOT NULL DEFAULT 8,
+      layout_style VARCHAR(40) NOT NULL DEFAULT 'grid',
+      show_view_all TINYINT(1) NOT NULL DEFAULT 1,
+      view_all_url VARCHAR(500) NULL,
+      filter_categories JSON NULL,
+      filter_brands JSON NULL,
+      filter_min_price DECIMAL(12,2) NULL,
+      filter_max_price DECIMAL(12,2) NULL,
+      filter_tags JSON NULL,
+      pinned_product_ids JSON NULL,
+      sort_by VARCHAR(80) NOT NULL DEFAULT 'updated_at',
+      sort_direction VARCHAR(10) NOT NULL DEFAULT 'desc',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_catalog_sections_user_type_title (user_id, section_type, title),
+      INDEX idx_catalog_sections_enabled_order (is_enabled, display_order),
+      INDEX idx_catalog_sections_user_order (user_id, display_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(
+    `INSERT IGNORE INTO catalog_sections
+      (id, user_id, section_type, title, subtitle, is_enabled, display_order, max_products, layout_style, show_view_all, view_all_url, sort_by, sort_direction)
+     VALUES
+      (UUID(), ?, 'recent', 'Mais Recentes', 'Produtos adicionados recentemente', 1, 10, 8, 'grid', 1, '/produtos/mais-recentes', 'updated_at', 'desc'),
+      (UUID(), ?, 'featured', 'Destaques', 'Produtos em destaque', 1, 20, 8, 'grid', 1, '/produtos/destaques', 'updated_at', 'desc'),
+      (UUID(), ?, 'bestsellers', 'Mais Vendidos', 'Os produtos mais populares', 1, 30, 8, 'grid', 1, NULL, 'sales_count', 'desc')`,
+    [defaultCompanyId, defaultCompanyId, defaultCompanyId]
+  );
+  console.log('[migration] catalog_sections table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS custom_fields (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      company_id CHAR(36) NOT NULL,
+      \`key\` VARCHAR(120) NOT NULL,
+      label VARCHAR(255) NOT NULL,
+      category VARCHAR(40) NOT NULL DEFAULT 'spec',
+      field_type VARCHAR(40) NOT NULL DEFAULT 'text',
+      options JSON NULL,
+      validation JSON NULL,
+      placeholder VARCHAR(255) NULL,
+      help_text TEXT NULL,
+      table_config JSON NULL,
+      is_system TINYINT(1) NOT NULL DEFAULT 0,
+      display_order INT NOT NULL DEFAULT 999,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_custom_fields_company_key (company_id, \`key\`),
+      INDEX idx_custom_fields_company (company_id),
+      INDEX idx_custom_fields_category (category),
+      INDEX idx_custom_fields_order (display_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(
+    `INSERT IGNORE INTO custom_fields
+      (id, company_id, \`key\`, label, category, field_type, options, validation, placeholder, is_system, display_order)
+     VALUES
+      (UUID(), ?, 'category_id', 'Categoria', 'basic', 'select', JSON_ARRAY(), JSON_OBJECT(), NULL, 1, 1),
+      (UUID(), ?, 'brand', 'Marca', 'basic', 'text', JSON_ARRAY(), JSON_OBJECT(), NULL, 1, 2),
+      (UUID(), ?, 'model', 'Modelo', 'basic', 'text', JSON_ARRAY(), JSON_OBJECT(), NULL, 1, 3),
+      (UUID(), ?, 'name', 'Nome do Produto', 'basic', 'text', JSON_ARRAY(), JSON_OBJECT(), NULL, 1, 4),
+      (UUID(), ?, 'sku', 'SKU', 'basic', 'text', JSON_ARRAY(), JSON_OBJECT(), NULL, 1, 5),
+      (UUID(), ?, 'description', 'Descricao', 'basic', 'textarea', JSON_ARRAY(), JSON_OBJECT(), NULL, 1, 6),
+      (UUID(), ?, 'color', 'Cor', 'spec', 'text', JSON_ARRAY(), JSON_OBJECT(), 'Ex: Preto, Azul', 1, 11),
+      (UUID(), ?, 'storage', 'Armazenamento', 'spec', 'text', JSON_ARRAY(), JSON_OBJECT(), 'Ex: 128GB, 256GB', 1, 12),
+      (UUID(), ?, 'ram', 'RAM', 'spec', 'text', JSON_ARRAY(), JSON_OBJECT(), 'Ex: 4GB, 8GB', 1, 13),
+      (UUID(), ?, 'battery_health', 'Saude da Bateria', 'spec', 'number', JSON_ARRAY(), JSON_OBJECT(), '0-100%', 1, 15),
+      (UUID(), ?, 'battery_mah', 'Bateria (mAh)', 'spec', 'number', JSON_ARRAY(), JSON_OBJECT(), 'Ex: 5000', 1, 16),
+      (UUID(), ?, 'display', 'Display (pol)', 'spec', 'number', JSON_ARRAY(), JSON_OBJECT(), 'Ex: 6.7', 1, 17),
+      (UUID(), ?, 'price_cost', 'Preco de Custo', 'price', 'number', JSON_ARRAY(), JSON_OBJECT(), NULL, 1, 18),
+      (UUID(), ?, 'price_retail', 'Preco Varejo', 'price', 'number', JSON_ARRAY(), JSON_OBJECT(), NULL, 1, 19),
+      (UUID(), ?, 'price_reseller', 'Preco Revenda', 'price', 'number', JSON_ARRAY(), JSON_OBJECT(), NULL, 1, 20),
+      (UUID(), ?, 'price_wholesale', 'Preco Atacado', 'price', 'number', JSON_ARRAY(), JSON_OBJECT(), NULL, 1, 21)`,
+    Array(16).fill(defaultCompanyId)
+  );
+  console.log('[migration] custom_fields table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS models (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      company_id CHAR(36) NOT NULL,
+      brand_id CHAR(36) NOT NULL,
+      category_id CHAR(36) NULL,
+      name VARCHAR(255) NOT NULL,
+      slug VARCHAR(255) NOT NULL,
+      description LONGTEXT NULL,
+      template_values JSON NULL,
+      eans JSON NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_models_company_brand_slug (company_id, brand_id, slug),
+      INDEX idx_models_company_name (company_id, name),
+      INDEX idx_models_brand_id (brand_id),
+      INDEX idx_models_category_id (category_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('models', 'company_id', 'CHAR(36) NULL');
+  await addColumnIfMissing('models', 'brand_id', 'CHAR(36) NULL');
+  await addColumnIfMissing('models', 'category_id', 'CHAR(36) NULL');
+  await addColumnIfMissing('models', 'slug', 'VARCHAR(255) NULL');
+  await addColumnIfMissing('models', 'description', 'LONGTEXT NULL');
+  await addColumnIfMissing('models', 'template_values', 'JSON NULL');
+  await addColumnIfMissing('models', 'eans', 'JSON NULL');
+  await addColumnIfMissing('models', 'active', 'TINYINT(1) NOT NULL DEFAULT 1');
+  await addColumnIfMissing('models', 'created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+  await addColumnIfMissing('models', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+  await addIndexIfMissing('models', 'idx_models_brand_id', 'brand_id');
+  await addIndexIfMissing('models', 'idx_models_category_id', 'category_id');
+  console.log('[migration] models table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cashback_settings (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      coins_per_real DECIMAL(10,2) NOT NULL DEFAULT 1,
+      min_purchase_for_coins DECIMAL(10,2) NOT NULL DEFAULT 0,
+      coins_to_brl_rate DECIMAL(10,2) NOT NULL DEFAULT 100,
+      max_redeem_percent DECIMAL(10,2) NOT NULL DEFAULT 20,
+      min_coins_to_redeem INT NOT NULL DEFAULT 100,
+      coins_per_referral_purchase INT NULL,
+      referral_coins_per_real DECIMAL(10,4) NOT NULL DEFAULT 0.5000,
+      review_coins INT NOT NULL DEFAULT 0,
+      checkin_base_coins INT NOT NULL DEFAULT 1,
+      checkin_streak_milestones JSON NOT NULL,
+      coins_expire_after_days INT NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(
+    `INSERT IGNORE INTO cashback_settings
+      (id, coins_per_real, min_purchase_for_coins, coins_to_brl_rate, max_redeem_percent, min_coins_to_redeem, referral_coins_per_real, review_coins, checkin_base_coins, checkin_streak_milestones, active)
+     VALUES
+      ('00000000-0000-4000-8000-000000000001', 1, 0, 100, 20, 100, 0.5, 0, 1, JSON_ARRAY(JSON_OBJECT('day', 7, 'bonus', 10), JSON_OBJECT('day', 14, 'bonus', 20), JSON_OBJECT('day', 30, 'bonus', 50)), 1)`
+  );
+  console.log('[migration] cashback_settings table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS coin_balances (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      customer_id CHAR(36) NOT NULL,
+      balance INT NOT NULL DEFAULT 0,
+      lifetime_earned INT NOT NULL DEFAULT 0,
+      lifetime_spent INT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_coin_balances_customer (customer_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS coin_transactions (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      customer_id CHAR(36) NOT NULL,
+      amount INT NOT NULL,
+      type VARCHAR(40) NOT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'completed',
+      description TEXT NULL,
+      reference_id CHAR(36) NULL,
+      reference_type VARCHAR(40) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_coin_transactions_customer_created (customer_id, created_at),
+      INDEX idx_coin_transactions_reference (reference_type, reference_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS checkin_logs (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      customer_id CHAR(36) NOT NULL,
+      checkin_date DATE NOT NULL,
+      coins_earned INT NOT NULL DEFAULT 0,
+      streak_day INT NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_checkin_logs_customer_date (customer_id, checkin_date),
+      INDEX idx_checkin_logs_customer_date (customer_id, checkin_date),
+      INDEX idx_checkin_logs_created_at (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS product_reviews (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      product_id CHAR(36) NOT NULL,
+      customer_id CHAR(36) NOT NULL,
+      rating INT NOT NULL,
+      review_text TEXT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'pending',
+      admin_reply TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_product_reviews_product_status (product_id, status),
+      INDEX idx_product_reviews_customer (customer_id),
+      INDEX idx_product_reviews_status_created (status, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] public catalog support tables: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS model_color_images (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      company_id CHAR(36) NULL,
+      model_id CHAR(36) NOT NULL,
+      color_id CHAR(36) NOT NULL,
+      images JSON NULL,
+      image_url TEXT NULL,
+      display_order INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_model_color_images_company_model_color (company_id, model_id, color_id),
+      INDEX idx_model_color_images_company (company_id),
+      INDEX idx_model_color_images_model (model_id),
+      INDEX idx_model_color_images_color (color_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] model_color_images table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stock_deposits (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      company_id CHAR(36) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      code VARCHAR(120) NOT NULL,
+      type VARCHAR(40) NOT NULL DEFAULT 'warehouse',
+      cep VARCHAR(20) NULL,
+      address TEXT NULL,
+      is_default TINYINT(1) NOT NULL DEFAULT 0,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_stock_deposits_company_code (company_id, code),
+      INDEX idx_stock_deposits_company_id (company_id),
+      INDEX idx_stock_deposits_active (company_id, is_active),
+      INDEX idx_stock_deposits_default (company_id, is_default)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stock_locations (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      company_id CHAR(36) NOT NULL,
+      deposit_id CHAR(36) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      code VARCHAR(120) NOT NULL,
+      description TEXT NULL,
+      is_default TINYINT(1) NOT NULL DEFAULT 0,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_stock_locations_deposit_code (deposit_id, code),
+      INDEX idx_stock_locations_company_id (company_id),
+      INDEX idx_stock_locations_deposit_id (deposit_id),
+      INDEX idx_stock_locations_active (deposit_id, is_active),
+      INDEX idx_stock_locations_default (deposit_id, is_default)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await dropIndexIfExists('stock_locations', 'uniq_stock_locations_deposit_code');
+  const [[stockLocationCodeIndex]] = await pool.query(
+    `SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'stock_locations' AND INDEX_NAME = 'idx_stock_locations_deposit_code'`
+  );
+  if (Number(stockLocationCodeIndex.cnt) === 0) {
+    await pool.query('ALTER TABLE `stock_locations` ADD INDEX `idx_stock_locations_deposit_code` (`deposit_id`, `code`)');
+    console.log('[migration] Added index stock_locations.idx_stock_locations_deposit_code');
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS product_stock_locations (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      company_id CHAR(36) NOT NULL,
+      product_id CHAR(36) NOT NULL,
+      deposit_id CHAR(36) NOT NULL,
+      location_id CHAR(36) NOT NULL,
+      quantity INT NOT NULL DEFAULT 0,
+      reserved_quantity INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_product_stock_location (product_id, deposit_id, location_id),
+      INDEX idx_product_stock_locations_company_id (company_id),
+      INDEX idx_product_stock_locations_product_id (product_id),
+      INDEX idx_product_stock_locations_deposit_id (deposit_id),
+      INDEX idx_product_stock_locations_location_id (location_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stock_location_movements (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      company_id CHAR(36) NOT NULL,
+      product_id CHAR(36) NOT NULL,
+      from_deposit_id CHAR(36) NULL,
+      from_location_id CHAR(36) NULL,
+      to_deposit_id CHAR(36) NULL,
+      to_location_id CHAR(36) NULL,
+      quantity INT NOT NULL,
+      movement_type VARCHAR(40) NOT NULL,
+      reason VARCHAR(255) NOT NULL DEFAULT 'inventory',
+      reference_type VARCHAR(80) NULL,
+      reference_id CHAR(36) NULL,
+      previous_from_quantity INT NULL,
+      new_from_quantity INT NULL,
+      previous_to_quantity INT NULL,
+      new_to_quantity INT NULL,
+      notes TEXT NULL,
+      created_by CHAR(36) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_stock_location_movements_company_id (company_id),
+      INDEX idx_stock_location_movements_product_id (product_id),
+      INDEX idx_stock_location_movements_created_at (created_at),
+      INDEX idx_stock_location_movements_reference (reference_type, reference_id),
+      INDEX idx_stock_location_movements_from_location (from_location_id),
+      INDEX idx_stock_location_movements_to_location (to_location_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await seedDefaultStockLocations();
+  await backfillProductStockLocations();
+  console.log('[migration] stock location tables: OK');
+
   // Tabela de unidades físicas serializadas (1 linha por aparelho com IMEI/serial)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS units (
@@ -16386,6 +18975,8 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] admin_preferences table: OK');
+
+  await ensureDefaultAdminAccount();
 }
 
 // Recalcula products.stock_quantity = COUNT(units WHERE status='available') para o produto.
@@ -16412,3 +19003,5 @@ runMigrations().then(() => {
   console.error('[startup] migration failed:', err);
   process.exit(1);
 });
+
+

@@ -9,7 +9,7 @@ import { MixedPaymentSimulator, type MixedPaymentState } from './MixedPaymentSim
 import { DeliveryOptions, type DeliveryOption } from './DeliveryOptions';
 import { calculateInstallments } from '@/services/installmentCalculator';
 import { generateQuoteMessage, generateWhatsAppLink } from '@/utils/whatsappMessageGenerator';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { useCart } from '@/contexts/CartContext';
@@ -222,7 +222,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
     }, []);
 
     // Get customer context for pricing
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const { addItem } = useQuoteCart();
     const { addItem: addToCart, items: cartItems, clear: clearCart } = useCart();
     const navigate = useNavigate();

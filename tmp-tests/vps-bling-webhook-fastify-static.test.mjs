@@ -19,7 +19,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /payload_api_fallback/, `${file} must keep non-zero payload fallback when Bling stock fetch fails`);
   assert.match(source, /refusing to zero stock incorrectly/, `${file} must avoid zeroing stock when API fails and payload is zero or absent`);
   assert.match(source, /patchVpsJsonForWebhookVps\(\s*request,\s*'\/products\/stock'/, `${file} must update VPS stock endpoint`);
-  assert.match(source, /supabaseRestPatch\('products'[\s\S]*stock_quantity/, `${file} must update Supabase stock as legacy did`);
+  assert.match(source, /vpsDbPatch\('products'[\s\S]*stock_quantity/, `${file} must update local product stock as legacy did`);
 
   assert.match(source, /event\.includes\('product'\)[\s\S]*event\.includes\('produto'\)/, `${file} must handle product webhook events`);
   assert.match(source, /fetchBlingProductDetailForWebhookVps/, `${file} must fetch product detail when payload lacks sku or name`);

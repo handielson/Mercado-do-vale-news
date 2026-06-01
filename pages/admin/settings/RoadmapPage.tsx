@@ -70,16 +70,16 @@ export const RoadmapPage = () => {
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <h4 className="font-semibold text-amber-800 text-sm flex items-center gap-2 mb-2">
-              <AlertCircle size={15} /> Pendência — Migração Supabase
+              <AlertCircle size={15} /> Pendência — Corte final para VPS
             </h4>
             <p className="text-sm text-amber-700">
-              As migrations <code className="bg-amber-100 px-1 rounded text-xs">20260414000001</code> e <code className="bg-amber-100 px-1 rounded text-xs">20260414000002</code> foram criadas mas ainda precisam ser aplicadas no Supabase Dashboard (SQL Editor) para adicionar as colunas <code className="bg-amber-100 px-1 rounded text-xs">legacy_sale_id</code>, <code className="bg-amber-100 px-1 rounded text-xs">product_specs</code>, <code className="bg-amber-100 px-1 rounded text-xs">product_brand</code> e <code className="bg-amber-100 px-1 rounded text-xs">product_model</code>. Após aplicar, reimportar as vendas para capturar RAM, memória e cor corretamente.
+              As migrations <code className="bg-amber-100 px-1 rounded text-xs">20260414000001</code> e <code className="bg-amber-100 px-1 rounded text-xs">20260414000002</code> precisam estar refletidas no banco local da VPS para adicionar as colunas <code className="bg-amber-100 px-1 rounded text-xs">legacy_sale_id</code>, <code className="bg-amber-100 px-1 rounded text-xs">product_specs</code>, <code className="bg-amber-100 px-1 rounded text-xs">product_brand</code> e <code className="bg-amber-100 px-1 rounded text-xs">product_model</code>. Depois disso, reimportar as vendas para capturar RAM, memória e cor corretamente.
             </p>
           </div>
         </div>
       </section>
 
-      {/* ARQUITETURA DE DADOS — VPS vs SUPABASE */}
+      {/* ARQUITETURA DE DADOS — VPS */}
       <section className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="bg-slate-50 border-b border-slate-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -87,7 +87,7 @@ export const RoadmapPage = () => {
               <Database size={24} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-slate-800">Arquitetura de Dados — VPS vs Supabase</h2>
+              <h2 className="text-xl font-bold text-slate-800">Arquitetura de Dados — VPS</h2>
               <p className="text-sm text-slate-500">Mapa atual de onde cada módulo busca/salva dados. Controlado em <code className="bg-slate-200 px-1 rounded text-xs">config/migration.ts</code>.</p>
             </div>
           </div>
@@ -97,7 +97,7 @@ export const RoadmapPage = () => {
         </div>
         <div className="p-6 space-y-6">
 
-          {/* Grid VPS vs Supabase */}
+          {/* Grid VPS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {/* VPS MySQL - já migrados */}
@@ -131,15 +131,15 @@ export const RoadmapPage = () => {
               </div>
             </div>
 
-            {/* Supabase - ainda não migrados */}
+            {/* Banco local da VPS - pendências de corte */}
             <div className="border border-amber-200 rounded-xl overflow-hidden">
               <div className="bg-amber-50 px-4 py-3 border-b border-amber-200 flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-amber-400" />
-                <h4 className="font-bold text-amber-800 text-sm">Supabase PostgreSQL — <code className="font-mono text-xs">cqbdyxxzm...supabase.co</code></h4>
+                <h4 className="font-bold text-amber-800 text-sm">Banco local da VPS <code className="font-mono text-xs">MySQL/MariaDB</code></h4>
               </div>
               <div className="p-4 space-y-2">
                 {[
-                  { module: 'customers', label: 'Clientes', detail: 'Cadastro, CPF, endereço. Usa Supabase Auth para login no storefront — migração requer solução de autenticação alternativa' },
+                  { module: 'customers', label: 'Clientes', detail: 'Cadastro, CPF, endereço. Login do storefront deve usar autenticação própria na VPS' },
                   { module: 'orders', label: 'Pedidos', detail: 'Pedidos online do storefront (status, itens, entrega)' },
                   { module: 'sales', label: 'Vendas / PDV', detail: 'Histórico de vendas do caixa físico e importações do MV-Gestão' },
                   { module: 'pdv', label: 'Caixa (PDV)', detail: 'Abertura/fechamento de caixa, sangrias e suprimentos' },
@@ -211,7 +211,7 @@ export const RoadmapPage = () => {
               </div>
               <div className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 shrink-0" />
-                <p><strong>Supabase (clientes/pedidos/vendas):</strong> Chamadas diretas via <code className="bg-slate-200 px-1 rounded">@supabase/supabase-js</code> com <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_URL</code> + <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_ANON_KEY</code>.</p>
+                <p><strong>Autenticação da loja:</strong> Sessões próprias da VPS com token bearer, cadastro e login de clientes/admin pelo MySQL.</p>
               </div>
             </div>
           </div>

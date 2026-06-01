@@ -9,7 +9,7 @@ import { calculateInstallments, formatPrice } from '@/services/installmentCalcul
 import { getBadgesForCategory, getAllBadges, shouldShowBadge } from '@/config/category-badges';
 import { ProductDetailsModal } from './ProductDetailsModal';
 import { QuoteModal } from './QuoteModal';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
 import { useCompare } from '@/contexts/CompareContext';
 import { useCart } from '@/contexts/CartContext';
@@ -152,7 +152,7 @@ export function ModernProductCard({
         }) as CatalogProduct;
     }, [selectedVariant, currentColorIndex, product]);
 
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const { items: cartItems, addItem: addToCartContext } = useCart();
     const isAdmin = customer?.customer_type === 'ADMIN';
     const [addedToCart, setAddedToCart] = useState(false);

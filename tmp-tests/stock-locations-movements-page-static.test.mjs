@@ -3,6 +3,8 @@ import path from 'node:path';
 
 const root = process.cwd();
 const page = fs.readFileSync(path.join(root, 'pages/admin/inventory/StockLocationsPage.tsx'), 'utf8');
+const typeSource = fs.readFileSync(path.join(root, 'types/stock-location.ts'), 'utf8');
+const vpsSource = fs.readFileSync(path.join(root, 'vps_server.cjs'), 'utf8');
 
 function assert(condition, message) {
   if (!condition) {
@@ -13,16 +15,24 @@ function assert(condition, message) {
 for (const snippet of [
   'StockLocationMovement',
   'setMovements',
-  'stockLocationService.listMovements({ limit: 20 })',
+  'stockLocationService.listMovements(',
   'Histórico de movimentações',
   'Últimos registros auditáveis',
   'formatMovementType',
   'formatMovementDate',
   'movement.movement_type',
   'movement.reason',
+  'product.name ||',
 ]) {
   assert(page.includes(snippet), `missing ${snippet}`);
 }
+
+assert(typeSource.includes('product?:'), 'StockLocationMovement should allow hydrated product data');
+assert(typeSource.includes('name: string'), 'StockLocationMovement product data should expose product name');
+assert(vpsSource.includes('LEFT JOIN products p ON p.id = slm.product_id'), 'VPS movements endpoint should join products');
+assert(vpsSource.includes('product_name'), 'VPS movements endpoint should return product_name');
+assert(vpsSource.includes('product: row.product_name ?'), 'VPS movements endpoint should hydrate movement.product');
+assert(!page.includes('if (!product) return movement.product_id;'), 'movement table should not prefer raw product id as the visible product label');
 
 assert(!page.includes('recordMovement('), 'page must not create movements yet');
 assert(page.includes('Entrada de estoque'), 'page should expose stock entry action after entry step');

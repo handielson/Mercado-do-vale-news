@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Save, Check, X, Info } from 'lucide-react';
-import { supabase } from '../../../services/supabase';
-import { useSupabaseAuth } from '../../../contexts/SupabaseAuthContext';
-import { ClientTypes } from '../../../utils/field-standards';
+import { Shield, Save, X, Info } from 'lucide-react';
+import { useVpsAuth } from '../../../contexts/VpsAuthContext';
+import { vpsClient } from '../../../services/vpsClient';
 
 interface Permission {
     id?: string;
@@ -12,6 +11,10 @@ interface Permission {
     can_create: boolean;
     can_edit: boolean;
     can_delete: boolean;
+}
+
+interface TableDataResponse<T> {
+    rows?: T[];
 }
 
 const FEATURES = [
@@ -33,8 +36,54 @@ const USER_TYPES = [
     { key: 'admin', label: 'Admin' },
 ];
 
+function createLocalId(): string {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+        return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function loadUserPermissions(): Promise<Permission[]> {
+    const allRows: Permission[] = [];
+    const pageSize = 200;
+
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<TableDataResponse<Permission>>(
+            `/table-data/user_permissions?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows.push(...rows);
+        if (rows.length < pageSize) break;
+    }
+
+    return allRows.sort((a, b) =>
+        `${a.user_type}:${a.feature_key}`.localeCompare(`${b.user_type}:${b.feature_key}`)
+    );
+}
+
+async function replaceUserPermissions(permissions: Permission[]): Promise<void> {
+    const existing = await loadUserPermissions();
+
+    await Promise.all(
+        existing
+            .filter(permission => permission.id)
+            .map(permission =>
+                vpsClient.delete(`/table-data/user_permissions/${encodeURIComponent(String(permission.id))}?pk=id`)
+            )
+    );
+
+    const rows = permissions.map(({ id, ...rest }) => ({
+        id: id || createLocalId(),
+        ...rest,
+    }));
+
+    if (rows.length > 0) {
+        await vpsClient.post('/table-data/user_permissions/bulk', rows);
+    }
+}
+
 export const PermissionsManagementPage: React.FC = () => {
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const [permissions, setPermissions] = useState<Permission[]>([]);
 
     const [loading, setLoading] = useState(true);
@@ -47,13 +96,7 @@ export const PermissionsManagementPage: React.FC = () => {
     const loadPermissions = async () => {
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('user_permissions')
-                .select('*')
-                .order('user_type, feature_key');
-
-            if (error) throw error;
-            setPermissions(data || []);
+            setPermissions(await loadUserPermissions());
         } catch (error) {
             console.error('Error loading permissions:', error);
             alert('Erro ao carregar permissões');
@@ -98,16 +141,7 @@ export const PermissionsManagementPage: React.FC = () => {
     const handleSave = async () => {
         try {
             setSaving(true);
-
-            // Delete all existing permissions
-            await supabase.from('user_permissions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-
-            // Insert new permissions
-            const { error } = await supabase
-                .from('user_permissions')
-                .insert(permissions.map(({ id, ...rest }) => rest));
-
-            if (error) throw error;
+            await replaceUserPermissions(permissions);
 
             alert('Permissões salvas com sucesso!');
             await loadPermissions();

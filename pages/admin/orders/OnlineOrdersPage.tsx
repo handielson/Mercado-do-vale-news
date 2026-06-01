@@ -4,7 +4,6 @@
  */
 import { useState, useEffect } from 'react';
 import { getOrders, updateOrderStatus, completeOnDeliveryOrder, cancelOrder } from '@/services/orderService';
-import { supabase } from '@/services/supabase';
 import { vpsApiService } from '@/services/vpsApiService';
 import { companySettingsService } from '@/services/companySettingsService';
 import type { CompanySettings } from '@/types/companySettings';

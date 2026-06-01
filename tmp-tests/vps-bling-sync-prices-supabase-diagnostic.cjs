@@ -38,24 +38,24 @@ set -eu
 cd /var/www/mdv-api
 node - <<'NODE'
 require('dotenv').config({ path: '/var/www/mdv-api/.env', quiet: true });
-const base = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\\/+$/, '') + '/rest/v1';
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
-const select = 'select=id,name,sku,status,category_id,price_retail,price_reseller,price_wholesale,price_cost,stock_quantity,track_inventory,bling_id,bling_parent_id,parent_id';
+const mysql = require('mysql2/promise');
+const select = 'id,name,sku,status,category_id,price_retail,price_reseller,price_wholesale,price_cost,stock_quantity,track_inventory,bling_id,bling_parent_id,parent_id';
 (async () => {
-  const res = await fetch(base + '/products?' + select, {
-    headers: {
-      apikey: key,
-      Authorization: 'Bearer ' + key,
-      'Range-Unit': 'items',
-      Range: '0-49',
-      Prefer: 'count=exact'
-    }
+  const pool = mysql.createPool({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+    waitForConnections: true,
+    connectionLimit: 1
   });
-  const text = await res.text();
+  const [rows] = await pool.query('SELECT ' + select + ' FROM products LIMIT 50');
+  await pool.end();
+  const text = JSON.stringify(rows);
   console.log(JSON.stringify({
-    ok: res.ok,
-    status: res.status,
-    contentRange: res.headers.get('content-range') || '',
+    ok: true,
+    status: 200,
+    rowCount: Array.isArray(rows) ? rows.length : 0,
     bodyPreview: text.slice(0, 300).replace(/[A-Za-z0-9_-]{32,}/g, '[REDACTED]')
   }));
 })().catch((err) => {

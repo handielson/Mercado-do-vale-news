@@ -4,12 +4,12 @@ import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSale
 import { SaleWithItems } from '../../../types/sale';
 import { cancelSale, refundSale, deleteSale } from '../../../services/saleService';
 import toast from 'react-hot-toast';
-import { supabase } from '../../../services/supabase';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { replaceWarrantyTags, applyWarrantyDisplayFlags, renderWarrantyBothCopies, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../../utils/warrantyTagReplacement';
-import { getCoinBalance } from '../../../services/cashbackService';
+import { getCoinBalance, getCoinsEarnedForReference } from '../../../services/cashbackService';
 import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
+import { warrantyTemplateService } from '../../../services/warrantyTemplates';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -121,8 +121,8 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
 
                     let days = 90;
                     if (product?.warranty_type === 'custom' && product.warranty_template_id) {
-                        const { data } = await supabase.from('warranty_templates').select('duration_days').eq('id', product.warranty_template_id).maybeSingle();
-                        if (data?.duration_days) days = data.duration_days;
+                        const template = await warrantyTemplateService.getById(product.warranty_template_id);
+                        if (template?.duration_days) days = template.duration_days;
                     } else {
                         const b = brandsByName.get(brand.toLowerCase());
                         if (b?.warranty_days) days = b.warranty_days;
@@ -190,15 +190,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                 customerId ? getCoinBalance(customerId).catch(() => null) : Promise.resolve(null),
                 customerId ? benefitService.getCustomerBenefitsStatus(customerId).catch(() => []) : Promise.resolve([]),
                 customerId
-                    ? supabase
-                        .from('coin_transactions')
-                        .select('amount')
-                        .eq('customer_id', customerId)
-                        .eq('reference_id', sale.id)
-                        .eq('type', 'earn_purchase')
-                        .maybeSingle()
-                        .then(({ data }) => data?.amount ?? 0)
-                        .catch(() => 0)
+                    ? getCoinsEarnedForReference(customerId, sale.id).catch(() => 0)
                     : Promise.resolve(0),
             ]);
             if (!settings) { toast.error('Configurações da empresa não encontradas'); return; }

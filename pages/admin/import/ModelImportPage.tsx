@@ -8,7 +8,7 @@ export const ModelImportPage: React.FC = () => {
 
   // Template CSV Link (Mock based on planned architecture)
   const handleDownloadTemplate = () => {
-    toast.info("A funcionalidade de download do template será conectada ao Supabase Storage na próxima etapa.");
+    toast.info("A funcionalidade de download do template será conectada ao Synology via VPS na próxima etapa.");
   };
 
   const handleSync = async () => {

@@ -101,6 +101,10 @@ function isPublicReadPath(pathname) {
 }
 
 function isPublicWritePath(pathname, method) {
+  if (method === 'POST' && /^\/products\/[^/]+\/view$/u.test(pathname)) {
+    return true;
+  }
+
   if (method === 'POST' && /^\/banners\/[^/]+\/(?:click|view)$/u.test(pathname)) {
     return true;
   }

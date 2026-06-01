@@ -28,7 +28,7 @@ import { QuoteCartProvider } from '@/contexts/QuoteCartContext';
 import { generateWhatsAppLink } from '@/utils/whatsappMessageGenerator';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { ShareCatalogButton } from '@/components/catalog/ShareCatalogButton';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import type { CustomerType } from '@/services/bannerService';
 import { CartIcon } from '@/components/store/CartIcon';
 import {
@@ -58,7 +58,7 @@ function CatalogContent() {
     const [promoData, setPromoData] = useState<Promotion | null>(null);
     const [promoTimeLeft, setPromoTimeLeft] = useState<{ days: number, hours: number, minutes: number, seconds: number } | null>(null);
 
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const [mobileView, setMobileView] = useState<'grid' | 'list'>('grid');
     const [autoDetectedBrand, setAutoDetectedBrand] = useState<string | null>(null);
     const [expandCats, setExpandCats] = useState(false);
@@ -73,6 +73,20 @@ function CatalogContent() {
         const observer = new ResizeObserver(update);
         observer.observe(header);
         return () => observer.disconnect();
+    }, []);
+
+    useEffect(() => {
+        const prefetchProductPage = () => {
+            import('../store/PublicProductPage').catch(() => undefined);
+        };
+
+        if ('requestIdleCallback' in window) {
+            const idleId = window.requestIdleCallback(prefetchProductPage, { timeout: 4000 });
+            return () => window.cancelIdleCallback(idleId);
+        }
+
+        const timer = window.setTimeout(prefetchProductPage, 2500);
+        return () => window.clearTimeout(timer);
     }, []);
 
     // Mapeia customer_type do banco (retail/wholesale/resale) → CustomerType do banner (varejo/revenda/atacado)

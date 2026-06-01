@@ -20,8 +20,8 @@ assert(
 );
 
 assert(
-  service.includes('buildProductSearchFilter(searchTerm)') && service.includes("].join(',')"),
-  'inventory search filter must be sent to PostgREST as a single-line logic tree'
+  service.includes('applyInventoryFilters') && service.includes('matchesSearch(product, filters.search!)'),
+  'inventory search filter must be preserved after moving product reads to VPS'
 );
 
 assert(

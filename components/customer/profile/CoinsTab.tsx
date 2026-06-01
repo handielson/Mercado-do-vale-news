@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Coins, ArrowUpRight, ArrowDownRight, Clock, Info, Gift, Flame, ReceiptText } from 'lucide-react';
-import { useSupabaseAuth } from '../../../hooks/useSupabaseAuth';
+import { useVpsAuth } from '../../../hooks/useVpsAuth';
 import { getCoinBalance, getCoinTransactions, coinsToReais, getCashbackSettings } from '../../../services/cashbackService';
 import type { CoinBalance, CoinTransaction } from '../../../types/cashback';
 import DailyCheckinWidget from '../../cashback/DailyCheckinWidget';
@@ -8,7 +8,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export function CoinsTab() {
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const [balance, setBalance] = useState<CoinBalance | null>(null);
     const [transactions, setTransactions] = useState<CoinTransaction[]>([]);
     const [loading, setLoading] = useState(true);

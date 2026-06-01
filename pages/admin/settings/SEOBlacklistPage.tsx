@@ -25,7 +25,7 @@ export const SEOBlacklistPage: React.FC = () => {
         try {
             setLoading(true);
             
-            // Busca os dados exclusivamente pela VPS, sem tocar no Supabase
+            // Busca os dados exclusivamente pela VPS, sem tocar no VPS
             // Usa noCache: true para furar o cache da API (Cache-Control: max-age)
             const vpsData = await vpsApiService.getProducts({ 
                 search: debouncedSearch.trim() || undefined,
@@ -65,7 +65,7 @@ export const SEOBlacklistPage: React.FC = () => {
             const newValue = !product.exclude_from_seo;
             
             // Envia a chamada APENAS para a VPS (MySQL), garantindo que
-            // nenhuma tabela/coluna desconhecida seja cobrada do Supabase.
+            // nenhuma tabela/coluna desconhecida seja cobrada do VPS.
             const ok = await vpsApiService.updateProductSeo(product.id, newValue);
 
             if (!ok) throw new Error("A VPS rejeitou a atualização.");

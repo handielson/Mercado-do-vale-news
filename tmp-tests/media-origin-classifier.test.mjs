@@ -30,19 +30,19 @@ test('classifies non-media VPS API URLs as external review items', () => {
   assert.equal(result.shouldMigrate, true);
 });
 
-test('classifies Supabase Storage images as migration candidates', () => {
+test('classifies legacy external storage images as migration candidates', () => {
   const result = classifyMediaUrl(
-    'https://cqbdyxxzmkgeghwkozts.supabase.co/storage/v1/object/public/catalog-banners/banner.png',
+    'https://legacy-media.example.com/storage/catalog-banners/banner.png',
   );
 
-  assert.equal(result.origin, 'supabase-storage');
+  assert.equal(result.origin, 'external');
   assert.equal(result.shouldMigrate, true);
-  assert.match(result.reason, /Supabase Storage/);
+  assert.match(result.reason, /External image/);
 });
 
-test('classifies Supabase REST API URLs as external instead of storage', () => {
+test('classifies non-image API URLs as external review items', () => {
   const result = classifyMediaUrl(
-    'https://cqbdyxxzmkgeghwkozts.supabase.co/rest/v1/company_settings?select=*',
+    'https://legacy-api.example.com/rest/v1/company_settings?select=*',
   );
 
   assert.equal(result.origin, 'external');

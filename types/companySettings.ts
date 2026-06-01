@@ -91,6 +91,14 @@ export interface CompanySettings {
     shopee_access_token?: string;
     shopee_refresh_token?: string;
 
+    // Bling Integration
+    bling_client_id?: string;
+    bling_client_secret?: string;
+    bling_callback_url?: string;
+    bling_access_token?: string | null;
+    bling_refresh_token?: string;
+    bling_token_expires_at?: string;
+
     created_at: string;
     updated_at: string;
 }
@@ -152,4 +160,12 @@ export interface CompanySettingsInput {
     shopee_shop_id?: string;
     shopee_access_token?: string;
     shopee_refresh_token?: string;
+
+    // Bling Integration
+    bling_client_id?: string;
+    bling_client_secret?: string;
+    bling_callback_url?: string;
+    bling_access_token?: string | null;
+    bling_refresh_token?: string | null;
+    bling_token_expires_at?: string | null;
 }

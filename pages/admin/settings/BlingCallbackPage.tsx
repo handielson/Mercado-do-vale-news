@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { supabase } from '../../../services/supabase';
+import { companySettingsService } from '../../../services/companySettingsService';
 
 type Status = 'processing' | 'success' | 'error';
 
@@ -36,22 +36,18 @@ export default function BlingCallbackPage() {
         try {
             // 1. Buscar credenciais do banco (client-side, autenticado)
             setMessage('Buscando credenciais...');
-            const { data: settings, error: dbError } = await supabase
-                .from('company_settings')
-                .select('id, bling_client_id, bling_client_secret, bling_callback_url')
-                .limit(1)
-                .maybeSingle();
+            const settings = await companySettingsService.get();
 
-            if (dbError || !settings?.bling_client_id || !settings?.bling_client_secret) {
+            if (!settings?.bling_client_id || !settings?.bling_client_secret) {
                 throw new Error('Credenciais Bling não encontradas. Configure o Client ID e Secret primeiro.');
             }
 
             const callbackUrl = settings.bling_callback_url ||
-                `${window.location.origin}/admin/settings/bling/callback`;
+                `${window.location.origin}/api/auth/callback/bling`;
 
             // 2. Trocar code por token via API (sem expor o secret num CORS request direto)
             setMessage('Obtendo token de acesso...');
-            const exchangeRes = await fetch('/api/bling-exchange', {
+            const exchangeRes = await fetch('/api/bling?resource=exchange', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -69,20 +65,15 @@ export default function BlingCallbackPage() {
 
             const tokens = await exchangeRes.json();
 
-            // 3. Salvar tokens no Supabase (client-side)
+            // 3. Salvar tokens no VPS (client-side)
             setMessage('Salvando conexão...');
             const expiresAt = new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString();
 
-            const { error: saveError } = await supabase
-                .from('company_settings')
-                .update({
-                    bling_access_token: tokens.access_token,
-                    bling_refresh_token: tokens.refresh_token || null,
-                    bling_token_expires_at: expiresAt,
-                })
-                .eq('id', settings.id);
-
-            if (saveError) throw new Error('Erro ao salvar tokens: ' + saveError.message);
+            await companySettingsService.update({
+                bling_access_token: tokens.access_token,
+                bling_refresh_token: tokens.refresh_token || null,
+                bling_token_expires_at: expiresAt,
+            });
 
             // Sucesso
             setStatus('success');

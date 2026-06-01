@@ -3,7 +3,7 @@ import { vpsClient } from './vpsClient';
 
 /**
  * VERSION SERVICE — VPS MySQL
- * Substitui versions.ts (localStorage) e versions-supabase.ts (Supabase).
+ * Substitui o antigo servico local e persiste os dados na VPS.
  * Backend: tabela `versions` no MySQL da VPS.
  */
 

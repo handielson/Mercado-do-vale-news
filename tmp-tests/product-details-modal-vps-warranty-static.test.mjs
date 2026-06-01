@@ -10,8 +10,8 @@ assert(
 );
 
 assert(
-  /from\('brands'\)[\s\S]*from\('categories'\)[\s\S]*from\('warranty_templates'\)/.test(source),
-  'ProductDetailsModal should keep warranty support-table lookups scoped outside products',
+  /brandService[\s\S]*categoryService[\s\S]*warrantyTemplateService/.test(source),
+  'ProductDetailsModal should keep warranty support lookups routed through services outside products',
 );
 
 assert(

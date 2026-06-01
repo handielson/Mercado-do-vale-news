@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getCurrentAuthUserId } from './authSession';
 import {
     StockMovement,
     StockAdjustmentInput,
@@ -7,6 +7,16 @@ import {
 } from '../types/inventory';
 import { Product } from '../types/product';
 import { vpsApiService } from './vpsApiService';
+import { vpsClient } from './vpsClient';
+
+interface TableDataResponse<T> {
+    rows?: T[];
+}
+
+interface UserCompanyRow {
+    id?: string;
+    company_id?: string | null;
+}
 
 const INVENTORY_PRODUCT_SELECT = [
     'id',
@@ -25,6 +35,46 @@ const INVENTORY_PRODUCT_SELECT = [
 
 function normalizeStockQuantity(product: { stock_quantity?: number | string | null; specs?: Record<string, any> | null }): number {
     return Number(product.stock_quantity ?? product.specs?.stock_quantity ?? 0) || 0;
+}
+
+function createLocalId(): string {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+        return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function loadStockMovementRows(): Promise<StockMovement[]> {
+    const allRows: StockMovement[] = [];
+    const pageSize = 200;
+
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<TableDataResponse<StockMovement>>(
+            `/table-data/stock_movements?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows.push(...rows);
+        if (rows.length < pageSize) break;
+    }
+
+    return allRows;
+}
+
+async function loadUserCompanyId(userId?: string): Promise<string | null> {
+    if (!userId) return null;
+    const pageSize = 200;
+
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<TableDataResponse<UserCompanyRow>>(
+            `/table-data/users?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        const user = rows.find(row => String(row.id || '') === String(userId));
+        if (user) return user.company_id ? String(user.company_id) : null;
+        if (rows.length < pageSize) break;
+    }
+
+    return null;
 }
 
 function escapeSearchTerm(value: string): string {
@@ -356,33 +406,27 @@ class InventoryService {
         }
 
         // Start transaction
-        const { data: user } = await supabase.auth.getUser();
-        const userId = user?.user?.id;
+        const userId = await getCurrentAuthUserId();
 
-        // Get company_id from user
-        const { data: userData } = await supabase
-            .from('users')
-            .select('company_id')
-            .eq('id', userId)
-            .single();
+        const companyId = await loadUserCompanyId(userId);
 
-        if (!userData?.company_id) {
+        if (!companyId) {
             throw new Error('User company not found');
         }
 
-        // Update product stock
-        const { error: updateError } = await supabase
-            .from('products')
-            .update({ stock_quantity: newQty })
-            .eq('id', adjustment.product_id);
+        const updated = await vpsApiService.updateProduct(adjustment.product_id, {
+            ...product,
+            stock_quantity: newQty
+        });
 
-        if (updateError) {
-            throw updateError;
+        if (!updated) {
+            throw new Error('Failed to update product stock on VPS');
         }
 
         // Record movement
         const movement: Partial<StockMovement> = {
-            company_id: userData.company_id,
+            id: createLocalId(),
+            company_id: companyId,
             product_id: adjustment.product_id,
             type: adjustment.type,
             quantity: adjustment.quantity,
@@ -391,20 +435,19 @@ class InventoryService {
             reason: adjustment.reason,
             notes: adjustment.notes,
             reference_id: adjustment.reference_id,
-            created_by: userId
+            created_by: userId || '',
+            created_at: new Date().toISOString()
         };
 
-        const { error: movementError } = await supabase
-            .from('stock_movements')
-            .insert(movement);
-
-        if (movementError) {
+        try {
+            await vpsClient.post<StockMovement>('/table-data/stock_movements', movement);
+        } catch (movementError) {
             console.error('Error recording stock movement:', movementError);
             // Rollback product update
-            await supabase
-                .from('products')
-                .update({ stock_quantity: previousQty })
-                .eq('id', adjustment.product_id);
+            await vpsApiService.updateProduct(adjustment.product_id, {
+                ...product,
+                stock_quantity: previousQty
+            });
             throw movementError;
         }
     }
@@ -413,19 +456,11 @@ class InventoryService {
      * Get stock movement history for a product
      */
     async getMovements(productId: string, limit: number = 50): Promise<StockMovement[]> {
-        const { data, error } = await supabase
-            .from('stock_movements')
-            .select('*')
-            .eq('product_id', productId)
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-        if (error) {
-            console.error('Error fetching stock movements:', error);
-            throw error;
-        }
-
-        return data || [];
+        const rows = await loadStockMovementRows();
+        return rows
+            .filter(row => String(row.product_id || '') === String(productId))
+            .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+            .slice(0, limit);
     }
 
     /**

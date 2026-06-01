@@ -43,8 +43,8 @@ assert.match(
 
 assert.match(
   service,
-  /restoreOrderStockByLocation[\s\S]*restore_product_stock_from_order_movements/,
-  'stockLocationService must expose restoreOrderStockByLocation using order restore RPC'
+  /restoreOrderStockByLocation[\s\S]*\/stock-locations\/order-restores/,
+  'stockLocationService must expose restoreOrderStockByLocation using the VPS restore endpoint'
 );
 
 assert.match(
@@ -61,20 +61,26 @@ assert.match(
 
 assert.match(
   orderService,
+  /restoreOrderStockByLocation\s*\(/,
+  'cancelOrder must attempt location restore through VPS'
+);
+
+assert.doesNotMatch(
+  orderService,
   /supabase\.rpc\(['"]increment_stock['"]/,
-  'legacy increment_stock fallback must remain for orders paid before migration'
+  'legacy increment_stock fallback must not remain after moving order restore to VPS'
 );
 
 assert.match(
   orderService,
-  /from\(['"]orders['"]\)[\s\S]*select\(['"][^'"]*payment_status[^'"]*status/,
-  'cancelOrder must read order payment/status before deciding whether to restore numeric stock'
+  /cancelOrder[\s\S]*loadOrderWithItemsById\(id\)[\s\S]*orderHadNumericStockDecrement\(orderBeforeCancel\)/,
+  'cancelOrder must read order payment/status from the VPS order record before deciding whether to restore numeric stock'
 );
 
 assert.match(
   orderService,
-  /from\(['"]order_items['"]\)[\s\S]*select\(['"]product_id,\s*quantity['"]/,
-  'cancelOrder fallback must fetch order items before restoring legacy numeric stock'
+  /cancelOrder[\s\S]*items = orderBeforeCancel\.items \|\| \[\]/,
+  'cancelOrder fallback must use VPS order items before restoring legacy numeric stock'
 );
 
 assert.match(

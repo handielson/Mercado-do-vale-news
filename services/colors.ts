@@ -1,14 +1,14 @@
 
 import { Color, ColorInput } from '../types/color';
-import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
 import { getCompanyId } from './companyContext';
 
 /**
- * COLOR SERVICE - Supabase Implementation
+ * COLOR SERVICE - VPS Implementation
  * Multi-tenant service with Row Level Security
  * 
  * ANTIGRAVITY PROTOCOL:
- * - Online storage via Supabase (not localStorage)
+ * - Online storage via VPS (not localStorage)
  * - Multi-tenant with company_id isolation
  * - Follows same pattern as brandService
  * - Includes hex_code mapping for visual preview
@@ -142,6 +142,65 @@ const LIST_TTL_MS = 5 * 60 * 1000;
 
 function clearListCache() { listCache = null; }
 
+type ColorRow = {
+    id: string;
+    company_id?: string | null;
+    name: string;
+    slug?: string | null;
+    hex_code?: string | null;
+    active?: boolean | number | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+};
+
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[]; total?: number };
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
+}
+
+function normalizeColor(row: ColorRow): Color {
+    return {
+        id: row.id,
+        name: row.name,
+        slug: row.slug || generateSlug(row.name),
+        hex_code: row.hex_code || undefined,
+        active: row.active === undefined || row.active === null ? true : Boolean(row.active),
+        created: row.created_at || '',
+        updated: row.updated_at || '',
+    };
+}
+
+function sortColors(colors: Color[]): Color[] {
+    return [...colors].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+function stripUndefined<T extends Record<string, unknown>>(input: T): Partial<T> {
+    return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as Partial<T>;
+}
+
+async function loadColorRows(): Promise<ColorRow[]> {
+    const companyId = await getCompanyId();
+    const pageSize = 200;
+    let offset = 0;
+    const rows: ColorRow[] = [];
+
+    while (true) {
+        const response = await vpsClient.get<TableDataResponse<ColorRow>>(
+            `/table-data/colors?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return companyId
+        ? rows.filter(row => !row.company_id || row.company_id === companyId)
+        : rows;
+}
+
 /**
  * List all colors
  */
@@ -151,23 +210,7 @@ async function list(): Promise<Color[]> {
 
     listInFlight = (async () => {
         try {
-            const companyId = await getCompanyId();
-            const { data, error } = await supabase
-                .from('colors')
-                .select('*')
-                .eq('company_id', companyId)
-                .order('name');
-            if (error) throw new Error(`Failed to fetch colors: ${error.message}`);
-
-            const result = (data || []).map(row => ({
-                id: row.id,
-                name: row.name,
-                slug: row.slug,
-                hex_code: row.hex_code,
-                active: row.active ?? true,
-                created: row.created_at,
-                updated: row.updated_at,
-            }));
+            const result = sortColors((await loadColorRows()).map(normalizeColor));
             listCache = { data: result, expiresAt: Date.now() + LIST_TTL_MS };
             return result;
         } finally {
@@ -182,29 +225,8 @@ async function list(): Promise<Color[]> {
  * Get color by ID
  */
 async function getById(id: string): Promise<Color | null> {
-    const companyId = await getCompanyId();
-
-    const { data, error } = await supabase
-        .from('colors')
-        .select('*')
-        .eq('id', id)
-        .eq('company_id', companyId)
-        .single();
-
-    if (error) {
-        if (error.code === 'PGRST116') return null;
-        throw new Error(`Failed to fetch color: ${error.message}`);
-    }
-
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        hex_code: data.hex_code,
-        active: data.active ?? true,
-        created: data.created_at,
-        updated: data.updated_at
-    };
+    const color = (await loadColorRows()).find(row => row.id === id);
+    return color ? normalizeColor(color) : null;
 }
 
 /**
@@ -217,79 +239,43 @@ async function create(input: ColorInput): Promise<Color> {
     // Auto-detect hex_code from COLOR_MAP if not provided
     const hex_code = input.hex_code || COLOR_MAP[input.name] || '#000000';
 
-    const { data, error } = await supabase
-        .from('colors')
-        .insert({
-            company_id: companyId,
-            name: input.name,
-            slug,
-            hex_code,
-            active: input.active !== undefined ? input.active : true
-        })
-        .select()
-        .single();
-
-    if (error) throw new Error(`Failed to create color: ${error.message}`);
+    const data = await vpsClient.post<ColorRow>('/table-data/colors', {
+        company_id: companyId,
+        name: input.name,
+        slug,
+        hex_code,
+        active: input.active !== undefined ? input.active : true
+    });
 
     clearListCache();
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        hex_code: data.hex_code,
-        active: data.active,
-        created: data.created_at,
-        updated: data.updated_at
-    };
+    return normalizeColor(data);
 }
 
 /**
  * Update existing color
  */
 async function update(id: string, input: ColorInput): Promise<Color> {
-    const companyId = await getCompanyId();
     const slug = generateSlug(input.name);
 
-    const { data, error } = await supabase
-        .from('colors')
-        .update({
+    const data = await vpsClient.patch<ColorRow>(
+        `/table-data/colors/${encodeURIComponent(id)}?pk=id`,
+        stripUndefined({
             name: input.name,
             slug,
             hex_code: input.hex_code !== undefined ? input.hex_code : undefined,
             active: input.active !== undefined ? input.active : undefined
         })
-        .eq('id', id)
-        .eq('company_id', companyId)
-        .select()
-        .single();
-
-    if (error) throw new Error(`Failed to update color: ${error.message}`);
+    );
 
     clearListCache();
-    return {
-        id: data.id,
-        name: data.name,
-        slug: data.slug,
-        hex_code: data.hex_code,
-        active: data.active,
-        created: data.created_at,
-        updated: data.updated_at
-    };
+    return normalizeColor(data);
 }
 
 /**
  * Delete color
  */
 async function deleteColor(id: string): Promise<void> {
-    const companyId = await getCompanyId();
-
-    const { error } = await supabase
-        .from('colors')
-        .delete()
-        .eq('id', id)
-        .eq('company_id', companyId);
-
-    if (error) throw new Error(`Failed to delete color: ${error.message}`);
+    await vpsClient.delete(`/table-data/colors/${encodeURIComponent(id)}?pk=id`);
     clearListCache();
 }
 
@@ -297,26 +283,7 @@ async function deleteColor(id: string): Promise<void> {
  * Get only active colors
  */
 async function listActive(): Promise<Color[]> {
-    const companyId = await getCompanyId();
-
-    const { data, error } = await supabase
-        .from('colors')
-        .select('*')
-        .eq('company_id', companyId)
-        .eq('active', true)
-        .order('name');
-
-    if (error) throw new Error(`Failed to fetch active colors: ${error.message}`);
-
-    return (data || []).map(row => ({
-        id: row.id,
-        name: row.name,
-        slug: row.slug,
-        hex_code: row.hex_code,
-        active: row.active,
-        created: row.created_at,
-        updated: row.updated_at
-    }));
+    return (await list()).filter(color => color.active);
 }
 
 /**

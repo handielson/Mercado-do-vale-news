@@ -27,7 +27,7 @@ assert(
 
 assert(
   vpsServer.includes("fastify.post('/team/delivery'") &&
-    vpsServer.includes("supabaseRestInsert('team_members'"),
+    vpsServer.includes("vpsDbInsert('team_members'"),
   'VPS server must expose the delivery creation endpoint backed by the existing team_members table',
 );
 

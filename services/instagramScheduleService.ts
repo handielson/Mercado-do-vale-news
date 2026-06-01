@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
 
 export type ContentType = 'story' | 'reels' | 'carrossel' | 'post';
 
@@ -31,69 +31,64 @@ export interface InstagramSlot {
 
 export type InstagramSlotInput = Omit<InstagramSlot, 'id' | 'created_at' | 'updated_at'>;
 
+interface TableDataResponse {
+    rows?: InstagramSlot[];
+}
+
+function sortSlots(slots: InstagramSlot[]): InstagramSlot[] {
+    return [...slots].sort((a, b) => (
+        a.day_of_week - b.day_of_week ||
+        String(a.scheduled_time ?? '').localeCompare(String(b.scheduled_time ?? ''))
+    ));
+}
+
+async function loadSlots(): Promise<InstagramSlot[]> {
+    const allRows: InstagramSlot[] = [];
+    const pageSize = 200;
+
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<TableDataResponse>(
+            `/table-data/instagram_schedule?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows.push(...rows);
+        if (rows.length < pageSize) break;
+    }
+
+    return sortSlots(allRows);
+}
+
 export const instagramScheduleService = {
     async list(): Promise<InstagramSlot[]> {
-        const { data, error } = await supabase
-            .from('instagram_schedule')
-            .select('*')
-            .order('day_of_week')
-            .order('scheduled_time');
-        if (error) throw error;
-        return data || [];
+        return loadSlots();
     },
 
     async listByDay(dayOfWeek: number): Promise<InstagramSlot[]> {
-        const { data, error } = await supabase
-            .from('instagram_schedule')
-            .select('*')
-            .eq('day_of_week', dayOfWeek)
-            .order('scheduled_time');
-        if (error) throw error;
-        return data || [];
+        const slots = await loadSlots();
+        return slots.filter((slot) => slot.day_of_week === dayOfWeek);
     },
 
     async listActiveByDay(dayOfWeek: number): Promise<InstagramSlot[]> {
-        const { data, error } = await supabase
-            .from('instagram_schedule')
-            .select('*')
-            .eq('day_of_week', dayOfWeek)
-            .eq('active', true)
-            .order('scheduled_time');
-        if (error) throw error;
-        return data || [];
+        const slots = await loadSlots();
+        return slots.filter((slot) => slot.day_of_week === dayOfWeek && slot.active);
     },
 
     async create(input: InstagramSlotInput): Promise<InstagramSlot> {
-        const { data, error } = await supabase
-            .from('instagram_schedule')
-            .insert(input)
-            .select()
-            .single();
-        if (error) throw error;
-        return data;
+        return vpsClient.post<InstagramSlot>('/table-data/instagram_schedule', input);
     },
 
     async update(id: string, input: Partial<InstagramSlotInput>): Promise<InstagramSlot> {
-        const { data, error } = await supabase
-            .from('instagram_schedule')
-            .update(input)
-            .eq('id', id)
-            .select()
-            .single();
-        if (error) throw error;
-        return data;
+        return vpsClient.patch<InstagramSlot>(
+            `/table-data/instagram_schedule/${encodeURIComponent(id)}?pk=id`,
+            input
+        );
     },
 
     async delete(id: string): Promise<void> {
-        const { error } = await supabase.from('instagram_schedule').delete().eq('id', id);
-        if (error) throw error;
+        await vpsClient.delete(`/table-data/instagram_schedule/${encodeURIComponent(id)}?pk=id`);
     },
 
     async toggleActive(id: string, active: boolean): Promise<void> {
-        const { error } = await supabase
-            .from('instagram_schedule')
-            .update({ active })
-            .eq('id', id);
-        if (error) throw error;
+        await vpsClient.patch(`/table-data/instagram_schedule/${encodeURIComponent(id)}?pk=id`, { active });
     },
 };

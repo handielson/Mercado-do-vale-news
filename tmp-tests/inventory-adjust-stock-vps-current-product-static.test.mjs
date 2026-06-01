@@ -21,8 +21,8 @@ assert(
 );
 
 assert(
-  /supabase\s*\.\s*from\('products'\)[\s\S]{0,160}\.update\(\{\s*stock_quantity: newQty\s*\}\)/.test(block),
-  'adjustStock should keep the existing Supabase stock write until the write path is migrated',
+  /vpsApiService\.updateProduct\(adjustment\.product_id,[\s\S]*stock_quantity:\s*newQty/.test(block),
+  'adjustStock should write product stock through the VPS product API',
 );
 
 console.log('inventory adjustStock reads current product from VPS');

@@ -5,15 +5,16 @@ import {
     XCircle, Circle, X
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '../../../services/supabase';
-import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings, FieldMappingConfig, SYSTEM_FIELDS, loadFieldMappings, saveFieldMappings, getDefaultFieldMappings, ColorMapping, loadColorMappings, saveColorMappings, blingService, FetchProgress } from '../../../services/blingService';
+import { buildAuthHeaders } from '../../../services/authSession';
+import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings, FieldMappingConfig, SYSTEM_FIELDS, loadFieldMappings, saveFieldMappings, getDefaultFieldMappings, ColorMapping, loadColorMappings, saveColorMappings, blingService, FetchProgress, isBlingReconnectRequired } from '../../../services/blingService';
 import { categoryService } from '../../../services/categories';
-import { modelService } from '../../../services/models-new';
+import { modelService } from '../../../services/models';
 import { colorService } from '../../../services/colors';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../../services/vpsProxyBase';
+import { companySettingsService } from '../../../services/companySettingsService';
 import { Category } from '../../../types/category';
-import { Model } from '../../../types/model-architecture';
+import { Model } from '../../../types/model';
 import { Color } from '../../../types/color';
 import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -27,10 +28,75 @@ interface BlingCredentials {
     bling_callback_url: string;
 }
 
+interface BlingConnectDebug {
+    captured_at: string;
+    phase: string;
+    page_url: string;
+    origin: string;
+    callback_url: string;
+    callback_host: string | null;
+    callback_path: string | null;
+    auth_url: string | null;
+    auth_host: string | null;
+    client_id_masked: string;
+    has_client_secret: boolean;
+    is_connected: boolean;
+    token_expires_at: string | null;
+    error: string | null;
+}
+
 type Tab = 'config' | 'products' | 'mappings' | 'webhook' | 'parents-backfill';
+type WebhookKind = 'names' | 'prices' | 'stock';
+type WebhookManualStatus = 'auto' | 'online' | 'offline';
 
 const CACHE_KEY = 'bling_products_cache';
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutos
+const BLING_CONNECT_DEBUG_KEY = 'bling_connect_debug';
+const BLING_WEBHOOK_DEBUG_KEY = 'bling_webhook_debug';
+const BLING_WEBHOOK_STATUS_KEY = 'bling_webhook_status_overrides';
+
+const WEBHOOK_KINDS: Array<{ kind: WebhookKind; label: string; description: string }> = [
+    { kind: 'names', label: 'Webhook Nomes', description: 'Atualizacao de nome e cadastro do produto' },
+    { kind: 'prices', label: 'Webhook Precos', description: 'Atualizacao de preco enviada pelo Bling' },
+    { kind: 'stock', label: 'Webhook Estoque', description: 'Movimentacao e saldo de estoque' },
+];
+
+function loadWebhookStatusOverrides(): Record<WebhookKind, WebhookManualStatus> {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(BLING_WEBHOOK_STATUS_KEY) || '{}');
+        return {
+            names: parsed.names || 'auto',
+            prices: parsed.prices || 'auto',
+            stock: parsed.stock || 'auto',
+        };
+    } catch {
+        return { names: 'auto', prices: 'auto', stock: 'auto' };
+    }
+}
+
+function saveWebhookStatusOverrides(value: Record<WebhookKind, WebhookManualStatus>) {
+    localStorage.setItem(BLING_WEBHOOK_STATUS_KEY, JSON.stringify(value));
+}
+
+function getDefaultBlingCallbackUrl(): string {
+    return `${window.location.origin}/api/auth/callback/bling`;
+}
+
+function maskClientId(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    if (trimmed.length <= 8) return `${trimmed.slice(0, 2)}...${trimmed.slice(-2)}`;
+    return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+}
+
+function parseUrlParts(value: string): { host: string | null; path: string | null } {
+    try {
+        const url = new URL(value);
+        return { host: url.host, path: url.pathname };
+    } catch {
+        return { host: null, path: null };
+    }
+}
 
 interface BlingCache {
     timestamp: number;
@@ -63,6 +129,44 @@ function formatCacheAge(timestamp: number): string {
     if (mins < 1) return 'agora';
     if (mins === 1) return 'há 1 min';
     return `há ${mins} min`;
+}
+
+function buildBlingFetchDebugPayload(input: {
+    error: any;
+    query: string;
+    forceRefresh: boolean;
+    phase: string;
+    count: number;
+    productsLoaded: number;
+    isConnected: boolean;
+    tokenExpiresAt: string | null;
+    cacheTimestamp: number | null;
+}) {
+    const errorMessage = input.error?.message || String(input.error || 'Erro desconhecido');
+    const payload = {
+        scope: 'bling-products-fetch',
+        captured_at: new Date().toISOString(),
+        page_url: typeof window !== 'undefined' ? window.location.href : null,
+        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+        query: input.query,
+        forceRefresh: input.forceRefresh,
+        fetchPhase: input.phase,
+        fetchCount: input.count,
+        productsLoaded: input.productsLoaded,
+        isConnected: input.isConnected,
+        tokenExpiresAt: input.tokenExpiresAt,
+        cacheTimestamp: input.cacheTimestamp,
+        error: {
+            name: input.error?.name || null,
+            message: errorMessage,
+            stack: input.error?.stack || null,
+        },
+    };
+
+    return {
+        title: 'Debug busca produtos Bling',
+        text: JSON.stringify(payload, null, 2),
+    };
 }
 
 interface CategoryTreeOption {
@@ -160,13 +264,21 @@ export default function BlingPage() {
     const [credentials, setCredentials] = useState<BlingCredentials>({
         bling_client_id: '',
         bling_client_secret: '',
-        bling_callback_url: `${window.location.origin}/admin/settings/bling/callback`,
+        bling_callback_url: getDefaultBlingCallbackUrl(),
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [showSecret, setShowSecret] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
     const [tokenExpiresAt, setTokenExpiresAt] = useState<string | null>(null);
+    const [lastConnectDebug, setLastConnectDebug] = useState<BlingConnectDebug | null>(() => {
+        try {
+            const raw = sessionStorage.getItem(BLING_CONNECT_DEBUG_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch {
+            return null;
+        }
+    });
 
     // ── Products import ──
     const [fetching, setFetching] = useState(false);
@@ -183,6 +295,7 @@ export default function BlingPage() {
     const [importItemStatus, setImportItemStatus] = useState<Map<number, { status: 'pending' | 'processing' | 'success' | 'error'; reason?: string }>>(new Map());
     const [fetchPhase, setFetchPhase] = useState<'idle' | 'fetching_products' | 'fetching_stock' | 'done'>('idle');
     const [fetchCount, setFetchCount] = useState(0);
+    const [lastBlingFetchDebug, setLastBlingFetchDebug] = useState<{ title: string; text: string } | null>(null);
     const [importResult, setImportResult] = useState<ImportResult | null>(null);
     const [cacheInfo, setCacheInfo] = useState<{ timestamp: number } | null>(null);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -231,9 +344,14 @@ export default function BlingPage() {
     const [reimportingIds, setReimportingIds] = useState<Set<string>>(new Set());
     const [reimportResults, setReimportResults] = useState<Map<string, { ok: boolean; message: string }>>(new Map());
     const [reimportingAll, setReimportingAll] = useState(false);
-    const [webhookLogs, setWebhookLogs] = useState<{ id: string; payload: any; received_at: string }[] | null>(null);
+    const [webhookLogs, setWebhookLogs] = useState<{ id: string; source?: string; payload: any; received_at: string }[] | null>(null);
     const [loadingLogs, setLoadingLogs] = useState(false);
     const [logsTableExists, setLogsTableExists] = useState<boolean | null>(null);
+    const [webhookStatusOverrides, setWebhookStatusOverrides] = useState<Record<WebhookKind, WebhookManualStatus>>(loadWebhookStatusOverrides);
+    const [testingWebhookKind, setTestingWebhookKind] = useState<WebhookKind | 'all' | null>(null);
+    const [webhookDebug, setWebhookDebug] = useState<any | null>(() => {
+        try { return JSON.parse(sessionStorage.getItem(BLING_WEBHOOK_DEBUG_KEY) || 'null'); } catch { return null; }
+    });
 
     const categoryTreeOptions = useMemo(() => buildCategoryTreeOptions(categories), [categories]);
     const filteredCategoryTreeOptions = useMemo(() => {
@@ -257,7 +375,7 @@ export default function BlingPage() {
         loadCredentials();
         refreshCategories();
         modelService.list().then(mods => {
-            const sorted = [...mods].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            const sorted = [...mods].sort((a, b) => new Date(b.created || b.updated || 0).getTime() - new Date(a.created || a.updated || 0).getTime());
             setModels(sorted);
         }).catch(() => { });
         colorService.list().then(cols => setSystemColors(cols)).catch(() => { });
@@ -274,7 +392,15 @@ export default function BlingPage() {
                 server_config: 'Erro de configuração do servidor.',
                 callback_failed: 'Erro ao processar o callback.',
             };
-            const msg = errMap[params.get('error')!] || `Erro: ${params.get('error')}`;
+            const detail = params.get('detail');
+            const status = params.get('status');
+            const msg = [
+                errMap[params.get('error')!] || `Erro: ${params.get('error')}`,
+                status ? `status ${status}` : '',
+                detail ? decodeURIComponent(detail) : '',
+            ].filter(Boolean).join(' - ');
+            const callbackUrl = credentials.bling_callback_url.trim() || getDefaultBlingCallbackUrl();
+            rememberConnectDebug(buildConnectDebug(`callback_error_${params.get('error')}`, callbackUrl, null, msg));
             toast.error(msg);
             window.history.replaceState({}, '', window.location.pathname);
         }
@@ -300,20 +426,21 @@ export default function BlingPage() {
         };
     }, []);
 
+    useEffect(() => {
+        if (activeTab === 'webhook' && webhookLogs === null) {
+            void loadWebhookLogs();
+        }
+    }, [activeTab, webhookLogs]);
+
     async function loadCredentials() {
         try {
-            const { data, error } = await supabase
-                .from('company_settings')
-                .select('bling_client_id, bling_client_secret, bling_access_token, bling_token_expires_at, bling_callback_url')
-                .limit(1)
-                .maybeSingle();
+            const data = await companySettingsService.get();
 
-            if (error) throw error;
             if (data) {
                 setCredentials({
                     bling_client_id: data.bling_client_id || '',
                     bling_client_secret: data.bling_client_secret || '',
-                    bling_callback_url: data.bling_callback_url || `${window.location.origin}/admin/settings/bling/callback`,
+                    bling_callback_url: data.bling_callback_url || getDefaultBlingCallbackUrl(),
                 });
                 setIsConnected(!!data.bling_access_token);
                 setTokenExpiresAt(data.bling_token_expires_at || null);
@@ -371,32 +498,11 @@ export default function BlingPage() {
 
         setSaving(true);
         try {
-            const { data: existing } = await supabase
-                .from('company_settings')
-                .select('id')
-                .limit(1)
-                .maybeSingle();
-
-            if (existing) {
-                const { error } = await supabase
-                    .from('company_settings')
-                    .update({
-                        bling_client_id: credentials.bling_client_id.trim(),
-                        bling_client_secret: credentials.bling_client_secret.trim(),
-                        bling_callback_url: credentials.bling_callback_url.trim(),
-                    })
-                    .eq('id', existing.id);
-                if (error) throw error;
-            } else {
-                const { error } = await supabase
-                    .from('company_settings')
-                    .insert({
-                        bling_client_id: credentials.bling_client_id.trim(),
-                        bling_client_secret: credentials.bling_client_secret.trim(),
-                        bling_callback_url: credentials.bling_callback_url.trim(),
-                    });
-                if (error) throw error;
-            }
+            await companySettingsService.update({
+                bling_client_id: credentials.bling_client_id.trim(),
+                bling_client_secret: credentials.bling_client_secret.trim(),
+                bling_callback_url: credentials.bling_callback_url.trim(),
+            });
             toast.success('Credenciais salvas!');
         } catch (err: any) {
             toast.error('Erro ao salvar: ' + err.message);
@@ -405,29 +511,131 @@ export default function BlingPage() {
         }
     }
 
-    function handleConnectBling() {
+    function rememberConnectDebug(debug: BlingConnectDebug) {
+        setLastConnectDebug(debug);
+        try {
+            sessionStorage.setItem(BLING_CONNECT_DEBUG_KEY, JSON.stringify(debug));
+        } catch { /* ignore */ }
+    }
+
+    function buildConnectDebug(phase: string, callbackUrl: string, authUrl: string | null = null, error: string | null = null): BlingConnectDebug {
+        const callbackParts = parseUrlParts(callbackUrl);
+        const authParts = authUrl ? parseUrlParts(authUrl) : { host: null, path: null };
+        return {
+            captured_at: new Date().toISOString(),
+            phase,
+            page_url: window.location.href,
+            origin: window.location.origin,
+            callback_url: callbackUrl,
+            callback_host: callbackParts.host,
+            callback_path: callbackParts.path,
+            auth_url: authUrl,
+            auth_host: authParts.host,
+            client_id_masked: maskClientId(credentials.bling_client_id),
+            has_client_secret: !!credentials.bling_client_secret.trim(),
+            is_connected: isConnected,
+            token_expires_at: tokenExpiresAt,
+            error,
+        };
+    }
+
+    function handleConnectBling(event?: React.MouseEvent<HTMLButtonElement>) {
+        event?.preventDefault();
+        event?.stopPropagation();
+
+        let callbackUrl = credentials.bling_callback_url.trim() || getDefaultBlingCallbackUrl();
+        if (!callbackUrl.startsWith('http')) {
+            callbackUrl = `${window.location.origin}${callbackUrl}`;
+        }
+
         if (!credentials.bling_client_id.trim()) {
+            rememberConnectDebug(buildConnectDebug('blocked_missing_client_id', callbackUrl, null, 'Client ID vazio'));
             toast.error('Salve o Client ID antes de conectar.');
             return;
         }
 
-        let callbackUrl = credentials.bling_callback_url.trim() || `${window.location.origin}/admin/settings/bling/callback`;
-        // Ensure callback URL is always absolute
-        if (!callbackUrl.startsWith('http')) {
-            callbackUrl = `${window.location.origin}${callbackUrl}`;
-        }
-        const authUrl = new URL('https://www.bling.com.br/Api/v3/oauth/authorize');
-        authUrl.searchParams.set('response_type', 'code');
-        authUrl.searchParams.set('client_id', credentials.bling_client_id.trim());
-        authUrl.searchParams.set('redirect_uri', callbackUrl);
-        authUrl.searchParams.set('state', 'bling_oauth');
+        try {
+            new URL(callbackUrl);
+            const authUrl = new URL('https://www.bling.com.br/Api/v3/oauth/authorize');
+            authUrl.searchParams.set('response_type', 'code');
+            authUrl.searchParams.set('client_id', credentials.bling_client_id.trim());
+            authUrl.searchParams.set('redirect_uri', callbackUrl);
+            authUrl.searchParams.set('state', 'bling_oauth');
 
-        window.location.href = authUrl.toString();
+            const authUrlText = authUrl.toString();
+            rememberConnectDebug(buildConnectDebug('redirecting_to_bling', callbackUrl, authUrlText));
+            toast.info('Abrindo autorização do Bling...');
+            window.location.assign(authUrlText);
+        } catch (err: any) {
+            rememberConnectDebug(buildConnectDebug('blocked_invalid_url', callbackUrl, null, err?.message || 'URL inválida'));
+            toast.error('URL de callback inválida. Confira o campo de redirecionamento.');
+        }
     }
 
     function copyCallbackUrl() {
         navigator.clipboard.writeText(credentials.bling_callback_url);
         toast.success('URL copiada!');
+    }
+
+    function copyConnectDebug() {
+        if (!lastConnectDebug) return;
+        navigator.clipboard.writeText(JSON.stringify(lastConnectDebug, null, 2));
+        toast.success('Debug OAuth copiado!');
+    }
+
+    function rememberWebhookDebug(phase: string, extra: Record<string, any> = {}) {
+        const callbackUrl = credentials.bling_callback_url.trim() || getDefaultBlingCallbackUrl();
+        const payload = {
+            captured_at: new Date().toISOString(),
+            phase,
+            page_url: window.location.href,
+            origin: window.location.origin,
+            urls: {
+                webhook: `${window.location.origin}/api/bling-webhook`,
+                callback: callbackUrl.startsWith('http') ? callbackUrl : `${window.location.origin}${callbackUrl}`,
+                legacy_webhook: `${window.location.origin}/api/bling?resource=webhook`,
+                webhook_logs: `${window.location.origin}/api/bling?resource=webhook-logs`,
+                webhook_test: `${window.location.origin}/api/bling?resource=webhook-test`,
+                bling_dashboard: blingDashboardUrl,
+            },
+            is_connected: isConnected,
+            token_expires_at: tokenExpiresAt,
+            logs_table_exists: logsTableExists,
+            overrides: webhookStatusOverrides,
+            ...extra,
+        };
+        setWebhookDebug(payload);
+        try {
+            sessionStorage.setItem(BLING_WEBHOOK_DEBUG_KEY, JSON.stringify(payload));
+        } catch { /* ignore */ }
+        return payload;
+    }
+
+    async function loadWebhookLogs() {
+        setLoadingLogs(true);
+        try {
+            const res = await fetch('/api/bling?resource=webhook-logs');
+            const json = await res.json();
+            setLogsTableExists(json.tableExists ?? false);
+            setWebhookLogs(json.logs || []);
+            rememberWebhookDebug('webhook_logs_loaded', {
+                ok: json.ok,
+                tableExists: json.tableExists ?? false,
+                logCount: Array.isArray(json.logs) ? json.logs.length : 0,
+                error: json.error || null,
+            });
+        } catch (e: any) {
+            rememberWebhookDebug('webhook_logs_error', { error: e?.message || String(e) });
+            toast.error('Erro ao carregar logs: ' + e.message);
+        } finally {
+            setLoadingLogs(false);
+        }
+    }
+
+    function copyWebhookDebug() {
+        if (!webhookDebug) return;
+        navigator.clipboard.writeText(JSON.stringify(webhookDebug, null, 2));
+        toast.success('Debug do webhook copiado!');
     }
 
     function copyImportErrorDebug(error: any) {
@@ -499,15 +707,12 @@ export default function BlingPage() {
             // 3. Sincroniza também na VPS MySQL (fire-and-forget)
             if (product.id) {
                 const fiscalPath = `/products/${product.id}/fiscal`;
-                const { data } = await supabase.auth.getSession();
-                const token = data.session?.access_token;
                 fetch(buildVpsUrl(fiscalPath, { method: 'PATCH' }), {
                     method: 'PATCH',
-                    headers: {
+                    headers: await buildAuthHeaders({
                         'Content-Type': 'application/json',
                         ...getVpsSyncHeaders(),
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                    },
+                    }),
                     body: JSON.stringify({ ncm: ncm || undefined, cest: fiscalCest.trim() || undefined }),
                 }).catch(() => {});
             }
@@ -537,6 +742,7 @@ export default function BlingPage() {
         setImportItemStatus(new Map());
         setFetchPhase('idle');
         setFetchCount(0);
+        setLastBlingFetchDebug(null);
 
         const handleProgress = (p: FetchProgress) => {
             setFetchPhase(p.phase);
@@ -593,7 +799,23 @@ export default function BlingPage() {
             const activeIds = new Set(products.filter(p => p.situacao === 'A' && !existing.has(p.id) && Number(p.stock_quantity) > 0).map(p => p.id));
             setSelectedIds(activeIds);
         } catch (err: any) {
-            toast.error('Erro ao buscar produtos: ' + err.message);
+            if (isBlingReconnectRequired(err)) {
+                setIsConnected(false);
+                setTokenExpiresAt(null);
+            }
+            const debugPayload = buildBlingFetchDebugPayload({
+                error: err,
+                query: blingSearch.trim(),
+                forceRefresh,
+                phase: fetchPhase,
+                count: fetchCount,
+                productsLoaded: blingProducts.length,
+                isConnected,
+                tokenExpiresAt,
+                cacheTimestamp: cacheInfo?.timestamp ?? null,
+            });
+            setLastBlingFetchDebug(debugPayload);
+            toast.error('Erro ao buscar produtos: ' + (err?.message || String(err)));
         } finally {
             setFetching(false);
         }
@@ -1095,7 +1317,7 @@ export default function BlingPage() {
                                         value={credentials.bling_callback_url}
                                         onChange={e => setCredentials({ ...credentials, bling_callback_url: e.target.value })}
                                         className="flex-1 px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono text-sm bg-slate-50"
-                                        placeholder="https://seudominio.com/admin/settings/bling/callback"
+                                        placeholder="https://www.mercadodovale.com.br/api/auth/callback/bling"
                                     />
                                     <button onClick={copyCallbackUrl} className="flex-shrink-0 p-3 hover:bg-slate-100 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-700">
                                         <Copy className="w-4 h-4" />
@@ -1113,6 +1335,7 @@ export default function BlingPage() {
                                     Clique em <strong>"Conectar com Bling"</strong> para autorizar via OAuth2. Você será redirecionado para o Bling e voltará automaticamente.
                                 </p>
                                 <button
+                                    type="button"
                                     onClick={handleConnectBling}
                                     disabled={!credentials.bling_client_id}
                                     className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1120,6 +1343,48 @@ export default function BlingPage() {
                                     <ExternalLink className="w-5 h-5" />
                                     {isConnected && !tokenExpired ? 'Reconectar com Bling' : 'Conectar com Bling'}
                                 </button>
+                                {lastConnectDebug && (
+                                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2 text-amber-900">
+                                                <Info className="w-4 h-4" />
+                                                <span className="text-sm font-semibold">Debug OAuth Bling</span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={copyConnectDebug}
+                                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                                            >
+                                                <Copy className="w-3.5 h-3.5" />
+                                                Copiar debug
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-amber-950">
+                                            <div><span className="font-semibold">Fase:</span> {lastConnectDebug.phase}</div>
+                                            <div><span className="font-semibold">Capturado:</span> {lastConnectDebug.captured_at}</div>
+                                            <div><span className="font-semibold">Origem:</span> {lastConnectDebug.origin}</div>
+                                            <div><span className="font-semibold">Callback host:</span> {lastConnectDebug.callback_host || 'inválido'}</div>
+                                            <div><span className="font-semibold">Callback path:</span> {lastConnectDebug.callback_path || 'inválido'}</div>
+                                            <div><span className="font-semibold">Auth host:</span> {lastConnectDebug.auth_host || '-'}</div>
+                                            <div><span className="font-semibold">Client ID:</span> {lastConnectDebug.client_id_masked || 'vazio'}</div>
+                                            <div><span className="font-semibold">Client Secret:</span> {lastConnectDebug.has_client_secret ? 'preenchido' : 'vazio'}</div>
+                                        </div>
+                                        {lastConnectDebug.error && (
+                                            <p className="text-xs font-medium text-red-700">{lastConnectDebug.error}</p>
+                                        )}
+                                        {lastConnectDebug.auth_url && (
+                                            <a
+                                                href={lastConnectDebug.auth_url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center gap-2 text-xs font-semibold text-green-700 hover:text-green-800 underline"
+                                            >
+                                                <ExternalLink className="w-3.5 h-3.5" />
+                                                Abrir URL OAuth em nova aba
+                                            </a>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Link Rápido Bling */}
@@ -1336,7 +1601,7 @@ export default function BlingPage() {
                                                     type="button"
                                                     title="Atualizar modelos"
                                                     onClick={() => modelService.list().then(mods => {
-                                                        const sorted = [...mods].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                                                        const sorted = [...mods].sort((a, b) => new Date(b.created || b.updated || 0).getTime() - new Date(a.created || a.updated || 0).getTime());
                                                         setModels(sorted);
                                                     }).catch(() => { })}
                                                     className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors text-slate-500 flex-shrink-0"
@@ -1433,6 +1698,37 @@ export default function BlingPage() {
                                                 </div>
                                             )}
                                         </div>
+
+                                            {lastBlingFetchDebug && (
+                                                <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-3">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="flex items-start gap-2 min-w-0">
+                                                            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                                                            <div className="min-w-0">
+                                                                <p className="text-sm font-semibold text-red-800">{lastBlingFetchDebug.title}</p>
+                                                                <p className="text-xs text-red-700">Copie este conteudo para diagnosticar a busca do Bling.</p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={async () => {
+                                                                await navigator.clipboard.writeText(lastBlingFetchDebug.text);
+                                                                toast.success('Debug copiado.');
+                                                            }}
+                                                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition-colors flex-shrink-0"
+                                                        >
+                                                            <Copy className="w-3.5 h-3.5" />
+                                                            Copiar debug
+                                                        </button>
+                                                    </div>
+                                                    <textarea
+                                                        readOnly
+                                                        value={lastBlingFetchDebug.text}
+                                                        onFocus={e => e.currentTarget.select()}
+                                                        className="w-full min-h-[190px] rounded-lg border border-red-200 bg-white px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-700 outline-none focus:ring-2 focus:ring-red-300"
+                                                    />
+                                                </div>
+                                            )}
 
                                         {/* Product list */}
                                         {blingProducts.length > 0 && (
@@ -2347,6 +2643,51 @@ export default function BlingPage() {
                     {/* ════════════════════════════════════ */}
                     {activeTab === 'webhook' && (() => {
                         const webhookUrl = `${window.location.origin}/api/bling-webhook`;
+                        const callbackUrl = credentials.bling_callback_url.trim() || getDefaultBlingCallbackUrl();
+                        const publicCallbackUrl = callbackUrl.startsWith('http') ? callbackUrl : `${window.location.origin}${callbackUrl}`;
+                        const legacyWebhookUrl = `${window.location.origin}/api/bling?resource=webhook`;
+                        const webhookLogsUrl = `${window.location.origin}/api/bling?resource=webhook-logs`;
+                        const webhookTestUrl = `${window.location.origin}/api/bling?resource=webhook-test`;
+
+                        function detectWebhookKind(log: { source?: string; payload: any }): WebhookKind | null {
+                            const payload = log?.payload || {};
+                            const explicitKind = String(payload.webhookKind || payload.webhook_kind || '').toLowerCase();
+                            if (explicitKind === 'names' || explicitKind === 'prices' || explicitKind === 'stock') return explicitKind as WebhookKind;
+
+                            const event = String(payload.event || payload.evento || payload.tipo || '').toLowerCase();
+                            const data = payload.data || payload.dados || {};
+                            const productData = data.produto || payload.produto || {};
+                            const hasPrice = data.preco !== undefined || productData.preco !== undefined || payload.preco !== undefined || payload.price_retail !== undefined;
+                            const hasName = productData.nome !== undefined || data.nome !== undefined || payload.nome !== undefined || event.includes('name');
+                            const hasStock = event.includes('stock') || event.includes('estoque') || data.saldoFisicoTotal !== undefined || data.saldoVirtualTotal !== undefined || data.deposito !== undefined;
+
+                            if (hasStock) return 'stock';
+                            if (hasPrice) return 'prices';
+                            if (hasName || event.includes('product') || event.includes('produto')) return 'names';
+                            return null;
+                        }
+
+                        function getWebhookMonitorStatus(kind: WebhookKind) {
+                            const manual = webhookStatusOverrides[kind] || 'auto';
+                            const matchingLog = webhookLogs?.find(log => detectWebhookKind(log) === kind) || null;
+                            const lastAt = matchingLog ? new Date(matchingLog.received_at) : null;
+                            const isFresh = !!lastAt && (Date.now() - lastAt.getTime()) < 24 * 60 * 60 * 1000;
+                            const status = manual === 'auto' ? (isFresh ? 'online' : 'offline') : manual;
+                            return {
+                                status,
+                                manual,
+                                log: matchingLog,
+                                lastLabel: lastAt ? lastAt.toLocaleString('pt-BR') : 'Sem evento registrado',
+                                isFresh,
+                            };
+                        }
+
+                        function setWebhookManualStatus(kind: WebhookKind, status: WebhookManualStatus) {
+                            const next = { ...webhookStatusOverrides, [kind]: status };
+                            setWebhookStatusOverrides(next);
+                            saveWebhookStatusOverrides(next);
+                            rememberWebhookDebug('manual_status_changed', { kind, status });
+                        }
 
                         async function testWebhookPing() {
                             setTestingWebhook(true);
@@ -2362,6 +2703,44 @@ export default function BlingPage() {
                                 setWebhookTestResult({ ok: false, message: 'Erro de rede: ' + e.message });
                             } finally {
                                 setTestingWebhook(false);
+                            }
+                        }
+
+                        async function testWebhookKind(kind: WebhookKind) {
+                            setTestingWebhookKind(kind);
+                            setWebhookTestResult(null);
+                            try {
+                                const res = await fetch('/api/bling?resource=webhook-test', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ type: kind }),
+                                });
+                                const json = await res.json().catch(() => ({}));
+                                if (!res.ok || !json.ok) {
+                                    throw new Error(json.error || `Endpoint retornou ${res.status}`);
+                                }
+                                rememberWebhookDebug('webhook_kind_test_ok', { kind, response: json });
+                                setWebhookTestResult({ ok: true, message: `${WEBHOOK_KINDS.find(w => w.kind === kind)?.label || kind} testado e registrado nos logs.` });
+                                await loadWebhookLogs();
+                                toast.success('Teste registrado no log da VPS.');
+                            } catch (e: any) {
+                                rememberWebhookDebug('webhook_kind_test_error', { kind, error: e?.message || String(e) });
+                                setWebhookTestResult({ ok: false, message: `Erro no teste: ${e?.message || e}` });
+                                toast.error('Erro ao testar webhook: ' + (e?.message || e));
+                            } finally {
+                                setTestingWebhookKind(null);
+                            }
+                        }
+
+                        async function testAllWebhookKinds() {
+                            setTestingWebhookKind('all');
+                            try {
+                                for (const item of WEBHOOK_KINDS) {
+                                    await testWebhookKind(item.kind);
+                                }
+                                rememberWebhookDebug('webhook_all_tests_ok');
+                            } finally {
+                                setTestingWebhookKind(null);
                             }
                         }
 
@@ -2400,9 +2779,8 @@ export default function BlingPage() {
                                     setReimportResults(prev => new Map(prev).set(productId, { ok: false, message: 'Produto não encontrado no Bling' }));
                                     return;
                                 }
-                                // atualiza o bling_id diretamente
-                                const { error } = await supabase.from('products').update({ bling_id: match.id }).eq('id', productId);
-                                if (error) throw error;
+                                const updated = await vpsApiService.updateProduct(productId, { bling_id: match.id });
+                                if (!updated) throw new Error('Erro ao vincular bling_id na VPS');
                                 setReimportResults(prev => new Map(prev).set(productId, { ok: true, message: `bling_id ${match.id} vinculado` }));
                                 setProductsWithoutId(prev => prev.filter(p => p.id !== productId));
                                 setBlingIdStats(prev => prev ? { ...prev, with_id: prev.with_id + 1, without_id: prev.without_id - 1 } : prev);
@@ -2422,20 +2800,6 @@ export default function BlingPage() {
                             toast.success('Reimportação em massa concluída!');
                         }
 
-                        async function loadWebhookLogs() {
-                            setLoadingLogs(true);
-                            try {
-                                const res = await fetch('/api/bling?resource=webhook-logs');
-                                const json = await res.json();
-                                setLogsTableExists(json.tableExists ?? false);
-                                setWebhookLogs(json.logs || []);
-                            } catch (e: any) {
-                                toast.error('Erro ao carregar logs: ' + e.message);
-                            } finally {
-                                setLoadingLogs(false);
-                            }
-                        }
-
                         const latestWebhookLog = webhookLogs?.[0] || null;
                         const latestLiveWebhookLog = webhookLogs?.find((log: any) => {
                             const evt = String(log?.payload?.event || log?.payload?.evento || '').toLowerCase();
@@ -2451,6 +2815,154 @@ export default function BlingPage() {
 
                         return (
                             <div className="space-y-4">
+
+                                {/* Painel operacional */}
+                                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
+                                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                                        <div>
+                                            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                                <Webhook className="w-5 h-5 text-blue-600" />
+                                                Integracao Bling
+                                            </h2>
+                                            <p className="text-sm text-slate-500 mt-1">
+                                                Monitore os webhooks principais, teste o endpoint da VPS e reconecte o OAuth quando o token expirar.
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-2 mt-3 text-xs">
+                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-semibold ${isConnected ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                                    {isConnected ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                                                    OAuth {isConnected ? 'conectado' : 'desconectado'}
+                                                </span>
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200 text-slate-600">
+                                                    Token: {tokenExpiresAt ? new Date(tokenExpiresAt).toLocaleString('pt-BR') : 'sem validade registrada'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                onClick={testAllWebhookKinds}
+                                                disabled={testingWebhookKind !== null}
+                                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                                            >
+                                                {testingWebhookKind === 'all' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                                                Testar todos
+                                            </button>
+                                            <button
+                                                onClick={() => handleConnectBling()}
+                                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700"
+                                            >
+                                                <RefreshCw className="w-4 h-4" />
+                                                Reconectar Bling
+                                            </button>
+                                            <a
+                                                href={blingDashboardUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-50"
+                                            >
+                                                <ExternalLink className="w-4 h-4" />
+                                                Abrir Bling
+                                            </a>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+                                        {WEBHOOK_KINDS.map(item => {
+                                            const monitor = getWebhookMonitorStatus(item.kind);
+                                            const online = monitor.status === 'online';
+                                            const isTesting = testingWebhookKind === item.kind || testingWebhookKind === 'all';
+                                            return (
+                                                <div key={item.kind} className="border border-slate-200 rounded-xl p-4 space-y-3 bg-slate-50">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div>
+                                                            <p className="font-bold text-slate-900">{item.label}</p>
+                                                            <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>
+                                                        </div>
+                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${online ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                                            {online ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                                                            {online ? 'Online' : 'Offline'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs text-slate-500">
+                                                        Ultimo evento: <span className="font-semibold text-slate-700">{monitor.lastLabel}</span>
+                                                        {monitor.manual !== 'auto' && (
+                                                            <span className="ml-2 text-amber-700 font-semibold">(manual)</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="grid grid-cols-3 rounded-lg border border-slate-200 overflow-hidden bg-white">
+                                                        {(['auto', 'online', 'offline'] as WebhookManualStatus[]).map(status => (
+                                                            <button
+                                                                key={status}
+                                                                onClick={() => setWebhookManualStatus(item.kind, status)}
+                                                                className={`px-2 py-2 text-xs font-semibold transition-colors ${monitor.manual === status ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                                                            >
+                                                                {status === 'auto' ? 'Auto' : status === 'online' ? 'Online' : 'Offline'}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => testWebhookKind(item.kind)}
+                                                        disabled={isTesting}
+                                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-100 disabled:opacity-50"
+                                                    >
+                                                        {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+                                                        {isTesting ? 'Testando...' : 'Testar webhook'}
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                        {[
+                                            { label: 'Webhook principal', value: webhookUrl },
+                                            { label: 'Callback OAuth', value: publicCallbackUrl },
+                                            { label: 'Webhook legado', value: legacyWebhookUrl },
+                                            { label: 'Logs', value: webhookLogsUrl },
+                                            { label: 'Teste diagnostico', value: webhookTestUrl },
+                                            { label: 'Painel Bling', value: blingDashboardUrl },
+                                        ].map(item => (
+                                            <div key={item.label} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-[11px] font-bold uppercase text-slate-400">{item.label}</p>
+                                                    <p className="text-xs font-mono text-slate-700 truncate">{item.value}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => { navigator.clipboard.writeText(item.value); toast.success('URL copiada!'); }}
+                                                    className="p-2 rounded-lg text-slate-500 hover:bg-white hover:text-slate-800 border border-transparent hover:border-slate-200"
+                                                    title={`Copiar ${item.label}`}
+                                                >
+                                                    <Copy className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {webhookTestResult && (
+                                        <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                                            webhookTestResult.ok ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+                                        }`}>
+                                            {webhookTestResult.ok ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                                            {webhookTestResult.message}
+                                        </div>
+                                    )}
+
+                                    {webhookDebug && (
+                                        <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                            <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-200">
+                                                <p className="text-xs font-bold text-slate-700">Debug da integracao</p>
+                                                <button
+                                                    onClick={copyWebhookDebug}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900"
+                                                >
+                                                    <Copy className="w-3.5 h-3.5" />
+                                                    Copiar debug
+                                                </button>
+                                            </div>
+                                            <pre className="max-h-56 overflow-auto bg-slate-900 p-4 text-xs text-green-300">{JSON.stringify(webhookDebug, null, 2)}</pre>
+                                        </div>
+                                    )}
+
+                                </div>
 
                                 {/* URL do Webhook */}
                                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-3">
@@ -2502,7 +3014,7 @@ export default function BlingPage() {
                                             { label: 'URL do webhook cadastrada no Bling (Aplicativo → Webhooks → Servidores)', tip: 'Use a URL acima. O Bling faz um GET de verificação, então ela precisa responder 200.' },
                                             { label: 'Webhook de estoque habilitado (stock.updated / virtual_stock.updated / movimentacaoEstoque)', tip: 'Sem os eventos de estoque, não há baixa automática na loja.' },
                                             { label: 'Webhook de nome habilitado (product.updated / produto)', tip: 'Sem evento de produto, mudanças de nome no Bling não refletem na loja.' },
-                                            { label: 'Webhook de valor habilitado (product.updated com preço)', tip: 'Quando o payload traz preco, o webhook converte para centavos e atualiza price_retail na VPS e no Supabase.' },
+                                            { label: 'Webhook de valor habilitado (product.updated com preço)', tip: 'Quando o payload traz preco, o webhook converte para centavos e atualiza price_retail na VPS e no VPS.' },
                                             { label: 'Versão do payload: versão 1 (formato recomendado)', tip: 'O sistema suporta v3 (event em inglês) e legado em português.' },
                                             { label: 'App Bling tem escopo de Estoques habilitado', tip: 'Sem esse escopo, o recurso de Webhook de Estoque não aparece nas opções.' },
                                             { label: 'Produto importado pelo Bling (tem bling_id salvo)', tip: 'Produtos criados manualmente não têm bling_id — o webhook não consegue associá-los.' },
@@ -2651,14 +3163,16 @@ export default function BlingPage() {
 
                                     {logsTableExists === false && (
                                         <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-2">
-                                            <p className="text-sm font-semibold text-red-700">⚠️ Tabela webhook_logs não existe no Supabase</p>
-                                            <p className="text-xs text-red-600">Execute o SQL abaixo no Supabase → SQL Editor:</p>
+                                            <p className="text-sm font-semibold text-red-700">⚠️ Tabela webhook_logs não existe no VPS</p>
+                                            <p className="text-xs text-red-600">Execute o SQL abaixo no MySQL da VPS:</p>
                                             <pre className="text-xs bg-slate-900 text-green-400 rounded-lg p-3 overflow-auto">{`CREATE TABLE IF NOT EXISTS webhook_logs (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  source TEXT,
-  payload JSONB,
-  received_at TIMESTAMPTZ DEFAULT now()
-);`}</pre>
+  id CHAR(36) NOT NULL PRIMARY KEY,
+  source VARCHAR(80) NOT NULL,
+  payload JSON NULL,
+  received_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_webhook_logs_received_at (received_at),
+  INDEX idx_webhook_logs_source (source)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`}</pre>
                                         </div>
                                     )}
 
@@ -2737,7 +3251,7 @@ export default function BlingPage() {
                                                 1. Renovação Automática de Token (Failover)
                                             </h3>
                                             <p className="text-xs text-slate-600 leading-relaxed">
-                                                O token do Bling expira naturalmente. O Webhook detecta a expiração (falha com HTTP 401) e executa um fluxo de <code>refresh_token</code> utilizando as credenciais (Client ID e Secret) registradas nesta página. O novo token é automaticamente renovado e gravado no Supabase para continuar processando eventos sem interferência manual.
+                                                O token do Bling expira naturalmente. O Webhook detecta a expiração (falha com HTTP 401) e executa um fluxo de <code>refresh_token</code> utilizando as credenciais (Client ID e Secret) registradas nesta página. O novo token é automaticamente renovado e gravado no VPS para continuar processando eventos sem interferência manual.
                                             </p>
                                         </div>
 
@@ -2748,7 +3262,7 @@ export default function BlingPage() {
                                                 2. Resolução de SKU via VPS (Fonte da Verdade)
                                             </h3>
                                             <p className="text-xs text-slate-600 leading-relaxed">
-                                                Durante eventos de webhook (ex: <code>stock.created</code>, <code>product.updated</code>), o SKU nem sempre é transmitido ou confiável. Em vez de depender do payload ou Supabase de forma isolada, o webhook faz uma chamada direta para a API da VPS <code>/products/bling/{"{bling_id}"}</code>. Isso garante compatibilidade total com o catálogo local hospedado no MySQL.
+                                                Durante eventos de webhook (ex: <code>stock.created</code>, <code>product.updated</code>), o SKU nem sempre é transmitido ou confiável. Em vez de depender do payload ou VPS de forma isolada, o webhook faz uma chamada direta para a API da VPS <code>/products/bling/{"{bling_id}"}</code>. Isso garante compatibilidade total com o catálogo local hospedado no MySQL.
                                             </p>
                                         </div>
 

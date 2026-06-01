@@ -1,4 +1,4 @@
-// Troca o code pelo access_token DIRETAMENTE (contornando o callback da Vercel)
+// Troca o code pelo access_token DIRETAMENTE (contornando o callback da deploy legado)
 import https from 'https';
 import crypto from 'crypto';
 

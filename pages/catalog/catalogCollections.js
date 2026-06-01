@@ -49,8 +49,6 @@ export const CATALOG_COLLECTIONS = [
       sortBy: 'featured',
     },
     source: 'curated-featured-first-fallback',
-    // Para reativar: trocar para true e descomentar a rota em routes/index.tsx
-    enabled: false,
   },
 ];
 

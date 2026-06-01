@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, User, LogOut, Grid, List, Search } from 'lucide-react';
-import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
+import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 import { catalogService } from '../../services/catalogService';
 import { getPublicCompanyData } from '../../services/publicCompanySettings';
 import type { Company } from '../../types/company';

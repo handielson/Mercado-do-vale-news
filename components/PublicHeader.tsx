@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingBag, User, LogOut, ChevronDown, Shield, Tag, Heart } from 'lucide-react';
-import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
+import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { StoreStatusBadge } from './ui/StoreStatusBadge';
 import { WeatherWidget } from './WeatherWidget';
@@ -18,7 +18,7 @@ import { FastDeliveryBadge } from './FastDeliveryBadge';
  * - Customer type badge
  */
 export const PublicHeader: React.FC = () => {
-    const { user, customer, signOut, setAdminPreviewType } = useSupabaseAuth();
+    const { user, customer, signOut, setAdminPreviewType } = useVpsAuth();
     const { settings: themeSettings } = useTheme();
     const navigate = useNavigate();
     const [showLoginDropdown, setShowLoginDropdown] = useState(false);

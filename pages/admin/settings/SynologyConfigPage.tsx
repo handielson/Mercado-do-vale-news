@@ -413,15 +413,15 @@ SYNC_SECRET="<chave compartilhada com o frontend (VITE_VPS_SYNC_KEY)>"`}</pre>
             </div>
             <div className="border border-slate-200 rounded-lg p-5 bg-white hover:border-sky-300 hover:shadow-md transition-all">
               <h4 className="font-bold text-slate-800 text-sm mb-2 flex items-center gap-2"><span className="text-sky-500 text-lg">💾</span> Backup Diário</h4>
-              <p className="text-xs text-slate-600 leading-relaxed">Rotina noturna para backup do Supabase e pedidos Bling no NAS. Segurança local caso a nuvem tenha indisponibilidade.</p>
+              <p className="text-xs text-slate-600 leading-relaxed">Rotina noturna para backup do VPS e pedidos Bling no NAS. Segurança local caso a nuvem tenha indisponibilidade.</p>
             </div>
             <div className="border border-slate-200 rounded-lg p-5 bg-white hover:border-rose-300 hover:shadow-md transition-all">
               <h4 className="font-bold text-slate-800 text-sm mb-2 flex items-center gap-2"><span className="text-rose-500 text-lg">🗂️</span> Storage Off-Cloud</h4>
-              <p className="text-xs text-slate-600 leading-relaxed">NAS como banco de imagens/PDFs, eliminando custo de storage premium no Supabase (cobrança em dólar/GB).</p>
+              <p className="text-xs text-slate-600 leading-relaxed">NAS como banco de imagens/PDFs, eliminando custo de storage premium no VPS (cobrança em dólar/GB).</p>
             </div>
             <div className="border border-slate-200 rounded-lg p-5 bg-white hover:border-indigo-300 hover:shadow-md transition-all">
               <h4 className="font-bold text-slate-800 text-sm mb-2 flex items-center gap-2"><span className="text-indigo-500 text-lg">📊</span> BI Local</h4>
-              <p className="text-xs text-slate-600 leading-relaxed">Metabase no Docker do Synology conectando ao Supabase para dashboards de lucro, curva ABC e conversão na intranet.</p>
+              <p className="text-xs text-slate-600 leading-relaxed">Metabase no Docker do Synology conectando ao VPS para dashboards de lucro, curva ABC e conversão na intranet.</p>
             </div>
           </div>
         </div>

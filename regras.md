@@ -33,7 +33,7 @@ Esse arquivo documenta recuperacao/operacao do NAS e nao deve entrar em commits 
 
 ## Commits
 
-Quando for comitar, seguir obrigatoriamente o `commit.md`.
+Quando for comitar ou publicar, seguir obrigatoriamente o `publicar.md`.
 
 Regras resumidas:
 
@@ -42,8 +42,8 @@ Regras resumidas:
 - nao misturar mudancas paralelas;
 - criar commit objetivo;
 - fazer push por padrao;
-- se precisar refletir na Vercel, garantir que o commit chegue em `main`;
-- verificar deploy quando aplicavel;
+- se precisar refletir em producao, garantir que o commit chegue em `main`;
+- verificar publicacao quando aplicavel;
 - avaliar deploy da VPS se a mudanca afetar runtime ou scripts da VPS.
 
 ## Log de navegacao admin/PDV
@@ -74,7 +74,7 @@ Se o botao nao aparecer, confirmar:
 
 O ambiente de sandbox pode bloquear operacoes de Git e build, especialmente em pastas sincronizadas pelo Synology Drive.
 
-Quando isso acontecer, nao tentar contornar com comandos destrutivos. Usar o fluxo descrito em `commit.md`: repetir o comando necessario com permissao aprovada fora do sandbox e manter o escopo isolado por arquivo.
+Quando isso acontecer, nao tentar contornar com comandos destrutivos. Usar o fluxo descrito em `publicar.md`: repetir o comando necessario com permissao aprovada fora do sandbox e manter o escopo isolado por arquivo.
 
 ## Proibicoes sem pedido explicito
 
@@ -87,7 +87,7 @@ Arquivos sensiveis:
 - `.env`
 - `.env.local`
 - `.env.production`
-- `.vercel/*`
+- `.env.vps.local`
 - qualquer arquivo com token, chave, senha, segredo ou credencial operacional
 
 Regras:
@@ -127,9 +127,9 @@ Exemplos:
 - rotas da VPS;
 - webhooks;
 - payloads de Bling, Shopee, Mercado Pago ou catalogo;
-- contratos entre Supabase, Vercel e VPS.
+- contratos entre VPS, banco, Synology e integracoes externas.
 
-Se o contrato mudar, atualizar o runbook correspondente, como `bling.md`, `commit.md`, `regras.md` ou docs em `docs/operacional`.
+Se o contrato mudar, atualizar o runbook correspondente, como `bling.md`, `publicar.md`, `regras.md` ou docs em `docs/operacional`.
 
 ### 4. Arquivos gerados, temporarios e grandes
 
@@ -156,7 +156,7 @@ Regras:
 - antes de commitar, conferir `git diff --cached --name-only`;
 - conferir tambem `git diff --cached --stat`;
 - nunca incluir mudancas paralelas no mesmo commit;
-- seguir sempre `commit.md`.
+- seguir sempre `publicar.md`.
 
 ### 6. Estoque, preco, vendas e integracoes comerciais
 
@@ -182,7 +182,8 @@ Nao alterar migrations, schemas ou SQL sem plano e sem pedido explicito.
 
 Arquivos sensiveis:
 
-- `supabase/*.sql`
+- `migrations/*.sql`
+- `*.sql`
 - migrations;
 - funcoes SQL;
 - triggers;
@@ -190,9 +191,7 @@ Arquivos sensiveis:
 - politicas/RLS;
 - schemas.
 
-Regra principal: qualquer nova funcao operacional gerada deve ser implementada na VPS, nao no Supabase.
-
-Usar Supabase para nova funcao somente se o pedido for explicito ou se houver justificativa tecnica registrada antes da alteracao.
+Regra principal: qualquer nova funcao operacional gerada deve ser implementada na VPS/MySQL e nos scripts atuais de publicacao.
 
 Quando houver mudanca de banco, deixar claro:
 
@@ -203,7 +202,7 @@ Quando houver mudanca de banco, deixar claro:
 
 ### 8. Documentos de regra e runbooks
 
-Nao alterar `Synology.md`, `bling.md`, `commit.md` ou `regras.md` junto com codigo, salvo pedido explicito.
+Nao alterar `Synology.md`, `bling.md`, `publicar.md` ou `regras.md` junto com codigo, salvo pedido explicito.
 
 Esses documentos devem ir em commit separado quando forem apenas regra, runbook ou documentacao operacional.
 
@@ -248,7 +247,7 @@ Nao mudar formato de preco por suposicao.
 
 Regras atuais:
 
-- local/Supabase/VPS: preco em centavos, exemplo `1499`;
+- app/VPS/MySQL: preco em centavos, exemplo `1499`;
 - Bling: preco em reais, exemplo `14.99`;
 - Shopee: seguir o contrato da Shopee no payload especifico;
 - exibicao: formatar para real apenas na camada de UI/relatorio.
@@ -261,7 +260,6 @@ Nao assumir que producao atualizou so porque houve commit ou push.
 
 Regras:
 
-- se for web, confirmar que chegou em `origin/main`;
-- se for Vercel, verificar deploy quando possivel;
+- se for web, confirmar que chegou em `origin/main` e foi publicado na VPS quando necessario;
 - se for VPS, confirmar deploy, servico e endpoint;
 - se a verificacao for recusada ou impossivel, registrar isso claramente.

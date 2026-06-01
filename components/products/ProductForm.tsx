@@ -32,7 +32,7 @@ import { modelService } from '../../services/models';
 import { averagePriceService } from '../../services/averagePriceService';
 import { modelColorImagesService } from '../../services/model-color-images';
 import { colorService } from '../../services/colors';
-import { supabase } from '../../services/supabase';
+import { getAuthSessionToken } from '../../services/authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
 import { findBlingProductByExactSku } from '../../services/blingService';
@@ -468,8 +468,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 return tid;
             })();
 
-            const { data } = await supabase.auth.getSession();
-            const token = data.session?.access_token;
+            const token = await getAuthSessionToken();
 
             for (const file of filesToProcess) {
                 const compressed = await compressImage(file);
@@ -538,8 +537,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
         try {
             const processedImages: string[] = [];
-            const { data } = await supabase.auth.getSession();
-            const token = data.session?.access_token;
+            const token = await getAuthSessionToken();
 
             for (const file of filesToProcess) {
                 const compressed = await compressImage(file);

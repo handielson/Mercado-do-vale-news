@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
 
 export interface CustomerBenefit {
     id: string;
@@ -30,87 +30,111 @@ export interface BenefitStatus {
     currentYearMonth: string;
 }
 
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[]; total?: number };
+
+interface CustomerSummary {
+    id: string;
+    name: string | null;
+}
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
+}
+
+async function loadTableRows<T>(table: string, pageSize = 200): Promise<T[]> {
+    let offset = 0;
+    const rows: T[] = [];
+
+    while (true) {
+        const response = await vpsClient.get<TableDataResponse<T>>(
+            `/table-data/${table}?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return rows;
+}
+
+async function loadCustomerBenefits(pageSize = 200): Promise<CustomerBenefit[]> {
+    return loadTableRows<CustomerBenefit>('customer_benefits', pageSize);
+}
+
+async function loadBenefitRedemptions(pageSize = 200): Promise<BenefitRedemption[]> {
+    return loadTableRows<BenefitRedemption>('benefit_redemptions', pageSize);
+}
+
+async function buildCustomerNameMap(): Promise<Map<string, string>> {
+    const customers = await loadTableRows<CustomerSummary>('customers');
+    return new Map(customers.map((customer) => [customer.id, customer.name || '']));
+}
+
+function enrichRedemptions(
+    redemptions: BenefitRedemption[],
+    customerNames: Map<string, string>,
+): BenefitRedemption[] {
+    return redemptions.map((redemption) => {
+        const name = customerNames.get(redemption.redeemed_by);
+        return name ? { ...redemption, redeemed_by_user: { name } } : redemption;
+    });
+}
+
 export const benefitService = {
     /**
-     * Concede o benefício de película para um cliente
+     * Concede o beneficio de pelicula para um cliente.
      */
     async grantScreenProtectorBenefit(customerId: string, saleId: string): Promise<CustomerBenefit> {
         const expiresInOneYear = new Date();
         expiresInOneYear.setFullYear(expiresInOneYear.getFullYear() + 1);
 
-        const { data, error } = await supabase
-            .from('customer_benefits')
-            .insert({
-                customer_id: customerId,
-                promotion_type: 'one_year_screen_protector',
-                source_sale_id: saleId,
-                expires_at: expiresInOneYear.toISOString()
-            })
-            .select()
-            .single();
-
-        if (error) throw error;
-        return data as CustomerBenefit;
+        return vpsClient.post<CustomerBenefit>('/table-data/customer_benefits', {
+            customer_id: customerId,
+            promotion_type: 'one_year_screen_protector',
+            source_sale_id: saleId,
+            expires_at: expiresInOneYear.toISOString()
+        });
     },
 
     /**
-     * Lista benefícios e seu histórico de resgate para um cliente específico
+     * Lista beneficios e historico de resgate para um cliente especifico.
      */
     async getCustomerBenefitsStatus(customerId: string): Promise<BenefitStatus[]> {
-        const { data: benefits, error: benefitsError } = await supabase
-            .from('customer_benefits')
-            .select('*')
-            .eq('customer_id', customerId)
-            .eq('promotion_type', 'one_year_screen_protector')
-            .order('granted_at', { ascending: false });
+        const benefits = (await loadCustomerBenefits())
+            .filter(benefit =>
+                benefit.customer_id === customerId &&
+                benefit.promotion_type === 'one_year_screen_protector'
+            )
+            .sort((a, b) => String(b.granted_at).localeCompare(String(a.granted_at)));
 
-        if (benefitsError) throw benefitsError;
         if (!benefits || benefits.length === 0) return [];
 
         const statuses: BenefitStatus[] = [];
         const now = new Date();
         const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const allRedemptions = await loadBenefitRedemptions();
+        const customerNames = await buildCustomerNameMap();
 
         for (const benefit of benefits) {
-            // Conta quantos meses se passaram / restam
-            const grantedDate = new Date(benefit.granted_at);
             const expiresDate = benefit.expires_at ? new Date(benefit.expires_at) : null;
 
-            // Calculo simples de validade (12 meses totais)
-            // Se já passou da validade total, restam 0.
-            let monthsRemaining = 0;
-            if (expiresDate && now < expiresDate) {
-                // Cálculo de meses faltantes grosseiro (apenas para exibição)
-                const monthDiff = (expiresDate.getFullYear() - now.getFullYear()) * 12 + (expiresDate.getMonth() - now.getMonth());
-                monthsRemaining = Math.max(0, Math.min(12, monthDiff));
-            }
+            const redemptions = enrichRedemptions(
+                allRedemptions
+                    .filter((redemption) => redemption.benefit_id === benefit.id)
+                    .sort((a, b) => String(b.redeemed_at).localeCompare(String(a.redeemed_at))),
+                customerNames,
+            );
 
-            // Busca os resgates deste benefício (Max 12)
-            const { data: redemptions, error: redemptionsError } = await supabase
-                .from('benefit_redemptions')
-                .select(`
-                    *,
-                    redeemed_by_user:customers!redeemed_by(name)
-                `)
-                .eq('benefit_id', benefit.id)
-                .order('redeemed_at', { ascending: false });
-
-            if (redemptionsError) throw redemptionsError;
-
-            // Checa se já resgatou no mês atual
-            const hasRedeemedThisMonth = (redemptions || []).some(r => r.year_month === currentYearMonth);
-
-            // Regras para poder resgatar:
-            // 1. Ainda estar dentro da validade (now < expiresDate)
-            // 2. Não ter resgatado este mês
-            // 3. Ter resgatado menos de 12 vezes no total
+            const hasRedeemedThisMonth = redemptions.some(r => r.year_month === currentYearMonth);
             const isExpired = expiresDate ? now > expiresDate : false;
-            const totalRedemptions = (redemptions || []).length;
+            const totalRedemptions = redemptions.length;
             const canRedeemThisMonth = !isExpired && !hasRedeemedThisMonth && totalRedemptions < 12;
 
             statuses.push({
-                benefit: benefit as CustomerBenefit,
-                redemptions: (redemptions || []) as BenefitRedemption[],
+                benefit,
+                redemptions,
                 monthsRemaining: isExpired ? 0 : (12 - totalRedemptions),
                 canRedeemThisMonth,
                 currentYearMonth
@@ -121,34 +145,27 @@ export const benefitService = {
     },
 
     /**
-     * Registra o resgate de uma película na conta do cliente (Apenas Admin)
+     * Registra o resgate de uma pelicula na conta do cliente.
      */
     async redeemScreenProtector(benefitId: string, adminId: string, notes?: string): Promise<BenefitRedemption> {
         const now = new Date();
         const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-        // O Unique Constraint no banco (uk_benefit_id_year_month) bloqueará duplicações concorrentes.
-        const { data, error } = await supabase
-            .from('benefit_redemptions')
-            .insert({
-                benefit_id: benefitId,
-                year_month: currentYearMonth,
-                redeemed_by: adminId,
-                notes: notes || null
-            })
-            .select(`
-                *,
-                redeemed_by_user:customers!redeemed_by(name)
-            `)
-            .single();
+        const existingRedemption = (await loadBenefitRedemptions())
+            .find((redemption) => redemption.benefit_id === benefitId && redemption.year_month === currentYearMonth);
 
-        if (error) {
-            if (error.code === '23505') { // Unique violation
-                throw new Error('A película deste mês já foi resgatada.');
-            }
-            throw error;
+        if (existingRedemption) {
+            throw new Error('A pelicula deste mes ja foi resgatada.');
         }
 
-        return data as BenefitRedemption;
+        const redemption = await vpsClient.post<BenefitRedemption>('/table-data/benefit_redemptions', {
+            benefit_id: benefitId,
+            year_month: currentYearMonth,
+            redeemed_by: adminId,
+            notes: notes || null
+        });
+
+        const customerNames = await buildCustomerNameMap();
+        return enrichRedemptions([redemption], customerNames)[0];
     }
 };

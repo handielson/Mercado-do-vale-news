@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const page = readFileSync('pages/admin/settings/ShopeePage.tsx', 'utf8');
-const api = readFileSync('api/shopee-catalog.ts', 'utf8');
 const docs = readFileSync('Shopee.md', 'utf8');
 const vpsService = readFileSync('services/vpsApiService.ts', 'utf8');
 const vpsServer = readFileSync('vps_server.cjs', 'utf8');
@@ -49,7 +48,7 @@ assert.match(page, /variation_image:coverage/, 'variation publish should log opt
 assert.doesNotMatch(page, /const firstImage = Array\.isArray\(child\.images\) \? child\.images\[0\]/, 'variation image upload should not only inspect the first image slot');
 assert.match(page, /rawSelectedVariationGroup/, 'Shopee modal should keep the raw group separate from the publish-scoped group');
 assert.doesNotMatch(page, /rawSelectedVariationGroup\.children\.filter\(\(child\) => allowedIds\.has\(child\.id\)\)/, 'bulk variation publish must not drop siblings outside the current bulk queue');
-assert.match(page, /onSuccess\(syncedProductIds\)/, 'variation publish should report all synced product ids to the bulk runner');
+assert.match(page, /publishedProductIds:\s*syncedProductIds/, 'variation publish should report all synced product ids to the bulk runner');
 assert.match(page, /publishedProductIds/, 'bulk runner should advance all product ids synced by a variation publish');
 assert.match(page, /findExistingShopeeItemForDuplicate/, 'variation fallback should recover from duplicate base items');
 assert.match(page, /duplicate_lookup:match/, 'duplicate recovery should log the reused Shopee item');
@@ -58,7 +57,7 @@ assert.match(page, /proactiveDuplicateItem[\s\S]*findExistingShopeeItemForDuplic
 assert.match(page, /existing_variation_item_id_source/, 'variation publish should log whether it reused local or remote duplicate linkage');
 assert.match(page, /handleDeleteShopeeProductAndLink/, 'Shopee page should expose a focused delete-and-unlink action for bad Shopee items');
 assert.match(page, /action=delete_item[\s\S]*item_id:\s*p\.shopee_item_id/, 'delete action should remove the selected item from Shopee before unlinking locally');
-assert.match(page, /from\('shopee_products'\)[\s\S]*\.delete\(\)[\s\S]*\.eq\('shopee_item_id',\s*p\.shopee_item_id\)/, 'delete action should delete only local link rows for the selected Shopee item id');
+assert.match(page, /shopeeProductService\.deleteByShopeeItemId\(p\.shopee_item_id\)/, 'delete action should delete local link rows for the selected Shopee item id through the VPS service');
 assert.match(page, /Apagar da Shopee e excluir vinculo/, 'linked products should show a delete-and-unlink button for operators');
 assert.match(page, /fetchAllVpsProducts[\s\S]*pageSize\s*=\s*2000[\s\S]*offset/, 'Shopee product list should page through the VPS 2000-item cap');
 assert.doesNotMatch(page, /getProducts\(\{\s*limit:\s*5000/, 'Shopee product list should not rely on a single VPS request above the server cap');
@@ -74,10 +73,10 @@ assert.match(page, /add_item:variation_fallback_base/, 'variation fallback shoul
 assert.match(page, /isShopeeGtinValidationRateLimitError/, 'variation init should detect Shopee GTIN validation rate limits');
 assert.match(page, /postShopeeDebugWithRetry\('init_tier_variation'/, 'variation init should retry transient Shopee GTIN rate limits');
 assert.match(page, /debugLabel\}:retry/, 'variation init retry attempts should be logged');
-assert.match(api, /action === 'init_tier_variation'/, 'API must expose init_tier_variation action');
-assert.match(api, /\/api\/v2\/product\/init_tier_variation/, 'API must call Shopee init_tier_variation endpoint');
-assert.match(api, /action === 'delete_item'/, 'API must expose delete_item action');
-assert.match(api, /\/api\/v2\/product\/delete_item/, 'API must call Shopee delete_item endpoint');
+assert.match(vpsServer, /case 'init_tier_variation'/, 'VPS API must expose init_tier_variation action');
+assert.match(vpsServer, /\/api\/v2\/product\/init_tier_variation/, 'VPS API must call Shopee init_tier_variation endpoint');
+assert.match(vpsServer, /case 'delete_item'/, 'VPS API must expose delete_item action');
+assert.match(vpsServer, /\/api\/v2\/product\/delete_item/, 'VPS API must call Shopee delete_item endpoint');
 assert.match(docs, /Primeira entrega: variacoes manuais/, 'Shopee docs should document the first manual variation delivery');
 
 console.log('shopee variation modal static checks passed');

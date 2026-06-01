@@ -9,7 +9,7 @@ import { TeamMember, TeamMemberFilters } from '../../types/team';
  * Team List Page
  * 
  * ANTIGRAVITY PROTOCOL:
- * - Database-First: All data from Supabase
+ * - Database-First: All data from VPS
  * - Real-time updates via service cache
  * - Responsive design
  * - < 500 lines

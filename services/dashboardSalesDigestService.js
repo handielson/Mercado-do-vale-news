@@ -333,27 +333,17 @@ async function fetchShopeeDetailedOrders(now) {
 }
 
 async function loadPdvSales(now) {
-  const { supabase } = await import('./supabase');
+  const { getSales } = await import('./saleService');
   const start = new Date(now);
   start.setDate(start.getDate() - 14);
   start.setHours(0, 0, 0, 0);
 
-  let response = await supabase
-    .from('sales')
-    .select('id, created_at, status, items:sale_items(product_id, product_name, product_model, product_sku, quantity, total, unit_price, unit_cost)')
-    .gte('created_at', start.toISOString())
-    .lte('created_at', now.toISOString());
+  const sales = await getSales({
+    start_date: start.toISOString(),
+    end_date: now.toISOString(),
+  });
 
-  if (response.error?.code === '42703') {
-    response = await supabase
-      .from('sales')
-      .select('id, created_at, status, items:sale_items(product_id, product_name, quantity, total, unit_price, unit_cost)')
-      .gte('created_at', start.toISOString())
-      .lte('created_at', now.toISOString());
-  }
-
-  if (response.error) throw response.error;
-  return Array.isArray(response.data) ? response.data : [];
+  return Array.isArray(sales) ? sales : [];
 }
 
 async function loadProductCatalog() {

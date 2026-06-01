@@ -1,25 +1,114 @@
-import { supabase } from './supabase';
+﻿import { vpsClient } from './vpsClient';
 import type {
     CashbackSettings,
     CoinBalance,
     CoinTransaction,
     CoinTransactionType,
+    CoinReferenceType,
     RedeemValidation,
 } from '../types/cashback';
 
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[]; total?: number };
+type CustomerSummary = { id: string; name?: string | null; referral_code?: string | null };
+
+function createLocalId(prefix = 'coin'): string {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
+}
+
+async function loadTableRows<T>(table: string, pageSize = 200): Promise<T[]> {
+    let offset = 0;
+    const rows: T[] = [];
+
+    while (true) {
+        const response = await vpsClient.get<TableDataResponse<T>>(
+            `/table-data/${table}?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return rows;
+}
+
+async function loadCoinTransactions(): Promise<CoinTransaction[]> {
+    let offset = 0;
+    const pageSize = 200;
+    const rows: CoinTransaction[] = [];
+
+    while (true) {
+        const response = await vpsClient.get<TableDataResponse<CoinTransaction>>(
+            `/table-data/coin_transactions?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return rows;
+}
+
+async function loadCoinBalances(): Promise<CoinBalance[]> {
+    let offset = 0;
+    const pageSize = 200;
+    const rows: CoinBalance[] = [];
+
+    while (true) {
+        const response = await vpsClient.get<TableDataResponse<CoinBalance>>(
+            `/table-data/coin_balances?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return rows;
+}
+
+async function loadCashbackSettings(): Promise<CashbackSettings[]> {
+    let offset = 0;
+    const pageSize = 200;
+    const rows: CashbackSettings[] = [];
+
+    while (true) {
+        const response = await vpsClient.get<TableDataResponse<CashbackSettings>>(
+            `/table-data/cashback_settings?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return rows;
+}
+
+function sortTransactionsNewestFirst(transactions: CoinTransaction[]): CoinTransaction[] {
+    return [...transactions].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+}
+
 // ============================================================
-// CONFIGURAÇÕES
+// CONFIGURAÃ‡Ã•ES
 // ============================================================
 
 export async function getCashbackSettings(): Promise<CashbackSettings> {
-    const { data, error } = await supabase
-        .from('cashback_settings')
-        .select('*')
-        .limit(1)
-        .maybeSingle();
+    const settings = await loadCashbackSettings();
+    const current = settings[0];
 
-    if (error) throw new Error(`Erro ao buscar configurações de cashback: ${error.message}`);
-    return data as CashbackSettings;
+    if (!current) {
+        throw new Error('Nenhuma configuraÃ§Ã£o de cashback encontrada');
+    }
+
+    return current;
 }
 
 export async function updateCashbackSettings(
@@ -29,18 +118,13 @@ export async function updateCashbackSettings(
     const current = await getCashbackSettings();
 
     if (!current?.id) {
-        throw new Error('Nenhuma configuração de cashback encontrada para atualizar');
+        throw new Error('Nenhuma configuraÃ§Ã£o de cashback encontrada para atualizar');
     }
 
-    const { data, error } = await supabase
-        .from('cashback_settings')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', current.id)
-        .select()
-        .single();
-
-    if (error) throw new Error(`Erro ao salvar configurações: ${error.message}`);
-    return data as CashbackSettings;
+    return vpsClient.patch<CashbackSettings>(`/table-data/cashback_settings/${current.id}`, {
+        ...updates,
+        updated_at: new Date().toISOString(),
+    });
 }
 
 // ============================================================
@@ -48,114 +132,189 @@ export async function updateCashbackSettings(
 // ============================================================
 
 export async function getCoinBalance(customerId: string): Promise<CoinBalance | null> {
-    const { data, error } = await supabase
-        .from('coin_balances')
-        .select('*')
-        .eq('customer_id', customerId)
-        .maybeSingle();
-
-    if (error) throw error;
-    return data as CoinBalance | null;
+    const balances = await loadCoinBalances();
+    return balances.find(balance => balance.customer_id === customerId) || null;
 }
 
 export async function getOrCreateBalance(customerId: string): Promise<CoinBalance> {
     const existing = await getCoinBalance(customerId);
     if (existing) return existing;
 
-    const { data, error } = await supabase
-        .from('coin_balances')
-        .insert({ customer_id: customerId, balance: 0, lifetime_earned: 0, lifetime_spent: 0 })
-        .select()
-        .single();
+    return vpsClient.post<CoinBalance>('/table-data/coin_balances', {
+        customer_id: customerId,
+        balance: 0,
+        lifetime_earned: 0,
+        lifetime_spent: 0,
+    });
+}
 
-    if (error) throw new Error(`Erro ao criar saldo: ${error.message}`);
-    return data as CoinBalance;
+async function patchBalance(balance: CoinBalance, updates: Partial<CoinBalance>): Promise<CoinBalance> {
+    return vpsClient.patch<CoinBalance>(`/table-data/coin_balances/${balance.id}`, {
+        ...updates,
+        updated_at: new Date().toISOString(),
+    });
+}
+
+export async function addCoins(
+    customerId: string,
+    amount: number,
+    type: CoinTransactionType,
+    description: string,
+    referenceId?: string | null,
+    referenceType?: CoinReferenceType | null,
+    status: CoinTransaction['status'] = 'completed'
+): Promise<CoinTransaction> {
+    if (amount <= 0) throw new Error('Quantidade de moedas deve ser positiva');
+    const now = new Date().toISOString();
+
+    if (status === 'completed') {
+        const balance = await getOrCreateBalance(customerId);
+        await patchBalance(balance, {
+            balance: Number(balance.balance || 0) + amount,
+            lifetime_earned: Number(balance.lifetime_earned || 0) + amount,
+        });
+    }
+
+    return vpsClient.post<CoinTransaction>('/table-data/coin_transactions', {
+        id: createLocalId(),
+        customer_id: customerId,
+        amount,
+        type,
+        status,
+        description,
+        reference_id: referenceId ?? null,
+        reference_type: referenceType ?? null,
+        created_at: now,
+    });
+}
+
+export async function spendCoins(
+    customerId: string,
+    amount: number,
+    type: CoinTransactionType,
+    description: string,
+    referenceId?: string | null,
+    referenceType?: CoinReferenceType | null
+): Promise<CoinTransaction> {
+    if (amount <= 0) throw new Error('Quantidade de moedas deve ser positiva');
+    const balance = await getOrCreateBalance(customerId);
+    if (Number(balance.balance || 0) < amount) throw new Error('Saldo insuficiente');
+
+    await patchBalance(balance, {
+        balance: Number(balance.balance || 0) - amount,
+        lifetime_spent: Number(balance.lifetime_spent || 0) + amount,
+    });
+
+    return vpsClient.post<CoinTransaction>('/table-data/coin_transactions', {
+        id: createLocalId(),
+        customer_id: customerId,
+        amount: -amount,
+        type,
+        status: 'completed',
+        description,
+        reference_id: referenceId ?? null,
+        reference_type: referenceType ?? null,
+        created_at: new Date().toISOString(),
+    });
+}
+
+export async function listCoinBalances(): Promise<CoinBalance[]> {
+    return loadCoinBalances();
 }
 
 // ============================================================
-// HISTÓRICO DE TRANSAÇÕES
+// HISTÃ“RICO DE TRANSAÃ‡Ã•ES
 // ============================================================
 
 export async function getCoinTransactions(
     customerId: string,
     limit = 20
 ): Promise<CoinTransaction[]> {
-    const { data, error } = await supabase
-        .from('coin_transactions')
-        .select('*')
-        .eq('customer_id', customerId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-    if (error) throw new Error(`Erro ao buscar transações: ${error.message}`);
-    return (data ?? []) as CoinTransaction[];
+    return sortTransactionsNewestFirst(
+        (await loadCoinTransactions()).filter(transaction => transaction.customer_id === customerId)
+    ).slice(0, limit);
 }
 
-// Admin: todas as transações com filtros
+// Admin: todas as transaÃ§Ãµes com filtros
 export async function listAllTransactions(filters?: {
     type?: CoinTransactionType;
     from?: string;
     to?: string;
     limit?: number;
 }): Promise<CoinTransaction[]> {
-    let query = supabase
-        .from('coin_transactions')
-        .select('*, customers(name)')
-        .order('created_at', { ascending: false })
-        .limit(filters?.limit ?? 100);
+    let rows = await loadCoinTransactions();
 
-    if (filters?.type) query = query.eq('type', filters.type);
-    if (filters?.from) query = query.gte('created_at', filters.from);
-    if (filters?.to) query = query.lte('created_at', filters.to);
+    if (filters?.type) rows = rows.filter(transaction => transaction.type === filters.type);
+    if (filters?.from) rows = rows.filter(transaction => transaction.created_at >= filters.from!);
+    if (filters?.to) rows = rows.filter(transaction => transaction.created_at <= filters.to!);
 
-    const { data, error } = await query;
-    if (error) throw new Error(`Erro ao listar transações: ${error.message}`);
-    return (data ?? []) as CoinTransaction[];
+    const limited = sortTransactionsNewestFirst(rows).slice(0, filters?.limit ?? 100);
+    const customers = await loadTableRows<CustomerSummary>('customers');
+    const customerNameById = new Map(customers.map(customer => [customer.id, customer.name || null]));
+
+    return limited.map(transaction => ({
+        ...transaction,
+        customers: { name: customerNameById.get(transaction.customer_id) || null },
+    } as CoinTransaction));
+}
+
+export async function getCoinsEarnedForReference(
+    customerId: string,
+    referenceId: string,
+    type: CoinTransactionType = 'earn_purchase'
+): Promise<number> {
+    const transaction = sortTransactionsNewestFirst(
+        (await loadCoinTransactions()).filter(row =>
+            row.customer_id === customerId &&
+            row.reference_id === referenceId &&
+            row.type === type
+        )
+    )[0];
+
+    return transaction?.amount ?? 0;
 }
 
 // ============================================================
-// ACÚMULO — APÓS COMPRA
+// ACÃšMULO â€” APÃ“S COMPRA
 // ============================================================
 
 /**
- * Acumula moedas para um cliente após uma compra.
+ * Acumula moedas para um cliente apÃ³s uma compra.
  *
- * ⚠️ REGRA CRÍTICA: `finalPaidBrl` deve ser o valor FINAL PAGO pelo cliente,
- * ou seja, APÓS subtrair cupom de desconto e moedas resgatadas.
- * Nunca passar o valor bruto do pedido — isso geraria duplicidade de desconto.
+ * âš ï¸ REGRA CRÃTICA: `finalPaidBrl` deve ser o valor FINAL PAGO pelo cliente,
+ * ou seja, APÃ“S subtrair cupom de desconto e moedas resgatadas.
+ * Nunca passar o valor bruto do pedido â€” isso geraria duplicidade de desconto.
  *
  * Exemplo correto:
- *   Pedido R$ 100 - cupom R$ 20 - moedas R$ 5 = R$ 75 pago → cashback sobre R$ 75
+ *   Pedido R$ 100 - cupom R$ 20 - moedas R$ 5 = R$ 75 pago â†’ cashback sobre R$ 75
  */
 export async function earnCoinsForPurchase(
     customerId: string,
-    finalPaidBrl: number,  // Valor FINAL pago — depois de todos os descontos
+    finalPaidBrl: number,  // Valor FINAL pago â€” depois de todos os descontos
     saleId: string
 ): Promise<number> {
     const settings = await getCashbackSettings();
 
     if (!settings.active) return 0;
-    if (finalPaidBrl < 0.01) return 0; // Compra zerada por descontos não gera cashback
+    if (finalPaidBrl < 0.01) return 0; // Compra zerada por descontos nÃ£o gera cashback
     if (finalPaidBrl < settings.min_purchase_for_coins) return 0;
 
     const coinsEarned = Math.floor(finalPaidBrl * settings.coins_per_real);
     if (coinsEarned <= 0) return 0;
 
-    const { error } = await supabase.rpc('add_coins', {
-        p_customer_id: customerId,
-        p_amount: coinsEarned,
-        p_type: 'earn_purchase',
-        p_description: `Compra aprovada — R$ ${finalPaidBrl.toFixed(2).replace('.', ',')}`,
-        p_reference_id: saleId,
-        p_reference_type: 'sale',
-    });
-
-    if (error) throw new Error(`Erro ao creditar moedas: ${error.message}`);
+    await addCoins(
+        customerId,
+        coinsEarned,
+        'earn_purchase',
+        `Compra aprovada - R$ ${finalPaidBrl.toFixed(2).replace('.', ',')}`,
+        saleId,
+        'sale'
+    );
     return coinsEarned;
 }
 
 // ============================================================
-// ACÚMULO — AVALIAÇÃO DE PRODUTO
+// ACÃšMULO â€” AVALIAÃ‡ÃƒO DE PRODUTO
 // ============================================================
 export async function earnCoinsForReview(
     customerId: string,
@@ -167,20 +326,18 @@ export async function earnCoinsForReview(
 
     const coinsEarned = settings.review_coins;
 
-    const { error } = await supabase.rpc('add_coins', {
-        p_customer_id: customerId,
-        p_amount: coinsEarned,
-        p_type: 'earn_review',
-        p_description: `Avaliação de produto`,
-        p_reference_id: reviewId,
-        p_reference_type: 'review',
-    });
-
-    if (error) throw new Error(`Erro ao creditar moedas por avaliação: ${error.message}`);
+    await addCoins(
+        customerId,
+        coinsEarned,
+        'earn_review',
+        'Avaliacao de produto',
+        reviewId,
+        'review'
+    );
     return coinsEarned;
 }
 
-// Emissão de moedas pendentes (para novas compras online aguardando pagamento/aprovação)
+// EmissÃ£o de moedas pendentes (para novas compras online aguardando pagamento/aprovaÃ§Ã£o)
 export async function addPendingCoinsForPurchase(
     customerId: string,
     finalPaidBrl: number,
@@ -192,34 +349,49 @@ export async function addPendingCoinsForPurchase(
     const coinsToEarn = Math.floor(finalPaidBrl * settings.coins_per_real);
     if (coinsToEarn <= 0) return;
 
-    const { error } = await supabase.rpc('add_pending_coins', {
-        p_customer_id: customerId,
-        p_amount: coinsToEarn,
-        p_type: 'earn_purchase',
-        p_description: `Moedas pendentes da compra #${saleId.slice(0, 8)}`,
-        p_reference_id: saleId,
-        p_reference_type: 'sale',
-    });
-
-    if (error) throw new Error(`Erro ao pré-adicionar moedas: ${error.message}`);
+    await addCoins(
+        customerId,
+        coinsToEarn,
+        'earn_purchase',
+        `Moedas pendentes da compra #${saleId.slice(0, 8)}`,
+        saleId,
+        'sale',
+        'pending'
+    );
 }
 
 // Confirma moedas pendentes
 export async function confirmPendingCoins(saleId: string): Promise<void> {
-    const { error } = await supabase.rpc('confirm_pending_coins', {
-        p_reference_id: saleId
-    });
+    const pending = (await loadCoinTransactions()).filter(transaction =>
+        transaction.reference_id === saleId && transaction.status === 'pending'
+    );
 
-    if (error) throw new Error(`Erro ao confirmar moedas: ${error.message}`);
+    for (const transaction of pending) {
+        const amount = Number(transaction.amount || 0);
+        if (amount <= 0) continue;
+
+        const balance = await getOrCreateBalance(transaction.customer_id);
+        await patchBalance(balance, {
+            balance: Number(balance.balance || 0) + amount,
+            lifetime_earned: Number(balance.lifetime_earned || 0) + amount,
+        });
+        await vpsClient.patch<CoinTransaction>(`/table-data/coin_transactions/${transaction.id}`, {
+            status: 'completed',
+        });
+    }
 }
 
 // Cancela moedas pendentes
 export async function cancelPendingCoins(saleId: string): Promise<void> {
-    const { error } = await supabase.rpc('cancel_pending_coins', {
-        p_reference_id: saleId
-    });
+    const pending = (await loadCoinTransactions()).filter(transaction =>
+        transaction.reference_id === saleId && transaction.status === 'pending'
+    );
 
-    if (error) throw new Error(`Erro ao cancelar moedas pendentes: ${error.message}`);
+    for (const transaction of pending) {
+        await vpsClient.patch<CoinTransaction>(`/table-data/coin_transactions/${transaction.id}`, {
+            status: 'cancelled',
+        });
+    }
 }
 
 // ============================================================
@@ -238,13 +410,13 @@ export async function validateCoinRedeem(
         return { valid: false, error: 'Sistema de moedas inativo', coins_to_use: 0, discount_brl: 0, final_price: orderValueBrl };
     }
     if (!balance || balance.balance < settings.min_coins_to_redeem) {
-        return { valid: false, error: `Saldo mínimo para resgate: ${settings.min_coins_to_redeem} moedas`, coins_to_use: 0, discount_brl: 0, final_price: orderValueBrl };
+        return { valid: false, error: `Saldo mÃ­nimo para resgate: ${settings.min_coins_to_redeem} moedas`, coins_to_use: 0, discount_brl: 0, final_price: orderValueBrl };
     }
     if (coinsToUse > balance.balance) {
         return { valid: false, error: 'Saldo insuficiente', coins_to_use: 0, discount_brl: 0, final_price: orderValueBrl };
     }
 
-    // Cap: desconto máximo = max_redeem_percent% do pedido
+    // Cap: desconto mÃ¡ximo = max_redeem_percent% do pedido
     const maxDiscountBrl = (orderValueBrl * settings.max_redeem_percent) / 100;
     const rawDiscountBrl = coinsToUse / settings.coins_to_brl_rate;
     const discountBrl = Math.min(rawDiscountBrl, maxDiscountBrl);
@@ -269,16 +441,14 @@ export async function redeemCoins(
     referenceId?: string,
     referenceType: 'sale' | 'quote' = 'quote'
 ): Promise<void> {
-    const { error } = await supabase.rpc('spend_coins', {
-        p_customer_id: customerId,
-        p_amount: coinsToUse,
-        p_type: 'spend_discount',
-        p_description: description,
-        p_reference_id: referenceId ?? null,
-        p_reference_type: referenceType,
-    });
-
-    if (error) throw new Error(error.message);
+    await spendCoins(
+        customerId,
+        coinsToUse,
+        'spend_discount',
+        description,
+        referenceId ?? null,
+        referenceType
+    );
 }
 
 // ============================================================
@@ -290,24 +460,37 @@ export async function refundCoinsOnCancel(
     coinsToRefund: number,
     saleId: string
 ): Promise<void> {
-    const { error } = await supabase.rpc('refund_coins', {
-        p_customer_id: customerId,
-        p_amount: coinsToRefund,
-        p_reference_id: saleId,
-    });
-
-    if (error) throw new Error(`Erro ao estornar moedas: ${error.message}`);
+    await addCoins(
+        customerId,
+        coinsToRefund,
+        'refund_cancel',
+        'Estorno de moedas por cancelamento',
+        saleId,
+        'sale'
+    );
 }
 
 export async function cancelReferralReward(referenceId: string): Promise<void> {
-    const { error, data } = await supabase.rpc('refund_referral_coins', {
-        p_reference_id: referenceId,
-    });
+    const rewards = (await loadCoinTransactions()).filter(transaction =>
+        transaction.reference_id === referenceId &&
+        transaction.type === 'earn_referral' &&
+        transaction.status === 'completed' &&
+        Number(transaction.amount || 0) > 0
+    );
 
-    if (error) {
-        console.error(`Erro ao estornar moedas de indicacao para o pedido ${referenceId}:`, error);
-    } else {
-        console.log(`Estorno de moedas de indicação concluído:`, data);
+    for (const reward of rewards) {
+        try {
+            await spendCoins(
+                reward.customer_id,
+                Number(reward.amount || 0),
+                'refund_cancel',
+                'Estorno de moedas de indicacao',
+                referenceId,
+                'sale'
+            );
+        } catch (error) {
+            console.error(`Erro ao estornar moedas de indicacao para o pedido ${referenceId}:`, error);
+        }
     }
 }
 
@@ -320,52 +503,85 @@ export async function adminAdjustCoins(
     amount: number, // positivo = adicionar, negativo = remover
     reason: string
 ): Promise<void> {
-    const rpc = amount > 0 ? 'add_coins' : 'spend_coins';
-    const { error } = await supabase.rpc(rpc, {
-        p_customer_id: customerId,
-        p_amount: Math.abs(amount),
-        p_type: 'admin_adjust',
-        p_description: reason,
-        p_reference_type: 'admin',
-    });
+    if (amount > 0) {
+        await addCoins(customerId, amount, 'admin_adjust', reason, null, 'admin');
+        return;
+    }
 
-    if (error) throw new Error(`Erro no ajuste: ${error.message}`);
+    await spendCoins(customerId, Math.abs(amount), 'admin_adjust', reason, null, 'admin');
 }
 
 // ============================================================
-// VALIDAÇÃO DE INDICAÇÃO
+// VALIDAÃ‡ÃƒO DE INDICAÃ‡ÃƒO
 // ============================================================
 
 export async function validateReferralCode(
     code: string,
     currentCustomerId?: string
 ): Promise<{ valid: boolean; error?: string; referrerName?: string }> {
-    if (!code.trim()) return { valid: false, error: 'Código vazio.' };
+    const normalizedCode = code.trim().toUpperCase();
+    if (!normalizedCode) return { valid: false, error: 'CÃ³digo vazio.' };
+
+    const customers = await loadTableRows<CustomerSummary>('customers');
 
     // Check if it's the user's own code
     if (currentCustomerId) {
-        const { data: currentCustomer } = await supabase
-            .from('customers')
-            .select('referral_code')
-            .eq('id', currentCustomerId)
-            .single();
+        const currentCustomer = customers.find(customer => customer.id === currentCustomerId);
 
-        if (currentCustomer && currentCustomer.referral_code === code.trim().toUpperCase()) {
-            return { valid: false, error: 'Você não pode usar seu próprio código de indicação.' };
+        if (currentCustomer?.referral_code?.toUpperCase() === normalizedCode) {
+            return { valid: false, error: 'VocÃª nÃ£o pode usar seu prÃ³prio cÃ³digo de indicaÃ§Ã£o.' };
         }
     }
 
-    const { data: referrer, error } = await supabase
-        .from('customers')
-        .select('name')
-        .eq('referral_code', code.trim().toUpperCase())
-        .single();
+    const referrer = customers.find(customer => customer.referral_code?.toUpperCase() === normalizedCode);
 
-    if (error || !referrer) {
-        return { valid: false, error: 'Código de indicação inválido ou não encontrado.' };
+    if (!referrer) {
+        return { valid: false, error: 'CÃ³digo de indicaÃ§Ã£o invÃ¡lido ou nÃ£o encontrado.' };
     }
 
     return { valid: true, referrerName: referrer.name };
+}
+
+export async function processReferralReward(input: {
+    referralCode: string;
+    buyerId: string;
+    purchaseValue: number;
+    referenceId: string;
+    referenceType: Extract<CoinReferenceType, 'sale' | 'order'>;
+    buyerName?: string | null;
+}): Promise<{ success: boolean; coins_awarded?: number; error?: string }> {
+    const settings = await getCashbackSettings();
+    if (!settings.active) return { success: false, error: 'Sistema de moedas inativo' };
+
+    const normalizedCode = input.referralCode.trim().toUpperCase();
+    if (!normalizedCode) return { success: false, error: 'Codigo de indicacao vazio' };
+
+    const customers = await loadTableRows<CustomerSummary>('customers');
+    const referrer = customers.find(customer => customer.referral_code?.toUpperCase() === normalizedCode);
+    if (!referrer) return { success: false, error: 'Codigo de indicacao invalido' };
+    if (referrer.id === input.buyerId) return { success: false, error: 'Autoindicacao ignorada' };
+
+    const alreadyRewarded = (await loadCoinTransactions()).some(transaction =>
+        transaction.reference_id === input.referenceId &&
+        transaction.reference_type === input.referenceType &&
+        transaction.type === 'earn_referral' &&
+        transaction.status !== 'cancelled'
+    );
+    if (alreadyRewarded) return { success: false, error: 'Indicacao ja processada' };
+
+    const coins = Math.floor(Math.max(0, input.purchaseValue) * Number(settings.referral_coins_per_real || 0));
+    if (coins <= 0) return { success: false, error: 'Valor insuficiente para gerar recompensa' };
+
+    await addCoins(
+        referrer.id,
+        coins,
+        'earn_referral',
+        `Indicacao de ${input.buyerName || 'cliente'}`,
+        input.referenceId,
+        input.referenceType
+    );
+
+    return { success: true, coins_awarded: coins };
 }
 
 // ============================================================
@@ -381,3 +597,4 @@ export function coinsToReais(coins: number, rate: number): number {
 export function reaisToCoins(brl: number, coinsPerReal: number): number {
     return Math.floor(brl * coinsPerReal);
 }
+

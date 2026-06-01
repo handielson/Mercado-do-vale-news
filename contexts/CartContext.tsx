@@ -6,7 +6,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { CatalogProduct } from '@/types/catalog';
-import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
+import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { getEffectivePrice } from '../hooks/useEffectiveCustomerType';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
 
     // Sincroniza o carrinho com o backend quando logado
     useEffect(() => {

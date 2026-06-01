@@ -1,18 +1,23 @@
-import { supabase } from './supabase';
 import { vpsClient } from './vpsClient';
-import { USE_VPS } from '@/config/migration';
 
 /**
- * Serviço para gerenciar uploads de arquivos para Supabase Storage
+ * Serviço para gerenciar uploads de arquivos via VPS/Synology.
  */
 
-const BANNER_BUCKET = 'catalog-banners';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
 
+type SynologyUploadResponse = {
+    ok?: boolean;
+    url: string;
+    name?: string;
+    filename?: string;
+    storage?: 'synology' | 'local';
+};
+
 export const uploadService = {
     /**
-     * Faz upload de uma imagem de banner para o Supabase Storage
+     * Faz upload de uma imagem de banner para a VPS.
      * @param file - Arquivo de imagem a ser enviado
      * @returns URL pública da imagem
      */
@@ -24,36 +29,10 @@ export const uploadService = {
             throw new Error(`Arquivo muito grande. Tamanho máximo: ${MAX_FILE_SIZE / 1024 / 1024}MB`);
         }
 
-        // Upload para VPS
-        if (USE_VPS.banners) {
-            const formData = new FormData();
-            formData.append('file', file);
-            const { url } = await vpsClient.upload<{ url: string }>('/banners/upload', formData);
-            return url;
-        }
-
-        // Upload para Supabase Storage (fallback)
-        const timestamp = Date.now();
-        const randomString = Math.random().toString(36).substring(2, 10);
-        const extension = file.name.split('.').pop() || 'png';
-        const fileName = `${timestamp}_${randomString}.${extension}`;
-
-        try {
-            const { error } = await supabase.storage
-                .from(BANNER_BUCKET)
-                .upload(fileName, file, { cacheControl: '3600', upsert: false });
-
-            if (error) throw new Error(`Erro ao fazer upload: ${error.message}`);
-
-            const { data: publicUrlData } = supabase.storage
-                .from(BANNER_BUCKET)
-                .getPublicUrl(fileName);
-
-            if (!publicUrlData?.publicUrl) throw new Error('Erro ao obter URL pública da imagem');
-            return publicUrlData.publicUrl;
-        } catch (error: any) {
-            throw new Error(error.message || 'Erro ao fazer upload da imagem');
-        }
+        const formData = new FormData();
+        formData.append('file', file);
+        const { url } = await vpsClient.upload<{ url: string }>('/banners/upload', formData);
+        return url;
     },
 
     /**
@@ -108,7 +87,7 @@ export const uploadService = {
     },
 
     /**
-     * Faz upload da imagem de perfil (avatar) para o Storage (já comprimida via client-side)
+     * Faz upload da imagem de perfil (avatar) para o Synology via VPS.
      */
     uploadAvatar: async (file: File, customerId: string): Promise<string> => {
         if (!ALLOWED_TYPES.includes(file.type)) {
@@ -117,31 +96,15 @@ export const uploadService = {
 
         try {
             // Comprime antes do upload (para o avatar ficar leve)
-            const compressedBlob = await uploadService.compressAvatarClientSide(file);
-            const compressedFile = new File([compressedBlob], `avatar_${customerId}.jpg`, { type: 'image/jpeg' });
-            
-            // O nome do arquivo será atrelado ao usuário.
-            // Sobrescreve a imagem anterior, usando upsert: true
             const fileName = `${customerId}_avatar.jpg`;
+            const compressedBlob = await uploadService.compressAvatarClientSide(file);
+            const compressedFile = new File([compressedBlob], fileName, { type: 'image/jpeg' });
+            const formData = new FormData();
+            formData.append('file', compressedFile);
 
-            const { error, data } = await supabase.storage
-                .from('customer-avatars')
-                .upload(fileName, compressedFile, {
-                    cacheControl: '3600',
-                    upsert: true
-                });
-
-            if (error) {
-                console.error('Erro no upload de avatar:', error);
-                throw new Error(`Erro ao fazer upload: ${error.message}`);
-            }
-
-            const { data: publicUrlData } = supabase.storage
-                .from('customer-avatars')
-                .getPublicUrl(fileName);
-
-            // Append query param to bypass cache if image changes
-            return `${publicUrlData.publicUrl}?t=${Date.now()}`;
+            const upload = await vpsClient.upload<SynologyUploadResponse>('/synology/upload?folder=imagens', formData);
+            if (!upload.url) throw new Error('Erro ao obter URL pública da imagem');
+            return `${upload.url}?t=${Date.now()}`;
         } catch (error: any) {
             console.error('Erro geral no uploadAvatar:', error);
             throw new Error(error.message || 'Erro ao processar e enviar foto.');
@@ -149,7 +112,7 @@ export const uploadService = {
     },
 
     /**
-     * Remove uma imagem de banner do Supabase Storage
+     * Remove uma imagem de banner da VPS.
      * @param imageUrl - URL da imagem a ser removida
      */
     deleteBannerImage: async (imageUrl: string): Promise<void> => {
@@ -157,18 +120,7 @@ export const uploadService = {
             const fileName = imageUrl.split('/').pop();
             if (!fileName) throw new Error('URL de imagem inválida');
 
-            // Deletar da VPS
-            if (USE_VPS.banners) {
-                await vpsClient.delete(`/banners/upload/${fileName}`);
-                return;
-            }
-
-            // Deletar do Supabase Storage (fallback)
-            const { error } = await supabase.storage
-                .from(BANNER_BUCKET)
-                .remove([fileName]);
-
-            if (error) throw new Error(`Erro ao deletar imagem: ${error.message}`);
+            await vpsClient.delete(`/banners/upload/${fileName}`);
         } catch (error: any) {
             console.error('Erro ao deletar:', error);
             // Não lançar erro para não bloquear a exclusão do banner
@@ -199,15 +151,12 @@ export const uploadService = {
     },
 
     /**
-     * Obtém a URL pública de um arquivo no bucket
+     * Obtém a URL pública de um arquivo já publicado pela VPS.
      * @param fileName - Nome do arquivo
      * @returns URL pública
      */
     getPublicUrl: (fileName: string): string => {
-        const { data } = supabase.storage
-            .from(BANNER_BUCKET)
-            .getPublicUrl(fileName);
-
-        return data.publicUrl;
+        if (/^https?:\/\//i.test(fileName)) return fileName;
+        return `/images/banners/${fileName.replace(/^\/+/, '')}`;
     }
 };

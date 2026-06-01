@@ -1,28 +1,11 @@
 require('dotenv/config');
 
 const BASE_URL = process.env.VPS_API_BASE_URL || 'https://api.xiaomipetrolina.com.br';
-const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/+$/, '');
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-  || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
-  || process.env.SUPABASE_KEY
-  || process.env.SUPABASE_ANON_KEY
-  || process.env.VITE_SUPABASE_ANON_KEY
-  || '';
+const BLING_ACCESS_TOKEN = process.env.BLING_ACCESS_TOKEN || process.env.VPS_BLING_ACCESS_TOKEN || '';
 
 async function loadStoredBlingAccessToken() {
-  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error('Supabase env vars missing');
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/company_settings?select=bling_access_token&limit=1`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      Accept: 'application/json',
-    },
-    signal: AbortSignal.timeout(20000),
-  });
-  const body = await response.json().catch(() => []);
-  const token = Array.isArray(body) ? body[0]?.bling_access_token : null;
-  if (!response.ok || !token) throw new Error('Bling token missing');
-  return String(token);
+  if (!BLING_ACCESS_TOKEN) throw new Error('BLING_ACCESS_TOKEN or VPS_BLING_ACCESS_TOKEN env var missing');
+  return BLING_ACCESS_TOKEN;
 }
 
 function extractFirstId(body) {

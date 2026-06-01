@@ -53,20 +53,20 @@ assert.match(types, /StockLocationOrderReservationInput/, 'types must define ord
 
 assert.match(
   service,
-  /reserveStockByPriority[\s\S]*reserve_product_stock_by_priority/,
-  'stockLocationService must expose reserveStockByPriority'
+  /reserveStockByPriority[\s\S]*\/stock-locations\/priority-reservations/,
+  'stockLocationService must expose reserveStockByPriority through VPS'
 );
 
 assert.match(
   service,
-  /consumeOrderStockReservations[\s\S]*consume_order_stock_reservations/,
-  'stockLocationService must expose consumeOrderStockReservations'
+  /consumeOrderStockReservations[\s\S]*\/stock-locations\/order-reservations\/consume/,
+  'stockLocationService must expose consumeOrderStockReservations through VPS'
 );
 
 assert.match(
   service,
-  /releaseOrderStockReservations[\s\S]*release_order_stock_reservations/,
-  'stockLocationService must expose releaseOrderStockReservations'
+  /releaseOrderStockReservations[\s\S]*\/stock-locations\/order-reservations\/release/,
+  'stockLocationService must expose releaseOrderStockReservations through VPS'
 );
 
 assert.match(

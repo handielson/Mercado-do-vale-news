@@ -2,7 +2,7 @@
 
 Data: 11/05/2026
 
-Objetivo: deixar pronto o escopo para quando for solicitado commit desta frente, seguindo `commit.md`.
+Objetivo: deixar pronto o escopo para quando for solicitado commit/publicacao desta frente, seguindo `publicar.md`.
 
 ## Regra
 
@@ -11,15 +11,15 @@ Objetivo: deixar pronto o escopo para quando for solicitado commit desta frente,
 - [ ] Stagear somente arquivos desta frente.
 - [ ] Nao misturar alteracoes paralelas do worktree.
 - [ ] Fazer push por padrao.
-- [ ] Levar para `main` se precisar refletir na Vercel.
-- [ ] Verificar Vercel se houver deploy web.
+- [ ] Levar para `main` se precisar refletir em producao.
+- [ ] Publicar na VPS se houver deploy web.
 - [ ] Avaliar deploy VPS apenas se o commit mexer em runtime/servicos da VPS.
 
 ## Arquivos Provaveis Desta Frente
 
 - [ ] `Estoque.md`
-- [ ] `supabase/migrations/20260509000001_multi_deposit_stock.sql`
-- [ ] `supabase/verify_multi_deposit_stock.sql`
+- [ ] `migrations/20260509000001_multi_deposit_stock.sql`
+- [ ] `migrations/verify_multi_deposit_stock.sql`
 - [ ] `types/stock-location.ts`
 - [ ] `services/stockLocationService.ts`
 - [ ] `services/saleService.ts`
@@ -55,7 +55,7 @@ Objetivo: deixar pronto o escopo para quando for solicitado commit desta frente,
 - [ ] `tmp-tests/order-stock-restore-by-location-static.test.mjs`
 - [ ] `tmp-tests/external-integrations-total-stock-static.test.mjs`
 - [ ] `tmp-tests/multi-deposit-stock-verification-sql-static.test.mjs`
-- [ ] `tmp-tests/vercel-deploy-readiness-static.test.mjs`
+- [ ] `tmp-tests/vps-site-deploy-script-static.test.mjs`
 - [ ] `tmp-tests/estoque-staging-runbook-static.test.mjs`
 - [ ] `tmp-tests/vps-units-location-fields-static.test.mjs`
 
@@ -91,7 +91,7 @@ docs(inventory): document multi-location stock validation
 - [ ] `node tmp-tests\order-stock-reservation-static.test.mjs`
 - [ ] `node tmp-tests\external-integrations-total-stock-static.test.mjs`
 - [ ] `node tmp-tests\multi-deposit-stock-verification-sql-static.test.mjs`
-- [ ] `node tmp-tests\vercel-deploy-readiness-static.test.mjs`
+- [ ] `node tmp-tests\vps-site-deploy-script-static.test.mjs`
 - [ ] `node tmp-tests\estoque-staging-runbook-static.test.mjs`
 - [ ] `npm.cmd run build`
 

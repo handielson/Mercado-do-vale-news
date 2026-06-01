@@ -63,6 +63,7 @@ const CompanyDataPage = lazy(() => import('../pages/admin/settings/CompanyDataPa
 const DocumentSettingsPage = lazy(() => import('../pages/admin/settings/DocumentSettingsPage'));
 const WarrantyTemplatesPage = lazy(() => import('../pages/admin/settings/WarrantyTemplatesPage'));
 const MessagesPage = lazy(() => import('../pages/admin/settings/MessagesPage'));
+const EmailTemplatesPage = lazy(() => import('../pages/admin/settings/EmailTemplatesPage'));
 const BannerManagementPage = lazy(() => import('../pages/admin/settings/BannerManagementPage'));
 const CatalogSettingsPage = lazy(() => import('../pages/admin/settings/CatalogSettingsPage'));
 const ShippingPage = lazy(() => import('../pages/admin/settings/ShippingPage'));
@@ -156,12 +157,12 @@ export const router = createBrowserRouter([
     },
     element: <div>Redirecionando...</div>
   },
-  // Admin Authentication (Supabase)
+  // Admin Authentication (VPS)
   {
     path: "/admin/login",
     element: <AdminLoginPage />
   },
-  // Customer Authentication (Supabase)
+  // Customer Authentication (VPS)
   {
     path: "/cliente/login",
     element: <ClienteLoginPage />
@@ -539,6 +540,14 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/admin/settings/email",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><EmailTemplatesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
     path: "/admin/settings/shopee",
     element: (
       <ProtectedRoute requireAdmin={true}>
@@ -876,6 +885,16 @@ export const router = createBrowserRouter([
   },
   {
     path: "/produtos/mais-recentes",
+    element: (
+      <MaintenanceGuard>
+        <CartProvider>
+          <CatalogPage />
+        </CartProvider>
+      </MaintenanceGuard>
+    )
+  },
+  {
+    path: "/produtos/mais-vendidos",
     element: (
       <MaintenanceGuard>
         <CartProvider>

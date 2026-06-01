@@ -1,39 +1,42 @@
 /**
- * tools/backfill-brand-tags.cjs
- *
- * Para cada produto da VPS que tenha `brand` preenchido:
- *   1. Garante que existe uma entrada em cross_sell_tags (Supabase) com o nome
- *      da marca — match case-insensitive + accent-insensitive.
- *   2. Adiciona a marca em product.specs.tags_venda se ainda não estiver lá
- *      (mesma regra de match), via PATCH /products/:id/tags-venda na VPS.
- *
- * Uso:
- *   node tools/backfill-brand-tags.cjs           # dry-run (padrão)
- *   node tools/backfill-brand-tags.cjs --apply   # executa
- *
- * Env exigidas (.env do projeto):
- *   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (ou SUPABASE_SERVICE_ROLE_KEY),
- *   SYNC_SECRET.
+ * Adds product brands to tags_venda and ensures the cross_sell_tags dictionary
+ * through the protected VPS API. Dry-run by default; pass --apply to execute.
  */
 require('dotenv').config();
-const { createClient } = require('@supabase/supabase-js');
 
-const VPS_BASE = process.env.VITE_VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
-const SYNC_SECRET = process.env.SYNC_SECRET;
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const VPS_BASE = (process.env.VITE_VPS_BASE_URL || process.env.VITE_VPS_URL || 'https://api.xiaomipetrolina.com.br').replace(/\/+$/, '');
+const SYNC_SECRET = process.env.SYNC_SECRET || process.env.VPS_SYNC_KEY || process.env.VITE_VPS_SYNC_KEY || '';
 const apply = process.argv.includes('--apply');
 
-if (!SYNC_SECRET) { console.error('SYNC_SECRET ausente no .env'); process.exit(1); }
-if (!SUPABASE_URL || !SUPABASE_KEY) { console.error('Supabase env ausente'); process.exit(1); }
+if (!SYNC_SECRET) { console.error('SYNC_SECRET/VPS_SYNC_KEY ausente no .env'); process.exit(1); }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+async function getFetch() {
+    if (typeof fetch === 'function') return fetch;
+    const mod = await import('node-fetch');
+    return mod.default;
+}
+
+async function vpsFetch(pathname, options = {}) {
+    const requestFetch = await getFetch();
+    const res = await requestFetch(`${VPS_BASE}${pathname}`, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            'x-sync-key': SYNC_SECRET,
+            ...(options.headers || {}),
+        },
+    });
+    const text = await res.text();
+    const json = text ? JSON.parse(text) : null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${json?.error || text || ''}`);
+    return json;
+}
 
 function normalizeTag(value) {
     return String(value || '')
         .toLowerCase()
         .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
+        .replace(/[\u0300-\u036f]/g, '')
         .trim();
 }
 
@@ -43,7 +46,7 @@ function tagsArray(raw) {
         try {
             const p = JSON.parse(raw);
             return Array.isArray(p) ? p.filter(t => typeof t === 'string' && t.trim()) : [];
-        } catch { /* */ }
+        } catch { /* ignore malformed JSON */ }
     }
     return [];
 }
@@ -62,7 +65,8 @@ async function fetchAllProducts() {
     let page = 0;
     const pageSize = 2000;
     while (true) {
-        const res = await fetch(`${VPS_BASE}/products?status=all&limit=${pageSize}&offset=${page * pageSize}`);
+        const requestFetch = await getFetch();
+        const res = await requestFetch(`${VPS_BASE}/products?status=all&limit=${pageSize}&offset=${page * pageSize}`);
         if (!res.ok) throw new Error(`GET /products falhou: ${res.status}`);
         const rows = await res.json();
         if (!Array.isArray(rows) || rows.length === 0) break;
@@ -74,35 +78,35 @@ async function fetchAllProducts() {
 }
 
 async function loadDictionary() {
-    const { data, error } = await supabase.from('cross_sell_tags').select('id, name');
-    if (error) throw new Error(`Supabase cross_sell_tags: ${error.message}`);
-    return data || [];
+    const all = [];
+    const pageSize = 200;
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsFetch(`/table-data/cross_sell_tags?limit=${pageSize}&offset=${offset}`);
+        const rows = Array.isArray(data?.rows) ? data.rows : [];
+        all.push(...rows);
+        if (rows.length < pageSize) break;
+    }
+    return all;
 }
 
 async function ensureDictionaryTag(name) {
     const slug = name
         .toLowerCase()
         .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
+        .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
-    const { error } = await supabase
-        .from('cross_sell_tags')
-        .insert({ name: name.trim(), slug });
-    if (error && error.code !== '23505' /* unique violation */) {
-        throw new Error(`Insert cross_sell_tags '${name}': ${error.message}`);
-    }
+    return vpsFetch('/table-data/cross_sell_tags', {
+        method: 'POST',
+        body: JSON.stringify({ name: name.trim(), slug }),
+    });
 }
 
 async function patchTagsVenda(productId, tagsVenda) {
-    const res = await fetch(`${VPS_BASE}/products/${productId}/tags-venda`, {
+    return vpsFetch(`/products/${productId}/tags-venda`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'X-Sync-Key': SYNC_SECRET },
         body: JSON.stringify({ tags_venda: tagsVenda }),
     });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${json.error || ''}`);
-    return json;
 }
 
 (async () => {
@@ -111,15 +115,14 @@ async function patchTagsVenda(productId, tagsVenda) {
     const products = await fetchAllProducts();
     console.log(`[brand-tags] produtos lidos: ${products.length}`);
 
-    // 1. Garante marcas no dicionário cross_sell_tags
-    const brandsByNorm = new Map(); // norm -> nome original (primeiro encontrado)
+    const brandsByNorm = new Map();
     for (const p of products) {
         const b = (p.brand || '').trim();
         if (!b) continue;
         const n = normalizeTag(b);
         if (!brandsByNorm.has(n)) brandsByNorm.set(n, b);
     }
-    console.log(`[brand-tags] marcas únicas: ${brandsByNorm.size}`);
+    console.log(`[brand-tags] marcas unicas: ${brandsByNorm.size}`);
 
     const dict = await loadDictionary();
     const dictNorm = new Set(dict.map(t => normalizeTag(t.name)));
@@ -127,12 +130,11 @@ async function patchTagsVenda(productId, tagsVenda) {
     for (const [n, name] of brandsByNorm) {
         if (!dictNorm.has(n)) dictMissing.push(name);
     }
-    console.log(`[brand-tags] marcas faltando no dicionário: ${dictMissing.length}`);
+    console.log(`[brand-tags] marcas faltando no dicionario: ${dictMissing.length}`);
     if (dictMissing.length > 0) {
-        console.log('  →', dictMissing.slice(0, 10).join(', '), dictMissing.length > 10 ? '...' : '');
+        console.log('  ->', dictMissing.slice(0, 10).join(', '), dictMissing.length > 10 ? '...' : '');
     }
 
-    // 2. Calcula plano por produto
     const plan = [];
     const skipped = [];
     for (const p of products) {
@@ -150,7 +152,7 @@ async function patchTagsVenda(productId, tagsVenda) {
     console.log(`  ignorados (sem brand): ${skipped.length}`);
     console.log('\n  primeiros 10:');
     for (const item of plan.slice(0, 10)) {
-        console.log(`  ${item.sku.padEnd(15)} [${item.brand}] → tags_venda: [${item.newTags.join(', ')}]`);
+        console.log(`  ${item.sku.padEnd(15)} [${item.brand}] -> tags_venda: [${item.newTags.join(', ')}]`);
     }
 
     if (!apply) {
@@ -158,18 +160,16 @@ async function patchTagsVenda(productId, tagsVenda) {
         return;
     }
 
-    // 3a. Insere marcas faltantes no dicionário
-    console.log(`\n[brand-tags] inserindo ${dictMissing.length} marcas no dicionário...`);
+    console.log(`\n[brand-tags] inserindo ${dictMissing.length} marcas no dicionario...`);
     for (const name of dictMissing) {
         try {
             await ensureDictionaryTag(name);
-            console.log(`  ✓ ${name}`);
+            console.log(`  ok ${name}`);
         } catch (err) {
-            console.error(`  ✗ ${name}: ${err.message}`);
+            console.error(`  falhou ${name}: ${err.message}`);
         }
     }
 
-    // 3b. Atualiza specs.tags_venda nos produtos
     console.log(`\n[brand-tags] aplicando ${plan.length} PATCHes...`);
     let ok = 0, fail = 0;
     for (const item of plan) {
@@ -179,7 +179,7 @@ async function patchTagsVenda(productId, tagsVenda) {
             if (ok % 50 === 0) console.log(`  progresso: ${ok}/${plan.length}`);
         } catch (err) {
             fail += 1;
-            console.error(`  ✗ ${item.sku}: ${err.message}`);
+            console.error(`  falhou ${item.sku}: ${err.message}`);
         }
     }
     console.log(`\n[brand-tags] feito. ok=${ok} fail=${fail}`);

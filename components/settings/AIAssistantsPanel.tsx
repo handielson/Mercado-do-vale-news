@@ -22,7 +22,7 @@ export function AIAssistantsPanel() {
     const [isSaving, setIsSaving] = useState(false);
     const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
-    // Load from Supabase on mount
+    // Load from VPS on mount
     useEffect(() => {
         const loadPrompts = async () => {
             try {
@@ -34,14 +34,14 @@ export function AIAssistantsPanel() {
                     }));
                 }
             } catch (error) {
-                console.error('Failed to load AI prompts from Supabase:', error);
+                console.error('Failed to load AI prompts from VPS:', error);
             }
         };
 
         loadPrompts();
     }, []);
 
-    // Save to Supabase with debounce
+    // Save to VPS with debounce
     const handlePromptChange = (key: keyof typeof prompts, field: 'title' | 'content', value: string) => {
         const newPrompts = {
             ...prompts,
@@ -57,7 +57,7 @@ export function AIAssistantsPanel() {
             try {
                 await companySettingsService.update({ ai_prompts: newPrompts });
             } catch (error) {
-                console.error('Failed to save AI prompts to Supabase:', error);
+                console.error('Failed to save AI prompts to VPS:', error);
                 toast.error('Erro ao salvar os prompts na nuvem.');
             } finally {
                 setIsSaving(false);

@@ -1,6 +1,8 @@
 import type { Product } from '@/types/product';
-import { formatPrice } from '@/services/installmentCalculator';
+import { calculateInstallmentFromFees, calculatePixPrice, formatPrice } from '@/services/installmentCalculator';
+import { paymentFeesService, type PaymentFee } from '@/services/payment-fees';
 import { vpsApiService } from '@/services/vpsApiService';
+import { publicCompanySettingsService } from '@/services/publicCompanySettings';
 
 export type CustomerType = 'retail' | 'wholesale' | 'resale';
 
@@ -31,18 +33,6 @@ function getPriceForCustomer(product: Product, customerType: CustomerType): numb
         default:
             return product.price_retail;
     }
-}
-
-/**
- * Calculate installment price (10x with 16% interest)
- */
-function calculateInstallment(price: number): { value: number; total: number } {
-    const installments = 10;
-    const interestRate = 0.16; // 16%
-    const total = price * (1 + interestRate);
-    const value = total / installments;
-
-    return { value, total };
 }
 
 /**
@@ -99,13 +89,29 @@ async function getCategoryName(categoryId: string): Promise<string | undefined> 
     return category?.name ? String(category.name) : undefined;
 }
 
+function getCatalogOrigin(): string {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+        return window.location.origin;
+    }
+    return 'https://mercadodovale.com.br';
+}
+
+function buildCatalogUrl(categoryName?: string): string {
+    const origin = getCatalogOrigin();
+    if (!categoryName) return `${origin}/`;
+    return `${origin}/?categoria=${encodeURIComponent(categoryName)}`;
+}
+
 /**
  * Generate catalog message for WhatsApp
  */
 export function generateCatalogMessage(
     products: Product[],
     customerType: CustomerType = 'retail',
-    categoryName?: string
+    categoryName?: string,
+    catalogUrl: string = buildCatalogUrl(categoryName),
+    paymentFees: PaymentFee[] = [],
+    pixDiscountPercent: number = 0
 ): string {
     if (products.length === 0) {
         return 'Nenhum produto disponível no momento.';
@@ -136,18 +142,20 @@ export function generateCatalogMessage(
     message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     grouped.forEach((item, index) => {
-        // Calculate installment
-        const installment = calculateInstallment(item.price);
+        const pixPrice = calculatePixPrice(item.price, pixDiscountPercent);
+        const installment = calculateInstallmentFromFees(item.price, paymentFees, 12);
+        const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
 
         message += `${index + 1}. *${item.name}*\n`;
         message += `   📱 ${item.variant.ram}/${item.variant.storage}\n`;
-        message += `   💰 ${formatPrice(item.price)} à vista\n`;
-        message += `   💳 10x de ${formatPrice(installment.value)} (${formatPrice(installment.total)})\n`;
+        message += `   💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}\n`;
+        message += `   💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})\n`;
         message += `   🎨 Cores: ${item.colors.join(', ')}\n\n`;
     });
 
     message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    message += `*Gostou de algum desses?*`;
+    message += `*Gostou de algum desses?*\n`;
+    message += `Veja no site: ${catalogUrl}`;
 
     return message;
 }
@@ -170,7 +178,11 @@ export async function generateCategoryMessage(
             return 'Nenhum produto disponível nesta categoria.';
         }
 
-        return generateCatalogMessage(products, customerType, categoryName);
+        const [paymentFees, companySettings] = await Promise.all([
+            paymentFeesService.list(),
+            publicCompanySettingsService.get(),
+        ]);
+        return generateCatalogMessage(products, customerType, categoryName, buildCatalogUrl(categoryName), paymentFees, Number(companySettings?.pix_discount_percentage || 0));
     } catch (error) {
         console.error('Error generating category message:', error);
         return 'Erro ao gerar catálogo da categoria.';
@@ -191,7 +203,11 @@ export async function generateFullCatalogMessage(
             return 'Nenhum produto disponível no catálogo.';
         }
 
-        return generateCatalogMessage(products, customerType);
+        const [paymentFees, companySettings] = await Promise.all([
+            paymentFeesService.list(),
+            publicCompanySettingsService.get(),
+        ]);
+        return generateCatalogMessage(products, customerType, undefined, buildCatalogUrl(), paymentFees, Number(companySettings?.pix_discount_percentage || 0));
     } catch (error) {
         console.error('Error generating full catalog:', error);
         return 'Erro ao gerar catálogo completo.';

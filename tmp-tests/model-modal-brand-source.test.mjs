@@ -30,8 +30,14 @@ assert.match(
 
 assert.match(
   loadDataBody,
-  /fieldsResult\.status === 'fulfilled'[\s\S]*setCustomFields\(fieldsResult\.value\.filter\(f => !UNIQUE_FIELDS\.includes\(f\.key\)\)\)/,
-  'Model modal must keep category template fields isolated from unrelated loader failures'
+  /customFieldsService\.clearCache\(\)[\s\S]*customFieldsService\.list\(\)/,
+  'Model modal must force fresh custom_fields data so newly created category fields appear immediately'
+);
+
+assert.match(
+  loadDataBody,
+  /fieldsResult\.status === 'fulfilled'[\s\S]*setCustomFields\(fieldsResult\.value\)/,
+  'Model modal must not drop category-configured custom fields such as Receptor serial before visibility rules run'
 );
 
 assert.match(
@@ -42,14 +48,26 @@ assert.match(
 
 assert.match(
   source,
+  /shouldCreateTemplateFieldFromCategoryConfig[\s\S]*value === 'off' \|\| value === 'hidden'/,
+  'Category fallback fields must respect hidden category fields while preserving configured visible fields'
+);
+
+assert.doesNotMatch(
+  source,
   /shouldCreateTemplateFieldFromCategoryConfig[\s\S]*UNIQUE_FIELDS\.includes\(key\)/,
-  'Category fallback fields must still respect unique fields that should not be saved on model templates'
+  'Category fallback fields must not hide visible category fields solely because their key is globally unique'
 );
 
 assert.match(
   source,
   /templateFields = \[[\s\S]*\.\.\.customFields,[\s\S]*\.\.\.buildCategoryFallbackFields\(categoryConfig, customFields, templateValues\)/,
   'Visible template fields must combine database fields with category-config fallback fields'
+);
+
+assert.match(
+  source,
+  /if \(requirement === undefined \|\| requirement === null\) return false/,
+  'Selected category templates must hide global fields that are not configured for that category'
 );
 
 assert.match(

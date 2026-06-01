@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { Client } = require('ssh2');
+const { assertNoSupabaseRuntime } = require('./assert-no-supabase-runtime.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -22,6 +23,8 @@ try {
   for (const envRoot of getEnvRoots()) {
     require('dotenv').config({ path: path.join(envRoot, '.env.vps.local') });
     require('dotenv').config({ path: path.join(envRoot, '.env.local') });
+    require('dotenv').config({ path: path.join(envRoot, '.env') });
+    require('dotenv').config({ path: path.join(envRoot, '.env.production') });
   }
 } catch (_) {
   // dotenv is optional for CI environments that inject variables directly.
@@ -53,12 +56,47 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
+function walkFiles(dir, files = []) {
+  if (!fs.existsSync(dir)) return files;
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (['node_modules', 'dist', '.git', '.worktrees'].includes(entry.name)) continue;
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walkFiles(fullPath, files);
+      continue;
+    }
+    if (entry.isFile()) files.push(fullPath);
+  }
+  return files;
+}
+
+function assertBuiltBundleSafety() {
+  const assetsDir = path.join(DIST_DIR, 'assets');
+  const jsFiles = walkFiles(assetsDir).filter((file) => file.endsWith('.js'));
+  const offenders = jsFiles.filter((file) =>
+    fs.readFileSync(file, 'utf8').includes('Missing Supabase environment variables')
+  );
+
+  if (offenders.length) {
+    throw new Error(
+      [
+        'Deploy bloqueado: o bundle contem "Missing Supabase environment variables".',
+        ...offenders.slice(0, 5).map((file) => `- ${path.relative(ROOT, file).replace(/\\/g, '/')}`),
+      ].join('\n')
+    );
+  }
+}
+
 function runLocalBuild() {
+  assertNoSupabaseRuntime();
+
   if (process.env.VPS_SITE_SKIP_BUILD === '1') {
     console.log('Skipping npm run build because VPS_SITE_SKIP_BUILD=1');
     if (!fs.existsSync(DIST_DIR)) {
       throw new Error(`Build output not found: ${DIST_DIR}`);
     }
+    assertBuiltBundleSafety();
     return;
   }
 
@@ -81,6 +119,7 @@ function runLocalBuild() {
   if (!fs.existsSync(DIST_DIR)) {
     throw new Error(`Build output not found: ${DIST_DIR}`);
   }
+  assertBuiltBundleSafety();
 }
 
 function execRemote(conn, command) {

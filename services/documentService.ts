@@ -1,13 +1,61 @@
 // Serviço para gerenciamento de documentos da empresa
 // Máximo: 20 documentos por usuário, 10MB por arquivo, apenas PDFs
 
-import { supabase } from './supabase';
+import { getCurrentAuthUserId } from './authSession';
+import { vpsClient } from './vpsClient';
 import type { CompanyDocument, DocumentUploadData, CompanyDocumentRow } from '../types/document';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_DOCUMENTS = 20;
 const ALLOWED_TYPES = ['application/pdf'];
-const BUCKET_NAME = 'company-documents';
+
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[]; total?: number };
+type SynologyDocumentUpload = {
+    ok?: boolean;
+    url: string;
+    name?: string;
+    filename?: string;
+    storage?: 'synology' | 'local';
+};
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
+}
+
+function buildDocumentFileName(userId: string): string {
+    const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `${safeUserId}_${Date.now()}.pdf`;
+}
+
+function extractFileName(value: string): string {
+    try {
+        const parsed = new URL(value);
+        const name = parsed.pathname.split('/').filter(Boolean).pop();
+        if (name) return decodeURIComponent(name);
+    } catch {
+        // Plain file path from older rows.
+    }
+
+    return decodeURIComponent(value.split('?')[0].split('/').filter(Boolean).pop() || value);
+}
+
+async function loadCompanyDocuments(pageSize = 200): Promise<CompanyDocumentRow[]> {
+    let offset = 0;
+    const rows: CompanyDocumentRow[] = [];
+
+    while (true) {
+        const response = await vpsClient.get<TableDataResponse<CompanyDocumentRow>>(
+            `/table-data/company_documents?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return rows;
+}
 
 /**
  * Faz upload de um novo documento
@@ -29,129 +77,85 @@ export const uploadDocument = async (data: DocumentUploadData): Promise<CompanyD
     }
 
     // Obter usuário autenticado ou usar mock
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
+    const userId = await getCurrentAuthUserId() || '00000000-0000-0000-0000-000000000000';
 
-    if (!user) {
+    if (userId === '00000000-0000-0000-0000-000000000000') {
         console.warn('No authenticated user, using mock user ID for document upload');
     }
 
     // Verificar limite de documentos
-    const { count, error: countError } = await supabase
-        .from('company_documents')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
+    const count = (await loadCompanyDocuments()).filter(document => document.user_id === userId).length;
 
-    if (countError) throw countError;
-    if (count !== null && count >= MAX_DOCUMENTS) {
+    if (count >= MAX_DOCUMENTS) {
         throw new Error(`Limite de ${MAX_DOCUMENTS} documentos atingido`);
     }
 
-    // Gerar nome único para o arquivo
-    const timestamp = Date.now();
-    const fileName = `${timestamp}.pdf`;
-    const filePath = `${userId}/${fileName}`;
-
-    // Upload para o Storage
-    const { error: uploadError } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(filePath, data.file, {
-            contentType: 'application/pdf',
-            upsert: false
-        });
-
-    if (uploadError) {
-        throw new Error(`Erro ao fazer upload: ${uploadError.message}`);
-    }
+    const fileName = buildDocumentFileName(userId);
+    const uploadFile = new File([data.file], fileName, { type: 'application/pdf' });
+    const formData = new FormData();
+    formData.append('file', uploadFile);
+    const upload = await vpsClient.upload<SynologyDocumentUpload>('/synology/upload?folder=arquivos', formData);
+    if (!upload.url) throw new Error('Erro ao obter URL do documento');
 
     // Salvar metadados no banco
-    const { data: document, error: dbError } = await supabase
-        .from('company_documents')
-        .insert({
+    try {
+        const document = await vpsClient.post<CompanyDocumentRow>('/table-data/company_documents', {
             user_id: userId,
             document_name: data.documentName.trim(),
             file_name: data.file.name,
-            file_path: filePath,
+            file_path: upload.url,
             file_size: data.file.size,
             mime_type: data.file.type
-        })
-        .select()
-        .single();
+        });
 
-    if (dbError) {
-        // Rollback: deletar arquivo do storage
-        await supabase.storage.from(BUCKET_NAME).remove([filePath]);
+        return rowToDocument(document);
+    } catch (dbError: any) {
+        await vpsClient.delete(`/synology/file?folder=arquivos&name=${encodeURIComponent(fileName)}`).catch((error) => {
+            console.error('Erro ao desfazer upload no Synology:', error);
+        });
         throw new Error(`Erro ao salvar documento: ${dbError.message}`);
     }
-
-    return rowToDocument(document);
 };
 
 /**
  * Busca todos os documentos do usuário
  */
 export const getDocuments = async (): Promise<CompanyDocument[]> => {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
+    const userId = await getCurrentAuthUserId() || '00000000-0000-0000-0000-000000000000';
 
-    if (!user) {
+    if (userId === '00000000-0000-0000-0000-000000000000') {
         console.warn('No authenticated user, using mock user ID for documents list');
     }
 
-    const { data, error } = await supabase
-        .from('company_documents')
-        .select('*')
-        .eq('user_id', userId)
-        .order('uploaded_at', { ascending: false });
-
-    if (error) throw error;
-    return (data || []).map(rowToDocument);
+    return (await loadCompanyDocuments())
+        .filter(document => document.user_id === userId)
+        .sort((a, b) => new Date(b.uploaded_at || 0).getTime() - new Date(a.uploaded_at || 0).getTime())
+        .map(rowToDocument);
 };
 
 /**
- * Deleta um documento (storage + banco)
+ * Deleta um documento (Synology + banco)
  */
 export const deleteDocument = async (id: string): Promise<void> => {
     // Buscar documento para obter file_path
-    const { data: doc, error: fetchError } = await supabase
-        .from('company_documents')
-        .select('file_path')
-        .eq('id', id)
-        .single();
+    const doc = (await loadCompanyDocuments()).find(document => document.id === id);
+    if (!doc) throw new Error('Documento nao encontrado');
 
-    if (fetchError) throw fetchError;
-
-    // Deletar do storage
-    const { error: storageError } = await supabase.storage
-        .from(BUCKET_NAME)
-        .remove([doc.file_path]);
-
-    if (storageError) {
-        console.error('Erro ao deletar do storage:', storageError);
-    }
+    const fileName = extractFileName(doc.file_path || doc.file_name);
+    await vpsClient.delete(`/synology/file?folder=arquivos&name=${encodeURIComponent(fileName)}`).catch((error) => {
+        console.error('Erro ao deletar do Synology:', error);
+    });
 
     // Deletar do banco
-    const { error: dbError } = await supabase
-        .from('company_documents')
-        .delete()
-        .eq('id', id);
-
-    if (dbError) throw dbError;
+    await vpsClient.delete(`/table-data/company_documents/${id}`);
 };
 
 /**
  * Gera URL assinada para visualizar documento
  */
 export const getDocumentUrl = async (filePath: string): Promise<string> => {
-    const { data, error } = await supabase.storage
-        .from(BUCKET_NAME)
-        .createSignedUrl(filePath, 3600); // 1 hora
-
-    if (error || !data) {
-        throw new Error('Erro ao gerar URL do documento');
-    }
-
-    return data.signedUrl;
+    if (/^https?:\/\//i.test(filePath)) return filePath;
+    return `https://arquivos.xiaomipetrolina.com.br/${encodeURIComponent(extractFileName(filePath))}`;
 };
 
 /**

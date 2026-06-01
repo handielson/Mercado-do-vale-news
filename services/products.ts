@@ -1,6 +1,5 @@
 import { Product, ProductInput } from '../types/product';
 import { ProductStatus } from '../utils/field-standards';
-import { supabase } from './supabase';
 import { logPriceChange } from './priceHistoryService';
 import { vpsApiService } from './vpsApiService';
 import { categoryService } from './categories';
@@ -9,10 +8,11 @@ import { brandService } from './brands';
 import { buildProductVideoUrl } from '../utils/video-url';
 import { getCompanyId } from './companyContext';
 import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
+import { shopeeProductService } from './shopeeProducts';
 
 /**
  * PRODUCT SERVICE — VPS MySQL (fonte exclusiva de verdade)
- * Supabase ainda é usado para: companies, price_history (dados relacionais que não estão na VPS)
+ * VPS é a fonte operacional; dados relacionais usam os serviços locais correspondentes
  */
 
 // ─── Transform ─────────────────────────────────────────────────────────────
@@ -185,18 +185,7 @@ async function enrichProductsWithShopeeLinks(rows: any[]): Promise<any[]> {
     if (rows.length === 0) return rows;
 
     try {
-        const { data, error } = await supabase
-            .from('shopee_products')
-            .select('product_id, shopee_item_id')
-            .not('shopee_item_id', 'is', null);
-
-        if (error) throw error;
-
-        const shopeeItemByProductId = new Map(
-            (data || [])
-                .map((row: any) => [String(row.product_id), Number(row.shopee_item_id)] as const)
-                .filter(([, itemId]) => Number.isFinite(itemId) && itemId > 0)
-        );
+        const shopeeItemByProductId = await shopeeProductService.getItemIdByProductIdMap();
 
         if (shopeeItemByProductId.size === 0) return rows;
 
@@ -539,7 +528,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
     const ok = await vpsApiService.updateProduct(id, payload);
     if (!ok) throw new Error(`Failed to update product in VPS`);
 
-    // Log price change (usa Supabase — tabela price_history não está na VPS)
+    // Log price change (usa VPS — tabela price_history não está na VPS)
     try {
         if (oldProduct) {
             const pricesChanged =

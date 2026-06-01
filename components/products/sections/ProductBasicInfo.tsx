@@ -8,7 +8,7 @@ import { CategorySelect } from '../CategorySelect';
 import { ExternalLink, GitBranch, Link2, Loader2, Package } from 'lucide-react';
 import { modelService } from '../../../services/models';
 import { brandService } from '../../../services/brands';
-import { versionService } from '../../../services/versions-supabase';
+import { versionService } from '../../../services/versions-vps';
 import { FIELD_DICTIONARY } from '../../../config/field-dictionary';
 import { productService } from '../../../services/products';
 import { Product } from '../../../types/product';

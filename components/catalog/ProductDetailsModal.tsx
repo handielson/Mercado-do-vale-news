@@ -2,14 +2,16 @@ import { useState, useEffect } from 'react';
 import { X, Package } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
 import { formatPrice, calculateInstallments } from '@/services/installmentCalculator';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiveCustomerType';
-import { supabase } from '@/services/supabase';
 import { vpsApiService } from '@/services/vpsApiService';
 import { brandService } from '@/services/brands';
 import { categoryService } from '@/services/categories';
 import { modelService } from '@/services/models';
 import { customFieldsService, CustomField } from '@/services/custom-fields';
+import { warrantyTemplateService } from '@/services/warrantyTemplates';
+import { versionService } from '@/services/versions-vps';
+import type { Version } from '@/types/version';
 import { ProductReviewsList } from './ProductReviewsList';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
 import { trackViewItem } from '@/utils/analytics';
@@ -138,7 +140,7 @@ export function ProductDetailsModal({
     totalStock
 }: ProductDetailsModalProps) {
     // Get customer context for pricing
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const effectivePrice = getEffectivePrice(product, customer);
     const effectiveCustomerType = useEffectiveCustomerType();
     const isWholesale = effectiveCustomerType === 'wholesale';
@@ -197,9 +199,9 @@ export function ProductDetailsModal({
             try {
                 setLoadingTemplate(true);
 
-                const [modelData, { data: versionsData }] = await Promise.all([
+                const [modelData, versionsData] = await Promise.all([
                     modelService.getById(product.model_id),
-                    supabase.from('versions').select('id, name')
+                    versionService.list()
                 ]);
 
                 if (cancelled) return;
@@ -213,7 +215,7 @@ export function ProductDetailsModal({
                 }
 
                 if (versionsData) {
-                    setVersionsMap(new Map(versionsData.map((v: any) => [v.id, v.name])));
+                    setVersionsMap(new Map(versionsData.map((v: Version) => [v.id, v.name])));
                 }
             } catch (error) {
                 if (!cancelled) setTemplateValues(null);
@@ -270,9 +272,8 @@ export function ProductDetailsModal({
                         templateId = (await getVpsProductDetails())?.warranty_template_id;
                     }
                     if (templateId) {
-                        const { data } = await supabase
-                            .from('warranty_templates').select('duration_days').eq('id', templateId).single();
-                        if (data?.duration_days) setWarrantyDays(data.duration_days);
+                        const template = await warrantyTemplateService.getById(templateId);
+                        if (template?.duration_days) setWarrantyDays(template.duration_days);
                     }
                 }
             } catch (err) {

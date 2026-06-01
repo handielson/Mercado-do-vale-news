@@ -5,7 +5,6 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
-import { createClient } from '@supabase/supabase-js';
 import {
   extractMediaRefsFromCatalogBanners,
   extractMediaRefsFromCompanySettings,
@@ -21,21 +20,14 @@ for (const envPath of ['.env.local', '.env', '../../.env.local', '../../.env']) 
 const REPORT_DIR = 'reports';
 const JSON_REPORT_PATH = path.join(REPORT_DIR, 'media-origin-audit.json');
 const MD_REPORT_PATH = path.join(REPORT_DIR, 'media-origin-audit.md');
-const DEFAULT_VPS_BASE_URL = process.env.VITE_VPS_BASE_URL || process.env.VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br';
+const DEFAULT_VPS_BASE_URL = (process.env.VITE_VPS_BASE_URL || process.env.VPS_BASE_URL || 'https://api.xiaomipetrolina.com.br').replace(/\/+$/, '');
 const PRODUCT_LIMIT = process.env.MEDIA_AUDIT_PRODUCT_LIMIT || '5000';
 const MODEL_COLOR_LIMIT = Number(process.env.MEDIA_AUDIT_MODEL_COLOR_LIMIT || '2000');
-const MODEL_COLOR_PAGE_SIZE = Number(process.env.MEDIA_AUDIT_MODEL_COLOR_PAGE_SIZE || '5');
-
-function getSupabaseEnv() {
-  return {
-    url: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '',
-    key: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
-  };
-}
+const MODEL_COLOR_PAGE_SIZE = Number(process.env.MEDIA_AUDIT_MODEL_COLOR_PAGE_SIZE || '200');
 
 function getVpsHeaders() {
   const headers = {};
-  const syncKey = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY;
+  const syncKey = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || process.env.SYNC_SECRET;
   if (syncKey) headers['x-sync-key'] = syncKey;
   return headers;
 }
@@ -67,99 +59,58 @@ async function fetchProductsFromVps() {
   return [];
 }
 
-function createSupabaseReadClient(warnings) {
-  const { url, key } = getSupabaseEnv();
-  if (!url || !key) {
-    warnings.push('Supabase env vars missing; skipped Supabase-backed image sources');
-    return null;
-  }
-
-  return createClient(url, key, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
+async function fetchCompanySettingsFromVps() {
+  return fetchJson(new URL('/company-settings', DEFAULT_VPS_BASE_URL).toString(), getVpsHeaders());
 }
 
-async function selectArray(promise, label, warnings) {
-  const { data, error } = await promise;
-  if (error) {
-    warnings.push(`${label}: ${error.message}`);
-    return [];
-  }
-  return Array.isArray(data) ? data : [];
-}
-
-async function selectObject(promise, label, warnings) {
-  const { data, error } = await promise;
-  if (error) {
-    warnings.push(`${label}: ${error.message}`);
-    return null;
-  }
-  return data || null;
-}
-
-async function selectPagedModelColorImages(supabase, warnings) {
+async function fetchTableRowsFromVps(tableName, { limit = 200, maxRows = Infinity } = {}) {
   const rows = [];
-  let offset = 0;
-
-  while (offset < MODEL_COLOR_LIMIT) {
-    const pageSize = Math.min(MODEL_COLOR_PAGE_SIZE, MODEL_COLOR_LIMIT - offset);
-    const { data, error } = await supabase
-      .from('model_color_images')
-      .select('id, model_id, color_id, images')
-      .range(offset, offset + pageSize - 1);
-
-    if (error) {
-      warnings.push(`model_color_images page ${offset}-${offset + pageSize - 1}: ${error.message}`);
-      break;
-    }
-
-    const page = Array.isArray(data) ? data : [];
+  for (let offset = 0; rows.length < maxRows; offset += limit) {
+    const pageLimit = Math.min(limit, maxRows - rows.length);
+    const url = new URL(`/table-data/${tableName}`, DEFAULT_VPS_BASE_URL);
+    url.searchParams.set('limit', String(pageLimit));
+    url.searchParams.set('offset', String(offset));
+    const data = await fetchJson(url.toString(), getVpsHeaders());
+    const page = Array.isArray(data?.rows) ? data.rows : [];
     rows.push(...page);
-
-    if (page.length < pageSize) break;
-    offset += pageSize;
+    if (page.length < pageLimit) break;
   }
-
-  if (rows.length >= MODEL_COLOR_LIMIT) {
-    warnings.push(`model_color_images limited to ${MODEL_COLOR_LIMIT} rows; increase MEDIA_AUDIT_MODEL_COLOR_LIMIT for a larger audit`);
-  }
-
   return rows;
 }
 
-async function fetchSupabaseRows(warnings) {
-  const supabase = createSupabaseReadClient(warnings);
-  if (!supabase) {
-    return {
-      modelColorImages: [],
-      companySettings: null,
-      catalogBanners: [],
-    };
+async function fetchModelColorImagesFromVps(warnings) {
+  const rows = await fetchTableRowsFromVps('model_color_images', {
+    limit: MODEL_COLOR_PAGE_SIZE,
+    maxRows: MODEL_COLOR_LIMIT,
+  });
+  if (rows.length >= MODEL_COLOR_LIMIT) {
+    warnings.push(`model_color_images limited to ${MODEL_COLOR_LIMIT} rows; increase MEDIA_AUDIT_MODEL_COLOR_LIMIT for a larger audit`);
   }
+  return rows;
+}
 
-  const [modelColorImages, companySettings, catalogBanners] = await Promise.all([
-    selectPagedModelColorImages(supabase, warnings),
-    selectObject(
-      supabase
-        .from('company_settings')
-        .select('id, name, logo, favicon, about_us_image_url, watermark_url')
-        .limit(1)
-        .maybeSingle(),
-      'company_settings',
-      warnings,
-    ),
-    selectArray(
-      supabase.from('catalog_banners').select('*'),
-      'catalog_banners',
-      warnings,
-    ),
+async function fetchVpsRows(warnings) {
+  const [modelColorImagesResult, companySettingsResult, catalogBannersResult] = await Promise.allSettled([
+    fetchModelColorImagesFromVps(warnings),
+    fetchCompanySettingsFromVps(),
+    fetchTableRowsFromVps('catalog_banners', { limit: 200 }),
   ]);
 
-  return { modelColorImages, companySettings, catalogBanners };
+  if (modelColorImagesResult.status === 'rejected') {
+    warnings.push(`VPS model_color_images: ${modelColorImagesResult.reason?.message || modelColorImagesResult.reason}`);
+  }
+  if (companySettingsResult.status === 'rejected') {
+    warnings.push(`VPS company_settings: ${companySettingsResult.reason?.message || companySettingsResult.reason}`);
+  }
+  if (catalogBannersResult.status === 'rejected') {
+    warnings.push(`VPS catalog_banners: ${catalogBannersResult.reason?.message || catalogBannersResult.reason}`);
+  }
+
+  return {
+    modelColorImages: modelColorImagesResult.status === 'fulfilled' ? modelColorImagesResult.value : [],
+    companySettings: companySettingsResult.status === 'fulfilled' ? companySettingsResult.value : null,
+    catalogBanners: catalogBannersResult.status === 'fulfilled' ? catalogBannersResult.value : [],
+  };
 }
 
 function buildMarkdownReport(report) {
@@ -198,9 +149,9 @@ Read-only: ${report.readOnly ? 'yes' : 'no'}
 ## Sources Read
 
 - Products from VPS: ${report.sources.products}
-- Model/color rows from Supabase: ${report.sources.modelColorImages}
-- Company settings rows from Supabase: ${report.sources.companySettings}
-- Catalog banner rows from Supabase: ${report.sources.catalogBanners}
+- Model/color rows from VPS: ${report.sources.modelColorImages}
+- Company settings rows from VPS: ${report.sources.companySettings}
+- Catalog banner rows from VPS: ${report.sources.catalogBanners}
 
 ## By Origin
 
@@ -227,9 +178,9 @@ ${candidateRows || '| none | - | - | - | - |'}
 export async function runAudit() {
   const warnings = [];
 
-  const [productsResult, supabaseResult] = await Promise.allSettled([
+  const [productsResult, vpsRowsResult] = await Promise.allSettled([
     fetchProductsFromVps(),
-    fetchSupabaseRows(warnings),
+    fetchVpsRows(warnings),
   ]);
 
   const products = productsResult.status === 'fulfilled' ? productsResult.value : [];
@@ -237,23 +188,23 @@ export async function runAudit() {
     warnings.push(`VPS products: ${productsResult.reason?.message || productsResult.reason}`);
   }
 
-  const supabaseRows = supabaseResult.status === 'fulfilled'
-    ? supabaseResult.value
+  const vpsRows = vpsRowsResult.status === 'fulfilled'
+    ? vpsRowsResult.value
     : {
         modelColorImages: [],
         companySettings: null,
         catalogBanners: [],
       };
 
-  if (supabaseResult.status === 'rejected') {
-    warnings.push(`Supabase: ${supabaseResult.reason?.message || supabaseResult.reason}`);
+  if (vpsRowsResult.status === 'rejected') {
+    warnings.push(`VPS media rows: ${vpsRowsResult.reason?.message || vpsRowsResult.reason}`);
   }
 
   const refs = [
     ...extractMediaRefsFromProducts(products),
-    ...extractMediaRefsFromModelColorImages(supabaseRows.modelColorImages),
-    ...extractMediaRefsFromCompanySettings(supabaseRows.companySettings),
-    ...extractMediaRefsFromCatalogBanners(supabaseRows.catalogBanners),
+    ...extractMediaRefsFromModelColorImages(vpsRows.modelColorImages),
+    ...extractMediaRefsFromCompanySettings(vpsRows.companySettings),
+    ...extractMediaRefsFromCatalogBanners(vpsRows.catalogBanners),
   ];
 
   const report = {
@@ -266,9 +217,9 @@ export async function runAudit() {
     },
     sources: {
       products: products.length,
-      modelColorImages: supabaseRows.modelColorImages.length,
-      companySettings: supabaseRows.companySettings ? 1 : 0,
-      catalogBanners: supabaseRows.catalogBanners.length,
+      modelColorImages: vpsRows.modelColorImages.length,
+      companySettings: vpsRows.companySettings ? 1 : 0,
+      catalogBanners: vpsRows.catalogBanners.length,
     },
     summary: summarizeMediaRefs(refs),
     warnings,

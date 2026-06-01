@@ -12,10 +12,6 @@ const expectations = [
     expected: /vpsApiService\.getProductsByIds\(productIds\)/,
   },
   {
-    path: 'pages/test/catalog-test.tsx',
-    expected: /vpsApiService\.getProducts\(\{\s*status:\s*'active'[\s\S]*limit:\s*10/,
-  },
-  {
     path: 'components/shipping/FreightCalculator.tsx',
     expected: /vpsApiService\.getProducts\(\{\s*status:\s*'active'[\s\S]*limit:\s*2000/,
   },

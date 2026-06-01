@@ -6,7 +6,6 @@ const SYNOLOGY_IMAGE_HOSTNAMES = new Set([
   'imagens.xiaomipetrolina.com.br',
 ]);
 
-const SUPABASE_HOST_SUFFIX = '.supabase.co';
 const IMGUR_HOSTNAMES = new Set(['i.imgur.com', 'imgur.com']);
 const BLING_S3_HOSTNAMES = new Set(['orgbling.s3.amazonaws.com']);
 
@@ -43,17 +42,6 @@ function classifyParsedHttpUrl(parsed, normalizedUrl, sourceUrl = normalizedUrl)
       redactedUrl: redactMediaUrl(sourceUrl),
       shouldMigrate: false,
       reason: 'Already served from canonical VPS image paths',
-    };
-  }
-
-  if (parsed.hostname.endsWith(SUPABASE_HOST_SUFFIX) && parsed.pathname.includes('/storage/v1/object/')) {
-    return {
-      origin: 'supabase-storage',
-      normalizedUrl,
-      sourceUrl,
-      redactedUrl: redactMediaUrl(sourceUrl),
-      shouldMigrate: true,
-      reason: 'Supabase Storage image should be copied to VPS',
     };
   }
 

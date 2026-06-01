@@ -1,4 +1,5 @@
 import { getDashboardSalesDigest } from './dashboardSalesDigestService.js';
+import { vpsClient } from './vpsClient';
 
 export const PURCHASE_QUEUE_TABLE = 'purchase_queue_items';
 export const PURCHASE_QUEUE_STATUSES = ['pending', 'purchased', 'not_purchased', 'removed'];
@@ -45,11 +46,6 @@ function normalizeChannels(channels) {
       .split('+')
       .map((value) => normalizeText(value)),
   );
-}
-
-function isMissingPurchaseQueueTable(error) {
-  return error?.code === 'PGRST205'
-    || /purchase_queue_items/i.test(String(error?.message || ''));
 }
 
 function buildBaseQueueRow(summaryRow, now) {
@@ -178,30 +174,27 @@ export function buildPurchaseQueueClipboardText(items = []) {
   return lines.join('\n').trim();
 }
 
-async function getSupabaseClient() {
-  const { supabase } = await import('./supabase');
-  return supabase;
+function extractRows(response) {
+  if (Array.isArray(response)) return response;
+  return response?.data || response?.rows || response?.items || [];
+}
+
+async function loadPurchaseQueueRows() {
+  const response = await vpsClient.get(`/table-data/${PURCHASE_QUEUE_TABLE}?limit=5000&offset=0`);
+  return extractRows(response);
 }
 
 export async function getPurchaseQueueItems({
   includeResolved = true,
 } = {}) {
-  const supabase = await getSupabaseClient();
-  let query = supabase
-    .from(PURCHASE_QUEUE_TABLE)
-    .select('*')
-    .order('status', { ascending: true })
-    .order('updated_at', { ascending: false, nullsFirst: false })
-    .order('model', { ascending: true });
-
-  if (!includeResolved) {
-    query = query.eq('status', 'pending');
-  }
-
-  const { data, error } = await query;
-  if (isMissingPurchaseQueueTable(error)) return [];
-  if (error) throw error;
-  return data || [];
+  const rows = await loadPurchaseQueueRows();
+  return rows
+    .filter((row) => includeResolved || row.status === 'pending')
+    .sort((a, b) =>
+      String(a.status || '').localeCompare(String(b.status || '')) ||
+      String(b.updated_at || '').localeCompare(String(a.updated_at || '')) ||
+      String(a.model || '').localeCompare(String(b.model || ''))
+    );
 }
 
 export async function syncPurchaseQueueFromSummary(summaryRows = [], now = new Date()) {
@@ -209,15 +202,8 @@ export async function syncPurchaseQueueFromSummary(summaryRows = [], now = new D
     return getPurchaseQueueItems();
   }
 
-  const supabase = await getSupabaseClient();
   const itemKeys = uniqueValues(summaryRows.map((row) => buildPurchaseQueueItemKey(row)));
-  const { data: existingRows, error: existingError } = await supabase
-    .from(PURCHASE_QUEUE_TABLE)
-    .select('*')
-    .in('item_key', itemKeys);
-
-  if (isMissingPurchaseQueueTable(existingError)) return [];
-  if (existingError) throw existingError;
+  const existingRows = (await loadPurchaseQueueRows()).filter((row) => itemKeys.includes(row.item_key));
 
   const upsertRows = mergeSalesDigestIntoPurchaseQueue({
     existingItems: existingRows || [],
@@ -228,12 +214,15 @@ export async function syncPurchaseQueueFromSummary(summaryRows = [], now = new D
     updated_at: now.toISOString(),
   }));
 
-  const { error: upsertError } = await supabase
-    .from(PURCHASE_QUEUE_TABLE)
-    .upsert(upsertRows, { onConflict: 'item_key' });
-
-  if (isMissingPurchaseQueueTable(upsertError)) return [];
-  if (upsertError) throw upsertError;
+  const existingByKey = new Map(existingRows.map((row) => [row.item_key, row]));
+  for (const row of upsertRows) {
+    const existing = existingByKey.get(row.item_key);
+    if (existing?.id) {
+      await vpsClient.patch(`/table-data/${PURCHASE_QUEUE_TABLE}/${encodeURIComponent(existing.id)}?pk=id`, row);
+    } else {
+      await vpsClient.post(`/table-data/${PURCHASE_QUEUE_TABLE}`, row);
+    }
+  }
 
   return getPurchaseQueueItems();
 }
@@ -244,28 +233,16 @@ export async function syncPurchaseQueueFromDashboardDigest(now = new Date()) {
 }
 
 export async function updatePurchaseQueueItemStatus(id, status, reason = '', now = new Date()) {
-  const supabase = await getSupabaseClient();
-  const { data: current, error: currentError } = await supabase
-    .from(PURCHASE_QUEUE_TABLE)
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-
-  if (currentError) throw currentError;
+  const current = (await loadPurchaseQueueRows()).find((row) => String(row.id) === String(id));
   if (!current) throw new Error('Item da fila de compra nao encontrado.');
 
   const nextRow = applyPurchaseQueueStatusTransition(current, { status, reason, now });
-  const { error: updateError } = await supabase
-    .from(PURCHASE_QUEUE_TABLE)
-    .update({
-      status: nextRow.status,
-      reason: nextRow.reason,
-      purchased_at: nextRow.purchased_at,
-      updated_at: nextRow.updated_at,
-    })
-    .eq('id', id);
-
-  if (updateError) throw updateError;
+  await vpsClient.patch(`/table-data/${PURCHASE_QUEUE_TABLE}/${encodeURIComponent(id)}?pk=id`, {
+    status: nextRow.status,
+    reason: nextRow.reason,
+    purchased_at: nextRow.purchased_at,
+    updated_at: nextRow.updated_at,
+  });
 
   return getPurchaseQueueItems();
 }

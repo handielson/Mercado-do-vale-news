@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingBag, Package, RefreshCw, Receipt, FileText, ExternalLink, Check, Clock, X, CreditCard, Truck, Filter, Search, type LucideIcon } from 'lucide-react';
-import { useSupabaseAuth } from '../../../hooks/useSupabaseAuth';
+import { useVpsAuth } from '../../../hooks/useVpsAuth';
 import { getSales } from '../../../services/saleService';
 import { getOrders } from '../../../services/orderService';
-import { supabase } from '../../../services/supabase';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { SaleWithItems } from '../../../types/sale';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
 import { printOnlineOrderReceipt } from '../../../utils/printOnlineOrderReceipt';
-import { getCoinBalance } from '../../../services/cashbackService';
+import { getCoinBalance, getCoinsEarnedForReference } from '../../../services/cashbackService';
 import { generateLegacySalePdf } from '../../../utils/legacySalePdfGenerator';
 import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
@@ -75,7 +74,7 @@ function getStatusBadge(status: string): { label: string; className: string } {
 }
 
 export const PurchaseHistoryTab: React.FC = () => {
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const [sales, setSales] = useState<SaleWithItems[]>([]);
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
     const [loading, setLoading] = useState(true);
@@ -191,14 +190,7 @@ export const PurchaseHistoryTab: React.FC = () => {
                 customerId ? getCoinBalance(customerId).catch(() => null) : Promise.resolve(null),
                 customerId ? benefitService.getCustomerBenefitsStatus(customerId).catch(() => []) : Promise.resolve([]),
                 customerId
-                    ? supabase
-                        .from('coin_transactions')
-                        .select('amount')
-                        .eq('customer_id', customerId)
-                        .eq('reference_id', sale.id)
-                        .eq('type', 'earn_purchase')
-                        .maybeSingle()
-                        .then(({ data }) => data?.amount ?? 0, () => 0)
+                    ? getCoinsEarnedForReference(customerId, sale.id).catch(() => 0)
                     : Promise.resolve(0),
             ]);
             if (!settings) return;

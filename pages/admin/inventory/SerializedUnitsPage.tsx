@@ -11,7 +11,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { unitService } from '@/services/units';
-import { supabase } from '@/services/supabase';
+import { releaseSerializedDocsForOrder } from '@/services/orderService';
 import type { Unit } from '@/types/unit';
 import { UnitStatus } from '@/utils/field-standards';
 import {
@@ -362,24 +362,11 @@ export default function SerializedUnitsPage() {
     const loadUnits = useCallback(async () => {
         setLoading(true);
         try {
-            const companyId = await getCompanyId();
-
-            let query = supabase
-                .from('units')
-                .select('*, product:products(name, sku)')
-                .eq('company_id', companyId)
-                .order('created_at', { ascending: false });
-
-            if (filterStatus) {
-                query = query.eq('status', filterStatus);
-            }
-
-            const { data, error } = await query;
-            if (error) throw error;
+            const data = await unitService.listAll({ status: filterStatus || undefined });
 
             const mapped: UnitWithProduct[] = (data || []).map((row: any) => ({
                 id: row.id,
-                companyId: row.company_id,
+                companyId: row.company_id || '',
                 productId: row.product_id,
                 product_id: row.product_id,
                 imei_1: row.imei_1,
@@ -414,18 +401,28 @@ export default function SerializedUnitsPage() {
     const loadSwapLogs = async () => {
         setLogsLoading(true);
         try {
-            const { data, error } = await supabase
-                .from('unit_swap_logs')
-                .select(`
-                    *,
-                    old_unit:units!unit_swap_logs_old_unit_id_fkey(imei_1, imei_2, serial),
-                    new_unit:units!unit_swap_logs_new_unit_id_fkey(imei_1, imei_2, serial)
-                `)
-                .order('created_at', { ascending: false })
-                .limit(50);
+            const unitSummaryById = new Map(
+                units.map(unit => [
+                    unit.id,
+                    {
+                        imei_1: unit.imei_1,
+                        imei_2: unit.imei_2,
+                        serial: unit.serial || unit.serial_number,
+                    },
+                ])
+            );
 
-            if (error) throw error;
-            setSwapLogs((data || []) as SwapLog[]);
+            const logs = await unitService.getSwapLogs({});
+            const enrichedLogs = logs
+                .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
+                .slice(0, 50)
+                .map(log => ({
+                    ...log,
+                    old_unit: unitSummaryById.get(log.old_unit_id),
+                    new_unit: unitSummaryById.get(log.new_unit_id),
+                })) as SwapLog[];
+
+            setSwapLogs(enrichedLogs);
         } catch (err) {
             console.error('[SerializedUnitsPage] Erro ao carregar logs:', err);
         } finally {
@@ -477,10 +474,7 @@ export default function SerializedUnitsPage() {
 
             // Se houver order_id, libera serialized_docs_released
             if (unit.order_id) {
-                await supabase
-                    .from('orders')
-                    .update({ serialized_docs_released: true })
-                    .eq('id', unit.order_id);
+                await releaseSerializedDocsForOrder(unit.order_id);
             }
 
             await loadUnits();
@@ -665,16 +659,4 @@ export default function SerializedUnitsPage() {
             )}
         </div>
     );
-}
-
-// ─── Helper getCompanyId (local) ─────────────────────────────────────────────
-
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', 'mercado-do-vale')
-        .single();
-    if (error || !data) throw new Error('Empresa não encontrada.');
-    return data.id;
 }

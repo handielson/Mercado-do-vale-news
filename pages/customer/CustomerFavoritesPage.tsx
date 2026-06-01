@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Heart, ArrowLeft, ShoppingBag, Frown, RefreshCw, ShoppingCart } from 'lucide-react';
 import { PublicHeader } from '@/components/PublicHeader';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { catalogService } from '@/services/catalogService';
 import { vpsApiService } from '@/services/vpsApiService';
 import { useCart } from '@/contexts/CartContext';
@@ -189,7 +189,7 @@ function FavoriteSkeleton() {
 // ── Página principal ──────────────────────────────────────────────────────────
 export function CustomerFavoritesPage() {
     const navigate = useNavigate();
-    const { customer, isLoading: authLoading } = useSupabaseAuth();
+    const { customer, isLoading: authLoading } = useVpsAuth();
 
     const [products, setProducts] = useState<FavoriteProduct[]>([]);
     const [loading, setLoading] = useState(true);

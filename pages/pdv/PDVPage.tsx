@@ -26,7 +26,7 @@ import { telegramBotService } from '../../services/telegramBot';
 import { brandService } from '../../services/brands';
 import { categoryService } from '../../services/categories';
 import { productService } from '../../services/products';
-import { supabase } from '../../services/supabase';
+import { warrantyTemplateService } from '../../services/warrantyTemplates';
 import { teamService } from '../../services/team';
 import { getEffectiveRetailPrice, normalizeCentValue } from '../../utils/promoPrice';
 import { buildPdvProductName } from '../../utils/pdvProductDisplay';
@@ -91,7 +91,7 @@ export default function PDVPage() {
     // Meta de cada termo (id pré-gerado p/ numero_documento + unit vinculada) — paralelo ao warrantyContents
     const [warrantyDocsMeta, setWarrantyDocsMeta] = useState<Array<{ id: string; serialized_unit_id: string }>>([]);
 
-    // Entregadores reais do Supabase (role = 'delivery')
+    // Entregadores reais do VPS (role = 'delivery')
     const [deliveryPersons, setDeliveryPersons] = React.useState<{ id: string; name: string }[]>([]);
 
     const loadDeliveryPersons = React.useCallback(() => {
@@ -116,7 +116,7 @@ export default function PDVPage() {
     // Estado das taxas de pagamento
     const [paymentFees, setPaymentFees] = useState<any[]>([]);
 
-    // Buscar taxas de pagamento do Supabase
+    // Buscar taxas de pagamento do VPS
     React.useEffect(() => {
         const fetchPaymentFees = async () => {
             try {
@@ -543,12 +543,8 @@ export default function PDVPage() {
         try {
             const product = item.product_id ? await productService.getById(item.product_id) : null;
             if (product?.warranty_type === 'custom' && product.warranty_template_id) {
-                const { data } = await supabase
-                    .from('warranty_templates')
-                    .select('duration_days')
-                    .eq('id', product.warranty_template_id)
-                    .maybeSingle();
-                if (data?.duration_days) return data.duration_days;
+                const template = await warrantyTemplateService.getById(product.warranty_template_id);
+                if (template?.duration_days) return template.duration_days;
             }
             const brandName = ((item as any).product_brand || product?.brand || '').toLowerCase();
             const brand = brandsByName.get(brandName);

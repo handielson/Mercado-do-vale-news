@@ -1,22 +1,25 @@
-import { supabase } from './supabase';
-
-/**
- * Singleton com cache + dedup do company_id resolvido por slug.
- *
- * Antes: cada service tinha seu próprio getCompanyId() — 11 cópias da mesma
- * query `from('companies').select('id').eq('slug', 'mercado-do-vale')` com
- * cache local separado. Resultado: 3-5 queries duplicadas /companies em
- * paralelo a cada page load (visível no PageSpeed Insights).
- *
- * Agora: 1 só query por sessão (resolve uma vez, mantém em memória).
- * Promise in-flight evita race condition quando múltiplos services chamam
- * antes do cache popular.
- */
+import { vpsClient } from './vpsClient';
 
 const COMPANY_SLUG = 'mercado-do-vale';
+const DEFAULT_COMPANY_ID = '9717131e-7b14-4aec-84a4-4317c0489985';
+
+interface TableDataResponse<T> {
+    rows?: T[];
+}
+
+interface CompanyRow {
+    id?: string;
+    slug?: string | null;
+}
 
 let cachedCompanyId: string | null = null;
 let inFlight: Promise<string> | null = null;
+
+function useDefaultCompanyId(reason: unknown): string {
+    console.warn('[companyContext] Using default VPS company id:', reason);
+    cachedCompanyId = DEFAULT_COMPANY_ID;
+    return DEFAULT_COMPANY_ID;
+}
 
 export async function getCompanyId(): Promise<string> {
     if (cachedCompanyId) return cachedCompanyId;
@@ -24,14 +27,22 @@ export async function getCompanyId(): Promise<string> {
 
     inFlight = (async () => {
         try {
-            const { data, error } = await supabase
-                .from('companies')
-                .select('id')
-                .eq('slug', COMPANY_SLUG)
-                .single();
-            if (error) throw new Error(`Failed to get company: ${error.message}`);
-            cachedCompanyId = data.id;
-            return data.id;
+            const pageSize = 100;
+            for (let offset = 0; ; offset += pageSize) {
+                const data = await vpsClient.get<TableDataResponse<CompanyRow>>(
+                    `/table-data/companies?limit=${pageSize}&offset=${offset}`
+                );
+                const rows = Array.isArray(data.rows) ? data.rows : [];
+                const company = rows.find(row => row.slug === COMPANY_SLUG);
+                if (company?.id) {
+                    cachedCompanyId = String(company.id);
+                    return cachedCompanyId;
+                }
+                if (rows.length < pageSize) break;
+            }
+            return useDefaultCompanyId('company slug not found');
+        } catch (error) {
+            return useDefaultCompanyId(error);
         } finally {
             inFlight = null;
         }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/services/supabase';
+import { vpsApiService } from '@/services/vpsApiService';
 import { Search, AlertTriangle, CheckCircle, BarChart2, RefreshCw, Link as LinkIcon, Edit3, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { generateSlug } from '@/utils/urlHelpers';
@@ -25,7 +25,7 @@ export const SEODashboardPage: React.FC = () => {
     const fetchSEOData = async () => {
         setLoading(true);
         try {
-            const data = await fetchAllSEOProducts(supabase);
+            const data = await fetchAllSEOProducts();
 
             let missingSlug = 0;
             let missingTitle = 0;
@@ -110,11 +110,14 @@ export const SEODashboardPage: React.FC = () => {
                 }
                 usedSlugs.add(slugToUse);
 
-                const { error } = await supabase.from('products').update({ slug: slugToUse }).eq('id', p.id);
-                if (!error) {
+                const currentProduct = await vpsApiService.getProductById(p.id, true);
+                const ok = currentProduct
+                    ? await vpsApiService.updateProduct(p.id, { ...currentProduct, slug: slugToUse })
+                    : false;
+                if (ok) {
                     successCount++;
                 } else {
-                    console.error('Erro ao gerar slug para', p.name, error);
+                    console.error('Erro ao gerar slug para', p.name);
                     failCount++;
                 }
             }
@@ -172,15 +175,19 @@ export const SEODashboardPage: React.FC = () => {
                     }
                 }
 
-                const { error } = await supabase.from('products').update({
-                    meta_title: title,
-                    meta_description: desc
-                }).eq('id', p.id);
+                const currentProduct = await vpsApiService.getProductById(p.id, true);
+                const ok = currentProduct
+                    ? await vpsApiService.updateProduct(p.id, {
+                        ...currentProduct,
+                        meta_title: title,
+                        meta_description: desc
+                    })
+                    : false;
 
-                if (!error) {
+                if (ok) {
                     successCount++;
                 } else {
-                    console.error('Erro ao gerar meta tags para', p.name, error);
+                    console.error('Erro ao gerar meta tags para', p.name);
                     failCount++;
                 }
             }

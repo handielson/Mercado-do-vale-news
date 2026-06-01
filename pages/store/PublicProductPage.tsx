@@ -4,8 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
-import { supabase } from '@/services/supabase';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { useQuoteCart } from '@/contexts/QuoteCartContext';
 import { useCompare } from '@/contexts/CompareContext';
 import { PublicHeader } from '@/components/PublicHeader';
@@ -17,6 +16,7 @@ import { getEffectivePrice, useEffectiveCustomerType } from '@/hooks/useEffectiv
 import { getCashbackSettings } from '@/services/cashbackService';
 import type { CashbackSettings } from '@/types/cashback';
 import { paymentFeesService, PaymentFee } from '@/services/payment-fees';
+import { calculateInstallmentFromFees, calculatePixPrice, formatPrice as formatCurrency } from '@/services/installmentCalculator';
 import { publicCompanySettingsService, type PublicCompanySettings } from '@/services/publicCompanySettings';
 import { generateGroupKey } from '@/services/productGrouping';
 import { toTitleCase } from '@/utils/stringFormatters';
@@ -31,6 +31,7 @@ import { modelService } from '@/services/models';
 import { buildProductVideoPlaylist, isMp4VideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
 import { getPublicProductRouteTarget } from './productRouteTarget.js';
+import { customFieldsService } from '@/services/custom-fields';
 /**
  * PublicProductPage
  * A dedicated SEO-friendly landing page for a single product.
@@ -38,7 +39,7 @@ import { getPublicProductRouteTarget } from './productRouteTarget.js';
 export const PublicProductPage: React.FC = () => {
     const { slug } = useParams<{ slug: string }>();
     const navigate = useNavigate();
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const { addItem } = useCart();
     const { add: addToCompare, remove: removeFromCompare, isSelected: isComparing } = useCompare();
 
@@ -225,6 +226,19 @@ export const PublicProductPage: React.FC = () => {
                 text_secondary: settings.text_secondary || '#64748b',
             }))
             .catch(console.error);
+        if (customer?.customer_type === 'ADMIN') {
+            customFieldsService.list()
+                .then((fieldsData) => {
+                    if (fieldsData.length > 0) {
+                        const dict: Record<string, string> = {};
+                        fieldsData.forEach(f => { if (f.key) dict[f.key] = f.label; });
+                        setCustomFieldNames(dict);
+                    }
+                })
+                .catch((fieldError) => {
+                    console.warn('[PublicProductPage] Dicionario de campos customizados indisponivel.', fieldError);
+                });
+        }
         if (!slug) {
             navigate('/');
             return;
@@ -232,15 +246,8 @@ export const PublicProductPage: React.FC = () => {
 
         const fetchProduct = async () => {
             setLoading(true);
+            let criticalProductLoaded = false;
             try {
-                // Fetch dictionary of custom fields to get readable labels
-                const { data: fieldsData } = await supabase.from('custom_fields').select('key, label');
-                if (fieldsData) {
-                    const dict: Record<string, string> = {};
-                    fieldsData.forEach(f => { if (f.key) dict[f.key] = f.label; });
-                    setCustomFieldNames(dict);
-                }
-
                 const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(slug);
 
                 let data: any = null;
@@ -316,7 +323,7 @@ export const PublicProductPage: React.FC = () => {
                 const needsDescription = !isMeaningfulDesc(data.description) && data.model_id;
                 let modelTemplateValues: Record<string, unknown> = {};
                 if (!isMeaningfulDesc(data.description)) data.description = null;
-                if (data.model_id) {
+                if (data.model_id && (needsBrand || needsDescription)) {
                     try {
                         const modelData = await modelService.getById(data.model_id);
 
@@ -380,24 +387,26 @@ export const PublicProductPage: React.FC = () => {
                 }
                 
                 // Categoria: a VPS fornece nome e config usados na PDP.
-                if (data.category_id) {
-                    let catName: string | null = null;
-                    try {
-                        const vpsCategories = await vpsApiService.getCategories();
-                        const vpscat = vpsCategories?.find((c: any) => String(c.id) === String(data.category_id));
-                        if (vpscat?.name) catName = vpscat.name;
-                        if (vpscat) {
-                            if (vpscat.config) setCategoryConfig(vpscat.config);
-                        }
-                    } catch (e) {
-                        console.warn('[PublicProductPage] Falha ao carregar categoria da VPS', e);
-                    }
-
-                    if (catName) data.category = catName;
-                }
+                const loadCategoryDetails = () => {
+                    if (!data.category_id) return;
+                    vpsApiService.getCategories()
+                        .then((vpsCategories) => {
+                            const vpscat = vpsCategories?.find((c: any) => String(c.id) === String(data.category_id));
+                            if (vpscat?.config) setCategoryConfig(vpscat.config);
+                            if (vpscat?.name) {
+                                setProduct((current) => current && String(current.id) === String(data.id)
+                                    ? { ...current, category: vpscat.name } as CatalogProduct
+                                    : current
+                                );
+                            }
+                        })
+                        .catch((e) => {
+                            console.warn('[PublicProductPage] Falha ao carregar categoria da VPS', e);
+                        });
+                };
 
                 // VPS é a única fonte de verdade para description/technical_specifications.
-                // Migração do Supabase → VPS concluída em 31/03/2026 (568 produtos).
+                // Migração do VPS → VPS concluída em 31/03/2026 (568 produtos).
                 
                 const formattedProduct = {
                     ...normalizeProduct(data),
@@ -407,7 +416,9 @@ export const PublicProductPage: React.FC = () => {
 
                 setSelectedVariantId(null);
                 setProduct(formattedProduct as unknown as CatalogProduct);
+                criticalProductLoaded = true;
                 trackViewItem(formattedProduct);
+                loadCategoryDetails();
 
                 if (data.is_combo && data.tags?.includes('mosaic_combo') && data.images.length > 1) {
                     setSelectedImage('MOSAIC');
@@ -419,15 +430,16 @@ export const PublicProductPage: React.FC = () => {
                 setLoading(false);
 
                 // -- Siblings (Variantes do mesmo modelo) via VPS --
-                // IMPORTANTE: a API da VPS pode ignorar o filtro model_id/parent_id e devolver
-                // produtos aleatórios. Por isso validamos cada resultado: só consideramos sibling
-                // um produto que realmente compartilha o mesmo model_id (ou parent_id) do produto atual.
+                // IMPORTANTE: model_id pode ser generico em produtos importados. Reusamos
+                // a mesma chave segura do catalogo para separar produtos sem variacao real.
                 if (data.model_id && String(data.model_id) !== '0' && String(data.model_id) !== 'null') {
+                    const currentGroupKey = generateGroupKey(data as unknown as CatalogProduct);
                     const sibs = await vpsApiService.getProducts({ model_id: data.model_id, status: 'active', limit: 50 });
                     if (sibs) {
                         const cleanSibs = sibs.map(s => normalizeProduct(s)).filter(s =>
                             (!s.offer_type || s.offer_visibility !== 'hidden') &&
-                            String(s.model_id) === String(data.model_id)  // ← validação: só produtos do mesmo modelo
+                            String(s.model_id) === String(data.model_id) &&
+                            generateGroupKey(s as unknown as CatalogProduct) === currentGroupKey
                         );
                         setSiblings(cleanSibs as unknown as CatalogProduct[]);
                     }
@@ -488,14 +500,16 @@ export const PublicProductPage: React.FC = () => {
                 }
             } catch (err) {
                 console.error('[PublicProductPage] Error fetching product:', err);
-                navigate('/');
+                if (!criticalProductLoaded) {
+                    navigate('/');
+                }
             } finally {
                 setLoading(false);
             }
         };
 
         fetchProduct();
-    }, [slug, navigate, customer?.user_id]);
+    }, [slug, navigate, customer?.user_id, customer?.customer_type]);
 
     if (loading) {
         return (
@@ -551,9 +565,14 @@ export const PublicProductPage: React.FC = () => {
         : 0;
     const shouldShowVariantPriceRange = variantPriceRange.hasRange && !selectedVariantId && !isKitSelected;
 
-    const presencial12x = paymentFees.find(f => f.channel === 'presencial' && f.installments === 12);
-    const taxaAplicada12x = presencial12x?.applied_fee_pct || 0;
-    const value12x = (displayPrice * (1 + taxaAplicada12x / 100)) / 12;
+    const pixDiscountPercent = Math.max(0, Number(companySettings?.pix_discount_percentage || 0));
+    const pixPriceCents = calculatePixPrice(Math.round(displayPrice * 100), pixDiscountPercent);
+    const pixPrice = pixPriceCents / 100;
+    const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
+    const installment12x = calculateInstallmentFromFees(Math.round(displayPrice * 100), paymentFees, 12);
+    const value12x = installment12x.value / 100;
+    const total12x = installment12x.total / 100;
+    const installment12xLabel = `ou no cartão em até 12x de ${formatCurrency(installment12x.value)} (total ${formatCurrency(installment12x.total)})`;
 
     // Descrições salvas via admin podem ser texto puro (com \n) — vira bloco único
     // sob dangerouslySetInnerHTML. Converte para HTML quando não vier marcado.
@@ -731,6 +750,89 @@ export const PublicProductPage: React.FC = () => {
     });
     uniqueVariants.sort((a, b) => ((a as any)._displayLabel || '').localeCompare((b as any)._displayLabel || ''));
 
+    const readVariantSpec = (item: CatalogProduct, keys: string[]): string => {
+        const specs = (item.specs || {}) as Record<string, unknown>;
+        for (const key of keys) {
+            const value = specs[key];
+            if (typeof value === 'string' && value.trim()) return value.trim();
+            if (typeof value === 'number') return String(value);
+            if (value && typeof value === 'object' && 'name' in value) {
+                const name = (value as { name?: unknown }).name;
+                if (typeof name === 'string' && name.trim()) return name.trim();
+            }
+        }
+        return '';
+    };
+
+    const normalizeStorageLabel = (value: string): string => {
+        const cleaned = value.replace(/\s+/g, '').toUpperCase();
+        const match = cleaned.match(/(\d+(?:GB|TB))/i);
+        return match ? match[1].toUpperCase() : value.trim();
+    };
+
+    const getStorageFromLabel = (label: string): string => {
+        const matches = [...label.matchAll(/(\d+)\s*(GB|TB)/gi)];
+        const storageMatch = matches.find(match => {
+            const before = label.slice(Math.max(0, match.index - 5), match.index).toLowerCase();
+            return !before.includes('ram');
+        });
+        return storageMatch ? `${storageMatch[1]}${storageMatch[2]}`.toUpperCase() : '';
+    };
+
+    const getVariantParts = (item: CatalogProduct) => {
+        const displayLabel = String((item as any)._displayLabel || '');
+        const storage = normalizeStorageLabel(
+            readVariantSpec(item, ['storage', 'armazenamento', 'capacidade', 'memoria_interna']) ||
+            getStorageFromLabel(displayLabel)
+        );
+        const ramFromSpec = readVariantSpec(item, ['ram', 'memoria_ram']);
+        const ramFromLabel = displayLabel.match(/RAM\s*([0-9]+\s*(?:GB|MB|TB)?)/i)?.[1] || '';
+        const ram = ramFromSpec || ramFromLabel;
+        const colorFromSpec = readVariantSpec(item, ['color', 'cor']);
+        const colorFromLabel = displayLabel
+            .replace(/RAM\s*[0-9]+\s*(?:GB|MB|TB)?/gi, '')
+            .replace(/[0-9]+\s*(?:GB|TB)/gi, '')
+            .split('-')
+            .map(part => part.trim())
+            .filter(Boolean)[0] || '';
+        const color = colorFromSpec || colorFromLabel || displayLabel || 'Padrão';
+
+        return {
+            storage: storage || 'Outras opções',
+            ram: ram ? normalizeStorageLabel(ram) : '',
+            color,
+        };
+    };
+
+    const groupedVariantOptions = Array.from(uniqueVariants.reduce((groups, item) => {
+        const parts = getVariantParts(item);
+        const key = parts.storage;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push({ item, ...parts });
+        return groups;
+    }, new Map<string, Array<{ item: CatalogProduct; storage: string; ram: string; color: string }>>()))
+        .map(([storage, options]) => {
+            const ramCount = new Set(options.map(option => option.ram).filter(Boolean)).size;
+            return {
+                storage,
+                options: options.sort((a, b) => a.color.localeCompare(b.color)),
+                showRam: ramCount > 1,
+            };
+        })
+        .sort((a, b) => {
+            const parse = (value: string) => {
+                const match = value.match(/(\d+)(GB|TB)/i);
+                if (!match) return Number.MAX_SAFE_INTEGER;
+                const size = Number(match[1]);
+                return match[2].toUpperCase() === 'TB' ? size * 1024 : size;
+            };
+            return parse(a.storage) - parse(b.storage) || a.storage.localeCompare(b.storage);
+        });
+    const shouldShowVariantOptions = uniqueVariants.length > 1 || uniqueVariants.some((item) => {
+        const parts = getVariantParts(item);
+        return parts.storage !== 'Outras opções' || parts.color !== 'Padrão' || Boolean(parts.ram);
+    });
+
     const getShareText = () => {
         const variantNames = uniqueVariants.map(v => (v as any)._displayLabel).join(', ');
         
@@ -738,7 +840,8 @@ export const PublicProductPage: React.FC = () => {
         if (variantNames) {
             text += `Disponível: ${variantNames}\n`;
         }
-        text += `R$ ${displayPrice.toFixed(2).replace('.', ',')}, em até 12x de: R$ ${value12x.toFixed(2).replace('.', ',')}\n\n`;
+        text += `À vista no PIX: R$ ${pixPrice.toFixed(2).replace('.', ',')}${pixDiscountLabel}\n`;
+        text += `Cartão: 12x de R$ ${value12x.toFixed(2).replace('.', ',')} (total R$ ${total12x.toFixed(2).replace('.', ',')})\n\n`;
 
         if (estimatedCoins > 0) {
             text += `Ganhe ${estimatedCoins} Moedas do Vale nessa compra!\n\n`;
@@ -1145,33 +1248,56 @@ export const PublicProductPage: React.FC = () => {
                         </div>
 
                         {/* Variantes (Cores / Capacidades) */}
-                        {uniqueVariants.length > 1 && (
+                        {shouldShowVariantOptions && (
                             <div className="pt-2">
-                                <h3 className="text-sm font-bold text-slate-900 mb-3">Opções Disponíveis:</h3>
-                                <div className="flex flex-wrap gap-2">
-                                    {(() => {
-                                        // Usa as variações já preparadas e alinhadas lá em cima (uniqueVariants)
-                                        if (uniqueVariants.length <= 1) return null;
+                                <h3 className="text-sm font-bold text-slate-900 mb-3">Opções disponíveis:</h3>
+                                <div className="space-y-4">
+                                    {groupedVariantOptions.map((group) => (
+                                        <div key={group.storage} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                                            <div className="mb-2">
+                                                <h4 className="text-base font-extrabold text-slate-950">{group.storage}</h4>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {group.options.map(({ item: sib, color, ram }) => {
+                                                    const isCurrent = sib.id === product.id;
+                                                    const isOutOfStock = Boolean(sib.track_inventory) && ((sib.stock_quantity || 0) <= 0);
+                                                    const buttonLabel = `${color}${group.showRam && ram ? ` - RAM ${ram}` : ''}`;
+                                                    const variantButtonStateClasses = isOutOfStock
+                                                        ? 'relative overflow-hidden border-slate-300 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75 shadow-inner'
+                                                        : isCurrent
+                                                            ? 'border-slate-950 bg-white text-slate-950 ring-2 ring-slate-950 shadow-sm'
+                                                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:bg-white';
 
-                                        return uniqueVariants.map((sib) => {
-                                            const isCurrent = sib.id === product.id;
-                                            const variantLabel = (sib as any)._displayLabel;
-                                            const isOutOfStock = Boolean(sib.track_inventory) && ((sib.stock_quantity || 0) <= 0);
-
-                                            return (
-                                                <button
-                                                    key={sib.id}
-                                                    onClick={() => handleVariantChange(sib)}
-                                                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-300 ${isCurrent
-                                                        ? 'border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-600 scale-[1.03] shadow-sm transform'
-                                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                                                        } ${isOutOfStock ? 'opacity-70' : ''}`}
-                                                >
-                                                    {variantLabel}{isOutOfStock ? ' (esgotado)' : ''}
-                                                </button>
-                                            );
-                                        })
-                                    })()}
+                                                    return (
+                                                        <button
+                                                            key={sib.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (isOutOfStock) return;
+                                                                handleVariantChange(sib);
+                                                            }}
+                                                            disabled={isOutOfStock}
+                                                            aria-disabled={isOutOfStock}
+                                                            title={isOutOfStock ? `${buttonLabel} esgotado` : buttonLabel}
+                                                            className={`min-h-11 px-4 py-2 rounded-lg border text-sm font-semibold transition-all duration-300 ${variantButtonStateClasses}`}
+                                                        >
+                                                            <span className={isOutOfStock ? 'line-through decoration-2 decoration-slate-500/70' : ''}>
+                                                                {buttonLabel}
+                                                            </span>
+                                                            {isOutOfStock && (
+                                                                <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                                                                    Esgotado
+                                                                </span>
+                                                            )}
+                                                            {isOutOfStock && (
+                                                                <span className="pointer-events-none absolute inset-x-[-20%] top-1/2 h-px -rotate-12 bg-slate-400/60" />
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
@@ -1194,6 +1320,7 @@ export const PublicProductPage: React.FC = () => {
                                                 -{product.discount_percentage}% OFF
                                             </span>
                                         </div>
+                                        <p className="text-xs font-bold uppercase tracking-wide text-green-700">À vista no PIX{pixDiscountLabel}</p>
                                         <div className="text-4xl font-extrabold text-slate-900">
                                             {shouldShowVariantPriceRange ? (
                                                 <>
@@ -1202,18 +1329,13 @@ export const PublicProductPage: React.FC = () => {
                                                     R$ {formatDisplayPrice(variantPriceRange.max)}
                                                 </>
                                             ) : (
-                                                <>R$ {formatDisplayPrice(displayPrice)}</>
+                                                <>R$ {formatDisplayPrice(customerType !== 'wholesale' ? pixPrice : displayPrice)}</>
                                             )}
                                         </div>
                                         {customerType !== 'wholesale' && (
                                             <p className="text-sm font-medium text-green-600 mt-1">
-                                                ou em até <span className="font-bold">12x de R$ {formatDisplayPrice(value12x)}</span> sem juros
+                                                {installment12xLabel}
                                             </p>
-                                        )}
-                                        {customerType !== 'wholesale' && (companySettings?.pix_discount_percentage || 0) > 0 && (
-                                            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 rounded-lg text-sm font-bold border border-green-100">
-                                                ✓ {companySettings?.pix_discount_percentage}% desconto direto no PIX
-                                            </div>
                                         )}
                                         {customerType !== 'wholesale' && estimatedCoins > 0 && (
                                             <div className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-sm font-bold border border-amber-200">
@@ -1224,6 +1346,7 @@ export const PublicProductPage: React.FC = () => {
                                     </div>
                                 ) : (
                                     <div>
+                                        <p className="text-xs font-bold uppercase tracking-wide text-green-700">À vista no PIX{pixDiscountLabel}</p>
                                         <div className="text-4xl font-extrabold text-slate-900">
                                             {shouldShowVariantPriceRange ? (
                                                 <>
@@ -1232,18 +1355,13 @@ export const PublicProductPage: React.FC = () => {
                                                     R$ {formatDisplayPrice(variantPriceRange.max)}
                                                 </>
                                             ) : (
-                                                <>R$ {formatDisplayPrice(displayPrice)}</>
+                                                <>R$ {formatDisplayPrice(customerType !== 'wholesale' ? pixPrice : displayPrice)}</>
                                             )}
                                         </div>
                                         {customerType !== 'wholesale' && (
                                             <p className="text-sm font-medium text-green-600 mt-1">
-                                                ou em até <span className="font-bold">12x de R$ {formatDisplayPrice(value12x)}</span> sem juros
+                                                {installment12xLabel}
                                             </p>
-                                        )}
-                                        {customerType !== 'wholesale' && (companySettings?.pix_discount_percentage || 0) > 0 && (
-                                            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 rounded-lg text-sm font-bold border border-green-100">
-                                                ✓ {companySettings?.pix_discount_percentage}% desconto direto no PIX
-                                            </div>
                                         )}
                                         {customerType !== 'wholesale' && estimatedCoins > 0 && (
                                             <div className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-sm font-bold border border-amber-200">
@@ -1663,6 +1781,8 @@ export const PublicProductPage: React.FC = () => {
                                             nfc: 'NFC',
                                             rede: 'Rede',
                                             camera: 'Câmera',
+                                            camera_traseira_video: 'Câmera traseira vídeo',
+                                            camera_frontal_video: 'Câmera frontal vídeo',
                                         };
 
                                         // Configuração de Grupo de Especificações e Ícones
@@ -1683,7 +1803,7 @@ export const PublicProductPage: React.FC = () => {
                                                 id: 'camera',
                                                 label: 'Câmeras',
                                                 icon: Camera,
-                                                keys: ['cam_principal_mpx', 'cam_selfie_mpx', 'camera', 'pontuacao_dxomak']
+                                                keys: ['cam_principal_mpx', 'cam_selfie_mpx', 'camera', 'camera_traseira_video', 'camera_frontal_video', 'pontuacao_dxomak']
                                             },
                                             {
                                                 id: 'desempenho',
@@ -1707,7 +1827,13 @@ export const PublicProductPage: React.FC = () => {
                                                 id: 'fisico',
                                                 label: 'Físico e Segurança',
                                                 icon: ShieldCheck,
-                                                keys: ['celular_biometria', 'resistencia', 'peso_g']
+                                                keys: ['celular_biometria', 'resistencia']
+                                            },
+                                            {
+                                                id: 'logistica',
+                                                label: 'Logística',
+                                                icon: Truck,
+                                                keys: ['dimensions.width_cm', 'dimensions.height_cm', 'dimensions.depth_cm', 'dimensions.weight_kg', 'largura_cm', 'altura_cm', 'profundidade_cm', 'peso_g', 'peso_kg', 'weight_kg']
                                             }
                                         ];
 
@@ -1749,21 +1875,48 @@ export const PublicProductPage: React.FC = () => {
                                             tryAddItem(key, label, value);
                                         }
 
+                                        function normalizeSpecText(value: string): string {
+                                            return value
+                                                .normalize('NFD')
+                                                .replace(/[\u0300-\u036f]/g, '')
+                                                .toLowerCase()
+                                                .replace(/[^a-z0-9]+/g, '_')
+                                                .replace(/^_+|_+$/g, '');
+                                        }
+
+                                        function resolveSpecGroupId(item: { key: string, label: string }): string | null {
+                                            const normalized = normalizeSpecText(`${item.key} ${item.label}`);
+
+                                            if (normalized.includes('camera') || normalized.includes('cam_')) return 'camera';
+                                            if (normalized.includes('largura') || normalized.includes('altura') || normalized.includes('profundidade') || normalized.includes('dimensions') || normalized.includes('peso')) return 'logistica';
+                                            if (normalized.includes('tela') || normalized.includes('display') || normalized.includes('resolucao') || normalized.includes('pixels') || normalized.includes('brilho')) return 'tela';
+                                            if (normalized.includes('bateria') || normalized.includes('mah') || normalized.includes('carregamento')) return 'bateria';
+                                            if (normalized.includes('processador') || normalized.includes('chipset') || normalized.includes('cpu') || normalized.includes('gpu') || normalized.includes('antutu')) return 'desempenho';
+                                            if (normalized.includes('wifi') || normalized.includes('wi_fi') || normalized.includes('bluetooth') || normalized.includes('nfc') || normalized.includes('rede') || normalized.includes('sim') || normalized.includes('usb') || normalized.includes('fone')) return 'conexoes';
+                                            if (normalized.includes('biometria') || normalized.includes('resistencia') || normalized.includes('ip64') || normalized.includes('seguranca')) return 'fisico';
+
+                                            return null;
+                                        }
+
                                         // Agrupar itens mapeados
                                         const groupedItems: { group: typeof SPEC_GROUPS[0] | { id: string, label: string, icon: any, keys: string[] }, items: typeof allItems }[] = [];
-                                        
+
                                         SPEC_GROUPS.forEach(group => {
-                                            const groupItems = allItems.filter(item => group.keys.includes(item.key));
+                                            const groupItems = allItems.filter(item => group.keys.includes(item.key) || resolveSpecGroupId(item) === group.id);
                                             if (groupItems.length > 0) {
                                                 // Ordenar os itens dentro do grupo para seguir a ordem de chaves configurada no array `keys`
-                                                groupItems.sort((a, b) => group.keys.indexOf(a.key) - group.keys.indexOf(b.key));
+                                                groupItems.sort((a, b) => {
+                                                    const indexA = group.keys.includes(a.key) ? group.keys.indexOf(a.key) : 999;
+                                                    const indexB = group.keys.includes(b.key) ? group.keys.indexOf(b.key) : 999;
+                                                    return indexA - indexB;
+                                                });
                                                 groupedItems.push({ group, items: groupItems });
                                             }
                                         });
 
                                         // Coletar itens restantes que não caíram em nenhum grupo (Outros)
                                         const mappedKeys = new Set(SPEC_GROUPS.flatMap(g => g.keys));
-                                        const othersItems = allItems.filter(item => !mappedKeys.has(item.key));
+                                        const othersItems = allItems.filter(item => !mappedKeys.has(item.key) && !resolveSpecGroupId(item));
                                         
                                         if (othersItems.length > 0) {
                                             groupedItems.push({
@@ -1836,8 +1989,8 @@ export const PublicProductPage: React.FC = () => {
             {/* Sticky Mobile CTA */}
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:hidden z-40 flex items-center gap-4">
                 <div className="flex-1">
-                    <p className="text-xs text-slate-500 uppercase font-bold">Total à vista</p>
-                    <p className="text-xl font-extrabold" style={{ color: primaryColor }}>R$ {displayPrice.toFixed(2).replace('.', ',')}</p>
+                    <p className="text-xs text-slate-500 uppercase font-bold">À vista no PIX</p>
+                    <p className="text-xl font-extrabold" style={{ color: primaryColor }}>R$ {(customerType !== 'wholesale' ? pixPrice : displayPrice).toFixed(2).replace('.', ',')}</p>
                 </div>
                 <button
                     onClick={handleAddToCart}

@@ -16,7 +16,7 @@ test('extracts product image_url, images, and custom_images in stable order', ()
       name: 'Produto 1',
       image_url: 'https://i.imgur.com/a.png',
       images: ['https://api.xiaomipetrolina.com.br/images/products/p1/a.webp', ''],
-      custom_images: ['https://cqbdyxxzmkgeghwkozts.supabase.co/storage/v1/object/public/products/a.png'],
+      custom_images: ['https://legacy-media.example.com/products/a.png'],
     },
   ]);
 
@@ -64,27 +64,27 @@ test('extracts banner image fields without assuming schema completeness', () => 
       id: 'b1',
       title: 'Banner 1',
       image_url: 'https://api.xiaomipetrolina.com.br/banners/a.webp',
-      desktop_image_url: 'https://cqbdyxxzmkgeghwkozts.supabase.co/storage/v1/object/public/catalog-banners/a.png',
+      desktop_image_url: 'https://legacy-media.example.com/catalog-banners/a.png',
       mobile_image_url: undefined,
     },
   ]);
 
   assert.deepEqual(refs.map((ref) => ref.field), ['image_url', 'desktop_image_url']);
-  assert.equal(refs[1].origin, 'supabase-storage');
+  assert.equal(refs[1].origin, 'external');
 });
 
 test('summarizes refs by origin and entity type', () => {
   const summary = summarizeMediaRefs([
     { origin: 'vps', entityType: 'product', shouldMigrate: false },
-    { origin: 'supabase-storage', entityType: 'product', shouldMigrate: true },
-    { origin: 'supabase-storage', entityType: 'catalog_banner', shouldMigrate: true },
+    { origin: 'external', entityType: 'product', shouldMigrate: true },
+    { origin: 'external', entityType: 'catalog_banner', shouldMigrate: true },
   ]);
 
   assert.equal(summary.total, 3);
   assert.equal(summary.migrationCandidates, 2);
   assert.equal(summary.alreadyCanonical, 1);
   assert.equal(summary.byOrigin.vps, 1);
-  assert.equal(summary.byOrigin['supabase-storage'], 2);
+  assert.equal(summary.byOrigin.external, 2);
   assert.equal(summary.byEntityType.product, 2);
   assert.equal(summary.byEntityType.catalog_banner, 1);
 });

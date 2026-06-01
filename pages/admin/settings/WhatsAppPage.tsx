@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { MessageCircle, Save, CheckCircle, AlertCircle, Phone, Link2, ShieldAlert } from 'lucide-react';
-import { supabase } from '../../../lib/supabase';
 import { getWhatsAppSettings, updateWhatsAppSettings } from '../../../services/whatsappSettingsService';
 import { WhatsAppSettings } from '../../../types/whatsapp';
 import toast from 'react-hot-toast';

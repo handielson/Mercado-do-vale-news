@@ -11,7 +11,7 @@ import { Plus, Trash2, AlertCircle, Loader2 } from 'lucide-react';
 import { BatchProductRow } from '../ProductEntryWizard';
 import { UNIQUE_FIELDS } from '../../../../config/product-fields';
 import { customFieldsService, CustomField } from '../../../../services/custom-fields';
-import { supabase } from '../../../../services/supabase';
+import { tableDataService } from '../../../../services/table-data';
 import { vpsApiService } from '../../../../services/vpsApiService';
 
 interface BatchEntryGridProps {
@@ -276,23 +276,16 @@ export function BatchEntryGrid({ rows, onChange, uniqueFields }: BatchEntryGridP
 
                     console.log(`🔄 [BatchEntryGrid] Loading options for ${field.key} from ${table_name}...`);
 
-                    let query = supabase
-                        .from(table_name)
-                        .select(`${value_column}, ${label_column}`);
+                    const data = await tableDataService.loadOptions(
+                        table_name,
+                        value_column,
+                        label_column,
+                        order_by
+                    );
 
-                    if (order_by) {
-                        query = query.order(order_by.replace(' ASC', '').replace(' DESC', ''), {
-                            ascending: order_by.includes('ASC')
-                        });
-                    }
-
-                    const { data, error } = await query;
-
-                    if (error) throw error;
-
-                    options[field.key] = (data || []).map(item => ({
-                        id: item[value_column],
-                        name: item[label_column]
+                    options[field.key] = data.map(item => ({
+                        id: String(item.value),
+                        name: item.label
                     }));
 
                     console.log(`✅ [BatchEntryGrid] Loaded ${options[field.key].length} options for ${field.key}`);

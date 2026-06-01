@@ -216,7 +216,6 @@ const formatCategoryFieldLabel = (key: string) => {
 
 const shouldCreateTemplateFieldFromCategoryConfig = (key: string, value: unknown) => {
     if (NON_TEMPLATE_CATEGORY_KEYS.has(key)) return false;
-    if (UNIQUE_FIELDS.includes(key)) return false;
     if (value === 'off' || value === 'hidden') return false;
     return value !== undefined && value !== null;
 };
@@ -491,6 +490,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             : null;
 
         const requirement = customFieldConfig?.requirement ?? categoryConfig[field.key];
+        if (requirement === undefined || requirement === null) return false;
         return requirement !== 'off' && requirement !== 'hidden';
     };
     const isSmartphoneCategory = (category?: Category) => {
@@ -828,6 +828,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     const loadData = async () => {
         try {
             setLoading(true);
+            customFieldsService.clearCache();
             const [brandsResult, categoriesResult, fieldsResult, tagsResult] = await Promise.allSettled([
                 brandService.list(),
                 categoryService.list(),
@@ -848,7 +849,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             }
 
             if (fieldsResult.status === 'fulfilled') {
-                setCustomFields(fieldsResult.value.filter(f => !UNIQUE_FIELDS.includes(f.key)));
+                setCustomFields(fieldsResult.value);
             } else {
                 console.error('Error loading model custom fields:', fieldsResult.reason);
             }

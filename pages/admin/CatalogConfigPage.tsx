@@ -3,7 +3,7 @@ import { Settings, Eye, Palette, Search, Share2, Save, Loader2, Layers, ArrowLef
 import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogSettings } from '@/types/catalogSettings';
 import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
-import { useSupabaseAuth } from '@/hooks/useSupabaseAuth';
+import { useVpsAuth } from '@/hooks/useVpsAuth';
 import { SectionsTab } from '@/components/admin/SectionsTab';
 import { PdpSectionHeadersPanel } from '@/components/settings/PdpSectionHeadersPanel';
 import { categoryService } from '@/services/categories';
@@ -18,7 +18,7 @@ function sanitizeCatalogSettingsForSave(settings: CatalogSettings): Partial<Cata
 }
 
 export default function CatalogConfigPage() {
-    const { user } = useSupabaseAuth();
+    const { user } = useVpsAuth();
     const [activeTab, setActiveTab] = useState<TabType>('display');
     const [settings, setSettings] = useState<CatalogSettings>(DEFAULT_CATALOG_SETTINGS as CatalogSettings);
     const [loading, setLoading] = useState(true);

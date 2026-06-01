@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
 
 // ============================================================
 // Tipos
@@ -66,92 +66,105 @@ export const RESOLVER_LABELS: Record<TagResolverType, string> = {
 // Service
 // ============================================================
 
+interface TableDataResponse {
+    rows?: SystemTag[];
+}
+
+function slugName(value: string): string {
+    return value
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '');
+}
+
+function parseResolverConfig(value: unknown): Record<string, any> {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, any>;
+    if (typeof value === 'string' && value.trim()) {
+        try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        } catch {
+            return {};
+        }
+    }
+    return {};
+}
+
+function normalizeTag(row: SystemTag): SystemTag {
+    return {
+        ...row,
+        active: Boolean(row.active),
+        sort_order: Number(row.sort_order || 0),
+        resolver_config: parseResolverConfig(row.resolver_config),
+    };
+}
+
+function sortTags(tags: SystemTag[]): SystemTag[] {
+    return tags.sort((a, b) => {
+        const orderDiff = Number(a.sort_order || 0) - Number(b.sort_order || 0);
+        if (orderDiff !== 0) return orderDiff;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+}
+
+async function loadTags(): Promise<SystemTag[]> {
+    const allRows: SystemTag[] = [];
+    const pageSize = 200;
+
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<TableDataResponse>(
+            `/table-data/system_tags?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows.push(...rows);
+        if (rows.length < pageSize) break;
+    }
+
+    return sortTags(allRows.map(normalizeTag));
+}
+
 export const systemTagsService = {
     async list(): Promise<SystemTag[]> {
-        const { data, error } = await supabase
-            .from('system_tags')
-            .select('*')
-            .order('sort_order', { ascending: true })
-            .order('name', { ascending: true });
-
-        if (error) throw error;
-        return data || [];
+        return loadTags();
     },
 
     async listActive(): Promise<SystemTag[]> {
-        const { data, error } = await supabase
-            .from('system_tags')
-            .select('*')
-            .eq('active', true)
-            .order('sort_order', { ascending: true });
-
-        if (error) throw error;
-        return data || [];
+        return (await loadTags()).filter(tag => tag.active);
     },
 
     async listByContext(context: TagContext): Promise<SystemTag[]> {
-        const { data, error } = await supabase
-            .from('system_tags')
-            .select('*')
-            .eq('context', context)
-            .eq('active', true)
-            .order('sort_order', { ascending: true });
-
-        if (error) throw error;
-        return data || [];
+        return (await loadTags()).filter(tag => tag.context === context && tag.active);
     },
 
     async create(input: SystemTagInput): Promise<SystemTag> {
-        const slug = input.name
-            .toLowerCase()
-            .replace(/\s+/g, '_')
-            .replace(/[^a-z0-9_]/g, '');
-
-        const { data, error } = await supabase
-            .from('system_tags')
-            .insert({ ...input, name: slug })
-            .select()
-            .single();
-
-        if (error) throw error;
-        return data;
+        const data = await vpsClient.post<SystemTag>('/table-data/system_tags', {
+            ...input,
+            name: slugName(input.name),
+        });
+        return normalizeTag(data);
     },
 
     async update(id: string, input: Partial<SystemTagInput>): Promise<SystemTag> {
         const payload: any = { ...input, updated_at: new Date().toISOString() };
         if (input.name) {
-            payload.name = input.name
-                .toLowerCase()
-                .replace(/\s+/g, '_')
-                .replace(/[^a-z0-9_]/g, '');
+            payload.name = slugName(input.name);
         }
 
-        const { data, error } = await supabase
-            .from('system_tags')
-            .update(payload)
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) throw error;
-        return data;
+        const data = await vpsClient.patch<SystemTag>(
+            `/table-data/system_tags/${encodeURIComponent(id)}?pk=id`,
+            payload
+        );
+        return normalizeTag(data);
     },
 
     async delete(id: string): Promise<void> {
-        const { error } = await supabase
-            .from('system_tags')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
+        await vpsClient.delete(`/table-data/system_tags/${encodeURIComponent(id)}?pk=id`);
     },
 
     async toggleActive(id: string, active: boolean): Promise<void> {
-        const { error } = await supabase
-            .from('system_tags')
-            .update({ active, updated_at: new Date().toISOString() })
-            .eq('id', id);
-
-        if (error) throw error;
+        await vpsClient.patch(
+            `/table-data/system_tags/${encodeURIComponent(id)}?pk=id`,
+            { active, updated_at: new Date().toISOString() }
+        );
     },
 };

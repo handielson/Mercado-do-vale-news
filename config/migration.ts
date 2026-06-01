@@ -1,6 +1,6 @@
 /**
  * config/migration.ts
- * Feature flags para controlar a migração gradual do Supabase para VPS MySQL.
+ * Feature flags para controlar a migração gradual do VPS para VPS MySQL.
  *
  * COMO USAR:
  *   import { USE_VPS } from '@/config/migration';
@@ -8,7 +8,7 @@
  *
  * ATIVAR UMA FLAG:
  *   Mude o valor de false → true e faça deploy.
- *   Teste no ambiente de produção antes de desligar o Supabase.
+ *   Teste no ambiente de produção antes de desligar o VPS.
  *
  * ORDEM RECOMENDADA DE ATIVAÇÃO:
  *   Semana 1: banners, shipping, coupons, paymentFees, company
@@ -22,7 +22,7 @@ export const USE_VPS = {
     products:    true,
     categories:  true,
     brands:      true,
-    versions:    true,  // ✅ migrado de localStorage/Supabase para VPS MySQL em 2026-03-18
+    versions:    true,  // ✅ migrado de localStorage/VPS para VPS MySQL em 2026-03-18
 
     // ✅ Endpoints implementados + dados migrados em 2026-03-18
     banners:     true,
@@ -32,10 +32,10 @@ export const USE_VPS = {
     company:     true,  // ✅ migrado para VPS MySQL em 2026-03-18
 
     // ⏳ Alto impacto — deixar para o final
-    customers:   false,
-    orders:      false,
-    pdv:         false,
-    sales:       false,
+    customers:   true,
+    orders:      true,
+    pdv:         true,
+    sales:       true,
 } as const;
 
 export type VpsFeature = keyof typeof USE_VPS;

@@ -3,7 +3,6 @@ import { Download, RefreshCw, AlertTriangle, CheckCircle, CheckCircle2, Info, Fi
 import { toast } from 'sonner';
 import { CategorySelect } from '../../../components/products/CategorySelect';
 import { DataSyncService } from '../../../services/dataSyncService';
-import { supabase } from '../../../services/supabase';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { LegacySalesImportTab } from '../../../components/import/LegacySalesImportTab';
 
@@ -33,88 +32,49 @@ export const DataImportExportPage: React.FC = () => {
     vpsSyncAbort.current = false;
 
     try {
-      // ── Etapa 1: Carregar produtos existentes da VPS para preservar imagens e outros dados ──
-      toast.loading('Carregando dados da VPS...', { id: 'vps-sync' });
+      toast.loading('Reaplicando precos e estoque atuais da VPS...', { id: 'vps-sync' });
 
-      // compact=true retorna a primeira imagem como URL (não base64), evitando payload enorme
-      const vpsProducts = await vpsApiService.getProducts({ status: 'all', limit: 2000, compact: true, noCache: true });
-      const vpsMap = new Map<string, any>();
-      if (Array.isArray(vpsProducts)) {
-        for (const vp of vpsProducts) vpsMap.set(vp.id, vp);
-      }
-
-      // ── Etapa 2: Ler do Supabase em páginas e mergear com dados da VPS ──
-      toast.loading(`VPS carregada (${vpsMap.size} produtos). Sincronizando preços e estoque...`, { id: 'vps-sync' });
-
-      const PAGE_SIZE = 50;
-      let page = 0;
-      let total = 0;
+      const PAGE_SIZE = 200;
+      let offset = 0;
       let done = 0;
       let hasMore = true;
 
       while (hasMore && !vpsSyncAbort.current) {
-        const from = page * PAGE_SIZE;
-        const to   = from + PAGE_SIZE - 1;
+        const products = await vpsApiService.getProducts({
+          status: 'all',
+          limit: PAGE_SIZE,
+          offset,
+          compact: true,
+          noCache: true,
+        }) || [];
 
-        const { data: sbProducts, error, count } = await supabase
-          .from('products')
-          .select(
-            'id, name, sku, ean, status, category_id, ' +
-            'price_retail, price_reseller, price_wholesale, price_cost, ' +
-            'stock_quantity, track_inventory',
-            page === 0 ? { count: 'exact' } : undefined
-          )
-          .range(from, to);
+        if (products.length === 0) break;
 
-        if (error) {
-          toast.dismiss('vps-sync');
-          toast.error(`Erro ao ler Supabase: ${error.message}`);
-          break;
-        }
-        if (!sbProducts || sbProducts.length === 0) break;
-
-        if (page === 0 && count != null) {
-          total = count;
-          setVpsSyncTotal(total);
-        }
-
-        // Merge: todos os campos da VPS são preservados; apenas price/stock/status vêm do Supabase
-        const mergedRows = sbProducts.map((p: any) => {
-          const existing = vpsMap.get(p.id) ?? {};
-          return {
-            // Preserva TUDO da VPS (imagens, description, slug, kits, specs, etc.)
-            ...existing,
-            // Sobrescreve somente com dados do Supabase (fonte de verdade para preço/estoque)
-            id:             p.id,
-            name:           p.name        || existing.name,
-            sku:            p.sku         || existing.sku,
-            ean:            p.ean         || existing.ean        || null,
-            status:         p.status      || existing.status     || 'active',
-            category_id:    p.category_id || existing.category_id|| null,
-            price_retail:   p.price_retail,
-            price_reseller: p.price_reseller,
-            price_wholesale: p.price_wholesale,
-            price_cost:     p.price_cost,
-            stock_quantity: p.stock_quantity ?? 0,
-            track_inventory: p.track_inventory ?? true,
-            // Imagens: usa apenas URLs da VPS (filtra base64 se houver)
-            images: (() => {
-              const vpsImgs = Array.isArray(existing.images)
-                ? existing.images.filter((u: string) => u?.startsWith('http'))
-                : [];
-              return vpsImgs.length > 0 ? vpsImgs : (existing.images ?? null);
-            })(),
-          };
-        });
+        const mergedRows = products.map((p: any) => ({
+          ...p,
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          ean: p.ean || null,
+          status: p.status || 'active',
+          category_id: p.category_id || null,
+          price_retail: p.price_retail,
+          price_reseller: p.price_reseller,
+          price_wholesale: p.price_wholesale,
+          price_cost: p.price_cost,
+          stock_quantity: p.stock_quantity ?? 0,
+          track_inventory: p.track_inventory ?? true,
+        }));
 
         await vpsApiService.bulkSyncPricesStock(mergedRows);
 
-        done += sbProducts.length;
+        done += products.length;
         setVpsSyncDone(done);
-        setVpsSyncProgress(total > 0 ? Math.round((done / total) * 100) : 0);
+        setVpsSyncTotal(done);
+        setVpsSyncProgress(products.length < PAGE_SIZE ? 100 : Math.min(99, Math.round((done / (done + PAGE_SIZE)) * 100)));
 
-        hasMore = sbProducts.length === PAGE_SIZE;
-        page++;
+        hasMore = products.length === PAGE_SIZE;
+        offset += PAGE_SIZE;
         await new Promise(r => setTimeout(r, 200));
       }
 
@@ -417,13 +377,13 @@ export const DataImportExportPage: React.FC = () => {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-slate-800">Sincronizar Preços &amp; Estoque → VPS</h2>
-                <p className="text-sm text-slate-500 mt-1">Copia todos os dados do Supabase (fonte de verdade) para o banco MySQL da VPS.</p>
+                <p className="text-sm text-slate-500 mt-1">Copia todos os dados do VPS (fonte de verdade) para o banco MySQL da VPS.</p>
               </div>
             </div>
 
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-sm text-amber-900 flex gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <span>Esta operação atualiza <strong>todos os produtos</strong> na VPS com os preços e estoques do Supabase. Execute quando os produtos aparecerem como "R$ 0,00" ou "Esgotado" na vitrine.</span>
+              <span>Esta operação atualiza <strong>todos os produtos</strong> na VPS com os preços e estoques do VPS. Execute quando os produtos aparecerem como "R$ 0,00" ou "Esgotado" na vitrine.</span>
             </div>
 
             {isVpsSyncing && (

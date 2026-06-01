@@ -5,8 +5,8 @@ const source = readFileSync('tmp-tests/vps-bling-live-read-check.cjs', 'utf8');
 
 assert.match(source, /dotenv\/config/, 'script must load local env files without printing them');
 assert.match(source, /https:\/\/api\.xiaomipetrolina\.com\.br/, 'script must target the VPS API host by default');
-assert.match(source, /SUPABASE_URL|VITE_SUPABASE_URL/, 'script must read Supabase URL from env');
-assert.match(source, /bling_access_token/, 'script must load stored Bling token');
+assert.match(source, /BLING_ACCESS_TOKEN|VPS_BLING_ACCESS_TOKEN/, 'script must read an explicit Bling token from env');
+assert.doesNotMatch(source, /SUPABASE_URL|VITE_SUPABASE_URL|\/rest\/v1|apikey/i, 'script must not read the retired provider directly');
 assert.match(source, /\/api\/bling\?resource=categories/, 'script must validate Bling categories');
 assert.match(source, /\/api\/bling\?resource=products/, 'script must validate Bling products');
 assert.match(source, /\/api\/bling\?resource=nfe/, 'script must validate Bling NFe list through VPS');

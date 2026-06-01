@@ -27,12 +27,12 @@ Estado operacional em 11/05/2026:
 - Quando o pedido online e pago ou concluido no pagamento na entrega, a baixa numerica tenta consumir a reserva existente; se nao houver reserva, cai para baixa por prioridade com fallback legado para `decrement_stock`.
 - Cancelamento/liberacao de pedido online por local ja tenta liberar reserva pendente ou devolver aos mesmos locais consumidos pela baixa do pedido, usando o historico `order_reservation`/`order` em `stock_location_movements`.
 - Se o pedido foi baixado antes da migration ou nao houver historico por local, o cancelamento cai para o fluxo legado `increment_stock`.
-- A migration Supabase ainda precisa ser executada/validada em ambiente real antes de depender dela em producao.
+- A migration de estoque ainda precisa ser executada/validada em ambiente real antes de depender dela em producao.
 
 Ja esta pronto:
 
 - Documento estrutural e checklist de producao.
-- Migration Supabase aditiva para depositos, locais internos, saldo por local e historico de movimentacoes.
+- Migration aditiva para depositos, locais internos, saldo por local e historico de movimentacoes.
 - Deposito/local padrao para migrar estoque atual para `Loja Principal / Estoque Geral`.
 - View de divergencias entre `products.stock_quantity` e a soma por locais.
 - Funcao de recalculo do estoque total a partir dos locais.
@@ -99,7 +99,7 @@ O ciclo basico do estoque multi-depositos para PDV foi fechado em modo compative
 
 ### Arquivos Principais Alterados
 
-- `supabase/migrations/20260509000001_multi_deposit_stock.sql`
+- `migrations/20260509000001_multi_deposit_stock.sql`
 - `types/stock-location.ts`
 - `services/stockLocationService.ts`
 - `services/saleService.ts`
@@ -137,7 +137,7 @@ Ainda falta rodar a migration em ambiente real/staging e testar com dados reais:
 
 Pendencias principais:
 
-- Testar a migration do Supabase em ambiente local/staging.
+- Testar a migration em ambiente local/staging.
 - Validar entrada, ajuste manual e transferencia com dados reais.
 - Acompanhar a baixa do PDV por prioridade depois da migration aplicada no banco.
 - Validar pedido online reservando, consumindo e liberando estoque por local com dados reais.
@@ -174,7 +174,7 @@ Foi criada uma fundacao aditiva para estoque multi-depositos sem remover nem sub
 
 Arquivos principais:
 
-- `supabase/migrations/20260509000001_multi_deposit_stock.sql`
+- `migrations/20260509000001_multi_deposit_stock.sql`
 - `types/stock-location.ts`
 - `services/stockLocationService.ts`
 
@@ -793,7 +793,7 @@ Leituras principais de estoque:
 - `pages/store/PublicProductPage.tsx`: usa `stock_quantity` e `track_inventory` para disponibilidade, variantes, botao comprar e schema.
 - `pages/catalog/index.tsx`: agrupa produtos e considera estoque para visibilidade do catalogo.
 - `components/catalog/*`: cards, modal de produto e simuladores usam estoque total para exibir disponibilidade.
-- `pages/customer/CustomerFavoritesPage.tsx`: normaliza estoque vindo de VPS/Supabase para favoritos.
+- `pages/customer/CustomerFavoritesPage.tsx`: normaliza estoque vindo da VPS para favoritos.
 - `pages/pdv/PDVPage.tsx`, `components/pdv/CartSection.tsx`, `components/pdv/ProductSearchSection.tsx`: validam estoque antes de adicionar ou aumentar quantidade no carrinho.
 - `components/products/ProductCard.tsx`: exibe e sincroniza estoque real vindo do Bling.
 - `components/products/ProductForm.tsx`: edita `track_inventory` e `stock_quantity`.
@@ -875,7 +875,7 @@ Regra para evitar contagem duplicada:
 - Produto serializado: local vive na propria unidade em `units`.
 - O total exibido continua em `products.stock_quantity`.
 
-Tabelas novas no Supabase:
+Tabelas novas no banco:
 
 ```text
 stock_deposits
@@ -1059,7 +1059,7 @@ Proxima etapa segura:
 - [ ] Testar pedido online.
 - [ ] Testar ajuste e transferencia.
 - [ ] Testar leitura/bipagem de EAN na lista de impressao.
-- [x] Conferir Vercel.
+- [x] Conferir publicacao web.
 - [x] Conferir necessidade de deploy VPS.
 - [x] Registrar evidencias no diario.
 
@@ -1090,7 +1090,7 @@ Proxima etapa segura:
 - [ ] Registrar comandos de verificacao.
 - [ ] Registrar se houve commit.
 - [ ] Registrar se houve push.
-- [ ] Registrar se houve deploy Vercel.
+- [ ] Registrar se houve publicacao web.
 - [ ] Registrar se houve deploy VPS.
 
 ## Diario De Producao
@@ -1111,16 +1111,16 @@ Feito:
 - [x] Criada guarda estatica para validacao de divergencia entre `products.stock_quantity` e soma por locais.
 - [x] Confirmado que a tela `/admin/inventory/locations` carrega e exibe divergencias.
 - [x] Corrigida a migration para manter as RPCs de estoque por local sem `SECURITY DEFINER`, respeitando RLS.
-- [x] Criado verificador SQL `supabase/verify_multi_deposit_stock.sql` para rodar depois da migration em staging/producao.
+- [x] Criado verificador SQL `migrations/verify_multi_deposit_stock.sql` para rodar depois da migration em staging/producao.
 - [x] Confirmado que o build de producao passa depois dos ajustes desta etapa.
-- [x] Conferida necessidade de deploy VPS: para o fluxo atual de estoque multi-depositos no Supabase, nao ha deploy VPS obrigatorio; para localizacao de unidades serializadas e futura migracao total do estoque para VPS, havera deploy separado.
+- [x] Conferida necessidade de deploy VPS: para o fluxo atual de estoque multi-depositos, publicar na VPS quando a mudanca atingir runtime, telas ou servicos.
 - [x] Decidido manter a migracao total do estoque para VPS como etapa futura, depois de concluir o checklist atual.
 - [x] Validada tecnicamente a lista de impressao: busca tenta EAN primeiro, cai para SKU/nome e nao movimenta estoque.
 - [x] Criado checklist operacional `docs/operacional/2026-05-11-estoque-staging-validation.md` para guiar a validacao em staging/local.
 - [x] Fechada decisao da lista de impressao: primeira versao fica apenas conferencia/separacao, sem reserva ou baixa automatica.
-- [x] Conferida preparacao Vercel por build e `vercel.json`: API, sitemap, SEO de produto e fallback SPA continuam configurados.
+- [x] Conferida preparacao web por build: API, sitemap, SEO de produto e fallback SPA continuam configurados na stack atual.
 - [x] Checklist de staging ampliado com preparacao, dados da execucao, criterios de aprovacao, criterios de bloqueio e rollback/contencao.
-- [x] Registrado que qualquer commit futuro desta frente deve seguir `commit.md`: commit isolado por arquivo, push por padrao, `main` quando precisar Vercel e deploy VPS apenas quando atingir runtime/servicos da VPS.
+- [x] Registrado que qualquer commit futuro desta frente deve seguir `publicar.md`: commit isolado por arquivo, push por padrao, `main` quando precisar producao e deploy VPS quando atingir runtime/servicos/telas.
 - [x] Criado escopo de commit `docs/operacional/2026-05-11-estoque-commit-scope.md` para separar arquivos da frente de estoque antes de stagear.
 
 Verificacoes executadas:
@@ -1140,7 +1140,7 @@ Verificacoes executadas:
 - [x] `node tmp-tests\stock-location-entry-static.test.mjs`
 - [x] `node tmp-tests\inventory-print-list-static.test.mjs`
 - [x] `node tmp-tests\multi-deposit-stock-verification-sql-static.test.mjs`
-- [x] `node tmp-tests\vercel-deploy-readiness-static.test.mjs`
+- [x] `node tmp-tests\vps-site-deploy-script-static.test.mjs`
 - [x] `node tmp-tests\estoque-staging-runbook-static.test.mjs`
 - [x] `node tmp-tests\estoque-commit-scope-static.test.mjs`
 - [x] `npm.cmd run build`
@@ -1150,17 +1150,17 @@ Pendencias:
 - [ ] Testar migration em ambiente local/staging.
 - [ ] Validar venda PDV e pedido online com dados reais depois da migration aplicada.
 - [ ] Conferir integracoes externas em ambiente real depois do deploy da migration.
-- [ ] Instalar/disponibilizar Supabase CLI ou aplicar a migration em staging via SQL Editor para executar `supabase/verify_multi_deposit_stock.sql`.
+- [ ] Aplicar a migration em staging/producao pelo fluxo atual de banco e executar `migrations/verify_multi_deposit_stock.sql`.
 - [ ] Testar bipagem fisica de EAN na lista de impressao com scanner real.
 - [ ] Executar checklist `docs/operacional/2026-05-11-estoque-staging-validation.md` em ambiente com dados reais.
-- [ ] Conferir deploy real no Vercel depois que a migration for validada e publicada.
-- [ ] Quando for comitar, seguir o fluxo de `commit.md` e nao misturar arquivos fora do escopo.
+- [ ] Conferir publicacao real na VPS depois que a migration for validada e publicada.
+- [ ] Quando for comitar, seguir o fluxo de `publicar.md` e nao misturar arquivos fora do escopo.
 - [ ] Usar `docs/operacional/2026-05-11-estoque-commit-scope.md` como lista de conferencia antes do stage.
 
 Roteiro manual da proxima validacao:
 
-1. Aplicar `supabase/migrations/20260509000001_multi_deposit_stock.sql` em staging ou ambiente local com backup.
-2. Rodar `supabase/verify_multi_deposit_stock.sql` e registrar contagem de divergencias.
+1. Aplicar `migrations/20260509000001_multi_deposit_stock.sql` em staging ou ambiente local com backup.
+2. Rodar `migrations/verify_multi_deposit_stock.sql` e registrar contagem de divergencias.
 3. Escolher um produto com saldo somente na `Loja Principal` e fazer venda PDV parcial.
 4. Escolher um produto com saldo dividido entre `Loja Principal` e outro deposito e fazer venda maior que o saldo da loja.
 5. Cancelar/estornar a venda e conferir devolucao ao local original.
@@ -1185,7 +1185,7 @@ Feito:
 - [x] Definida estrategia inicial para Bling, VPS e marketplaces.
 - [x] Criado checklist de implementacao por fases.
 - [x] Criado checklist diario de producao.
-- [x] Criada migration aditiva Supabase para depositos, locais, saldo por local e movimentos por local.
+- [x] Criada migration aditiva para depositos, locais, saldo por local e movimentos por local.
 - [x] Criada view de divergencias entre saldo total e saldo por local.
 - [x] Criada funcao de recalculo do estoque total a partir dos locais.
 - [x] Criados types e service inicial de leitura para depositos, locais, distribuicao e divergencias.
@@ -1275,7 +1275,7 @@ Verificacoes executadas:
 - [ ] Havera permissao especifica para transferencia entre depositos?
 - [ ] A lista de impressao deve salvar historico por caixa/lote ou ser apenas impressao avulsa?
 - [x] A lista de impressao deve permanecer apenas como conferencia ou futuramente reservar/baixar estoque? Primeira versao permanece apenas como conferencia/separacao; reserva/baixa fica fora do fluxo atual.
-- [ ] Migrar a fonte principal do estoque do Supabase para VPS/MySQL? Futuro; primeiro concluir validacao do checklist atual.
+- [ ] Consolidar a fonte principal do estoque na VPS/MySQL? Futuro; primeiro concluir validacao do checklist atual.
 
 ## Criterios De Sucesso
 

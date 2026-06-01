@@ -3,7 +3,6 @@ import { Star, Filter, EyeOff, CheckCircle, MessageSquare, Trash2, ShieldAlert }
 import { toast } from 'sonner';
 import { reviewService } from '../../../services/reviews';
 import { ProductReview } from '../../../types/review';
-import { supabase } from '../../../services/supabase';
 
 export const ReviewsPage: React.FC = () => {
     const [reviews, setReviews] = useState<ProductReview[]>([]);
@@ -46,8 +45,7 @@ export const ReviewsPage: React.FC = () => {
     const handleDelete = async (id: string) => {
         if (!confirm('Tem certeza que deseja apagar esta avaliação permanentemente?')) return;
         try {
-            const { error } = await supabase.from('product_reviews').delete().eq('id', id);
-            if (error) throw error;
+            await reviewService.deleteReview(id);
             toast.success('Avaliação apagada!');
             fetchReviews();
         } catch (error) {

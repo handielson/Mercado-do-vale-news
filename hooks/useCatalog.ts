@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { catalogService } from '@/services/catalogService';
 import { catalogConfigService } from '@/services/catalogConfigService';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import type { CatalogProduct } from '@/types/catalog';
 import type { FilterState } from '@/components/catalog';
 import type { CatalogSettings } from '@/types/catalogSettings';
@@ -29,7 +29,7 @@ export function useCatalog(options: UseCatalogOptions = {}) {
 
     // Favoritos vinculados exclusivamente ao cliente autenticado na VPS.
     // Se não há customer logado, nenhum favorito é carregado ou gravado.
-    const { customer: authCustomer } = useSupabaseAuth();
+    const { customer: authCustomer } = useVpsAuth();
     const effectiveCustomerId = useMemo(
         () => customerId || authCustomer?.id || null,
         [customerId, authCustomer?.id]

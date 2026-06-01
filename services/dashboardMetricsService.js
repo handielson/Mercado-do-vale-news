@@ -87,24 +87,19 @@ export function buildDailyDashboardMetrics({ sales, now = new Date() }) {
 }
 
 export async function getDashboardDailyMetrics(now = new Date()) {
-  const { supabase } = await import('./supabase');
+  const { getSales } = await import('./saleService');
   const rangeStart = new Date(now);
   rangeStart.setDate(rangeStart.getDate() - 14);
   rangeStart.setHours(0, 0, 0, 0);
 
-  const { data, error } = await supabase
-    .from('sales')
-    .select('created_at, total, profit')
-    .eq('status', 'completed')
-    .gte('created_at', rangeStart.toISOString())
-    .lte('created_at', now.toISOString());
-
-  if (error) {
-    throw error;
-  }
+  const sales = await getSales({
+    status: 'completed',
+    start_date: rangeStart.toISOString(),
+    end_date: now.toISOString(),
+  });
 
   return buildDailyDashboardMetrics({
-    sales: data || [],
+    sales,
     now,
   });
 }

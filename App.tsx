@@ -1,7 +1,7 @@
 import React from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import { RouterProvider } from 'react-router-dom';
-import { SupabaseAuthProvider } from './contexts/SupabaseAuthContext';
+import { VpsAuthProvider } from './contexts/VpsAuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CompareProvider } from './contexts/CompareContext';
 import { CompareBar } from './components/catalog/CompareBar';
@@ -109,7 +109,7 @@ const App: React.FC = () => {
 
   return (
     <HelmetProvider>
-      <SupabaseAuthProvider>
+      <VpsAuthProvider>
         <ThemeProvider>
           <CompareProvider>
             <OAuthHashRedirect />
@@ -120,7 +120,7 @@ const App: React.FC = () => {
             <DeferredToaster />
           </CompareProvider>
         </ThemeProvider>
-      </SupabaseAuthProvider>
+      </VpsAuthProvider>
     </HelmetProvider>
   );
 };

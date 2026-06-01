@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Star, MessageCircle, User as UserIcon, Loader2, Send, Shield } from 'lucide-react';
 import { toast } from 'sonner';
-import { useSupabaseAuth } from '../../contexts/SupabaseAuthContext';
+import { useVpsAuth } from '../../contexts/VpsAuthContext';
 import { reviewService } from '../../services/reviews';
 import { ProductReview } from '../../types/review';
 
@@ -10,7 +10,7 @@ interface ProductReviewsListProps {
 }
 
 export const ProductReviewsList: React.FC<ProductReviewsListProps> = ({ productId }) => {
-    const { user, customer } = useSupabaseAuth();
+    const { user, customer } = useVpsAuth();
     const [reviews, setReviews] = useState<ProductReview[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);

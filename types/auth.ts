@@ -1,5 +1,13 @@
-import type { User } from '@supabase/supabase-js'
 import type { Customer } from './customer'
+
+export interface VpsUser {
+    id: string
+    email?: string
+    user_metadata?: {
+        full_name?: string
+        cpf_cnpj?: string
+    }
+}
 
 // Account status types
 export type AccountStatus = 'pending' | 'active'
@@ -9,7 +17,7 @@ export type AuthProvider = 'email' | 'google' | 'facebook'
 
 // Auth context type
 export interface AuthContextType {
-    user: User | null
+    user: VpsUser | null
     customer: Customer | null
     isLoading: boolean
 
@@ -26,7 +34,7 @@ export interface AuthContextType {
 
     // Password recovery
     resetPassword: (email: string) => Promise<void>
-    updatePassword: (newPassword: string) => Promise<void>
+    updatePassword: (newPassword: string, resetToken?: string) => Promise<void>
 
     // Other
     signOut: () => Promise<void>

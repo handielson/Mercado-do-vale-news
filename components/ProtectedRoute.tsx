@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
+import { useVpsAuth } from '../contexts/VpsAuthContext';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -8,13 +8,13 @@ interface ProtectedRouteProps {
 }
 
 /**
- * ProtectedRoute - Supabase Authentication
+ * ProtectedRoute - VPS Authentication
  * 
  * Protects routes requiring authentication
  * Optionally requires ADMIN customer_type
  */
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requireAdmin = false }) => {
-  const { user, customer, isLoading } = useSupabaseAuth();
+  const { user, customer, isLoading } = useVpsAuth();
   const location = useLocation();
 
   // Wait for auth to load

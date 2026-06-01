@@ -25,7 +25,7 @@ assert.match(
 
 assert.match(
   saleService,
-  /reference_id:\s*sale\.id/,
+  /reference_id:\s*saleId/,
   'priority decrement must link stock movement to the sale id'
 );
 
@@ -35,10 +35,10 @@ assert.match(
   'serialized units must remain excluded from numeric stock decrement'
 );
 
-assert.match(
+assert.doesNotMatch(
   saleService,
   /supabase\.rpc\(['"]decrement_stock['"]/,
-  'legacy decrement_stock fallback must remain while migration may not be deployed'
+  'legacy decrement_stock fallback must not remain after moving priority stock to VPS'
 );
 
 assert.match(
@@ -53,7 +53,7 @@ const createOrderBody = orderService.slice(createOrderStart, getOrderStart);
 
 assert.doesNotMatch(
   createOrderBody,
-  /decrementOrderItemStockByPriority|decrementStockByPriority|supabase\.rpc\(['"]decrement_stock['"]/,
+  /decrementOrderItemStockByPriority|decrementStockByPriority/,
   'createOrder must still not reserve or decrement numeric stock'
 );
 

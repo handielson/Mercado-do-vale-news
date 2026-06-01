@@ -1,8 +1,23 @@
-import { supabase } from './supabase';
 import { categoryService } from './categories';
 import { customFieldsService, CustomField } from './custom-fields';
+import { modelService } from './models';
 import { vpsApiService } from './vpsApiService';
+import { vpsClient } from './vpsClient';
 import { encodeCSV, parseCSV } from '../utils/csv';
+
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[] };
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
+}
+
+async function loadRelationRows(tableName: string): Promise<Record<string, unknown>[]> {
+    const response = await vpsClient.get<TableDataResponse<Record<string, unknown>>>(
+        `/table-data/${encodeURIComponent(tableName)}?limit=5000&offset=0`
+    );
+    return extractRows(response);
+}
 
 export class DataSyncService {
     
@@ -109,7 +124,7 @@ export class DataSyncService {
             if (cf?.field_type === 'table_relation' && cf.table_config) {
                 const { table_name, value_column, label_column } = cf.table_config;
                 try {
-                    const { data } = await supabase.from(table_name).select(`${value_column}, ${label_column}`);
+                    const data = await loadRelationRows(table_name);
                     const vMap: Record<string, string> = {};
                     const lMap: Record<string, string> = {};
                     const optList: string[] = [];
@@ -162,31 +177,26 @@ export class DataSyncService {
             noCache: true,
         }) || []).sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')));
 
-        // Fetch de Modelos manualmente para mapear template_values e Marca (brands)
+        // Fetch de Modelos pela VPS para mapear template_values e Marca (brands)
         const modelIds = [...new Set((products || []).map(p => p.model_id).filter(Boolean))];
         const modelsMap: Record<string, { template_values: any, brandName: string }> = {};
 
         if (modelIds.length > 0) {
-            const { data: modelsData, error: modelsError } = await supabase
-                .from('models')
-                .select(`
-                    id,
-                    template_values,
-                    brands (
-                        name
-                    )
-                `)
-                .in('id', modelIds);
-            
-            if (modelsData) {
-                modelsData.forEach((m: any) => {
-                    modelsMap[m.id] = {
-                        template_values: m.template_values || {},
-                        // Tratando array ou objeto na resposta do PostgREST
-                        brandName: (Array.isArray(m.brands) ? m.brands[0]?.name : m.brands?.name) || ''
+            const [modelsData, brandsData] = await Promise.all([
+                modelService.list(),
+                vpsApiService.getBrands(),
+            ]);
+            const modelIdSet = new Set(modelIds);
+            const brandNameById = new Map((brandsData || []).map((brand: any) => [brand.id, brand.name]));
+
+            modelsData
+                .filter((model: any) => modelIdSet.has(model.id))
+                .forEach((model: any) => {
+                    modelsMap[model.id] = {
+                        template_values: model.template_values || {},
+                        brandName: brandNameById.get(model.brand_id) || ''
                     };
                 });
-            }
         }
 
         const rows: any[][] = [];
@@ -323,7 +333,7 @@ export class DataSyncService {
             if (cf.field_type === 'table_relation' && cf.table_config) {
                 const { table_name, value_column, label_column } = cf.table_config;
                 try {
-                    const { data } = await supabase.from(table_name).select(`${value_column}, ${label_column}`);
+                    const data = await loadRelationRows(table_name);
                     const lMap: Record<string, string> = {};
                     if (data) {
                         data.forEach(item => {
@@ -417,12 +427,14 @@ export class DataSyncService {
 
             try {
                 if (system_id) {
-                    const { error } = await supabase.from('products').update(payload).eq('id', system_id);
-                    if (error) throw error;
+                    const updated = await vpsApiService.updateProduct(system_id, payload);
+                    if (!updated) throw new Error('Falha ao atualizar produto na VPS');
                     results.updated++;
                 } else {
-                    const { error } = await supabase.from('products').insert([payload]);
-                    if (error) throw error;
+                    const created = await vpsApiService.createProduct(payload);
+                    if (!created.upserted || created.errors?.length) {
+                        throw new Error(created.errors?.[0]?.error || 'Falha ao criar produto na VPS');
+                    }
                     results.inserted++;
                 }
                 results.processed++;

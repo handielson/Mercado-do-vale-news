@@ -21,8 +21,8 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
         .filter((fee, idx, arr) => idx === arr.findIndex(f => f.installments === fee.installments))
         .sort((a, b) => a.installments - b.installments);
 
-    // Debug: verificar valores vindos do Supabase
-    console.log('Payment Fees from Supabase:', creditFees);
+    // Debug: verificar valores vindos do VPS
+    console.log('Payment Fees from VPS:', creditFees);
 
     // Calcular opções de parcelamento
     const installmentOptions = creditFees.map(fee => {

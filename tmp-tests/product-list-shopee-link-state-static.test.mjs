@@ -11,14 +11,20 @@ assert.match(
 
 assert.match(
   source,
-  /from\('shopee_products'\)[\s\S]*select\('product_id,\s*shopee_item_id'\)/,
-  'product list should read product_id and shopee_item_id from shopee_products'
+  /shopeeProductService\.getItemIdByProductIdMap\(\)/,
+  'product list should read product_id and shopee_item_id through the VPS service'
+);
+
+assert.doesNotMatch(
+  source,
+  /from\('shopee_products'\)/,
+  'product list must not read shopee_products directly from Supabase'
 );
 
 assert.match(
   source,
-  /const shopeeItemByProductId = new Map/,
-  'product list should index Shopee item ids by product id'
+  /const shopeeItemByProductId = await shopeeProductService\.getItemIdByProductIdMap\(\)/,
+  'product list should get Shopee item ids indexed by product id from the VPS service'
 );
 
 assert.match(

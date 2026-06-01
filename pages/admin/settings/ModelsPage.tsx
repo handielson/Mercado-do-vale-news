@@ -7,7 +7,6 @@ import { brandService } from '../../../services/brands';
 import { ModelModal } from '../../../components/settings/ModelModal';
 import { BulkSeoModal } from '../../../components/settings/BulkSeoModal';
 import { NextStepBanner } from '../../../components/ui/NextStepBanner';
-import { supabase } from '../../../services/supabase';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { getPriceHistory, applyPricesToVariation, PriceSnapshot } from '../../../services/priceHistoryService';
 import { blingService } from '../../../services/blingService';

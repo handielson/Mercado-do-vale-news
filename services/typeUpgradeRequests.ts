@@ -1,18 +1,54 @@
-import { supabase } from './supabase';
 import type {
     TypeUpgradeRequest,
     TypeUpgradeRequestWithCustomer,
-    CreateTypeUpgradeRequest,
-    UpdateTypeUpgradeRequest,
-    RequestedCustomerType
+    RequestedCustomerType,
+    TypeUpgradeRequestStatus
 } from '../types/typeUpgradeRequest';
+import { vpsClient } from './vpsClient';
 
-/**
- * Type Upgrade Request Service
- * 
- * Manages customer type upgrade requests
- * ANTIGRAVITY PROTOCOL: Keep under 300 lines
- */
+interface TableDataResponse<T> {
+    rows?: T[];
+}
+
+interface CustomerSummary {
+    id: string;
+    name: string;
+    email: string;
+    cpf_cnpj?: string;
+    phone?: string;
+}
+
+async function loadTableRows<T>(table: string, pageSize = 200): Promise<T[]> {
+    const allRows: T[] = [];
+
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<TableDataResponse<T>>(
+            `/table-data/${table}?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows.push(...rows);
+        if (rows.length < pageSize) break;
+    }
+
+    return allRows;
+}
+
+function sortNewestFirst<T extends { created_at?: string; requested_at?: string }>(rows: T[]): T[] {
+    return [...rows].sort((a, b) => {
+        const aDate = a.created_at || a.requested_at || '';
+        const bDate = b.created_at || b.requested_at || '';
+        return bDate.localeCompare(aDate);
+    });
+}
+
+async function loadUpgradeRequests(): Promise<TypeUpgradeRequest[]> {
+    return sortNewestFirst(await loadTableRows<TypeUpgradeRequest>('customer_type_requests'));
+}
+
+async function findUpgradeRequest(id: string): Promise<TypeUpgradeRequest | null> {
+    const rows = await loadUpgradeRequests();
+    return rows.find(row => String(row.id) === String(id)) || null;
+}
 
 /**
  * Create a new type upgrade request
@@ -21,29 +57,20 @@ export const createUpgradeRequest = async (
     customerId: string,
     requestedType: RequestedCustomerType
 ): Promise<TypeUpgradeRequest> => {
-    // Check if there's already a pending request
-    const { data: existing } = await supabase
-        .from('customer_type_requests')
-        .select('*')
-        .eq('customer_id', customerId)
-        .eq('status', 'pending')
-        .single();
+    const requests = await loadUpgradeRequests();
+    const existing = requests.find(
+        request => String(request.customer_id) === String(customerId) && request.status === 'pending'
+    );
 
     if (existing) {
-        throw new Error('Você já possui uma solicitação pendente');
+        throw new Error('Voce ja possui uma solicitacao pendente');
     }
 
-    const { data, error } = await supabase
-        .from('customer_type_requests')
-        .insert({
-            customer_id: customerId,
-            requested_type: requestedType
-        })
-        .select()
-        .single();
-
-    if (error) throw error;
-    return data;
+    return vpsClient.post<TypeUpgradeRequest>('/table-data/customer_type_requests', {
+        customer_id: customerId,
+        requested_type: requestedType,
+        status: 'pending'
+    });
 };
 
 /**
@@ -52,46 +79,32 @@ export const createUpgradeRequest = async (
 export const getCustomerUpgradeRequest = async (
     customerId: string
 ): Promise<TypeUpgradeRequest | null> => {
-    const { data, error } = await supabase
-        .from('customer_type_requests')
-        .select('*')
-        .eq('customer_id', customerId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
-    return data;
+    const requests = await loadUpgradeRequests();
+    return requests.find(request => String(request.customer_id) === String(customerId)) || null;
 };
 
 /**
  * Get all upgrade requests (admin only)
  */
 export const getAllUpgradeRequests = async (
-    status?: 'pending' | 'approved' | 'rejected'
+    status?: TypeUpgradeRequestStatus
 ): Promise<TypeUpgradeRequestWithCustomer[]> => {
-    let query = supabase
-        .from('customer_type_requests')
-        .select(`
-            *,
-            customer:customers (
-                id,
-                name,
-                email,
-                cpf_cnpj,
-                phone
-            )
-        `)
-        .order('created_at', { ascending: false });
+    const [requests, customers] = await Promise.all([
+        loadUpgradeRequests(),
+        loadTableRows<CustomerSummary>('customers', 500)
+    ]);
+    const customersById = new Map(customers.map(customer => [String(customer.id), customer]));
 
-    if (status) {
-        query = query.eq('status', status);
-    }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-    return data as TypeUpgradeRequestWithCustomer[];
+    return requests
+        .filter(request => !status || request.status === status)
+        .map(request => ({
+            ...request,
+            customer: customersById.get(String(request.customer_id)) || {
+                id: request.customer_id,
+                name: '',
+                email: ''
+            }
+        }));
 };
 
 /**
@@ -101,35 +114,22 @@ export const approveUpgradeRequest = async (
     requestId: string,
     reviewerId: string
 ): Promise<void> => {
-    // Get the request
-    const { data: request, error: fetchError } = await supabase
-        .from('customer_type_requests')
-        .select('*, customer:customers(id, customer_type)')
-        .eq('id', requestId)
-        .single();
+    const request = await findUpgradeRequest(requestId);
+    if (!request) throw new Error('Solicitacao nao encontrada');
 
-    if (fetchError) throw fetchError;
-    if (!request) throw new Error('Solicitação não encontrada');
+    await vpsClient.patch(
+        `/table-data/customers/${encodeURIComponent(request.customer_id)}?pk=id`,
+        { customer_type: request.requested_type }
+    );
 
-    // Update customer type
-    const { error: updateCustomerError } = await supabase
-        .from('customers')
-        .update({ customer_type: request.requested_type })
-        .eq('id', request.customer_id);
-
-    if (updateCustomerError) throw updateCustomerError;
-
-    // Update request status
-    const { error: updateRequestError } = await supabase
-        .from('customer_type_requests')
-        .update({
+    await vpsClient.patch(
+        `/table-data/customer_type_requests/${encodeURIComponent(requestId)}?pk=id`,
+        {
             status: 'approved',
             reviewed_by: reviewerId,
             reviewed_at: new Date().toISOString()
-        })
-        .eq('id', requestId);
-
-    if (updateRequestError) throw updateRequestError;
+        }
+    );
 };
 
 /**
@@ -140,17 +140,15 @@ export const rejectUpgradeRequest = async (
     reviewerId: string,
     reason?: string
 ): Promise<void> => {
-    const { error } = await supabase
-        .from('customer_type_requests')
-        .update({
+    await vpsClient.patch(
+        `/table-data/customer_type_requests/${encodeURIComponent(requestId)}?pk=id`,
+        {
             status: 'rejected',
             reviewed_by: reviewerId,
             reviewed_at: new Date().toISOString(),
             rejection_reason: reason || null
-        })
-        .eq('id', requestId);
-
-    if (error) throw error;
+        }
+    );
 };
 
 /**
@@ -162,24 +160,21 @@ export const getUpgradeRequestStats = async (): Promise<{
     rejected: number;
     total: number;
 }> => {
-    const { data, error } = await supabase
-        .from('customer_type_requests')
-        .select('status');
+    const requests = await loadUpgradeRequests();
 
-    if (error) throw error;
-
-    const stats = {
-        pending: 0,
-        approved: 0,
-        rejected: 0,
-        total: data.length
-    };
-
-    data.forEach(req => {
-        if (req.status === 'pending') stats.pending++;
-        if (req.status === 'approved') stats.approved++;
-        if (req.status === 'rejected') stats.rejected++;
-    });
-
-    return stats;
+    return requests.reduce(
+        (stats, request) => {
+            if (request.status === 'pending') stats.pending++;
+            if (request.status === 'approved') stats.approved++;
+            if (request.status === 'rejected') stats.rejected++;
+            stats.total++;
+            return stats;
+        },
+        {
+            pending: 0,
+            approved: 0,
+            rejected: 0,
+            total: 0
+        }
+    );
 };

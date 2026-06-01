@@ -1,11 +1,9 @@
 /**
- * Company Data Service - Supabase Integration
- * Manages company information storage and retrieval using Supabase
+ * Company Data Service - VPS Integration
+ * Manages company information storage and retrieval using the VPS API.
  */
 
-import { supabase } from './supabase';
 import { Company, defaultCompany } from '../types/company';
-import { USE_VPS } from '../config/migration';
 import { vpsClient } from './vpsClient';
 
 /**
@@ -53,8 +51,6 @@ interface CompanySettingsRow {
     google_analytics_id: string | null;
     synology_video_base_url: string | null;
     synology_video_extension: string | null;
-    
-    // Shopee Integration
     shopee_partner_id: string | null;
     shopee_partner_key: string | null;
     shopee_shop_id: string | null;
@@ -62,7 +58,6 @@ interface CompanySettingsRow {
     shopee_refresh_token: string | null;
     shopee_printer_thermal: string | null;
     shopee_printer_a4: string | null;
-
     catalog_footer_text: string | null;
     maintenance_mode: boolean | null;
     maintenance_message: string | null;
@@ -73,9 +68,6 @@ interface CompanySettingsRow {
     updated_at: string;
 }
 
-/**
- * Convert database row to Company type
- */
 const rowToCompany = (row: CompanySettingsRow): Company => ({
     name: row.name,
     razaoSocial: row.razao_social || '',
@@ -88,7 +80,7 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     phone: row.phone || '',
     email: row.email || '',
     logo: row.logo,
-    logoUrl: row.logo || '', // Use logo field for logoUrl
+    logoUrl: row.logo || '',
     watermarkLogoUrl: row.watermark_url || '',
     favicon: row.favicon,
     address: {
@@ -100,13 +92,13 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
         city: row.address_city || '',
         state: row.address_state || '',
         lat: row.address_lat || undefined,
-        lng: row.address_lng || undefined
+        lng: row.address_lng || undefined,
     },
     socialMedia: {
         instagram: row.social_instagram || '',
         facebook: row.social_facebook || '',
         youtube: row.social_youtube || '',
-        website: row.social_website || ''
+        website: row.social_website || '',
     },
     googleReviewsLink: row.google_reviews_link || '',
     pixKey: row.pix_key || '',
@@ -122,7 +114,6 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     googleAnalyticsId: row.google_analytics_id || '',
     synologyVideoBaseUrl: row.synology_video_base_url || '',
     synologyVideoExtension: row.synology_video_extension || '.mp4',
-
     shopee_partner_id: row.shopee_partner_id || '',
     shopee_partner_key: row.shopee_partner_key || '',
     shopee_shop_id: row.shopee_shop_id || '',
@@ -130,7 +121,6 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     shopee_refresh_token: row.shopee_refresh_token || '',
     shopee_printer_thermal: row.shopee_printer_thermal || '',
     shopee_printer_a4: row.shopee_printer_a4 || '',
-
     catalogFooterText: row.catalog_footer_text || '',
     maintenanceMode: row.maintenance_mode ?? false,
     maintenanceMessage: row.maintenance_message || '',
@@ -139,9 +129,6 @@ const rowToCompany = (row: CompanySettingsRow): Company => ({
     aboutUsImageUrl: row.about_us_image_url || '',
 });
 
-/**
- * Convert Company type to database row
- */
 const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     name: company.name,
     razao_social: company.razaoSocial || null,
@@ -183,17 +170,13 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     google_analytics_id: company.googleAnalyticsId || null,
     synology_video_base_url: company.synologyVideoBaseUrl || null,
     synology_video_extension: company.synologyVideoExtension || null,
-    
-    // Protect sensitive/hidden fields from being overwritten if UI didn't load them
     ...(company.shopee_partner_id ? { shopee_partner_id: company.shopee_partner_id } : {}),
     ...(company.shopee_partner_key ? { shopee_partner_key: company.shopee_partner_key } : {}),
     ...(company.shopee_shop_id ? { shopee_shop_id: company.shopee_shop_id } : {}),
     ...(company.shopee_access_token ? { shopee_access_token: company.shopee_access_token } : {}),
     ...(company.shopee_refresh_token ? { shopee_refresh_token: company.shopee_refresh_token } : {}),
-
     shopee_printer_thermal: company.shopee_printer_thermal || null,
     shopee_printer_a4: company.shopee_printer_a4 || null,
-
     catalog_footer_text: company.catalogFooterText || null,
     maintenance_mode: company.maintenanceMode ?? null,
     maintenance_message: company.maintenanceMessage || null,
@@ -202,125 +185,36 @@ const companyToRow = (company: Company): Partial<CompanySettingsRow> => ({
     about_us_image_url: company.aboutUsImageUrl || null,
 });
 
-/**
- * Get company data from Supabase
- */
 export const getCompanyData = async (): Promise<Company> => {
     try {
-        if (USE_VPS.company) {
-            try {
-                const data = await vpsClient.get<any>('/company-settings');
-                if (data) return rowToCompany(data);
-            } catch (vpsErr) {
-                console.error('[companyService] VPS fetch error:', vpsErr);
-            }
-        }
-        
-        // Fetch company settings (single global record)
-        const { data, error } = await supabase
-            .from('company_settings')
-            .select('*')
-            .limit(1)
-            .single();
-
-        if (error) {
-            // Requisição abortada (AbortError / CORS / timeout) – retornar padrão sem bloquear
-            if (error.code === '20' || error.message?.includes('aborted') || error.message?.includes('abort')) {
-                console.log('[companyService] Fetch aborted – returning defaults');
-                return defaultCompany;
-            }
-            // If no record exists, return default
-            if (error.code === 'PGRST116') {
-                console.log('No company settings found, returning default');
-                return defaultCompany;
-            }
-            console.error('Error fetching company data:', error);
-            return defaultCompany;
-        }
-
-        console.log('Company data loaded successfully');
+        const data = await vpsClient.get<any>('/company-settings');
+        if (!data) return defaultCompany;
         return rowToCompany(data as CompanySettingsRow);
     } catch (error: any) {
-        // Qualquer erro (AbortError, CORS, timeout) retorna padrão sem explodir
         if (error?.name === 'AbortError' || error?.message === 'AbortError' || error?.message?.includes('aborted')) {
-            console.log('[companyService] Fetch aborted – returning defaults');
+            console.log('[companyService] VPS fetch aborted - returning defaults');
             return defaultCompany;
         }
-        console.error('Error loading company data:', error);
+        console.error('[companyService] VPS fetch error:', error);
         return defaultCompany;
     }
 };
 
-/**
- * Save company data to Supabase
- */
 export const saveCompanyData = async (data: Company): Promise<void> => {
     try {
         const row = companyToRow(data);
-
-        if (USE_VPS.company) {
-            try {
-                console.log('Updating existing company settings record via VPS');
-                await vpsClient.patch('/company-settings', row);
-                return;
-            } catch (vpsErr) {
-                console.error('[companyService] VPS update error:', vpsErr);
-                throw vpsErr;
-            }
-        }
-
-        // Check if record exists (should be only one global record)
-        const { data: existing } = await supabase
-            .from('company_settings')
-            .select('id')
-            .limit(1)
-            .single();
-
-        if (existing) {
-            // Update existing record
-            console.log('Updating existing company settings record');
-            const { error } = await supabase
-                .from('company_settings')
-                .update(row)
-                .eq('id', existing.id);
-
-            if (error) {
-                console.error('Update error:', error);
-                throw error;
-            }
-            console.log('Update successful');
-        } else {
-            // Insert new record
-            const { error } = await supabase
-                .from('company_settings')
-                .insert([row]);
-
-            if (error) {
-                console.error('Insert error:', error);
-                throw error;
-            }
-            console.log('Insert successful');
-        }
+        await vpsClient.patch('/company-settings', row);
     } catch (error) {
-        console.error('Error saving company data:', error);
+        console.error('[companyService] VPS update error:', error);
         throw new Error('Erro ao salvar dados da empresa');
     }
 };
 
-/**
- * Clear company data from Supabase
- */
 export const clearCompanyData = async (): Promise<void> => {
     try {
-        // Delete all records (should be only one)
-        const { error } = await supabase
-            .from('company_settings')
-            .delete()
-            .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all real records
-
-        if (error) throw error;
+        await vpsClient.patch('/company-settings', companyToRow(defaultCompany));
     } catch (error) {
-        console.error('Error clearing company data:', error);
+        console.error('[companyService] VPS clear error:', error);
         throw new Error('Erro ao limpar dados da empresa');
     }
 };

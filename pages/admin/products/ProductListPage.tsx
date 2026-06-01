@@ -8,7 +8,6 @@ import { Product } from '../../../types/product';
 import { ExportCatalogModal } from '../../../components/admin/ExportCatalogModal';
 import { BulkActionBar } from '../../../components/products/BulkActionBar';
 import { BulkCategoryModal } from '../../../components/products/BulkCategoryModal';
-import { supabase } from '../../../services/supabase';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { toast } from 'sonner';
 import { buildProductVideoUrl } from '../../../utils/video-url';
@@ -129,12 +128,12 @@ export const ProductListPage: React.FC = () => {
                 if (!prod.sku) continue;
                 
                 const candidateUrl = buildProductVideoUrl(videoBaseUrl, prod.sku, ext);
-                const { error: updateError } = await supabase
-                    .from('products')
-                    .update({ video_url: candidateUrl })
-                    .eq('id', prod.id);
+                const updated = await vpsApiService.updateProduct(prod.id, {
+                    ...prod,
+                    video_url: candidateUrl,
+                });
                 
-                if (!updateError) {
+                if (updated) {
                     updatedCount++;
                 }
             }

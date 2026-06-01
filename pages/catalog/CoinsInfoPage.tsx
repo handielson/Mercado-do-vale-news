@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Coins, ShoppingBag, Calendar, Flame, Gift, CheckCircle2, AlertTriangle, Clock, Share2 } from 'lucide-react';
 import { getCashbackSettings } from '../../services/cashbackService';
-import { supabase } from '../../services/supabase';
+import { useVpsAuth } from '../../hooks/useVpsAuth';
 import type { CashbackSettings } from '../../types/cashback';
 
 const DEFAULT_DAILY = [5, 10, 15, 20, 25, 30, 50];
 
 export default function CoinsInfoPage() {
     const navigate = useNavigate();
+    const { customer } = useVpsAuth();
     const [settings, setSettings] = useState<CashbackSettings | null>(null);
 
     useEffect(() => {
@@ -31,13 +32,8 @@ export default function CoinsInfoPage() {
     const [simCoins, setSimCoins] = useState<number | ''>('');
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => {
-            if (user) {
-                supabase.from('customers').select('referral_code').eq('id', user.id).single()
-                    .then(({ data }) => setUserCode(data?.referral_code || null));
-            }
-        });
-    }, []);
+        setUserCode(customer?.referral_code || null);
+    }, [customer?.referral_code]);
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white">

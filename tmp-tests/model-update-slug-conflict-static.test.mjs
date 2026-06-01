@@ -12,7 +12,7 @@ assert.match(
 
 assert.match(
   server,
-  /const currentRows = await supabaseRestSelect\([\s\S]*select=\*&id=eq\.\$\{encodeURIComponent\(req\.params\.id\)\}/,
+  /const currentRows = await vpsDbSelect\([\s\S]*select=\*&id=eq\.\$\{encodeURIComponent\(req\.params\.id\)\}/,
   'VPS model update must load the current row before deciding whether to regenerate slug',
 );
 

@@ -25,7 +25,7 @@ echo [2/4] Verificando dependencias...
 if not exist "%TARGET_DIR%\node_modules" (
     echo     Instalando pacotes (primeira vez, aguarde)...
     call npm init -y >nul 2>&1
-    call npm install pdf-to-printer dotenv node-fetch@2 @supabase/supabase-js --no-fund --no-audit
+    call npm install pdf-to-printer dotenv node-fetch@2 --no-fund --no-audit
 ) else (
     echo     OK - pacotes ja instalados.
 )

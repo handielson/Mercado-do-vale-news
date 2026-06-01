@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
 
 export interface TelegramTemplate {
     id: string; // Ex: 'sale_template', 'custom_123'
@@ -56,54 +56,68 @@ const DEFAULT_TEMPLATES: TelegramTemplate[] = [
     }
 ];
 
+const DEFAULT_SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
+
+interface TableDataResponse {
+    rows?: TelegramSettings[];
+}
+
+function parseTemplates(value: unknown): TelegramTemplate[] {
+    if (Array.isArray(value)) return value as TelegramTemplate[];
+
+    if (typeof value === 'string' && value.trim()) {
+        try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+
+    return [];
+}
+
+function normalizeSettings(row?: Partial<TelegramSettings> | null): TelegramSettings {
+    const data: TelegramSettings = {
+        id: row?.id || DEFAULT_SETTINGS_ID,
+        bot_token: row?.bot_token ?? null,
+        chat_id: row?.chat_id ?? null,
+        active: Boolean(row?.active),
+        templates: parseTemplates(row?.templates),
+        updated_at: row?.updated_at || new Date().toISOString()
+    };
+
+    // Se a coluna templates acabou de ser criada, ou esta vazia, forcamos o default
+    if (!data.templates || !Array.isArray(data.templates) || data.templates.length === 0) {
+        data.templates = DEFAULT_TEMPLATES;
+    }
+
+    // Compatibilidade reversa: se os templates antigos nao tem "type", atribuimos
+    data.templates = data.templates.map((t: TelegramTemplate) => {
+        if (!t.type) {
+            return {
+                ...t,
+                type: t.id === 'sale_template' ? 'action' : 'action',
+                action_type: t.id === 'sale_template' ? 'sale' : null
+            };
+        }
+        return t;
+    });
+
+    // Injeta templates novos que ainda nao existem na base (merge nao-destrutivo)
+    const existingIds = new Set(data.templates.map((t: TelegramTemplate) => t.id));
+    const missingDefaults = DEFAULT_TEMPLATES.filter(t => !existingIds.has(t.id));
+    if (missingDefaults.length > 0) {
+        data.templates = [...data.templates, ...missingDefaults];
+    }
+
+    return data;
+}
+
 export const telegramSettingsService = {
     async getSettings(): Promise<TelegramSettings> {
-        const { data, error } = await supabase
-            .from('telegram_settings')
-            .select('*')
-            .limit(1)
-            .single();
-
-        if (error) {
-            if (error.code === 'PGRST116') {
-                // Tabela vazia ou RLS impedindo a leitura
-                return {
-                    id: '00000000-0000-0000-0000-000000000001',
-                    bot_token: null,
-                    chat_id: null,
-                    active: false,
-                    templates: DEFAULT_TEMPLATES,
-                    updated_at: new Date().toISOString()
-                };
-            }
-            throw error;
-        }
-
-        // Se a coluna templates acabou de ser criada, ou está vazia, forçamos o default
-        if (!data.templates || !Array.isArray(data.templates) || data.templates.length === 0) {
-            data.templates = DEFAULT_TEMPLATES;
-        }
-
-        // Compatibilidade reversa: se os templates antigos não tem "type", atribuimos
-        data.templates = data.templates.map((t: TelegramTemplate) => {
-            if (!t.type) {
-                return {
-                    ...t,
-                    type: t.id === 'sale_template' ? 'action' : 'action',
-                    action_type: t.id === 'sale_template' ? 'sale' : null
-                };
-            }
-            return t;
-        });
-
-        // Injeta templates novos que ainda não existem na base (merge não-destrutivo)
-        const existingIds = new Set(data.templates.map((t: TelegramTemplate) => t.id));
-        const missingDefaults = DEFAULT_TEMPLATES.filter(t => !existingIds.has(t.id));
-        if (missingDefaults.length > 0) {
-            data.templates = [...data.templates, ...missingDefaults];
-        }
-
-        return data;
+        const data = await vpsClient.get<TableDataResponse>('/table-data/telegram_settings?limit=1&offset=0');
+        return normalizeSettings(data.rows?.[0]);
     },
 
     async updateSettings(updates: Partial<TelegramSettings>): Promise<TelegramSettings> {
@@ -116,13 +130,15 @@ export const telegramSettingsService = {
             updated_at: new Date().toISOString()
         };
 
-        const { data, error } = await supabase
-            .from('telegram_settings')
-            .upsert(payload)
-            .select()
-            .single();
+        if (current.id && current.id !== DEFAULT_SETTINGS_ID) {
+            const data = await vpsClient.patch<TelegramSettings>(
+                `/table-data/telegram_settings/${encodeURIComponent(current.id)}?pk=id`,
+                payload
+            );
+            return normalizeSettings(data);
+        }
 
-        if (error) throw error;
-        return data;
+        const data = await vpsClient.post<TelegramSettings>('/table-data/telegram_settings', payload);
+        return normalizeSettings(data);
     }
 };

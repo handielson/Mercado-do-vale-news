@@ -19,11 +19,12 @@ assert.match(migration, /PERFORM recalculate_product_stock_from_locations/, 'res
 assert.match(types, /StockLocationSaleRestoreInput/, 'types must define sale restore input');
 assert.match(types, /StockLocationSaleRestoreResult/, 'types must define sale restore result');
 assert.match(service, /async restoreSaleStockByLocation\(/, 'service must expose restoreSaleStockByLocation');
-assert.match(service, /rpc\('restore_product_stock_from_sale_movements'/, 'service must call restore RPC');
+assert.match(service, /\/stock-locations\/sale-restores/, 'service must call the VPS sale restore endpoint');
+assert.doesNotMatch(service, /rpc\('restore_product_stock_from_sale_movements'/, 'service must not call the old Supabase sale restore RPC');
 
 assert.match(saleService, /restoreSaleStockForItems/, 'saleService must use a central restore helper');
 assert.match(saleService, /restoreSaleStockByLocation/, 'saleService must try location restore');
-assert.match(saleService, /supabase\.rpc\('increment_stock'/, 'saleService must keep increment_stock fallback');
+assert.doesNotMatch(saleService, /supabase\.rpc\('increment_stock'/, 'saleService must not keep the old increment_stock fallback');
 assert.match(saleService, /cancelSale[\s\S]*restoreSaleStockForItems/, 'cancelSale must restore through helper');
 assert.match(saleService, /refundSale[\s\S]*restoreSaleStockForItems/, 'refundSale must restore through helper');
 assert.match(saleService, /deleteSale[\s\S]*restoreSaleStockForItems/, 'deleteSale must restore through helper');

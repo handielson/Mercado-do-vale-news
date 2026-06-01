@@ -11,10 +11,10 @@ import {
     Sparkles,
 } from 'lucide-react';
 import { benefitService, BenefitStatus } from '../../../services/benefitService';
-import { useSupabaseAuth } from '../../../hooks/useSupabaseAuth';
+import { useVpsAuth } from '../../../hooks/useVpsAuth';
 
 export const BenefitsTab: React.FC = () => {
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const [benefits, setBenefits] = useState<BenefitStatus[]>([]);
     const [loading, setLoading] = useState(true);
 

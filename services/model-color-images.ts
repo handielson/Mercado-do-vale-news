@@ -1,16 +1,19 @@
 /**
  * Model-Color Images Service
- * Manages images for model-color variations
+ * Manages images for model-color variations through the VPS table-data API.
  */
 
-import { supabase } from './supabase';
 import { getCompanyId } from './companyContext';
+import { vpsClient } from './vpsClient';
 
 export interface ModelColorImages {
     id: string;
+    company_id?: string | null;
     model_id: string;
     color_id: string;
     images: string[];
+    image_url?: string | null;
+    display_order?: number | null;
     created_at: string;
     updated_at: string;
 }
@@ -21,44 +24,108 @@ export interface ModelColorImagesInput {
     images: string[];
 }
 
+export type ModelColorImageRow = {
+    id: string;
+    company_id?: string | null;
+    model_id: string;
+    color_id: string;
+    images?: string[] | string | null;
+    image_url?: string | null;
+    display_order?: number | string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+};
+
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[]; total?: number };
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
+}
+
+function parseImages(value: unknown): string[] {
+    if (Array.isArray(value)) return value.map(String).filter(Boolean);
+    if (typeof value !== 'string' || !value.trim()) return [];
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [value];
+    } catch {
+        return [value];
+    }
+}
+
+function normalizeRow(row: ModelColorImageRow): ModelColorImages {
+    const images = parseImages(row.images);
+    if (row.image_url && !images.includes(row.image_url)) images.push(row.image_url);
+
+    return {
+        id: row.id,
+        company_id: row.company_id,
+        model_id: row.model_id,
+        color_id: row.color_id,
+        images,
+        image_url: row.image_url || images[0] || null,
+        display_order: row.display_order == null ? null : Number(row.display_order),
+        created_at: row.created_at || '',
+        updated_at: row.updated_at || '',
+    };
+}
+
+function sortRows(rows: ModelColorImages[]): ModelColorImages[] {
+    return [...rows].sort((left, right) => {
+        const leftOrder = left.display_order == null ? Number.MAX_SAFE_INTEGER : Number(left.display_order);
+        const rightOrder = right.display_order == null ? Number.MAX_SAFE_INTEGER : Number(right.display_order);
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return String(right.updated_at || '').localeCompare(String(left.updated_at || ''));
+    });
+}
+
+async function loadRows(): Promise<ModelColorImages[]> {
+    const companyId = await getCompanyId();
+    const pageSize = 500;
+    const rows: ModelColorImageRow[] = [];
+
+    for (let offset = 0; ; offset += pageSize) {
+        const response = await vpsClient.get<TableDataResponse<ModelColorImageRow>>(
+            `/table-data/model_color_images?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+    }
+
+    const normalized = rows.map(normalizeRow);
+    return companyId
+        ? normalized.filter(row => !row.company_id || row.company_id === companyId)
+        : normalized;
+}
+
 /**
  * Get images for a specific model-color variation
  */
 async function get(modelId: string, colorId: string): Promise<ModelColorImages | null> {
-    const companyId = await getCompanyId();
-
-    const { data, error } = await supabase
-        .from('model_color_images')
-        .select('*')
-        .eq('company_id', companyId)
-        .eq('model_id', modelId)
-        .eq('color_id', colorId)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-    if (error) {
-        throw new Error(`Failed to fetch images: ${error.message}`);
-    }
-
-    return data;
+    const rows = await loadRows();
+    return sortRows(rows.filter(row => row.model_id === modelId && row.color_id === colorId))[0] || null;
 }
 
 /**
  * Get all images for a model (all colors)
  */
 async function getByModel(modelId: string): Promise<ModelColorImages[]> {
-    const companyId = await getCompanyId();
+    return sortRows((await loadRows()).filter(row => row.model_id === modelId));
+}
 
-    const { data, error } = await supabase
-        .from('model_color_images')
-        .select('*')
-        .eq('company_id', companyId)
-        .eq('model_id', modelId)
-        .order('created_at');
+/**
+ * Get all image rows for a set of models.
+ */
+async function getByModelIds(modelIds: string[]): Promise<ModelColorImages[]> {
+    const ids = new Set(modelIds.filter(Boolean));
+    if (ids.size === 0) return [];
+    return sortRows((await loadRows()).filter(row => ids.has(row.model_id)));
+}
 
-    if (error) throw new Error(`Failed to fetch images: ${error.message}`);
-    return data || [];
+async function getAll(): Promise<ModelColorImages[]> {
+    return sortRows(await loadRows());
 }
 
 /**
@@ -66,59 +133,41 @@ async function getByModel(modelId: string): Promise<ModelColorImages[]> {
  */
 async function upsert(input: ModelColorImagesInput): Promise<ModelColorImages> {
     const companyId = await getCompanyId();
-
-    const { data: existingRows, error: selectError } = await supabase
-        .from('model_color_images')
-        .select('id')
-        .eq('company_id', companyId)
-        .eq('model_id', input.model_id)
-        .eq('color_id', input.color_id)
-        .order('updated_at', { ascending: false })
-        .limit(1);
-
-    if (selectError) throw new Error(`Failed to check existing images: ${selectError.message}`);
-
-    const existingId = existingRows?.[0]?.id;
+    const existing = await get(input.model_id, input.color_id);
+    const now = new Date().toISOString();
     const payload = {
         company_id: companyId,
         model_id: input.model_id,
         color_id: input.color_id,
         images: input.images,
-        updated_at: new Date().toISOString()
+        image_url: input.images[0] || null,
+        updated_at: now
     };
 
-    const query = existingId
-        ? supabase
-            .from('model_color_images')
-            .update(payload)
-            .eq('id', existingId)
-            .eq('company_id', companyId)
-        : supabase
-            .from('model_color_images')
-            .insert(payload);
+    const existingId = existing?.id;
+    if (existingId) {
+        const data = await vpsClient.patch<ModelColorImageRow>(
+            `/table-data/model_color_images/${encodeURIComponent(existingId)}?pk=id`,
+            payload
+        );
+        return normalizeRow(data);
+    }
 
-    const { data, error } = await query
-        .select()
-        .single();
-
-    if (error) throw new Error(`Failed to save images: ${error.message}`);
-    return data;
+    const data = await vpsClient.post<ModelColorImageRow>('/table-data/model_color_images', {
+        ...payload,
+        created_at: now,
+    });
+    return normalizeRow(data);
 }
 
 /**
  * Delete images for a model-color variation
  */
 async function remove(modelId: string, colorId: string): Promise<void> {
-    const companyId = await getCompanyId();
-
-    const { error } = await supabase
-        .from('model_color_images')
-        .delete()
-        .eq('company_id', companyId)
-        .eq('model_id', modelId)
-        .eq('color_id', colorId);
-
-    if (error) throw new Error(`Failed to delete images: ${error.message}`);
+    const rows = (await loadRows()).filter(row => row.model_id === modelId && row.color_id === colorId);
+    await Promise.all(rows.map(row =>
+        vpsClient.delete(`/table-data/model_color_images/${encodeURIComponent(row.id)}?pk=id`)
+    ));
 }
 
 /**
@@ -129,19 +178,19 @@ async function getProductImages(product: {
     model_id: string;
     color_id: string;
 }): Promise<string[]> {
-    // If product has custom images, use them
     if (product.custom_images && product.custom_images.length > 0) {
         return product.custom_images;
     }
 
-    // Otherwise, get default images from model-color variation
     const variantImages = await get(product.model_id, product.color_id);
     return variantImages?.images || [];
 }
 
 export const modelColorImagesService = {
     get,
+    getAll,
     getByModel,
+    getByModelIds,
     upsert,
     remove,
     getProductImages

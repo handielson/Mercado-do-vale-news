@@ -1,40 +1,68 @@
-import { supabase } from './supabase';
 import { CustomerFeedback, FeedbackInput } from '../types/feedback';
+import { companySettingsService } from './companySettingsService';
+import { vpsClient } from './vpsClient';
 
 const TABLE_NAME = 'customer_feedbacks';
+const PAGE_LIMIT = 200;
+
+interface TableDataResponse<T> {
+    rows: T[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
+async function fetchAllFeedbacks(): Promise<CustomerFeedback[]> {
+    const rows: CustomerFeedback[] = [];
+    let offset = 0;
+    let total = 0;
+
+    do {
+        const page = await vpsClient.get<TableDataResponse<CustomerFeedback>>(
+            `/table-data/${TABLE_NAME}?limit=${PAGE_LIMIT}&offset=${offset}`,
+        );
+        rows.push(...(page.rows || []));
+        total = Number(page.total || rows.length);
+        offset += Number(page.limit || PAGE_LIMIT);
+    } while (rows.length < total);
+
+    return rows;
+}
+
+function sortNewestFirst(feedbacks: CustomerFeedback[]): CustomerFeedback[] {
+    return [...feedbacks].sort((a, b) => {
+        const bTime = new Date(b.created_at || 0).getTime();
+        const aTime = new Date(a.created_at || 0).getTime();
+        return bTime - aTime;
+    });
+}
 
 export const feedbackService = {
     /**
-     * Busca o ID da empresa a partir da company_settings (fonte de verdade atual)
+     * Busca o ID da empresa pela rota VPS de company settings.
      */
     async getDefaultCompanyId(): Promise<string> {
-        const { data, error } = await supabase
-            .from('company_settings')
-            .select('id')
-            .limit(1)
-            .single();
-
-        if (error || !data) {
-            console.error('Erro ao buscar company_settings:', error);
+        const settings = await companySettingsService.get();
+        if (!settings?.id) {
             throw new Error('Falha ao identificar a empresa.');
         }
-
-        return data.id;
+        return settings.id;
     },
 
     /**
-     * Envia um novo feedback (Acesso Público Anônimo)
+     * Envia um novo feedback (Acesso Publico Anonimo)
      */
     async submitFeedback(input: FeedbackInput): Promise<void> {
         const companyId = await this.getDefaultCompanyId();
 
-        const { error } = await supabase
-            .from(TABLE_NAME)
-            .insert([{ ...input, company_id: companyId }]);
-
-        if (error) {
+        try {
+            await vpsClient.post<CustomerFeedback>(`/table-data/${TABLE_NAME}`, {
+                ...input,
+                company_id: companyId,
+            });
+        } catch (error) {
             console.error('Erro ao enviar feedback:', error);
-            throw new Error('Não foi possível enviar sua mensagem. Tente novamente.');
+            throw new Error('Nao foi possivel enviar sua mensagem. Tente novamente.');
         }
     },
 
@@ -42,77 +70,61 @@ export const feedbackService = {
      * Lista feedbacks (Acesso Admin)
      */
     async listFeedbacks(filters?: { status?: string, type?: string }): Promise<CustomerFeedback[]> {
-        let query = supabase
-            .from(TABLE_NAME)
-            .select('*')
-            .order('created_at', { ascending: false });
+        try {
+            let feedbacks = await fetchAllFeedbacks();
 
-        if (filters?.status && filters.status !== 'all') {
-            query = query.eq('status', filters.status);
-        }
+            if (filters?.status && filters.status !== 'all') {
+                feedbacks = feedbacks.filter((feedback) => feedback.status === filters.status);
+            }
 
-        if (filters?.type && filters.type !== 'all') {
-            query = query.eq('type', filters.type);
-        }
+            if (filters?.type && filters.type !== 'all') {
+                feedbacks = feedbacks.filter((feedback) => feedback.type === filters.type);
+            }
 
-        const { data, error } = await query;
-
-        if (error) {
+            return sortNewestFirst(feedbacks);
+        } catch (error) {
             console.error('Erro ao buscar feedbacks:', error);
             throw error;
         }
-
-        return data || [];
     },
 
     /**
-     * Conta mensagens não lidas para o Dashboard (Acesso Admin)
+     * Conta mensagens nao lidas para o Dashboard (Acesso Admin)
      */
     async getUnreadCount(): Promise<number> {
-        const { count, error } = await supabase
-            .from(TABLE_NAME)
-            .select('*', { count: 'exact', head: true })
-            .eq('status', 'novo');
-
-        if (error) {
+        try {
+            const feedbacks = await fetchAllFeedbacks();
+            return feedbacks.filter((feedback) => feedback.status === 'novo').length;
+        } catch (error) {
             console.error('Erro ao contar mensagens novas:', error);
-            return 0; // Return 0 non-destructively for dashboard
+            return 0;
         }
-
-        return count || 0;
     },
 
     /**
      * Atualiza o status ou a resposta de um feedback (Acesso Admin)
      */
     async updateFeedback(id: string, updates: Partial<CustomerFeedback>): Promise<CustomerFeedback> {
-        const { data, error } = await supabase
-            .from(TABLE_NAME)
-            .update(updates)
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) {
+        try {
+            return await vpsClient.patch<CustomerFeedback>(
+                `/table-data/${TABLE_NAME}/${encodeURIComponent(id)}`,
+                updates,
+            );
+        } catch (error) {
             console.error('Erro ao atualizar feedback:', error);
             throw new Error('Falha ao atualizar a mensagem.');
         }
-
-        return data;
     },
 
     /**
      * Exclui um feedback (Acesso Admin)
      */
     async deleteFeedback(id: string): Promise<void> {
-        const { error } = await supabase
-            .from(TABLE_NAME)
-            .delete()
-            .eq('id', id);
-
-        if (error) {
+        try {
+            await vpsClient.delete(`/table-data/${TABLE_NAME}/${encodeURIComponent(id)}`);
+        } catch (error) {
             console.error('Erro ao excluir feedback:', error);
             throw new Error('Falha ao excluir a mensagem.');
         }
-    }
+    },
 };

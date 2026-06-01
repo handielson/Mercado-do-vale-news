@@ -1,7 +1,40 @@
-import { supabase } from './supabase';
 import { vpsApiService } from './vpsApiService';
+import { vpsClient } from './vpsClient';
 import type { CatalogSettings, CategoryDisplayConfig } from '@/types/catalogSettings';
 import { DEFAULT_CATALOG_SETTINGS } from '@/types/catalogSettings';
+
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[]; total?: number };
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
+}
+
+function sortCategoryConfigs(configs: CategoryDisplayConfig[]): CategoryDisplayConfig[] {
+    return [...configs].sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0));
+}
+
+function stripUndefined<T extends Record<string, unknown>>(input: T): Partial<T> {
+    return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as Partial<T>;
+}
+
+async function loadCategoryDisplayConfigs(): Promise<CategoryDisplayConfig[]> {
+    const pageSize = 200;
+    let offset = 0;
+    const rows: CategoryDisplayConfig[] = [];
+
+    while (true) {
+        const response = await vpsClient.get<TableDataResponse<CategoryDisplayConfig>>(
+            `/table-data/category_display_config?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return sortCategoryConfigs(rows);
+}
 
 class CatalogConfigService {
     private cache: Map<string, { data: any; timestamp: number }> = new Map();
@@ -86,17 +119,8 @@ class CatalogConfigService {
      */
     async getCategoryConfig(categoryId: string): Promise<CategoryDisplayConfig | null> {
         try {
-            const { data, error } = await supabase
-                .from('category_display_config')
-                .select('*')
-                .eq('category_id', categoryId)
-                .single();
-
-            if (error && error.code !== 'PGRST116') {
-                throw error;
-            }
-
-            return data;
+            const configs = await loadCategoryDisplayConfigs();
+            return configs.find(config => config.category_id === categoryId) || null;
         } catch (error) {
             console.error('Erro ao buscar configuração de categoria:', error);
             return null;
@@ -108,14 +132,7 @@ class CatalogConfigService {
      */
     async getAllCategoryConfigs(): Promise<CategoryDisplayConfig[]> {
         try {
-            const { data, error } = await supabase
-                .from('category_display_config')
-                .select('*')
-                .order('display_order', { ascending: true });
-
-            if (error) throw error;
-
-            return data || [];
+            return await loadCategoryDisplayConfigs();
         } catch (error) {
             console.error('Erro ao buscar configurações de categorias:', error);
             return [];
@@ -127,16 +144,26 @@ class CatalogConfigService {
      */
     async saveCategoryConfig(config: Partial<CategoryDisplayConfig>): Promise<void> {
         try {
-            const { error } = await supabase
-                .from('category_display_config')
-                .upsert({
-                    ...config,
-                    updated_at: new Date().toISOString()
-                }, {
-                    onConflict: 'category_id'
-                });
+            const payload = stripUndefined({
+                ...config,
+                updated_at: new Date().toISOString()
+            } as Record<string, unknown>);
 
-            if (error) throw error;
+            const existing = config.id
+                ? ({ id: config.id } as CategoryDisplayConfig)
+                : config.category_id
+                    ? (await loadCategoryDisplayConfigs()).find(item => item.category_id === config.category_id)
+                    : null;
+
+            if (existing?.id) {
+                await vpsClient.patch(
+                    `/table-data/category_display_config/${encodeURIComponent(existing.id)}?pk=id`,
+                    payload
+                );
+                return;
+            }
+
+            await vpsClient.post('/table-data/category_display_config', payload);
         } catch (error) {
             console.error('Erro ao salvar configuração de categoria:', error);
             throw error;

@@ -1,12 +1,107 @@
-import { supabase } from './supabase';
-import type { CatalogSection, CreateSectionData, UpdateSectionData, SectionType } from '@/types/catalogSections';
+import { SECTION_PRESETS, type CatalogSection, type CreateSectionData, type UpdateSectionData, type SectionType } from '@/types/catalogSections';
 import type { CatalogProduct } from '@/types/catalog';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import { normalizeProduct } from '@/services/productNormalizer';
 import { buildVpsUrl } from '@/services/vpsProxyBase';
 import { vpsApiService } from '@/services/vpsApiService';
+import { vpsClient } from '@/services/vpsClient';
+import { colorService } from '@/services/colors';
+import { modelColorImagesService } from '@/services/model-color-images';
 
 const PUBLIC_STOREFRONT_TIMEOUT_MS = 3500;
+
+interface TableDataResponse<T> {
+    rows?: T[];
+}
+
+function sortSections(sections: CatalogSection[]): CatalogSection[] {
+    return [...sections].sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0));
+}
+
+function parseArrayField(value: unknown): string[] | undefined {
+    if (Array.isArray(value)) return value.map(String);
+    if (typeof value !== 'string' || !value.trim()) return undefined;
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.map(String) : undefined;
+    } catch {
+        return value.split(',').map(item => item.trim()).filter(Boolean);
+    }
+}
+
+function normalizeSection(row: any): CatalogSection {
+    return {
+        ...row,
+        is_enabled: Boolean(row.is_enabled),
+        show_view_all: Boolean(row.show_view_all),
+        display_order: Number(row.display_order || 0),
+        max_products: Number(row.max_products || 8),
+        filter_categories: parseArrayField(row.filter_categories),
+        filter_brands: parseArrayField(row.filter_brands),
+        filter_tags: parseArrayField(row.filter_tags),
+        pinned_product_ids: parseArrayField(row.pinned_product_ids),
+        filter_min_price: row.filter_min_price == null ? undefined : Number(row.filter_min_price),
+        filter_max_price: row.filter_max_price == null ? undefined : Number(row.filter_max_price),
+    } as CatalogSection;
+}
+
+function buildDefaultPublicSections(): CatalogSection[] {
+    const now = new Date(0).toISOString();
+    const defaults: Array<{
+        id: string;
+        section_type: SectionType;
+        display_order: number;
+        view_all_url: string;
+    }> = [
+        { id: 'public-default-recent', section_type: 'recent', display_order: 0, view_all_url: '/produtos/mais-recentes' },
+        { id: 'public-default-featured', section_type: 'featured', display_order: 1, view_all_url: '/produtos/destaques' },
+        { id: 'public-default-bestsellers', section_type: 'bestsellers', display_order: 2, view_all_url: '/produtos/mais-vendidos' },
+    ];
+
+    return defaults.map(item => {
+        const preset = SECTION_PRESETS[item.section_type];
+        return normalizeSection({
+            id: item.id,
+            user_id: 'system',
+            section_type: item.section_type,
+            title: preset.title,
+            subtitle: preset.subtitle,
+            is_enabled: true,
+            display_order: item.display_order,
+            max_products: preset.max_products || 8,
+            layout_style: preset.layout_style || 'grid',
+            show_view_all: true,
+            view_all_url: item.view_all_url,
+            sort_by: preset.sort_by || 'updated_at',
+            sort_direction: preset.sort_direction || 'desc',
+            created_at: now,
+            updated_at: now,
+        });
+    });
+}
+
+function stripUndefined<T extends Record<string, unknown>>(input: T): Partial<T> {
+    return Object.fromEntries(
+        Object.entries(input).filter(([, value]) => value !== undefined)
+    ) as Partial<T>;
+}
+
+async function loadSectionRows(userId?: string): Promise<CatalogSection[]> {
+    const allRows: CatalogSection[] = [];
+    const pageSize = 200;
+
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<TableDataResponse<any>>(
+            `/table-data/catalog_sections?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows.push(...rows.map(normalizeSection));
+        if (rows.length < pageSize) break;
+    }
+
+    const filtered = userId ? allRows.filter(section => String(section.user_id) === String(userId)) : allRows;
+    return sortSections(filtered);
+}
 
 class CatalogSectionsService {
     private cache: Map<string, { data: CatalogSection[]; timestamp: number }> = new Map();
@@ -51,20 +146,7 @@ class CatalogSectionsService {
                 return cached.data;
             }
 
-            let query = supabase
-                .from('catalog_sections')
-                .select('*')
-                .order('display_order', { ascending: true });
-
-            if (userId) {
-                query = query.eq('user_id', userId);
-            }
-
-            const { data, error } = await query;
-
-            if (error) throw error;
-
-            const sections = (data || []) as CatalogSection[];
+            const sections = await loadSectionRows(userId);
             this.cache.set(cacheKey, { data: sections, timestamp: Date.now() });
 
             return sections;
@@ -78,8 +160,13 @@ class CatalogSectionsService {
      * Buscar seções ativas (habilitadas)
      */
     async getActiveSections(userId?: string): Promise<CatalogSection[]> {
+        if (!userId) {
+            return buildDefaultPublicSections();
+        }
+
         const sections = await this.getSections(userId);
-        return sections.filter(s => s.is_enabled);
+        const activeSections = sections.filter(s => s.is_enabled);
+        return activeSections;
     }
 
     /**
@@ -87,14 +174,10 @@ class CatalogSectionsService {
      */
     async getSection(id: string): Promise<CatalogSection> {
         try {
-            const { data, error } = await supabase
-                .from('catalog_sections')
-                .select('*')
-                .eq('id', id)
-                .single();
-
-            if (error) throw error;
-            return data as CatalogSection;
+            const sections = await loadSectionRows();
+            const section = sections.find(row => String(row.id) === String(id));
+            if (!section) throw new Error('Secao nao encontrada');
+            return section;
         } catch (error) {
             console.error('Erro ao buscar seção:', error);
             throw error;
@@ -106,22 +189,13 @@ class CatalogSectionsService {
      */
     async createSection(sectionData: CreateSectionData): Promise<CatalogSection> {
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('Usuário não autenticado');
-
-            const { data, error } = await supabase
-                .from('catalog_sections')
-                .insert({
-                    ...sectionData,
-                    user_id: user.id
-                })
-                .select()
-                .single();
-
-            if (error) throw error;
+            const data = await vpsClient.post<any>(
+                '/table-data/catalog_sections',
+                stripUndefined(sectionData as unknown as Record<string, unknown>)
+            );
 
             this.clearCache();
-            return data as CatalogSection;
+            return normalizeSection(data);
         } catch (error) {
             console.error('Erro ao criar seção:', error);
             throw error;
@@ -133,17 +207,14 @@ class CatalogSectionsService {
      */
     async updateSection(id: string, updates: Partial<UpdateSectionData>): Promise<CatalogSection> {
         try {
-            const { data, error } = await supabase
-                .from('catalog_sections')
-                .update(updates)
-                .eq('id', id)
-                .select()
-                .single();
-
-            if (error) throw error;
+            const { id: _id, ...payload } = updates;
+            const data = await vpsClient.patch<any>(
+                `/table-data/catalog_sections/${encodeURIComponent(id)}?pk=id`,
+                stripUndefined(payload as Record<string, unknown>)
+            );
 
             this.clearCache();
-            return data as CatalogSection;
+            return normalizeSection(data);
         } catch (error) {
             console.error('Erro ao atualizar seção:', error);
             throw error;
@@ -155,12 +226,7 @@ class CatalogSectionsService {
      */
     async deleteSection(id: string): Promise<void> {
         try {
-            const { error } = await supabase
-                .from('catalog_sections')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
+            await vpsClient.delete(`/table-data/catalog_sections/${encodeURIComponent(id)}?pk=id`);
             this.clearCache();
         } catch (error) {
             console.error('Erro ao deletar seção:', error);
@@ -173,14 +239,12 @@ class CatalogSectionsService {
      */
     async reorderSections(sectionIds: string[]): Promise<void> {
         try {
-            const updates = sectionIds.map((id, index) =>
-                supabase
-                    .from('catalog_sections')
-                    .update({ display_order: index })
-                    .eq('id', id)
-            );
-
-            await Promise.all(updates);
+            await Promise.all(sectionIds.map((id, index) =>
+                vpsClient.patch(
+                    `/table-data/catalog_sections/${encodeURIComponent(id)}?pk=id`,
+                    { display_order: index }
+                )
+            ));
             this.clearCache();
         } catch (error) {
             console.error('Erro ao reordenar seções:', error);
@@ -224,7 +288,10 @@ class CatalogSectionsService {
             // Busca mais fundo porque as regras globais de visibilidade
             // (estoque/preco/status) sao aplicadas client-side apos a VPS.
             // O componente da secao ainda limita a exibicao em max_products.
-            const fetchLimit = Math.min((section.max_products || 12) * 50, 500);
+            const sectionType = section.section_type;
+            const fetchMultiplier = ['recent', 'new', 'bestsellers'].includes(sectionType) ? 4 : 20;
+            const fetchCap = ['recent', 'new', 'bestsellers'].includes(sectionType) ? 80 : 200;
+            const fetchLimit = Math.min((section.max_products || 12) * fetchMultiplier, fetchCap);
             params.append('limit', fetchLimit.toString());
 
             // App settings filters
@@ -281,7 +348,7 @@ class CatalogSectionsService {
             if (!res.ok) throw new Error(`VPS API returned ${res.status}`);
             const data = await res.json();
             
-            // Normaliza dados da VPS para campos canônicos (elimina colisões VPS ↔ Supabase)
+            // Normaliza dados da VPS para campos canônicos (elimina colisões VPS ↔ VPS)
             products = (data || []).map((p: any) => normalizeProduct(p) as unknown as CatalogProduct);
 
             // Filtro client-side por categorias (VPS ignora in_category, só aceita category único)
@@ -339,14 +406,11 @@ class CatalogSectionsService {
                     productsNeedingImages.map(p => p.specs?.color).filter(Boolean) as string[]
                 )];
 
-                const [{ data: modelImages }, { data: colorRows }] = await Promise.all([
-                    supabase
-                        .from('model_color_images')
-                        .select('model_id, color_id, images')
-                        .in('model_id', modelIds),
+                const [modelImages, colorRows] = await Promise.all([
+                    modelColorImagesService.getByModelIds(modelIds),
                     colorNames.length > 0
-                        ? supabase.from('colors').select('id, name').in('name', colorNames)
-                        : Promise.resolve({ data: [] })
+                        ? colorService.list().then(colors => colors.filter(color => colorNames.includes(color.name)))
+                        : Promise.resolve([])
                 ]);
 
                 if (modelImages && modelImages.length > 0) {

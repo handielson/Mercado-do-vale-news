@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Share2, ShoppingCart, Pencil } from 'lucide-react';
 import type { CatalogProduct } from '@/types/catalog';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
 import { toTitleCase } from '@/utils/stringFormatters';
 import { getCacheBustedUrl } from '@/utils/cache-buster';
@@ -31,7 +31,7 @@ export function ProductCard({
     const navigate = useNavigate();
 
     // Get customer context for pricing and roles
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const isAdmin = customer?.customer_type === 'ADMIN';
 
     // Calcular preço com desconto usando tipo de cliente efetivo

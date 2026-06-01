@@ -26,9 +26,10 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["supabase", "test_*.mjs",
-    "scripts/create-test-inventory.ts",
+  "exclude": ["test_*.mjs",
     "check_api2.cjs",
+    "test-synology-auth.cjs",
+    "test-synology-auth.js",
     "tmp-verify-apibling.ts"
   ]
 }

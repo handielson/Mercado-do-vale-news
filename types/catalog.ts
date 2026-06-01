@@ -3,7 +3,7 @@ import type { Product } from './product';
 
 
 /**
- * Espelha exatamente a tabela `catalog_banners` do Supabase.
+ * Espelha exatamente a tabela `catalog_banners` do VPS.
  * Campos verificados em 2026-02-19 contra information_schema.
  */
 export interface Banner {

@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getOrderById } from '@/services/orderService';
-import { supabase } from '@/services/supabase';
+import { unitService } from '@/services/units';
 import { vpsApiService } from '@/services/vpsApiService';
 import type { OrderWithItems } from '@/types/order';
 import { formatCurrency } from '@/utils/saleCalculations';
@@ -169,10 +169,7 @@ export default function OrderTrackingPage() {
                         .map(i => ({ item_id: i.id, product_name: i.product_name, unit_id: (i as any).serialized_unit_id }));
 
                     if (unitIds.length > 0) {
-                        const { data: units } = await supabase
-                            .from('units')
-                            .select('id, imei_1, imei_2, serial')
-                            .in('id', unitIds.map(u => u.unit_id));
+                        const units = await unitService.listByIds(unitIds.map(u => u.unit_id));
 
                         if (units) {
                             const unitMap = Object.fromEntries(units.map(u => [u.id, u]));

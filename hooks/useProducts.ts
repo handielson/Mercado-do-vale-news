@@ -4,7 +4,7 @@ import { Product } from '../types/product';
 import { ProductStatus } from '../utils/field-standards';
 import { productService } from '../services/products';
 import { vpsApiService } from '../services/vpsApiService';
-import { supabase } from '../services/supabase';
+import { shopeeProductService } from '../services/shopeeProducts';
 import { ProductFiltersState } from '../components/products/ProductFilters';
 import { prefetchModelImages } from '../services/modelImageCache';
 import { filterAdminProducts, mergeProductsById } from './adminProductFilters';
@@ -64,18 +64,7 @@ async function enrichProductsWithShopeeLinks(products: Product[]): Promise<Produ
     if (products.length === 0) return products;
 
     try {
-        const { data, error } = await supabase
-            .from('shopee_products')
-            .select('product_id, shopee_item_id')
-            .not('shopee_item_id', 'is', null);
-
-        if (error) throw error;
-
-        const shopeeItemByProductId = new Map(
-            (data || [])
-                .map((row: any) => [String(row.product_id), Number(row.shopee_item_id)] as const)
-                .filter(([, itemId]) => Number.isFinite(itemId) && itemId > 0)
-        );
+        const shopeeItemByProductId = await shopeeProductService.getItemIdByProductIdMap();
 
         if (shopeeItemByProductId.size === 0) return products;
 
@@ -183,7 +172,7 @@ export const useProducts = () => {
     const [itemsPerPage, setItemsPerPage] = useState(24);
 
     /**
-     * Fetch products from Supabase.
+     * Fetch products from VPS.
      * mode='spinner'    → mostra isLoading (sem cache, primeiro acesso)
      * mode='background' → silencioso, dados já estão na tela via cache
      * mode='refresh'    → mostra isRefreshing (botão de atualizar clicado)
@@ -194,14 +183,14 @@ export const useProducts = () => {
             if (mode === 'refresh') setIsRefreshing(true);
             setError(null);
 
-            // VPS MySQL primeiro — fallback Supabase se a primeira página falhar.
+            // VPS MySQL primeiro — fallback VPS se a primeira página falhar.
             let data: Product[];
             const vpsData = await fetchAllAdminVpsProducts();
             if (vpsData) {
                 data = await enrichProductsWithShopeeLinks(vpsData.map(mapVpsProduct));
                 console.log(`[useProducts] VPS: ${data.length} produtos`);
             } else {
-                console.warn('[useProducts] VPS indisponível — usando Supabase');
+                console.warn('[useProducts] VPS indisponível — usando VPS');
                 data = await productService.list();
             }
 

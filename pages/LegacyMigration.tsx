@@ -12,13 +12,15 @@ import { Database, Users, RefreshCw, Search, Filter, Zap, X, MessageSquare } fro
 import { toast } from 'sonner'
 import { CustomerMigrationTable, CustomerMigrationStatus } from '../components/migration/CustomerMigrationTable'
 import { CustomerMigrateModal, MigratedCustomerData } from '../components/migration/CustomerMigrateModal'
-import { supabase } from '../services/supabase'
+import { customerService } from '../services/customers'
+import { vpsAuthService } from '../services/vpsAuthService'
 import { welcomeMessageService, buildMessage, buildWhatsAppUrl, getDefaultPassword } from '../services/welcomeMessageService'
 import { getWhatsAppSettings } from '../services/whatsappSettingsService'
+import { getCompanyId } from '../services/companyContext'
 
 type FilterStatus = 'all' | 'new' | 'partial' | 'migrated' | 'error'
 
-// ─── Helper: Transforma dados legado → payload do Supabase ────────────────────
+// ─── Helper: Transforma dados legado → payload da VPS ─────────────────────────
 
 function mapCustomerType(type: string, wholesaleStatus?: string): 'retail' | 'wholesale' | 'resale' {
     if (wholesaleStatus === 'APPROVED') return 'wholesale'
@@ -55,6 +57,10 @@ function buildPayload(customer: LegacyCustomer, companyId: string) {
     }
 }
 
+function onlyDigits(value: unknown): string {
+    return String(value || '').replace(/\D/g, '')
+}
+
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
 export default function LegacyMigrationPage() {
@@ -74,6 +80,23 @@ export default function LegacyMigrationPage() {
     } | null>(null)
     const abortRef = useRef(false)
 
+    const createVpsLogin = async (customerId: string, name: string, cpfDigits: string, email?: string | null) => {
+        const placeholderEmail = email || `${cpfDigits}@cliente.mercadodovale.com.br`
+        const tempPassword = getDefaultPassword(cpfDigits)
+        await vpsAuthService.createCustomerLogin({
+            customer_id: customerId,
+            email: placeholderEmail,
+            cpf_cnpj: cpfDigits,
+            password: tempPassword,
+        })
+        await customerService.update(customerId, {
+            user_id: customerId,
+            email: placeholderEmail,
+            account_status: 'active',
+            name,
+        } as any)
+    }
+
     // ── Carregar e verificar clientes ─────────────────────────────────────────
 
     const loadCustomers = async () => {
@@ -81,18 +104,14 @@ export default function LegacyMigrationPage() {
         try {
             const legacyCustomers = await legacyAPI.getCustomers()
 
-            const { data: existingCustomers, error } = await supabase
-                .from('customers')
-                .select('cpf_cnpj, phone, email, address, birth_date')
-
-            if (error) console.error('Erro ao verificar existentes:', error)
+            const existingCustomers = await customerService.list()
 
             const existingMap = new Map(
-                (existingCustomers || []).map(c => [c.cpf_cnpj, c])
+                existingCustomers.map(c => [onlyDigits(c.cpf_cnpj), c])
             )
 
             const statuses: CustomerMigrationStatus[] = legacyCustomers.map(customer => {
-                const cpf = (customer.cpf || customer.cpf_cnpj || '').replace(/\D/g, '')
+                const cpf = onlyDigits(customer.cpf || customer.cpf_cnpj)
 
                 if (!cpf || (cpf.length !== 11 && cpf.length !== 14)) {
                     return { customer, status: 'error' as const, errorMessage: 'Sem CPF/CNPJ válido' }
@@ -134,12 +153,8 @@ export default function LegacyMigrationPage() {
             const companyId = await getCompanyId()
             if (!companyId) return
 
-            const cleanCpf = edited.cpf_cnpj.replace(/\D/g, '')
-            const { data: existing } = await supabase
-                .from('customers')
-                .select('id')
-                .eq('cpf_cnpj', cleanCpf)
-                .maybeSingle()
+            const cleanCpf = onlyDigits(edited.cpf_cnpj)
+            const existing = await customerService.getByCpfCnpj(cleanCpf)
 
             const payload: any = {
                 company_id: companyId,
@@ -159,33 +174,15 @@ export default function LegacyMigrationPage() {
                 payload.address = addr
             }
 
-            const { error: dbError } = existing
-                ? await supabase.from('customers').update({ ...payload, company_id: undefined }).eq('id', existing.id)
-                : await supabase.from('customers').insert(payload)
+            const persistedCustomer = existing
+                ? await customerService.update(existing.id, { ...payload, company_id: undefined } as any)
+                : await customerService.create(payload)
 
-            if (dbError) { toast.error(`Erro: ${dbError.message}`); return }
-
-            // Cria a conta no Supabase Auth para a migração individual e atualiza user_id
-            const placeholderEmail = `${cleanCpf}@cliente.mercadodovale.com.br`
-            const tempPassword = getDefaultPassword(cleanCpf)
+            // Cria o login na auth propria da VPS para a migracao individual.
             try {
-                const { data: authData } = await supabase.auth.admin
-                    ? (supabase as any).auth.admin.createUser({ email: placeholderEmail, password: tempPassword, email_confirm: true })
-                    : { data: null }
-
-                if (!authData?.user) {
-                    const { data: signUpData } = await supabase.auth.signUp({
-                        email: placeholderEmail, password: tempPassword,
-                        options: { data: { name: edited.name.trim(), cpf_cnpj: cleanCpf } }
-                    })
-                    if (signUpData?.user) {
-                        await supabase.from('customers').update({ user_id: signUpData.user.id }).eq('cpf_cnpj', cleanCpf)
-                    }
-                } else if (authData.user) {
-                    await supabase.from('customers').update({ user_id: authData.user.id }).eq('cpf_cnpj', cleanCpf)
-                }
+                await createVpsLogin(persistedCustomer.id, edited.name.trim(), cleanCpf, payload.email)
             } catch (authErr) {
-                console.warn('Erro ao criar conta auth individual', authErr)
+                console.warn('Erro ao criar login VPS individual', authErr)
             }
 
             // Tenta enviar o WhatsApp de boas-vindas
@@ -272,11 +269,9 @@ export default function LegacyMigrationPage() {
         if (!companyId) return
 
         // Buscar CPFs já existentes para não reinserir
-        const { data: existingRows } = await supabase
-            .from('customers')
-            .select('cpf_cnpj')
+        const existingRows = await customerService.list()
 
-        const existingCpfs = new Set((existingRows || []).map(r => r.cpf_cnpj))
+        const existingCpfs = new Set(existingRows.map(r => onlyDigits(r.cpf_cnpj)))
 
         abortRef.current = false
         setBatchProgress({ total: toMigrate.length, done: 0, errors: 0, running: true })
@@ -299,7 +294,7 @@ export default function LegacyMigrationPage() {
             const batch = toMigrate.slice(i, i + BATCH_SIZE)
             const payloads = batch
                 .map(item => {
-                    const cpf = (item.customer.cpf || item.customer.cpf_cnpj || '').replace(/\D/g, '')
+                    const cpf = onlyDigits(item.customer.cpf || item.customer.cpf_cnpj)
                     if (!cpf || (cpf.length !== 11 && cpf.length !== 14)) return null
                     return buildPayload(item.customer, companyId)
                 })
@@ -328,15 +323,11 @@ export default function LegacyMigrationPage() {
                 continue
             }
 
-            const { error } = await supabase
-                .from('customers')
-                .insert(newPayloads)
-
-            if (error) {
-                console.error('Erro no lote:', error)
-                errors += newPayloads.length
-                done += alreadyMigrated
-            } else {
+            try {
+                for (const payload of newPayloads) {
+                    await customerService.create(payload)
+                    existingCpfs.add(onlyDigits(payload.cpf_cnpj))
+                }
                 done += newPayloads.length + alreadyMigrated
 
                 // Atualizar status local
@@ -353,46 +344,24 @@ export default function LegacyMigrationPage() {
 
                 // Criar conta auth + enviar WhatsApp para cada novo cliente
                 for (const item of batch) {
-                    const cpfDigits = (item.customer.cpf || item.customer.cpf_cnpj || '').replace(/\D/g, '')
+                    const cpfDigits = onlyDigits(item.customer.cpf || item.customer.cpf_cnpj)
                     if (!cpfDigits || !migratedCpfs.has(cpfDigits)) continue
-
-                    const placeholderEmail = `${cpfDigits}@cliente.mercadodovale.com.br`
-                    const tempPassword = getDefaultPassword(cpfDigits)
+                    const migratedCustomer = await customerService.getByCpfCnpj(cpfDigits)
+                    if (!migratedCustomer) continue
 
                     try {
-                        // Cria conta auth (ignora silenciosamente se já existir)
-                        const { data: authData } = await supabase.auth.admin
-                            ? (supabase as any).auth.admin.createUser({
-                                email: placeholderEmail,
-                                password: tempPassword,
-                                email_confirm: true,
-                              })
-                            : { data: null }
-
-                        // Fallback: signUp normal (sem confirmação de email)
-                        if (!authData?.user) {
-                            const { data: signUpData } = await supabase.auth.signUp({
-                                email: placeholderEmail,
-                                password: tempPassword,
-                                options: { data: { name: item.customer.name, cpf_cnpj: cpfDigits } }
-                            })
-                            if (signUpData?.user) {
-                                await supabase.from('customers')
-                                    .update({ user_id: signUpData.user.id })
-                                    .eq('cpf_cnpj', cpfDigits)
-                            }
-                        } else if (authData.user) {
-                            await supabase.from('customers')
-                                .update({ user_id: authData.user.id })
-                                .eq('cpf_cnpj', cpfDigits)
-                        }
+                        await createVpsLogin(migratedCustomer.id, item.customer.name, cpfDigits, migratedCustomer.email)
                     } catch (authErr) {
-                        console.warn('Erro ao criar conta auth para', cpfDigits, authErr)
+                        console.warn('Erro ao criar login VPS para', cpfDigits, authErr)
                     }
 
                     // Enviar WhatsApp
                     await sendWelcomeWhatsApp(item.customer, cpfDigits, welcomeTemplate, whatsappCfg)
                 }
+            } catch (error) {
+                console.error('Erro no lote:', error)
+                errors += newPayloads.length
+                done += alreadyMigrated
             }
 
             setBatchProgress({ total: toMigrate.length, done, errors, running: true })
@@ -408,16 +377,6 @@ export default function LegacyMigrationPage() {
         } else {
             toast.success(`✅ Migração concluída! ${done} migrados, ${errors} com problema.`)
         }
-    }
-
-    async function getCompanyId(): Promise<string | null> {
-        const { data: company, error } = await supabase
-            .from('companies')
-            .select('id')
-            .eq('slug', 'mercado-do-vale')
-            .single()
-        if (error || !company) { toast.error('Empresa não encontrada'); return null }
-        return company.id
     }
 
     // ── Filtro e busca ────────────────────────────────────────────────────────
@@ -442,18 +401,6 @@ export default function LegacyMigrationPage() {
         )
         if (!confirmed) return
 
-        const adminKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-        if (!adminKey) {
-            toast.error("ALERTA: A chave VITE_SUPABASE_SERVICE_ROLE_KEY não está no seu .env.local! Renomeie a chave e reinicie o servidor.");
-            return;
-        }
-
-        // Cliente especial que tem permissão para ignorar o Rate Limit de criação de contas:
-        const supabaseAdmin = (await import('@supabase/supabase-js')).createClient(
-            import.meta.env.VITE_SUPABASE_URL,
-            adminKey
-        );
-
         setLoading(true)
         let count = 0
         let erros = 0
@@ -463,37 +410,13 @@ export default function LegacyMigrationPage() {
                 const cpfDigits = (item.customer.cpf || item.customer.cpf_cnpj || '').replace(/\D/g, '')
                 if (!cpfDigits) continue
 
-                const placeholderEmail = `${cpfDigits}@cliente.mercadodovale.com.br`
-                const tempPassword = getDefaultPassword(cpfDigits)
-
                 try {
-                    // Tenta criar pela rota Admin que ignora Rate Limits
-                    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-                        email: placeholderEmail,
-                        password: tempPassword,
-                        email_confirm: true,
-                        user_metadata: { name: item.customer.name, cpf_cnpj: cpfDigits }
-                    });
-
-                    if (error) {
-                        if (error.status === 422 || error.message.includes("already registered") || error.message.includes("already exists")) {
-                            // A conta já estava criada! Vamos apenas garantir que o ID dela conecte na tabela `customers`
-                            const { data: searchUser } = await supabaseAdmin.auth.admin.listUsers();
-                            const matched = searchUser?.users?.find(u => u.email === placeholderEmail);
-                            if (matched) {
-                                await supabaseAdmin.from('customers').update({ user_id: matched.id }).eq('cpf_cnpj', cpfDigits);
-                            }
-                        } else {
-                            console.error("Erro da API Admin:", error);
-                            erros++;
-                        }
-                    } else if (data?.user) {
-                        // Sucesso total, conta criada!
-                        await supabaseAdmin.from('customers').update({ user_id: data.user.id }).eq('cpf_cnpj', cpfDigits);
-                        count++;
-                    }
+                    const customer = await customerService.getByCpfCnpj(cpfDigits);
+                    if (!customer) continue;
+                    await createVpsLogin(customer.id, item.customer.name, cpfDigits, customer.email);
+                    count++;
                 } catch (e) {
-                    console.error("Falha silenciosa:", e);
+                    console.error("Falha ao sincronizar login VPS:", e);
                     erros++;
                 }
             }

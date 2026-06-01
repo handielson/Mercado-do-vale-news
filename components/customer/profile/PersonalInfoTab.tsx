@@ -16,7 +16,7 @@ import {
     User,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useSupabaseAuth } from '../../../hooks/useSupabaseAuth';
+import { useVpsAuth } from '../../../hooks/useVpsAuth';
 import { uploadService } from '../../../services/uploadService';
 
 interface AddressData {
@@ -36,7 +36,7 @@ const inputIconClass = 'w-full rounded-xl border border-slate-300 bg-white py-3 
 const disabledInputClass = 'w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm text-slate-500';
 
 export const PersonalInfoTab: React.FC = () => {
-    const { customer, updateProfile, updatePassword } = useSupabaseAuth();
+    const { customer, updateProfile, updatePassword } = useVpsAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [activeSection, setActiveSection] = useState<ProfileSection>('profile');
 

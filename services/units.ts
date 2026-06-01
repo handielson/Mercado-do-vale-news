@@ -1,7 +1,7 @@
 import { Unit, UnitInput } from '../types/unit';
 import { UnitStatus } from '../utils/field-standards';
-import { supabase } from './supabase';
 import { vpsApiService } from './vpsApiService';
+import { vpsClient } from './vpsClient';
 import { getCompanyId } from './companyContext';
 
 /**
@@ -9,8 +9,12 @@ import { getCompanyId } from './companyContext';
  *
  * Triggers no MySQL mantêm `products.stock_quantity = COUNT(units WHERE status='available')`.
  *
- * Tabelas de auditoria (unit_swap_logs, rma_logs) seguem no Supabase por enquanto.
+ * Logs de troca seguem pela VPS em /table-data/unit_swap_logs.
  */
+
+interface UnitSwapLogResponse {
+    rows?: any[];
+}
 
 function transformFromDB(row: any): Unit {
     return {
@@ -34,6 +38,21 @@ function transformFromDB(row: any): Unit {
     };
 }
 
+function transformWithProduct(row: any): Unit & {
+    company_id?: string;
+    product_name?: string;
+    product_sku?: string;
+    serial?: string;
+} {
+    return {
+        ...transformFromDB(row),
+        company_id: row.company_id,
+        product_name: row.product_name,
+        product_sku: row.product_sku,
+        serial: row.serial,
+    };
+}
+
 function toPayload(input: Partial<UnitInput>): any {
     const out: any = {};
     if (input.product_id !== undefined) out.product_id = input.product_id;
@@ -47,6 +66,22 @@ function toPayload(input: Partial<UnitInput>): any {
     if (input.location_id !== undefined) out.location_id = input.location_id || null;
     if (input.internal_notes !== undefined) out.internal_notes = input.internal_notes || null;
     return out;
+}
+
+async function loadSwapLogs(): Promise<any[]> {
+    const allRows: any[] = [];
+    const pageSize = 200;
+
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<UnitSwapLogResponse>(
+            `/table-data/unit_swap_logs?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows.push(...rows);
+        if (rows.length < pageSize) break;
+    }
+
+    return allRows.sort((a, b) => String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')));
 }
 
 async function listByProduct(productId: string): Promise<Unit[]> {
@@ -95,6 +130,22 @@ export const unitService = {
     delete: deleteUnit,
     getStatsByProduct,
 
+    async listAll(filters: { status?: string } = {}): Promise<ReturnType<typeof transformWithProduct>[]> {
+        const companyId = await getCompanyId();
+        const data = await vpsApiService.getUnits({
+            company_id: companyId,
+            status: filters.status || undefined,
+        });
+        return (data || []).map(transformWithProduct);
+    },
+
+    async listByIds(ids: string[]): Promise<ReturnType<typeof transformWithProduct>[]> {
+        const uniqueIds = [...new Set(ids.filter(Boolean))];
+        if (uniqueIds.length === 0) return [];
+        const data = await vpsApiService.getUnits({ ids: uniqueIds });
+        return (data || []).map(transformWithProduct);
+    },
+
     /**
      * Busca unidade por IMEI 1, IMEI 2 ou serial (PDV).
      */
@@ -131,7 +182,7 @@ export const unitService = {
     },
 
     /**
-     * Troca a unidade reservada por outra disponível, registrando log no Supabase.
+     * Troca a unidade reservada por outra disponível, registrando log na VPS.
      */
     async swapUnit(opts: {
         currentUnitId: string;
@@ -169,9 +220,9 @@ export const unitService = {
             throw new Error('Falha ao reservar nova unidade. Operação revertida.');
         }
 
-        // Audit log no Supabase (tabela ainda não migrada)
+        // Audit log na VPS
         const companyId = await getCompanyId();
-        await supabase.from('unit_swap_logs').insert({
+        await vpsClient.post('/table-data/unit_swap_logs', {
             company_id: companyId,
             order_id: orderId || null,
             sale_id: saleId || null,
@@ -214,15 +265,14 @@ export const unitService = {
 
     async getSwapLogs(opts: { unitId?: string; orderId?: string }): Promise<any[]> {
         const companyId = await getCompanyId();
-        let query = supabase
-            .from('unit_swap_logs')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('created_at', { ascending: true });
-        if (opts.orderId) query = query.eq('order_id', opts.orderId);
-        if (opts.unitId) query = query.or(`old_unit_id.eq.${opts.unitId},new_unit_id.eq.${opts.unitId}`);
-        const { data, error } = await query;
-        if (error) throw new Error(`Falha ao buscar logs: ${error.message}`);
-        return data || [];
+        const logs = await loadSwapLogs();
+        return logs.filter((log) => {
+            if (String(log.company_id) !== String(companyId)) return false;
+            if (opts.orderId && String(log.order_id) !== String(opts.orderId)) return false;
+            if (opts.unitId && String(log.old_unit_id) !== String(opts.unitId) && String(log.new_unit_id) !== String(opts.unitId)) {
+                return false;
+            }
+            return true;
+        });
     },
 };

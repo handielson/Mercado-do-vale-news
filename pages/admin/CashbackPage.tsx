@@ -5,6 +5,7 @@ import {
     getCashbackSettings,
     updateCashbackSettings,
     listAllTransactions,
+    listCoinBalances,
     adminAdjustCoins,
     coinsToReais,
 } from '../../services/cashbackService';
@@ -17,7 +18,6 @@ import {
     toggleCoinPromotion,
     type CoinPromotion,
 } from '../../services/coinPromotionService';
-import { supabase } from '../../services/supabase';
 import { vpsApiService } from '../../services/vpsApiService';
 
 // ============================================================
@@ -58,24 +58,19 @@ function DashboardTab() {
             const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
             // Transações de hoje
-            const { data: txToday } = await supabase
-                .from('coin_transactions')
-                .select('*')
-                .gte('created_at', `${today}T00:00:00`)
-                .lte('created_at', `${today}T23:59:59`)
-                .order('created_at', { ascending: false });
-
-            const todayTx: CoinTransaction[] = (txToday ?? []) as CoinTransaction[];
+            const todayTx = await listAllTransactions({
+                from: `${today}T00:00:00`,
+                to: `${today}T23:59:59`,
+                limit: 500,
+            }).catch(() => []);
 
             const earned = todayTx.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
             const spent = todayTx.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
             const checkins = todayTx.filter(t => t.type === 'earn_checkin').length;
 
             // Total em circulação (soma de todas as coin_balances)
-            const { data: balanceSum } = await supabase
-                .from('coin_balances')
-                .select('balance');
-            const totalCirculation = (balanceSum ?? []).reduce((s: number, b: any) => s + (b.balance || 0), 0);
+            const balanceSum = await listCoinBalances().catch(() => []);
+            const totalCirculation = balanceSum.reduce((s: number, b) => s + (b.balance || 0), 0);
 
             setStats([
                 { label: 'Moedas distribuídas hoje', value: earned, color: 'text-green-600', sign: '+' },

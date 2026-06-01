@@ -4,7 +4,7 @@ import { User, Mail, Phone, Lock, Loader2, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthLayout } from '../../components/auth/AuthLayout';
 import { GoogleButton } from '../../components/auth/GoogleButton';
-import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
+import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 
 type Step = 'cpf' | 'activate' | 'create';
 

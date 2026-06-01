@@ -1,4 +1,3 @@
-import { supabase } from './supabase';
 import type { ContaPagar, ContaReceber, BaixaConta, ContaBordero, CreateContaInput } from '../types/finance';
 import { getValidToken } from './blingService';
 

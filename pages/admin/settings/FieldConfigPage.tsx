@@ -6,10 +6,10 @@ import { CustomFieldModal } from '../../../components/settings/CustomFieldModal'
 
 /**
  * Field Configuration Page
- * Manage custom fields from Supabase
+ * Manage custom fields from VPS
  * 
  * ANTIGRAVITY PROTOCOL: Database-First Architecture
- * - Loads fields from Supabase custom_fields table
+ * - Loads fields from custom_fields da VPS table
  * - All changes persist to database
  * - Real-time updates across the application
  */

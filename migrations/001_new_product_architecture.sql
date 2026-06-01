@@ -117,7 +117,7 @@ CREATE INDEX IF NOT EXISTS idx_variant_images_primary ON model_variant_images(va
 
 -- Comentários
 COMMENT ON TABLE model_variant_images IS 'Galeria de imagens das variantes de modelos';
-COMMENT ON COLUMN model_variant_images.image_url IS 'URL da imagem no Supabase Storage';
+COMMENT ON COLUMN model_variant_images.image_url IS 'URL da imagem no storage legado';
 COMMENT ON COLUMN model_variant_images.display_order IS 'Ordem de exibição (0 = primeira)';
 COMMENT ON COLUMN model_variant_images.is_primary IS 'Indica se esta é a imagem principal da variante';
 

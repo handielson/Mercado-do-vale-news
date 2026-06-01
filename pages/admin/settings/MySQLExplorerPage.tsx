@@ -4,7 +4,7 @@ import {
     Database, Table, ChevronDown, ChevronRight, RefreshCw, Search,
     Rows, LayoutList, Plus, Trash2, Pencil, Upload, Download, X, Save, AlertTriangle
 } from 'lucide-react';
-import { supabase } from '../../../services/supabase';
+import { buildAuthHeaders } from '../../../services/authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../../services/vpsProxyBase';
 const PAGE_SIZE = 50;
 
@@ -21,17 +21,14 @@ type Tab = 'schema' | 'data';
 // ─── API helpers ──────────────────────────────────────────────────────────────
 async function apiFetch(path: string, options?: RequestInit) {
     const normalized = path.startsWith('/') ? path : `/${path}`;
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
     const method = options?.method || 'GET';
     const r = await fetch(buildVpsUrl(normalized, { method }), {
         ...options,
-        headers: {
+        headers: await buildAuthHeaders({
             'Content-Type': 'application/json',
             ...getVpsSyncHeaders(),
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...(options?.headers ?? {}),
-        },
+        }),
     });
     if (!r.ok) {
         const err = await r.json().catch(() => ({ error: r.statusText }));

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Coins, CheckCircle2, LogIn, Flame, Info, ChevronRight, Gift } from 'lucide-react';
-import { useSupabaseAuth } from '../../contexts/SupabaseAuthContext';
+import { useVpsAuth } from '../../contexts/VpsAuthContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { performCheckin, getStreakStatus } from '../../services/checkinService';
@@ -17,7 +17,7 @@ interface CheckinStatus {
 }
 
 export function CheckinWidget() {
-    const { user, customer } = useSupabaseAuth();
+    const { user, customer } = useVpsAuth();
     const navigate = useNavigate();
     const [cardState, setCardState] = useState<CheckinCardState>('loading');
     const [status, setStatus] = useState<CheckinStatus | null>(null);

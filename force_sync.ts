@@ -8,7 +8,7 @@ async function forceProductSync() {
             prod.stock_quantity = 0;
             // The signature of update requires ProductInput (which mostly matches Product)
             await productService.update(id, prod as any);
-            console.log("Successfully synced product stock to 0 internally on both VPS and Supabase");
+            console.log("Successfully synced product stock to 0 internally on both VPS and VPS");
         } else {
             console.log("Product not found");
         }

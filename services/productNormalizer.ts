@@ -1,11 +1,11 @@
 /**
  * productNormalizer.ts
  *
- * Converte qualquer objeto de produto (VPS MySQL, Supabase legado, Bling)
+ * Converte qualquer objeto de produto (VPS MySQL, formato legado, Bling)
  * para o formato canônico VPS — eliminando bugs de campo com nomes diferentes.
  *
  * ─── POR QUE ISSO EXISTE? ────────────────────────────────────────────────────
- *   Campo          VPS MySQL         Supabase legado      Bling API
+ *   Campo          VPS MySQL         formato legado      Bling API
  *   ──────────     ────────────      ───────────────      ─────────────────
  *   Preço varejo   price_retail      price                precoVenda
  *   Código barras  ean               barcode              gtin
@@ -71,7 +71,7 @@ export interface NormalizedProduct {
 export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
   // ── Status ─────────────────────────────────────────────────────────────────
   // VPS: 'active' | 'inactive' | 'ativo' | 'a' | 'disponível' | 'disponivel'
-  // Supabase: active = true | false
+  // VPS: active = true | false
   let status: 'active' | 'inactive';
   if (typeof p.status === 'string') {
     const s = p.status.toLowerCase().trim();
@@ -79,24 +79,24 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
       ? 'active'
       : 'inactive';
   } else if (typeof p.active === 'boolean') {
-    status = p.active ? 'active' : 'inactive'; // Supabase usa booleano
+    status = p.active ? 'active' : 'inactive'; // Formato legado usa booleano
   } else {
     status = 'active'; // fallback seguro
   }
 
   // ── EAN ─────────────────────────────────────────────────────────────────────
-  // VPS = ean, Supabase = barcode, Bling = gtin
+  // VPS = ean, Legado = barcode, Bling = gtin
   const ean = String(p.ean || p.barcode || p.gtin || '');
 
   // ── Preço de venda ──────────────────────────────────────────────────────────
-  // VPS = price_retail, Supabase = price, Bling = precoVenda / preco_venda / preco_varejo
+  // VPS = price_retail, Legado = price, Bling = precoVenda / preco_venda / preco_varejo
   const rawPrice = p.price_retail ?? p.price ?? p.preco ?? p.preco_venda ?? p.preco_varejo ?? p.precoVenda ?? null;
   const price_retail = rawPrice !== null && rawPrice !== undefined
     ? (isNaN(parseFloat(String(rawPrice))) ? 0 : parseFloat(String(rawPrice)))
     : 0;
 
   // ── Estoque ─────────────────────────────────────────────────────────────────
-  // VPS = stock_quantity, Supabase = stock
+  // VPS = stock_quantity, Legado = stock
   const stockRaw = p.stock_quantity !== undefined ? p.stock_quantity : p.stock;
   let stock_quantity = 0;
   if (typeof stockRaw === 'number') {
@@ -194,16 +194,16 @@ export function normalizeProducts(products: Record<string, any>[]): NormalizedPr
 }
 
 /**
- * Converte produto normalizado (VPS) para formato Supabase legado.
+ * Converte produto normalizado (VPS) para formato formato legado.
  * @deprecated Use apenas em scripts de migração — nunca no frontend.
  */
-export function toSupabaseFormat(p: NormalizedProduct): Record<string, unknown> {
+export function toLegacyProductFormat(p: NormalizedProduct): Record<string, unknown> {
   return {
     ...p,
-    price: p.price_retail,         // Supabase usa 'price'
-    barcode: p.ean,                // Supabase usa 'barcode'
-    stock: p.stock_quantity,       // Supabase usa 'stock'
-    active: p.status === 'active', // Supabase usa booleano
+    price: p.price_retail,         // Formato legado usa 'price'
+    barcode: p.ean,                // Formato legado usa 'barcode'
+    stock: p.stock_quantity,       // Formato legado usa 'stock'
+    active: p.status === 'active', // Formato legado usa booleano
     price_retail: undefined,
     ean: undefined,
     stock_quantity: undefined,

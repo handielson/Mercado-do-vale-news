@@ -3,7 +3,6 @@ import { Package, Plus, Search, Trash2, Edit2, ChevronLeft, Save, X, Calculator,
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { vpsApiService } from '../../../services/vpsApiService';
-import { supabase } from '../../../services/supabase';
 import { formatCurrency } from '../../../utils/saleCalculations';
 import {
   buildDefaultOfferSku,
@@ -556,7 +555,7 @@ export const ProductCombosPage: React.FC<ProductCombosPageProps> = ({ initialOff
         vpsApiService.getProductById(combo.id, true)
       ]);
 
-      // Prioriza description do Supabase (fonte primária), fallback para a VPS
+      // Prioriza description do VPS (fonte primária), fallback para a VPS
       const savedDescription = vpsRich?.description || combo.description || '';
       const savedTechSpecs = vpsRich?.technical_specifications || combo.technical_specifications || '';
 

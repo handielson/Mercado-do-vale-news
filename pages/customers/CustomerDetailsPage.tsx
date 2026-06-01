@@ -8,14 +8,14 @@ import CustomerPrintableView from '../../components/customers/CustomerPrintableV
 import { benefitService, BenefitStatus } from '../../services/benefitService';
 import { getSales } from '../../services/saleService';
 import { SaleWithItems } from '../../types/sale';
-import { useSupabaseAuth } from '../../contexts/SupabaseAuthContext';
-import { supabase } from '../../services/supabase';
+import { useVpsAuth } from '../../contexts/VpsAuthContext';
 import { companySettingsService } from '../../services/companySettingsService';
 import { replaceWarrantyTags, applyWarrantyDisplayFlags, renderWarrantyBothCopies, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../utils/warrantyTagReplacement';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../utils/printSaleReceipt';
-import { getCoinBalance } from '../../services/cashbackService';
+import { getCoinBalance, getCoinsEarnedForReference } from '../../services/cashbackService';
 import { generateLegacySalePdf } from '../../utils/legacySalePdfGenerator';
 import { vpsApiService } from '../../services/vpsApiService';
+import { warrantyTemplateService } from '../../services/warrantyTemplates';
 
 /**
  * Customer Details Page
@@ -30,7 +30,7 @@ export default function CustomerDetailsPage() {
     const { id } = useParams();
 
     // State
-    const { user } = useSupabaseAuth();
+    const { user } = useVpsAuth();
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [benefits, setBenefits] = useState<BenefitStatus[]>([]);
     const [salesHistory, setSalesHistory] = useState<SaleWithItems[]>([]);
@@ -52,15 +52,7 @@ export default function CustomerDetailsPage() {
                 companySettingsService.get(),
                 customerId ? getCoinBalance(customerId).catch(() => null) : Promise.resolve(null),
                 customerId
-                    ? supabase
-                        .from('coin_transactions')
-                        .select('amount')
-                        .eq('customer_id', customerId)
-                        .eq('reference_id', sale.id)
-                        .eq('type', 'earn_purchase')
-                        .maybeSingle()
-                        .then(({ data }) => data?.amount ?? 0)
-                        .catch(() => 0)
+                    ? getCoinsEarnedForReference(customerId, sale.id).catch(() => 0)
                     : Promise.resolve(0),
             ]);
             if (!settings) { toast.error('Configurações não encontradas'); return; }
@@ -219,8 +211,8 @@ export default function CustomerDetailsPage() {
 
                     let days = 90;
                     if (warrantyType === 'custom' && warrantyTemplateId) {
-                        const { data } = await supabase.from('warranty_templates').select('duration_days').eq('id', warrantyTemplateId).maybeSingle();
-                        if (data?.duration_days) days = data.duration_days;
+                        const template = await warrantyTemplateService.getById(warrantyTemplateId);
+                        if (template?.duration_days) days = template.duration_days;
                     } else {
                         const b = brandsByName.get(brand.toLowerCase());
                         if (b?.warranty_days) days = b.warranty_days;

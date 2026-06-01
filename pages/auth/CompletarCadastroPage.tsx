@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Phone, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthLayout } from '../../components/auth/AuthLayout';
-import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
+import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 
 export const CompletarCadastroPage: React.FC = () => {
     const [cpf, setCpf] = useState('');

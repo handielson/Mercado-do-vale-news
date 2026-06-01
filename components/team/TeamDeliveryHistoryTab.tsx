@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Package, Clock, CheckCircle, XCircle, DollarSign, Loader2, Search, Filter, Printer, Calendar } from 'lucide-react';
-import { supabase } from '../../services/supabase';
+import { deliveryCreditService } from '../../services/deliveryCreditService';
 import toast from 'react-hot-toast';
 
 interface DeliveryRecord {
@@ -53,13 +53,8 @@ export default function TeamDeliveryHistoryTab({ memberId, memberName }: TeamDel
 
     const loadHistory = useCallback(async () => {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('delivery_credits')
-            .select(`*, sales ( customers ( name ) )`)
-            .eq('delivery_person_id', memberId)
-            .order('created_at', { ascending: false });
-
-        if (!error && data) {
+        try {
+            const data = await deliveryCreditService.listByDeliveryPersonId(memberId);
             setRecords(data.map((r: any) => ({
                 id: r.id,
                 sale_id: r.sale_id,
@@ -68,8 +63,11 @@ export default function TeamDeliveryHistoryTab({ memberId, memberName }: TeamDel
                 status: r.status,
                 created_at: r.created_at,
                 paid_at: r.paid_at,
-                customer_name: r.sales?.customers?.name ?? '—',
+                customer_name: r.customer_name ?? '-',
             })));
+        } catch (error) {
+            console.error('Error loading delivery history:', error);
+            toast.error('Erro ao carregar historico de entregas');
         }
         setLoading(false);
     }, [memberId]);
@@ -79,11 +77,7 @@ export default function TeamDeliveryHistoryTab({ memberId, memberName }: TeamDel
     const handleMarkPaid = async (record: DeliveryRecord) => {
         setPayingId(record.id);
         try {
-            const { error } = await supabase
-                .from('delivery_credits')
-                .update({ status: 'paid', paid_at: new Date().toISOString() })
-                .eq('id', record.id);
-            if (error) throw error;
+            await deliveryCreditService.markPaid(record.id);
             toast.success(`Entrega de ${record.customer_name} marcada como paga!`);
             await loadHistory();
         } catch (e: any) {

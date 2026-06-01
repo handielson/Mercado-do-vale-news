@@ -1,27 +1,10 @@
 require('dotenv/config');
 
-const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/+$/, '');
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-  || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
-  || process.env.SUPABASE_KEY
-  || process.env.SUPABASE_ANON_KEY
-  || process.env.VITE_SUPABASE_ANON_KEY
-  || '';
+const BASE_URL = String(process.env.VPS_API_BASE_URL || 'https://api.xiaomipetrolina.com.br').replace(/\/+$/, '');
 
-function buildSupabaseHeaders() {
-  return {
-    apikey: SUPABASE_KEY,
-    Authorization: `Bearer ${SUPABASE_KEY}`,
-    Accept: 'application/json',
-  };
-}
-
-async function supabaseSelect(table, query) {
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error('Supabase env vars missing');
-  }
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-    headers: buildSupabaseHeaders(),
+async function fetchVpsProducts(query) {
+  const response = await fetch(`${BASE_URL}/products?${query}`, {
+    headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(20000),
   });
   const text = await response.text();
@@ -32,18 +15,18 @@ async function supabaseSelect(table, query) {
     body = { parse_error: true, sample: text.slice(0, 160) };
   }
   if (!response.ok) {
-    const message = body?.message || body?.error || `Supabase HTTP ${response.status}`;
+    const message = body?.message || body?.error || `VPS HTTP ${response.status}`;
     throw new Error(String(message).slice(0, 160));
   }
-  return Array.isArray(body) ? body : [];
+  return Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [];
 }
 
 function looksLikeTestProduct(product) {
   const text = `${product?.name || ''} ${product?.sku || ''}`.toLowerCase();
-  return /\b(test|teste|homolog|sandbox|dummy|qa|validacao|validação)\b/.test(text);
+  return /\b(test|teste|homolog|sandbox|dummy|qa|validacao|validacao)\b/.test(text);
 }
 
-function sanitizeProductCandidate(product, source, linked = {}) {
+function sanitizeProductCandidate(product, source) {
   return {
     source,
     product_id: product?.id == null ? null : String(product.id),
@@ -51,8 +34,8 @@ function sanitizeProductCandidate(product, source, linked = {}) {
     track_inventory: product?.track_inventory == null ? null : !!product.track_inventory,
     has_stock: Number(product?.stock_quantity || 0) > 0,
     has_price: Number(product?.price_retail || 0) > 0,
-    linked_item: !!(product?.shopee_item_id || linked?.shopee_item_id),
-    linked_model: !!linked?.shopee_model_id,
+    linked_item: !!product?.shopee_item_id,
+    linked_model: !!product?.shopee_model_id,
     test_like: looksLikeTestProduct(product),
   };
 }
@@ -70,55 +53,18 @@ function uniqueByProductId(candidates) {
 }
 
 async function run() {
-  const productRows = await supabaseSelect(
-    'products',
-    [
-      'select=id,sku,name,status,track_inventory,stock_quantity,price_retail,shopee_item_id',
-      'shopee_item_id=not.is.null',
-      'order=updated_at.desc',
-      'limit=50',
-    ].join('&'),
-  );
+  const productRows = await fetchVpsProducts([
+    'status=all',
+    'include_parents=true',
+    'compact=true',
+    'limit=200',
+  ].join('&'));
 
-  let linkedRows = [];
-  try {
-    linkedRows = await supabaseSelect(
-      'shopee_products',
-      [
-        'select=product_id,shopee_item_id,shopee_model_id',
-        'shopee_item_id=not.is.null',
-        'limit=50',
-      ].join('&'),
-    );
-  } catch {
-    linkedRows = [];
-  }
-
-  const linkedProductIds = linkedRows
-    .map((row) => row?.product_id)
-    .filter((id) => id != null)
-    .slice(0, 50);
-
-  let linkedProductRows = [];
-  if (linkedProductIds.length > 0) {
-    linkedProductRows = await supabaseSelect(
-      'products',
-      [
-        'select=id,sku,name,status,track_inventory,stock_quantity,price_retail,shopee_item_id',
-        `id=in.(${linkedProductIds.map((id) => encodeURIComponent(String(id))).join(',')})`,
-        'limit=50',
-      ].join('&'),
-    );
-  }
-
-  const linkedByProductId = new Map(
-    linkedRows.map((row) => [String(row.product_id), row]),
-  );
-
-  const candidates = uniqueByProductId([
-    ...productRows.map((product) => sanitizeProductCandidate(product, 'products.shopee_item_id', linkedByProductId.get(String(product.id)))),
-    ...linkedProductRows.map((product) => sanitizeProductCandidate(product, 'shopee_products', linkedByProductId.get(String(product.id)))),
-  ]).sort((a, b) => Number(b.test_like) - Number(a.test_like));
+  const candidates = uniqueByProductId(
+    productRows
+      .filter((product) => product?.shopee_item_id || product?.shopee_model_id)
+      .map((product) => sanitizeProductCandidate(product, 'vps.products')),
+  ).sort((a, b) => Number(b.test_like) - Number(a.test_like));
 
   console.log(JSON.stringify({
     ok: true,

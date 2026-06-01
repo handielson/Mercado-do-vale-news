@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock, Loader2, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthLayout } from '../../components/auth/AuthLayout';
-import { useSupabaseAuth as useAuth } from '../../hooks/useSupabaseAuth';
+import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 
 export const RedefinirSenhaPage: React.FC = () => {
     const [password, setPassword] = useState('');
@@ -11,6 +11,8 @@ export const RedefinirSenhaPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const resetToken = searchParams.get('token') || '';
     const { updatePassword } = useAuth();
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -28,7 +30,7 @@ export const RedefinirSenhaPage: React.FC = () => {
 
         setLoading(true);
         try {
-            await updatePassword(password);
+            await updatePassword(password, resetToken);
             setSuccess(true);
             toast.success('Senha redefinida com sucesso!');
 
@@ -61,6 +63,11 @@ export const RedefinirSenhaPage: React.FC = () => {
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-4">
+                        {!resetToken && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                                Link de recuperacao ausente ou incompleto. Solicite um novo link antes de redefinir a senha.
+                            </div>
+                        )}
                         {/* New Password */}
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-slate-700">
@@ -115,7 +122,7 @@ export const RedefinirSenhaPage: React.FC = () => {
                         {/* Submit Button */}
                         <button
                             type="submit"
-                            disabled={loading}
+                            disabled={loading || !resetToken}
                             className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
                         >
                             {loading ? (

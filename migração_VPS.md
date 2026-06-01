@@ -1,6 +1,723 @@
 # Migração VPS
 
+## 2026-05-31 - Catalogo Bling sem Supabase operacional
+
+Mudanca: `blingService` deixou de usar `.from(...)` para `products`, `categories` e os ultimos `models`. A importacao Bling valida categorias pela VPS, grava produtos por `vpsApiService.updateProduct`/`createProduct`, resincroniza produtos por `updateProduct` e os helpers de dimensoes usam `modelService.getById`/`modelService.update`.
+
+Escopo admin/publico:
+
+- Admin afetado: Configuracoes > Bling, importacao de produtos, resincronizacao e push/pull de dimensoes.
+- Publico afetado: direto no catalogo, porque produtos, categorias, modelos e marcas agora passam pela VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\bling-import-products-vps-static.test.mjs`, `node tmp-tests\bling-import-categories-vps-static.test.mjs` e `node tmp-tests\bling-model-dimensions-vps-static.test.mjs` falharam antes das trocas.
+- `node tmp-tests\bling-import-products-vps-static.test.mjs`: OK.
+- `node tmp-tests\bling-import-categories-vps-static.test.mjs`: OK.
+- `node tmp-tests\bling-model-dimensions-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 0`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `products`, `categories`, `brands` e `models` sairam dos alvos `.from(...)`; a allowlist `products-catalog-migration-temporary` foi removida; o baseline Supabase caiu de `.from=10` para `.from=0`.
+
+Rollback: restaurar os caminhos Supabase no `blingService` e recolocar a allowlist de catalogo; nao recomendado porque reintroduz dados operacionais de catalogo fora da VPS.
+
+## 2026-05-31 - Modelo selecionado do Bling pela VPS
+
+Mudanca: `importBlingProducts` deixou de consultar `models` com join em `brands` pelo Supabase para carregar o modelo escolhido na importacao. Agora usa `modelService.getById(modelId)` e `brandService.getById(modelData.brand_id)`.
+
+Escopo admin/publico:
+
+- Admin afetado: importacao Bling quando o usuario seleciona um modelo manualmente.
+- Publico afetado: indireto, por manter descricao/modelo/marca dos produtos importados na base VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\bling-selected-model-vps-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\bling-selected-model-vps-static.test.mjs`: OK.
+- `node tmp-tests\bling-brands-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 10`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `models` caiu de 4 para 3 ocorrencias restantes e o baseline Supabase caiu de `.from=11` para `.from=10`.
+
+Rollback: restaurar a consulta direta a `supabase.from('models')` para o modelo selecionado e voltar baseline `.from=11`; nao recomendado porque reintroduz leitura de catalogo fora da VPS.
+
+## 2026-05-31 - Marcas do Bling pela VPS
+
+Mudanca: o helper de resolucao de marca no `blingService` deixou de consultar/criar `brands` pelo Supabase. A importacao de modelos do Bling agora resolve marcas por `brandService.list()` e cria ausentes por `brandService.create()`.
+
+Escopo admin/publico:
+
+- Admin afetado: importacao/sincronizacao de produtos e modelos do Bling.
+- Publico afetado: indireto, porque os produtos importados passam a referenciar marcas persistidas na VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\bling-brands-vps-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\bling-brands-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 11`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `brands` saiu dos alvos restantes e o baseline Supabase caiu de `.from=15` para `.from=11`.
+
+Rollback: restaurar o helper antigo com `supabase.from('brands')` e voltar baseline `.from=15`; nao recomendado porque recoloca criacao de marca do Bling fora da VPS.
+
+## 2026-05-31 - Modelos da planilha pela VPS
+
+Mudanca: `DataSyncService.generateDynamicTemplate` deixou de consultar `models` pelo Supabase para montar `template_values` e fallback de marca. A rotina agora usa `modelService.list()` e `vpsApiService.getBrands()`.
+
+Escopo admin/publico:
+
+- Admin afetado: geracao de template dinamico de planilha para importacao de produtos.
+- Publico afetado: indireto, pela qualidade dos dados importados para o catalogo VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\data-sync-models-vps-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\data-sync-models-vps-static.test.mjs`: OK.
+- `node tmp-tests\data-sync-products-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 15`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `models` caiu de 5 para 4 ocorrencias restantes e o baseline Supabase caiu de `.from=16` para `.from=15`.
+
+Rollback: restaurar a consulta direta a `supabase.from('models')` no `DataSyncService` e voltar baseline `.from=16`; nao recomendado porque recoloca dados de template de produto fora da VPS.
+
+## 2026-05-31 - Importacao de produtos por planilha pela VPS
+
+Mudanca: `DataSyncService.syncGoogleSpreadsheet` deixou de gravar `products` pelo Supabase. Produtos com `system_id` agora usam `vpsApiService.updateProduct`, e novos produtos usam `vpsApiService.createProduct`.
+
+Escopo admin/publico:
+
+- Admin afetado: importacao/sincronizacao de planilhas em Data Import/Export.
+- Publico afetado: direto no catalogo, pois os produtos criados/atualizados passam pela VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\data-sync-products-vps-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\data-sync-products-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 16`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `products` caiu de 5 para 3 ocorrencias restantes e o baseline Supabase caiu de `.from=18` para `.from=16`.
+
+Rollback: restaurar update/insert em `supabase.from('products')` no `DataSyncService` e voltar baseline `.from=18`; nao recomendado porque recoloca importacao admin de catalogo fora da VPS.
+
+## 2026-05-31 - Vinculo Bling ID pela VPS
+
+Mudanca: `BlingPage.reimportProduct` deixou de atualizar `products.bling_id` diretamente no Supabase. A rotina da pagina admin agora usa `vpsApiService.updateProduct` para vincular o ID encontrado no Bling.
+
+Escopo admin/publico:
+
+- Admin afetado: Configuracoes > Bling, checagem e reimportacao de produtos sem `bling_id`.
+- Publico afetado: indireto, pois o vinculo fica na base operacional da VPS/MySQL usada pelo catalogo.
+
+Validacao:
+
+- RED: `node tmp-tests\bling-page-product-link-vps-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\bling-page-product-link-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 18`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `products` caiu de 6 para 5 ocorrencias restantes e o baseline Supabase caiu de `.from=19` para `.from=18`.
+
+Rollback: restaurar o update direto em `supabase.from('products')` na `BlingPage` e voltar baseline `.from=19`; nao recomendado porque recoloca um fluxo admin do Bling fora da VPS.
+
+## 2026-05-31 - Precos de variacao pela VPS
+
+Mudanca: `priceHistoryService.applyPricesToVariation` agora atualiza produtos pela VPS com `vpsApiService.updateProduct`, mantendo o historico em `/table-data/product_price_history`.
+
+Escopo admin/publico:
+
+- Admin afetado: paineis de precos por modelo/variacao.
+- Publico afetado: direto, nos precos do catalogo publicados pela VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\price-history-vps-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\price-history-vps-static.test.mjs`: OK.
+- `node tmp-tests\price-history-null-regression.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 19`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `products` caiu de 7 para 6 e o baseline Supabase caiu de `.from=20` para `.from=19`.
+
+Rollback: restaurar o update Supabase de `products` em `applyPricesToVariation` e voltar baseline `.from=20`; nao recomendado porque recoloca escrita de preco fora da VPS.
+
+## 2026-05-31 - Company context pela VPS
+
+Mudanca: `companyContext.getCompanyId` agora resolve a empresa pela VPS em `/table-data/companies`. `LegacyMigration` e `blingService` deixaram de consultar `companies` diretamente e usam o helper compartilhado.
+
+Escopo admin/publico:
+
+- Admin afetado: migracao legada e integracao Bling.
+- Publico afetado: indireto, por manter o tenant/catalogo amarrado na VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\company-context-vps-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\company-context-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 20`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `companies` saiu dos alvos restantes e o baseline Supabase caiu de `.from=23` para `.from=20`.
+
+Rollback: restaurar as consultas Supabase de `companies` e voltar baseline `.from=23`; nao recomendado porque recoloca resolucao de empresa fora da VPS.
+
+## 2026-05-31 - Gerenciamento de permissoes pela VPS
+
+Mudanca: a tela `PermissionsManagementPage` removeu o CRUD direto de `user_permissions` no Supabase. A listagem e o salvamento agora usam `/table-data/user_permissions` na VPS, com recriacao em lote via `/bulk`.
+
+Escopo admin/publico:
+
+- Admin afetado: Configuracoes > Permissoes.
+- Publico afetado: indireto, pelas regras persistidas na VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\permissions-management-vps-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\permissions-management-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 23`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `user_permissions` saiu dos alvos restantes e o baseline Supabase caiu de `.from=26` para `.from=23`.
+
+Rollback: restaurar o CRUD Supabase de `user_permissions` e voltar baseline `.from=26`; nao recomendado porque recoloca permissoes admin fora da VPS.
+
+## 2026-05-31 - Ajuste manual de estoque pela VPS
+
+Mudanca: `inventoryService.adjustStock` deixou de gravar `products` e `stock_movements` via Supabase. A rotina agora le o produto pela VPS, atualiza `stock_quantity` com `vpsApiService.updateProduct`, registra auditoria em `/table-data/stock_movements` e consulta historico pela VPS.
+
+Escopo admin/publico:
+
+- Admin afetado: Inventario/Estoque, ajuste manual e historico de movimentacoes.
+- Publico afetado: indireto, porque o estoque publicado continua refletindo a base da VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\inventory-stock-adjustment-vps-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\inventory-stock-adjustment-vps-static.test.mjs`: OK.
+- `node tmp-tests\inventory-adjust-stock-vps-current-product-static.test.mjs`: OK.
+- `node tmp-tests\inventory-vps-products-static.test.mjs`: OK.
+- `node tmp-tests\inventory-service-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 27`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Extensao: a resolucao de `company_id` do usuario autenticado para auditoria do movimento tambem saiu de `supabase.from('users')` e passou a usar `/table-data/users`.
+
+Resultado: `stock_movements` e `users` sairam dos alvos restantes, `products` caiu de 9 para 7 e o baseline Supabase caiu de `.from=31` para `.from=26`.
+
+Rollback: restaurar as escritas Supabase de `products`/`stock_movements` e voltar baseline `.from=31`; nao recomendado porque recoloca ajustes de estoque fora da VPS.
+
+## 2026-05-31 - Analytics de vendas pela VPS
+
+Mudanca: os calculos do dashboard diario, digest de vendas e tags de vendas deixaram de usar `supabase.from('sales')`. `dashboardMetricsService`, `dashboardSalesDigestService` e `tagResolver` agora consultam vendas por `saleService.getSales`, mantendo a origem em `/table-data/sales` e itens via `/table-data/sale_items` na VPS/MySQL.
+
+Escopo admin/publico:
+
+- Admin afetado: dashboard, digest/relatorios operacionais e configuracoes de tags dinamicas.
+- Publico afetado: indireto, em mensagens/automacoes que resolvem tags de vendas do dia.
+
+Validacao:
+
+- RED: `node tmp-tests\sales-analytics-vps-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\sales-analytics-vps-static.test.mjs`: OK.
+- `node tmp-tests\sale-service-vps-table-data-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 31`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox; dentro do sandbox o Vite segue bloqueado ao resolver `vite.config.ts`.
+
+Resultado: `sales` saiu dos alvos restantes, a allowlist temporaria de vendas/clientes/financeiro foi removida e o baseline Supabase caiu de `.from=36` para `.from=31`.
+
+Rollback: restaurar os acessos diretos a `sales` nesses servicos e voltar baseline `.from=36`; nao recomendado porque recoloca os indicadores fora da VPS.
+
+## 2026-05-31 - Importacao legada de vendas pela VPS
+
+Mudanca: `LegacySalesImportTab` removeu os acessos diretos a `sales` e `sale_items` no Supabase. O diagnostico, limpeza de importacoes, criacao de vendas/itens legados e atualizacao de `legacy_pdf_url` agora usam `vpsClient` com `/table-data/sales` e `/table-data/sale_items/bulk`.
+
+Escopo admin/publico:
+
+- Admin afetado: Central de Importacao & Exportacao, aba de vendas legadas.
+- Publico afetado: indireto, porque as vendas importadas ficam na base operacional da VPS/MySQL usada pelo historico.
+
+Validacao:
+
+- RED: `node tmp-tests\legacy-sales-import-vps-sales-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\legacy-sales-import-vps-sales-static.test.mjs`: OK.
+- `node tmp-tests\legacy-sales-import-customers-vps-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 36`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `sales` caiu de 10 para 5 ocorrencias operacionais, `sale_items` saiu dos alvos restantes e o baseline Supabase caiu de `.from=43` para `.from=36`.
+
+Rollback: restaurar as leituras/escritas diretas de `sales`/`sale_items` na `LegacySalesImportTab` e voltar baseline `.from=43`; nao recomendado porque reintroduz vendas legadas fora da VPS.
+
+## 2026-05-31 - Sync VPS da importacao sem Supabase
+
+Mudanca: a aba `vps-sync` da `DataImportExportPage` deixou de buscar `products` no Supabase. Ela agora pagina produtos pela VPS (`vpsApiService.getProducts` com `offset`) e reaplica preco/estoque/status pelo `bulkSyncPricesStock`, removendo o papel do Supabase como fonte legado nessa ferramenta.
+
+Escopo admin/publico:
+
+- Admin afetado: Central de Importacao & Exportacao, aba de sync VPS.
+- Publico afetado: indireto, mantendo catalogo publico amarrado na VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\data-import-export-vps-sync-static.test.mjs` falhou antes da troca.
+- `node tmp-tests\data-import-export-vps-sync-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 43`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `products` caiu de 10 para 9 ocorrencias operacionais e o baseline Supabase caiu de `.from=44` para `.from=43`.
+
+Rollback: restaurar a leitura paginada via `supabase.from('products')` nessa aba e voltar baseline `.from=44`; nao recomendado porque reativa uma fonte legada dentro da ferramenta de migracao.
+
+## 2026-05-31 - SEO Dashboard grava catalogo pela VPS
+
+Mudanca: `SEODashboardPage` removeu os updates diretos em `products` no Supabase. A pagina ja carregava os produtos por `seoDashboardData.js` via VPS e agora tambem grava slugs/meta tags por `vpsApiService.getProductById(..., true)` + `vpsApiService.updateProduct`.
+
+Escopo admin/publico:
+
+- Admin afetado: painel SEO e geracao em lote de slugs/meta tags.
+- Publico afetado: indireto, porque os dados SEO continuam alimentando as paginas publicas, mas a escrita passa pela VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\seo-dashboard-products-vps-static.test.mjs` falhou antes da pagina usar `vpsApiService`.
+- `node tmp-tests\seo-dashboard-products-vps-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 44`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `products` caiu de 12 para 10 ocorrencias operacionais e o baseline Supabase caiu de `.from=46` para `.from=44`.
+
+Rollback: restaurar `supabase.from('products').update(...)` na `SEODashboardPage` e voltar baseline `.from=46`; nao recomendado porque reintroduz escrita de catalogo no Supabase.
+
+## 2026-05-31 - Shopee admin usa metadados de vinculo pela VPS
+
+Mudanca: `ShopeePage` passou a consumir `shopeeProductService` para todos os vinculos em `shopee_products`: listagem, importacao dos anuncios existentes, vinculo manual, apagar anuncio e vinculo, status, preco, rename, publicacao simples e publicacao com variacoes. O servico agora tambem expoe `upsert`, `upsertMany`, `updateByProductId`, `getByProductIds` e `deleteByShopeeItemId` sobre `/table-data/shopee_products`.
+
+Escopo admin/publico:
+
+- Admin afetado: pagina Shopee de configuracao/publicacao e seus fluxos de variacao.
+- Publico afetado: indireto, mantendo a fonte de vinculos da Shopee unificada na VPS para os servicos compartilhados de produto.
+
+Arquivos alterados:
+
+- `pages/admin/settings/ShopeePage.tsx`
+- `services/shopeeProducts.ts`
+- `tmp-tests/shopee-page-product-links-vps-static.test.mjs`
+- `tmp-tests/shopee-variation-modal-static.test.mjs`
+- `tmp-tests/shopee-existing-variation-flow-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migracao_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\shopee-page-product-links-vps-static.test.mjs` falhou antes da pagina usar `shopeeProductService`.
+- `node tmp-tests\shopee-page-product-links-vps-static.test.mjs`: OK.
+- `node tmp-tests\shopee-products-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\shopee-variation-modal-static.test.mjs`: OK.
+- `node tmp-tests\shopee-existing-variation-flow-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 46`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `shopee_products` saiu do inventario operacional Supabase; o baseline caiu de `.from=57` para `.from=46` e a allowlist de catalogo nao permite mais essa tabela.
+
+Rollback: restaurar o acesso direto a `supabase.from('shopee_products')` na `ShopeePage`, recolocar a tabela na allowlist e voltar baseline `.from=57`; nao recomendado porque desfaz a remocao do Supabase no caminho principal admin da Shopee.
+
+## 2026-05-31 - Metadados compartilhados da Shopee pela VPS
+
+Mudanca: criado `services/shopeeProducts.ts` para centralizar leitura/exclusao de `shopee_products` por `/table-data/shopee_products`. `useProducts`, `productService` e `ProductCard` passaram a usar esse servico para enriquecer produtos com `shopee_item_id` e limpar vinculos obsoletos.
+
+Escopo admin/publico:
+
+- Admin afetado: listagem/cache/busca de produtos e card de produto com estado/link Shopee.
+- Publico afetado: indireto, pelo `productService` compartilhado que preserva metadados vindos da VPS.
+
+Arquivos alterados:
+
+- `services/shopeeProducts.ts`
+- `hooks/useProducts.ts`
+- `services/products.ts`
+- `components/products/ProductCard.tsx`
+- `tmp-tests/shopee-products-service-vps-static.test.mjs`
+- `tmp-tests/use-products-shopee-link-state-static.test.mjs`
+- `tmp-tests/product-list-shopee-link-state-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migraÃ§Ã£o_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\shopee-products-service-vps-static.test.mjs` falhou antes de existir o servico VPS.
+- `node tmp-tests\shopee-products-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\use-products-shopee-link-state-static.test.mjs`: OK.
+- `node tmp-tests\product-list-shopee-link-state-static.test.mjs`: OK.
+- `node tmp-tests\product-card-status-stock-vps-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 57`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `shopee_products` caiu de 15 para 11 ocorrencias operacionais no audit, o baseline caiu de `.from=61` para `.from=57` e a allowlist `shopee-products-crossmodule-temporary` saiu.
+
+Rollback: restaurar as leituras/exclusao diretas de `shopee_products` em `useProducts`, `productService` e `ProductCard` e voltar baseline `.from=61`; nao recomendado porque desfaz o caminho compartilhado pela VPS.
+
+## 2026-05-31 - Migracao legada de clientes pela VPS
+
+Mudanca: `LegacyMigrationPage` removeu as leituras/escritas diretas de `customers` no Supabase. A verificacao de clientes existentes, migracao individual, migracao em lote e vinculacao de `user_id` apos criar conta Auth agora usam `customerService`.
+
+Escopo admin/publico:
+
+- Admin afetado: pagina/ferramenta de migracao legada de clientes.
+- Publico afetado: impacto indireto nos clientes migrados, que passam a cair na fonte operacional VPS/MySQL usada por login/perfil publicos.
+
+Arquivos alterados:
+
+- `pages/LegacyMigration.tsx`
+- `tmp-tests/legacy-migration-customers-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migraÃ§Ã£o_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\legacy-migration-customers-vps-static.test.mjs` falhou antes da troca para `customerService`.
+- `node tmp-tests\legacy-migration-customers-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 61`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `customers` saiu dos alvos operacionais do auditor e o baseline Supabase caiu de `.from=73` para `.from=61`. A allowlist `customer-core-temporary` tambem foi removida.
+
+Rollback: restaurar o acesso direto a `customers` no Supabase em `LegacyMigrationPage` e voltar baseline `.from=73`; nao recomendado porque recoloca clientes migrados fora da VPS.
+
+## 2026-05-31 - Contexto Supabase Auth usando clientes da VPS
+
+Mudanca: `SupabaseAuthContext` removeu o CRUD direto de `customers` pelo Supabase. O carregamento do cliente vinculado ao usuario Auth agora usa `customerService.getByUserId`; criacao por OAuth e cadastro publico usam `customerService.create`; ativacao, perfil e preview admin usam `customerService.update`.
+
+Escopo admin/publico:
+
+- Admin afetado: carregamento da sessao admin e persistencia do `admin_preview_type`.
+- Publico afetado: criacao/ativacao de conta, criacao por OAuth e atualizacao de perfil de cliente.
+
+Arquivos alterados:
+
+- `contexts/SupabaseAuthContext.tsx`
+- `tmp-tests/supabase-auth-customer-service-only-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migraÃ§Ã£o_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\supabase-auth-customer-service-only-static.test.mjs` falhou antes da remocao das chamadas `.from('customers')`.
+- `node tmp-tests\supabase-auth-customer-service-only-static.test.mjs`: OK.
+- `node tmp-tests\supabase-auth-cpf-vps-customer-static.test.mjs`: OK.
+- `node tmp-tests\auth-context-vps-customer-static.test.mjs`: OK.
+- `node tmp-tests\customer-service-vps-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 73`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `customers` caiu de 19 para 12 ocorrencias operacionais no audit e o baseline Supabase caiu de `.from=80` para `.from=73`.
+
+Rollback: restaurar o CRUD direto de `customers` em `SupabaseAuthContext` e voltar baseline `.from=80`; nao recomendado porque desfaz uma fatia compartilhada entre admin e publico.
+
+## 2026-05-31 - Login publico por CPF pela VPS
+
+Mudanca: `contexts/SupabaseAuthContext.tsx` passou a usar `customerService.getByCpfCnpj` para `checkCPF` e `signInWithCpf`. A busca do cliente/e-mail por CPF agora vem da VPS/MySQL, e o Supabase fica somente na etapa de Auth do login.
+
+Escopo admin/publico:
+
+- Publico afetado: cadastro/login de cliente, especialmente validacao de CPF e login por CPF.
+- Admin afetado: nenhum fluxo admin nesta fatia.
+
+Arquivos alterados:
+
+- `contexts/SupabaseAuthContext.tsx`
+- `services/customers.ts`
+- `tmp-tests/supabase-auth-cpf-vps-customer-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migraÃ§Ã£o_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\supabase-auth-cpf-vps-customer-static.test.mjs` falhou antes de trocar os lookups por `customerService`.
+- `node tmp-tests\supabase-auth-cpf-vps-customer-static.test.mjs`: OK.
+- `node tmp-tests\customer-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 80`, `.rpc(...) = 24`, `supabase.storage = 0`, `supabase.auth = 37`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `customers` caiu de 21 para 19 ocorrencias operacionais no audit e o baseline Supabase caiu de `.from=82` para `.from=80`.
+
+Rollback: restaurar as leituras diretas de `customers` em `checkCPF` e `signInWithCpf` e voltar baseline `.from=82`; nao recomendado porque desfaz mais um caminho publico ja coberto pela VPS.
+
+## 2026-05-31 - AuthContext legado pela VPS
+
+Mudanca: `contexts/AuthContext.tsx` deixou de buscar perfil de cliente por `supabase.from('customers')`. A busca por `user_id` agora passa por `customerService.getByUserId(userId)`, usando a camada VPS/MySQL ja criada para clientes.
+
+Escopo admin/publico:
+
+- Admin afetado: nenhum fluxo visual ativo; reducao preventiva de dependencia em contexto legado.
+- Publico afetado: nenhum fluxo visual ativo; o provider ativo segue em `SupabaseAuthProvider`.
+
+Arquivos alterados:
+
+- `contexts/AuthContext.tsx`
+- `tmp-tests/auth-context-vps-customer-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migraÃ§Ã£o_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\auth-context-vps-customer-static.test.mjs` falhou antes da troca para `customerService`.
+- `node tmp-tests\auth-context-vps-customer-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 82`, `.rpc(...) = 24`, `supabase.storage = 0`, `supabase.auth = 37`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `customers` caiu de 22 para 21 ocorrencias operacionais no audit e o baseline Supabase caiu de `.from=83` para `.from=82`.
+
+Rollback: restaurar a leitura direta de `customers` no contexto legado e voltar baseline `.from=83`; nao recomendado porque desfaz mais um caminho de cliente ja coberto pela VPS.
+
+## 2026-05-31 - Fallback do login admin pela VPS
+
+Mudanca: o fallback de seguranca em `AdminLoginPage` deixou de consultar `customers` pelo Supabase quando o contexto de auth demora a carregar o perfil. A tela agora usa `customerService.getByUserId(user.id)`, mantendo Supabase somente para autenticar e encerrar sessao.
+
+Escopo admin/publico:
+
+- Admin afetado: login administrativo, somente no fallback de timeout.
+- Publico afetado: nenhum fluxo publico nesta fatia.
+
+Arquivos alterados:
+
+- `pages/auth/AdminLoginPage.tsx`
+- `services/customers.ts`
+- `tmp-tests/admin-login-vps-customer-fallback-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migraÃ§Ã£o_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\admin-login-vps-customer-fallback-static.test.mjs` falhou antes da troca para `customerService`.
+- `node tmp-tests\admin-login-vps-customer-fallback-static.test.mjs`: OK.
+- `node tmp-tests\customer-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 83`, `.rpc(...) = 24`, `supabase.storage = 0`, `supabase.auth = 37`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `customers` caiu de 23 para 22 ocorrencias operacionais no audit e o baseline Supabase caiu de `.from=84` para `.from=83`.
+
+Rollback: restaurar a consulta direta de `customers` no fallback do login admin e voltar baseline `.from=84`; nao recomendado porque desfaz mais um caminho admin ja coberto pela VPS.
+
+## 2026-05-31 - Clientes da importacao legada pela VPS
+
+Mudanca: a analise da aba `LegacySalesImportTab` passou a carregar clientes pelo `customerService`, que usa a VPS/MySQL por `/table-data/customers`. O cruzamento de vendas antigas do MV-Gestao continua usando CPF normalizado para montar os matches, mas sem ler `customers` direto no Supabase.
+
+Escopo admin/publico:
+
+- Admin afetado: ferramenta de importacao legada de vendas, na fase de diagnostico/match de clientes.
+- Publico afetado: nenhum fluxo publico nesta fatia.
+
+Arquivos alterados:
+
+- `components/import/LegacySalesImportTab.tsx`
+- `tmp-tests/legacy-sales-import-customers-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migraÃ§Ã£o_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\legacy-sales-import-customers-vps-static.test.mjs` falhou antes de remover a leitura Supabase de `customers`.
+- `node tmp-tests\legacy-sales-import-customers-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 84`, `.rpc(...) = 24`, `supabase.storage = 0`, `supabase.auth = 37`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `customers` caiu de 24 para 23 ocorrencias operacionais no audit e o baseline Supabase caiu de `.from=85` para `.from=84`.
+
+Rollback: restaurar a leitura direta de `customers` na aba de importacao legada e voltar baseline `.from=85`; nao recomendado porque desfaz mais uma leitura admin ja coberta pela VPS.
+
+## 2026-05-31 - Codigo de indicacao cashback pela VPS
+
+Mudanca: `validateReferralCode` em `cashbackService` passou a validar codigos de indicacao lendo `customers` pela VPS em `/table-data/customers`. A regra continua bloqueando o proprio codigo do cliente e retornando o nome do indicador, mas sem consulta direta a `supabase.from('customers')`.
+
+Escopo admin/publico:
+
+- Publico afetado: fluxo autenticado/publico de indicacao/cashback que valida `referral_code`.
+- Admin afetado: nenhum fluxo visual novo nesta fatia; os RPCs de moedas continuam pendentes para uma etapa propria.
+
+Arquivos alterados:
+
+- `services/cashbackService.ts`
+- `tmp-tests/cashback-referral-vps-customers-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migraÃ§Ã£o_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\cashback-referral-vps-customers-static.test.mjs` falhou antes da troca para VPS.
+- `node tmp-tests\cashback-referral-vps-customers-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 85`, `.rpc(...) = 24`, `supabase.storage = 0`, `supabase.auth = 37`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `customers` caiu de 26 para 24 ocorrencias operacionais no audit e o baseline Supabase caiu de `.from=87` para `.from=85`.
+
+Rollback: restaurar as consultas diretas a `customers` dentro de `validateReferralCode` e voltar baseline `.from=87`; nao recomendado porque reintroduz Supabase em um fluxo publico de cashback.
+
+## 2026-05-31 - Busca de clientes no PDV/Frete pela VPS
+
+Mudanca: `CustomerSection` no PDV e `FreightCalculator` passaram a buscar clientes pelo `customerService`, que ja usa a VPS/MySQL por `/table-data/customers`. A busca central agora considera nome, CPF/CNPJ, telefone e e-mail, incluindo comparacao por digitos para CPF/CNPJ e telefone com ou sem mascara.
+
+Escopo admin/publico:
+
+- Admin/PDV afetado: clientes recentes e busca de cliente no PDV; busca de cliente no calculador de frete para preencher destino e dados de etiqueta.
+- Publico afetado: nenhum fluxo publico novo nesta fatia.
+
+Arquivos alterados:
+
+- `components/pdv/CustomerSection.tsx`
+- `components/shipping/FreightCalculator.tsx`
+- `services/customers.ts`
+- `tmp-tests/customer-components-vps-service-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migraÃ§Ã£o_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\customer-components-vps-service-static.test.mjs` falhou antes de remover as consultas diretas Supabase dos componentes.
+- `node tmp-tests\customer-components-vps-service-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 87`, `.rpc(...) = 24`, `supabase.storage = 0`, `supabase.auth = 37`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `customers` caiu de 29 para 26 ocorrencias operacionais no audit e o baseline Supabase caiu de `.from=90` para `.from=87`.
+
+Rollback: restaurar as consultas diretas em `CustomerSection`/`FreightCalculator` e voltar baseline `.from=90`; nao recomendado porque reintroduz Supabase em fluxos de admin/PDV ja cobertos pela VPS.
+
+## 2026-05-31 - Clientes admin/PDV pela VPS
+
+Mudanca: `customerService` passou a usar a VPS como fonte operacional para clientes. O servico carrega `customers` por `/table-data/customers` paginado, aplica filtros por empresa/search/status/data no cliente, cria clientes com ID local e `referral_code`, atualiza por `PATCH /table-data/customers/:id?pk=id` e exclui por `DELETE /table-data/customers/:id?pk=id`. Campos JSON como `address` e `custom_data` sao serializados na escrita e normalizados na leitura.
+
+Escopo admin/publico:
+
+- Admin afetado: telas e componentes que usam `customerService`, incluindo cadastro/listagem de clientes, seletores de cliente em cashback/pedidos e a contagem ativa.
+- PDV afetado: criacao e busca central de clientes pelo servico compartilhado.
+- Publico afetado: nenhum fluxo publico novo nesta fatia; o perfil autenticado e a pagina publica de moedas continuam cobertos pelas etapas anteriores.
+
+Arquivos alterados:
+
+- `services/customers.ts`
+- `tmp-tests/customer-service-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migraÃ§Ã£o_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\customer-service-vps-static.test.mjs` falhou antes da migracao do `customerService`.
+- `node tmp-tests\customer-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 90`, `.rpc(...) = 24`, `supabase.storage = 0`, `supabase.auth = 37`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox; avisos nao bloqueantes conhecidos permanecem.
+
+Resultado: `customers` caiu de 36 para 29 ocorrencias operacionais no audit e o baseline Supabase caiu de `.from=97` para `.from=90`. Proxima fatia natural: remover acessos diretos restantes de `customers` em componentes legados ou atacar `shopee_products`.
+
+Rollback: voltar o `customerService` para Supabase e restaurar baseline `.from=97`; nao recomendado porque desfaz o CRUD central de clientes pela VPS.
+
+## 2026-05-31 - Pagina publica Moedas sem consulta direta Supabase
+
+Mudanca: `pages/catalog/CoinsInfoPage.tsx` deixou de buscar `customers.referral_code` via Supabase. A pagina agora usa `useSupabaseAuth()` e mostra o codigo de indicacao a partir de `customer.referral_code`, que ja vem do contexto de autenticacao.
+
+Escopo admin/publico:
+
+- Admin afetado: nenhum.
+- Publico afetado: pagina publica `/moedas`/informacoes das Moedas do Vale, removendo uma leitura direta de `customers`.
+
+Arquivos alterados:
+
+- `pages/catalog/CoinsInfoPage.tsx`
+- `tmp-tests/coins-info-page-customer-context-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migracao_supabase.md`
+- `migração_VPS.md`
+
+Validacao:
+
+- `node tmp-tests\coins-info-page-customer-context-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 97`, `.rpc(...) = 24`, `supabase.storage = 0`, `supabase.auth = 37`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: a dependencia operacional em `customers` caiu de 37 para 36 e o baseline do guard caiu de `.from=98` para `.from=97`.
+
+Rollback: restaurar a consulta direta a `supabase.from('customers')` na pagina e voltar o baseline `.from=98`; nao recomendado porque recoloca Supabase no caminho publico.
+
+## 2026-05-31 - Cliente VPS desacoplado do Supabase estatico
+
+Mudanca: `services/vpsClient.ts` deixou de importar `services/supabase.ts` de forma estatica. O token Supabase agora e obtido via `getSupabaseClient()` somente quando a chamada precisa montar headers autenticados; se a sessao nao estiver disponivel, o cliente continua sem `Authorization` e preserva os headers da VPS.
+
+Escopo admin/publico:
+
+- Admin afetado: fluxos que usam `vpsClient` seguem anexando Bearer token quando existe sessao Supabase.
+- Publico afetado: pagina publica e catalogo nao precisam carregar o cliente Supabase apenas para leituras pela VPS.
+
+Arquivos alterados:
+
+- `services/vpsClient.ts`
+- `tmp-tests/vps-client-lazy-supabase-static.test.mjs`
+- `migracao_supabase.md`
+- `migração_VPS.md`
+
+Validacao:
+
+- `node tmp-tests\vps-client-lazy-supabase-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 98`, `.rpc(...) = 24`, `supabase.storage = 0`, `supabase.auth = 38`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox; avisos nao bloqueantes conhecidos de chunks/imports permanecem.
+
+Resultado: a VPS continua sendo o caminho comum de dados, mas o cliente compartilhado nao inicializa Supabase no runtime publico por padrao.
+
+Rollback: restaurar o import estatico `import { supabase } from './supabase'` em `vpsClient.ts` e remover o teste novo; nao recomendado porque aumenta novamente o acoplamento do catalogo publico com Supabase.
+
 Este documento define as regras para conduzir a migração do Mercado do Vale para a VPS, com foco em remover dependências da Vercel e usar a VPS como infraestrutura principal do sistema.
+
+## 2026-05-31 - Vendas PDV pela VPS
+
+Mudanca: o `saleService` passou a usar a VPS como fonte para criar venda, gravar itens, buscar venda por ID, listar vendas, calcular resumo, cancelar, estornar e excluir vendas PDV. `createSale` grava `sales` por `/table-data/sales`, grava itens por `/table-data/sale_items/bulk` e usa rollback por `/table-data/sales/:id`; os demais fluxos carregam `/table-data/sales`, `/table-data/sale_items`, `/table-data/customers` e `/table-data/team_members`, com filtros e hidratacao no servico. As escritas de status usam `/table-data/sales/:id`.
+
+Pendencias preservadas: RPC de referral (`process_referral_reward`) e RPCs de estoque continuam separados para outra fatia transacional.
+
+Escopo admin/publico: mudanca somente em fluxos administrativos/PDV. Nenhuma pagina publica foi afetada diretamente.
+
+Arquivos alterados:
+
+- `services/saleService.ts`
+- `tmp-tests/sale-service-vps-table-data-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `docs/superpowers/plans/2026-05-31-sales-vps-table-data.md`
+- `migracao_supabase.md`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\sale-service-vps-table-data-static.test.mjs` falhou antes da migracao dos helpers VPS e voltou a falhar enquanto `createSale` ainda nao usava `createLocalId`/`vpsClient`.
+- `node tmp-tests\sale-service-vps-table-data-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 98`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK via Vite; apenas avisos nao bloqueantes de chunk/import.
+
+Atualizacao adicional: a busca do nome do comprador no referral agora usa `/table-data/customers`, reduzindo mais uma leitura direta de `customers`.
+
+Resultado: o PDV reduziu dependencias operacionais Supabase de `.from=112` para `.from=98`, com `sales` em 10 ocorrencias, `sale_items` em 2 e `customers` em 37. Proxima fatia natural: atacar mais chamadas de `customers` ou isolar os RPCs de estoque/cashback da venda.
+
+Rollback: voltar `saleService` para criacao, leituras e mutacoes diretas Supabase e restaurar baseline `.from=112`; nao recomendado porque desfaz uma reducao validada da migracao VPS.
 
 ## Objetivo Principal
 
@@ -20,6 +737,837 @@ A VPS deve ser tratada como o centro da aplicação:
 - deploy e rollback.
 
 Tudo que não puder ir para a VPS deve ter justificativa clara e alternativa proposta.
+
+## Regra Permanente - Admin e Pagina Publica
+
+Sempre que uma mudanca da migracao afetar um fluxo usado tanto pela pagina do admin quanto pela pagina publica, a implementacao, os testes e a documentacao devem cobrir explicitamente os dois lados.
+
+Antes de considerar a etapa concluida, verificar e registrar:
+
+- qual tela/fluxo do admin foi afetado;
+- qual tela/fluxo publico foi afetado;
+- quais testes cobrem o admin;
+- quais testes cobrem a pagina publica;
+- se o build passou depois da mudanca;
+- se a etapa foi apenas validada localmente ou tambem publicada no VPS.
+
+Quando a mudanca afetar somente admin ou somente publico, documentar isso de forma explicita para evitar ambiguidade no historico da migracao.
+
+## 2026-05-30 - Unidades serializadas via VPS no admin e rastreio publico
+
+Mudanca: `units` deixou de ser lida diretamente do Supabase na tela admin `/admin/serializados` e na pagina publica `/pedido/:id`. `services/units.ts` passou a expor `listAll()` para o admin e `listByIds()` para o rastreio publico; `services/vpsApiService.ts` ganhou `getUnits()` com filtros genericos; e a rota VPS `/units` agora aceita `company_id` e `ids`, alem de hidratar `product_name`/`product_sku` via join com `products`.
+
+Escopo admin/publico:
+
+- Admin afetado: `/admin/serializados`, listagem e filtro de unidades serializadas por status.
+- Publico afetado: `/pedido/:id`, exibicao de IMEI/serial quando os documentos serializados do pedido ja foram liberados.
+
+Validacao:
+
+- RED: `node tmp-tests\serialized-units-vps-only-static.test.mjs` falhou enquanto o admin ainda nao usava `unitService.listAll()` e o rastreio publico ainda nao usava `unitService.listByIds()`.
+- `node tmp-tests\serialized-units-vps-only-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 121`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+- `node tmp-tests\units-swap-logs-vps-static.test.mjs`: OK.
+- `node tmp-tests\serialized-units-swap-logs-vps-static.test.mjs`: OK.
+- `node tmp-tests\order-tracking-vps-products-static.test.mjs`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node --check vps_server.js`: OK.
+- `npm.cmd run build`: OK fora do sandbox; Vite manteve apenas avisos conhecidos de chunking/import dinamico misturado.
+
+Publicacao VPS:
+
+- API: `node deploy-vps-server-only.cjs` publicou `vps_server.js`/`server.js` em `/var/www/mdv-api` e reiniciou `mdv-api` no PM2.
+- Site: `npm.cmd run deploy:vps-site` publicou a release `/var/www/mdv-site/releases/20260530-211604`.
+- Verificacao online: `https://api.xiaomipetrolina.com.br/units?company_id=...&status=all` respondeu `200`; `https://www.mercadodovale.com.br/admin/serializados` respondeu `200 OK`; `https://www.mercadodovale.com.br/pedido/teste` respondeu `200 OK`.
+
+Resultado: `units` saiu da allowlist temporaria do auditor e o baseline operacional Supabase caiu de `.from=124` para `.from=121`. A leitura de unidades serializadas agora passa pela VPS tanto no admin quanto no fluxo publico de rastreio.
+
+Rollback: restaurar as leituras diretas de `units` em `SerializedUnitsPage` e `OrderTrackingPage`, recolocar `units` na allowlist `inventory-and-operations-temporary` e voltar o baseline `.from=124`; nao recomendado porque reintroduz Supabase em um fluxo compartilhado admin/publico.
+
+## 2026-05-30 - Historico de movimentacoes com nome do produto
+
+Mudanca: a tela admin `/admin/inventory/locations`, no bloco "Historico de movimentacoes", deixou de exibir o UUID cru em `Produto`. A rota VPS `/stock-locations/movements` agora hidrata cada movimento com `product.name`, `product.sku`, `product.ean` e `product.specs` via join com `products`, e a interface usa esses dados para mostrar o nome/SKU/especificacoes. Quando o produto nao puder ser encontrado, a tela mostra "Produto nao encontrado" em vez do ID tecnico.
+
+Escopo admin/publico: mudanca somente no admin de estoque. Nenhuma pagina publica foi afetada.
+
+Validacao:
+
+- RED: `node tmp-tests\stock-locations-movements-page-static.test.mjs` falhou enquanto o contrato de movimentos nao aceitava `product` hidratado e a tela ainda podia retornar `movement.product_id`.
+- `node tmp-tests\stock-locations-movements-page-static.test.mjs`: OK.
+- `node tmp-tests\stock-location-service-static.test.mjs`: OK.
+- `node tmp-tests\vps-stock-location-contract-static.test.mjs`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node --check vps_server.js`: OK.
+- `npm.cmd run build`: OK fora do sandbox; Vite manteve apenas avisos conhecidos de chunking/import dinamico misturado.
+
+Publicacao VPS:
+
+- API: `node deploy-vps-server-only.cjs` publicou `vps_server.js`/`server.js` em `/var/www/mdv-api` e reiniciou `mdv-api` no PM2.
+- Site: `npm.cmd run deploy:vps-site` publicou a release `/var/www/mdv-site/releases/20260530-205157`.
+- Verificacao online: `https://www.mercadodovale.com.br/admin/inventory/locations` respondeu `200 OK`; a API `/stock-locations/movements?limit=3` respondeu `200` com `product.name` para o produto `NV-C29`.
+
+Resultado: o historico de estoque fica legivel para operacao e auditoria, exibindo o nome do produto em vez de IDs internos.
+
+Rollback: restaurar o `SELECT *` anterior em `/stock-locations/movements` e o fallback antigo da coluna Produto; nao recomendado porque volta a expor UUIDs na tela admin.
+
+## 2026-05-30 - Transferencia em lote com origem explicita
+
+Mudanca: a tela admin `/admin/inventory/locations`, no bloco "Transferencia em lote", passou a exibir o seletor de estoque de origem mesmo quando existe apenas uma origem com saldo. A coluna de quantidade tambem ficou explicita como "Quantidade a movimentar". A lista de opcoes do seletor agora vem da distribuicao completa do item, para permitir trocar a origem depois da primeira selecao; a transferencia efetiva continua usando somente a origem escolhida.
+
+Escopo admin/publico: mudanca somente no admin de estoque. Nenhuma pagina publica foi afetada.
+
+Validacao:
+
+- RED: `node tmp-tests\stock-location-batch-origin-selection-static.test.mjs` falhou enquanto a linha do lote nao tinha seletor explicito para origem unica.
+- `node tmp-tests\stock-location-batch-origin-selection-static.test.mjs`: OK.
+- `node tmp-tests\stock-location-batch-transfer-static.test.mjs`: OK.
+- `node tmp-tests\stock-location-batch-transfer-draft-quota-static.test.mjs`: OK.
+- `npm.cmd run build`: OK fora do sandbox; Vite manteve apenas avisos conhecidos de chunking/import dinamico misturado.
+
+Resultado: o operador consegue escolher explicitamente o estoque de origem e informar a quantidade que sera movimentada antes de transferir o lote, evitando a mensagem de erro sem um controle visivel para resolver.
+
+Complemento: quando uma das fontes do produto ja e o proprio local de destino selecionado, ela permanece visivel no seletor e no resumo, mas fica desabilitada com a indicacao "ja esta no destino". A transferencia continua permitindo apenas origens diferentes do destino.
+
+Rollback: restaurar a renderizacao condicional anterior em `StockLocationsPage.tsx`; nao recomendado porque volta a esconder a escolha de origem quando ha apenas uma origem real.
+
+## 2026-05-30 - Pedidos online via VPS table-data
+
+Mudanca: `services/orderService.ts` deixou de ler/gravar `orders` e `order_items` pelo Supabase. Criacao, listagem, busca por ID, atualizacao de status, cancelamento, confirmacao de pagamento e salvamento de resultado de gateway agora passam por `/table-data/orders` e `/table-data/order_items` via `vpsClient`. A pagina publica continua usando `createOrder`/`getOrderById` em `CheckoutPage`, `OrderConfirmationPage` e `OrderTrackingPage`; o admin continua usando `getOrders`, `updateOrderStatus`, `completeOnDeliveryOrder` e `cancelOrder` em `OnlineOrdersPage`. `SerializedUnitsPage` tambem deixou de atualizar `orders.serialized_docs_released` diretamente pelo Supabase e passou pelo `orderService`.
+
+Objetivo: remover a dependencia operacional de pedidos online do frontend sem alterar as regras de pagamento, reserva/baixa de estoque, cashback pendente, alerta Telegram, rastreamento publico e painel admin.
+
+Validacao:
+
+- RED: `node tmp-tests\orders-service-vps-static.test.mjs` falhou enquanto `orderService` ainda usava `supabase.from('orders')` e `supabase.from('order_items')`.
+- `node tmp-tests\orders-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\order-stock-restore-by-location-static.test.mjs`: OK.
+- `node tmp-tests\order-stock-reservation-static.test.mjs`: OK.
+- `node tmp-tests\order-priority-stock-decrement-static.test.mjs`: OK.
+- `node tmp-tests\order-average-vps-products-static.test.mjs`: OK.
+- `node tmp-tests\order-tracking-vps-products-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 124`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `orders`, `order_items` e `order_status_history` sairam da allowlist temporaria do auditor, e o baseline operacional Supabase caiu de `.from=149` para `.from=124`. Os RPCs legados de estoque/cashback acionados pelo ciclo de pagamento continuam no backlog proprio.
+
+Rollback: restaurar o uso direto de Supabase em `services/orderService.ts` e `SerializedUnitsPage`, recolocar `orders-temporary` na allowlist e voltar o baseline `.from=149`; nao recomendado porque reintroduz pedidos publicos/admin fora da VPS.
+
+## 2026-05-30 - Credenciais e tokens Bling via VPS company-settings
+
+Mudanca: `pages/admin/settings/BlingPage.tsx`, `pages/admin/settings/BlingCallbackPage.tsx` e `services/blingService.ts` deixaram de ler/gravar `company_settings` pelo Supabase para credenciais e tokens Bling. A leitura e persistencia agora passam por `companySettingsService` e pela rota VPS `/company-settings`; a troca OAuth usa a rota VPS `/api/bling?resource=exchange`.
+
+Objetivo: remover o ultimo bloco de configuracao Bling que ainda dependia de Supabase direto para `company_settings`, mantendo o fluxo de conexao, expiracao e refresh de token.
+
+Validacao:
+
+- RED: `node tmp-tests\bling-company-settings-vps-static.test.mjs` falhou enquanto BlingPage, BlingCallbackPage e blingService ainda usavam `supabase.from('company_settings')`.
+- `node tmp-tests\bling-company-settings-vps-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 149`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox; Vite manteve apenas avisos ja conhecidos de chunking/import dinamico misturado.
+
+Resultado: `company_settings` saiu dos alvos restantes do inventario operacional frontend, e o baseline Supabase foi reduzido de `.from=157` para `.from=149`.
+
+Rollback: restaurar as leituras/escritas diretas em BlingPage, BlingCallbackPage e blingService e voltar o baseline `.from=157`; nao recomendado porque reintroduz credenciais/tokens Bling fora da rota central da VPS.
+
+## 2026-05-30 - Status de conexao Shopee via dados da empresa VPS
+
+Mudanca: `pages/admin/settings/ShopeePage.tsx` deixou de consultar `company_settings` pelo Supabase durante `loadData()`. A tela agora usa o `getCompanyData()` ja carregado da VPS para definir `shopee_access_token`/`shopee_shop_id` e marcar o status de conexao da Shopee.
+
+Objetivo: remover uma consulta redundante de configuracao da empresa fora da VPS sem alterar os fluxos de catalogo/pedidos Shopee ainda pendentes.
+
+Validacao:
+
+- RED: `node tmp-tests\shopee-page-company-settings-vps-static.test.mjs` falhou enquanto a pagina ainda usava `supabase.from('company_settings')`.
+- `node tmp-tests\shopee-page-company-settings-vps-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 157`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `company_settings` caiu de 9 para 8 chamadas diretas no inventario, e o baseline operacional Supabase foi reduzido para `.from=157`.
+
+Rollback: restaurar a leitura direta anterior em `ShopeePage` e voltar o baseline `.from=158`; nao recomendado porque duplica no Supabase uma informacao ja carregada da VPS.
+
+## 2026-05-30 - Feedbacks de cliente via VPS table-data
+
+Mudanca: `services/feedbackService.ts` deixou de usar Supabase para `company_settings` e `customer_feedbacks`. O servico agora resolve `company_id` por `companySettingsService.get()` na rota VPS `/company-settings`, cria/lista/conta/atualiza/remove feedbacks por `/table-data/customer_feedbacks`, pagina os resultados em lotes de 200 e preserva filtros por status/tipo e ordenacao local por `created_at` desc.
+
+Objetivo: mover o fluxo publico/admin de feedbacks para a VPS e remover mais uma leitura direta de `company_settings` no frontend.
+
+Validacao:
+
+- RED: `node tmp-tests\feedback-service-vps-static.test.mjs` falhou enquanto `feedbackService` importava Supabase.
+- `node tmp-tests\feedback-service-vps-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 158`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: `customer_feedbacks` passa pela rota generica da VPS e o inventario operacional Supabase caiu de `.from=159` para `.from=158`.
+
+Rollback: restaurar a versao anterior de `services/feedbackService.ts` e voltar o baseline `.from=159`; nao recomendado porque reintroduz envio/listagem de feedbacks fora da VPS.
+
+## 2026-05-30 - Dados publicos e administrativos da empresa via VPS
+
+Mudanca: `services/companyService.ts` deixou de manter fallback Supabase para `company_settings`. Leitura, atualizacao e reset passam a usar somente a rota protegida `/company-settings` pela `vpsClient`. `services/publicCompanySettings.ts` tambem deixou de importar Supabase dinamicamente: o catalogo publico, loja, manutencao e componentes publicos agora leem apenas `/public/company-settings`, preservando cache em memoria/localStorage e sanitizacao dos campos expostos.
+
+Objetivo: reduzir a dependencia operacional Supabase do bloco de configuracao administrativa, usando a VPS como fonte unica para dados da empresa em fluxos publicos e internos.
+
+Validacao:
+
+- RED: `node tmp-tests\company-service-vps-only-static.test.mjs` falhou enquanto `companyService` ainda importava Supabase e `USE_VPS.company`.
+- RED: `node tmp-tests\public-company-settings-vps-only-static.test.mjs` falhou enquanto `publicCompanySettings` ainda tinha fallback Supabase.
+- `node tmp-tests\company-service-vps-only-static.test.mjs`: OK.
+- `node tmp-tests\public-company-settings-vps-only-static.test.mjs`: OK.
+- `node tmp-tests\company-settings-service-vps-only-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 159`, `.rpc(...) = 24`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o inventario operacional Supabase caiu de `.from=165` para `.from=159`, e o baseline do auditor foi reduzido para 159.
+
+Rollback: restaurar os fallbacks Supabase anteriores em `companyService` e `publicCompanySettings`, e voltar o baseline `.from=165`; nao recomendado porque reintroduz leitura/escrita de configuracao da empresa fora da VPS.
+
+## 2026-05-30 - Galerias modelo/cor via VPS table-data
+
+Mudanca: `model_color_images` deixou de ser consultada pelo Supabase nos servicos de catalogo. `services/model-color-images.ts` agora pagina `/table-data/model_color_images` pela VPS, normaliza tanto linhas antigas com `image_url/display_order` quanto o formato atual com `images[]`, e centraliza leitura, upsert e exclusao. `services/modelColorImages.ts` virou apenas uma fachada de compatibilidade para consumidores antigos. `catalogService`, `catalogSectionsService` e `modelImageCache` passaram a buscar fallback de imagens por modelo/cor pelo servico VPS.
+
+Objetivo: manter as imagens compartilhadas de produto novo/modelo/cor na VPS/MySQL e remover mais uma fonte operacional Supabase do catalogo.
+
+Validacao:
+
+- RED: `node tmp-tests\model-color-images-vps-static.test.mjs` falhou enquanto os servicos ainda usavam `supabase.from('model_color_images')`.
+- `node tmp-tests\model-color-images-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 175`, `.rpc(...) = 27`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: `model_color_images` saiu da allowlist temporaria e o baseline caiu de `.from=193` para `.from=175`.
+
+Rollback: restaurar os acessos Supabase nos servicos de imagens por modelo/cor, recolocar `model_color_images` na allowlist e voltar o baseline `.from=193`; nao recomendado porque reintroduz fallback de catalogo fora da VPS.
+
+## 2026-05-30 - Servico de marcas VPS-only
+
+Mudanca: `services/brands.ts` deixou de manter branches Supabase por `USE_VPS.brands`. Listagem, busca por ID, criacao, atualizacao, exclusao e listagem ativa agora usam somente a API da VPS (`/brands` via `vpsApiService`), preservando o fallback same-origin `/api/vps-proxy?path=/brands` para leitura no browser. A normalizacao de `active` continua tratando `null`/ausente como ativo e valores numericos `0` como inativo.
+
+Objetivo: reduzir dependencias Supabase remanescentes no bloco de catalogo/produtos sem mexer ainda nas chamadas de marca internas do `blingService`.
+
+Validacao:
+
+- RED: `node tmp-tests\brand-service-vps-only-static.test.mjs` falhou enquanto `brands.ts` ainda importava Supabase e `USE_VPS`.
+- `node tmp-tests\brand-service-vps-only-static.test.mjs`: OK.
+- `node tmp-tests\brand-service-vps-source.test.mjs`: OK.
+- `node tmp-tests\brand-list-active-null-filter.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 193`, `.rpc(...) = 27`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: o baseline caiu de `.from=202` para `.from=193`. A tabela `brands` ainda fica temporariamente na allowlist porque `services/blingService.ts` tem consultas diretas remanescentes para conciliacao/importacao.
+
+Rollback: restaurar o fallback Supabase anterior de `services/brands.ts` e voltar o baseline `.from=202`; nao recomendado porque reintroduz leitura/escrita de marca fora da VPS no servico compartilhado.
+
+## 2026-05-30 - Biblioteca de campos customizados via VPS table-data
+
+Mudanca: `services/custom-fields.ts` deixou de consultar/criar/atualizar/remover `custom_fields` pelo Supabase. O servico agora pagina `/table-data/custom_fields` via `vpsClient`, normaliza campos JSON (`options`, `validation`, `table_config`), filtra pelo `company_id` compartilhado e preserva cache, criacao, edicao limitada de campos de sistema, exclusao e reordenacao. A pagina `CustomFieldsLibraryPage` passou a usar o servico centralizado, e a pagina publica de produto deixou de buscar labels de campos customizados diretamente no Supabase.
+
+Objetivo: remover `custom_fields` do bloco temporario de catalogo/produtos e manter a biblioteca global de campos na VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\custom-fields-service-vps-static.test.mjs` falhou enquanto o servico e as paginas ainda usavam `supabase.from('custom_fields')`.
+- `node tmp-tests\custom-fields-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 202`, `.rpc(...) = 27`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: `custom_fields` saiu da allowlist temporaria, e o baseline caiu de `.from=216` para `.from=202`.
+
+Rollback: restaurar o uso anterior de Supabase em `services/custom-fields.ts`, `CustomFieldsLibraryPage` e `PublicProductPage`, recolocar `custom_fields` na allowlist e voltar o baseline `.from=216`; nao recomendado porque reintroduz configuracao de catalogo no Supabase.
+
+## 2026-05-30 - Supabase Storage zerado em uploads
+
+Mudanca: `services/uploadService.ts` deixou de manter fallback de Supabase Storage. Banners seguem pelo endpoint VPS `/banners/upload`, e avatares de clientes agora sobem para o Synology pela rota VPS `/synology/upload?folder=imagens`. `services/documentService.ts` tambem deixou de usar o bucket `company-documents`: PDFs de empresa passam por `/synology/upload?folder=arquivos`, os metadados continuam em `/table-data/company_documents`, a exclusao remove o arquivo por `/synology/file?folder=arquivos&name=...`, e URLs antigas por caminho simples ainda sao convertidas para o CDN de arquivos.
+
+Objetivo: cumprir a regra de que novos arquivos nao entram mais no Supabase; arquivos ficam em VPS/Synology e metadados operacionais permanecem na VPS/MySQL.
+
+Validacao:
+
+- RED: `node tmp-tests\company-documents-vps-static.test.mjs` falhou enquanto `documentService` ainda usava `supabase.storage`.
+- RED: `node tmp-tests\upload-service-vps-synology-static.test.mjs` falhou enquanto `uploadService` ainda usava `supabase.storage` e `USE_VPS` como fallback.
+- `node tmp-tests\company-documents-vps-static.test.mjs`: OK.
+- `node tmp-tests\upload-service-vps-synology-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 216`, `.rpc(...) = 27`, `supabase.storage = 0`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: Supabase Storage ficou zerado no auditor, o baseline caiu para `.from=216`, `.rpc=27`, `storage=0`, e as allowlists `storage-temporary`/`named-storage-buckets-temporary` foram removidas para impedir regressao.
+
+Rollback: restaurar temporariamente o uso anterior de Supabase Storage em `services/uploadService.ts` e `services/documentService.ts`, recolocar as allowlists de storage e o baseline antigo; nao recomendado porque reabre entrada de arquivos no Supabase.
+
+## 2026-05-30 - Aposentadoria do models-new Supabase
+
+Mudanca: removidos o servico experimental `services/models-new.ts` e a pagina nao roteada `pages/admin/debug/models.tsx`, ambos ainda dependentes de leitura direta no Supabase. A tela `pages/admin/settings/BlingPage.tsx` passou a usar `services/models.ts`, que ja consulta modelos pela rota VPS `/models`.
+
+Objetivo: eliminar uma segunda implementacao de modelos que competia com o servico VPS atual e reduzia a clareza da migracao.
+
+Validacao:
+
+- RED: `node tmp-tests\retired-models-new-vps-static.test.mjs` falhou enquanto `services/models-new.ts` ainda existia.
+- `node tmp-tests\retired-models-new-vps-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 327`, `.rpc(...) = 28`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o inventario operacional Supabase caiu mais seis chamadas `.from(...)` (`333 -> 327`), e a tela Bling agora usa o caminho unico de modelos via VPS.
+
+## 2026-05-30 - Aposentadoria do model-eans Supabase
+
+Mudanca: removido `services/model-eans.ts`, que era um servico direto Supabase para a tabela `model_eans` e ficou sem consumidor ativo depois da aposentadoria do `models-new`.
+
+Objetivo: reduzir codigo morto da arquitetura antiga de modelos e impedir que `model_eans` continue como dependencia operacional permitida sem uso real.
+
+Validacao:
+
+- RED: `node tmp-tests\retired-model-eans-service-static.test.mjs` falhou enquanto `services/model-eans.ts` ainda existia.
+- `node tmp-tests\retired-model-eans-service-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 321`, `.rpc(...) = 28`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o inventario operacional Supabase caiu mais seis chamadas `.from(...)` (`327 -> 321`) e `model_eans` saiu da allowlist temporaria do auditor.
+
+## 2026-05-30 - Secoes do catalogo via VPS table-data
+
+Mudanca: `services/catalogSectionsService.ts` deixou de usar `supabase.from('catalog_sections')` para listar, buscar, criar, atualizar, apagar e reordenar secoes. O CRUD agora usa `/table-data/catalog_sections` via `vpsClient`, com paginacao, ordenacao client-side por `display_order`, normalizacao defensiva de arrays vindos do MySQL e cache preservado. A busca de produtos da secao continua usando `/products` da VPS; as imagens por modelo/cor seguem como etapa separada.
+
+Objetivo: mover a administracao das secoes da home do catalogo para a VPS/Synology sem alterar o contrato usado por `SectionsTab`, `CatalogSection` e a home publica.
+
+Validacao:
+
+- RED: `node tmp-tests\catalog-sections-service-vps-crud-static.test.mjs` falhou enquanto o servico ainda usava Supabase para `catalog_sections`.
+- `node tmp-tests\catalog-sections-service-vps-crud-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 315`, `.rpc(...) = 28`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o inventario operacional Supabase caiu mais seis chamadas `.from(...)` (`321 -> 315`), `catalog_sections` saiu da allowlist temporaria e o CRUD de secoes passou a depender da VPS.
+
+## 2026-05-30 - Avaliacoes de produtos via VPS table-data
+
+Mudanca: `services/reviews.ts` deixou de consultar e alterar `product_reviews` pelo Supabase. Listagem publica em lote, envio de avaliacao, moderacao, resposta admin e remocao agora usam `/table-data/product_reviews` via `vpsClient`; o enriquecimento do cliente passou a ler `customers` pela mesma camada VPS. A pagina `pages/admin/catalog/ReviewsPage.tsx` deixou de importar Supabase e usa `reviewService.deleteReview`.
+
+Objetivo: mover avaliacoes do catalogo para a VPS/Synology preservando a moderacao admin, o fluxo publico de reviews e a recompensa por moedas ao aprovar uma avaliacao.
+
+Validacao:
+
+- RED: `node tmp-tests\reviews-service-vps-static.test.mjs` falhou enquanto `services/reviews.ts` ainda usava Supabase para `product_reviews`.
+- `node tmp-tests\reviews-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 309`, `.rpc(...) = 28`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o inventario operacional Supabase caiu mais seis chamadas `.from(...)` (`315 -> 309`) e `product_reviews` saiu da allowlist temporaria. O RPC de moedas acionado apos aprovacao ainda permanece no backlog de cashback.
+
+## 2026-05-30 - Aposentadoria do gerenciador legado de variantes
+
+Mudanca: removidos `services/model-variants.ts`, `components/settings/VariantManager.tsx`, `components/settings/VariantImageGallery.tsx` e `types/model-architecture.ts`. Esse conjunto nao era montado por nenhuma pagina ou modal ativo e ainda mantinha CRUD direto em `model_variants`, `model_variant_images` e upload/remocao em Supabase Storage.
+
+Objetivo: cortar codigo morto da arquitetura antiga de variantes em vez de migrar uma ferramenta sem consumidor, reduzindo dependencia Supabase e simplificando o backlog real de catalogo.
+
+Validacao:
+
+- RED: `node tmp-tests\retired-model-variants-manager-static.test.mjs` falhou enquanto `services/model-variants.ts` ainda existia.
+- `node tmp-tests\retired-model-variants-manager-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 295`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o inventario operacional Supabase caiu quatorze chamadas `.from(...)` (`309 -> 295`) e o uso de Storage caiu tres ocorrencias (`13 -> 10`). `model_variants` e `model_variant_images` sairam da allowlist temporaria.
+
+## 2026-05-30 - Cores via VPS table-data
+
+Mudanca: `services/colors.ts` deixou de usar `supabase.from('colors')` para listar, buscar, criar, atualizar, apagar e listar cores ativas. O CRUD agora usa `/table-data/colors` via `vpsClient`, com paginacao, ordenacao local por nome, normalizacao defensiva e cache preservado. Os enriquecimentos de imagens em `services/catalogService.ts`, `services/catalogSectionsService.ts` e `services/modelImageCache.ts` passaram a resolver nome de cor pelo `colorService`, mantendo `model_color_images` como pendencia separada.
+
+Objetivo: mover a taxonomia de cores para a VPS/Synology e remover o bloco temporario `catalog-taxonomy` da allowlist do auditor.
+
+Validacao:
+
+- RED: `node tmp-tests\colors-service-vps-static.test.mjs` falhou enquanto `services/colors.ts` ainda usava Supabase.
+- `node tmp-tests\colors-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 286`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu nove chamadas `.from(...)` (`295 -> 286`) e `colors`/`battery_healths` sairam da allowlist temporaria.
+
+## 2026-05-30 - Configuracao visual de categorias via VPS table-data
+
+Mudanca: `services/catalogConfigService.ts` deixou de usar `supabase.from('category_display_config')` para buscar, listar e salvar configuracoes visuais de categorias. A leitura agora pagina `/table-data/category_display_config` via `vpsClient`, ordena localmente por `display_order` e o salvamento faz `PATCH` quando encontra configuracao existente por `category_id` ou `POST` quando ainda nao existe.
+
+Objetivo: remover a ultima tabela de configuracao visual de categorias do caminho Supabase e manter `catalog_settings` e `category_display_config` sob a camada VPS.
+
+Validacao:
+
+- RED: `node tmp-tests\catalog-category-config-vps-static.test.mjs` falhou enquanto `catalogConfigService` ainda usava Supabase para `category_display_config`.
+- `node tmp-tests\catalog-category-config-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 283`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais tres chamadas `.from(...)` (`286 -> 283`) e `category_display_config` saiu da allowlist temporaria. O bloco restante `product-variant-taxonomy-temporary` ficou apenas com `rams` e `storages`.
+
+## 2026-05-30 - Limpeza da allowlist de RAM e armazenamento
+
+Mudanca: removido o bloco temporario `product-variant-taxonomy-temporary` do auditor Supabase. `services/rams.ts` e `services/storages.ts` ja estavam usando exclusivamente `vpsClient` nas rotas `/rams`, `/rams/all`, `/storages` e `/storages/all`; nao havia mais chamadas `.from('rams')` ou `.from('storages')` no runtime.
+
+Objetivo: manter a allowlist apenas com dependencias Supabase ainda ativas, sem permissoes antigas para caminhos que ja estao na VPS.
+
+Validacao:
+
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tmp-tests\retired-supabase-taxonomy-services-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 283`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: sem mudanca de baseline, mas a auditoria deixou de permitir `rams` e `storages` como dependencias Supabase temporarias.
+
+## 2026-05-30 - Check-in diario via VPS table-data
+
+Mudanca: `services/checkinService.ts` deixou de usar `supabase.from('checkin_logs')` para calcular streak, verificar check-in do dia, gravar check-in, listar historico e montar status atual. Essas operacoes agora usam `/table-data/checkin_logs` via `vpsClient`, com paginacao, filtros locais por cliente/data e ordenacao local por `checkin_date`. O credito de moedas continua usando `supabase.rpc('add_coins')`, marcado como etapa separada do backlog de cashback.
+
+Objetivo: mover o registro operacional do check-in para a VPS/Synology sem misturar ainda a migracao dos RPCs de moedas.
+
+Validacao:
+
+- RED: `node tmp-tests\checkin-service-vps-static.test.mjs` falhou enquanto `checkinService` ainda usava Supabase para `checkin_logs`.
+- `node tmp-tests\checkin-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 278`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: primeiro acusou bytes nulos no fim de `services/checkinService.ts`; arquivo limpo e build repetido com OK, mantendo apenas avisos Vite ja existentes.
+
+Resultado: o inventario operacional Supabase caiu mais cinco chamadas `.from(...)` (`283 -> 278`) e `checkin_logs` saiu da allowlist temporaria.
+
+## 2026-05-30 - Transacoes de moedas via VPS table-data
+
+Mudanca: `services/cashbackService.ts` deixou de usar `supabase.from('coin_transactions')` para listar historico do cliente, montar a listagem admin e buscar moedas ganhas por venda nos recibos. Essas leituras agora usam `/table-data/coin_transactions` via `vpsClient`, com paginacao e ordenacao local. Os recibos em `SaleDetailsModal`, `CustomerDetailsPage` e `PurchaseHistoryTab`, alem do dashboard de cashback, passaram a usar o servico centralizado.
+
+Objetivo: mover o historico operacional de moedas para a VPS/Synology sem alterar ainda `coin_balances`, `cashback_settings` e os RPCs de credito/resgate, que seguem como etapa separada do backlog de cashback.
+
+Validacao:
+
+- RED: `node tmp-tests\coin-transactions-vps-static.test.mjs` falhou enquanto `cashbackService` ainda usava Supabase para `coin_transactions`.
+- `node tmp-tests\coin-transactions-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 272`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais seis chamadas `.from(...)` (`278 -> 272`) e `coin_transactions` saiu da allowlist temporaria.
+
+## 2026-05-30 - Saldos de moedas via VPS table-data
+
+Mudanca: `services/cashbackService.ts` deixou de usar `supabase.from('coin_balances')` para buscar/criar saldo de cliente e passou a usar `/table-data/coin_balances` via `vpsClient`, com paginacao para leituras e `POST` para criacao inicial. O dashboard de cashback em `pages/admin/CashbackPage.tsx` passou a calcular o total em circulacao pela nova funcao centralizada `listCoinBalances`.
+
+Objetivo: mover as leituras operacionais de saldo de moedas para a VPS/Synology mantendo os RPCs de credito, resgate, estorno e pendencias no backlog separado de cashback.
+
+Validacao:
+
+- RED: `node tmp-tests\coin-balances-vps-static.test.mjs` falhou enquanto `cashbackService` e o dashboard ainda usavam Supabase para `coin_balances`.
+- `node tmp-tests\coin-balances-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 269`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais tres chamadas `.from(...)` (`272 -> 269`) e `coin_balances` saiu da allowlist temporaria.
+
+## 2026-05-30 - Configuracao de cashback via VPS table-data
+
+Mudanca: `services/cashbackService.ts` deixou de usar `supabase.from('cashback_settings')` para buscar e salvar a configuracao de moedas. A leitura agora pagina `/table-data/cashback_settings` via `vpsClient`, e o salvamento usa `PATCH /table-data/cashback_settings/:id` preservando o contrato de `getCashbackSettings` e `updateCashbackSettings`.
+
+Objetivo: mover a configuracao administrativa do cashback para a VPS/Synology sem misturar ainda a migracao dos RPCs de credito/resgate.
+
+Validacao:
+
+- RED: `node tmp-tests\cashback-settings-vps-static.test.mjs` falhou enquanto `cashbackService` ainda usava Supabase para `cashback_settings`.
+- `node tmp-tests\cashback-settings-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 267`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais duas chamadas `.from(...)` (`269 -> 267`) e `cashback_settings` saiu da allowlist temporaria.
+
+## 2026-05-30 - Beneficios de cliente via VPS table-data
+
+Mudanca: `services/benefitService.ts` deixou de usar `supabase.from('customer_benefits')` para conceder beneficio de pelicula e listar beneficios do cliente. A criacao agora usa `POST /table-data/customer_benefits`, e a listagem pagina `/table-data/customer_benefits` via `vpsClient`, filtrando por cliente/tipo e ordenando localmente por `granted_at`. `benefit_redemptions` permanece no Supabase nesta etapa por ainda concentrar o fluxo de resgate mensal e o join com cliente.
+
+Objetivo: encerrar o bloco temporario `customer-benefits-temporary` e deixar apenas a parte de resgate de beneficio para o backlog posterior de cashback/RPC.
+
+Validacao:
+
+- RED: `node tmp-tests\customer-benefits-vps-static.test.mjs` falhou enquanto `benefitService` ainda usava Supabase para `customer_benefits`.
+- `node tmp-tests\customer-benefits-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 265`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais duas chamadas `.from(...)` (`267 -> 265`) e o bloco `customer-benefits-temporary` foi removido da allowlist.
+
+## 2026-05-30 - Templates de garantia via VPS table-data
+
+Mudanca: `services/warrantyTemplates.ts` deixou de usar Supabase para listar, buscar, criar, atualizar e remover `warranty_templates`. O CRUD agora usa `/table-data/warranty_templates` via `vpsClient`, com filtro local por `company_id` e ordenacao por nome. Os pontos que buscavam `duration_days` diretamente (`SaleDetailsModal`, `ProductDetailsModal`, `CartPage`, `PDVPage` e `CustomerDetailsPage`) passaram a usar `warrantyTemplateService.getById`.
+
+Objetivo: mover os templates reutilizaveis de garantia para a VPS/Synology e deixar no bloco de garantia apenas `warranty_documents`, que sera migrado separadamente.
+
+Validacao:
+
+- RED: `node tmp-tests\warranty-templates-vps-static.test.mjs` falhou enquanto o servico e os fallbacks ainda consultavam `warranty_templates` pelo Supabase.
+- `node tmp-tests\warranty-templates-vps-static.test.mjs`: OK.
+- `node tmp-tests\product-details-modal-vps-warranty-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 255`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais dez chamadas `.from(...)` (`265 -> 255`) e `warranty_templates` saiu da allowlist temporaria.
+
+## 2026-05-30 - Documentos de garantia via VPS table-data
+
+Mudanca: `services/warrantyDocumentService.ts` deixou de usar `supabase.from('warranty_documents')` para criar, listar, buscar, atualizar e excluir termos de garantia. O CRUD agora usa `/table-data/warranty_documents` via `vpsClient`, com leitura paginada, filtro local por `company_id` e ordenacao local por `created_at` para preservar os fluxos de PDV, pedido online e historico do cliente.
+
+Objetivo: encerrar o bloco temporario de garantia no auditor Supabase, deixando templates e documentos de garantia fora do Supabase operacional.
+
+Validacao:
+
+- RED: `node tmp-tests\warranty-documents-vps-static.test.mjs` falhou enquanto `warrantyDocumentService` ainda importava Supabase e consultava `warranty_documents`.
+- `node tmp-tests\warranty-documents-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 247`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais oito chamadas `.from(...)` (`255 -> 247`) e o bloco `warranty-temporary` foi removido da allowlist.
+
+## 2026-05-30 - Creditos de entrega via VPS table-data
+
+Mudanca: criado `services/deliveryCreditService.ts` para centralizar `delivery_credits` na VPS. A criacao de credito no fechamento de venda e o cancelamento em cancelamento/estorno agora usam esse servico. A aba `TeamDeliveryHistoryTab` tambem deixou de usar o join Supabase com `sales/customers`; ela lista creditos pela VPS, enriquece nomes de cliente via `sales`/`customers` em table-data e marca pagamentos com `PATCH /table-data/delivery_credits/:id`.
+
+Objetivo: remover `delivery_credits` do bloco temporario de frete, mantendo apenas configuracoes de zonas/faixas para etapa separada.
+
+Validacao:
+
+- RED: `node tmp-tests\delivery-credits-vps-static.test.mjs` falhou enquanto o servico VPS ainda nao existia e os consumidores consultavam `delivery_credits` no Supabase.
+- `node tmp-tests\delivery-credits-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 242`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais cinco chamadas `.from(...)` (`247 -> 242`) e `delivery_credits` saiu da allowlist temporaria.
+
+## 2026-05-30 - Metadados de documentos da empresa via VPS table-data
+
+Mudanca: `services/documentService.ts` deixou de usar `supabase.from('company_documents')` para contar, criar, listar, buscar e excluir metadados de documentos. As operacoes de tabela agora usam `/table-data/company_documents` via `vpsClient`, com filtro local por `user_id` e ordenacao por `uploaded_at`. O Storage Supabase permanece explicito nesta etapa para upload, remocao e URL assinada dos PDFs, ficando para a frente separada de Storage/Synology.
+
+Objetivo: reduzir o bloco `admin-team-temporary` sem misturar metadados de tabela com a migracao de arquivos.
+
+Validacao:
+
+- RED: `node tmp-tests\company-documents-vps-static.test.mjs` falhou enquanto `documentService` ainda consultava `company_documents` pelo Supabase.
+- `node tmp-tests\company-documents-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 237`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais cinco chamadas `.from(...)` (`242 -> 237`) e `company_documents` saiu da allowlist temporaria. O bloco `admin-team-temporary` agora fica restrito a `team_members`.
+
+## 2026-05-30 - Time administrativo via VPS table-data
+
+Mudanca: `services/team.ts` deixou de importar Supabase e passou a carregar `team_members` por `/table-data/team_members` via `vpsClient`, com cache preservado e filtros locais para busca, cargo, tipo de contrato, status e periodo de criacao. Criacao, atualizacao, exclusao logica e exclusao definitiva tambem foram movidas para a VPS; o caminho especial `createDeliveryFromPdv` continuou usando `/team/delivery`.
+
+Objetivo: encerrar o bloco temporario `admin-team-temporary`, deixando o cadastro operacional de equipe fora do Supabase.
+
+Validacao:
+
+- RED: `node tmp-tests\team-members-vps-static.test.mjs` falhou enquanto `teamService` ainda usava `supabase.from('team_members')`.
+- `node tmp-tests\team-members-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 230`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npx.cmd tsc --noEmit --pretty false`: falhou em erros antigos de tipagem espalhados no projeto, sem apontar erro novo em `services/team.ts`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais sete chamadas `.from(...)` (`237 -> 230`) e `admin-team-temporary` foi removido da allowlist.
+
+## 2026-05-30 - Historico de precos via VPS table-data
+
+Mudanca: `services/priceHistoryService.ts` deixou de usar `supabase.from('product_price_history')` para registrar e consultar snapshots de preco. `logPriceChange`, `getPriceHistory` e a gravacao em lote de `applyPricesToVariation` agora usam `/table-data/product_price_history` via `vpsClient`, preservando a normalizacao que impede `price_cost` nulo. A atualizacao de `products` dentro de `applyPricesToVariation` permanece no trilho de migracao de produtos.
+
+Objetivo: remover o historico de precos do bloco temporario de catalogo sem misturar com o corte maior de `products`.
+
+Validacao:
+
+- RED: `node tmp-tests\price-history-vps-static.test.mjs` falhou enquanto `priceHistoryService` ainda usava `supabase.from('product_price_history')`.
+- `node tmp-tests\price-history-vps-static.test.mjs`: OK.
+- `node tmp-tests\price-history-null-regression.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 227`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais tres chamadas `.from(...)` (`230 -> 227`) e `product_price_history` saiu da allowlist temporaria.
+
+## 2026-05-30 - Promocoes via VPS table-data
+
+Mudanca: `services/promotionService.ts` deixou de usar `supabase.from('promotions')`. Listagem, consulta de status e atualizacao agora passam por `/table-data/promotions` via `vpsClient`, preservando a avaliacao local de promocoes ativas, inativas e agendadas.
+
+Objetivo: remover `promotions` do bloco temporario de cashback/promocoes sem mexer ainda no ledger de moedas e nos RPCs de cashback.
+
+Validacao:
+
+- RED: `node tmp-tests\promotions-vps-static.test.mjs` falhou enquanto `promotionService` ainda importava Supabase e consultava `promotions` diretamente.
+- `node tmp-tests\promotions-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 224`, `.rpc(...) = 28`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais tres chamadas `.from(...)` (`227 -> 224`) e `promotions` saiu da allowlist temporaria.
+
+## 2026-05-30 - Analytics de visualizacao de produto via VPS
+
+Mudanca: `catalogService.recordProductView` deixou de inserir em `product_views` e chamar o RPC `increment_product_views` no Supabase. O front agora envia a visualizacao para `POST /products/:id/view` na VPS; a API VPS cria a tabela `product_views` quando necessario, grava `product_id`, `customer_id` e `session_id`, e incrementa `products.view_count` diretamente no MySQL.
+
+Objetivo: remover a dependencia de analytics publico do catalogo no Supabase, incluindo a tabela `product_views` e o RPC `increment_product_views`.
+
+Validacao:
+
+- RED: `node tmp-tests\catalog-product-views-vps-static.test.mjs` falhou enquanto `recordProductView` ainda usava `supabase.from('product_views')` e `supabase.rpc('increment_product_views')`.
+- `node tmp-tests\catalog-product-views-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node --check vps_server.js`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 223`, `.rpc(...) = 27`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu uma chamada `.from(...)` e uma chamada `.rpc(...)` (`224 -> 223`, `28 -> 27`). As allowlists `catalog-analytics-rpc-temporary` e `catalog-analytics-tables-temporary` foram removidas.
+
+## 2026-05-30 - Divergencias de estoque via VPS
+
+Mudanca: `stockLocationService.getStockDivergences` deixou de consultar a view Supabase `stock_location_divergences`. A leitura agora usa `GET /stock-locations/divergences` na VPS; a rota calcula em MySQL a diferenca entre `products.stock_quantity` e a soma de `product_stock_locations.quantity`, retorna apenas divergencias diferentes de zero e ordena por nome do produto.
+
+Objetivo: remover a ultima dependencia da view Supabase de auditoria de estoque, sem misturar com o bloco maior de deposito/local/movimentacoes e RPCs de estoque.
+
+Validacao:
+
+- RED: `node tmp-tests\stock-location-divergences-vps-static.test.mjs` falhou enquanto `getStockDivergences` ainda consultava `supabase.from('stock_location_divergences')`.
+- `node tmp-tests\stock-location-divergences-vps-static.test.mjs`: OK.
+- `node tmp-tests\stock-location-divergence-validation-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node --check vps_server.js`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 222`, `.rpc(...) = 27`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais uma chamada `.from(...)` (`223 -> 222`) e `inventory-audit-temporary` saiu da allowlist.
+
+Interrupcao no deploy:
+
+- `node deploy-vps-server-only.cjs`: OK, API `mdv-api` reiniciada na VPS.
+- `curl https://api.xiaomipetrolina.com.br/health`: `200`.
+- `curl https://api.xiaomipetrolina.com.br/stock-locations/divergences` com `x-sync-key`: `500`.
+- Corpo retornado: `ER_NO_SUCH_TABLE`, tabela `mercadodovale.product_stock_locations` nao existe na VPS.
+
+Resultado do deploy: site nao publicado nesta etapa. A rota de divergencias precisa aguardar a migracao/criacao da tabela `product_stock_locations` na VPS, ou voltar temporariamente para uma estrategia que nao dependa dessa tabela.
+
+## 2026-05-30 - Transporte direto para visualizacao de produto na VPS
+
+Mudanca: `services/vpsTransport.js` passou a tratar `POST /products/:id/view` como escrita direta permitida para a API VPS em build de producao. Antes, esse write montava `/api/vps-proxy?path=...`, mantendo dependencia do proxy da Vercel para a captura de visualizacoes do catalogo.
+
+Objetivo: permitir que o site estatico servido pela VPS registre visualizacoes diretamente em `https://api.xiaomipetrolina.com.br/products/:id/view`.
+
+Validacao:
+
+- RED: `node tmp-tests\vps-product-view-direct-transport.test.mjs` falhou retornando `/api/vps-proxy?path=%2Fproducts%2Fprod-123%2Fview`.
+- `node tmp-tests\vps-product-view-direct-transport.test.mjs`: OK.
+- `node tmp-tests\catalog-product-views-vps-static.test.mjs`: OK.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: a correcao local esta pronta, mas o site ainda nao foi publicado por causa do erro `ER_NO_SUCH_TABLE` na rota de divergencias de estoque descrito acima.
+
+## 2026-05-30 - Limpeza da allowlist de frete ja migrado
+
+Mudanca: removida a allowlist temporaria `shipping-config-temporary` do auditor Supabase. `shippingService` ja estava usando os endpoints VPS (`/shipping/settings`, `/shipping/zones`, `/shipping/price-ranges`), entao a permissao para `shipping_zones` e `shipping_price_ranges` estava sem ocorrencias reais e podia mascarar regressao futura.
+
+Objetivo: manter o auditor alinhado com o estado real da migracao de frete.
+
+Validacao:
+
+- RED: `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` falhou enquanto `shipping-config-temporary` ainda existia.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tmp-tests\shipping-service-vps-only-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 222`, `.rpc(...) = 27`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: nenhuma queda de baseline era esperada porque nao havia ocorrencia operacional ativa de frete no Supabase; a protecao agora fica explicita no guard.
+
+## 2026-05-30 - Labels de versoes do catalogo via VPS
+
+Mudanca: `CompareModal` e `ProductDetailsModal` deixaram de consultar `supabase.from('versions')` para montar os nomes de versao exibidos em especificacoes. Ambos agora usam `versionService.list()` da VPS. Tambem foram removidas allowlists temporarias vazias de integracoes, observabilidade e versionamento (`integration-settings-temporary`, `operations-observability-temporary`, `app-versioning-temporary`).
+
+Objetivo: eliminar as ultimas leituras ativas de `versions` pelo Supabase e manter o auditor sem permissoes temporarias mortas.
+
+Validacao:
+
+- RED: `node tmp-tests\catalog-version-labels-vps-static.test.mjs` falhou enquanto os modais ainda usavam `supabase.from('versions')`.
+- RED: `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` falhou enquanto o baseline antigo e as allowlists vazias ainda existiam.
+- `node tmp-tests\catalog-version-labels-vps-static.test.mjs`: OK.
+- `node tmp-tests\version-service-vps-imports-static.test.mjs`: OK.
+- `node tmp-tests\version-service-retired-local-alias-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 220`, `.rpc(...) = 27`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais duas chamadas `.from(...)` (`222 -> 220`) e as allowlists temporarias vazias foram removidas.
+
+## 2026-05-30 - Resgates de beneficios via VPS table-data
+
+Mudanca: `benefitService` deixou de consultar e inserir `benefit_redemptions` pelo Supabase. A listagem agora usa `/table-data/benefit_redemptions` com paginacao, enriquece `redeemed_by_user` consultando `customers` via VPS e o resgate mensal passa a criar o registro por `/table-data/benefit_redemptions`.
+
+Objetivo: remover `benefit_redemptions` do bloco temporario de cashback/beneficios, mantendo apenas os RPCs de moedas para uma etapa separada.
+
+Validacao:
+
+- RED: `node tmp-tests\customer-benefits-vps-static.test.mjs` falhou enquanto `benefitService` ainda usava `supabase.from('benefit_redemptions')`.
+- `node tmp-tests\customer-benefits-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 218`, `.rpc(...) = 27`, `supabase.storage = 10`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK, somente avisos Vite ja existentes sobre imports dinamicos/estaticos e tamanho de chunk.
+
+Resultado: o inventario operacional Supabase caiu mais duas chamadas `.from(...)` (`220 -> 218`) e `benefit_redemptions` saiu da allowlist temporaria.
+
+## 2026-05-30 - Remocao de scripts Supabase e Shopee auto-print via VPS
+
+Mudanca: removidos artefatos de teste e scripts manuais que ainda dependiam diretamente do Supabase (`public/catalog-test.html`, criadores de produtos de teste, migradores avulsos e diagnosticos/sincronizadores manuais). O `scripts/shopee-auto-print.cjs` deixou de criar cliente Supabase local e agora le tokens Shopee e impressoras pelo endpoint protegido `/company-settings` da VPS com `x-sync-key`.
+
+Objetivo: cortar dependencias operacionais locais de Supabase sem perder a rotina de impressao local da Shopee, mantendo a VPS como fonte unica para credenciais e configuracoes.
+
+Validacao:
+
+- RED: `node tmp-tests\retired-supabase-test-product-artifacts-static.test.mjs` falhou enquanto `public/catalog-test.html` e scripts de produto de teste ainda existiam.
+- RED: `node tmp-tests\retired-supabase-manual-scripts-static.test.mjs` falhou enquanto scripts manuais Supabase ainda existiam.
+- RED: `node tmp-tests\shopee-auto-print-vps-settings-static.test.mjs` falhou enquanto `scripts/shopee-auto-print.cjs` importava `@supabase/supabase-js`.
+- `node tmp-tests\retired-supabase-test-product-artifacts-static.test.mjs`: OK.
+- `node tmp-tests\retired-supabase-manual-scripts-static.test.mjs`: OK.
+- `node tmp-tests\shopee-auto-print-vps-settings-static.test.mjs`: OK.
+- `node --check scripts\shopee-auto-print.cjs`: OK.
+
+Resultado: scripts locais obsoletos sairam do repositorio e a impressao Shopee passou a depender da VPS protegida por chave de sincronizacao, nao de cliente Supabase embarcado.
+
+## 2026-05-30 - Backfills administrativos via VPS table-data
+
+Mudanca: os backfills `tools/backfill-brand-tags.cjs`, `tools/backfill-product-descriptions.cjs` e `tools/backfill-smartphone-model-virtual-ram.cjs` deixaram de carregar `@supabase/supabase-js` e passaram a ler/escrever tabelas auxiliares por `/table-data/*` na VPS, sempre com `x-sync-key`. Os PATCHes de produtos continuam indo para endpoints VPS existentes.
+
+Objetivo: manter ferramentas administrativas de correcao de dados sem exigir credenciais Supabase no ambiente local.
+
+Validacao:
+
+- RED: `node tmp-tests\smartphone-model-virtual-ram-backfill-static.test.mjs` falhou enquanto o backfill de RAM virtual usava `supabase.from`.
+- RED: `node tmp-tests\vps-backfill-tools-static.test.mjs` falhou enquanto os backfills de marca/descricao ainda usavam `@supabase/supabase-js`.
+- `node tmp-tests\smartphone-model-virtual-ram-backfill-static.test.mjs`: OK.
+- `node tmp-tests\vps-backfill-tools-static.test.mjs`: OK.
+- `node --check tools\backfill-brand-tags.cjs`: OK.
+- `node --check tools\backfill-product-descriptions.cjs`: OK.
+- `node --check tools\backfill-smartphone-model-virtual-ram.cjs`: OK.
+
+Resultado: os backfills administrativos agora dependem da VPS/MySQL e nao precisam mais de URL/chave Supabase.
+
+## 2026-05-30 - Auditoria de midia lendo VPS
+
+Mudanca: `tools/audit-media-origins.mjs` deixou de criar cliente Supabase para ler `model_color_images`, `company_settings` e `catalog_banners`. A auditoria agora usa `/products`, `/company-settings` e `/table-data/*` na VPS com `x-sync-key`, e o relatorio Markdown passou a rotular essas fontes como VPS.
+
+Objetivo: manter a auditoria de origem de imagens/videos alinhada ao corte VPS/Synology, sem exigir credenciais Supabase para verificar midias.
+
+Validacao:
+
+- RED: `node tmp-tests\media-origin-audit-vps-only-static.test.mjs` falhou enquanto a auditoria importava `@supabase/supabase-js`.
+- `node tmp-tests\media-origin-audit-vps-only-static.test.mjs`: OK.
+- `node --check tools\audit-media-origins.mjs`: OK.
+
+Resultado: a auditoria de midia agora compara produtos, banners, configuracoes e imagens por dados vindos da VPS.
+
+## 2026-05-30 - Table data service via VPS
+
+Mudanca: `services/table-data.ts` deixou de usar `supabase.from(...)` para carregar opcoes de campos relacionais e agora pagina `/table-data/:name` via `vpsClient`, ordenando no cliente quando necessario.
+
+Objetivo: remover mais um ponto generico de leitura Supabase do frontend/admin e reaproveitar o endpoint protegido da VPS.
+
+Validacao:
+
+- RED: `node tmp-tests\table-data-service-vps-static.test.mjs` falhou enquanto `services/table-data.ts` importava `./supabase`.
+- `node tmp-tests\table-data-service-vps-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 393`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Observacao: `npx tsc --noEmit --pretty false` ainda falha por `test-synology-auth.cjs`/`.js` terem `#!` no meio do arquivo, problema legado fora desta troca.
+
+Resultado: campos relacionais carregados por `tableDataService` passam pela VPS.
+
+## 2026-05-30 - Verificacao TypeScript e WhatsApp sem import Supabase morto
+
+Mudanca: `tsconfig.json` passou a excluir os scripts manuais `test-synology-auth.cjs` e `test-synology-auth.js`, que estavam sendo analisados por causa de `allowJs` e possuem um segundo shebang no meio do arquivo. Tambem removido de `pages/admin/settings/WhatsAppPage.tsx` o import morto `../../../lib/supabase`, mantendo a tela apoiada apenas em `whatsappSettingsService`.
+
+Objetivo: destravar a verificacao de parse inicial do TypeScript e remover mais um import direto/legado de Supabase do runtime admin.
+
+Validacao:
+
+- RED: `npx.cmd tsc --noEmit --pretty false` falhou primeiro nos shebangs duplicados dos scripts Synology.
+- RED: `node tmp-tests\whatsapp-page-no-lib-supabase-static.test.mjs` falhou enquanto `WhatsAppPage` importava `../../../lib/supabase`.
+- `node tmp-tests\whatsapp-page-no-lib-supabase-static.test.mjs`: OK.
+- `node tmp-tests\table-data-service-vps-static.test.mjs`: OK.
+
+Observacao: apos excluir os scripts Synology, `tsc --noEmit` avancou e revelou erros legados amplos de tipos em componentes/servicos que nao foram criados nesta etapa. O build Vite segue como validacao principal da migracao incremental.
+
+Resultado: a tela de WhatsApp nao depende mais de import Supabase quebrado, e a falha inicial de parse dos scripts Synology deixou de bloquear a auditoria TypeScript.
+
+## 2026-05-30 - Limpeza de paginas e diagnosticos legados Supabase/Vercel
+
+Mudanca: removida a pagina experimental `pages/test/catalog-test.tsx`, que ainda lia `catalog_banners` no Supabase, e retirados os diagnosticos avulsos `check-product-supabase.cjs`, `check_supabase.cjs`, `check_supabase_cols.mts`, `diagnose_supabase.js`, `test_supa_prods.mjs`, `test_cat_supa.mjs` e `check-stock-sync.mjs`. A tela de importacao de modelos deixou de prometer Supabase Storage e passou a apontar template futuro para Synology via VPS. O gerador `backup-synology.cjs` foi atualizado para documentar producao, rollback e dependencias em VPS/Synology, sem instrucoes de deploy Vercel ou Supabase.
+
+Objetivo: reduzir codigo morto e orientacoes operacionais antigas, mantendo a documentacao gerada pelo backup alinhada ao corte VPS/Synology.
+
+Validacao:
+
+- RED: `node tmp-tests\model-import-page-vps-synology-static.test.mjs` falhou enquanto `ModelImportPage` ainda mencionava Supabase Storage.
+- RED: `node tmp-tests\retired-catalog-test-page-static.test.mjs` falhou enquanto `pages/test/catalog-test.tsx` ainda existia.
+- RED: `node tmp-tests\retired-root-supabase-diagnostics-static.test.mjs` falhou enquanto os diagnosticos Supabase avulsos ainda existiam.
+- RED: `node tmp-tests\synology-backup-runbook-vps-static.test.mjs` falhou enquanto `backup-synology.cjs` ainda apontava URLs/deploy/rollback para Vercel e dependencias Supabase.
+- RED: `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` falhou ao baixar o baseline `.from` para `393` antes do auditor ser ajustado.
+- `node tmp-tests\model-import-page-vps-synology-static.test.mjs`: OK.
+- `node tmp-tests\retired-catalog-test-page-static.test.mjs`: OK.
+- `node tmp-tests\vps-products-read-batch-static.test.mjs`: OK.
+- `node tmp-tests\retired-root-supabase-diagnostics-static.test.mjs`: OK.
+- `node tmp-tests\synology-backup-runbook-vps-static.test.mjs`: OK.
+- `node --check backup-synology.cjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 393`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o inventario operacional Supabase caiu mais uma chamada `.from(...)` (`394 -> 393`), diagnosticos soltos antigos foram removidos e o runbook de backup Synology agora orienta VPS/Synology como caminho operacional.
+
+## 2026-05-30 - Remocao de backups e monitoramento Supabase legado
+
+Mudanca: removidos `services/versions.ts`, `services/models-new-backup.ts`, `services/monitoringService.ts` e `types/systemStatus.ts`. O modal de versoes agora importa `services/versions-vps.ts` diretamente. Tambem removidos os literais `vercel` restantes do runtime, mantendo apenas a deteccao generica de checkpoint/HTML anti-bot.
+
+Objetivo: eliminar codigo morto que ainda entrava nos scans de runtime, reduzir o inventario Supabase e impedir retorno de referencias Vercel em `components/`, `pages/`, `services/`, `hooks/`, `contexts/`, `utils/`, `routes/` e `config/`.
+
+Validacao:
+
+- RED: `node tmp-tests\version-service-retired-local-alias-static.test.mjs` falhou enquanto `components/settings/VersionModal.tsx` ainda importava `services/versions.ts`.
+- RED: `node tmp-tests\retired-supabase-model-backup-static.test.mjs` falhou enquanto `services/models-new-backup.ts` ainda existia.
+- RED: `node tmp-tests\digest-monitoring-vps-products-static.test.mjs` falhou enquanto `services/monitoringService.ts` ainda existia.
+- RED: `node tmp-tests\no-vercel-runtime-literals-static.test.mjs` falhou enquanto `pages/admin/settings/ShopeePage.tsx` e `services/vpsClient.ts` ainda continham literal `vercel`.
+- RED: `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` falhou ao baixar o baseline `.from` para `394` antes do auditor ser ajustado.
+- `node tmp-tests\version-service-retired-local-alias-static.test.mjs`: OK.
+- `node tmp-tests\retired-supabase-model-backup-static.test.mjs`: OK.
+- `node tmp-tests\digest-monitoring-vps-products-static.test.mjs`: OK.
+- `node tmp-tests\no-vercel-runtime-literals-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 394`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: mais dezesseis chamadas `.from(...)` sairam do inventario operacional desde o baseline anterior (`410 -> 394`), o alias local de versoes saiu do runtime e nao ha mais literais Vercel em codigo runtime escaneado.
+
+## 2026-05-30 - Remocao de aliases e servicos Supabase mortos
+
+Mudanca: removidos os aliases/servicos legados `services/versions-supabase.ts`, `services/batteryHealths-supabase.ts`, `services/rams-supabase.ts` e `services/storages-supabase.ts`. Os consumidores de versoes agora importam `services/versions-vps.ts` diretamente, e os tres servicos de taxonomia sem chamadores deixaram de entrar no inventario operacional Supabase.
+
+Objetivo: continuar a remocao gradual de Supabase do codigo versionado, sem criar recurso novo na Vercel ou no Supabase e mantendo a VPS como fonte operacional.
+
+Validacao:
+
+- RED: `node tmp-tests\version-service-vps-imports-static.test.mjs` falhou enquanto os imports ainda apontavam para `versions-supabase`.
+- RED: `node tmp-tests\retired-supabase-taxonomy-services-static.test.mjs` falhou enquanto os servicos mortos ainda existiam.
+- RED: `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs` falhou ao baixar o baseline `.from` para `410` antes do auditor ser ajustado.
+- `node tmp-tests\version-service-vps-imports-static.test.mjs`: OK.
+- `node tmp-tests\retired-supabase-taxonomy-services-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 410`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: quinze chamadas `.from(...)` de servicos Supabase sem uso sairam do inventario operacional, e o guard agora impede regressao acima do baseline `.from=410`.
 
 ## 2026-05-28 - Historico de baixas no financeiro Bling
 
@@ -5687,6 +7235,295 @@ Pendências:
 
 Rollback: restaurar o backup anterior de `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
 
+## 2026-05-30 - Configuracoes WhatsApp via VPS table-data
+
+Mudanca: `services/whatsappSettingsService.ts` deixou de usar `supabase.from('whatsapp_settings')` e passou a ler/gravar a tabela por `/table-data/whatsapp_settings` via `vpsClient`. A tela `pages/admin/settings/WhatsAppPage.tsx` continua usando o mesmo servico, agora sem import direto ou indireto dedicado ao Supabase para essa tabela.
+
+Arquivos alterados:
+
+- `services/whatsappSettingsService.ts`
+- `tmp-tests/whatsapp-settings-service-vps-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\whatsapp-settings-service-vps-static.test.mjs` falhou enquanto o servico importava `./supabase`.
+- `node tmp-tests\whatsapp-settings-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\whatsapp-page-no-lib-supabase-static.test.mjs`: OK.
+- `node tmp-tests\table-data-service-vps-static.test.mjs`: OK.
+- `npm.cmd run build`: OK fora do sandbox. O sandbox bloqueou leitura do `vite.config.ts`; o build elevado passou com os mesmos avisos conhecidos de chunk/dynamic import.
+
+Rollback: restaurar a versao anterior de `services/whatsappSettingsService.ts`, que lia `whatsapp_settings` por Supabase.
+
+## 2026-05-30 - Tags de cross-sell via VPS table-data
+
+Mudanca: `services/cross-sell-tags.ts` deixou de usar `supabase.from('cross_sell_tags')` e passou a listar, criar, atualizar e apagar tags pela VPS em `/table-data/cross_sell_tags`. O servico preserva o slug local, ordenacao por nome, `updated_at` em updates e a protecao contra duplicidade por slug/nome antes e depois do POST.
+
+Arquivos alterados:
+
+- `services/cross-sell-tags.ts`
+- `tmp-tests/cross-sell-tags-service-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\cross-sell-tags-service-vps-static.test.mjs` falhou enquanto o servico importava `./supabase`.
+- `node tmp-tests\cross-sell-tags-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\whatsapp-settings-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\vps-backfill-tools-static.test.mjs`: OK.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 382`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o inventario operacional Supabase caiu de `.from=393` para `.from=382` nesta sequencia WhatsApp + cross-sell. O guard tambem removeu as excecoes temporarias para `whatsapp_settings` e `cross_sell_tags`, impedindo retorno dessas tabelas para Supabase.
+
+Rollback: restaurar a versao anterior de `services/cross-sell-tags.ts` e recolocar o baseline/allowlist anterior no auditor.
+
+## 2026-05-30 - Agenda Instagram via VPS table-data
+
+Mudanca: `services/instagramScheduleService.ts` deixou de usar `supabase.from('instagram_schedule')` e passou a listar, filtrar, criar, atualizar, apagar e alternar agenda pela VPS em `/table-data/instagram_schedule`. A ordenacao por `day_of_week` e `scheduled_time`, os filtros por dia/ativo e os labels usados pela tela de Marketing foram preservados.
+
+Arquivos alterados:
+
+- `services/instagramScheduleService.ts`
+- `tmp-tests/instagram-schedule-service-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\instagram-schedule-service-vps-static.test.mjs` falhou enquanto o servico importava `./supabase`.
+- `node tmp-tests\instagram-schedule-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\cross-sell-tags-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\whatsapp-settings-service-vps-static.test.mjs`: OK.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 375`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o inventario operacional Supabase caiu mais sete chamadas `.from(...)` (`382 -> 375`) e o guard removeu a excecao temporaria de `instagram_schedule`.
+
+Rollback: restaurar a versao anterior de `services/instagramScheduleService.ts` e recolocar `instagram_schedule`/baseline anterior no auditor.
+
+## 2026-05-30 - Compartilhamento de catalogo via VPS
+
+Mudanca: `services/catalogShareService.ts` deixou de buscar `company` e gravar `catalog_shares` via Supabase. Os dados da empresa agora vêm de `publicCompanySettingsService`, ja apoiado na VPS/public endpoint, e o rastreamento de compartilhamentos grava em `/table-data/catalog_shares` via `vpsClient`.
+
+Arquivos alterados:
+
+- `services/catalogShareService.ts`
+- `tmp-tests/catalog-share-service-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\catalog-share-service-vps-static.test.mjs` falhou enquanto o servico importava `./supabase`.
+- `node tmp-tests\catalog-share-service-vps-static.test.mjs`: OK.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 371`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+
+Resultado: o inventario operacional Supabase caiu quatro chamadas `.from(...)` (`375 -> 371`) e a excecao temporaria `catalog-share-temporary` saiu do auditor.
+
+Rollback: restaurar a versao anterior de `services/catalogShareService.ts` e recolocar `catalog_shares`/baseline anterior no auditor.
+
+## 2026-05-30 - Logs de troca de unidades via VPS table-data
+
+Mudanca: `services/units.ts` deixou de gravar e listar `unit_swap_logs` via Supabase e passou a usar `/table-data/unit_swap_logs` pela VPS. A tela `pages/admin/inventory/SerializedUnitsPage.tsx` tambem deixou de consultar `unit_swap_logs` diretamente no Supabase; ela agora usa `unitService.getSwapLogs({})` e enriquece a visualizacao com as unidades ja carregadas na tela.
+
+Arquivos alterados:
+
+- `services/units.ts`
+- `pages/admin/inventory/SerializedUnitsPage.tsx`
+- `tmp-tests/units-swap-logs-vps-static.test.mjs`
+- `tmp-tests/serialized-units-swap-logs-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\units-swap-logs-vps-static.test.mjs` falhou enquanto `services/units.ts` importava `./supabase`.
+- RED: `node tmp-tests\serialized-units-swap-logs-vps-static.test.mjs` falhou enquanto `SerializedUnitsPage` fazia `.from('unit_swap_logs')`.
+- `node tmp-tests\units-swap-logs-vps-static.test.mjs`: OK.
+- `node tmp-tests\serialized-units-swap-logs-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 368`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: `unit_swap_logs` saiu do inventario operacional Supabase e o baseline do auditor ficou travado em `.from=368`, `.rpc=29`, `storage=13`.
+
+Rollback: restaurar temporariamente as versoes anteriores de `services/units.ts` e `SerializedUnitsPage.tsx`, recolocar `unit_swap_logs` na allowlist operacional e voltar o baseline `.from` anterior; nao recomendado porque reintroduz Supabase no historico de troca de unidades.
+
+## 2026-05-30 - Configuracoes Telegram via VPS table-data
+
+Mudanca: `services/telegramSettings.ts` deixou de usar `supabase.from('telegram_settings')` e passou a ler/gravar configuracoes pela VPS em `/table-data/telegram_settings`. O servico preserva templates padrao, normalizacao de templates antigos sem `type`, merge nao-destrutivo de templates novos e fallback para configuracao vazia.
+
+Arquivos alterados:
+
+- `services/telegramSettings.ts`
+- `tmp-tests/telegram-settings-service-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\telegram-settings-service-vps-static.test.mjs` falhou enquanto o servico importava `./supabase`.
+- `node tmp-tests\telegram-settings-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 366`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: `telegram_settings` saiu da allowlist operacional Supabase e o baseline do auditor caiu de `.from=368` para `.from=366`.
+
+Rollback: restaurar a versao anterior de `services/telegramSettings.ts`, recolocar `telegram_settings` na allowlist `admin-config-temporary` e voltar o baseline `.from=368`; nao recomendado porque reintroduz Supabase na configuracao do Telegram.
+
+## 2026-05-30 - Integracoes de pagamento via VPS table-data
+
+Mudanca: `services/paymentIntegrationService.ts` deixou de usar Supabase para `companies` e `payment_integrations`. O servico agora usa o `getCompanyId` compartilhado de `companyContext` e lista/cria/atualiza/remove integracoes pela VPS em `/table-data/payment_integrations`.
+
+Arquivos alterados:
+
+- `services/paymentIntegrationService.ts`
+- `tmp-tests/payment-integration-service-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\payment-integration-service-vps-static.test.mjs` falhou enquanto o servico importava `./supabase`.
+- `node tmp-tests\payment-integration-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 359`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: `payment_integrations` saiu da allowlist operacional Supabase, o servico eliminou sua copia local de consulta a `companies`, e o baseline do auditor caiu de `.from=366` para `.from=359`.
+
+Rollback: restaurar a versao anterior de `services/paymentIntegrationService.ts`, recolocar `payment_integrations` na allowlist `integration-settings-temporary` e voltar o baseline `.from=366`; nao recomendado porque reintroduz Supabase no checkout/configuracao de gateways.
+
+## 2026-05-30 - Templates Shopee via VPS table-data
+
+Mudanca: `services/shopeeTemplateService.ts` deixou de usar `supabase.from('shopee_templates')` e passou a listar, criar, atualizar, remover e semear templates pela VPS em `/table-data/shopee_templates`. O fallback em `localStorage`, os templates padrao, a ordenacao por prioridade/nome e o parse defensivo dos campos JSON foram preservados.
+
+Arquivos alterados:
+
+- `services/shopeeTemplateService.ts`
+- `tmp-tests/shopee-template-service-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\shopee-template-service-vps-static.test.mjs` falhou enquanto o servico importava `./supabase`.
+- `node tmp-tests\shopee-template-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 354`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: `shopee_templates` saiu da allowlist operacional Supabase e o baseline do auditor caiu de `.from=359` para `.from=354`.
+
+Rollback: restaurar a versao anterior de `services/shopeeTemplateService.ts`, recolocar `shopee_templates`/`shopee-templates-temporary` na allowlist e voltar o baseline `.from=359`; nao recomendado porque reintroduz Supabase na configuracao de templates Shopee.
+
+## 2026-05-30 - Tags do sistema via VPS table-data
+
+Mudanca: `services/systemTagsService.ts` deixou de usar `supabase.from('system_tags')` e passou a listar, criar, atualizar, remover e ativar/desativar tags pela VPS em `/table-data/system_tags`. A normalizacao de `resolver_config`, ordenacao por contexto/ordem/nome e geracao de slug foram preservadas.
+
+Arquivos alterados:
+
+- `services/systemTagsService.ts`
+- `tmp-tests/system-tags-service-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\system-tags-service-vps-static.test.mjs` falhou enquanto o servico importava `./supabase`.
+- `node tmp-tests\system-tags-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 347`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: `system_tags` saiu da allowlist operacional Supabase e o baseline do auditor caiu de `.from=354` para `.from=347`.
+
+Rollback: restaurar a versao anterior de `services/systemTagsService.ts`, recolocar `system_tags` na allowlist `admin-config-temporary` e voltar o baseline `.from=354`; nao recomendado porque reintroduz Supabase na configuracao de tags do sistema.
+
+## 2026-05-30 - Solicitacoes de tipo de cliente via VPS table-data
+
+Mudanca: `services/typeUpgradeRequests.ts` deixou de usar Supabase para `customer_type_requests` e para atualizar o cliente aprovado. O servico agora usa `/table-data/customer_type_requests` e `/table-data/customers`, mantendo criacao com bloqueio de pendencia, consulta do cliente, listagem admin com resumo do cliente, aprovacao/rejeicao e estatisticas.
+
+Arquivos alterados:
+
+- `services/typeUpgradeRequests.ts`
+- `tmp-tests/type-upgrade-requests-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\type-upgrade-requests-vps-static.test.mjs` falhou enquanto o servico importava `./supabase`.
+- `node tmp-tests\type-upgrade-requests-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 338`, `.rpc(...) = 29`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: `customer_type_requests` saiu da allowlist operacional Supabase e o baseline do auditor caiu de `.from=347` para `.from=338`.
+
+Rollback: restaurar a versao anterior de `services/typeUpgradeRequests.ts`, recolocar `customer_type_requests` na allowlist `customer-engagement-temporary` e voltar o baseline `.from=347`; nao recomendado porque reintroduz Supabase no fluxo de upgrade do cliente.
+
+## 2026-05-30 - Mensagem copiada do catalogo com link da categoria
+
+Mudanca: `utils/catalogMessageGenerator.ts` agora adiciona o link do catalogo/categoria no rodape da mensagem copiada. As frases antigas `Digite o numero ou o modelo escolhido...` e `Total: X modelos` permanecem bloqueadas pelo teste estatico.
+
+Arquivos alterados:
+
+- `utils/catalogMessageGenerator.ts`
+- `tmp-tests/catalog-message-footer-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\catalog-message-footer-static.test.mjs` falhou enquanto a mensagem nao incluia o link da categoria.
+- `node tmp-tests\catalog-message-footer-static.test.mjs`: OK.
+- `rg -n "Digite o numero ou o modelo escolhido|Total: .*modelos|Qual desses aparelhos deseja" utils components pages services tmp-tests`: somente o teste contem as frases bloqueadas.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: o rodape copiado fica curto, sem contador de modelos e com `Veja no site: https://mercadodovale.com.br/?categoria=<categoria>`. No navegador usa a origem atual para preservar dominio/ambiente.
+
+Rollback: remover `catalogUrl`/`buildCatalogUrl` de `utils/catalogMessageGenerator.ts` e voltar o teste anterior; nao recomendado porque perderia o link direto da categoria.
+
+## 2026-05-30 - Promocoes de moedas via VPS table-data
+
+Mudanca: `services/coinPromotionService.ts` deixou de usar `supabase.from('coin_promotions')` e o RPC `increment_coin_promo_uses`. Listagem, criacao, atualizacao, remocao, ativacao e incremento de uso agora passam por `/table-data/coin_promotions`; o credito de moedas ainda preserva o RPC `add_coins` ate a migracao do ledger de moedas.
+
+Arquivos alterados:
+
+- `services/coinPromotionService.ts`
+- `tmp-tests/coin-promotion-service-vps-static.test.mjs`
+- `tools/audit-supabase-operational-dependencies.mjs`
+- `tmp-tests/supabase-operational-dependency-guard-static.test.mjs`
+- `migração_VPS.md`
+
+Validacao:
+
+- RED: `node tmp-tests\coin-promotion-service-vps-static.test.mjs` falhou enquanto o servico ainda usava Supabase para a tabela.
+- `node tmp-tests\coin-promotion-service-vps-static.test.mjs`: OK.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from(...) = 333`, `.rpc(...) = 28`, `supabase.storage = 13`, `unclassifiedOperationalMatches = 0`.
+- `npm.cmd run build`: OK fora do sandbox, com os avisos conhecidos de chunk/dynamic import.
+
+Resultado: `coin_promotions` saiu da allowlist operacional Supabase, `increment_coin_promo_uses` saiu da allowlist de RPC e o baseline do auditor caiu de `.from=338` para `.from=333` e de `.rpc=29` para `.rpc=28`.
+
+Rollback: restaurar a versao anterior de `services/coinPromotionService.ts`, recolocar `coin_promotions` em `customer-engagement-temporary`, recolocar `increment_coin_promo_uses` em `catalog-analytics-rpc-temporary` e voltar os baselines para `.from=338`/`.rpc=29`; nao recomendado porque reintroduz Supabase na configuracao de promocoes.
+
 ### 2026-05-27 - Log de navegacao admin/PDV na VPS
 
 Mudanca: adicionada captura de navegacao das telas `/admin` e `/pdv`, com armazenamento na VPS e botao para copiar os ultimos logs na tela `Status VPS`.
@@ -5881,3 +7718,356 @@ Pendências:
 - depois da validação, trocar status da rota para `vps-staging-validado-http`.
 
 Rollback: restaurar o backup anterior de `/var/www/mdv-api/server.js` e reiniciar `pm2 restart mdv-api --update-env`.
+# 2026-05-31 - Operacional Supabase zerado na VPS
+
+Status: `.from(...)`, `.rpc(...)` e Supabase Storage operacionais zerados no auditor. O allowlist temporario operacional tambem ficou vazio.
+
+Movido para VPS/MySQL nesta fatia: ledger de moedas/cashback, recompensas de indicacao, check-in, promocoes de moedas, fila de compra, relacoes dinamicas da importacao/exportacao e a camada transacional de estoque por local.
+
+Endpoints VPS adicionados para estoque: `/stock-locations/priority-decrements`, `/stock-locations/priority-reservations`, `/stock-locations/order-reservations/consume`, `/stock-locations/order-reservations/release`, `/stock-locations/sale-restores`, `/stock-locations/order-restores`.
+
+Validado com auditor operacional zerado, guardas estaticos de cashback/estoque/fila de compra e build Vite de producao.
+
+Proxima decisao humana: substituir Supabase Auth por Auth proprio na VPS ou outro provedor. Essa decisao envolve login por email/CPF, OAuth Google/Facebook, reset de senha, refresh token e compatibilidade com `customers.user_id`.
+## 2026-05-31 - Auditoria externa pos-corte VPS
+
+Status local:
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `blockers=[]`.
+- DNS `mercadodovale.com.br A`: Cloudflare proxied (`104.21.42.27`, `172.67.199.67`), nao o IP legado Vercel `76.76.21.21`.
+- DNS `www.mercadodovale.com.br A`: Cloudflare proxied (`172.67.199.67`, `104.21.42.27`).
+- DNS `www.mercadodovale.com.br CNAME`: sem CNAME publico, resposta SOA Cloudflare.
+- Validacao HTTP confirma o proxy: `https://mercadodovale.com.br/` e `https://www.mercadodovale.com.br/admin` retornaram 200 servindo o site publicado na VPS.
+
+Checklist manual pendente nos paineis externos:
+- Bling callback: `https://www.mercadodovale.com.br/api/auth/callback/bling`.
+- Bling webhook: `https://www.mercadodovale.com.br/api/bling-webhook`.
+- Shopee callback: `https://www.mercadodovale.com.br/api/shopee?action=callback`.
+- Shopee webhook: `https://www.mercadodovale.com.br/api/shopee-webhook`.
+- Mercado Pago webhook: `https://www.mercadodovale.com.br/api/mercadopago-webhook`.
+
+Rollback: manter ou restaurar URL antiga somente se uma integracao real falhar e registrar qual provedor bloqueou o corte.
+
+## 2026-05-31 - Deploy VPS apos corte sequencial
+
+Mudanca: frontend publicado na VPS apos ativar as flags finais de runtime. Release ativa: `/var/www/mdv-site/releases/20260531-200854`.
+
+Validacao:
+- `npm.cmd run deploy:vps-site`: OK.
+- `curl https://mercadodovale.com.br/`: `200 https://www.mercadodovale.com.br/`.
+- `curl https://www.mercadodovale.com.br/admin`: `200 https://www.mercadodovale.com.br/admin`.
+- `curl https://api.xiaomipetrolina.com.br/status`: HTTP `200 OK`, MySQL `ok=true`.
+
+Rollback: apontar `/var/www/mdv-site/current` para `/var/www/mdv-site/previous`.
+
+## 2026-05-31 - Passo 2 do checklist externo validado
+
+Objetivo: confirmar que callbacks e webhooks externos podem operar fora da Vercel, usando o dominio publico em `www.mercadodovale.com.br` e a VPS/Fastify como destino.
+
+Validacao DNS:
+- `Resolve-DnsName mv.mercadodovale.com.br`: Cloudflare proxied (`104.21.42.27`, `172.67.199.67`), sem `vercel-dns`.
+- `Resolve-DnsName www.mercadodovale.com.br`: Cloudflare proxied (`104.21.42.27`, `172.67.199.67`).
+- `Resolve-DnsName mercadodovale.com.br`: Cloudflare proxied (`104.21.42.27`, `172.67.199.67`).
+
+Validacao automatizada:
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `blockers=[]`.
+- `curl https://www.mercadodovale.com.br/api/status`: HTTP `200`, MySQL `ok=true`, produtos/imagens retornando totais.
+- `curl https://mv.mercadodovale.com.br/#/catalog`: HTTP `200` servindo o bundle VPS `assets/index-DFs8JI8s.js`.
+- `curl https://www.mercadodovale.com.br/api/auth/callback/bling`: HTTP `302` para `/admin/settings/bling?error=missing_code`, esperado sem codigo OAuth real.
+- `curl https://www.mercadodovale.com.br/api/bling-webhook`: HTTP `200`, `mode=vps-fastify`, `accepts=POST`.
+- `curl https://www.mercadodovale.com.br/api/shopee?action=callback`: HTTP `400`, esperado sem `code` e `shop_id`.
+- `curl -X POST https://www.mercadodovale.com.br/api/shopee-webhook`: HTTP `200`, `message=success`.
+- `curl https://www.mercadodovale.com.br/api/mercadopago-webhook`: HTTP `200`, `mode=vps-fastify`, `accepts=POST`.
+- `curl https://www.mercadodovale.com.br/api/telegram-webhook`: HTTP `200`, `ok=true`.
+
+Configuracoes internas conferidas:
+- `company_settings.bling_callback_url`: `https://www.mercadodovale.com.br/api/auth/callback/bling`.
+- `SHOPEE_REDIRECT_BASE_URL`: configurado para `https://www.mercadodovale.com.br`.
+
+Guardas executados:
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+- `node tmp-tests\no-vercel-runtime-literals-static.test.mjs`: OK.
+- `node tmp-tests\legacy-deploy-removal-readiness-static.test.mjs`: OK.
+
+Checklist manual nos paineis oficiais:
+- Bling: confirmado em 2026-05-31 no painel oficial. O redirect OAuth foi orientado para `https://www.mercadodovale.com.br/api/auth/callback/bling`. Em Webhooks, o servidor unico ficou como `Mercado do Vale VPS` apontando para `https://www.mercadodovale.com.br/api/bling-webhook`; Estoques, Produtos, Pedidos de Vendas, Notas Fiscais Eletronicas, Notas Fiscais de Consumidor Eletronicas e Fornecedores de Produtos aparecem ativos usando esse servidor, versao `v1`, com criacao/atualizacao/exclusao marcados.
+- Shopee: confirmado em 2026-05-31 no Shopee Open Platform. O app `Mercado do Vale` esta `Online`; `Live Redirect URL Domain` ficou em `https://www.mercadodovale.com.br`; `Live Push` foi salvo como `ON`, status `Normal`, com `Live Call Back URL` em `https://www.mercadodovale.com.br/api/shopee-webhook`, `Deployment Service Area` em `Brazil` e push `order_status_push` (`code=3`) ativo. A chave de push foi gerada/salva no painel, sem ser registrada na documentacao.
+- Mercado Pago: confirmado em 2026-05-31 no painel oficial de Webhooks. A URL configurada aparece apontando para `https://www.mercadodovale.com.br/api/mercadopago-webhook`; os eventos exibidos incluem pagamentos e vinculacao de aplicacoes. Conferencia feita em modo visual/read-only, sem alterar a configuracao do painel.
+
+Validacao apos salvamento Bling:
+- `curl https://www.mercadodovale.com.br/api/bling-webhook`: HTTP `200`, `{"ok":true,"mode":"vps-fastify","accepts":"POST"}`.
+- `curl https://www.mercadodovale.com.br/api/auth/callback/bling`: HTTP `302` para `/admin/settings/bling?error=missing_code`, esperado sem codigo OAuth real.
+
+Validacao apos salvamento Shopee:
+- Painel `Push Mechanism`: `Live Push ON`, `Live Push Status Normal`, acao `Set Push` disponivel.
+- `curl https://www.mercadodovale.com.br/api/shopee?action=callback`: HTTP `400`, esperado sem `code` e `shop_id`.
+- `curl https://www.mercadodovale.com.br/api/shopee-webhook`: HTTP `405`, esperado para GET.
+- `curl -X POST https://www.mercadodovale.com.br/api/shopee-webhook -H "Content-Type: application/json" --data "{}"`: HTTP `200`, `{"message":"success"}`.
+
+Validacao apos conferencia Mercado Pago:
+- `curl https://www.mercadodovale.com.br/api/mercadopago-webhook`: HTTP `200`, `{"ok":true,"mode":"vps-fastify","accepts":"POST"}`.
+- `curl -X POST https://www.mercadodovale.com.br/api/mercadopago-webhook -H "Content-Type: application/json" --data "{}"`: HTTP `200`, `{"message":"ignored","reason":"not payment webhook"}`.
+
+Resultado: passo 2 concluido pelo lado VPS/DNS/app e pelos paineis oficiais. Bling, Shopee e Mercado Pago estao conferidos contra as URLs finais no dominio `www.mercadodovale.com.br`; a validacao do Mercado Pago foi read-only no painel e HTTP segura na rota publica.
+
+## 2026-05-31 - Checkpoint pos-paineis externos
+
+Objetivo: revalidar a trilha segura do checklist apos concluir a conferencia visual dos paineis Bling, Shopee e Mercado Pago, sem executar OAuth real, payload real de webhook, escrita comercial, deploy, restart, DNS ou alteracao em provedor externo.
+
+Validacao:
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `blockers=[]`; DNS `mercadodovale.com.br` e `www.mercadodovale.com.br` em Cloudflare proxied (`104.21.42.27`, `172.67.199.67`), sem CNAME publico em `www`.
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+- `node tmp-tests\no-vercel-runtime-literals-static.test.mjs`: OK.
+- `node tmp-tests\legacy-deploy-removal-readiness-static.test.mjs`: OK.
+- `VPS_EXTERNAL_CUTOVER_LIVE=true node tmp-tests\vps-external-cutover-read-only-check.cjs`: OK; Bling webhook `200`, Mercado Pago webhook `200`, Shopee webhook GET `405`, Bling callback sem code `302`, Shopee callback sem parametros `400`.
+- `node tmp-tests\vps-external-cutover-read-only-check-static.test.mjs`: OK.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `checked=30`, `failed=0`, `mutation_executed=false`.
+
+Resultado: a remocao da dependencia externa da Vercel continua sem blockers tecnicos e os endpoints publicos de integracao respondem pelo dominio final da VPS. Os scripts de escrita e payload real seguem bloqueados por padrao e exigem variaveis/confirmacoes explicitas para qualquer janela controlada.
+
+Proximo passo: escolher uma janela controlada com alvo explicito para validar payload real/simulado de webhook ou escrita pequena/reversivel, ou seguir para a decisao humana de Auth proprio na VPS versus provedor externo.
+
+## 2026-05-31 - Decisao Auth VPS
+
+Decisao: seguir com Auth proprio na VPS como trilha principal, mantendo Supabase fora do runtime. A implementacao atual usa `VpsAuthProvider`, `vpsAuthService`, tokens Bearer proprios assinados na VPS e a tabela `customer_auth` no MySQL. O login por e-mail/senha e CPF/senha passa pela API publica `https://api.xiaomipetrolina.com.br`; Google/Facebook e recuperacao de senha por e-mail permanecem indisponiveis durante a migracao ate serem redesenhados em etapa propria.
+
+Motivo: o auditor operacional ja esta zerado, o pacote runtime do Supabase nao deve voltar, e o modelo proprio preserva compatibilidade direta com `customers.user_id`/`customer_auth` sem reintroduzir dependencias da plataforma antiga.
+
+Validacao:
+- `node tmp-tests\vps-auth-cutover-static.test.mjs`: OK.
+- `node tmp-tests\vps-auth-naming-static.test.mjs`: OK.
+- `node tmp-tests\no-supabase-runtime-package-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from=0`, `.rpc=0`, `storage=0`, `supabase.auth=0`, `unclassifiedOperationalMatches=0`.
+- `curl https://api.xiaomipetrolina.com.br/auth/me`: HTTP `401`, `{"error":"Unauthorized"}`, esperado sem token.
+- `curl -X POST https://api.xiaomipetrolina.com.br/auth/login -H "Content-Type: application/json" --data "{}"`: HTTP `400`, `{"error":"Email/CPF e senha sao obrigatorios"}`, esperado sem credenciais.
+
+Observacao de roteamento: `www.mercadodovale.com.br/auth/*` nao e a origem do Auth; no dominio do site, `/auth/me` cai no fallback SPA e `POST /auth/login` retorna `405` do Nginx. O frontend usa `VPS_DIRECT_BASE_URL`, cujo default e `https://api.xiaomipetrolina.com.br`, para chamar as rotas de autenticacao.
+
+Pendencias:
+- criar os e-mails transacionais da VPS; nao temos nenhum e-mail transacional criado hoje;
+- desenhar recuperacao de senha por e-mail na VPS;
+- implementar confirmacao de cadastro por e-mail quando houver envio configurado; flag `VPS_AUTH_REQUIRE_EMAIL_CONFIRMATION` desligada por padrao;
+- decidir se Google/Facebook voltam via provedor externo/OIDC ou se ficam desativados;
+- revisar expiracao/renovacao de token proprio e politica de logout global antes de considerar a remocao definitiva do provedor antigo em todos os ambientes.
+
+### 2026-05-31 - Validacao real de login Auth VPS
+
+Mudanca: criado `tmp-tests/verify-vps-auth-browser-login.cjs` para validar o login real no site publico com Chrome headless local, lendo credenciais admin e cliente apenas de `.env.vps.local`/`.env.local` e sem imprimir senha ou token. Criado tambem `tmp-tests/create-vps-retail-test-account.cjs` para gerar uma conta cliente descartavel via registro publico e salvar as credenciais locais ignoradas pelo Git.
+
+Correcao encontrada durante a validacao: o formulario publico envia `customer_type=retail`, mas o MySQL da VPS aceita `CUSTOMER`, `ADMIN` ou `RESELLER`. A rota `/auth/register` agora normaliza `retail`/valor vazio para `CUSTOMER` e `resale`/`wholesale`/`reseller` para `RESELLER`, evitando erro `500` no cadastro publico.
+
+Validacao:
+- `node tmp-tests\verify-vps-admin-login.cjs`: HTTP `200`, usuario admin autenticado, `customer_type=ADMIN`, token presente.
+- `node tmp-tests\vps-auth-customer-type-normalization-static.test.mjs`: OK.
+- `node --check vps_server.cjs`, `node --check vps_server.js`, `node --check server.js`: OK.
+- `node deploy-vps-server-only.cjs`: OK; API enviada para `/var/www/mdv-api`, env admin sincronizado e PM2 `mdv-api` reiniciado online.
+- `curl https://api.xiaomipetrolina.com.br/status`: HTTP `200`, `ok=true`, MySQL `ok=true`.
+- `MDV_FORCE_NEW_TEST_CUSTOMER=1 node tmp-tests\create-vps-retail-test-account.cjs`: conta cliente criada via `/auth/register`, `customer_type=CUSTOMER`, login HTTP `200`, token presente, credenciais salvas em `.env.vps.local`.
+- `node tmp-tests\verify-vps-auth-browser-login.cjs`: OK; login admin abriu `https://www.mercadodovale.com.br/admin`, `customer_type=ADMIN`, token presente; login cliente comum abriu `https://www.mercadodovale.com.br/`, `customer_type=CUSTOMER`, token presente.
+- `node --check tmp-tests\verify-vps-auth-browser-login.cjs`: OK.
+- `node --check tmp-tests\create-vps-retail-test-account.cjs`: OK.
+
+Resultado: login admin real e login cliente comum/retail foram validados por API e por navegador autenticado contra o Auth proprio da VPS. A falha de cadastro publico causada pelo enum de `customer_type` tambem foi corrigida e publicada na API da VPS.
+
+Proximo passo: seguir para recuperacao de senha por e-mail, decisao Google/Facebook e revisao de expiracao/renovacao/logout global do token proprio.
+
+### 2026-05-31 - Chave seletora para confirmacao de cadastro
+
+Decisao: manter confirmacao de cadastro por e-mail em aberto durante a migracao, com chave seletora desligada por padrao. Hoje nao temos nenhum e-mail transacional criado para cadastro, confirmacao de e-mail ou recuperacao de senha, entao a ativacao real depende primeiro da criacao dos templates e da configuracao de envio SMTP/API.
+
+Mudanca: adicionada a flag `VPS_AUTH_REQUIRE_EMAIL_CONFIRMATION="false"` em `.env.vps.example` e o helper `isAuthEmailConfirmationRequired()` nos servidores VPS. O retorno de Auth passa a expor `emailConfirmationRequired`, mas o fluxo continua permissivo enquanto a flag estiver desligada.
+
+Validacao:
+- `node tmp-tests\vps-auth-email-confirmation-flag-static.test.mjs`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node --check vps_server.js`: OK.
+- `node --check server.js`: OK.
+
+Resultado: a chave ficou preparada sem bloquear cadastro/login atual. A pendencia principal agora e criar os e-mails transacionais da VPS e, depois disso, implementar tokens de confirmacao/recuperacao e decidir quando ligar `VPS_AUTH_REQUIRE_EMAIL_CONFIRMATION`.
+
+### 2026-05-31 - Readiness final sem Vercel/Supabase runtime
+
+Objetivo: executar a frente de limpeza/readiness versionada antes de qualquer corte operacional externo, confirmando que o repositorio nao depende mais de Vercel ou Supabase como runtime da aplicacao.
+
+Validacao:
+- `node tmp-tests\legacy-deploy-removal-static.test.mjs`: OK.
+- `node tmp-tests\legacy-deploy-removal-readiness-static.test.mjs`: OK.
+- `node tmp-tests\retired-supabase-project-artifacts-static.test.mjs`: OK.
+- `node tmp-tests\retired-root-supabase-diagnostics-static.test.mjs`: OK.
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `legacy_config_present=false`, `legacy_api_files_count=0`, `legacy_crons_disabled=true`, `cors_allows_legacy_fallback=false`, `legacy_cron_user_agent_allowed=false`, `blockers=[]`. As consultas DNS internas retornaram `dns_timeout`, sem criar blocker no auditor.
+- `node tmp-tests\no-supabase-runtime-package-static.test.mjs`: OK.
+- `node tmp-tests\no-vercel-runtime-literals-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from=0`, `.rpc=0`, `storage=0`, `supabase.auth=0`, `unclassifiedOperationalMatches=0`.
+
+Resultado: a frente versionada esta pronta para remover a plataforma antiga como runtime. O proximo corte deve ser externo/controlado: reconferir painéis e callbacks/webhooks oficiais em modo read-only antes de qualquer alteracao real.
+
+### 2026-05-31 - Validacao externa final read-only
+
+Objetivo: revalidar as rotas finais fora da Vercel e o SEO publico sem enviar payload real, sem reconectar OAuth, sem salvar configuracao em paineis externos e sem executar mutacoes comerciais.
+
+Validacao local/guard:
+- `node tmp-tests\vps-external-cutover-read-only-check-static.test.mjs`: OK.
+- `node tmp-tests\vps-external-cutover-read-only-check.cjs`: OK em modo guard, `route_probe_sent=false`, `reason=missing_VPS_EXTERNAL_CUTOVER_LIVE_true`.
+- `node tmp-tests\vps-oauth-preflight-check-static.test.mjs`: OK.
+- `node tmp-tests\vps-migration-guard-regression.cjs`: `ok=true`, `checked=30`, `failed=0`, `mutation_executed=false`.
+
+Validacao live/read-only fora do sandbox de rede:
+- `VPS_EXTERNAL_CUTOVER_LIVE=true node tmp-tests\vps-external-cutover-read-only-check.cjs`: OK; `GET /api/bling-webhook` HTTP `200`, `GET /api/mercadopago-webhook` HTTP `200`, `GET /api/shopee-webhook` HTTP `405`, `GET /api/auth/callback/bling` HTTP `302` para `/admin/settings/bling?error=missing_code`, `GET /api/shopee?action=callback` HTTP `400`.
+- `OAUTH_PREFLIGHT_LIVE=true node tmp-tests\vps-oauth-preflight-check.cjs`: OK; Bling callback sem code `302`, Bling exchange sem credenciais `400`, Shopee callback sem parametros `400`, Shopee auth URL `200` com `auth_host=partner.shopeemobile.com` e `redirect_host=www.mercadodovale.com.br`.
+- `SEO_PRODUCTION_HOST_LIVE=true node tmp-tests\vps-seo-production-host-check.cjs`: OK; apex redireciona `301` para `https://www.mercadodovale.com.br/sitemap.xml`, sitemap HTTP `200`, `1843` URLs, `1840` produtos, hosts somente `www.mercadodovale.com.br`, amostra de 3 produtos com canonical `www`, `og:type=product` e 2 JSON-LD cada.
+
+Observacao de painel: conferencia humana/read-only concluida para Bling, Shopee e Mercado Pago. Os paineis oficiais foram conferidos contra as URLs finais da VPS/Cloudflare, sem salvar configuracao, sem reconectar OAuth, sem enviar payload real e sem alterar recursos externos.
+
+Resultado: rotas externas finais, OAuth preflight, SEO publico e conferencia read-only dos paineis oficiais Bling, Shopee e Mercado Pago estao concluidos sem dependencia de Vercel. Os guards continuam impedindo payload real e escrita por padrao. Proximo passo operacional: escolher uma janela controlada com alvo explicito para payload real/simulado reversivel, se ainda for necessario antes do corte definitivo.
+
+### 2026-05-31 - Fechamento tecnico sem Vercel/Supabase runtime
+
+Decisao: considerar concluido o corte tecnico de runtime Vercel/Supabase. O repositorio ativo nao possui `vercel.json`, `pages/api`, runtime `@vercel/node`, pacote runtime `@supabase/supabase-js`, cliente Supabase ativo, chamadas operacionais `.from(...)`, `.rpc(...)`, Storage ou `supabase.auth`. A aplicacao publica/admin usa site estatico na VPS/Cloudflare, API Fastify na VPS, MySQL e Auth proprio.
+
+O que nao bloqueia o corte tecnico:
+- e-mails transacionais da VPS ainda precisam ser criados para recuperacao de senha, confirmacao de cadastro e aviso de senha alterada;
+- Google/Facebook seguem desativados ate decisao futura de OIDC/provedor externo;
+- confirmacao de cadastro por e-mail fica preparada por `VPS_AUTH_REQUIRE_EMAIL_CONFIRMATION=false`, desligada por padrao;
+- refresh token e logout global ficam como melhoria de seguranca do Auth proprio; o fluxo atual usa token Bearer proprio com TTL configuravel por `VPS_AUTH_TOKEN_TTL_SECONDS` e logout local no frontend.
+
+Validacao de fechamento:
+- `node tools\audit-legacy-deploy-removal-readiness.mjs`: `ready_to_remove_legacy_deploy=true`, `legacy_config_present=false`, `legacy_api_files_count=0`, `legacy_crons_disabled=true`, `cors_allows_legacy_fallback=false`, `legacy_cron_user_agent_allowed=false`, `blockers=[]`; DNS retornou `dns_timeout` no sandbox, sem blocker.
+- `node tools\audit-supabase-operational-dependencies.mjs`: `ok=true`, `.from=0`, `.rpc=0`, `storage=0`, `supabase.auth=0`, `unclassifiedOperationalMatches=0`.
+
+Resultado: o corte de plataforma antiga esta tecnicamente concluido. Daqui para frente, qualquer payload real/simulado de webhook, reconexao OAuth real ou escrita comercial deve ser tratado como validacao operacional controlada, com alvo explicito e confirmacao propria, nao como dependencia restante da remocao de Vercel/Supabase.
+
+### 2026-05-31 - Recuperacao de senha por e-mail no Auth VPS
+
+Mudanca: implementada a base de recuperacao de senha do Auth proprio da VPS. A API agora possui `POST /auth/password-reset/request` para gerar token seguro, armazenar apenas hash em `customer_auth_password_resets` e tentar envio transacional por SMTP; e `POST /auth/password-reset/confirm` para validar token, expirar/rejeitar links usados e atualizar a senha. O frontend passou a chamar as rotas VPS em `vpsAuthService`, e a pagina `/redefinir-senha?token=...` usa o token do link para trocar a senha sem exigir sessao ativa.
+
+Configuracao necessaria na VPS para envio real: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_STARTTLS`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_FROM_NAME`, `APP_PUBLIC_URL` e `VPS_AUTH_PASSWORD_RESET_TTL_MINUTES`. Sem SMTP configurado, a rota retorna resposta generica segura e registra que o envio nao saiu, para nao vazar existencia de conta.
+
+Validacao:
+- RED: `node tmp-tests\vps-auth-password-reset-static.test.mjs` falhou antes da implementacao exigindo tabela, rotas, hash de token, SMTP e integracao frontend.
+- `node tmp-tests\vps-auth-password-reset-static.test.mjs`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node --check vps_server.js`: OK.
+- `node --check server.js`: OK.
+- `npm.cmd run build`: OK fora do sandbox; avisos conhecidos de import dinamico/estatico permanecem sem erro.
+- `node deploy-vps-server-only.cjs`: OK; API publicada em `/var/www/mdv-api` e PM2 `mdv-api` online.
+- `curl https://api.xiaomipetrolina.com.br/status`: HTTP 200, `ok=true`, MySQL `ok=true`.
+- `POST https://api.xiaomipetrolina.com.br/auth/password-reset/request` com e-mail inexistente: HTTP 200, `{"ok":true}`.
+- `POST https://api.xiaomipetrolina.com.br/auth/password-reset/confirm` com token invalido: HTTP 400, `{"error":"Link de recuperacao invalido ou expirado"}`.
+- `npm.cmd run deploy:vps-site`: OK; release ativa `/var/www/mdv-site/releases/20260601-015020`.
+- `curl https://www.mercadodovale.com.br/redefinir-senha?token=invalid`: HTTP 200.
+
+Resultado: a recuperacao de senha esta publicada na API e no frontend. O envio efetivo do e-mail depende apenas de configurar credenciais SMTP reais na VPS; sem SMTP configurado, a rota responde de forma generica e segura sem vazar existencia de conta.
+
+### 2026-05-31 - Templates de e-mail transacional do Auth VPS
+
+Mudanca: a criacao dos e-mails transacionais saiu do corpo inline da rota e passou a usar templates nomeados no servidor VPS. Foram criados `buildPasswordResetEmail` para recuperacao de senha e `buildPasswordChangedEmail` para aviso de senha alterada. A confirmacao de troca de senha agora tenta enviar o aviso de seguranca apos atualizar a senha, mantendo resposta da API independente do sucesso do SMTP para nao bloquear o fluxo do cliente.
+
+Configuracao: o mesmo SMTP transacional documentado em `.env.vps.example` atende recuperacao de senha e avisos de seguranca. A confirmacao de cadastro por e-mail continua preparada pela flag `VPS_AUTH_REQUIRE_EMAIL_CONFIRMATION=false`, mas ainda fica para a proxima etapa porque depende da decisao de quando bloquear cadastro/login sem confirmacao.
+
+Validacao:
+- RED: `node tmp-tests\vps-auth-transactional-email-templates-static.test.mjs` falhou antes da implementacao exigindo templates nomeados e aviso de senha alterada.
+- `node tmp-tests\vps-auth-transactional-email-templates-static.test.mjs`: OK.
+- `node tmp-tests\vps-auth-password-reset-static.test.mjs`: OK.
+- `node tmp-tests\vps-auth-email-confirmation-flag-static.test.mjs`: OK.
+- `node --check server.js`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node --check vps_server.js`: OK.
+- `npm.cmd run build`: OK fora do sandbox; dentro do sandbox o Vite ficou bloqueado por permissao ao carregar `vite.config.ts`.
+
+Resultado esperado: com SMTP configurado na VPS, o Auth proprio passa a enviar o link de recuperacao e tambem um aviso quando a senha for alterada. Sem SMTP configurado, as rotas continuam seguras e registram `smtp_not_configured` sem vazar existencia de conta.
+
+### 2026-05-31 - Pagina admin de templates de e-mail
+
+Mudanca: criada a pagina admin `E-mail` em Marketing & Loja para editar templates HTML dinamicos. A base inicial cobre compra realizada com sucesso, promocoes, itens novos, recuperacao de senha, senha alterada e confirmacao de cadastro, alem da criacao de novos templates personalizados. Cada template possui nome, assunto, preheader, corpo HTML, fallback em texto, variaveis dinamicas e preview renderizado com dados de exemplo.
+
+Persistencia: adicionada a tabela `email_templates` na migracao automatica da VPS, com seeds nao destrutivos para os templates do sistema. Os templates ficam editaveis pelo painel via `/table-data/email_templates`.
+
+Validacao:
+- RED: `node tmp-tests\admin-email-templates-page-static.test.mjs` falhou antes da implementacao exigindo rota, menu, pagina, servico e tabela.
+- `node tmp-tests\admin-email-templates-page-static.test.mjs`: OK.
+- `node tmp-tests\vps-auth-transactional-email-templates-static.test.mjs`: OK.
+- `node --check server.js`: OK.
+- `node --check vps_server.cjs`: OK.
+- `node --check vps_server.js`: OK.
+- `npm.cmd run build`: OK fora do sandbox; dentro do sandbox o Vite ficou bloqueado por permissao ao carregar `vite.config.ts`.
+- `curl http://127.0.0.1:5181/admin/settings/email`: HTTP 200 com dev server fora do sandbox.
+- `node deploy-vps-server-only.cjs`: OK; API publicada em `/var/www/mdv-api` e PM2 `mdv-api` online.
+- `npm.cmd run deploy:vps-site`: OK; release ativa `/var/www/mdv-site/releases/20260601-021638`.
+- `curl https://api.xiaomipetrolina.com.br/status`: HTTP 200, `ok=true`, MySQL `ok=true`.
+- `curl https://www.mercadodovale.com.br/admin/settings/email`: HTTP 200.
+- `GET https://api.xiaomipetrolina.com.br/table-data/email_templates?limit=20`: HTTP 200, total `6` com os templates iniciais semeados.
+
+Resultado esperado: o admin passa a ter um editor central para os e-mails transacionais e de marketing. A proxima etapa e ligar o envio real do Auth/marketing aos templates salvos em `email_templates`, em vez dos templates fixos no servidor.
+
+### 2026-05-31 - Caixa de e-mail contato na VPS
+
+Mudanca: criada a caixa real `contato@mercadodovale.com.br` na VPS com Postfix, Dovecot, IMAP, SMTP autenticado e OpenDKIM. A conta recebe localmente em Maildir e tambem encaminha copia para `handielson@gmail.com`. A Cloudflare passou a apontar `mail.mercadodovale.com.br` para `76.13.232.162`, com MX, SPF, DKIM e DMARC do dominio ajustados para a VPS.
+
+API: configurado SMTP interno local em `127.0.0.1:2525` para a API `mdv-api`, usando `contato@mercadodovale.com.br` como remetente. O canal interno usa autenticacao SASL via Dovecot e evita depender de certificado publico para a propria API enviar e-mails transacionais.
+
+Validacao:
+- `node tools\setup-vps-mailbox.cjs`: OK; Postfix, Dovecot e OpenDKIM instalados e ativos.
+- `node tools\cloudflare-mail-dns.cjs`: OK; DNS de e-mail aplicado na Cloudflare.
+- `Resolve-DnsName mail.mercadodovale.com.br -Type A -Server 1.1.1.1`: `76.13.232.162`.
+- `Resolve-DnsName mercadodovale.com.br -Type MX -Server 1.1.1.1`: `mail.mercadodovale.com.br`, prioridade `10`.
+- `Resolve-DnsName mercadodovale.com.br -Type TXT -Server 1.1.1.1`: SPF unico `v=spf1 mx ip4:76.13.232.162 ~all`.
+- `Resolve-DnsName default._domainkey.mercadodovale.com.br -Type TXT -Server 1.1.1.1`: DKIM publicado.
+- `Resolve-DnsName _dmarc.mercadodovale.com.br -Type TXT -Server 1.1.1.1`: DMARC publicado.
+- Teste local na VPS para `contato@mercadodovale.com.br`: Maildir recebeu mensagem e copia para Gmail foi aceita.
+- `node tools\fix-vps-mail-dkim.cjs`: OK; OpenDKIM em `inet:localhost:8891` e Postfix assinando saidas.
+- `node tools\fix-vps-mail-sasl.cjs`: OK; Dovecot criou `/var/spool/postfix/private/auth`, AUTH `plain login` habilitado, porta 25 sem SASL obrigatorio e submission com SASL.
+- `node tools\configure-api-smtp-vps-mail.cjs`: OK; API reiniciada com SMTP interno e PM2 `mdv-api` online.
+- `node tools\test-vps-internal-smtp.cjs`: OK; envio autenticado como `contato` para `handielson@gmail.com`, Gmail retornou `250 OK` e `mailq` ficou vazia.
+
+Observacao: a senha da caixa fica somente na VPS em `/root/contato-mailbox-credentials.txt` e o token da Cloudflare deve permanecer apenas em ambiente local/seguro.
+
+### 2026-06-01 - Remocao final do projeto Vercel legado
+
+Mudanca: removido o projeto Vercel legado `handielson-amorim-bonfims-projects/mercado-do-vale` pelo CLI oficial da Vercel. O vinculo local `.vercel` tambem foi apagado do workspace para evitar deploy acidental no destino antigo.
+
+Validacao:
+- `npx.cmd vercel project inspect mercado-do-vale --scope handielson-amorim-bonfims-projects`: confirmou o alvo antes da remocao, ID `prj_5kdjUHyBqSremGLVUOtkuB3Nc4qG`.
+- `npx.cmd vercel remove mercado-do-vale --scope handielson-amorim-bonfims-projects --yes`: OK, `Success! Removed 1 project`.
+- `npx.cmd vercel project ls --scope handielson-amorim-bonfims-projects --json`: OK, lista atual nao contem `mercado-do-vale`.
+- Pasta local `.vercel`: removida do workspace.
+
+Resultado: o projeto Mercado do Vale nao fica mais publicado nem vinculado na Vercel. O runtime de producao permanece Cloudflare + VPS.
+
+### 2026-06-01 - Limpeza final de rastros Supabase
+
+Mudanca: removidos os rastros operacionais finais do Supabase no workspace principal. Sairam as variaveis `SUPABASE`/`VITE_SUPABASE` dos arquivos `.env*`, os scripts SQL soltos de RLS antigo e diagnosticos manuais que ainda importavam `services/supabase`.
+
+Escopo preservado: permanecem apenas documentacao historica e testes/auditores com `supabase` no nome, usados como guardas para provar que o runtime atual nao voltou a depender do Supabase.
+
+Validacao:
+- `Select-String` nos arquivos `.env`, `.env.local` e `.env.production`: sem variaveis Supabase.
+- `node tmp-tests\supabase-operational-dependency-guard-static.test.mjs`: OK.
+- `node tools\audit-supabase-operational-dependencies.mjs`: OK, zero dependencias operacionais.
+- `node tmp-tests\retired-supabase-project-artifacts-static.test.mjs`: OK.
+- `node tmp-tests\no-supabase-runtime-package-static.test.mjs`: OK.
+
+Resultado esperado: o runtime e as credenciais locais passam a ficar alinhados com Cloudflare + VPS, sem caminho acidental de retorno para Supabase.
+
+## 2026-05-31 - Trava do dominio legado mv
+
+Mudanca: qualquer carregamento do frontend em `mv.mercadodovale.com.br` passa a redirecionar antes de montar o app. O caso legado `https://mv.mercadodovale.com.br/#/catalog` segue para `https://www.mercadodovale.com.br/?categoria=Smartphones`; qualquer outro caminho no host `mv` preserva path, query e hash no dominio canonico `https://www.mercadodovale.com.br`.
+
+Validacao:
+- `node tmp-tests\legacy-mv-catalog-redirect-static.test.mjs`: OK.
+- `npm.cmd run build`: OK; avisos conhecidos de import dinamico/estatico permanecem sem erro.
+- `npm.cmd run deploy:vps-site`: OK. Release ativa: `/var/www/mdv-site/releases/20260601-001623`.
+- Browser: `https://mv.mercadodovale.com.br/#/catalog` redirecionou para `https://www.mercadodovale.com.br/?categoria=Smartphones`.
+- Browser: `https://mv.mercadodovale.com.br/produto/teste?x=1#abc` redirecionou para `https://www.mercadodovale.com.br/produto/teste?x=1#abc`.
+- Bundle publico: `https://www.mercadodovale.com.br/assets/index-DF64M216.js` contem a trava para `mv.mercadodovale.com.br`.
+
+Rollback: restaurar o comportamento anterior em `index.tsx` caso algum fluxo externo ainda dependa de navegar dentro do host `mv`.
+
+## 2026-05-31 - Flags finais VPS ativadas
+
+Mudanca: `USE_VPS.customers`, `USE_VPS.orders`, `USE_VPS.pdv` e `USE_VPS.sales` foram ativadas para concluir o corte de runtime admin/publico na VPS.
+
+Sequencia: esta etapa depende do auditor Supabase operacional zerado e precede validacao admin/publica, build, deploy VPS e corte externo Vercel.
+
+Validacao:
+- `node tmp-tests\vps-final-flags-static.test.mjs`: OK.
+
+Rollback: voltar essas quatro flags para `false` somente se uma validacao funcional bloquear admin, catalogo publico, checkout, pedidos ou PDV.

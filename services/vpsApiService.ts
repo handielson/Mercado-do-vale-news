@@ -1,10 +1,10 @@
 /**
  * VPS API Service — Mercado do Vale
  * Leitura: catálogo público via MySQL na VPS (com timeout e fallback silencioso).
- * Escrita: sync fire-and-forget após writes no Supabase (autenticado com X-Sync-Key).
+ * Escrita: mutações autenticadas com sessão atual e X-Sync-Key.
  */
 
-import { supabase } from './supabase';
+import { buildAuthHeaders } from './authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 import type { ShippingPriceRange, ShippingPriceRangeInput, ShippingZone, ShippingZoneInput } from '../types/shipping';
 
@@ -112,13 +112,10 @@ class VpsApiService {
   private videoCheckInFlight = new Map<string, Promise<{ exists: boolean; url?: string } | null>>();
 
   private async authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    return {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    return buildAuthHeaders({
       ...getVpsSyncHeaders(),
       ...extra,
-    };
+    });
   }
 
   private isCached<T>(key: string): T | null {
@@ -560,6 +557,24 @@ class VpsApiService {
 
   // ── Units (inventário serializado) ────────────────────────────────────
 
+  async getUnits(filters: {
+    product_id?: string;
+    order_id?: string;
+    sale_id?: string;
+    status?: string;
+    company_id?: string;
+    ids?: string[];
+  }): Promise<any[] | null> {
+    const qs = new URLSearchParams();
+    if (filters.product_id) qs.set('product_id', filters.product_id);
+    if (filters.order_id) qs.set('order_id', filters.order_id);
+    if (filters.sale_id) qs.set('sale_id', filters.sale_id);
+    if (filters.company_id) qs.set('company_id', filters.company_id);
+    if (filters.status) qs.set('status', filters.status);
+    if (filters.ids?.length) qs.set('ids', filters.ids.join(','));
+    return this.fetchSafe<any[]>(`/units?${qs.toString()}`, true);
+  }
+
   async getUnitsByProduct(productId: string, status?: string): Promise<any[] | null> {
     const qs = new URLSearchParams({ product_id: productId });
     if (status) qs.set('status', status);
@@ -641,7 +656,7 @@ class VpsApiService {
     } catch { return false; }
   }
 
-  // ── WRITE (fire-and-forget após Supabase) ─────────────────────────────
+  // ── WRITE ─────────────────────────────────────────────────────────────
 
   async createCombo(payload: unknown): Promise<VpsMutationResult> {
     this.invalidateProductCache();

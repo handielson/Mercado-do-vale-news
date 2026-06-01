@@ -99,7 +99,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose 
 
         setIsSaving(true);
         try {
-            // Bug fix: strings vazias → undefined (Supabase espera null/undefined, não '')
+            // Bug fix: strings vazias → undefined (VPS espera null/undefined, não '')
             const payload: Partial<CatalogBanner> = {
                 title: formData.title.trim(),
                 subtitle: formData.subtitle.trim() || undefined,

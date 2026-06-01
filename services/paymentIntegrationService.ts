@@ -1,55 +1,45 @@
-import { supabase } from './supabase';
 import type { PaymentIntegration, PaymentIntegrationInput, PaymentGatewayName } from '../types/paymentIntegration';
+import { getCompanyId } from './companyContext';
+import { vpsClient } from './vpsClient';
 
-const COMPANY_SLUG = 'mercado-do-vale';
+interface TableDataResponse {
+    rows?: PaymentIntegration[];
+}
 
-async function getCompanyId(): Promise<string> {
-    const { data, error } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('slug', COMPANY_SLUG)
-        .single();
+async function loadPaymentIntegrations(companyId: string): Promise<PaymentIntegration[]> {
+    const allRows: PaymentIntegration[] = [];
+    const pageSize = 200;
 
-    if (error || !data) throw new Error('Empresa não encontrada.');
-    return data.id;
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<TableDataResponse>(
+            `/table-data/payment_integrations?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows.push(...rows);
+        if (rows.length < pageSize) break;
+    }
+
+    return allRows
+        .filter(row => String(row.company_id) === String(companyId))
+        .sort((a, b) => String(a.gateway_name).localeCompare(String(b.gateway_name)));
 }
 
 export const paymentIntegrationService = {
     async getIntegrations(): Promise<PaymentIntegration[]> {
         const companyId = await getCompanyId();
-        const { data, error } = await supabase
-            .from('payment_integrations')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('gateway_name', { ascending: true });
-
-        if (error) throw new Error(error.message);
-        return data || [];
+        return loadPaymentIntegrations(companyId);
     },
 
     async getIntegrationByGateway(gatewayName: PaymentGatewayName): Promise<PaymentIntegration | null> {
         const companyId = await getCompanyId();
-        const { data, error } = await supabase
-            .from('payment_integrations')
-            .select('*')
-            .eq('company_id', companyId)
-            .eq('gateway_name', gatewayName)
-            .single();
-
-        if (error && error.code !== 'PGRST116') throw new Error(error.message);
-        return data as PaymentIntegration | null;
+        const integrations = await loadPaymentIntegrations(companyId);
+        return integrations.find(integration => integration.gateway_name === gatewayName) || null;
     },
 
     async upsertIntegration(input: PaymentIntegrationInput): Promise<PaymentIntegration> {
         const companyId = await getCompanyId();
-
-        // Check if exists
-        const { data: existing } = await supabase
-            .from('payment_integrations')
-            .select('id')
-            .eq('company_id', companyId)
-            .eq('gateway_name', input.gateway_name)
-            .single();
+        const integrations = await loadPaymentIntegrations(companyId);
+        const existing = integrations.find(integration => integration.gateway_name === input.gateway_name);
 
         const rowData = {
             company_id: companyId,
@@ -63,32 +53,17 @@ export const paymentIntegrationService = {
             updated_at: new Date().toISOString()
         };
 
-        let result;
         if (existing) {
-            result = await supabase
-                .from('payment_integrations')
-                .update(rowData)
-                .eq('id', existing.id)
-                .select()
-                .single();
-        } else {
-            result = await supabase
-                .from('payment_integrations')
-                .insert([rowData])
-                .select()
-                .single();
+            return vpsClient.patch<PaymentIntegration>(
+                `/table-data/payment_integrations/${encodeURIComponent(existing.id)}?pk=id`,
+                rowData
+            );
         }
 
-        if (result.error) throw new Error(result.error.message);
-        return result.data as PaymentIntegration;
+        return vpsClient.post<PaymentIntegration>('/table-data/payment_integrations', rowData);
     },
 
     async deleteIntegration(id: string): Promise<void> {
-        const { error } = await supabase
-            .from('payment_integrations')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw new Error(error.message);
+        await vpsClient.delete(`/table-data/payment_integrations/${encodeURIComponent(id)}?pk=id`);
     }
 };

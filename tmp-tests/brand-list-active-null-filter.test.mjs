@@ -5,14 +5,14 @@ const source = readFileSync('services/brands.ts', 'utf8');
 
 assert.match(
   source,
-  /\.or\(['"]active\.eq\.true,active\.is\.null['"]\)/,
-  'brandService.listActive must include active null rows because legacy brands are treated as active'
+  /return \(await list\(\)\)\.filter\(brand => brand\.active\)/,
+  'brandService.listActive must filter active rows after VPS normalization'
 );
 
 assert.doesNotMatch(
   source,
-  /\.eq\(['"]active['"],\s*true\)/,
-  'brandService.listActive must not exclude legacy brands with active null'
+  /\.or\(['"]active\.eq\.true,active\.is\.null['"]\)|\.eq\(['"]active['"],\s*true\)/,
+  'brandService.listActive must not use Supabase active filters after VPS-only migration'
 );
 
 console.log('brand list active null filter regression ok');

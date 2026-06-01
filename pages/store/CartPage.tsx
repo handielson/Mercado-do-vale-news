@@ -11,7 +11,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { extractVariants } from '@/services/productVariants';
 import { QuoteModal } from '@/components/catalog/QuoteModal';
 import { DeliveryOptions, type DeliveryOption } from '@/components/catalog/DeliveryOptions';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { useCoupon } from '@/hooks/useCoupon';
 import { getStoreStatus, type StoreStatus } from '@/utils/storeStatus';
 import { getPublicCompanyData, publicCompanySettingsService } from '@/services/publicCompanySettings';
@@ -19,7 +19,7 @@ import type { WarrantyOption } from '@/types/companySettings';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import { categoryService } from '@/services/categories';
 import { brandService } from '@/services/brands';
-import { supabase } from '@/services/supabase';
+import { warrantyTemplateService } from '@/services/warrantyTemplates';
 import { generateBudgetText } from '@/utils/cartShareUtils';
 import { NewOrderModal } from '@/components/cart/NewOrderModal';
 import { vpsApiService } from '@/services/vpsApiService';
@@ -54,7 +54,7 @@ function CartPageContent() {
     const { items, removeItem, updateQuantity, subtotal, totalItems, clear } = useCart();
     const cartVolume = useMemo(() => calculateCartVolume(items), [items]);
     const orderCost = useMemo(() => items.reduce((acc, item) => acc + (item.product.price_cost || 0) * item.quantity, 0), [items]);
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const device = useDeviceType();
     const navigate = useNavigate();
     const [couponOpen, setCouponOpen] = useState(false);
@@ -236,7 +236,8 @@ function CartPageContent() {
                             const cat = categories.find(c => c?.id === p.category_id);
                             setEligibleBaseWarrantyDays(cat?.warranty_days || 90);
                         } else if (wType === 'custom' && p.warranty_template_id) {
-                            supabase.from('warranty_templates').select('duration_days').eq('id', p.warranty_template_id).maybeSingle().then(r => setEligibleBaseWarrantyDays(r.data?.duration_days || 90));
+                            warrantyTemplateService.getById(p.warranty_template_id)
+                                .then(template => setEligibleBaseWarrantyDays(template?.duration_days || 90));
                         } else {
                             setEligibleBaseWarrantyDays(90);
                         }

@@ -1,10 +1,10 @@
-import { SupabaseClient } from '@supabase/supabase-js';
 import { SystemTag } from './systemTagsService';
 import { vpsApiService } from './vpsApiService';
+import { getSales } from './saleService';
 
 // ============================================================
 // Tag Resolver — Motor de resolução de variáveis dinâmicas
-// Funciona tanto no cliente (Supabase SDK) quanto no servidor.
+// Funciona tanto no cliente quanto no servidor usando os serviços VPS.
 // ============================================================
 
 const fmtMoney = (val: number) =>
@@ -35,9 +35,8 @@ const applyLineFormat = (template: string, row: Record<string, string>): string 
 
 /**
  * Resolve uma única tag com base no resolver_type.
- * Requer uma instância do Supabase Client (pode ser service role no backend).
  */
-export async function resolveTag(tag: SystemTag, supabase: SupabaseClient): Promise<string> {
+export async function resolveTag(tag: SystemTag): Promise<string> {
     const cfg = tag.resolver_config || {};
     const now = new Date();
 
@@ -157,14 +156,12 @@ export async function resolveTag(tag: SystemTag, supabase: SupabaseClient): Prom
                 const end = new Date(start);
                 end.setHours(23, 59, 59, 999);
 
-                let query = supabase.from('sales')
-                    .select('id', { count: 'exact', head: true })
-                    .gte('created_at', start.toISOString())
-                    .lte('created_at', end.toISOString());
-                if (cfg.status) query = query.eq('status', cfg.status);
-
-                const { count } = await query;
-                return (count ?? 0).toString();
+                const sales = await getSales({
+                    status: cfg.status,
+                    start_date: start.toISOString(),
+                    end_date: end.toISOString(),
+                });
+                return sales.length.toString();
             }
 
             // ── SUM SALES TODAY ──────────────────────────────────
@@ -175,14 +172,12 @@ export async function resolveTag(tag: SystemTag, supabase: SupabaseClient): Prom
                 end.setHours(23, 59, 59, 999);
 
                 const field = cfg.field ?? 'total';
-                let query = supabase.from('sales')
-                    .select(field)
-                    .gte('created_at', start.toISOString())
-                    .lte('created_at', end.toISOString());
-                if (cfg.status) query = query.eq('status', cfg.status);
-
-                const { data } = await query;
-                const sum = (data ?? []).reduce((s: number, r: any) => s + (r[field] || 0), 0);
+                const sales = await getSales({
+                    status: cfg.status,
+                    start_date: start.toISOString(),
+                    end_date: end.toISOString(),
+                });
+                const sum = sales.reduce((s: number, r: any) => s + (Number(r[field]) || 0), 0);
                 return fmtMoney(sum);
             }
 
@@ -200,16 +195,15 @@ export async function resolveTag(tag: SystemTag, supabase: SupabaseClient): Prom
 
 /**
  * Resolve todas as tags computáveis (não system_injected) e retorna um dicionário.
- * Uso: const dict = await resolveAll(tags, supabase)
+ * Uso: const dict = await resolveAll(tags)
  *      msg = applyDict(msg, dict)
  */
 export async function resolveAll(
-    tags: SystemTag[],
-    supabase: SupabaseClient
+    tags: SystemTag[]
 ): Promise<Record<string, string>> {
     const resolvable = tags.filter(t => t.active && t.resolver_type !== 'system_injected');
     const entries = await Promise.all(
-        resolvable.map(async t => [`{${t.name}}`, await resolveTag(t, supabase)] as [string, string])
+        resolvable.map(async t => [`{${t.name}}`, await resolveTag(t)] as [string, string])
     );
     return Object.fromEntries(entries);
 }

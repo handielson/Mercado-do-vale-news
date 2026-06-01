@@ -27,7 +27,7 @@ interface DynamicField {
  * - Controlled by parent via props
  * - Radio buttons for required/optional/off states
  * - Checkboxes for EAN exclusion and auto-naming
- * - DYNAMIC: Loads available fields from Supabase (Database-First)
+ * - DYNAMIC: Loads available fields from VPS (Database-First)
  */
 export const FieldConfigSection: React.FC<FieldConfigSectionProps> = ({
     config,

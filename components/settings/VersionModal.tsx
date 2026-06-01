@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Version, VersionInput } from '../../types/version';
-import { versionService } from '../../services/versions';
+import { versionService } from '../../services/versions-vps';
 
 interface VersionModalProps {
     isOpen: boolean;

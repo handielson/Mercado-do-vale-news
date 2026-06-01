@@ -1,5 +1,5 @@
 import imageCompression from 'browser-image-compression';
-import { supabase } from './supabase';
+import { buildAuthHeaders } from './authSession';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 
 function proxyUrl(path: string, method: string = 'GET'): string {
@@ -12,13 +12,10 @@ function directVpsUrl(path: string): string {
 }
 
 async function authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    return {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    return buildAuthHeaders({
         ...getVpsSyncHeaders(),
         ...extra,
-    };
+    });
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────

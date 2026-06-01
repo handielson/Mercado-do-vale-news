@@ -16,8 +16,22 @@ assert(
 );
 
 assert(
+  !source.includes('Digite o número ou o modelo escolhido') &&
+  !source.includes('Digite o numero ou o modelo escolhido') &&
+  !source.includes('Digite o nÃºmero ou o modelo escolhido'),
+  'copied catalog message must not ask the customer to type a number or model',
+);
+
+assert(
   !/Total:\s*\$\{grouped\.length\}/.test(source),
   'copied catalog message must not include a model counter footer',
 );
 
-console.log('catalog WhatsApp footer is short and has no model counter');
+assert(
+  source.includes('catalogUrl') &&
+  source.includes('?categoria=') &&
+  source.includes('Veja no site'),
+  'copied category message must include the category/search link',
+);
+
+console.log('catalog WhatsApp footer is short, has category link, and has no model counter');

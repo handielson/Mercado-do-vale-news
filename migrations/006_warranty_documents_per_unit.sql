@@ -1,6 +1,6 @@
 -- ============================================================
 -- MIGRATION 006: Termo de garantia por aparelho serializado
--- Aplicar no Supabase SQL Editor
+-- Aplicar no SQL da VPS
 -- ============================================================
 -- Cada aparelho serializado vendido recebe seu próprio termo de garantia
 -- com número de documento único (warranty_documents.id) e prazo individual

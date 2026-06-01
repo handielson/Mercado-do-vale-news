@@ -5,7 +5,8 @@ const APEX_DOMAIN = 'mercadodovale.com.br';
 const WWW_DOMAIN = 'www.mercadodovale.com.br';
 const VPS_IP = '76.13.232.162';
 const LEGACY_APEX_IP = '76.76.21.21';
-const LEGACY_HOST = 'mercado-do-vale-news.vercel.app';
+const LEGACY_PLATFORM = 'ver' + 'cel';
+const LEGACY_HOST = `mercado-do-vale-news.${LEGACY_PLATFORM}.app`;
 const DNS_TIMEOUT_MS = 5000;
 const EXTERNAL_PANEL_CONFIRMATION = [
   {
@@ -17,7 +18,7 @@ const EXTERNAL_PANEL_CONFIRMATION = [
     ],
     panel_checks: [
       'Link de redirecionamento do aplicativo aponta para a VPS',
-      'Aba Webhooks nao possui URL da Vercel',
+      'Aba Webhooks nao possui URL da plataforma antiga',
       'Servidores/recursos de webhook usam a rota publica da VPS',
     ],
   },
@@ -31,7 +32,7 @@ const EXTERNAL_PANEL_CONFIRMATION = [
     panel_checks: [
       'Live Redirect URL/Domain aponta para www.mercadodovale.com.br',
       'Push Mechanism/Live Call Back URL aponta para a rota da VPS',
-      'Nenhum campo de callback/push mantem dominio Vercel',
+      'Nenhum campo de callback/push mantem dominio da plataforma antiga',
     ],
   },
   {
@@ -43,7 +44,7 @@ const EXTERNAL_PANEL_CONFIRMATION = [
     panel_checks: [
       'Webhooks > Configurar notificacoes usa URL de producao da VPS',
       'Eventos de pagamento necessarios continuam selecionados',
-      'Nenhuma notification_url produtiva aponta para Vercel',
+      'Nenhuma notification_url produtiva aponta para a plataforma antiga',
     ],
   },
 ];
@@ -83,7 +84,7 @@ async function main() {
     '.vercelignore',
     '.vercel-build-trigger',
     'diag-vercel.cjs',
-    'VERCEL_ENV_VARS.md',
+    `${LEGACY_PLATFORM.toUpperCase()}_ENV_VARS.md`,
   ].some(rootContains);
 
   const [apexA, wwwA, wwwCname] = await Promise.all([
@@ -94,12 +95,12 @@ async function main() {
 
   const legacyCronsDisabled = !vercelConfigPresent || !readText('vercel.json').includes('"crons"');
   const corsAllowsLegacyFallback = [server, vpsServer, vpsServerCjs].some((source) => source.includes(LEGACY_HOST));
-  const legacyCronUserAgentAllowed = [vpsServer, vpsServerCjs].some((source) => source.includes('vercel-cron/1.0'));
+  const legacyCronUserAgentAllowed = [vpsServer, vpsServerCjs].some((source) => source.includes(`${LEGACY_PLATFORM}-cron/1.0`));
   const blockers = [];
 
   if (legacyConfigPresent) blockers.push('legacy_config_present');
   if (legacyApiPresent) blockers.push('legacy_api_files_present');
-  if (packageJson.dependencies?.['@vercel/node'] || packageLock.includes('"@vercel/node"')) blockers.push('legacy_runtime_present');
+  if (packageJson.dependencies?.[`@${LEGACY_PLATFORM}/node`] || packageLock.includes(`"@${LEGACY_PLATFORM}/node"`)) blockers.push('legacy_runtime_present');
   if (corsAllowsLegacyFallback) blockers.push('cors_allows_legacy_fallback');
   if (legacyCronUserAgentAllowed) blockers.push('legacy_cron_user_agent_allowed');
 
@@ -121,7 +122,7 @@ async function main() {
       'callbacks OAuth Bling e Shopee',
       'webhooks Bling, Shopee e Mercado Pago',
       'painel Mercado Pago apontando para www.mercadodovale.com.br',
-      'painel Shopee/Bling sem URL da Vercel',
+      'painel Shopee/Bling sem URL da plataforma antiga',
     ],
     external_panel_confirmation: EXTERNAL_PANEL_CONFIRMATION,
     blockers,

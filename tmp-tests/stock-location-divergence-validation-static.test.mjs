@@ -23,8 +23,14 @@ assert.match(
 
 assert.match(
   service,
-  /from\(['"]stock_location_divergences['"]\)[\s\S]*\.neq\(['"]difference['"],\s*0\)[\s\S]*\.order\(['"]product_name['"],\s*\{\s*ascending:\s*true\s*\}\)/,
-  'service must return only products with non-zero divergence in a stable order'
+  /vpsClient\.get<StockLocationDivergence\[]>\('\/stock-locations\/divergences'\)/,
+  'service must load non-zero divergence rows from the VPS endpoint'
+);
+
+assert.doesNotMatch(
+  service,
+  /from\(['"]stock_location_divergences['"]\)/,
+  'service must not query the Supabase divergence view directly'
 );
 
 assert.match(page, /getStockDivergences\(\)/, 'admin stock locations page must load divergence data');

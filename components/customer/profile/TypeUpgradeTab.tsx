@@ -9,7 +9,7 @@ import {
     Users,
     XCircle,
 } from 'lucide-react';
-import { useSupabaseAuth } from '../../../hooks/useSupabaseAuth';
+import { useVpsAuth } from '../../../hooks/useVpsAuth';
 import type { TypeUpgradeRequest } from '../../../types/typeUpgradeRequest';
 
 type UpgradeType = 'wholesale' | 'resale';
@@ -42,7 +42,7 @@ const accountPlans = [
 ] as const;
 
 export const TypeUpgradeTab: React.FC = () => {
-    const { customer, requestTypeUpgrade, getUpgradeRequestStatus } = useSupabaseAuth();
+    const { customer, requestTypeUpgrade, getUpgradeRequestStatus } = useVpsAuth();
     const [upgradeRequest, setUpgradeRequest] = useState<TypeUpgradeRequest | null>(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState<UpgradeType | null>(null);

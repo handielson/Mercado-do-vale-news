@@ -6,7 +6,7 @@ import { publicCompanySettingsService } from '@/services/publicCompanySettings';
 import { useEffect, useState } from 'react';
 import type { QuoteCartItem } from '@/contexts/QuoteCartContext';
 import toast from 'react-hot-toast';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { useCoupon } from '@/hooks/useCoupon';
 import { MixedPaymentSimulator, type MixedPaymentState } from './MixedPaymentSimulator';
 import { getStoreStatus, type StoreStatus } from '@/utils/storeStatus';
@@ -19,7 +19,7 @@ interface QuoteCartSidebarProps {
 
 export function QuoteCartSidebar({ isOpen, onClose }: QuoteCartSidebarProps) {
     const { items, removeItem, clear } = useQuoteCart();
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const [whatsappNumber, setWhatsappNumber] = useState('');
     const [storeAddress, setStoreAddress] = useState('');
     const [customNumber, setCustomNumber] = useState('');

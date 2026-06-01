@@ -15,8 +15,13 @@ assert(
 );
 
 assert(
-  /from\('units'\)/.test(source),
-  'OrderTrackingPage still intentionally keeps units lookup separate until the stock/units module migrates',
+  /unitService\.listByIds/.test(source),
+  'OrderTrackingPage should load released serialized unit data through unitService',
+);
+
+assert(
+  !/from\('units'\)|supabase\s*\.\s*from\('units'\)/.test(source),
+  'OrderTrackingPage must not read units directly from Supabase',
 );
 
 console.log('order tracking VPS products static checks passed');

@@ -25,9 +25,9 @@ assert.match(page, /duplicate_variation:model_list_before_update/, 'duplicate re
 assert.match(page, /duplicate_variation:update_existing_models/, 'duplicate recovery should update existing models when duplicate item already has variations');
 assert.match(page, /duplicate_variation:update_model/, 'duplicate recovery should use update_model instead of init_tier_variation for existing variations');
 
-const api = readFileSync('api/shopee-catalog.ts', 'utf8');
-assert.match(api, /action === 'update_model'/, 'API must expose update_model action');
-assert.match(api, /\/api\/v2\/product\/update_model/, 'API must call Shopee update_model endpoint');
+const vpsServer = readFileSync('vps_server.cjs', 'utf8');
+assert.match(vpsServer, /case 'update_model'/, 'VPS API must expose update_model action');
+assert.match(vpsServer, /\/api\/v2\/product\/update_model/, 'VPS API must call Shopee update_model endpoint');
 assert.match(page, /add_item:existing_variation/, 'UI must have a tracked existing variation update path');
 
 console.log('shopee existing variation flow static checks passed');

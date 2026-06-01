@@ -30,14 +30,14 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 
   assert.match(
     source,
-    /supabaseRestSelect\('payment_integrations'/,
-    `${file} must load the Mercado Pago integration from Supabase`,
+    /vpsDbSelect\('payment_integrations'/,
+    `${file} must load the Mercado Pago integration from the VPS database`,
   );
 
   assert.match(
     source,
-    /supabaseRestPatch\('orders'/,
-    `${file} must update the matching order through Supabase REST`,
+    /vpsDbPatch\('orders'/,
+    `${file} must update the matching order through the VPS database`,
   );
 
   assert.match(

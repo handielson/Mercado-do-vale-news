@@ -1,11 +1,14 @@
-import { supabase } from './supabase';
+import { buildAuthHeaders } from './authSession';
 import type { CatalogProduct } from '@/types/catalog';
 import { vpsApiService } from '@/services/vpsApiService';
 import { normalizeProduct } from '@/services/productNormalizer';
 import { catalogConfigService } from '@/services/catalogConfigService';
 import { buildVpsUrl, getVpsSyncHeaders } from '@/services/vpsProxyBase';
+import { vpsClient } from '@/services/vpsClient';
 import type { CatalogSettings } from '@/types/catalogSettings';
 import { filterBySelectedCategories } from './catalogFiltering';
+import { colorService } from './colors';
+import { modelColorImagesService } from './model-color-images';
 
 
 // Persistent Cache (Stale-While-Revalidate pattern)
@@ -186,15 +189,21 @@ export const catalogService = {
                     productsNeedingImages.map((p: any) => p.specs?.color).filter(Boolean) as string[]
                 )];
 
-                const [{ data: modelImages }, { data: colorRows }] = await Promise.all([
-                    supabase
-                        .from('model_color_images')
-                        .select('model_id, color_id, images')
-                        .in('model_id', modelIds),
+                const [modelImagesResult, colorRowsResult] = await Promise.allSettled([
+                    modelColorImagesService.getByModelIds(modelIds),
                     colorNames.length > 0
-                        ? supabase.from('colors').select('id, name').in('name', colorNames)
-                        : Promise.resolve({ data: [] })
+                        ? colorService.list().then(colors => colors.filter(color => colorNames.includes(color.name)))
+                        : Promise.resolve([])
                 ]);
+                const modelImages = modelImagesResult.status === 'fulfilled' ? modelImagesResult.value : [];
+                const colorRows = colorRowsResult.status === 'fulfilled' ? colorRowsResult.value : [];
+
+                if (modelImagesResult.status === 'rejected' || colorRowsResult.status === 'rejected') {
+                    console.warn('[catalogService] Fallback de imagens por modelo/cor indisponivel; seguindo com imagens publicas dos produtos.', {
+                        modelImagesError: modelImagesResult.status === 'rejected' ? modelImagesResult.reason : null,
+                        colorRowsError: colorRowsResult.status === 'rejected' ? colorRowsResult.reason : null,
+                    });
+                }
 
                 if (modelImages && modelImages.length > 0) {
                     const colorNameToId = new Map<string, string>(
@@ -383,7 +392,7 @@ export const catalogService = {
      */
     searchProducts: async (query: string): Promise<CatalogProduct[]> => {
         if (query.length < 2) return [];
-        // VPS é a fonte de verdade — Supabase products descontinuado para catálogo
+        // VPS é a fonte de verdade — catálogo VPS descontinuado para catálogo
         const results = await vpsApiService.getProducts({ search: query, limit: 50, noCache: true });
         return removeHiddenOffers(results || []).map(normalizeProduct) as unknown as CatalogProduct[];
     },
@@ -392,10 +401,10 @@ export const catalogService = {
      * Buscar produto por ID
      */
     getProductById: async (id: string): Promise<CatalogProduct | null> => {
-        // VPS é a fonte de verdade — Supabase products descontinuado para catálogo
+        // VPS é a fonte de verdade — catálogo VPS descontinuado para catálogo
         const product = await vpsApiService.getProductById(id, true);
         if (!product) return null;
-        // Registrar visualização (Supabase analytics — ok manter)
+        // Registrar visualização (analytics VPS — ok manter)
         await catalogService.recordProductView(id);
         if (product.offer_type && product.offer_visibility === 'hidden') return null;
         return normalizeProduct(product) as unknown as CatalogProduct;
@@ -418,7 +427,7 @@ export const catalogService = {
                 } catch (e) { }
             }
         }
-        // VPS é a fonte de verdade — Supabase products descontinuado para catálogo
+        // VPS é a fonte de verdade — catálogo VPS descontinuado para catálogo
         const results = await vpsApiService.getProducts({ category, limit: 200 });
         const products = removeHiddenOffers(results || []).map(normalizeProduct) as unknown as CatalogProduct[];
         if (!bypassCache) {
@@ -507,14 +516,10 @@ export const catalogService = {
         const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
         localStorage.setItem('session_id', sessionId);
 
-        await supabase.from('product_views').insert({
-            product_id: productId,
+        await vpsClient.post(`/products/${encodeURIComponent(productId)}/view`, {
             customer_id: customerId,
-            session_id: sessionId
+            session_id: sessionId,
         });
-
-        // Atualizar contador no produto
-        await supabase.rpc('increment_product_views', { product_id: productId });
     },
 
     /**
@@ -523,15 +528,12 @@ export const catalogService = {
     addToFavorites: async (productId: string, customerId: string): Promise<void> => {
         try {
             const path = `/customers/${customerId}/favorites`;
-            const { data } = await supabase.auth.getSession();
-            const token = data.session?.access_token;
             await fetch(buildVpsUrl(path, { method: 'POST' }), {
                 method: 'POST',
-                headers: {
+                headers: await buildAuthHeaders({
                     'Content-Type': 'application/json',
                     ...getVpsSyncHeaders(),
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
+                }),
                 body: JSON.stringify({ productId }),
             });
         } catch (error: any) {
@@ -546,14 +548,11 @@ export const catalogService = {
     removeFromFavorites: async (productId: string, customerId: string): Promise<void> => {
         try {
             const path = `/customers/${customerId}/favorites/${productId}`;
-            const { data } = await supabase.auth.getSession();
-            const token = data.session?.access_token;
             await fetch(buildVpsUrl(path, { method: 'DELETE' }), {
                 method: 'DELETE',
-                headers: {
+                headers: await buildAuthHeaders({
                     ...getVpsSyncHeaders(),
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
+                }),
             });
         } catch (error: any) {
             console.error('Error removing from favorites:', error);
@@ -567,14 +566,11 @@ export const catalogService = {
     getUserFavorites: async (customerId: string): Promise<string[]> => {
         try {
             const path = `/customers/${customerId}/favorites`;
-            const { data: sessionData } = await supabase.auth.getSession();
-            const token = sessionData.session?.access_token;
             const res = await fetch(buildVpsUrl(path, { method: 'GET' }), {
-                headers: {
+                headers: await buildAuthHeaders({
                     Accept: 'application/json',
                     ...getVpsSyncHeaders(),
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
+                }),
                 signal: AbortSignal.timeout(5000),
             });
             if (!res.ok) return [];
@@ -700,7 +696,7 @@ export const catalogService = {
     }
 };
 
-// Função RPC para incrementar views (criar no Supabase)
+// Função RPC para incrementar views (criar no VPS)
 /*
 CREATE OR REPLACE FUNCTION increment_product_views(product_id UUID)
 RETURNS void AS $$

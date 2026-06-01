@@ -1,10 +1,10 @@
 /**
  * vpsClient.ts
  * Cliente HTTP para a API da VPS (https://api.xiaomipetrolina.com.br)
- * Substitui chamadas ao Supabase gradualmente conforme as tabelas migram.
+ * Substitui chamadas ao VPS gradualmente conforme as tabelas migram.
  */
 
-import { supabase } from './supabase';
+import { getAuthSessionToken } from './authSession';
 import {
     buildVpsUrl,
     getVpsSyncHeaders,
@@ -55,7 +55,7 @@ function markCheckpointBlocked(): void {
 
 function looksLikeLegacySecurityCheckpoint(text: string): boolean {
     const lower = (text || '').toLowerCase();
-    return lower.includes('vercel security checkpoint') || lower.includes("we're verifying your browser");
+    return lower.includes('security checkpoint') || lower.includes("we're verifying your browser");
 }
 
 function summarizeErrorBody(text: string): string {
@@ -69,8 +69,7 @@ function summarizeErrorBody(text: string): string {
 }
 
 async function buildHeaders(extra?: Record<string, string>): Promise<HeadersInit> {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
+    const token = await getAuthSessionToken();
     const syncKey = getVpsSyncKey();
 
     const headers: HeadersInit = {
@@ -217,8 +216,7 @@ export const vpsClient = {
                 return;
             }
 
-            supabase.auth.getSession().then(({ data }) => {
-                const token = data.session?.access_token;
+            getAuthSessionToken().then((token) => {
                 const syncKey = getVpsSyncKey();
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', buildVpsUrl(path, { method: 'POST' }));

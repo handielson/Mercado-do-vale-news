@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Zap } from 'lucide-react';
-import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
+import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { shippingService } from '../services/shippingService';
 import type { FastDeliveryConfig } from '../types/shipping';
 
@@ -18,7 +18,7 @@ interface FastDeliveryBadgeProps {
 }
 
 export function FastDeliveryBadge({ className = '' }: FastDeliveryBadgeProps) {
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const [config, setConfig] = useState<FastDeliveryConfig | null>(null);
     const [visible, setVisible] = useState(false);
 

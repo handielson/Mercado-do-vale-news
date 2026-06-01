@@ -3,10 +3,11 @@ import { X, GitCompare, Package, Trophy } from 'lucide-react';
 import { useCompare } from '../../contexts/CompareContext';
 import type { CatalogProduct } from '../../types/catalog';
 import { formatPrice } from '../../services/installmentCalculator';
-import { useSupabaseAuth } from '../../contexts/SupabaseAuthContext';
+import { useVpsAuth } from '../../contexts/VpsAuthContext';
 import { getEffectivePrice } from '../../hooks/useEffectiveCustomerType';
-import { supabase } from '../../services/supabase';
 import { modelService } from '../../services/models';
+import { versionService } from '../../services/versions-vps';
+import type { Version } from '../../types/version';
 
 interface CompareModalProps {
     onClose: () => void;
@@ -198,7 +199,7 @@ function toNumber(val: unknown, key?: string): number | null {
 
 export function CompareModal({ onClose }: CompareModalProps) {
     const { selected, clear } = useCompare();
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
 
     // Fetch template_values from `models` table for each product
     const [templateValues, setTemplateValues] = useState<(Record<string, unknown> | null)[]>([]);
@@ -208,7 +209,7 @@ export function CompareModal({ onClose }: CompareModalProps) {
     useEffect(() => {
         const fetchAll = async () => {
             setLoading(true);
-            const [results, { data: versionsData }] = await Promise.all([
+            const [results, versionsData] = await Promise.all([
                 Promise.all(
                     selected.map(async (p) => {
                         if (!p.model_id) return null;
@@ -216,11 +217,11 @@ export function CompareModal({ onClose }: CompareModalProps) {
                         return (model?.template_values as Record<string, unknown>) || null;
                     })
                 ),
-                supabase.from('versions').select('id, name')
+                versionService.list()
             ]);
 
             if (versionsData) {
-                setVersionsMap(new Map(versionsData.map((v: any) => [v.id, v.name])));
+                setVersionsMap(new Map(versionsData.map((v: Version) => [v.id, v.name])));
             }
 
             setTemplateValues(results);

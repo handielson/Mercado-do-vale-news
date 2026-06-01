@@ -14,7 +14,7 @@ import type { OrderDeliveryType, OrderPaymentMethod, OrderShippingAddress, Payme
 import type { CardFormData } from '@/services/providers/mercadoPagoProvider';
 import MercadoPagoCardBrick from '@/components/payment/MercadoPagoCardBrick';
 import { MapPin, CreditCard, Truck, Package, ChevronRight, Loader2, User } from 'lucide-react';
-import { useSupabaseAuth } from '@/contexts/SupabaseAuthContext';
+import { useVpsAuth } from '@/contexts/VpsAuthContext';
 
 interface CheckoutForm {
     customer_name: string;
@@ -48,7 +48,7 @@ const INITIAL_FORM: CheckoutForm = {
 
 export default function CheckoutPage() {
     const { items, subtotal, clear, isHydrated } = useCart();
-    const { customer } = useSupabaseAuth();
+    const { customer } = useVpsAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const state = location.state as {

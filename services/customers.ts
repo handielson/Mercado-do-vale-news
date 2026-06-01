@@ -1,18 +1,62 @@
-import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
 import { Customer, CustomerInput, CustomerFilters } from '../types/customer';
 import { telegramBotService } from './telegramBot';
 
 /**
  * Customer Service
  * 
- * ANTIGRAVITY PROTOCOL:
- * - Database-First Architecture
- * - All customer data stored in Supabase
- * - Cache management for performance
- * - RLS policies enforce security
+ * Customer data now uses the VPS/MySQL operational store.
+ * Auth flows use the VPS auth context.
  */
 
 import { getCompanyId as resolveCompanyId } from './companyContext';
+
+interface TableDataResponse<T> {
+    rows?: T[];
+    total?: number;
+    limit?: number;
+    offset?: number;
+}
+
+function parseJsonField<T>(value: unknown, fallback: T): T {
+    if (value == null || value === '') return fallback;
+    if (typeof value !== 'string') return value as T;
+    try {
+        return JSON.parse(value) as T;
+    } catch {
+        return fallback;
+    }
+}
+
+function normalizeCustomer(row: Customer): Customer {
+    const active = row.is_active as unknown;
+    return {
+        ...row,
+        address: parseJsonField(row.address, undefined as any),
+        custom_data: parseJsonField(row.custom_data, undefined as any),
+        is_active: active === true || active === 1 || active === '1',
+    };
+}
+
+function serializeCustomerPayload<T extends Partial<CustomerInput>>(input: T): T {
+    const payload = { ...input } as Record<string, unknown>;
+
+    for (const key of ['address', 'custom_data']) {
+        if (payload[key] && typeof payload[key] === 'object') {
+            payload[key] = JSON.stringify(payload[key]);
+        }
+    }
+
+    return payload as T;
+}
+
+function onlyDigits(value: unknown): string {
+    return String(value || '').replace(/\D/g, '');
+}
+
+function byCreatedAtDesc(a: Customer, b: Customer): number {
+    return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+}
 
 class CustomerService {
     private cache: Customer[] | null = null;
@@ -31,6 +75,46 @@ class CustomerService {
             (Date.now() - this.cacheTimestamp) < this.CACHE_DURATION;
     }
 
+    private async loadAllCustomers(): Promise<Customer[]> {
+        if (this.isCacheValid()) return this.cache!;
+
+        const rows: Customer[] = [];
+        const pageSize = 200;
+
+        for (let offset = 0; ; offset += pageSize) {
+            const data = await vpsClient.get<TableDataResponse<Customer>>(
+                `/table-data/customers?limit=${pageSize}&offset=${offset}`
+            );
+            const pageRows = Array.isArray(data.rows) ? data.rows.map(normalizeCustomer) : [];
+            rows.push(...pageRows);
+            if (pageRows.length < pageSize) break;
+        }
+
+        this.cache = rows;
+        this.cacheTimestamp = Date.now();
+        return rows;
+    }
+
+    private applyFilters(rows: Customer[], companyId: string, filters?: CustomerFilters): Customer[] {
+        const search = filters?.search?.trim().toLowerCase();
+        const searchDigits = onlyDigits(search);
+
+        return rows
+            .filter(customer => customer.company_id === companyId)
+            .filter(customer => {
+                if (!search) return true;
+                const textMatch = [customer.name, customer.cpf_cnpj, customer.phone, customer.email]
+                    .some(value => String(value || '').toLowerCase().includes(search));
+                const digitMatch = !!searchDigits && [customer.cpf_cnpj, customer.phone]
+                    .some(value => onlyDigits(value).includes(searchDigits));
+                return textMatch || digitMatch;
+            })
+            .filter(customer => filters?.is_active === undefined || customer.is_active === filters.is_active)
+            .filter(customer => !filters?.created_after || String(customer.created_at || '') >= filters.created_after!)
+            .filter(customer => !filters?.created_before || String(customer.created_at || '') <= filters.created_before!)
+            .sort(byCreatedAtDesc);
+    }
+
     /**
      * Clear cache
      */
@@ -44,55 +128,23 @@ class CustomerService {
      */
     async list(filters?: CustomerFilters): Promise<Customer[]> {
         const companyId = await this.getCompanyId();
-
-        let query = supabase
-            .from('customers')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('created_at', { ascending: false });
-
-        // Apply filters
-        if (filters?.search) {
-            query = query.or(`name.ilike.%${filters.search}%,cpf_cnpj.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
-        }
-
-        if (filters?.is_active !== undefined) {
-            query = query.eq('is_active', filters.is_active);
-        }
-
-        if (filters?.created_after) {
-            query = query.gte('created_at', filters.created_after);
-        }
-
-        if (filters?.created_before) {
-            query = query.lte('created_at', filters.created_before);
-        }
-
-        const { data, error } = await query;
-        if (error) throw error;
-
-        this.cache = data;
-        this.cacheTimestamp = Date.now();
-
-        return data;
+        return this.applyFilters(await this.loadAllCustomers(), companyId, filters);
     }
 
     /**
      * Get customer by ID
      */
     async getById(id: string): Promise<Customer | null> {
-        const { data, error } = await supabase
-            .from('customers')
-            .select('*')
-            .eq('id', id)
-            .single();
+        const customers = await this.loadAllCustomers();
+        return customers.find(customer => String(customer.id) === String(id)) || null;
+    }
 
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
-
-        return data;
+    /**
+     * Get customer by linked VPS Auth user ID
+     */
+    async getByUserId(userId: string): Promise<Customer | null> {
+        const customers = await this.loadAllCustomers();
+        return customers.find(customer => String(customer.user_id) === String(userId)) || null;
     }
 
     /**
@@ -100,20 +152,11 @@ class CustomerService {
      */
     async getByCpfCnpj(cpfCnpj: string): Promise<Customer | null> {
         const companyId = await this.getCompanyId();
-
-        const { data, error } = await supabase
-            .from('customers')
-            .select('*')
-            .eq('company_id', companyId)
-            .eq('cpf_cnpj', cpfCnpj)
-            .single();
-
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
-
-        return data;
+        const customers = await this.loadAllCustomers();
+        return customers.find(customer =>
+            customer.company_id === companyId &&
+            onlyDigits(customer.cpf_cnpj) === onlyDigits(cpfCnpj)
+        ) || null;
     }
 
     /**
@@ -135,18 +178,12 @@ class CustomerService {
         const newId = crypto.randomUUID();
         const referralCode = this.generateReferralCode(newId);
 
-        const { data, error } = await supabase
-            .from('customers')
-            .insert({
-                id: newId,
-                company_id: companyId,
-                referral_code: referralCode,
-                ...input
-            })
-            .select()
-            .single();
-
-        if (error) throw error;
+        const data = normalizeCustomer(await vpsClient.post<Customer>('/table-data/customers', {
+            id: newId,
+            company_id: companyId,
+            referral_code: referralCode,
+            ...serializeCustomerPayload(input)
+        }));
 
         this.clearCache();
 
@@ -168,14 +205,10 @@ class CustomerService {
      * Update existing customer
      */
     async update(id: string, input: Partial<CustomerInput>): Promise<Customer> {
-        const { data, error } = await supabase
-            .from('customers')
-            .update(input)
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) throw error;
+        const data = normalizeCustomer(await vpsClient.patch<Customer>(
+            `/table-data/customers/${encodeURIComponent(id)}?pk=id`,
+            serializeCustomerPayload(input)
+        ));
 
         this.clearCache();
         return data;
@@ -192,12 +225,7 @@ class CustomerService {
      * Delete customer (hard delete from database)
      */
     async delete(id: string): Promise<void> {
-        const { error } = await supabase
-            .from('customers')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
+        await vpsClient.delete(`/table-data/customers/${encodeURIComponent(id)}?pk=id`);
         this.clearCache();
     }
 
@@ -213,15 +241,9 @@ class CustomerService {
      */
     async getActiveCount(): Promise<number> {
         const companyId = await this.getCompanyId();
-
-        const { count, error } = await supabase
-            .from('customers')
-            .select('*', { count: 'exact', head: true })
-            .eq('company_id', companyId)
-            .eq('is_active', true);
-
-        if (error) throw error;
-        return count || 0;
+        return (await this.loadAllCustomers())
+            .filter(customer => customer.company_id === companyId && customer.is_active)
+            .length;
     }
 }
 

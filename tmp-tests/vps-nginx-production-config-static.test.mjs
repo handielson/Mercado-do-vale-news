@@ -9,6 +9,7 @@ const config = fs.readFileSync(configPath, 'utf8');
 
 assert(/server_name\s+mercadodovale\.com\.br/.test(config), 'root production host should be documented');
 assert(/server_name\s+www\.mercadodovale\.com\.br/.test(config), 'www production host should be documented');
+assert(/server_name\s+www\.mercadodovale\.com\.br\s+mv\.mercadodovale\.com\.br/.test(config), 'mv production host should be served by the VPS frontend');
 assert(/return\s+301\s+https:\/\/www\.mercadodovale\.com\.br\$request_uri/.test(config), 'root host should redirect to canonical www host');
 assert(/listen\s+443\s+ssl/.test(config), 'production hosts must handle Cloudflare origin HTTPS on port 443');
 assert(/ssl_certificate\s+\/etc\/letsencrypt\/live\/api\.xiaomipetrolina\.com\.br\/fullchain\.pem/.test(config), 'temporary origin SSL certificate should be configured until a dedicated site cert exists');

@@ -17,8 +17,8 @@ assert(
 const productFromMatches = source.match(/from\('products'\)|supabase\s*\.\s*from\('products'\)/g) || [];
 assert.equal(
   productFromMatches.length,
-  2,
-  'inventory service should only keep the remaining Supabase products writes for stock adjustment and rollback',
+  0,
+  'inventory service must not keep direct Supabase product reads or writes',
 );
 
 assert(

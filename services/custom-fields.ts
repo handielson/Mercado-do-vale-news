@@ -1,4 +1,5 @@
-import { supabase } from './supabase';
+import { getCompanyId } from './companyContext';
+import { vpsClient } from './vpsClient';
 
 export const FORMAT_OPTIONS = [
     // Tipos de Texto
@@ -89,52 +90,118 @@ export interface CustomFieldInput {
     display_order?: number;
 }
 
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[]; total?: number };
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
+}
+
+function parseJsonField<T>(value: unknown, fallback: T): T {
+    if (value == null || value === '') return fallback;
+    if (typeof value !== 'string') return value as T;
+    try {
+        return JSON.parse(value) as T;
+    } catch {
+        return fallback;
+    }
+}
+
+function normalizeOptionList(value: unknown): string[] {
+    const parsed = parseJsonField<unknown>(value, []);
+    const rawOptions = Array.isArray(parsed) ? parsed : [parsed];
+
+    return rawOptions
+        .flatMap((option) => {
+            const text = String(option ?? '').trim();
+            if (!text) return [];
+            if (!/[\\\n\r]|\\n|\\r/.test(text)) return [text];
+            return text
+                .replace(/\\r\\n|\\n|\\r/g, '\n')
+                .split(/[\\\n\r]+/)
+                .map(part => part.trim())
+                .filter(Boolean);
+        })
+        .filter((option, index, list) => list.findIndex(item => item.toLowerCase() === option.toLowerCase()) === index);
+}
+
+function normalizeField(row: CustomField): CustomField {
+    return {
+        ...row,
+        options: normalizeOptionList(row.options),
+        validation: parseJsonField<Record<string, any>>(row.validation, {}),
+        table_config: parseJsonField<TableConfig | undefined>(row.table_config, undefined),
+        is_system: Boolean(row.is_system),
+        display_order: Number(row.display_order ?? 999),
+    };
+}
+
+async function loadCustomFields(pageSize = 200): Promise<CustomField[]> {
+    let offset = 0;
+    const rows: CustomField[] = [];
+
+    while (true) {
+        const response = await vpsClient.get<TableDataResponse<CustomField>>(
+            `/table-data/custom_fields?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response).map(normalizeField);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return rows;
+}
+
+function orderFields(fields: CustomField[]): CustomField[] {
+    return [...fields].sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999) || a.label.localeCompare(b.label));
+}
+
+function buildCreatePayload(companyId: string, input: CustomFieldInput): Record<string, unknown> {
+    return {
+        company_id: companyId,
+        key: input.key,
+        label: input.label,
+        category: input.category,
+        field_type: input.field_type || 'text',
+        options: input.options || [],
+        validation: input.validation || {},
+        placeholder: input.placeholder || null,
+        help_text: input.help_text || null,
+        table_config: input.table_config || null,
+        display_order: input.display_order || 999,
+        is_system: false,
+    };
+}
+
+function buildUpdatePayload(input: Partial<CustomFieldInput>, systemField = false): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+        label: input.label,
+        options: input.options,
+        placeholder: input.placeholder,
+        help_text: input.help_text,
+        display_order: input.display_order,
+        updated_at: new Date().toISOString(),
+    };
+
+    if (!systemField) {
+        payload.category = input.category;
+        payload.field_type = input.field_type;
+        payload.validation = input.validation;
+        payload.table_config = input.table_config;
+    }
+
+    return Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
+}
+
 /**
  * Custom Fields Service
- * Manages custom field definitions stored in Supabase
- * 
- * ANTIGRAVITY PROTOCOL:
- * - Database-First Architecture
- * - All field definitions stored in Supabase
- * - No local config files for business data
+ * Manages custom field definitions stored in the VPS/MySQL table-data layer.
  */
 class CustomFieldsService {
     private cache: CustomField[] | null = null;
     private cacheTimestamp: number = 0;
     private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-    /**
-     * Get company ID from auth context or first company
-     */
-    private async getCompanyId(): Promise<string> {
-        // Try to get from authenticated user first
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (user) {
-            // Get user's company_id from profile
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('company_id')
-                .eq('id', user.id)
-                .single();
-
-            if (profile?.company_id) {
-                return profile.company_id;
-            }
-        }
-
-        // Fallback: Get first company (for development/testing)
-        const { data: companies } = await supabase
-            .from('companies')
-            .select('id')
-            .limit(1);
-
-        if (!companies || companies.length === 0) {
-            throw new Error('No company found. Please create a company first.');
-        }
-
-        return companies[0].id;
-    }
 
     /**
      * Check if cache is valid
@@ -161,19 +228,10 @@ class CustomFieldsService {
             return this.cache;
         }
 
-        const companyId = await this.getCompanyId();
+        const companyId = await getCompanyId();
         console.log('🔍 [CustomFieldsService] Using company_id:', companyId);
 
-        const { data, error } = await supabase
-            .from('custom_fields')
-            .select('*')
-            .eq('company_id', companyId)
-            .order('display_order', { ascending: true });
-
-        if (error) {
-            console.error('❌ [CustomFieldsService] Error loading custom fields:', error);
-            throw error;
-        }
+        const data = orderFields((await loadCustomFields()).filter(field => field.company_id === companyId));
 
         console.log('✅ [CustomFieldsService] Loaded fields:', data?.length || 0);
         console.log('🔍 [CustomFieldsService] Fields:', data);
@@ -197,50 +255,23 @@ class CustomFieldsService {
      * Get a single custom field by ID
      */
     async getById(id: string): Promise<CustomField | null> {
-        const { data, error } = await supabase
-            .from('custom_fields')
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (error) {
-            console.error('Error loading custom field:', error);
-            return null;
-        }
-
-        return data;
+        const field = (await loadCustomFields()).find(item => item.id === id);
+        return field || null;
     }
 
     /**
      * Get a field by key
      */
     async getByKey(key: string): Promise<CustomField | null> {
-        const companyId = await this.getCompanyId();
-
-        const { data, error } = await supabase
-            .from('custom_fields')
-            .select('*')
-            .eq('company_id', companyId)
-            .eq('key', key)
-            .single();
-
-        if (error) {
-            if (error.code === 'PGRST116') {
-                // Not found
-                return null;
-            }
-            console.error('Error loading custom field:', error);
-            throw error;
-        }
-
-        return data;
+        const companyId = await getCompanyId();
+        return (await loadCustomFields()).find(field => field.company_id === companyId && field.key === key) || null;
     }
 
     /**
      * Create a new custom field
      */
     async create(input: CustomFieldInput): Promise<CustomField> {
-        const companyId = await this.getCompanyId();
+        const companyId = await getCompanyId();
 
         // Check if key already exists
         const existing = await this.getByKey(input.key);
@@ -248,34 +279,12 @@ class CustomFieldsService {
             throw new Error(`Field with key "${input.key}" already exists`);
         }
 
-        const { data, error } = await supabase
-            .from('custom_fields')
-            .insert({
-                company_id: companyId,
-                key: input.key,
-                label: input.label,
-                category: input.category,
-                field_type: input.field_type || 'text',
-                options: input.options || [],
-                validation: input.validation || {},
-                placeholder: input.placeholder || null,
-                help_text: input.help_text || null,
-                table_config: input.table_config || null,
-                display_order: input.display_order || 999,
-                is_system: false
-            })
-            .select()
-            .single();
-
-        if (error) {
-            console.error('Error creating custom field:', error);
-            throw error;
-        }
+        const data = await vpsClient.post<CustomField>('/table-data/custom_fields', buildCreatePayload(companyId, input));
 
         // Clear cache
         this.clearCache();
 
-        return data;
+        return normalizeField(data);
     }
 
     /**
@@ -291,59 +300,27 @@ class CustomFieldsService {
             // System fields: only allow updating non-structural fields
             console.log('⚠️ [CustomFieldsService] Updating system field (limited):', field.key);
 
-            const { data, error } = await supabase
-                .from('custom_fields')
-                .update({
-                    label: input.label,
-                    placeholder: input.placeholder,
-                    help_text: input.help_text,
-                    options: input.options,
-                    display_order: input.display_order,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', id)
-                .select()
-                .single();
-
-            if (error) {
-                console.error('Error updating system field:', error);
-                throw error;
-            }
+            const data = await vpsClient.patch<CustomField>(
+                `/table-data/custom_fields/${id}`,
+                buildUpdatePayload(input, true)
+            );
 
             // Clear cache
             this.clearCache();
 
-            return data;
+            return normalizeField(data);
         }
 
         // Non-system fields: allow full update
-        const { data, error } = await supabase
-            .from('custom_fields')
-            .update({
-                label: input.label,
-                category: input.category,
-                field_type: input.field_type,
-                options: input.options,
-                validation: input.validation,
-                placeholder: input.placeholder,
-                help_text: input.help_text,
-                table_config: input.table_config,
-                display_order: input.display_order,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) {
-            console.error('Error updating custom field:', error);
-            throw error;
-        }
+        const data = await vpsClient.patch<CustomField>(
+            `/table-data/custom_fields/${id}`,
+            buildUpdatePayload(input, false)
+        );
 
         // Clear cache
         this.clearCache();
 
-        return data;
+        return normalizeField(data);
     }
 
     /**
@@ -351,15 +328,7 @@ class CustomFieldsService {
      * Delete a custom field (system fields cannot be deleted)
      */
     async delete(id: string): Promise<void> {
-        const { error } = await supabase
-            .from('custom_fields')
-            .delete()
-            .eq('id', id);
-
-        if (error) {
-            console.error('Error deleting custom field:', error);
-            throw error;
-        }
+        await vpsClient.delete(`/table-data/custom_fields/${id}`);
 
         // Clear cache to force refresh
         this.cache = null;
@@ -376,10 +345,10 @@ class CustomFieldsService {
         }));
 
         for (const update of updates) {
-            await supabase
-                .from('custom_fields')
-                .update({ display_order: update.display_order })
-                .eq('id', update.id);
+            await vpsClient.patch<CustomField>(`/table-data/custom_fields/${update.id}`, {
+                display_order: update.display_order,
+                updated_at: new Date().toISOString(),
+            });
         }
 
         // Clear cache

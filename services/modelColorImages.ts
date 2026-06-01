@@ -1,15 +1,8 @@
-import { supabase } from './supabase';
-import { getCompanyId } from './companyContext';
+import { modelColorImagesService as primaryModelColorImagesService } from './model-color-images';
 
 /**
- * MODEL COLOR IMAGE SERVICE
- * Manages shared image galleries for Model+Color combinations
- * 
- * ANTIGRAVITY PROTOCOL:
- * - Images are shared across all NEW products with same Model+Color
- * - USED products use individual images (products.images[])
- * - Supports drag & drop reordering via display_order
- * - First image (display_order=1) is always the cover/main image
+ * Legacy compatibility facade for the older singular-image API.
+ * The source of truth is services/model-color-images.ts through VPS table-data.
  */
 
 export interface ModelColorImage {
@@ -30,164 +23,91 @@ export interface ModelColorImageInput {
     display_order?: number;
 }
 
-/**
- * Get all images for a Model+Color combination
- * Ordered by display_order (first image is cover)
- */
-async function getByModelAndColor(
-    modelId: string,
-    colorId: string
-): Promise<ModelColorImage[]> {
-    const companyId = await getCompanyId();
-
-    const { data, error } = await supabase
-        .from('model_color_images')
-        .select('*')
-        .eq('company_id', companyId)
-        .eq('model_id', modelId)
-        .eq('color_id', colorId)
-        .order('display_order', { ascending: true });
-
-    if (error) throw new Error(`Failed to fetch images: ${error.message}`);
-
-    return data || [];
+function toLegacyImages(row: Awaited<ReturnType<typeof primaryModelColorImagesService.get>>): ModelColorImage[] {
+    if (!row) return [];
+    return row.images.map((imageUrl, index) => ({
+        id: index === 0 ? row.id : `${row.id}:${index}`,
+        company_id: row.company_id || '',
+        model_id: row.model_id,
+        color_id: row.color_id,
+        image_url: imageUrl,
+        display_order: index + 1,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    }));
 }
 
-/**
- * Add new image to Model+Color gallery
- * Automatically assigns next display_order
- */
+async function getByModelAndColor(modelId: string, colorId: string): Promise<ModelColorImage[]> {
+    return toLegacyImages(await primaryModelColorImagesService.get(modelId, colorId));
+}
+
 async function create(input: ModelColorImageInput): Promise<ModelColorImage> {
-    const companyId = await getCompanyId();
+    const existing = await primaryModelColorImagesService.get(input.model_id, input.color_id);
+    const images = existing?.images ? [...existing.images] : [];
+    const index = Math.max(0, (input.display_order || images.length + 1) - 1);
+    images.splice(index, 0, input.image_url);
 
-    // Get current max display_order
-    const existing = await getByModelAndColor(input.model_id, input.color_id);
-    const nextOrder = input.display_order ?? (existing.length + 1);
+    const saved = await primaryModelColorImagesService.upsert({
+        model_id: input.model_id,
+        color_id: input.color_id,
+        images,
+    });
 
-    const { data, error } = await supabase
-        .from('model_color_images')
-        .insert({
-            company_id: companyId,
-            model_id: input.model_id,
-            color_id: input.color_id,
-            image_url: input.image_url,
-            display_order: nextOrder
-        })
-        .select()
-        .single();
-
-    if (error) throw new Error(`Failed to create image: ${error.message}`);
-
-    return data;
+    return toLegacyImages(saved)[index];
 }
 
-/**
- * Update image display order (for drag & drop reordering)
- */
-async function updateOrder(
-    imageId: string,
-    newOrder: number
-): Promise<ModelColorImage> {
-    const companyId = await getCompanyId();
+async function updateOrder(imageId: string, newOrder: number): Promise<ModelColorImage> {
+    const [rowId, indexPart] = imageId.split(':');
+    const allRows = await primaryModelColorImagesService.getAll();
+    const row = allRows.find(item => item.id === rowId);
+    if (!row) throw new Error('Image not found');
 
-    const { data, error } = await supabase
-        .from('model_color_images')
-        .update({ display_order: newOrder })
-        .eq('id', imageId)
-        .eq('company_id', companyId)
-        .select()
-        .single();
+    const currentIndex = indexPart ? Number(indexPart) : 0;
+    const images = [...row.images];
+    const [moved] = images.splice(currentIndex, 1);
+    images.splice(Math.max(0, newOrder - 1), 0, moved);
 
-    if (error) throw new Error(`Failed to update image order: ${error.message}`);
-
-    return data;
+    const saved = await primaryModelColorImagesService.upsert({
+        model_id: row.model_id,
+        color_id: row.color_id,
+        images,
+    });
+    return toLegacyImages(saved)[Math.max(0, newOrder - 1)];
 }
 
-/**
- * Reorder all images in a Model+Color gallery
- * Used for drag & drop functionality
- */
-async function reorderAll(
-    modelId: string,
-    colorId: string,
-    imageIds: string[] // Array of image IDs in new order
-): Promise<void> {
-    const companyId = await getCompanyId();
+async function reorderAll(modelId: string, colorId: string, imageIds: string[]): Promise<void> {
+    const row = await primaryModelColorImagesService.get(modelId, colorId);
+    if (!row) return;
 
-    // Update each image with its new position
-    const updates = imageIds.map((imageId, index) =>
-        supabase
-            .from('model_color_images')
-            .update({ display_order: index + 1 })
-            .eq('id', imageId)
-            .eq('company_id', companyId)
-            .eq('model_id', modelId)
-            .eq('color_id', colorId)
-    );
-
-    const results = await Promise.all(updates);
-
-    // Check for errors
-    const errors = results.filter(r => r.error);
-    if (errors.length > 0) {
-        throw new Error(`Failed to reorder images: ${errors[0].error?.message}`);
+    const current = toLegacyImages(row);
+    const byId = new Map(current.map(image => [image.id, image.image_url]));
+    const images = imageIds.map(id => byId.get(id)).filter((url): url is string => Boolean(url));
+    if (images.length > 0) {
+        await primaryModelColorImagesService.upsert({ model_id: modelId, color_id: colorId, images });
     }
 }
 
-/**
- * Delete image from gallery
- */
 async function deleteImage(imageId: string): Promise<void> {
-    const companyId = await getCompanyId();
+    const [rowId, indexPart] = imageId.split(':');
+    const rows = await primaryModelColorImagesService.getAll();
+    const row = rows.find(item => item.id === rowId);
+    if (!row) return;
 
-    const { error } = await supabase
-        .from('model_color_images')
-        .delete()
-        .eq('id', imageId)
-        .eq('company_id', companyId);
-
-    if (error) throw new Error(`Failed to delete image: ${error.message}`);
+    const index = indexPart ? Number(indexPart) : 0;
+    const images = row.images.filter((_, currentIndex) => currentIndex !== index);
+    await primaryModelColorImagesService.upsert({ model_id: row.model_id, color_id: row.color_id, images });
 }
 
-/**
- * Delete all images for a Model+Color combination
- */
-async function deleteAllByModelAndColor(
-    modelId: string,
-    colorId: string
-): Promise<void> {
-    const companyId = await getCompanyId();
-
-    const { error } = await supabase
-        .from('model_color_images')
-        .delete()
-        .eq('company_id', companyId)
-        .eq('model_id', modelId)
-        .eq('color_id', colorId);
-
-    if (error) throw new Error(`Failed to delete images: ${error.message}`);
+async function deleteAllByModelAndColor(modelId: string, colorId: string): Promise<void> {
+    await primaryModelColorImagesService.remove(modelId, colorId);
 }
 
-/**
- * Get cover image (first image) for a Model+Color
- */
-async function getCoverImage(
-    modelId: string,
-    colorId: string
-): Promise<ModelColorImage | null> {
-    const images = await getByModelAndColor(modelId, colorId);
-    return images.length > 0 ? images[0] : null;
+async function getCoverImage(modelId: string, colorId: string): Promise<ModelColorImage | null> {
+    return (await getByModelAndColor(modelId, colorId))[0] || null;
 }
 
-/**
- * Check if Model+Color has any images
- */
-async function hasImages(
-    modelId: string,
-    colorId: string
-): Promise<boolean> {
-    const images = await getByModelAndColor(modelId, colorId);
-    return images.length > 0;
+async function hasImages(modelId: string, colorId: string): Promise<boolean> {
+    return (await getByModelAndColor(modelId, colorId)).length > 0;
 }
 
 export const modelColorImageService = {

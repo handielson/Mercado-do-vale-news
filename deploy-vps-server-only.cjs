@@ -11,6 +11,8 @@ const password = process.env.VPS_SITE_PASSWORD || process.env.VPS_ROOT_PASSWORD 
 const privateKeyPath = process.env.VPS_SITE_PRIVATE_KEY || process.env.VPS_PRIVATE_KEY;
 const privateKey = privateKeyPath ? fs.readFileSync(privateKeyPath) : undefined;
 const localServer = path.join(__dirname, 'vps_server.js');
+const adminEmail = process.env.MDV_ADMIN_EMAIL || process.env.ADMIN_EMAIL || process.env.VPS_ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL;
+const adminPassword = process.env.MDV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || process.env.VPS_ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD;
 
 if (!host || !username || (!password && !privateKey)) {
   throw new Error('Missing VPS SSH env vars');
@@ -50,6 +52,75 @@ function upload(local, remote) {
   });
 }
 
+function withSftp(callback) {
+  return new Promise((resolve, reject) => {
+    conn.sftp((err, sftp) => {
+      if (err) return reject(err);
+      callback(sftp)
+        .then(resolve, reject)
+        .finally(() => sftp.end());
+    });
+  });
+}
+
+function readRemoteText(sftp, remotePath) {
+  return new Promise((resolve, reject) => {
+    sftp.readFile(remotePath, 'utf8', (err, data) => {
+      if (err && err.code === 2) return resolve('');
+      if (err) return reject(err);
+      resolve(String(data || ''));
+    });
+  });
+}
+
+function writeRemoteText(sftp, remotePath, content) {
+  return new Promise((resolve, reject) => {
+    sftp.writeFile(remotePath, content, 'utf8', (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+function quoteEnvValue(value) {
+  return `"${String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function upsertEnv(content, entries) {
+  const lines = String(content || '').replace(/\r\n/g, '\n').split('\n');
+  const seen = new Set();
+  const next = lines.map((line) => {
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
+    if (!match || !(match[1] in entries)) return line;
+    seen.add(match[1]);
+    return `${match[1]}=${quoteEnvValue(entries[match[1]])}`;
+  });
+
+  for (const [key, value] of Object.entries(entries)) {
+    if (!seen.has(key)) next.push(`${key}=${quoteEnvValue(value)}`);
+  }
+
+  return `${next.join('\n').replace(/\n+$/, '')}\n`;
+}
+
+async function ensureRemoteAdminEnv(appDir) {
+  if (!adminEmail || !adminPassword) {
+    console.warn('Skipping remote admin env sync: MDV_ADMIN_EMAIL and MDV_ADMIN_PASSWORD are not both set locally.');
+    return;
+  }
+
+  const remoteEnv = `${appDir}/.env`;
+  await withSftp(async (sftp) => {
+    const current = await readRemoteText(sftp, remoteEnv);
+    const next = upsertEnv(current, {
+      MDV_ADMIN_EMAIL: adminEmail,
+      MDV_ADMIN_PASSWORD: adminPassword,
+    });
+    await writeRemoteText(sftp, remoteEnv, next);
+  });
+  console.log(`Remote admin auth env synced at ${remoteEnv}`);
+}
+
 async function main() {
   await new Promise((resolve, reject) => {
     conn.on('ready', resolve);
@@ -70,6 +141,7 @@ async function main() {
   console.log(`Uploading server to ${appDir}`);
   await upload(localServer, `${appDir}/vps_server.js`);
   await upload(localServer, `${appDir}/server.js`);
+  await ensureRemoteAdminEnv(appDir);
   const restartOutput = await exec(`pm2 restart ${apiProc.name} --update-env`);
   console.log(restartOutput.trim());
   conn.end();

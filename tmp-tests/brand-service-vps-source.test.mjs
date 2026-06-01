@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 
 const source = readFileSync('services/brands.ts', 'utf8');
 
-assert.match(
+assert.doesNotMatch(
   source,
-  /import \{ USE_VPS \} from ['"]\.\.\/config\/migration['"]/,
-  'brandService must read the migration flag for brands'
+  /USE_VPS|services\/supabase|\.from\('brands'\)/,
+  'brandService must be VPS-only and must not keep Supabase/migration-flag branches'
 );
 
 assert.match(

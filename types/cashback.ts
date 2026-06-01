@@ -51,7 +51,7 @@ export type CoinTransactionType =
     | 'earn_review'
     | 'admin_adjust';
 
-export type CoinReferenceType = 'sale' | 'quote' | 'checkin' | 'admin' | 'review';
+export type CoinReferenceType = 'sale' | 'order' | 'quote' | 'checkin' | 'admin' | 'review';
 
 export interface CoinTransaction {
     id: string;

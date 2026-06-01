@@ -10,9 +10,10 @@ import { getModelImageWithCache } from '../../services/modelImageCache';
 import { getCacheBustedUrl } from '../../utils/cache-buster';
 import { LabelPrintModal } from './LabelPrintModal';
 import { ProductQuickTagsModal } from './ProductQuickTagsModal';
-import { supabase } from '../../services/supabase';
+import { getAuthSessionToken } from '../../services/authSession';
 import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
+import { shopeeProductService } from '../../services/shopeeProducts';
 import { stockLocationService } from '../../services/stockLocationService';
 import { deleteImageFromBank, uploadImagesToBank } from '../../services/productImageBank';
 import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct, validateShopeeItemForProduct } from './productCardShopee.js';
@@ -374,8 +375,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         // Reset input value to allow uploading the same file again if it fails
         e.target.value = '';
 
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
+        const token = await getAuthSessionToken();
         const normalizedSku = product.sku.trim().replace(/\s+/g, '');
 
         setIsUploadingVideo(true);
@@ -507,11 +507,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         const newStatus = currentStatus === ProductStatus.ACTIVE ? ProductStatus.INACTIVE : ProductStatus.ACTIVE;
         setIsTogglingStatus(true);
         try {
-            const { error } = await supabase
-                .from('products')
-                .update({ status: newStatus })
-                .eq('id', product.id);
-            if (error) throw error;
+            const currentVpsProduct = await vpsApiService.getProductById(product.id, true);
+            if (!currentVpsProduct) throw new Error('Produto nao encontrado na VPS');
+            const updated = await vpsApiService.updateProduct(product.id, {
+                ...currentVpsProduct,
+                status: newStatus,
+            });
+            if (!updated) throw new Error('Falha ao alterar status na VPS');
             setCurrentStatus(newStatus);
         } catch (err) {
             console.error('[ProductCard] Erro ao alterar status:', err);
@@ -542,24 +544,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             const realStock = !isNaN(parsedStock) ? parsedStock : 0;
             
             if (realStock !== currentStock) {
-                const { error } = await supabase
-                    .from('products')
-                    .update({ stock_quantity: realStock })
-                    .eq('id', product.id);
-                if (error) throw error;
                 
                 // Sincroniza stock na VPS: busca o produto completo e faz PUT com merge
                 // (PUT na VPS é replace completo — enviar só stock_quantity zerava os outros campos)
-                try {
-                    const { vpsApiService } = await import('../../services/vpsApiService');
-                    const currentVpsProduct = await vpsApiService.getProductById(product.id, true);
-                    if (currentVpsProduct) {
-                        await vpsApiService.updateProduct(product.id, {
-                            ...currentVpsProduct,
-                            stock_quantity: realStock,
-                        });
-                    }
-                } catch(e) { console.warn('[ProductCard] VPS stock update failed:', e); }
+                const currentVpsProduct = await vpsApiService.getProductById(product.id, true);
+                if (!currentVpsProduct) throw new Error('Produto nao encontrado na VPS');
+                const updated = await vpsApiService.updateProduct(product.id, {
+                    ...currentVpsProduct,
+                    stock_quantity: realStock,
+                });
+                if (!updated) throw new Error('Falha ao atualizar estoque na VPS');
 
                 setCurrentStock(realStock);
                 toast.success(`Estoque sincronizado: ${realStock} un.`);
@@ -602,21 +596,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
 
     const refreshShopeeLinkState = async (): Promise<number | null> => {
         try {
-            const { data, error } = await supabase
-                .from('shopee_products')
-                .select('shopee_item_id')
-                .eq('product_id', product.id)
-                .not('shopee_item_id', 'is', null)
-                .order('last_synced_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-            if (error) throw error;
-
-            const parsed = Number(data?.shopee_item_id);
-            if (Number.isFinite(parsed) && parsed > 0) {
-                setShopeeItemId(parsed);
-                return parsed;
+            const itemId = await shopeeProductService.getItemIdByProductId(product.id);
+            if (itemId) {
+                setShopeeItemId(itemId);
+                return itemId;
             }
         } catch (error) {
             console.error('[ProductCard] Erro ao atualizar estado Shopee:', error);
@@ -633,17 +616,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     };
 
     const clearStaleShopeeLink = async (itemId: number) => {
-        await supabase
-            .from('shopee_products')
-            .delete()
-            .eq('product_id', product.id)
-            .eq('shopee_item_id', itemId);
+        await shopeeProductService.deleteByProductId(product.id);
 
-        await supabase
-            .from('products')
-            .update({ shopee_item_id: null })
-            .eq('id', product.id)
-            .eq('shopee_item_id', itemId);
+        const latestProduct = await vpsApiService.getProductById(product.id, true);
+        await vpsApiService.updateProduct(product.id, {
+            ...(latestProduct || product),
+            shopee_item_id: null,
+        });
 
         setShopeeItemId(null);
     };

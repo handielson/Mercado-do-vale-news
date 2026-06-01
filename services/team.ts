@@ -1,16 +1,26 @@
-import { supabase } from './supabase';
 import { vpsClient } from './vpsClient';
 import { TeamMember, TeamMemberInput, TeamMemberFilters } from '../types/team';
 
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[]; total?: number };
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
+}
+
+function matchesSearch(member: TeamMember, search: string): boolean {
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
+    return [member.name, member.cpf_cnpj, member.email]
+        .some(value => (value || '').toLowerCase().includes(term));
+}
+
 /**
  * Team Member Service
- * 
- * ANTIGRAVITY PROTOCOL:
- * - Database-First Architecture
- * - All team member data stored in Supabase
- * - Cache management for performance
+ *
+ * Team member operational data is loaded through the VPS table-data bridge.
+ * Cache management is kept for admin screens that repeatedly list the team.
  */
-
 class TeamService {
     private cache: TeamMember[] | null = null;
     private cacheTimestamp: number = 0;
@@ -22,6 +32,27 @@ class TeamService {
     private isCacheValid(): boolean {
         return this.cache !== null &&
             (Date.now() - this.cacheTimestamp) < this.CACHE_DURATION;
+    }
+
+    private async loadTeamMembers(pageSize = 200): Promise<TeamMember[]> {
+        if (this.isCacheValid() && this.cache) return this.cache;
+
+        let offset = 0;
+        const rows: TeamMember[] = [];
+
+        while (true) {
+            const response = await vpsClient.get<TableDataResponse<TeamMember>>(
+                `/table-data/team_members?limit=${pageSize}&offset=${offset}`
+            );
+            const batch = extractRows(response);
+            rows.push(...batch);
+            if (batch.length < pageSize) break;
+            offset += pageSize;
+        }
+
+        this.cache = rows;
+        this.cacheTimestamp = Date.now();
+        return rows;
     }
 
     /**
@@ -36,79 +67,30 @@ class TeamService {
      * List all team members with optional filters
      */
     async list(filters?: TeamMemberFilters): Promise<TeamMember[]> {
-        let query = supabase
-            .from('team_members')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        // Apply filters
-        if (filters?.search) {
-            query = query.or(`name.ilike.%${filters.search}%,cpf_cnpj.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
-        }
-
-        if (filters?.role) {
-            query = query.eq('role', filters.role);
-        }
-
-        if (filters?.employment_type) {
-            query = query.eq('employment_type', filters.employment_type);
-        }
-
-        if (filters?.is_active !== undefined) {
-            query = query.eq('is_active', filters.is_active);
-        }
-
-        if (filters?.created_after) {
-            query = query.gte('created_at', filters.created_after);
-        }
-
-        if (filters?.created_before) {
-            query = query.lte('created_at', filters.created_before);
-        }
-
-        const { data, error } = await query;
-        if (error) throw error;
-
-        this.cache = data;
-        this.cacheTimestamp = Date.now();
-
-        return data;
+        return (await this.loadTeamMembers())
+            .filter(member => !filters?.search || matchesSearch(member, filters.search))
+            .filter(member => !filters?.role || member.role === filters.role)
+            .filter(member => !filters?.employment_type || member.employment_type === filters.employment_type)
+            .filter(member => filters?.is_active === undefined || member.is_active === filters.is_active)
+            .filter(member => !filters?.created_after || member.created_at >= filters.created_after)
+            .filter(member => !filters?.created_before || member.created_at <= filters.created_before)
+            .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
     }
 
     /**
      * Get team member by ID
      */
     async getById(id: string): Promise<TeamMember | null> {
-        const { data, error } = await supabase
-            .from('team_members')
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
-
-        return data;
+        const member = (await this.loadTeamMembers()).find(item => item.id === id);
+        return member || null;
     }
 
     /**
      * Get team member by CPF/CNPJ
      */
     async getByCpfCnpj(cpfCnpj: string): Promise<TeamMember | null> {
-        const { data, error } = await supabase
-            .from('team_members')
-            .select('*')
-            .eq('cpf_cnpj', cpfCnpj)
-            .single();
-
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
-
-        return data;
+        const member = (await this.loadTeamMembers()).find(item => item.cpf_cnpj === cpfCnpj);
+        return member || null;
     }
 
     /**
@@ -122,23 +104,13 @@ class TeamService {
      * Create new team member
      */
     async create(input: TeamMemberInput): Promise<TeamMember> {
-        const { data, error } = await supabase
-            .from('team_members')
-            .insert(input)
-            .select()
-            .single();
-
-        if (error) throw error;
-
+        const data = await vpsClient.post<TeamMember>('/table-data/team_members', input);
         this.clearCache();
         return data;
     }
 
     /**
      * Create delivery member from PDV through VPS.
-     *
-     * New operational writes must enter through the VPS layer; keep the
-     * generic create() method for legacy screens until they are migrated.
      */
     async createDeliveryFromPdv(input: TeamMemberInput): Promise<TeamMember> {
         const data = await vpsClient.post<TeamMember>('/team/delivery', input);
@@ -150,15 +122,7 @@ class TeamService {
      * Update existing team member
      */
     async update(id: string, input: Partial<TeamMemberInput>): Promise<TeamMember> {
-        const { data, error } = await supabase
-            .from('team_members')
-            .update(input)
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) throw error;
-
+        const data = await vpsClient.patch<TeamMember>(`/table-data/team_members/${id}`, input);
         this.clearCache();
         return data;
     }
@@ -174,12 +138,7 @@ class TeamService {
      * Delete team member (hard delete from database)
      */
     async delete(id: string): Promise<void> {
-        const { error } = await supabase
-            .from('team_members')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
+        await vpsClient.delete(`/table-data/team_members/${id}`);
         this.clearCache();
     }
 
@@ -194,13 +153,7 @@ class TeamService {
      * Get active team members count
      */
     async getActiveCount(): Promise<number> {
-        const { count, error } = await supabase
-            .from('team_members')
-            .select('*', { count: 'exact', head: true })
-            .eq('is_active', true);
-
-        if (error) throw error;
-        return count || 0;
+        return (await this.loadTeamMembers()).filter(member => member.is_active).length;
     }
 }
 

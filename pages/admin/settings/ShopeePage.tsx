@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCompanyData, saveCompanyData } from '../../../services/companyService';
-import { supabase } from '../../../services/supabase';
 import { vpsApiService } from '../../../services/vpsApiService';
+import { shopeeProductService } from '../../../services/shopeeProducts';
 import { Company } from '../../../types/company';
 import ShopeeOrdersTab from './components/ShopeeOrdersTab';
 import ShopeePrintersTab from './components/ShopeePrintersTab';
@@ -730,7 +730,7 @@ async function fetchJsonStrict(url: string, init?: RequestInit): Promise<any> {
     if (!res.ok) {
         const lower = text.toLowerCase();
         const isHtml = contentType.includes('text/html') || lower.includes('<!doctype') || lower.includes('<html');
-        const checkpoint = lower.includes('vercel security checkpoint') || lower.includes("we're verifying your browser");
+        const checkpoint = lower.includes('security checkpoint') || lower.includes("we're verifying your browser");
 
         if (checkpoint) {
             throw new Error('Checkpoint de seguranca bloqueou temporariamente a requisicao. Aguarde alguns segundos e tente novamente.');
@@ -976,14 +976,8 @@ export default function ShopeePage() {
             setLoading(true);
             const data = await getCompanyData();
             setCompany(data);
-            const { data: sbSettings } = await supabase
-                .from('company_settings')
-                .select('shopee_access_token, shopee_shop_id')
-                .limit(1).single();
-            if (sbSettings?.shopee_access_token) {
-                setShopeeConnected(true);
-                setShopeeShopId(sbSettings.shopee_shop_id);
-            }
+            setShopeeConnected(!!data.shopee_access_token);
+            setShopeeShopId(data.shopee_shop_id || null);
         } catch { toast.error('Erro ao buscar configurações.'); }
         finally { setLoading(false); }
     }
@@ -994,10 +988,8 @@ export default function ShopeePage() {
             // Fetch products from VPS (source of truth for catalog), bypassing 5-min cache to ensure Bling cost is fresh
             const localProds = await fetchAllVpsProducts({ status: 'all', noCache: true });
 
-            // Fetch Shopee sync records from Supabase (integration metadata)
-            const { data: shopeeRecords } = await supabase
-                .from('shopee_products')
-                .select('*');
+            // Fetch Shopee sync records from VPS (integration metadata)
+            const shopeeRecords = await shopeeProductService.list();
 
             const syncMap = new Map((shopeeRecords || []).map((r: any) => [r.product_id, r]));
 
@@ -1222,8 +1214,8 @@ export default function ShopeePage() {
 
 
             // 4. Deduplicate by product_id (SKU match wins over name match) and upsert
-            const { data: existing } = await supabase.from('shopee_products').select('product_id');
-            const existingIds = new Set((existing || []).map((r: any) => r.product_id));
+            const existing = await shopeeProductService.list();
+            const existingIds = new Set((existing || []).map((r: any) => String(r.product_id)));
 
             // Keep one Shopee item per VPS product (SKU match wins over name match)
             const bestMatchByProduct = new Map<string, typeof matched[0]>();
@@ -1250,11 +1242,7 @@ export default function ShopeePage() {
 
             let insertedCount = 0;
             if (toUpsert.length > 0) {
-                const { error: upsertError, count } = await supabase
-                    .from('shopee_products')
-                    .upsert(toUpsert, { onConflict: 'product_id', count: 'exact' });
-                if (upsertError) throw new Error(`Supabase: ${upsertError.message}`);
-                insertedCount = count ?? toUpsert.length;
+                insertedCount = await shopeeProductService.upsertMany(toUpsert);
             }
 
             const bySkuCount = [...bestMatchByProduct.values()].filter(m => m.bysku).length;
@@ -1284,12 +1272,12 @@ export default function ShopeePage() {
             return;
         }
         try {
-            await supabase.from('shopee_products').upsert({
+            await shopeeProductService.upsert({
                 product_id: p.product_id,
                 shopee_item_id: Number(itemId),
                 status: 'active',
                 last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'product_id' });
+            });
 
             toast.success(`Produto vinculado ao Item Shopee #${itemId}!`);
             setLinkingProductId(null);
@@ -1321,12 +1309,7 @@ export default function ShopeePage() {
                 throw new Error(shopeeData.message || shopeeData.error || 'Falha ao apagar produto na Shopee.');
             }
 
-            const { error } = await supabase
-                .from('shopee_products')
-                .delete()
-                .eq('shopee_item_id', p.shopee_item_id);
-
-            if (error) throw error;
+            await shopeeProductService.deleteByShopeeItemId(p.shopee_item_id);
 
             toast.success('Produto apagado da Shopee e vínculo local excluído. Você já pode reenviar.');
             loadProducts();
@@ -1348,9 +1331,9 @@ export default function ShopeePage() {
             });
             const data = await res.json();
             if (data.error) { toast.error(`Erro: ${data.message}`); return; }
-            await supabase.from('shopee_products').update({
+            await shopeeProductService.updateByProductId(p.product_id, {
                 status: newStatus === 'NORMAL' ? 'active' : 'inactive'
-            }).eq('product_id', p.product_id);
+            });
             toast.success(`Produto ${newStatus === 'NORMAL' ? 'ativado' : 'desativado'} na Shopee!`);
             loadProducts();
         } catch { toast.error('Erro ao alterar status.'); }
@@ -1371,9 +1354,7 @@ export default function ShopeePage() {
             });
             const data = await res.json();
             if (data.error) { toast.error(`Erro: ${data.message}`); return; }
-            await supabase.from('shopee_products')
-                .update({ shopee_price: newPrice })
-                .eq('product_id', p.product_id);
+            await shopeeProductService.updateByProductId(p.product_id, { shopee_price: newPrice });
             toast.success('Preço atualizado na Shopee!');
             setEditingPrice(prev => { const n = { ...prev }; delete n[p.product_id]; return n; });
             loadProducts();
@@ -1419,10 +1400,7 @@ export default function ShopeePage() {
                 }
             }
 
-            await supabase
-                .from('shopee_products')
-                .update({ last_synced_at: new Date().toISOString() })
-                .eq('product_id', p.product_id);
+            await shopeeProductService.updateByProductId(p.product_id, { last_synced_at: new Date().toISOString() });
 
             setProducts(prev => prev.map(prod =>
                 prod.product_id === p.product_id
@@ -2704,10 +2682,7 @@ export function ShopeeSyncModal({
                 }
 
                 const ids = children.map((child: any) => String(child.id));
-                const { data: records } = await supabase
-                    .from('shopee_products')
-                    .select('product_id, shopee_item_id')
-                    .in('product_id', ids);
+                const records = await shopeeProductService.getByProductIds(ids);
                 if (cancelled) return;
 
                 const itemIdByProductId = new Map((records || []).map((record: any) => [
@@ -4158,7 +4133,7 @@ export function ShopeeSyncModal({
                     : await publishShopeeItemWithStockFallback(finalPayload, parsedStock);
             setSyncStepDone('publish_item', 'Anuncio aceito pela Shopee');
 
-            // Save to Supabase
+            // Save to VPS
             const shopeeItemId = resolvedExistingVariationItemId || resolvedExistingProductItemId || data.response?.item_id;
             const videoUploadIdsForPostPublish = data?.omitted_video_upload_id ? [] : videoUploadIdList;
             let publishedModelList: any[] = [];
@@ -4267,7 +4242,7 @@ export function ShopeeSyncModal({
                 // Best-effort debug recovery only.
             }
             setSyncStepRunning('save_link', 'Gravando vinculo Shopee no sistema');
-            await supabase.from('shopee_products').upsert({
+            await shopeeProductService.upsert({
                 product_id: product.id,
                 shopee_item_id: shopeeItemId,
                 shopee_category_id: selectedCat.category_id,
@@ -4275,13 +4250,13 @@ export function ShopeeSyncModal({
                 shopee_price: Math.round(parsedPrice * 100),
                 status: 'active',
                 last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'product_id' });
+            });
 
             if (publishWithVariations && selectedVariationGroup) {
                 const modelMatches = matchShopeeModelsBySku(selectedVariationGroup.children, publishedModelList);
                 for (const child of selectedVariationGroup.children) {
                     const match = modelMatches.get(child.id);
-                    await supabase.from('shopee_products').upsert({
+                    await shopeeProductService.upsert({
                         product_id: child.id,
                         shopee_item_id: shopeeItemId,
                         shopee_model_id: match?.shopee_model_id ?? null,
@@ -4293,7 +4268,7 @@ export function ShopeeSyncModal({
                         shopee_price: Math.round(Number(child.price_retail || 0)),
                         status: 'active',
                         last_synced_at: new Date().toISOString(),
-                    }, { onConflict: 'product_id' });
+                    });
                 }
             }
             setSyncStepDone('save_link', `Item ${shopeeItemId} vinculado`);
@@ -5462,7 +5437,7 @@ function ExpandedItemPanel({
                     }
                     if (Object.keys(attrMap).length > 0) setAttrValues(attrMap);
                 }
-                // Resolve category id from live API (covers cases where Supabase has null)
+                // Resolve category id from live API (covers cases where VPS has null)
                 if (item.category_id) setEffectiveCategoryId(String(item.category_id));
                 // Auto-resize description textarea
                 setTimeout(() => {

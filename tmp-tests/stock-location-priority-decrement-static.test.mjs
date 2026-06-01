@@ -22,7 +22,8 @@ assert.match(migration, /PERFORM recalculate_product_stock_from_locations/, 'pri
 assert.match(types, /StockLocationPriorityDecrementInput/, 'types must define priority decrement input');
 assert.match(types, /StockLocationPriorityDecrementResult/, 'types must define priority decrement result rows');
 assert.match(service, /decrementStockByPriority/, 'service must expose decrementStockByPriority');
-assert.match(service, /rpc\('decrement_product_stock_by_priority'/, 'service must call priority decrement RPC');
+assert.match(service, /\/stock-locations\/priority-decrements/, 'service must call the VPS priority decrement endpoint');
+assert.doesNotMatch(service, /rpc\('decrement_product_stock_by_priority'/, 'service must not call the old Supabase priority decrement RPC');
 
 assert.match(saleService, /decrementStockByPriority/, 'PDV/sales must use priority decrement after PDV integration step');
 assert.match(orderService, /decrementOrderItemStockByPriority[\s\S]*decrementStockByPriority/, 'online orders paid/completed must use priority decrement after order integration step');

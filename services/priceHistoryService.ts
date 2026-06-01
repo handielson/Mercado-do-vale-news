@@ -1,4 +1,5 @@
-import { supabase } from './supabase';
+import { vpsClient } from './vpsClient';
+import { vpsApiService } from './vpsApiService';
 
 export interface PriceSnapshot {
     id: string;
@@ -8,6 +9,30 @@ export interface PriceSnapshot {
     price_reseller: number;
     price_wholesale: number;
     changed_at: string;
+}
+
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[]; total?: number };
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
+}
+
+async function loadPriceHistory(pageSize = 200): Promise<PriceSnapshot[]> {
+    let offset = 0;
+    const rows: PriceSnapshot[] = [];
+
+    while (true) {
+        const response = await vpsClient.get<TableDataResponse<PriceSnapshot>>(
+            `/table-data/product_price_history?limit=${pageSize}&offset=${offset}`
+        );
+        const batch = extractRows(response);
+        rows.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+    }
+
+    return rows;
 }
 
 function normalizePriceValue(value: unknown): number {
@@ -36,33 +61,30 @@ export async function logPriceChange(
 ): Promise<void> {
     const normalizedPrices = normalizePricePayload(prices);
 
-    const { error } = await supabase
-        .from('product_price_history')
-        .insert({
+    try {
+        await vpsClient.post<PriceSnapshot>('/table-data/product_price_history', {
             product_id: productId,
             price_cost: normalizedPrices.price_cost,
             price_retail: normalizedPrices.price_retail,
             price_reseller: normalizedPrices.price_reseller,
             price_wholesale: normalizedPrices.price_wholesale,
         });
-
-    if (error) console.error('[priceHistory] log error:', error.message);
+    } catch (error: any) {
+        console.error('[priceHistory] log error:', error.message);
+    }
 }
 
 /** Retorna as últimas N entradas do histórico de um produto */
 export async function getPriceHistory(productId: string, limit = 5): Promise<PriceSnapshot[]> {
-    const { data, error } = await supabase
-        .from('product_price_history')
-        .select('*')
-        .eq('product_id', productId)
-        .order('changed_at', { ascending: false })
-        .limit(limit);
-
-    if (error) {
+    try {
+        return (await loadPriceHistory())
+            .filter(snapshot => snapshot.product_id === productId)
+            .sort((a, b) => new Date(b.changed_at || 0).getTime() - new Date(a.changed_at || 0).getTime())
+            .slice(0, limit);
+    } catch (error: any) {
         console.error('[priceHistory] fetch error:', error.message);
         return [];
     }
-    return data || [];
 }
 
 /**
@@ -80,18 +102,14 @@ export async function applyPricesToVariation(
 
     const ids = variationProducts.map(p => p.id);
 
-    // 1. Atualiza os preços de todos os produtos da variação
-    const { error } = await supabase
-        .from('products')
-        .update({
+    await Promise.all(ids.map(id => (
+        vpsApiService.updateProduct(id, {
             price_cost: newPrices.price_cost,
             price_retail: newPrices.price_retail,
             price_reseller: newPrices.price_reseller,
             price_wholesale: newPrices.price_wholesale,
         })
-        .in('id', ids);
-
-    if (error) throw new Error('[priceHistory] apply prices error: ' + error.message);
+    )));
 
     // 2. Grava histórico para cada um
     const normalizedPrices = normalizePricePayload(newPrices);
@@ -100,11 +118,13 @@ export async function applyPricesToVariation(
         ...normalizedPrices,
     }));
 
-    const { error: histError } = await supabase
-        .from('product_price_history')
-        .insert(inserts);
-
-    if (histError) console.error('[priceHistory] batch log error:', histError.message);
+    try {
+        await Promise.all(inserts.map(insert => (
+            vpsClient.post<PriceSnapshot>('/table-data/product_price_history', insert)
+        )));
+    } catch (error: any) {
+        console.error('[priceHistory] batch log error:', error.message);
+    }
 }
 
 export const priceHistoryService = {

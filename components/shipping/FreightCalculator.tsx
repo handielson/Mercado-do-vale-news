@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Plus, Minus, Trash2, Package, AlertTriangle, CheckCircle, Loader2, Calculator, Share2, MessageCircle, Copy, Tag, X, User, FileText, Phone } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '../../services/supabase';
+import { customerService } from '../../services/customers';
 import { vpsApiService } from '../../services/vpsApiService';
 import { shippingService } from '../../services/shippingService';
 import { melhorEnvioService } from '../../services/melhorEnvio';
@@ -185,14 +185,10 @@ export function FreightCalculator({ originCep, secondaryCep }: FreightCalculator
             return;
         }
         const timer = setTimeout(async () => {
-            const q = `%${customerSearch}%`;
-            const { data } = await supabase
-                .from('customers')
-                .select('id, name, cpf_cnpj, phone, address')
-                .or(`name.ilike.${q},phone.ilike.${q},cpf_cnpj.ilike.${q}`)
-                .eq('is_active', true)
-                .limit(6);
-            setCustomerResults(data ?? []);
+            const data = (await customerService.list({ search: customerSearch, is_active: true }))
+                .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')))
+                .slice(0, 6);
+            setCustomerResults(data);
             setShowCustomerDrop(true);
         }, 400);
         return () => clearTimeout(timer);

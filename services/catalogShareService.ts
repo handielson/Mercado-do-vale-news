@@ -1,7 +1,23 @@
-import { supabase } from './supabase';
 import type { ShareOptions, CatalogProduct } from '@/types/catalog';
 import { catalogService } from './catalogService';
+import { publicCompanySettingsService, type PublicCompanySettings } from './publicCompanySettings';
+import { vpsClient } from './vpsClient';
 import { toast } from 'sonner';
+
+type CatalogShareCompany = PublicCompanySettings & { logoUrl?: string | null };
+
+async function getShareCompany(): Promise<CatalogShareCompany> {
+    const company = await publicCompanySettingsService.get();
+    return {
+        company_name: company?.company_name || 'Mercado do Vale',
+        name: company?.name || company?.company_name || 'Mercado do Vale',
+        phone: company?.phone || '',
+        email: company?.email || '',
+        logo: company?.logo || null,
+        logoUrl: company?.logo || null,
+        receipt_logo_url: company?.receipt_logo_url || null,
+    };
+}
 
 export const catalogShareService = {
     /**
@@ -21,11 +37,8 @@ export const catalogShareService = {
             products = product ? [product] : [];
         }
 
-        // Buscar dados da empresa
-        const { data: company } = await supabase
-            .from('company')
-            .select('name, phone, email')
-            .single();
+        // Buscar dados da empresa pela VPS
+        const company = await getShareCompany();
 
         const companyName = company?.name || 'Mercado do Vale';
         const companyPhone = company?.phone || '';
@@ -62,10 +75,7 @@ export const catalogShareService = {
         try {
             const text = await catalogShareService.generateCatalogText(options);
 
-            const { data: company } = await supabase
-                .from('company')
-                .select('phone')
-                .single();
+            const company = await getShareCompany();
 
             const companyPhone = company?.phone?.replace(/\D/g, '') || '';
             const url = `https://wa.me/${companyPhone}?text=${encodeURIComponent(text)}`;
@@ -119,11 +129,8 @@ export const catalogShareService = {
                 products = product ? [product] : [];
             }
 
-            // Buscar dados da empresa
-            const { data: company } = await supabase
-                .from('company')
-                .select('*')
-                .single();
+            // Buscar dados da empresa pela VPS
+            const company = await getShareCompany();
 
             // Gerar HTML para PDF
             const html = catalogShareService.generatePDFHTML(products, company, options);
@@ -232,7 +239,7 @@ export const catalogShareService = {
         const sessionId = localStorage.getItem('session_id') || crypto.randomUUID();
         localStorage.setItem('session_id', sessionId);
 
-        await supabase.from('catalog_shares').insert({
+        await vpsClient.post('/table-data/catalog_shares', {
             share_type: type,
             scope,
             scope_value: scopeValue,
