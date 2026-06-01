@@ -1,16 +1,6 @@
-import { vpsClient } from './vpsClient';
+import { publicCompanySettingsService } from './publicCompanySettings';
 
-const COMPANY_SLUG = 'mercado-do-vale';
 const DEFAULT_COMPANY_ID = '9717131e-7b14-4aec-84a4-4317c0489985';
-
-interface TableDataResponse<T> {
-    rows?: T[];
-}
-
-interface CompanyRow {
-    id?: string;
-    slug?: string | null;
-}
 
 let cachedCompanyId: string | null = null;
 let inFlight: Promise<string> | null = null;
@@ -27,20 +17,12 @@ export async function getCompanyId(): Promise<string> {
 
     inFlight = (async () => {
         try {
-            const pageSize = 100;
-            for (let offset = 0; ; offset += pageSize) {
-                const data = await vpsClient.get<TableDataResponse<CompanyRow>>(
-                    `/table-data/companies?limit=${pageSize}&offset=${offset}`
-                );
-                const rows = Array.isArray(data.rows) ? data.rows : [];
-                const company = rows.find(row => row.slug === COMPANY_SLUG);
-                if (company?.id) {
-                    cachedCompanyId = String(company.id);
-                    return cachedCompanyId;
-                }
-                if (rows.length < pageSize) break;
+            const settings = await publicCompanySettingsService.get();
+            if (settings?.id) {
+                cachedCompanyId = String(settings.id);
+                return cachedCompanyId;
             }
-            return useDefaultCompanyId('company slug not found');
+            return useDefaultCompanyId('public company id not found');
         } catch (error) {
             return useDefaultCompanyId(error);
         } finally {
