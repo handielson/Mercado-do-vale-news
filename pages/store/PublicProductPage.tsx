@@ -1158,17 +1158,36 @@ export const PublicProductPage: React.FC = () => {
                                             const isCurrent = sib.id === product.id;
                                             const variantLabel = (sib as any)._displayLabel;
                                             const isOutOfStock = Boolean(sib.track_inventory) && ((sib.stock_quantity || 0) <= 0);
+                                            const variantButtonStateClasses = isOutOfStock
+                                                ? 'relative overflow-hidden border-slate-300 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75 shadow-inner'
+                                                : isCurrent
+                                                    ? 'border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-600 scale-[1.03] shadow-sm transform'
+                                                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50';
 
                                             return (
                                                 <button
                                                     key={sib.id}
-                                                    onClick={() => handleVariantChange(sib)}
-                                                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-300 ${isCurrent
-                                                        ? 'border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-600 scale-[1.03] shadow-sm transform'
-                                                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                                                        } ${isOutOfStock ? 'opacity-70' : ''}`}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (isOutOfStock) return;
+                                                        handleVariantChange(sib);
+                                                    }}
+                                                    disabled={isOutOfStock}
+                                                    aria-disabled={isOutOfStock}
+                                                    title={isOutOfStock ? `${variantLabel} esgotado` : variantLabel}
+                                                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-300 ${variantButtonStateClasses}`}
                                                 >
-                                                    {variantLabel}{isOutOfStock ? ' (esgotado)' : ''}
+                                                    <span className={isOutOfStock ? 'line-through decoration-2 decoration-slate-500/70' : ''}>
+                                                        {variantLabel}
+                                                    </span>
+                                                    {isOutOfStock && (
+                                                        <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                                                            Esgotado
+                                                        </span>
+                                                    )}
+                                                    {isOutOfStock && (
+                                                        <span className="pointer-events-none absolute inset-x-[-20%] top-1/2 h-px -rotate-12 bg-slate-400/60" />
+                                                    )}
                                                 </button>
                                             );
                                         })

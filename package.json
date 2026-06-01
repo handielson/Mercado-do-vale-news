@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/assert-no-supabase-runtime.cjs",
     "build": "vite build",
     "deploy:vps-site": "node scripts/deploy-vps-site.cjs",
     "preview": "vite preview"
