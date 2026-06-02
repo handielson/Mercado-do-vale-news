@@ -12,6 +12,14 @@ export function hasSerializedIdentity(specs = {}) {
   return SERIALIZED_FIELDS.some(({ key }) => Boolean(cleanValue(specs?.[key])));
 }
 
+export function shouldAddSerializedFieldToBatchOnEnter({ key, value, hasBatchHandler }) {
+  return Boolean(
+    hasBatchHandler &&
+    SERIALIZED_FIELDS.some((field) => field.key === key) &&
+    cleanValue(value)
+  );
+}
+
 export function findSerializedBatchDuplicates(items) {
   const seen = new Map();
   const duplicates = [];

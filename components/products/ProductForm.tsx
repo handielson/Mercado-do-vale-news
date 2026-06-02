@@ -109,15 +109,15 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [batchImageUploadingId, setBatchImageUploadingId] = useState<string | null>(null);
     const [batchBlingLinkingId, setBatchBlingLinkingId] = useState<string | null>(null);
 
-    const handleAddToBatchList = () => {
+    const handleAddToBatchList = (overrides: Partial<BatchItem> = {}) => {
         const currentProductImages = getValues('images') || imagePreviews;
         const item: BatchItem = {
             id: crypto.randomUUID(),
             sku: watch('sku') || undefined,
             eans: [],
-            imei1: watch('specs.imei1') || undefined,
-            imei2: watch('specs.imei2') || undefined,
-            serial: watch('specs.serial') || undefined,
+            imei1: overrides.imei1 || watch('specs.imei1') || undefined,
+            imei2: overrides.imei2 || watch('specs.imei2') || undefined,
+            serial: overrides.serial || watch('specs.serial') || undefined,
             color: watch('specs.color') || undefined,
             storage: watch('specs.storage') || undefined,
             ram: watch('specs.ram') || undefined,

@@ -11,6 +11,7 @@ import { useEnrichedCustomFields } from '../../../hooks/useEnrichedCustomFields'
 import { FIELD_METADATA, isSpecialField, shouldRenderField } from './fieldMetadata';
 import { TableRelationField } from '../../fields/TableRelationField';
 import { vpsApiService } from '../../../services/vpsApiService';
+import { shouldAddSerializedFieldToBatchOnEnter } from '../serializedBatch.js';
 
 interface ProductSpecificationsProps {
     categoryConfig: CategoryConfig | null;
@@ -18,7 +19,7 @@ interface ProductSpecificationsProps {
     setValue: UseFormSetValue<ProductInput>;
     errors: FieldErrors<ProductInput>;
     onRefresh?: () => void;
-    onAddToBatchList?: () => void;
+    onAddToBatchList?: (overrides?: Record<string, string>) => void;
     templateValues?: Record<string, any>;
     currentProductId?: string; // ID do produto atual (modo edição)
 }
@@ -114,10 +115,13 @@ export function ProductSpecifications({
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
                                     const val = (e.currentTarget as HTMLInputElement).value;
-                                    // If serial/unique field and has value, add to list
-                                    if (isUnique && val && onSerialConfirm) {
-                                        onSerialConfirm(key as 'serial' | 'imei1' | 'imei2', val);
-                                        setValue(fieldKey, '');
+                                    if (shouldAddSerializedFieldToBatchOnEnter({
+                                        key,
+                                        value: val,
+                                        hasBatchHandler: Boolean(onAddToBatchList),
+                                    })) {
+                                        setValue(fieldKey, val, { shouldValidate: true });
+                                        onAddToBatchList?.({ [key]: val });
                                         setUniqueErrors(prev => ({ ...prev, [key]: '' }));
                                         return;
                                     }
@@ -187,7 +191,7 @@ export function ProductSpecifications({
                     {onAddToBatchList && (
                         <button
                             type="button"
-                            onClick={onAddToBatchList}
+                            onClick={() => onAddToBatchList()}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
                         >
                             <CheckCircle2 size={14} />
