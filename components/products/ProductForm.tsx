@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -41,6 +41,7 @@ import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
 import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl } from '../../utils/video-url';
 import { buildSerializedBatchPlan, findSerializedBatchDuplicates, hasSerializedIdentity, resolveSerializedBatchItemImages } from './serializedBatch.js';
+import { getProductSaveProgressPercent } from './productSaveProgress.js';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -69,6 +70,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [isBlingLinkManualOverride, setIsBlingLinkManualOverride] = useState(false);
     const [isAutoLinkingBling, setIsAutoLinkingBling] = useState(false);
     const [shopeeItemId, setShopeeItemId] = useState<number | undefined>(initialData?.shopee_item_id);
+    const [isSavingForm, setIsSavingForm] = useState(false);
+    const [saveProgress, setSaveProgress] = useState<{ current: number; total: number; message: string } | null>(null);
+    const saveInFlightRef = useRef(false);
 
     // Estado para armazenar as regras da categoria (Traffic Light)
     const [categoryConfig, setCategoryConfig] = useState<CategoryConfig | null>(null);
@@ -806,6 +810,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     // Wrapper para onSubmit que mostra toast de erro e calcula preço médio
     const handleFormSubmit = handleSubmit(
         async (data) => {
+            if (saveInFlightRef.current) return;
+            const totalToSave = Math.max(1, serialList.length || 1);
+            saveInFlightRef.current = true;
+            setIsSavingForm(true);
+            setSaveProgress({ current: 0, total: totalToSave, message: 'Preparando cadastro...' });
+
+            try {
             console.log('🔍 [ProductForm] Form data received:', data);
             console.log('  - model_id:', data.model_id);
             console.log('  - brand:', data.brand);
@@ -923,6 +934,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             console.log('📤 [ProductForm] Sending to onSubmit:', mergedData);
 
             if (serialList.length > 0) {
+                setSaveProgress({ current: 0, total: totalToSave, message: 'Verificando duplicidades...' });
                 // Entrada em massa: verificar unicidade de todos antes de salvar qualquer um
                 const duplicates: string[] = [];
                 const duplicateIdentifiers = findSerializedBatchDuplicates(serialList);
@@ -967,6 +979,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 }
 
                 // Carregar cores uma vez antes do loop para resolver nome → UUID
+                setSaveProgress({ current: 0, total: totalToSave, message: 'Preparando produtos do lote...' });
                 const allColors = await colorService.listActive().catch(() => []);
                 const linkedSerialList = await Promise.all(serialList.map(async (item) => {
                     if (item.bling_id || !item.sku) return item;
@@ -989,6 +1002,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 // Todos únicos — salvar um por um
                 for (let index = 0; index < linkedSerialList.length; index++) {
                     const item = linkedSerialList[index];
+                    setSaveProgress({
+                        current: index,
+                        total: totalToSave,
+                        message: `Salvando produto ${index + 1} de ${totalToSave}...`
+                    });
                     // Resolver imagens da cor específica do item
                     let colorImages: string[] = [];
                     if (item.color && mergedData.model_id) {
@@ -1013,11 +1031,17 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     const itemData = { ...batchPlan.items[index], images: itemImages };
                     const savedProduct = await onSubmit(itemData);
                     showVariationPriceAdjustmentToast(savedProduct);
+                    setSaveProgress({
+                        current: index + 1,
+                        total: totalToSave,
+                        message: `Produto ${index + 1} de ${totalToSave} salvo.`
+                    });
                 }
                 toast.success(`${serialList.length} produto(s) cadastrado(s) com sucesso!`);
                 setSerialList([]);
                 onBatchComplete?.();
             } else {
+                setSaveProgress({ current: 0, total: 1, message: 'Verificando duplicidades...' });
                 // Produto único — verificar serial/IMEI do campo se preenchido
                 const uniqueFields = ['serial', 'imei1', 'imei2'] as const;
                 const existingProducts = await vpsApiService.getProducts({
@@ -1041,8 +1065,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 if (hasSerializedIdentity(mergedData.specs || {})) {
                     mergedData.stock_quantity = 1;
                 }
+                setSaveProgress({ current: 0, total: 1, message: 'Salvando produto...' });
                 const savedProduct = await onSubmit(mergedData);
                 showVariationPriceAdjustmentToast(savedProduct);
+                setSaveProgress({ current: 1, total: 1, message: 'Produto salvo.' });
                 if (!initialData) {
                     toast.success('Produto cadastrado com sucesso!');
                 }
@@ -1075,6 +1101,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     console.error('Error calculating average prices:', error);
                     // Não bloqueia o salvamento, apenas loga o erro
                 }
+            }
+            } finally {
+                saveInFlightRef.current = false;
+                setIsSavingForm(false);
+                setSaveProgress(null);
             }
         },
         (errors) => {
@@ -1143,6 +1174,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
     const hasValidationErrors = Object.keys(errors).length > 0;
     const validationErrorList = hasValidationErrors ? extractValidationErrors(errors) : [];
+    const isSavingOperation = isLoading || isSavingForm;
+    const saveProgressPercent = getProductSaveProgressPercent(saveProgress);
 
     return (
         <form onSubmit={handleFormSubmit} className="space-y-6 pb-20">
@@ -1595,20 +1628,41 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-                <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900">
+            <div className="flex flex-col gap-3 pt-4 border-t border-slate-200">
+                {isSavingOperation && (
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                            <span className="font-medium text-blue-900">{saveProgress?.message || 'Salvando...'}</span>
+                            <span className="font-mono text-xs text-blue-700">
+                                {saveProgress?.current ?? 0}/{saveProgress?.total ?? Math.max(1, serialList.length || 1)}
+                            </span>
+                        </div>
+                        <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">
+                            <div
+                                className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                                style={{ width: `${saveProgressPercent || 8}%` }}
+                            />
+                        </div>
+                    </div>
+                )}
+                <div className="flex justify-end gap-3">
+                <button type="button" onClick={onCancel} disabled={isSavingOperation} className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50">
                     Cancelar
                 </button>
                 <button
                     type="submit"
-                    disabled={isLoading || isCompressing || blocksSubmitForDuplicateEAN}
+                    disabled={isSavingOperation || isCompressing || blocksSubmitForDuplicateEAN}
                     className={`px-4 py-2 text-white text-sm font-medium rounded-md shadow-lg transition-colors ${blocksSubmitForDuplicateEAN
                         ? 'bg-gray-400 cursor-not-allowed'
                         : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
-                        } disabled:opacity-50`}
+                        } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
-                    {blocksSubmitForDuplicateEAN ? '⚠️ EAN Duplicado - Não Permitido' : isLoading ? 'Salvando...' : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
+                    <span className="inline-flex items-center gap-2">
+                        {isSavingOperation && <Loader2 size={16} className="animate-spin" />}
+                        {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
+                    </span>
                 </button>
+                </div>
             </div>
         </form >
     );
