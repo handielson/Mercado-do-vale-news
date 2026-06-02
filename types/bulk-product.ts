@@ -1,23 +1,64 @@
+export type BulkImportAction = 'create' | 'update' | 'upsert' | 'skip' | '';
+export type BulkImportPlannedAction = 'create' | 'update' | 'skip' | 'error';
+export type BulkImportUpdateMode = 'filled_only' | 'replace_except_images';
+
+export interface BulkImportIssue {
+    code: string;
+    message: string;
+    debug?: Record<string, any>;
+}
+
 export interface BulkProductRow {
-    ean: string;
+    ean?: string;
+    action?: BulkImportAction;
+    sku?: string;
+    name?: string;
+    model_id?: string;
+    model_name?: string;
+    category_id?: string;
+    category_name?: string;
+    brand?: string;
+    specs?: Record<string, any>;
     imei1?: string;
     imei2?: string;
     serial?: string;
-    [key: string]: any; // Campos customizados dinâmicos
+    [key: string]: any;
 }
 
 export interface BulkProductValidation {
     row: number;
+    sku?: string;
     valid: boolean;
-    errors: string[];
-    warnings: string[];
+    errors: Array<string | BulkImportIssue>;
+    warnings: Array<string | BulkImportIssue>;
+    existingProduct?: any;
+}
+
+export interface BulkImportPlanItem {
+    row: number;
+    sku: string;
+    action: BulkImportPlannedAction;
+    rowData: BulkProductRow;
+    existingProduct?: any;
+    payload: any;
+    validation: BulkProductValidation;
+    debug: Record<string, any>;
+}
+
+export interface BulkImportPlan {
+    total: number;
+    create: number;
+    update: number;
+    skip: number;
+    error: number;
+    items: BulkImportPlanItem[];
 }
 
 export interface BulkProductPreview {
     row: number;
-    baseProduct: any; // Product type
+    baseProduct: any;
     uniqueFields: Record<string, any>;
-    finalProduct: any; // ProductInput type
+    finalProduct: any;
     validation: BulkProductValidation;
 }
 
@@ -29,7 +70,7 @@ export interface BulkUploadResult {
 }
 
 export interface PendingProduct {
-    id: string; // Temporary ID for queue management
+    id: string;
     ean: string;
     baseProductName: string;
     baseProductImage?: string;
