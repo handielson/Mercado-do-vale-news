@@ -87,43 +87,36 @@ git worktree add .worktrees\publish-site origin/main
 ```powershell
 cd .worktrees\publish-site
 npm.cmd ci
-Select-String -Path "..\..\.env.vps.local","..\..\.env.local","..\..\.env","..\..\.env.production" -Pattern "^(VITE_SUPABASE_URL|VITE_SUPABASE_ANON_KEY)=" | ForEach-Object { "$($_.Path):$($_.Line.Split('=')[0])" }
+node scripts\assert-no-supabase-runtime.cjs
 npm.cmd run build
 npm.cmd run deploy:vps-site
 ```
 
 O script `scripts/deploy-vps-site.cjs` le `.env.vps.local` e `.env.local` do worktree e, quando o worktree esta dentro de `.worktrees`, tambem do workspace principal.
 
-### Trava Critica: Variaveis Vite/Supabase
+### Trava Critica: Supabase e Somente Legado
 
-Antes de qualquer `npm.cmd run build` usado para producao, confirmar que as variaveis publicas do Vite existem no ambiente de build. Elas sao embutidas no JavaScript no momento do build; se faltarem, o site pode subir com HTML `200`, mas quebrar no navegador com:
-
-```text
-Uncaught Error: Missing Supabase environment variables
-```
-
-Variaveis obrigatorias enquanto houver codigo usando `services/supabase.ts` ou `import.meta.env.VITE_SUPABASE_*`:
+Antes de qualquer `npm.cmd run build` usado para producao, confirmar que o bundle nao voltou a depender do Supabase. A regra atual e:
 
 ```text
-VITE_SUPABASE_URL
-VITE_SUPABASE_ANON_KEY
+Supabase e somente fonte legada temporaria. Nada novo deve ler, escrever, sincronizar ou vincular Supabase.
 ```
 
-Checar nomes sem imprimir valores:
+Rodar a trava:
 
 ```powershell
-Select-String -Path ".env.vps.local",".env.local",".env",".env.production","..\..\.env.vps.local","..\..\.env.local","..\..\.env","..\..\.env.production" -Pattern "^(VITE_SUPABASE_URL|VITE_SUPABASE_ANON_KEY)=" | ForEach-Object { "$($_.Path):$($_.Line.Split('=')[0])" }
+node scripts\assert-no-supabase-runtime.cjs
 ```
 
-Resultado minimo esperado: aparecerem `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` em algum arquivo carregado pelo build. Se nao aparecerem, parar a publicacao e corrigir os envs antes de buildar/deployar.
+O `npm.cmd run build` tambem roda essa trava no `prebuild`. Se falhar, parar a publicacao e migrar o fluxo para VPS/MySQL antes de publicar.
 
-Depois do build, conferir que o bundle nao manteve o erro de env:
+Depois do build, conferir que o bundle publicado nao contem rastros operacionais do Supabase:
 
 ```powershell
-Select-String -Path "dist\assets\*.js" -Pattern "Missing Supabase environment variables"
+Select-String -Path "dist\assets\*.js" -Pattern "services/supabase|@supabase/supabase-js|VITE_SUPABASE|Missing Supabase environment variables"
 ```
 
-Se esse texto aparecer no bundle e as variaveis nao foram confirmadas no passo anterior, nao publicar.
+Se aparecer qualquer resultado, nao publicar.
 
 Variaveis esperadas para publicar:
 
@@ -165,10 +158,12 @@ Resultado esperado:
 200 https://www.mercadodovale.com.br/
 ```
 
-HTTP `200` sozinho nao prova que o app carregou. Abrir o site em navegador/DevTools e verificar console depois de reload sem cache. Nao pode haver erro fatal como:
+HTTP `200` sozinho nao prova que o app carregou. Abrir o site em navegador/DevTools e verificar console depois de reload sem cache. Nao pode haver erro fatal nem dependencia operacional de Supabase no bundle, como:
 
 ```text
 Missing Supabase environment variables
+services/supabase
+@supabase/supabase-js
 ```
 
 Sinal esperado no navegador: a pagina renderiza conteudo real do catalogo/admin, nao apenas o skeleton inicial.
