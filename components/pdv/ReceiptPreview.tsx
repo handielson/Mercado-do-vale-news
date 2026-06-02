@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Receipt, User, Package, Truck, CreditCard, DollarSign, Smartphone } from 'lucide-react';
 import { SaleItem, PaymentMethod, DeliveryType } from '../../types/sale';
-import QRCode from 'react-qr-code';
+import * as ReactQRCode from 'react-qr-code';
 import { calculateSaleTotals } from '../../utils/saleCalculations';
 import { companySettingsService } from '../../services/companySettingsService';
 import { CompanySettings } from '../../types/companySettings';
 
+const QRCode = (
+    (ReactQRCode as any).default?.default ||
+    (ReactQRCode as any).default?.QRCode ||
+    (ReactQRCode as any).QRCode ||
+    (ReactQRCode as any).default
+) as React.ComponentType<any>;
 
 interface Customer {
     id: string;
