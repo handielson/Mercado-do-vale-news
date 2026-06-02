@@ -13249,7 +13249,15 @@ fastify.put('/models/:id', { preHandler: requireSyncKey }, async (req, reply) =>
       `id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}`,
       payload
     );
-    return mapVpsModel(Array.isArray(rows) ? rows[0] : rows);
+    let updated = Array.isArray(rows) ? rows[0] : rows;
+    if (!updated) {
+      const fallbackRows = await vpsDbSelect(
+        'models',
+        `select=*&id=eq.${encodeURIComponent(req.params.id)}&company_id=eq.${encodeURIComponent(companyId)}&limit=1`
+      );
+      updated = Array.isArray(fallbackRows) ? fallbackRows[0] : fallbackRows;
+    }
+    return mapVpsModel(updated || { ...current, ...payload, company_id: companyId });
   } catch (error) {
     if (isVpsDbConflict(error)) {
       return reply.code(409).send({ error: 'Ja existe um modelo com esse nome para esta marca.' });

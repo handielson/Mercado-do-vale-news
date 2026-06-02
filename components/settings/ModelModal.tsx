@@ -957,7 +957,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 : await modelService.create(input);
 
             await onSave();
-            toast.success(`Modelo "${saved.name}" salvo com sucesso.`);
+            toast.success(`Modelo "${saved?.name || input.name}" salvo com sucesso.`);
             onClose();
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Erro ao salvar modelo';
