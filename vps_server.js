@@ -19205,6 +19205,29 @@ async function runMigrations() {
   `);
   console.log('[migration] admin_preferences table: OK');
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS avulso_receipts (
+      id VARCHAR(36) PRIMARY KEY,
+      numero VARCHAR(40) NOT NULL,
+      tipo ENUM('receber','pagar') NOT NULL DEFAULT 'receber',
+      nome_contato VARCHAR(255) NOT NULL,
+      cpf_cnpj VARCHAR(30) NULL,
+      telefone VARCHAR(30) NULL,
+      email VARCHAR(255) NULL,
+      customer_id VARCHAR(36) NULL,
+      valor DECIMAL(12,2) NOT NULL,
+      descricao TEXT NOT NULL,
+      data_emissao DATE NOT NULL,
+      created_by VARCHAR(80) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_avulso_receipts_created (created_at),
+      INDEX idx_avulso_receipts_tipo (tipo),
+      INDEX idx_avulso_receipts_customer (customer_id),
+      INDEX idx_avulso_receipts_numero (numero)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] avulso_receipts table: OK');
+
   await ensureDefaultAdminAccount();
 }
 
@@ -19221,6 +19244,111 @@ async function syncProductStock(productId) {
   const [rows] = await pool.query('SELECT stock_quantity FROM products WHERE id = ? LIMIT 1', [productId]);
   return rows?.[0]?.stock_quantity ?? null;
 }
+
+// ─── Recibos Avulsos ────────────────────────────────────────────────────────
+
+fastify.post('/financial/avulso-receipts', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const { tipo, nome_contato, cpf_cnpj, telefone, email, customer_id, valor, descricao, data_emissao } = body;
+
+  if (!nome_contato || typeof nome_contato !== 'string' || !nome_contato.trim()) {
+    return reply.code(400).send({ error: 'nome_contato obrigatorio' });
+  }
+  if (!valor || isNaN(Number(valor)) || Number(valor) <= 0) {
+    return reply.code(400).send({ error: 'valor invalido' });
+  }
+  if (!descricao || typeof descricao !== 'string' || !descricao.trim()) {
+    return reply.code(400).send({ error: 'descricao obrigatoria' });
+  }
+  if (!data_emissao || !/^\d{4}-\d{2}-\d{2}$/.test(data_emissao)) {
+    return reply.code(400).send({ error: 'data_emissao invalida (YYYY-MM-DD)' });
+  }
+
+  const tipoNorm = tipo === 'pagar' ? 'pagar' : 'receber';
+  const prefixo = tipoNorm === 'receber' ? 'REC' : 'PAG';
+  const datePart = data_emissao.replace(/-/g, '');
+  const rand = String(Math.floor(Math.random() * 9000) + 1000);
+  const numero = `${prefixo}-${datePart}-${rand}`;
+  const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+
+  await pool.query(
+    `INSERT INTO avulso_receipts
+      (id, numero, tipo, nome_contato, cpf_cnpj, telefone, email, customer_id, valor, descricao, data_emissao)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      numero,
+      tipoNorm,
+      nome_contato.trim(),
+      cpf_cnpj?.trim() || null,
+      telefone?.trim() || null,
+      email?.trim() || null,
+      customer_id?.trim() || null,
+      Number(valor),
+      descricao.trim(),
+      data_emissao,
+    ]
+  );
+
+  return reply.code(201).send({
+    id,
+    numero,
+    tipo: tipoNorm,
+    nome_contato: nome_contato.trim(),
+    cpf_cnpj: cpf_cnpj?.trim() || null,
+    telefone: telefone?.trim() || null,
+    email: email?.trim() || null,
+    customer_id: customer_id?.trim() || null,
+    valor: Number(valor),
+    descricao: descricao.trim(),
+    data_emissao,
+  });
+});
+
+fastify.get('/financial/avulso-receipts', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { tipo, search, limit = 50, offset = 0, data_inicio, data_fim, customer_id } = req.query || {};
+
+  const conditions = [];
+  const params = [];
+
+  if (tipo === 'receber' || tipo === 'pagar') {
+    conditions.push('tipo = ?');
+    params.push(tipo);
+  }
+  if (customer_id) {
+    conditions.push('customer_id = ?');
+    params.push(customer_id);
+  }
+  if (data_inicio) {
+    conditions.push('data_emissao >= ?');
+    params.push(data_inicio);
+  }
+  if (data_fim) {
+    conditions.push('data_emissao <= ?');
+    params.push(data_fim);
+  }
+  if (search && typeof search === 'string' && search.trim()) {
+    conditions.push('(nome_contato LIKE ? OR descricao LIKE ? OR numero LIKE ? OR cpf_cnpj LIKE ?)');
+    const s = `%${search.trim()}%`;
+    params.push(s, s, s, s);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const safeLimit = Math.min(Math.max(1, parseInt(limit) || 50), 200);
+  const safeOffset = Math.max(0, parseInt(offset) || 0);
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM avulso_receipts ${where}`,
+    params
+  );
+
+  const [rows] = await pool.query(
+    `SELECT * FROM avulso_receipts ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [...params, safeLimit, safeOffset]
+  );
+
+  return { rows, total: Number(total), limit: safeLimit, offset: safeOffset };
+});
 
 // Start
 runMigrations().then(() => {

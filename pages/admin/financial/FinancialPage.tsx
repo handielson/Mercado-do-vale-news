@@ -12,6 +12,7 @@ import { financialPreferencesService, type FinancialFiltersPreference } from '..
 import { printContaReceipt } from '../../../utils/printContaReceipt';
 import { printPaymentReceipt } from '../../../utils/printPaymentReceipt';
 import { printDebtClearance } from '../../../utils/printDebtClearance';
+import { ReceiboAvulsoModal } from '../../../components/financial/ReceiboAvulsoModal';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -567,6 +568,7 @@ export default function FinancialPage() {
     const [lastDebug, setLastDebug] = useState<FinanceDebugState | null>(null);
     const [filtersLoaded, setFiltersLoaded] = useState(false);
     const [initialLoadDone, setInitialLoadDone] = useState(false);
+    const [showAvulso, setShowAvulso] = useState(false);
 
     const contasOriginais = tab === 'pagar' ? contasPagar : contasReceber;
 
@@ -815,6 +817,15 @@ export default function FinancialPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                    <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                        <DollarSign className="text-blue-700" size={20} />
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-bold text-slate-800">Financeiro</h1>
+                        <p className="text-sm text-slate-500">Contas a Pagar e Receber — sincronizado com Bling</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
                     <button
                         onClick={() => setLancarTipo('pagar')}
                         className="flex items-center gap-1.5 px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors">
@@ -824,6 +835,11 @@ export default function FinancialPage() {
                         onClick={() => setLancarTipo('receber')}
                         className="flex items-center gap-1.5 px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-sm font-semibold hover:bg-green-100 transition-colors">
                         <TrendingUp size={15} /> Nova a Receber
+                    </button>
+                    <button
+                        onClick={() => setShowAvulso(true)}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-semibold hover:bg-blue-100 transition-colors">
+                        <ReceiptText size={15} /> Recibo Avulso
                     </button>
                     <button
                         onClick={() => load(true)}
@@ -1032,6 +1048,9 @@ export default function FinancialPage() {
                     onConfirm={handleEditar}
                     onClose={() => setEditTarget(null)}
                 />
+            )}
+            {showAvulso && (
+                <ReceiboAvulsoModal onClose={() => setShowAvulso(false)} />
             )}
         </div>
     );

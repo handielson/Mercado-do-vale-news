@@ -34,10 +34,14 @@ export function printPaymentReceipt(
 
     const template = settings.payment_receipt_template || companySettingsService.getDefaults().payment_receipt_template || '';
 
+    const contatoCpfCnpj = conta.contato?.cpf_cnpj || 'Não cadastrado';
+
     const htmlContent = template
         .replace(/{{cabecalho_a4}}/g, cabecalhoA4HTML)
         .replace(/{{nome_loja}}/g, companyName)
-        .replace(/{{cpf_cliente}}/g, conta.contato?.cpf_cnpj || 'Não cadastrado')
+        .replace(/{{nome_cliente}}/g, contatoNome)
+        .replace(/{{documento}}/g, contatoCpfCnpj)
+        .replace(/{{cpf_cliente}}/g, contatoCpfCnpj)
         .replace(/{{telefone_cliente}}/g, conta.contato?.telefone || 'Não cadastrado')
         .replace(/{{email_cliente}}/g, conta.contato?.email || 'Não cadastrado')
         .replace(/{{numero_recibo}}/g, String(conta.id || new Date().getTime().toString().slice(-6)))
