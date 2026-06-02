@@ -19,6 +19,8 @@ const IGNORED_CATEGORY_CONFIG_KEYS = new Set([
     'auto_name_fields',
     'auto_name_separator',
     'unique_fields',
+    'iks',
+    'sks',
 ]);
 
 export function getCategoryDynamicSpecFields(categoryConfig, templateValues = {}) {

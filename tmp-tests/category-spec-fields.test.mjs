@@ -15,7 +15,7 @@ const receptorConfig = {
 
 assert.deepEqual(
   getCategoryDynamicSpecFields(receptorConfig).map(field => field.key),
-  ['serial', 'iks', 'sks']
+  ['serial']
 );
 
 assert.equal(CATEGORY_SPEC_FIELD_METADATA.iks.type, 'select');
@@ -25,7 +25,7 @@ assert.deepEqual(CATEGORY_SPEC_FIELD_METADATA.sks.options, ['Sim', 'Não', 'Cons
 
 assert.deepEqual(
   getCategoryDynamicSpecFields(receptorConfig, { iks: 'Sim' }).map(field => field.key),
-  ['serial', 'sks']
+  ['serial']
 );
 
 console.log('category spec fields tests passed');
