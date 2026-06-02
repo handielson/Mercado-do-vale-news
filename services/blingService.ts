@@ -135,6 +135,7 @@ export interface BlingProduct {
     gtin: string | null;
     preco: number | null;
     precoCusto: number | null;
+    precoCompra?: number | null;
     situacao: string;
     stock_quantity: number;
     categoria?: { id: number; descricao: string };
@@ -271,7 +272,8 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
             codigo: data.codigo || null,
             gtin: data.gtin || parentData?.gtin || null,
             preco: data.preco ?? parentData?.preco ?? null,
-            precoCusto: data.precoCusto ?? parentData?.precoCusto ?? null,
+            precoCusto: data.precoCusto ?? data.precoCompra ?? parentData?.precoCusto ?? parentData?.precoCompra ?? null,
+            precoCompra: data.precoCompra ?? parentData?.precoCompra ?? null,
             situacao: data.situacao || 'A',
             stock_quantity: data.stock_quantity ?? 0,
             categoria: data.categoria || parentData?.categoria || undefined,

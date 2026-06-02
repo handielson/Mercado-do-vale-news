@@ -42,6 +42,7 @@ import { ProductKitsSection } from './sections/ProductKitsSection';
 import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl } from '../../utils/video-url';
 import { buildSerializedBatchPlan, findSerializedBatchDuplicates, hasSerializedIdentity, resolveSerializedBatchItemImages } from './serializedBatch.js';
 import { getProductSaveProgressPercent } from './productSaveProgress.js';
+import { getBlingSkuPriceAutofill } from './blingSkuPriceAutofill.js';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -730,8 +731,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
         const parentId = product.variacao?.produtoPai?.id;
         const blingEan = String(product.gtin || '').trim();
+        const priceAutofill = getBlingSkuPriceAutofill(product);
 
-        return { id: product.id, parentId, ean: blingEan || null };
+        return { id: product.id, parentId, ean: blingEan || null, priceAutofill };
     };
 
     const resolveAutomaticBlingLink = async (sku?: string | null) => {
@@ -753,7 +755,18 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             }
             setBlingId(link.id);
             setBlingParentId(link.parentId);
-            toast.info('Vinculado automaticamente pelo SKU no Bling.', { id: 'bling-auto-sku-link' });
+            if (link.priceAutofill.price_cost) {
+                setValue('price_cost', link.priceAutofill.price_cost, { shouldDirty: true, shouldValidate: true });
+            }
+            if (link.priceAutofill.price_retail) {
+                setValue('price_retail', link.priceAutofill.price_retail, { shouldDirty: true, shouldValidate: true });
+            }
+            toast.info('Vinculado automaticamente pelo SKU no Bling.', {
+                id: 'bling-auto-sku-link',
+                description: (link.priceAutofill.price_cost || link.priceAutofill.price_retail)
+                    ? 'Precos de compra e varejo preenchidos para conferencia.'
+                    : undefined,
+            });
             return link;
         } catch (error) {
             console.warn('[ProductForm] Auto Bling SKU link skipped:', error);
