@@ -9,6 +9,7 @@ import { VersionSelect } from '../selectors/VersionSelect';
 import { CheckCircle2, Package, RefreshCw, Loader2 } from 'lucide-react';
 import { useEnrichedCustomFields } from '../../../hooks/useEnrichedCustomFields';
 import { FIELD_METADATA, isSpecialField, shouldRenderField } from './fieldMetadata';
+import { getCategoryDynamicSpecFields } from './categorySpecFieldCore.js';
 import { TableRelationField } from '../../fields/TableRelationField';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { shouldAddSerializedFieldToBatchOnEnter } from '../serializedBatch.js';
@@ -378,23 +379,9 @@ export function ProductSpecifications({
                 )}
 
                 {/* DYNAMIC FIELDS - Render all other configured fields */}
-                {Object.entries(categoryConfig)
-                    .filter(([key, value]) => {
-                        if (typeof value !== 'string') return false;
-                        if (value === 'off') return false;
-                        if (isSpecialField(key)) return false;
-                        if (key === 'custom_fields') return false;
-                        if (key.includes('ean_autofill') || key.includes('auto_name')) return false;
-                        // Hide fields already in template
-                        if (templateValues && templateValues[key] !== undefined) return false;
-                        return true;
-                    })
-                    .sort(([keyA], [keyB]) => {
-                        if (keyA === 'serial') return -1;
-                        if (keyB === 'serial') return 1;
-                        return keyA.localeCompare(keyB);
-                    })
-                    .map(([key, value]) => renderGenericField(key, value as any))
+                {getCategoryDynamicSpecFields(categoryConfig, templateValues)
+                    .filter(({ key }) => !isSpecialField(key))
+                    .map(({ key, requirement }) => renderGenericField(key, requirement as any))
                 }
 
                 {/* CUSTOM FIELDS - Dynamic rendering */}

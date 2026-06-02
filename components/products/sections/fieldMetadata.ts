@@ -1,4 +1,5 @@
 import { FieldRequirement } from '../../../types/category';
+import { CATEGORY_SPEC_FIELD_METADATA } from './categorySpecFieldCore.js';
 
 /**
  * Field Metadata Map
@@ -18,6 +19,8 @@ export interface FieldMetadata {
 }
 
 export const FIELD_METADATA: Record<string, FieldMetadata> = {
+    ...CATEGORY_SPEC_FIELD_METADATA,
+
     // Inventory Identifiers
     imei1: {
         label: 'IMEI 1',
