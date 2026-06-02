@@ -169,6 +169,7 @@ export const vpsClient = {
     delete: async (path: string): Promise<void> => {
         assertCheckpointNotBlocked(path, 'DELETE');
         const headers = await buildHeaders();
+        delete (headers as Record<string, string>)['Content-Type'];
         const res = await fetch(buildVpsUrl(path, { method: 'DELETE' }), {
             method: 'DELETE',
             headers,
