@@ -56,6 +56,7 @@ export default function CustomerFormPage() {
             zipCode: ''
         },
         custom_data: {},
+        customer_type: 'retail',
         is_active: true
     });
 
@@ -77,6 +78,7 @@ export default function CustomerFormPage() {
                     cpf_cnpj: customer.cpf_cnpj,
                     email: customer.email,
                     phone: customer.phone,
+                    customer_type: customer.customer_type,
                     address: customer.address,
                     custom_data: customer.custom_data,
                     is_active: customer.is_active

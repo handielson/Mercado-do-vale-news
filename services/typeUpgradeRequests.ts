@@ -119,7 +119,7 @@ export const approveUpgradeRequest = async (
 
     await vpsClient.patch(
         `/table-data/customers/${encodeURIComponent(request.customer_id)}?pk=id`,
-        { customer_type: request.requested_type }
+        { customer_type: 'RESELLER' }
     );
 
     await vpsClient.patch(

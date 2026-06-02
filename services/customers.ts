@@ -18,6 +18,44 @@ interface TableDataResponse<T> {
     offset?: number;
 }
 
+function toVpsCustomerType(value: unknown): 'CUSTOMER' | 'RESELLER' | 'ADMIN' | undefined {
+    const normalized = String(value || '').trim().toLowerCase();
+    switch (normalized) {
+        case 'admin':
+            return 'ADMIN';
+        case 'customer':
+        case 'retail':
+        case 'varejo':
+            return 'CUSTOMER';
+        case 'reseller':
+        case 'resale':
+        case 'wholesale':
+        case 'revenda':
+        case 'atacado':
+            return 'RESELLER';
+        default:
+            return undefined;
+    }
+}
+
+function fromVpsCustomerType(value: unknown): Customer['customer_type'] {
+    const normalized = String(value || '').trim().toLowerCase();
+    switch (normalized) {
+        case 'admin':
+            return 'ADMIN';
+        case 'customer':
+            return 'retail';
+        case 'reseller':
+            return 'resale';
+        case 'retail':
+        case 'resale':
+        case 'wholesale':
+            return normalized as Customer['customer_type'];
+        default:
+            return undefined;
+    }
+}
+
 function parseJsonField<T>(value: unknown, fallback: T): T {
     if (value == null || value === '') return fallback;
     if (typeof value !== 'string') return value as T;
@@ -34,6 +72,7 @@ function normalizeCustomer(row: Customer): Customer {
         ...row,
         address: parseJsonField(row.address, undefined as any),
         custom_data: parseJsonField(row.custom_data, undefined as any),
+        customer_type: fromVpsCustomerType(row.customer_type),
         is_active: active === true || active === 1 || active === '1',
     };
 }
@@ -45,6 +84,11 @@ function serializeCustomerPayload<T extends Partial<CustomerInput>>(input: T): T
         if (payload[key] && typeof payload[key] === 'object') {
             payload[key] = JSON.stringify(payload[key]);
         }
+    }
+
+    if ('customer_type' in payload) {
+        payload.customer_type = toVpsCustomerType(payload.customer_type);
+        if (!payload.customer_type) delete payload.customer_type;
     }
 
     return payload as T;
