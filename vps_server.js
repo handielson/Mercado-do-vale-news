@@ -15095,16 +15095,195 @@ fastify.post('/products/:id/view', { preHandler: requireSyncKey }, async (req, r
   return { ok: true, affectedRows: result.affectedRows };
 });
 
+const SERIALIZED_PRODUCT_IDENTIFIER_FIELDS = ['imei1', 'imei2', 'serial'];
+const SERIALIZED_UNIT_IDENTIFIER_FIELDS = ['imei_1', 'imei_2', 'serial'];
+
+function normalizeSerializedIdentifierValue(value) {
+  return String(value || '').trim();
+}
+
+function normalizeSerializedIdentifierKey(value) {
+  return normalizeSerializedIdentifierValue(value).toLowerCase();
+}
+
+function parseSerializedSpecsInput(specs) {
+  if (!specs) return {};
+  if (typeof specs === 'string') {
+    try {
+      return JSON.parse(specs) || {};
+    } catch (_err) {
+      return {};
+    }
+  }
+  return typeof specs === 'object' ? specs : {};
+}
+
+function collectProductSerializedIdentifiers(product = {}) {
+  const specs = parseSerializedSpecsInput(product.specs);
+  return {
+    imei1: normalizeSerializedIdentifierValue(specs.imei1),
+    imei2: normalizeSerializedIdentifierValue(specs.imei2),
+    serial: normalizeSerializedIdentifierValue(specs.serial),
+  };
+}
+
+function collectUnitSerializedIdentifiers(unit = {}) {
+  return {
+    imei_1: normalizeSerializedIdentifierValue(unit.imei_1),
+    imei_2: normalizeSerializedIdentifierValue(unit.imei_2),
+    serial: normalizeSerializedIdentifierValue(unit.serial),
+  };
+}
+
+function findSerializedIdentifierDuplicateInBatch(items, collectIdentifiers, idField = 'id') {
+  const seen = new Map();
+  for (const [index, item] of (items || []).entries()) {
+    const itemId = item?.[idField] ? String(item[idField]) : '';
+    const identifiers = collectIdentifiers(item);
+    for (const [field, rawValue] of Object.entries(identifiers)) {
+      const value = normalizeSerializedIdentifierValue(rawValue);
+      if (!value) continue;
+      const key = `${field}:${normalizeSerializedIdentifierKey(value)}`;
+      const previous = seen.get(key);
+      if (previous && previous.index !== index) {
+        return { field, value, conflict: previous };
+      }
+      if (!previous) {
+        seen.set(key, {
+          index,
+          itemId,
+          name: item?.name || null,
+          sku: item?.sku || null,
+          product_id: item?.product_id || null,
+        });
+      }
+    }
+  }
+  return null;
+}
+
+async function findProductSerializedIdentifierConflict(identifiers, excludeProductId = null) {
+  const clauses = [];
+  const params = [];
+  for (const field of SERIALIZED_PRODUCT_IDENTIFIER_FIELDS) {
+    const value = normalizeSerializedIdentifierValue(identifiers?.[field]);
+    if (!value) continue;
+    clauses.push(`LOWER(TRIM(JSON_UNQUOTE(JSON_EXTRACT(specs, '$.${field}')))) = ?`);
+    params.push(normalizeSerializedIdentifierKey(value));
+  }
+  if (!clauses.length) return null;
+
+  const where = [];
+  const whereParams = [];
+  if (excludeProductId) {
+    where.push('id <> ?');
+    whereParams.push(String(excludeProductId));
+  }
+  where.push(`(${clauses.join(' OR ')})`);
+
+  const [rows] = await pool.query(
+    `SELECT id, name, sku,
+            JSON_UNQUOTE(JSON_EXTRACT(specs, '$.imei1')) AS imei1,
+            JSON_UNQUOTE(JSON_EXTRACT(specs, '$.imei2')) AS imei2,
+            JSON_UNQUOTE(JSON_EXTRACT(specs, '$.serial')) AS serial
+       FROM products
+      WHERE ${where.join(' AND ')}
+      LIMIT 1`,
+    [...whereParams, ...params]
+  );
+  const row = rows?.[0];
+  if (!row) return null;
+
+  for (const field of SERIALIZED_PRODUCT_IDENTIFIER_FIELDS) {
+    const value = normalizeSerializedIdentifierValue(identifiers?.[field]);
+    if (value && normalizeSerializedIdentifierKey(row[field]) === normalizeSerializedIdentifierKey(value)) {
+      return { field, value, table: 'products', id: row.id, name: row.name, sku: row.sku };
+    }
+  }
+  return null;
+}
+
+async function findUnitSerializedIdentifierConflict(identifiers, excludeUnitId = null) {
+  const clauses = [];
+  const params = [];
+  for (const field of SERIALIZED_UNIT_IDENTIFIER_FIELDS) {
+    const value = normalizeSerializedIdentifierValue(identifiers?.[field]);
+    if (!value) continue;
+    clauses.push(`LOWER(TRIM(${field})) = ?`);
+    params.push(normalizeSerializedIdentifierKey(value));
+  }
+  if (!clauses.length) return null;
+
+  const where = [];
+  const whereParams = [];
+  if (excludeUnitId) {
+    where.push('u.id <> ?');
+    whereParams.push(String(excludeUnitId));
+  }
+  where.push(`(${clauses.join(' OR ')})`);
+
+  const [rows] = await pool.query(
+    `SELECT u.id, u.product_id, u.imei_1, u.imei_2, u.serial, p.name AS product_name, p.sku AS product_sku
+       FROM units u
+       LEFT JOIN products p ON p.id = u.product_id
+      WHERE ${where.join(' AND ')}
+      LIMIT 1`,
+    [...whereParams, ...params]
+  );
+  const row = rows?.[0];
+  if (!row) return null;
+
+  for (const field of SERIALIZED_UNIT_IDENTIFIER_FIELDS) {
+    const value = normalizeSerializedIdentifierValue(identifiers?.[field]);
+    if (value && normalizeSerializedIdentifierKey(row[field]) === normalizeSerializedIdentifierKey(value)) {
+      return { field, value, table: 'units', id: row.id, product_id: row.product_id, name: row.product_name, sku: row.product_sku };
+    }
+  }
+  return null;
+}
+
+function serializedIdentifierConflictPayload(conflict) {
+  const label = conflict?.field === 'imei1' || conflict?.field === 'imei_1'
+    ? 'IMEI 1'
+    : conflict?.field === 'imei2' || conflict?.field === 'imei_2'
+      ? 'IMEI 2'
+      : 'Serial';
+  return {
+    error: 'duplicate_serialized_identifier',
+    message: `${label} ja cadastrado: ${conflict?.value || ''}`,
+    field: conflict?.field,
+    value: conflict?.value,
+    conflict,
+  };
+}
+
 fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, reply) => {
   const products = req.body;
   if (!Array.isArray(products) || products.length === 0) {
     return reply.code(400).send({ error: 'Expected non-empty array' });
   }
 
+  const batchDuplicate = findSerializedIdentifierDuplicateInBatch(products, collectProductSerializedIdentifiers);
+  if (batchDuplicate) {
+    return reply.code(409).send(serializedIdentifierConflictPayload({
+      ...batchDuplicate,
+      table: 'request_batch',
+    }));
+  }
+
   const results = { upserted: 0, errors: [] };
 
   for (const p of products) {
     try {
+      const conflict = await findProductSerializedIdentifierConflict(
+        collectProductSerializedIdentifiers(p),
+        p.id || null
+      );
+      if (conflict) {
+        results.errors.push({ id: p.id, name: p.name, ...serializedIdentifierConflictPayload(conflict) });
+        continue;
+      }
+
       await pool.query(
         `INSERT INTO products (
           id, name, slug, sku, ean, alternative_eans, description,
@@ -15298,6 +15477,12 @@ fastify.patch('/products/prices-stock', { preHandler: requireSyncKey }, async (r
 // Single product update
 fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   const p = req.body;
+  const conflict = await findProductSerializedIdentifierConflict(
+    collectProductSerializedIdentifiers(p),
+    req.params.id
+  );
+  if (conflict) return reply.code(409).send(serializedIdentifierConflictPayload(conflict));
+
   await pool.query(
     `UPDATE products SET
       name=?, slug=?, sku=?, ean=?, alternative_eans=?,
@@ -15610,6 +15795,9 @@ fastify.post('/units', { preHandler: requireSyncKey }, async (req, reply) => {
   const u = req.body || {};
   if (!u.product_id) return reply.code(400).send({ error: 'product_id required' });
   const id = u.id || require('crypto').randomUUID();
+  const conflict = await findUnitSerializedIdentifierConflict(collectUnitSerializedIdentifiers(u), id);
+  if (conflict) return reply.code(409).send(serializedIdentifierConflictPayload(conflict));
+
   await pool.query(
     `INSERT INTO units (
        id, product_id, imei_1, imei_2, serial, status, \`condition\`,
@@ -15639,12 +15827,26 @@ fastify.post('/units/batch', { preHandler: requireSyncKey }, async (req, reply) 
   if (!Array.isArray(items) || items.length === 0) {
     return reply.code(400).send({ error: 'Expected non-empty array' });
   }
+  const batchDuplicate = findSerializedIdentifierDuplicateInBatch(items, collectUnitSerializedIdentifiers);
+  if (batchDuplicate) {
+    return reply.code(409).send(serializedIdentifierConflictPayload({
+      ...batchDuplicate,
+      table: 'request_batch',
+    }));
+  }
+
   const results = { inserted: 0, errors: [] };
   const productIds = new Set();
   for (const u of items) {
     try {
       if (!u.product_id) throw new Error('product_id required');
       const id = u.id || require('crypto').randomUUID();
+      const conflict = await findUnitSerializedIdentifierConflict(collectUnitSerializedIdentifiers(u), id);
+      if (conflict) {
+        results.errors.push({ serial: u.serial, imei_1: u.imei_1, ...serializedIdentifierConflictPayload(conflict) });
+        continue;
+      }
+
       await pool.query(
         `INSERT INTO units (
            id, product_id, imei_1, imei_2, serial, status, \`condition\`,
@@ -15688,6 +15890,9 @@ fastify.put('/units/:id', { preHandler: requireSyncKey }, async (req, reply) => 
     }
   }
   if (!sets.length) return reply.code(400).send({ error: 'No fields to update' });
+  const conflict = await findUnitSerializedIdentifierConflict(collectUnitSerializedIdentifiers(u), req.params.id);
+  if (conflict) return reply.code(409).send(serializedIdentifierConflictPayload(conflict));
+
   vals.push(req.params.id);
   await pool.query(`UPDATE units SET ${sets.join(', ')} WHERE id = ?`, vals);
   const [rows] = await pool.query('SELECT * FROM units WHERE id = ?', [req.params.id]);
