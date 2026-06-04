@@ -199,11 +199,17 @@ function PixView({ payment, display }: { payment: PdvPixPayment; display: PdvDis
     const settings = display?.settings || {};
     const qrImage = payment.qr_code_base64 ? `data:image/png;base64,${payment.qr_code_base64}` : '';
     const statusText = payment.status === 'approved' ? 'Pagamento aprovado' : 'Aguardando pagamento';
+    const isApproved = payment.status === 'approved';
 
     return (
         <div className="grid flex-1 items-center gap-8 py-8 lg:grid-cols-[minmax(320px,520px)_1fr]">
             <div className="mx-auto w-full max-w-[520px] rounded-lg bg-white p-5 text-slate-950 shadow-2xl">
-                {qrImage ? (
+                {isApproved ? (
+                    <div className="flex aspect-square flex-col items-center justify-center rounded-lg bg-emerald-50 text-center text-emerald-700">
+                        <p className="text-8xl font-black">OK</p>
+                        <p className="mt-4 text-2xl font-bold">Pix aprovado</p>
+                    </div>
+                ) : qrImage ? (
                     <img src={qrImage} alt="QR Code Pix" className="aspect-square w-full object-contain" />
                 ) : (
                     <div className="flex aspect-square items-center justify-center rounded-lg border border-slate-200 p-6 text-center font-mono text-xs break-all">
@@ -218,7 +224,7 @@ function PixView({ payment, display }: { payment: PdvPixPayment; display: PdvDis
                         <p className="mt-2 text-6xl font-black tracking-tight sm:text-7xl">{formatCurrency(payment.amount)}</p>
                     )}
                 </div>
-                {settings.showInstructions !== false && (
+                {!isApproved && settings.showInstructions !== false && (
                     <div className="rounded-lg border border-white/10 bg-white/10 p-5 text-xl leading-relaxed text-slate-100">
                         Abra o app do banco, escolha Pix com QR Code e aponte a camera para a tela.
                     </div>
@@ -241,6 +247,7 @@ function PixView({ payment, display }: { payment: PdvPixPayment; display: PdvDis
 
 function IdleView({ items, slide, display }: { items: Array<any>; slide: number; display: PdvDisplay | null }) {
     const current = items.length > 0 ? items[slide % items.length] : { type: 'message', message: 'Mercado do Vale' };
+    const settings = display?.settings || {};
 
     return (
         <div className="flex flex-1 items-center justify-center py-8">
@@ -256,6 +263,9 @@ function IdleView({ items, slide, display }: { items: Array<any>; slide: number;
                         {current.product.image_url && <img src={current.product.image_url} alt={current.product.name} className="mx-auto max-h-[58vh] object-contain" />}
                         <div className="text-left">
                             <p className="text-5xl font-black">{current.product.name}</p>
+                            {settings.showProductCategory !== false && current.product.category_name && (
+                                <p className="mt-3 text-2xl font-semibold uppercase tracking-wide text-blue-100">{current.product.category_name}</p>
+                            )}
                             {current.product.price != null && <p className="mt-5 text-5xl font-bold text-blue-200">{formatCurrency(Number(current.product.price))}</p>}
                         </div>
                     </div>

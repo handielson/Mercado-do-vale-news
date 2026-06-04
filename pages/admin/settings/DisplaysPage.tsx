@@ -15,7 +15,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { pdvDisplayService } from '../../../services/pdvDisplayService';
+import { productService } from '../../../services/products';
 import type { PdvDisplay, PdvDisplayIdleContent, PdvDisplayInput, PdvDisplaySettings, PdvDisplayType, PdvDisplayOrientation } from '../../../types/pdvDisplay';
+import type { Product } from '../../../types/product';
 
 const DEFAULT_SETTINGS: PdvDisplaySettings = {
     showStoreName: true,
@@ -23,6 +25,7 @@ const DEFAULT_SETTINGS: PdvDisplaySettings = {
     showItems: true,
     showInstructions: true,
     showAdsDuringPix: false,
+    showProductCategory: true,
     adRotationSeconds: 8,
 };
 
@@ -83,6 +86,8 @@ export default function DisplaysPage() {
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState<PdvDisplayInput>(DEFAULT_FORM);
     const [pairingCode, setPairingCode] = useState<{ displayId: string; code: string; expiresMinutes: number } | null>(null);
+    const [idleProductSearch, setIdleProductSearch] = useState<Record<number, string>>({});
+    const [idleProductResults, setIdleProductResults] = useState<Record<number, Product[]>>({});
 
     useEffect(() => {
         loadDisplays();
@@ -110,12 +115,16 @@ export default function DisplaysPage() {
     function openCreateForm() {
         setEditingDisplay(null);
         setFormData({ ...DEFAULT_FORM, settings: { ...DEFAULT_SETTINGS } });
+        setIdleProductSearch({});
+        setIdleProductResults({});
         setShowForm(true);
     }
 
     function openEditForm(display: PdvDisplay) {
         setEditingDisplay(display);
         setFormData(normalizeForm(display));
+        setIdleProductSearch({});
+        setIdleProductResults({});
         setShowForm(true);
     }
 
@@ -174,7 +183,7 @@ export default function DisplaysPage() {
     }
 
     function addIdleProduct() {
-        const products = [...(formData.idle_content?.products || []), { name: '', price: 0, image_url: '' }];
+        const products = [...(formData.idle_content?.products || []), { name: '', price: 0, image_url: '', category_name: '' }];
         updateIdleContent({ products });
     }
 
@@ -183,13 +192,53 @@ export default function DisplaysPage() {
         updateIdleContent({ products });
     }
 
-    function updateIdleProduct(index: number, field: 'name' | 'price' | 'image_url', value: string) {
+    function updateIdleProduct(index: number, field: 'name' | 'price' | 'image_url' | 'category_name', value: string) {
         const products = [...(formData.idle_content?.products || [])];
         products[index] = {
             ...(products[index] || { name: '' }),
             [field]: field === 'price' ? Math.max(0, Math.round(Number(value.replace(',', '.')) * 100) || 0) : value,
         };
         updateIdleContent({ products });
+    }
+
+    function getProductCategoryName(product: Product): string {
+        return String((product as any).category_name || (product as any).category || (product as any).category_slug || '').trim();
+    }
+
+    async function searchIdleProducts(index: number, query: string) {
+        const term = query.trim();
+        setIdleProductSearch((current) => ({ ...current, [index]: query }));
+        if (term.length < 2) {
+            setIdleProductResults((current) => ({ ...current, [index]: [] }));
+            return;
+        }
+
+        try {
+            const byText = await productService.search(term);
+            const byEan = /^\d{8,}$/.test(term) ? await productService.searchByEAN(term) : [];
+            const byId = new Map<string, Product>();
+            [...byEan, ...byText].forEach((product) => byId.set(product.id, product));
+            setIdleProductResults((current) => ({ ...current, [index]: Array.from(byId.values()).slice(0, 8) }));
+        } catch (error: any) {
+            toast.error(error?.message || 'Erro ao buscar produto para propaganda');
+        }
+    }
+
+    function handleSelectIdleProduct(index: number, productId: string) {
+        const product = (idleProductResults[index] || []).find((item) => item.id === productId);
+        if (!product) return;
+        const products = [...(formData.idle_content?.products || [])];
+        products[index] = {
+            product_id: product.id,
+            name: product.name,
+            sku: product.sku,
+            category_name: getProductCategoryName(product),
+            price: Number(product.price_retail || 0),
+            image_url: product.images?.[0] || '',
+        };
+        updateIdleContent({ products });
+        setIdleProductSearch((current) => ({ ...current, [index]: `${product.sku || ''} ${product.name}`.trim() }));
+        setIdleProductResults((current) => ({ ...current, [index]: [] }));
     }
 
     async function handleSave(event: React.FormEvent) {
@@ -548,6 +597,7 @@ export default function DisplaysPage() {
                                     <ToggleRow label="Mostrar resumo de itens" checked={Boolean(formData.settings?.showItems)} onChange={(value) => updateSetting('showItems', value)} />
                                     <ToggleRow label="Mostrar instrucoes" checked={Boolean(formData.settings?.showInstructions)} onChange={(value) => updateSetting('showInstructions', value)} />
                                     <ToggleRow label="Mostrar propaganda durante Pix" checked={Boolean(formData.settings?.showAdsDuringPix)} onChange={(value) => updateSetting('showAdsDuringPix', value)} />
+                                    <ToggleRow label="Mostrar categoria na propaganda" checked={formData.settings?.showProductCategory !== false} onChange={(value) => updateSetting('showProductCategory', value)} />
                                     <label className="block rounded-lg border border-slate-200 px-3 py-2">
                                         <span className="text-sm font-semibold text-slate-700">Troca das propagandas (s)</span>
                                         <input
@@ -631,12 +681,34 @@ export default function DisplaysPage() {
                                     <div className="space-y-3">
                                         {(formData.idle_content?.products || []).map((product, index) => (
                                             <div key={`product-${index}`} className="grid gap-2 rounded-lg bg-slate-50 p-3 md:grid-cols-[1fr_130px_1fr_auto]">
-                                                <input
-                                                    value={product.name || ''}
-                                                    onChange={(event) => updateIdleProduct(index, 'name', event.target.value)}
-                                                    placeholder="Nome do produto"
-                                                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                                />
+                                                <div className="space-y-2">
+                                                    <input
+                                                        value={idleProductSearch[index] ?? product.sku ?? product.name ?? ''}
+                                                        onChange={(event) => searchIdleProducts(index, event.target.value)}
+                                                        placeholder="SKU, nome ou EAN"
+                                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                                    />
+                                                    {(idleProductResults[index] || []).length > 0 && (
+                                                        <select
+                                                            value=""
+                                                            onChange={(event) => handleSelectIdleProduct(index, event.target.value)}
+                                                            className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                                        >
+                                                            <option value="">Selecionar produto encontrado</option>
+                                                            {(idleProductResults[index] || []).map((item) => (
+                                                                <option key={item.id} value={item.id}>
+                                                                    {item.sku ? `${item.sku} - ` : ''}{item.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                    {product.name && (
+                                                        <p className="text-xs font-semibold text-slate-600">
+                                                            Selecionado: {product.name}
+                                                            {product.category_name ? ` - ${product.category_name}` : ''}
+                                                        </p>
+                                                    )}
+                                                </div>
                                                 <input
                                                     value={product.price ? (Number(product.price) / 100).toFixed(2).replace('.', ',') : ''}
                                                     onChange={(event) => updateIdleProduct(index, 'price', event.target.value)}

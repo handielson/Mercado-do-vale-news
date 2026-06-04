@@ -508,7 +508,7 @@ export default function PaymentSection({
                                 Abrir ticket Mercado Pago
                             </a>
                         )}
-                        {pdvPixPayment.qr_code_base64 && (
+                        {pdvPixPayment.status !== 'approved' && pdvPixPayment.qr_code_base64 && (
                             <div className="mt-3 flex justify-center rounded border border-slate-200 bg-slate-50 p-3">
                                 <img
                                     src={`data:image/png;base64,${pdvPixPayment.qr_code_base64}`}
@@ -517,7 +517,7 @@ export default function PaymentSection({
                                 />
                             </div>
                         )}
-                        {pdvPixPayment.qr_code ? (
+                        {pdvPixPayment.status !== 'approved' && pdvPixPayment.qr_code ? (
                             <p className="mt-2 break-all font-mono text-[10px] text-slate-500">
                                 {pdvPixPayment.qr_code}
                             </p>

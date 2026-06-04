@@ -86,7 +86,7 @@ export const calculatePaymentFee = (
     paymentFees: PaymentFee[]
 ): { fee_percentage: number; fee_amount: number; total_with_fee: number } => {
     // Pagamentos à vista não têm taxa
-    if (method === 'money' || method === 'pix' || method === 'debit') {
+    if (method === 'money' || method === 'pix' || method === 'debit' || method === 'a_prazo') {
         return {
             fee_percentage: 0,
             fee_amount: 0,
@@ -224,7 +224,8 @@ export const getPaymentMethodLabel = (method: string, installments?: number): st
         money: 'Dinheiro',
         credit: 'Cartão de Crédito',
         debit: 'Cartão de Débito',
-        pix: 'PIX'
+        pix: 'PIX',
+        a_prazo: 'A Prazo'
     };
 
     const baseLabel = labels[method] || method;
@@ -244,7 +245,8 @@ export const getPaymentMethodIcon = (method: string): string => {
         money: '💵',
         credit: '💳',
         debit: '💳',
-        pix: '📱'
+        pix: '📱',
+        a_prazo: '📝'
     };
     return icons[method] || '💰';
 };

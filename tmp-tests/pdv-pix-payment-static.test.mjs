@@ -7,6 +7,7 @@ const pdvPage = read('pages/pdv/PDVPage.tsx');
 const paymentSection = read('components/pdv/PaymentSection.tsx');
 const receiptPreview = read('components/pdv/ReceiptPreview.tsx');
 const saleTypes = read('types/sale.ts');
+const saleCalculations = read('utils/saleCalculations.ts');
 const plan = read('docs/planos/android.md');
 
 const requiredPdvPageSnippets = [
@@ -94,6 +95,16 @@ assert.doesNotMatch(
   paymentSection,
   /<input[\s\S]{0,400}placeholder="opcional"/,
   'PaymentSection.tsx nao deve permitir digitar Display ID livremente'
+);
+assert.match(
+  saleCalculations,
+  /a_prazo:\s*['"]A Prazo['"]/,
+  'utils/saleCalculations.ts deve exibir a_prazo como A Prazo'
+);
+assert.match(
+  paymentSection,
+  /pdvPixPayment\.status !== ['"]approved['"]/,
+  'PaymentSection.tsx deve ocultar QR/copia-e-cola quando o Pix for aprovado'
 );
 
 console.log('pdv pix payment static checks passed');
