@@ -26,6 +26,11 @@ for (const serverPath of serverPaths) {
     /paused_until = NULL,\s*pause_reason = NULL,\s*consecutive_fallbacks = 0,\s*reply_count = 0,\s*reply_window_started_at = NULL/.test(source),
     `${filename} reset route must clear pause and reply/fallback counters`
   );
+  assert(
+    source.includes("await addColumnIfMissing('autoresponder_conversations', 'reply_count', 'INT NOT NULL DEFAULT 0')")
+      && source.includes("await addColumnIfMissing('autoresponder_conversations', 'reply_window_started_at', 'TIMESTAMP NULL')"),
+    `${filename} must migrate reply counter columns before reset-counters uses them`
+  );
 
   const humanBranchStart = source.indexOf('if (detectedIntent.humanRequest) {');
   assert(humanBranchStart >= 0, `${filename} must keep human request branch`);
@@ -67,8 +72,8 @@ assert(
   'AutoResponderPage must call resetConversationCounters service'
 );
 assert(
-  page.includes('Zerar contadores'),
-  'AutoResponderPage must render a Zerar contadores button'
+  page.includes('Reiniciar conversa'),
+  'AutoResponderPage must render a Reiniciar conversa button'
 );
 
 console.log('autoresponder reset counters and human no-pause static checks passed');

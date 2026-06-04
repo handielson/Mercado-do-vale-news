@@ -18528,6 +18528,8 @@ async function runMigrations() {
       pause_reason VARCHAR(50) NULL,
       paused_by_user_id INT NULL,
       consecutive_fallbacks INT NOT NULL DEFAULT 0,
+      reply_count INT NOT NULL DEFAULT 0,
+      reply_window_started_at TIMESTAMP NULL,
       total_messages INT NOT NULL DEFAULT 0,
       tag_ids JSON NULL,
       last_options_offered JSON NULL,
@@ -18565,6 +18567,8 @@ async function runMigrations() {
   await addColumnIfMissing('autoresponder_conversations', 'contact_name_updated_at', 'TIMESTAMP NULL');
   await addColumnIfMissing('autoresponder_conversations', 'purchase_flow', 'JSON NULL');
   await addColumnIfMissing('autoresponder_conversations', 'purchase_flow_updated_at', 'TIMESTAMP NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'reply_count', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('autoresponder_conversations', 'reply_window_started_at', 'TIMESTAMP NULL');
   console.log('[migration] autoresponder phase 1A tables: OK');
 
   await pool.query(`
