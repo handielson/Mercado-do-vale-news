@@ -1254,6 +1254,14 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
     return true;
   }
 
+  if (normalizedMethod === 'POST' && pathname === '/pdv/displays/pair') {
+    return true;
+  }
+
+  if (normalizedMethod === 'GET' && pathname === '/pdv/display-state') {
+    return true;
+  }
+
   if (normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD') return false;
 
   if (

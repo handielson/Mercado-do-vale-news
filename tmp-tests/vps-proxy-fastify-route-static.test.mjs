@@ -42,7 +42,19 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
 
   assert.match(
     source,
-    /\(\(isWrite\s*&&\s*!isPublicPath\)\s*\|\|\s*isVpsProxySensitiveGetPath\(vpsProxyTargetPath\)\)\s*&&\s*!auth\.isAdmin/,
+    /normalizedMethod\s*===\s*'POST'[\s\S]*pathname\s*===\s*'\/pdv\/displays\/pair'/,
+    `${file} must allow public Android display pairing through the VPS proxy without admin auth`,
+  );
+
+  assert.match(
+    source,
+    /normalizedMethod\s*===\s*'GET'[\s\S]*pathname\s*===\s*'\/pdv\/display-state'/,
+    `${file} must allow public Android display state polling through the VPS proxy without admin auth`,
+  );
+
+  assert.match(
+    source,
+    /!isPublicPath\s*&&\s*\(isWrite\s*\|\|\s*isVpsProxySensitiveGetPath\(vpsProxyTargetPath\)\)\s*&&\s*!auth\.isAdmin/,
     `${file} must not require admin auth for public write proxy paths such as banner tracking`,
   );
 
