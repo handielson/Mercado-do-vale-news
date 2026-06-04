@@ -6130,6 +6130,18 @@ function isAutoresponderHumanRequest(message) {
     || text.includes('atendimento humano');
 }
 
+function isAutoresponderStoreStatusRequest(message) {
+  const text = normalizeAutoresponderText(message)
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return false;
+  const mentionsStore = /\b(loja|voces|voce|atendimento|mercado do vale)\b/.test(text);
+  const mentionsHours = /\b(horario|funcionamento|abre|abrem|abrir|aberto|aberta|fechado|fechada|fecha|fecham|expediente)\b/.test(text);
+  if (mentionsHours && (mentionsStore || /\b(esta|ta|tá|estao|estao|ainda|hoje|agora)\b/.test(text))) return true;
+  return /^(esta|ta|tá|estao|estao) (aberto|aberta|fechado|fechada)( agora)?$/.test(text);
+}
+
 function isAutoresponderWarrantyRequest(message) {
   const text = normalizeAutoresponderText(message);
   return /\b(garantia|garantias|garantido|defeito|defeitos|cobertura|assistencia)\b/.test(text);
@@ -9175,6 +9187,7 @@ function detectAutoresponderIntent(message) {
     greeting: isAutoresponderGreeting(message),
     greetingOnly: isAutoresponderGreetingOnly(message),
     humanRequest: isAutoresponderHumanRequest(message),
+    storeStatusRequest: isAutoresponderStoreStatusRequest(message),
     warrantyRequest: isAutoresponderWarrantyRequest(message),
     numberedChoice: getAutoresponderNumberedChoice(message),
     moreRequest: isAutoresponderMoreRequest(message),
@@ -9902,6 +9915,23 @@ async function getCachedAutoresponderStoreStatus() {
     expiresAt: nowMs + AUTORESPONDER_STORE_STATUS_CACHE_TTL_MS,
   };
   return value;
+}
+
+function buildAutoresponderStoreStatusReply(storeStatus) {
+  const status = String(storeStatus?.status || '');
+  if (status === 'open') {
+    return 'Estamos abertos agora. Pode mandar sua mensagem por aqui ou visitar a loja.';
+  }
+  if (status === 'closing_soon') {
+    return 'Estamos abertos agora, mas ja perto de fechar. Se quiser, me manda sua duvida por aqui que eu te ajudo.';
+  }
+  if (status === 'holiday') {
+    const holidayName = storeStatus?.message || storeStatus?.holiday?.name;
+    return holidayName
+      ? `Hoje a loja esta fechada por conta do feriado: ${holidayName}.`
+      : 'Hoje a loja esta fechada por conta de feriado.';
+  }
+  return 'No momento a loja esta fechada, mas pode mandar sua mensagem por aqui que vamos te responder assim que possivel.';
 }
 
 async function getAutoresponderReplyCount(sender, windowHours) {
@@ -10889,6 +10919,17 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     };
   }
 
+  if (detectedIntent.storeStatusRequest) {
+    const storeStatus = await getCachedAutoresponderStoreStatus();
+    const replyText = buildAutoresponderStoreStatusReply(storeStatus);
+    return {
+      intent: 'store_status',
+      matched_count: 0,
+      replies: [{ message: formatAutoresponderReply(replyText, settings, shouldPrefixGreeting) }],
+      sender: normalizedSender,
+    };
+  }
+
   if (detectedIntent.humanRequest) {
     const storeStatus = await getCachedAutoresponderStoreStatus();
     const humanReplyText = isAutoresponderStoreInHumanHours(storeStatus)
@@ -11230,6 +11271,24 @@ fastify.route({
         });
         await upsertAutoresponderSuccessConversation(senderKey);
         return { replies: formattedContactFlowReplies.map((replyMessage) => ({ message: replyMessage })) };
+      }
+
+      if (detectedIntent.storeStatusRequest) {
+        const storeStatus = await getCachedAutoresponderStoreStatus();
+        const replyText = formatAutoresponderReply(
+          buildAutoresponderStoreStatusReply(storeStatus),
+          settings,
+          shouldPrefixGreeting
+        );
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'store_status',
+          replyText,
+          matchedCount: 0,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
       }
 
       if (detectedIntent.greetingOnly) {
