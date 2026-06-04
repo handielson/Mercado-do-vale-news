@@ -1826,6 +1826,20 @@ const AutoResponderPage: React.FC = () => {
         }
     };
 
+    const resetConversationCounters = async (sender: string) => {
+        setConversationActionSender(sender);
+        setError(null);
+        try {
+            await autoResponderService.resetConversationCounters(sender);
+            await reloadConversations();
+        } catch (err) {
+            console.error('[AutoResponderPage] reset conversation counters error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao zerar contadores da conversa');
+        } finally {
+            setConversationActionSender(null);
+        }
+    };
+
     const toggleConversationTagDraft = (sender: string, tagId: number) => {
         setConversationTagDrafts((current) => {
             const existing = current[sender] || [];
@@ -3019,6 +3033,14 @@ const AutoResponderPage: React.FC = () => {
                                                     className="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
                                                 >
                                                     Liberar
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => resetConversationCounters(conversation.sender)}
+                                                    disabled={busy}
+                                                    className="rounded-lg border border-amber-200 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+                                                >
+                                                    Zerar contadores
                                                 </button>
                                                 <button
                                                     type="button"

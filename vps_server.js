@@ -6578,6 +6578,29 @@ function normalizeAutoresponderText(value) {
     .toLowerCase();
 }
 
+const AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY = 'Recebi seu áudio, mas ainda não consigo ouvir por aqui. Pode me mandar em texto?';
+
+function isAutoresponderAudioMessage(message) {
+  const raw = String(message || '').trim();
+  if (!raw) return false;
+  const text = normalizeAutoresponderText(raw)
+    .replace(/[^\w\s\[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const withoutBrackets = text.replace(/^\[|\]$/g, '').trim();
+  const exactPlaceholders = new Set([
+    'audio',
+    'audio message',
+    'mensagem de audio',
+    'mensagem de voz',
+    'voice message',
+    'ptt',
+  ]);
+  if (exactPlaceholders.has(withoutBrackets)) return true;
+  return withoutBrackets.length <= 80
+    && /\b(audio message|mensagem de audio|mensagem de voz|voice message|ptt)\b/.test(withoutBrackets);
+}
+
 function isAutoresponderHumanRequest(message) {
   const text = normalizeAutoresponderText(message);
   return /\b(humano|atendente|pessoa|vendedor|gerente|especialista)\b/.test(text)
@@ -7357,6 +7380,23 @@ async function buildAutoresponderNeedsPromptReply({ message, contactFirstName = 
     text: needsPrompt?.text || AUTORESPONDER_NEEDS_PROMPT_FALLBACK,
     aiMeta: needsPrompt?.aiMeta || null,
   };
+}
+
+async function buildAutoresponderAiFallbackReply({ message, contactFirstName = '', settings = null } = {}) {
+  const name = String(contactFirstName || '').trim();
+  return callAutoresponderOpenAi({
+    input: [
+      'Nenhuma resposta pronta ou produto correspondente foi encontrado para esta mensagem.',
+      `Mensagem do cliente: ${String(message || '').trim() || '(vazia)'}`,
+      name ? `Nome do cliente: ${name}` : '',
+      'Responda diretamente a pergunta como atendente do Mercado do Vale, usando somente o treinamento aprovado fornecido nas instrucoes.',
+      'Se a informacao necessaria nao estiver no treinamento, diga de forma natural que precisa confirmar com a equipe e faca no maximo uma pergunta realmente necessaria.',
+      'Nao envie uma resposta generica pedindo modelo ou tipo de produto, a menos que isso seja indispensavel para responder a pergunta.',
+      'Nao invente politicas, produtos, precos, estoque, garantias ou condicoes.',
+    ].filter(Boolean).join('\n'),
+    maxOutputTokens: 160,
+    settings,
+  });
 }
 
 const AUTORESPONDER_GENERIC_PHONE_CATALOG_WORDS = new Set([
@@ -10968,6 +11008,22 @@ fastify.post('/autoresponder/conversations/:sender/resume', { preHandler: requir
   return { ok: true };
 });
 
+fastify.post('/autoresponder/conversations/:sender/reset-counters', { preHandler: requireSyncKey }, async (req) => {
+  await pool.query(
+    `INSERT INTO autoresponder_conversations (sender, last_message_at)
+     VALUES (?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       paused_until = NULL,
+       pause_reason = NULL,
+       consecutive_fallbacks = 0,
+       reply_count = 0,
+       reply_window_started_at = NULL`,
+    [req.params.sender]
+  );
+  return { ok: true };
+});
+
 fastify.post('/autoresponder/conversations/:sender/tags', { preHandler: requireSyncKey }, async (req) => {
   const tagIds = Array.isArray(req.body?.tag_ids) ? req.body.tag_ids.map(Number).filter(Number.isFinite) : [];
   await pool.query(
@@ -11279,6 +11335,15 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   const shouldPrefixGreeting = detectedIntent.greeting;
   const normalizedSender = normalizeAutoresponderSender(sender) || 'teste-bot';
 
+  if (isAutoresponderAudioMessage(message)) {
+    return {
+      intent: 'audio_unsupported',
+      matched_count: 0,
+      replies: [{ message: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY }],
+      sender: normalizedSender,
+    };
+  }
+
   if (detectedIntent.greetingOnly) {
     const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
     const contactState = await getAutoresponderContactNameState(normalizedSender);
@@ -11489,6 +11554,17 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     }
   }
 
+  const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings });
+  if (aiFallback?.text) {
+    return {
+      intent: 'ai_fallback',
+      matched_count: 0,
+      replies: [{ message: formatAutoresponderReply(aiFallback.text, settings, shouldPrefixGreeting) }],
+      aiMeta: aiFallback.aiMeta,
+      sender: normalizedSender,
+    };
+  }
+
   const fallbackReply = getAutoresponderFallbackReply(settings, 1);
   return {
     intent: 'fallback',
@@ -11576,14 +11652,35 @@ fastify.route({
         return { replies: [] };
       }
 
+      if (isAutoresponderAudioMessage(message)) {
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'audio_unsupported',
+          replyText: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY,
+          matchedCount: 0,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY }] };
+      }
+
       const [conversationRows] = await pool.query(
-        'SELECT paused_until FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+        'SELECT paused_until, pause_reason FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
         [senderKey]
       );
       const pausedUntil = conversationRows[0]?.paused_until ? new Date(conversationRows[0].paused_until) : null;
       if (pausedUntil && pausedUntil.getTime() > Date.now()) {
-        await touchAutoresponderConversation(senderKey);
-        return { replies: [] };
+        if (String(conversationRows[0]?.pause_reason || '') === 'human_request') {
+          await pool.query(
+            `UPDATE autoresponder_conversations
+             SET paused_until = NULL, pause_reason = NULL
+             WHERE sender = ?`,
+            [senderKey]
+          );
+        } else {
+          await touchAutoresponderConversation(senderKey);
+          return { replies: [] };
+        }
       }
 
       const replyLimit = Number(settings.max_replies_per_conversation) > 0
@@ -12703,7 +12800,6 @@ fastify.route({
       }
 
       if (detectedIntent.humanRequest) {
-        const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
         const storeStatus = await getCachedAutoresponderStoreStatus();
         const humanReplyText = isAutoresponderStoreInHumanHours(storeStatus)
           ? (settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS)
@@ -12717,18 +12813,7 @@ fastify.route({
           [senderKey, message || null, 'human_request', 0, replyText, 0, 0]
         );
 
-        await pool.query(
-          `INSERT INTO autoresponder_conversations
-            (sender, last_message_at, last_bot_reply_at, total_messages, paused_until, pause_reason)
-           VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'human_request')
-           ON DUPLICATE KEY UPDATE
-             last_message_at = CURRENT_TIMESTAMP,
-             last_bot_reply_at = CURRENT_TIMESTAMP,
-             total_messages = total_messages + 1,
-             paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
-             pause_reason = 'human_request'`,
-          [senderKey, pauseMinutes, pauseMinutes]
-        );
+        await upsertAutoresponderSuccessConversation(senderKey);
 
         return { replies: [{ message: replyText }] };
       }
@@ -13033,6 +13118,21 @@ fastify.route({
 
           return { replies: formatAutoresponderProReplies(replyMessages) };
         }
+      }
+
+      const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings });
+      if (aiFallback?.text) {
+        const replyText = formatAutoresponderReply(aiFallback.text, settings, shouldPrefixGreeting);
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'ai_fallback',
+          replyText,
+          matchedCount: 0,
+          aiMeta: aiFallback.aiMeta,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
       }
 
       const fallbackState = await getAutoresponderFallbackState(senderKey);

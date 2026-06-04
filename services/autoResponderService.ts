@@ -31,9 +31,9 @@ import type {
     AutoResponderUnansweredQuestion,
 } from '../types/autoResponder';
 
-function withQuery(path: string, params: Record<string, string | number | boolean | undefined | null>): string {
+function withQuery(path: string, params: object): string {
     const query = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
+    Object.entries(params as Record<string, unknown>).forEach(([key, value]) => {
         if (value === undefined || value === null || value === '') return;
         query.set(key, String(value));
     });
@@ -129,6 +129,10 @@ export const autoResponderService = {
 
     resumeConversation: (sender: string): Promise<AutoResponderOk> => {
         return vpsClient.post<AutoResponderOk>(`/autoresponder/conversations/${senderPath(sender)}/resume`, {});
+    },
+
+    resetConversationCounters: (sender: string): Promise<AutoResponderOk> => {
+        return vpsClient.post<AutoResponderOk>(`/autoresponder/conversations/${senderPath(sender)}/reset-counters`, {});
     },
 
     setConversationTags: (sender: string, tagIds: number[]): Promise<AutoResponderOk & { tag_ids: number[] }> => {

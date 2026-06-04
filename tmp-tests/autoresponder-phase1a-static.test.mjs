@@ -5,7 +5,6 @@ const server = readFileSync('vps_server.cjs', 'utf8');
 
 const requiredSnippets = [
   'process.env.AUTORESPONDER_TOKEN',
-  "fastify.route({\n  method: ['GET', 'POST'],\n  url: '/autoresponder-webhook'",
   "fastify.get('/autoresponder/settings'",
   "fastify.patch('/autoresponder/settings'",
   "fastify.get('/autoresponder/rules'",
@@ -25,6 +24,7 @@ const requiredSnippets = [
   "fastify.get('/autoresponder/conversations'",
   "fastify.post('/autoresponder/conversations/:sender/pause'",
   "fastify.post('/autoresponder/conversations/:sender/resume'",
+  "fastify.post('/autoresponder/conversations/:sender/reset-counters'",
   "fastify.post('/autoresponder/conversations/:sender/tags'",
   "fastify.get('/autoresponder/unanswered'",
   "fastify.get('/autoresponder/stats'",
@@ -110,8 +110,8 @@ const requiredSnippets = [
   'OFFSET ${safeOffset}',
   'hasMore',
   "'product_search'",
-  'name LIKE ?',
-  'sku LIKE ?',
+  "LOWER(COALESCE(name, '')) LIKE ?",
+  "LOWER(COALESCE(sku, '')) LIKE ?",
   "LOWER(COALESCE(brand, '')) LIKE ?",
   "LOWER(COALESCE(CAST(specs AS CHAR), '')) LIKE ?",
   "'fallback'",
@@ -125,7 +125,7 @@ const requiredSnippets = [
   "console.error('[autoresponder] webhook failed:', err)",
   'Tivemos uma instabilidade no atendimento automatico',
   'SELECT pattern, pattern_type FROM autoresponder_blocklist WHERE active = 1',
-  'SELECT paused_until FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+  'SELECT paused_until, pause_reason FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
   'DATE_ADD(NOW(), INTERVAL ? MINUTE)',
   'DELETE FROM autoresponder_rules WHERE id = ?',
   'SELECT question FROM autoresponder_logs WHERE id = ?',
@@ -140,7 +140,6 @@ const requiredSnippets = [
   'COUNT(*) AS total_messages',
   'COUNT(DISTINCT sender) AS unique_senders',
   'UPDATE products SET tag_ids = ? WHERE id = ?',
-  "pause_reason = 'human_request'",
   "'human_request'",
 ];
 
@@ -148,6 +147,8 @@ for (const snippet of requiredSnippets) {
   assert.ok(server.includes(snippet), `Missing expected snippet: ${snippet}`);
 }
 
+assert.match(server, /fastify\.route\(\{\s*method: \['GET', 'POST'\],\s*url: '\/autoresponder-webhook'/, 'Webhook route must accept GET and POST');
+assert.ok(!server.includes("pause_reason = 'human_request'"), 'Human handoff must not pause the conversation anymore');
 assert.ok(!server.includes('mdv_ar_8a4f9c2e1b3d7f5a6e0c8b9d2a1f4e7c'), 'Token must not be hardcoded in server code');
 
 console.log('autoresponder phase 1A-2C static checks passed');
