@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CreditCard, DollarSign, Smartphone, Trash2, Calendar } from 'lucide-react';
 import { PaymentMethod, PaymentMethodType } from '../../types/sale';
-import type { PdvPixPayment } from '../../types/pdvDisplay';
+import type { PdvDisplay, PdvPixPayment } from '../../types/pdvDisplay';
 import {
     calculateTotalPaid,
     calculateRemaining,
@@ -34,6 +34,7 @@ interface PaymentSectionProps {
     pdvPixPayment?: PdvPixPayment | null;
     pdvPixLoading?: boolean;
     pdvPixDisplayId?: string;
+    pdvPixDisplays?: PdvDisplay[];
     pdvPixCashierKey?: string;
     onPdvPixDisplayIdChange?: (displayId: string) => void;
     onPdvPixCashierKeyChange?: (cashierKey: string) => void;
@@ -62,6 +63,7 @@ export default function PaymentSection({
     pdvPixPayment,
     pdvPixLoading = false,
     pdvPixDisplayId = '',
+    pdvPixDisplays = [],
     pdvPixCashierKey = '',
     onPdvPixDisplayIdChange,
     onPdvPixCashierKeyChange,
@@ -476,13 +478,19 @@ export default function PaymentSection({
                         />
                     </label>
                     <label className="text-xs font-medium text-cyan-900">
-                        Display ID
-                        <input
+                        Display
+                        <select
                             value={pdvPixDisplayId}
                             onChange={(event) => onPdvPixDisplayIdChange?.(event.target.value)}
-                            placeholder="opcional"
                             className="mt-1 w-full rounded border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-cyan-500 focus:outline-none"
-                        />
+                        >
+                            <option value="">Selecione um display</option>
+                            {pdvPixDisplays.map((display) => (
+                                <option key={display.id} value={display.id}>
+                                    {display.name} {display.cashier_key ? `(${display.cashier_key})` : ''}
+                                </option>
+                            ))}
+                        </select>
                     </label>
                 </div>
 
@@ -500,9 +508,18 @@ export default function PaymentSection({
                                 Abrir ticket Mercado Pago
                             </a>
                         )}
-                        {pdvPixPayment.qr_code_base64 || pdvPixPayment.qr_code ? (
+                        {pdvPixPayment.qr_code_base64 && (
+                            <div className="mt-3 flex justify-center rounded border border-slate-200 bg-slate-50 p-3">
+                                <img
+                                    src={`data:image/png;base64,${pdvPixPayment.qr_code_base64}`}
+                                    alt="QR Code Pix"
+                                    className="h-44 w-44 object-contain"
+                                />
+                            </div>
+                        )}
+                        {pdvPixPayment.qr_code ? (
                             <p className="mt-2 break-all font-mono text-[10px] text-slate-500">
-                                {pdvPixPayment.qr_code ? pdvPixPayment.qr_code.slice(0, 120) : 'QR em imagem base64 recebido'}...
+                                {pdvPixPayment.qr_code}
                             </p>
                         ) : null}
                     </div>

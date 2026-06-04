@@ -33,7 +33,7 @@ import { warrantyTemplateService } from '../../services/warrantyTemplates';
 import { teamService } from '../../services/team';
 import { getEffectiveCustomerPrice, normalizeCentValue } from '../../utils/promoPrice';
 import { buildPdvProductName } from '../../utils/pdvProductDisplay';
-import type { PdvPixPayment } from '../../types/pdvDisplay';
+import type { PdvDisplay, PdvPixPayment } from '../../types/pdvDisplay';
 
 type FinalizeStep = {
     id: string;
@@ -159,6 +159,7 @@ export default function PDVPage() {
     const [pdvPixLoading, setPdvPixLoading] = useState(false);
     const [pdvPixCashierKey, setPdvPixCashierKey] = useState(() => localStorage.getItem('pdv_pix_cashier_key') || 'caixa-01');
     const [pdvPixDisplayId, setPdvPixDisplayId] = useState(() => localStorage.getItem('pdv_pix_display_id') || '');
+    const [pdvPixDisplays, setPdvPixDisplays] = useState<PdvDisplay[]>([]);
 
     // Estado da entrega
     const [deliveryType, setDeliveryType] = useState<DeliveryType | undefined>();
@@ -545,6 +546,40 @@ export default function PDVPage() {
         localStorage.setItem('pdv_pix_display_id', displayId.trim());
         localStorage.setItem('pdv_pix_cashier_key', cashierKey.trim() || 'caixa-01');
     };
+
+    const cashierDisplayOptions = React.useMemo(() => {
+        return pdvPixDisplays.filter((display) => (
+            display.is_active && (display.type === 'cashier' || display.type === 'hybrid')
+        ));
+    }, [pdvPixDisplays]);
+
+    const loadPdvPixDisplays = React.useCallback(async () => {
+        try {
+            const displays = await pdvDisplayService.listDisplays();
+            setPdvPixDisplays(displays);
+
+            const currentDisplayId = pdvPixDisplayId.trim();
+            const cashierKey = pdvPixCashierKey.trim() || 'caixa-01';
+            const options = displays.filter((display) => (
+                display.is_active && (display.type === 'cashier' || display.type === 'hybrid')
+            ));
+            const currentStillAvailable = options.some((display) => display.id === currentDisplayId);
+            if (currentDisplayId && currentStillAvailable) return;
+
+            const matchingCashier = options.find((display) => String(display.cashier_key || '').trim() === cashierKey);
+            const nextDisplayId = (matchingCashier || options[0])?.id || '';
+            if (nextDisplayId) {
+                setPdvPixDisplayId(nextDisplayId);
+                rememberPdvPixDisplayConfig(nextDisplayId, cashierKey);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar displays do PDV:', error);
+        }
+    }, [pdvPixCashierKey, pdvPixDisplayId]);
+
+    React.useEffect(() => {
+        loadPdvPixDisplays();
+    }, [loadPdvPixDisplays]);
 
     const addApprovedPdvPixPayment = (payment: PdvPixPayment) => {
         setPayments(currentPayments => {
@@ -1246,6 +1281,7 @@ export default function PDVPage() {
                             pdvPixLoading={pdvPixLoading}
                             pdvPixDisplayId={pdvPixDisplayId}
                             pdvPixCashierKey={pdvPixCashierKey}
+                            pdvPixDisplays={cashierDisplayOptions}
                             onPdvPixDisplayIdChange={(displayId) => {
                                 setPdvPixDisplayId(displayId);
                                 localStorage.setItem('pdv_pix_display_id', displayId.trim());

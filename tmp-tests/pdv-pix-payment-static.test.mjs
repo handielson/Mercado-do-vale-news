@@ -21,6 +21,8 @@ const requiredPdvPageSnippets = [
   'pdvDisplayService.refreshPixPaymentStatus',
   'pdvDisplayService.setActivePix',
   'pdvDisplayService.clearActivePix',
+  'pdvDisplayService.listDisplays',
+  'setPdvPixDisplays',
   "method: 'pix'",
   'pix_payment_id',
   'mercado_pago_payment_id',
@@ -31,6 +33,7 @@ const requiredPdvPageSnippets = [
   'if (pixPaymentPending)',
   'cashier_key',
   'display_id',
+  'cashierDisplayOptions',
 ];
 
 for (const snippet of requiredPdvPageSnippets) {
@@ -49,6 +52,12 @@ const requiredPaymentSectionSnippets = [
   'qr_code',
   'qr_code_base64',
   'ticket_url',
+  'pdvPixDisplays',
+  '<select',
+  'Selecione um display',
+  'value={display.id}',
+  'data:image/png;base64,',
+  'alt="QR Code Pix"',
   'pending',
   'approved',
   'creating',
@@ -80,5 +89,11 @@ for (const snippet of requiredSaleTypeSnippets) {
 }
 
 assert.ok(plan.includes('### 2026-06-04 - Bloco Fase 5 PDV Pix Mercado Pago'), 'android.md deve registrar inicio da Fase 5');
+
+assert.doesNotMatch(
+  paymentSection,
+  /<input[\s\S]{0,400}placeholder="opcional"/,
+  'PaymentSection.tsx nao deve permitir digitar Display ID livremente'
+);
 
 console.log('pdv pix payment static checks passed');
