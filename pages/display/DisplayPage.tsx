@@ -8,6 +8,7 @@ import { formatCurrency } from '../../utils/saleCalculations';
 
 export const PDV_DISPLAY_TOKEN_STORAGE_KEY = '@mdv_pdv_display_token';
 const POLLING_INTERVAL_MS = 5000;
+const APPROVED_PIX_VISIBLE_MS = 8000;
 
 function getStoredDisplayToken(): string {
     if (typeof localStorage === 'undefined') return '';
@@ -49,6 +50,17 @@ function chunkProducts(products: Product[], size = 6): Product[][] {
         chunks.push(products.slice(index, index + size));
     }
     return chunks;
+}
+
+export function shouldShowPixPayment(payment: PdvPixPayment | null, now = Date.now()): boolean {
+    if (!payment) return false;
+    const status = String(payment.status || '');
+    if (status === 'pending') return true;
+    if (status !== 'approved') return false;
+
+    const approvedAt = Date.parse(String(payment.updated_at || payment.created_at || ''));
+    if (!Number.isFinite(approvedAt)) return false;
+    return now - approvedAt < APPROVED_PIX_VISIBLE_MS;
 }
 
 export default function DisplayPage() {
@@ -220,7 +232,7 @@ export default function DisplayPage() {
         );
     }
 
-    const showPix = active_pix && ['pending', 'approved'].includes(String(active_pix.status));
+    const showPix = shouldShowPixPayment(active_pix);
 
     return (
         <main className="min-h-screen bg-slate-950 text-white">
