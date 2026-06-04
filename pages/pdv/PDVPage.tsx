@@ -11,7 +11,6 @@ import PaymentSection from '../../components/pdv/PaymentSection';
 import DeliverySection from '../../components/pdv/DeliverySection';
 import ReceiptPreview from '../../components/pdv/ReceiptPreview';
 import InstallmentCalculator from '../../components/pdv/InstallmentCalculator';
-import { CrediarioSaveProgress, type CrediarioSaveStep } from '../../components/financial/CrediarioSaveProgress';
 import { WarrantyTermModal } from '../../components/warranty/WarrantyTermModal';
 import { printSaleReceipt } from '../../utils/printSaleReceipt';
 import { printPixQr } from '../../utils/printPixQr';
@@ -35,6 +34,37 @@ import { teamService } from '../../services/team';
 import { getEffectiveCustomerPrice, normalizeCentValue } from '../../utils/promoPrice';
 import { buildPdvProductName } from '../../utils/pdvProductDisplay';
 import type { PdvPixPayment } from '../../types/pdvDisplay';
+
+type FinalizeStep = {
+    id: string;
+    label: string;
+    status: 'idle' | 'saving' | 'done' | 'error';
+    detail?: string;
+    debug?: unknown;
+};
+
+function FinalizeProgress({ steps }: { steps: FinalizeStep[] }) {
+    if (steps.length === 0) return null;
+
+    return (
+        <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 text-sm font-semibold text-slate-800">Finalizacao da venda</div>
+            <div className="space-y-2">
+                {steps.map((step) => (
+                    <div key={step.id} className="flex items-start justify-between gap-3 text-sm">
+                        <div>
+                            <div className="font-medium text-slate-700">{step.label}</div>
+                            {step.detail && <div className="text-xs text-slate-500">{step.detail}</div>}
+                        </div>
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                            {step.status}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
 
 function extractFinalizeDebug(error: unknown, saleInput?: SaleInput) {
     const debug = error && typeof error === 'object'
@@ -124,7 +154,7 @@ export default function PDVPage() {
     // Estado dos pagamentos
     const [payments, setPayments] = useState<PaymentMethod[]>([]);
     const [isFinalizing, setIsFinalizing] = useState(false);
-    const [finalizeSteps, setFinalizeSteps] = useState<CrediarioSaveStep[]>([]);
+    const [finalizeSteps, setFinalizeSteps] = useState<FinalizeStep[]>([]);
     const [pdvPixPayment, setPdvPixPayment] = useState<PdvPixPayment | null>(null);
     const [pdvPixLoading, setPdvPixLoading] = useState(false);
     const [pdvPixCashierKey, setPdvPixCashierKey] = useState(() => localStorage.getItem('pdv_pix_cashier_key') || 'caixa-01');
@@ -680,7 +710,7 @@ export default function PDVPage() {
             { id: 'debt', label: 'Criando debito do cliente', status: 'idle' },
             { id: 'receipt', label: 'Preparando comprovante', status: 'idle' },
         ]);
-        const updateFinalizeStep = (id: string, status: CrediarioSaveStep['status'], detail?: string, debug?: unknown) => {
+        const updateFinalizeStep = (id: string, status: FinalizeStep['status'], detail?: string, debug?: unknown) => {
             setFinalizeSteps((current) => current.map((step) => step.id === id ? { ...step, status, detail, debug } : step));
         };
 
@@ -1235,7 +1265,7 @@ export default function PDVPage() {
                     </div>
 
                     <div>
-                        <CrediarioSaveProgress steps={finalizeSteps} />
+                        <FinalizeProgress steps={finalizeSteps} />
                         <ReceiptPreview
                             customer={selectedCustomer}
                             items={cartItems}
