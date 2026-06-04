@@ -60,14 +60,14 @@ function ProductAdPrice({ priceInCents, compact = false }: { priceInCents: numbe
     if (!Number.isFinite(priceInCents) || priceInCents <= 0) return null;
 
     return (
-        <div className={compact ? 'mt-3 space-y-1' : 'mt-5 space-y-2'}>
-            <p className={compact ? 'text-3xl font-black text-blue-200' : 'text-5xl font-black text-blue-200'}>
+        <div className={compact ? 'mt-3 space-y-1' : 'mt-4 space-y-1.5'}>
+            <p className={compact ? 'text-3xl font-black text-blue-200' : 'text-4xl font-black text-blue-200 md:text-5xl'}>
                 {formatCurrency(priceInCents)}
             </p>
-            <p className={compact ? 'text-lg font-bold text-emerald-200' : 'text-2xl font-bold text-emerald-200'}>
+            <p className={compact ? 'text-lg font-bold text-emerald-200' : 'text-xl font-bold text-emerald-200 md:text-2xl'}>
                 A vista
             </p>
-            <p className={compact ? 'text-xl font-bold text-white' : 'text-3xl font-bold text-white'}>
+            <p className={compact ? 'text-xl font-bold text-white' : 'text-2xl font-bold text-white md:text-3xl'}>
                 12x de {formatCurrency(getDisplayAdInstallment(priceInCents))}
             </p>
         </div>
@@ -257,9 +257,9 @@ export default function DisplayPage() {
     const showPix = shouldShowPixPayment(active_pix);
 
     return (
-        <main className="min-h-screen bg-slate-950 text-white">
-            <section className={`mx-auto flex min-h-screen w-full ${orientationClass} flex-col p-5 sm:p-8`}>
-                <header className="flex items-center justify-between gap-4 text-sm text-slate-300">
+        <main className="h-screen overflow-hidden bg-slate-950 text-white">
+            <section className={`mx-auto flex h-full min-h-0 w-full ${orientationClass} flex-col p-3 sm:p-5`}>
+                <header className="flex flex-shrink-0 items-center justify-between gap-4 text-sm text-slate-300">
                     <div>
                         {settings.showStoreName !== false && <p className="text-lg font-bold text-white">Mercado do Vale</p>}
                         <p>{display?.name || 'Display Android'}</p>
@@ -287,8 +287,8 @@ function PixView({ payment, display }: { payment: PdvPixPayment; display: PdvDis
     const isApproved = payment.status === 'approved';
 
     return (
-        <div className="grid flex-1 items-center gap-8 py-8 lg:grid-cols-[minmax(320px,520px)_1fr]">
-            <div className="mx-auto w-full max-w-[520px] rounded-lg bg-white p-5 text-slate-950 shadow-2xl">
+        <div className="grid min-h-0 flex-1 items-center gap-5 py-4 lg:grid-cols-[minmax(260px,440px)_1fr]">
+            <div className="mx-auto w-full max-w-[440px] rounded-lg bg-white p-4 text-slate-950 shadow-2xl">
                 {isApproved ? (
                     <div className="flex aspect-square flex-col items-center justify-center rounded-lg bg-emerald-50 text-center text-emerald-700">
                         <p className="text-8xl font-black">OK</p>
@@ -334,8 +334,8 @@ function IdleView({ items, slide, display }: { items: Array<any>; slide: number;
     const current = items.length > 0 ? items[slide % items.length] : { type: 'message', message: 'Mercado do Vale' };
 
     return (
-        <div className="flex flex-1 items-center justify-center py-8">
-            <div className="w-full text-center">
+        <div className="flex min-h-0 flex-1 items-center justify-center py-3">
+            <div className="h-full min-h-0 w-full text-center">
                 {current.type === 'banner' && (
                     <div className="mx-auto max-w-5xl overflow-hidden rounded-lg bg-white/5">
                         <img src={current.banner.image_url} alt={current.banner.title || 'Banner'} className="max-h-[72vh] w-full object-contain" />
@@ -343,35 +343,37 @@ function IdleView({ items, slide, display }: { items: Array<any>; slide: number;
                     </div>
                 )}
                 {current.type === 'product' && (
-                    <div className="mx-auto grid max-w-5xl items-center gap-8 rounded-lg bg-white/5 p-8 md:grid-cols-2">
-                        {current.product.image_url && <img src={current.product.image_url} alt={current.product.name} className="mx-auto max-h-[58vh] object-contain" />}
-                        <div className="text-left">
-                            <p className="text-5xl font-black">{current.product.name}</p>
+                    <div className="mx-auto grid h-full min-h-0 max-w-5xl grid-rows-[minmax(0,1fr)_auto] items-center gap-5 rounded-lg bg-white/5 p-5 md:grid-cols-2 md:grid-rows-1 md:p-6">
+                        <div className="flex h-full min-h-0 items-center justify-center rounded-lg bg-white p-4">
+                            {current.product.image_url && <img src={current.product.image_url} alt={current.product.name} className="max-h-full max-w-full object-contain" />}
+                        </div>
+                        <div className="min-h-0 text-left">
+                            <p className="line-clamp-3 break-words text-3xl font-black leading-tight md:text-5xl">{current.product.name}</p>
                             {current.product.category_name && (
-                                <p className="mt-3 text-2xl font-semibold uppercase tracking-wide text-blue-100">{current.product.category_name}</p>
+                                <p className="mt-2 text-xl font-semibold uppercase tracking-wide text-blue-100 md:text-2xl">{current.product.category_name}</p>
                             )}
                             {current.product.price != null && <ProductAdPrice priceInCents={Number(current.product.price)} />}
                         </div>
                     </div>
                 )}
                 {current.type === 'product-page' && (
-                    <div className="mx-auto w-full max-w-6xl text-left">
+                    <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col text-left">
                         {current.productPage.categoryName && (
-                            <p className="mb-5 text-center text-4xl font-black uppercase tracking-wide text-blue-100">
+                            <p className="mb-3 flex-shrink-0 text-center text-3xl font-black uppercase tracking-wide text-blue-100 md:text-4xl">
                                 {current.productPage.categoryName}
                             </p>
                         )}
                         {current.productPage.products.map((product: Product) => (
-                            <div key={product.id} className="mx-auto grid max-w-5xl items-center gap-8 rounded-lg bg-white/5 p-8 md:grid-cols-2">
-                                <div className="flex min-h-[360px] items-center justify-center rounded-lg bg-white p-5">
+                            <div key={product.id} className="mx-auto grid min-h-0 w-full max-w-5xl flex-1 grid-rows-[minmax(0,1fr)_auto] items-center gap-5 rounded-lg bg-white/5 p-5 md:grid-cols-2 md:grid-rows-1 md:p-6">
+                                <div className="flex h-full min-h-0 items-center justify-center rounded-lg bg-white p-4">
                                     {product.images?.[0] ? (
-                                        <img src={product.images[0]} alt={product.name} className="max-h-[52vh] max-w-full object-contain" />
+                                        <img src={product.images[0]} alt={product.name} className="max-h-full max-w-full object-contain" />
                                     ) : (
                                         <span className="text-center text-xl font-semibold text-slate-500">Sem imagem</span>
                                     )}
                                 </div>
-                                <div>
-                                    <p className="text-5xl font-black leading-tight">{product.name}</p>
+                                <div className="min-h-0 text-left">
+                                    <p className="line-clamp-3 break-words text-3xl font-black leading-tight md:text-5xl">{product.name}</p>
                                     {product.price_retail != null && <ProductAdPrice priceInCents={Number(product.price_retail)} />}
                                 </div>
                             </div>
