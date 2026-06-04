@@ -1834,7 +1834,7 @@ const AutoResponderPage: React.FC = () => {
             await reloadConversations();
         } catch (err) {
             console.error('[AutoResponderPage] reset conversation counters error:', err);
-            setError(err instanceof Error ? err.message : 'Falha ao zerar contadores da conversa');
+            setError(err instanceof Error ? err.message : 'Falha ao reiniciar conversa');
         } finally {
             setConversationActionSender(null);
         }
@@ -3038,9 +3038,10 @@ const AutoResponderPage: React.FC = () => {
                                                     type="button"
                                                     onClick={() => resetConversationCounters(conversation.sender)}
                                                     disabled={busy}
-                                                    className="rounded-lg border border-amber-200 px-3 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+                                                    title="Limpa pausa e contadores para o bot voltar a responder esta conversa"
+                                                    className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
                                                 >
-                                                    Zerar contadores
+                                                    Reiniciar conversa
                                                 </button>
                                                 <button
                                                     type="button"
