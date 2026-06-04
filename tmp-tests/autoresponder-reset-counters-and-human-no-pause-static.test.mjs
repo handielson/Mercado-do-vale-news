@@ -23,8 +23,12 @@ for (const serverPath of serverPaths) {
     `${filename} must expose a reset counters route`
   );
   assert(
-    /paused_until = NULL,\s*pause_reason = NULL,\s*consecutive_fallbacks = 0,\s*reply_count = 0,\s*reply_window_started_at = NULL/.test(source),
-    `${filename} reset route must clear pause and reply/fallback counters`
+    /paused_until = NULL,\s*pause_reason = NULL,\s*consecutive_fallbacks = 0,\s*reply_count = 0,\s*reply_window_started_at = CURRENT_TIMESTAMP,\s*last_options_offered = NULL,\s*last_options_at = NULL,\s*purchase_flow = NULL,\s*purchase_flow_updated_at = NULL/.test(source),
+    `${filename} reset route must clear pause, counters, options, purchase flow and start a fresh reply window`
+  );
+  assert(
+    /created_at >= COALESCE\(\s*\(SELECT reply_window_started_at\s*FROM autoresponder_conversations\s*WHERE sender = \?\s*LIMIT 1\),\s*DATE_SUB\(NOW\(\), INTERVAL \? HOUR\)\s*\)/.test(source),
+    `${filename} reply limit must ignore logs from before a manual conversation reset`
   );
   assert(
     source.includes("await addColumnIfMissing('autoresponder_conversations', 'reply_count', 'INT NOT NULL DEFAULT 0')")

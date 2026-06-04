@@ -9996,8 +9996,14 @@ async function getAutoresponderReplyCount(sender, windowHours) {
      WHERE sender = ?
        AND reply_text IS NOT NULL
        AND reply_text <> ''
-       AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`,
-    [sender, hours]
+       AND created_at >= COALESCE(
+         (SELECT reply_window_started_at
+          FROM autoresponder_conversations
+          WHERE sender = ?
+          LIMIT 1),
+         DATE_SUB(NOW(), INTERVAL ? HOUR)
+       )`,
+    [sender, sender, hours]
   );
   return Number(rows[0]?.total || 0);
 }
@@ -10623,7 +10629,11 @@ fastify.post('/autoresponder/conversations/:sender/reset-counters', { preHandler
        pause_reason = NULL,
        consecutive_fallbacks = 0,
        reply_count = 0,
-       reply_window_started_at = NULL`,
+       reply_window_started_at = CURRENT_TIMESTAMP,
+       last_options_offered = NULL,
+       last_options_at = NULL,
+       purchase_flow = NULL,
+       purchase_flow_updated_at = NULL`,
     [req.params.sender]
   );
   return { ok: true };
