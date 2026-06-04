@@ -43,11 +43,11 @@ for (const serverPath of serverPaths) {
 
   const webhookStart = source.indexOf("url: '/autoresponder-webhook'");
   const webhookStoreStatus = source.indexOf('if (detectedIntent.storeStatusRequest)', webhookStart);
-  const webhookPurchaseFlow = source.indexOf('const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);', webhookStart);
+  const webhookLimitGuard = source.indexOf('if (!hasActivePurchaseFlow && !detectedIntent.storeStatusRequest && recentReplyCount >= replyLimit)', webhookStart);
   const webhookRule = source.indexOf('const matchedRule = await findAutoresponderRuleMatch(message);', webhookStart);
   assert(
-    webhookStart >= 0 && webhookStoreStatus > webhookStart && webhookStoreStatus < webhookPurchaseFlow && webhookStoreStatus < webhookRule,
-    `${filename} webhook must answer store status before purchase/rule/product fallback flow`
+    webhookStart >= 0 && webhookStoreStatus > webhookStart && webhookStoreStatus > webhookLimitGuard && webhookStoreStatus < webhookRule,
+    `${filename} webhook must answer store status before rule/product fallback flow and bypass reply-limit guard`
   );
 }
 

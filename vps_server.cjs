@@ -6601,6 +6601,60 @@ function isAutoresponderAudioMessage(message) {
     && /\b(audio message|mensagem de audio|mensagem de voz|voice message|ptt)\b/.test(withoutBrackets);
 }
 
+function collectAutoresponderPayloadStrings(value, depth = 0) {
+  if (depth > 3 || value == null) return [];
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return [String(value)];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectAutoresponderPayloadStrings(item, depth + 1));
+  }
+  if (typeof value !== 'object') return [];
+
+  const strings = [];
+  const directKeys = [
+    'type',
+    'messageType',
+    'message_type',
+    'mediaType',
+    'media_type',
+    'mimetype',
+    'mimeType',
+    'mime_type',
+    'contentType',
+    'content_type',
+    'kind',
+    'event',
+    'ptt',
+    'audio',
+    'voice',
+    'media',
+    'fileName',
+    'filename',
+  ];
+  for (const key of directKeys) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      strings.push(String(value[key]));
+    }
+  }
+
+  const nestedKeys = ['message', 'audioMessage', 'mediaMessage', 'data', 'payload', 'media', 'file', 'document'];
+  for (const key of nestedKeys) {
+    if (value[key] && typeof value[key] === 'object') {
+      strings.push(...collectAutoresponderPayloadStrings(value[key], depth + 1));
+    }
+  }
+  return strings;
+}
+
+function isAutoresponderAudioPayload(payload, message = '') {
+  if (isAutoresponderAudioMessage(message)) return true;
+  const text = normalizeAutoresponderText(collectAutoresponderPayloadStrings(payload).join(' '));
+  if (!text) return false;
+  return /\b(audio|ptt|voice|voicenote|audiomessage|mensagem de audio|mensagem de voz)\b/.test(text)
+    || text.includes('audio/');
+}
+
 function isAutoresponderHumanRequest(message) {
   const text = normalizeAutoresponderText(message);
   return /\b(humano|atendente|pessoa|vendedor|gerente|especialista)\b/.test(text)
@@ -11693,7 +11747,13 @@ fastify.route({
         return { replies: [] };
       }
 
-      if (isAutoresponderAudioMessage(message)) {
+      const isAudioPayload = isAutoresponderAudioPayload(payload, message);
+      if (!message && !isAudioPayload) {
+        await touchAutoresponderConversation(senderKey);
+        return { replies: [] };
+      }
+
+      if (isAudioPayload) {
         await logAutoresponderReply({
           sender: senderKey,
           message,
@@ -11724,6 +11784,9 @@ fastify.route({
         }
       }
 
+      const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
+      const hasActivePurchaseFlow = hasAutoresponderCartItems(purchaseFlow);
+
       const replyLimit = Number(settings.max_replies_per_conversation) > 0
         ? Number(settings.max_replies_per_conversation)
         : 20;
@@ -11731,7 +11794,7 @@ fastify.route({
         ? Number(settings.max_replies_window_hours)
         : 24;
       const recentReplyCount = await getAutoresponderReplyCount(senderKey, replyWindowHours);
-      if (recentReplyCount >= replyLimit) {
+      if (!hasActivePurchaseFlow && !detectedIntent.storeStatusRequest && recentReplyCount >= replyLimit) {
         await touchAutoresponderConversation(senderKey);
         return { replies: [] };
       }
@@ -11830,7 +11893,6 @@ fastify.route({
         return { replies: [{ message: greetingText }] };
       }
 
-      const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
       if (detectedIntent.warrantyRequest) {
         return handleAutoresponderWarrantyRequest({
           sender: senderKey,

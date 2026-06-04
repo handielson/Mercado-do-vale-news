@@ -25,8 +25,20 @@ for (const serverPath of serverPaths) {
     `${filename} must detect audio placeholders`
   );
   assert(
-    /if \(isAutoresponderAudioMessage\(message\)\) \{[\s\S]*?intent: 'audio_unsupported'[\s\S]*?return \{ replies: \[\{ message: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY \}\] \};/.test(source),
-    `${filename} webhook must answer audio placeholders before other fallbacks`
+    source.includes("function isAutoresponderAudioPayload(payload, message = '')"),
+    `${filename} must detect audio metadata in webhook payloads`
+  );
+  assert(
+    source.includes('const isAudioPayload = isAutoresponderAudioPayload(payload, message);'),
+    `${filename} webhook must evaluate audio payloads before other fallbacks`
+  );
+  assert(
+    /if \(!message && !isAudioPayload\) \{[\s\S]*?return \{ replies: \[\] \};[\s\S]*?\}/.test(source),
+    `${filename} webhook must ignore empty non-text events instead of sending fallback`
+  );
+  assert(
+    /if \(isAudioPayload\) \{[\s\S]*?intent: 'audio_unsupported'[\s\S]*?return \{ replies: \[\{ message: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY \}\] \};/.test(source),
+    `${filename} webhook must answer audio payloads before other fallbacks`
   );
 }
 
