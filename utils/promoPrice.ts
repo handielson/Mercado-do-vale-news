@@ -1,5 +1,12 @@
 import type { Product } from '../types/product';
 
+type CustomerPriceType = 'retail' | 'resale' | 'wholesale' | 'ADMIN';
+
+type CustomerPricingContext = {
+    customer_type?: CustomerPriceType;
+    admin_preview_type?: 'retail' | 'resale' | 'wholesale';
+} | null | undefined;
+
 export function normalizeCentValue(value: unknown): number {
     const numeric = typeof value === 'number'
         ? value
@@ -34,6 +41,22 @@ export function getActivePromoPrice(product: Product): number | null {
  */
 export function getEffectiveRetailPrice(product: Product): number {
     return getActivePromoPrice(product) ?? normalizeCentValue(product.price_retail);
+}
+
+export function getEffectiveCustomerPrice(product: Product, customer: CustomerPricingContext): number {
+    const customerType = customer?.customer_type === 'ADMIN'
+        ? customer.admin_preview_type || 'retail'
+        : customer?.customer_type || 'retail';
+
+    switch (customerType) {
+        case 'wholesale':
+            return normalizeCentValue(product.price_wholesale) || getEffectiveRetailPrice(product);
+        case 'resale':
+            return normalizeCentValue(product.price_reseller) || normalizeCentValue(product.price_wholesale) || getEffectiveRetailPrice(product);
+        case 'retail':
+        default:
+            return getEffectiveRetailPrice(product);
+    }
 }
 
 /**
