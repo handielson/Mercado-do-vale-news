@@ -44,8 +44,15 @@ for (const snippet of [
   'productService.listByCategory',
   'shuffleArray',
   'chunkProducts',
+  'getDisplayAdInstallment',
+  'function ProductAdPrice',
+  'A vista',
+  '12x de',
+  'chunkProducts(shuffleArray(products), 1)',
   "type: 'product-page'",
   'current.productPage.products',
+  '<ProductAdPrice priceInCents={Number(current.product.price)}',
+  '<ProductAdPrice priceInCents={Number(product.price_retail)} />',
 ]) {
   assert.ok(displayPage.includes(snippet), `DisplayPage.tsx deve conter ${snippet}`);
 }

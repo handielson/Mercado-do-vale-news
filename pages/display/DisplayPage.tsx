@@ -52,6 +52,28 @@ function chunkProducts(products: Product[], size = 6): Product[][] {
     return chunks;
 }
 
+function getDisplayAdInstallment(priceInCents: number): number {
+    return Math.floor((priceInCents * 1.15) / 12);
+}
+
+function ProductAdPrice({ priceInCents, compact = false }: { priceInCents: number; compact?: boolean }) {
+    if (!Number.isFinite(priceInCents) || priceInCents <= 0) return null;
+
+    return (
+        <div className={compact ? 'mt-3 space-y-1' : 'mt-5 space-y-2'}>
+            <p className={compact ? 'text-3xl font-black text-blue-200' : 'text-5xl font-black text-blue-200'}>
+                {formatCurrency(priceInCents)}
+            </p>
+            <p className={compact ? 'text-lg font-bold text-emerald-200' : 'text-2xl font-bold text-emerald-200'}>
+                A vista
+            </p>
+            <p className={compact ? 'text-xl font-bold text-white' : 'text-3xl font-bold text-white'}>
+                12x de {formatCurrency(getDisplayAdInstallment(priceInCents))}
+            </p>
+        </div>
+    );
+}
+
 export function shouldShowPixPayment(payment: PdvPixPayment | null, now = Date.now()): boolean {
     if (!payment) return false;
     const status = String(payment.status || '');
@@ -102,7 +124,7 @@ export default function DisplayPage() {
         try {
             const loaded = await Promise.all(categories.map(async (category) => {
                 const products = await productService.listByCategory(category.category_id, 120);
-                return chunkProducts(shuffleArray(products), display?.orientation === 'portrait' ? 4 : 6).map((page) => ({
+                return chunkProducts(shuffleArray(products), 1).map((page) => ({
                     categoryId: category.category_id,
                     categoryName: category.category_name || '',
                     products: page,
@@ -328,7 +350,7 @@ function IdleView({ items, slide, display }: { items: Array<any>; slide: number;
                             {current.product.category_name && (
                                 <p className="mt-3 text-2xl font-semibold uppercase tracking-wide text-blue-100">{current.product.category_name}</p>
                             )}
-                            {current.product.price != null && <p className="mt-5 text-5xl font-bold text-blue-200">{formatCurrency(Number(current.product.price))}</p>}
+                            {current.product.price != null && <ProductAdPrice priceInCents={Number(current.product.price)} />}
                         </div>
                     </div>
                 )}
@@ -339,25 +361,21 @@ function IdleView({ items, slide, display }: { items: Array<any>; slide: number;
                                 {current.productPage.categoryName}
                             </p>
                         )}
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            {current.productPage.products.map((product: Product) => (
-                                <div key={product.id} className="grid min-h-[220px] grid-cols-[130px_1fr] items-center gap-4 rounded-lg bg-white/5 p-4">
-                                    <div className="flex h-36 items-center justify-center rounded-lg bg-white">
-                                        {product.images?.[0] ? (
-                                            <img src={product.images[0]} alt={product.name} className="max-h-32 max-w-full object-contain" />
-                                        ) : (
-                                            <span className="text-center text-sm font-semibold text-slate-500">Sem imagem</span>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <p className="line-clamp-3 text-2xl font-black leading-tight">{product.name}</p>
-                                        {product.price_retail != null && (
-                                            <p className="mt-3 text-3xl font-bold text-blue-200">{formatCurrency(Number(product.price_retail))}</p>
-                                        )}
-                                    </div>
+                        {current.productPage.products.map((product: Product) => (
+                            <div key={product.id} className="mx-auto grid max-w-5xl items-center gap-8 rounded-lg bg-white/5 p-8 md:grid-cols-2">
+                                <div className="flex min-h-[360px] items-center justify-center rounded-lg bg-white p-5">
+                                    {product.images?.[0] ? (
+                                        <img src={product.images[0]} alt={product.name} className="max-h-[52vh] max-w-full object-contain" />
+                                    ) : (
+                                        <span className="text-center text-xl font-semibold text-slate-500">Sem imagem</span>
+                                    )}
                                 </div>
-                            ))}
-                        </div>
+                                <div>
+                                    <p className="text-5xl font-black leading-tight">{product.name}</p>
+                                    {product.price_retail != null && <ProductAdPrice priceInCents={Number(product.price_retail)} />}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
                 {current.type === 'message' && (
