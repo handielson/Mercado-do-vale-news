@@ -9,30 +9,43 @@ const types = read('types/pdvDisplay.ts');
 
 for (const snippet of [
   "import { productService } from '../../../services/products'",
+  "import { categoryService } from '../../../services/categories'",
   'idleProductSearch',
   'searchIdleProducts',
   'handleSelectIdleProduct',
+  'idleCategories',
+  'addIdleCategory',
+  'updateIdleCategory',
+  'removeIdleCategory',
   'SKU, nome ou EAN',
+  'Produtos por categoria',
+  'Adicionar categoria',
+  'Selecionar categoria',
   'productService.search',
   'productService.searchByEAN',
   'category_name',
-  "showProductCategory",
-  "Mostrar categoria na propaganda",
-  "showProductCategory: true",
+  'category_id',
 ]) {
   assert.ok(displaysPage.includes(snippet), `DisplaysPage.tsx deve conter ${snippet}`);
 }
 
 for (const snippet of [
-  'showProductCategory: boolean',
+  'category_name?: string',
+  'categories: Array<{',
+  'category_id: string',
   'category_name?: string',
 ]) {
   assert.ok(types.includes(snippet), `types/pdvDisplay.ts deve conter ${snippet}`);
 }
 
 for (const snippet of [
-  'settings.showProductCategory',
-  'current.product.category_name',
+  'categoryProductPages',
+  'loadCategoryProducts',
+  'productService.listByCategory',
+  'shuffleArray',
+  'chunkProducts',
+  "type: 'product-page'",
+  'current.productPage.products',
 ]) {
   assert.ok(displayPage.includes(snippet), `DisplayPage.tsx deve conter ${snippet}`);
 }

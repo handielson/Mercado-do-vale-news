@@ -182,6 +182,15 @@ Get-Content publicar.md
 
 ## Historico De Implementacao
 
+### 2026-06-04 - Bloco Propaganda Por Categoria
+
+- Objetivo do bloco: corrigir a interpretacao de "mostrar categoria" na propaganda para selecionar categorias e exibir paginas aleatorias infinitas com produtos daquela categoria no display Android.
+- Arquivos alterados: `types/pdvDisplay.ts`, `services/products.ts`, `pages/admin/settings/DisplaysPage.tsx`, `pages/display/DisplayPage.tsx`, `tmp-tests/pdv-display-idle-products-static.test.mjs` e este plano.
+- Admin de displays: removido o toggle ambíguo `Mostrar categoria na propaganda`; adicionada a secao `Produtos por categoria` com seletor carregado via `categoryService.list(true)` na VPS.
+- Display Android: adicionada carga de produtos ativos por categoria via `productService.listByCategory()`, embaralhamento das paginas e renderizacao em grade; o indice de slide continua incrementando sem limite, mantendo a exibicao em loop infinito.
+- Validacoes executadas: `node tmp-tests\pdv-display-idle-products-static.test.mjs`, `node tmp-tests\pdv-pix-payment-static.test.mjs`, `node tmp-tests\pdv-display-service-static.test.mjs`, `node tmp-tests\pdv-display-routes-static.test.mjs` e `npm.cmd run build` passaram.
+- Regra operacional mantida: fonte de categorias/produtos e deploy seguem apenas VPS/MySQL, sem Vercel e sem Supabase operacional.
+
 ### 2026-06-04 - Bloco Fase 8 Verificacao Pre-Publicacao
 
 - Objetivo do bloco: validar o MVP de Displays Android/Pix antes de publicar na VPS, seguindo `publicar.md` e mantendo Supabase/Vercel fora do runtime operacional.

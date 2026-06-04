@@ -10,7 +10,6 @@ export interface PdvDisplaySettings {
     showItems: boolean;
     showInstructions: boolean;
     showAdsDuringPix: boolean;
-    showProductCategory: boolean;
     adRotationSeconds: number;
 }
 
@@ -29,6 +28,11 @@ export interface PdvDisplayIdleContent {
         category_name?: string;
         price?: number;
         image_url?: string;
+    }>;
+    categories: Array<{
+        id?: string;
+        category_id: string;
+        category_name?: string;
     }>;
     messages: string[];
 }

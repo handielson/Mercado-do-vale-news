@@ -16,8 +16,10 @@ import {
 import { toast } from 'sonner';
 import { pdvDisplayService } from '../../../services/pdvDisplayService';
 import { productService } from '../../../services/products';
+import { categoryService } from '../../../services/categories';
 import type { PdvDisplay, PdvDisplayIdleContent, PdvDisplayInput, PdvDisplaySettings, PdvDisplayType, PdvDisplayOrientation } from '../../../types/pdvDisplay';
 import type { Product } from '../../../types/product';
+import type { Category } from '../../../types/category';
 
 const DEFAULT_SETTINGS: PdvDisplaySettings = {
     showStoreName: true,
@@ -25,7 +27,6 @@ const DEFAULT_SETTINGS: PdvDisplaySettings = {
     showItems: true,
     showInstructions: true,
     showAdsDuringPix: false,
-    showProductCategory: true,
     adRotationSeconds: 8,
 };
 
@@ -37,12 +38,13 @@ const DEFAULT_FORM: PdvDisplayInput = {
     cashier_key: '',
     is_active: true,
     settings: DEFAULT_SETTINGS,
-    idle_content: { banners: [], products: [], messages: ['Obrigado pela preferencia.'] },
+    idle_content: { banners: [], products: [], categories: [], messages: ['Obrigado pela preferencia.'] },
 };
 
 const DEFAULT_IDLE_CONTENT: PdvDisplayIdleContent = {
     banners: [],
     products: [],
+    categories: [],
     messages: ['Obrigado pela preferencia.'],
 };
 
@@ -88,9 +90,11 @@ export default function DisplaysPage() {
     const [pairingCode, setPairingCode] = useState<{ displayId: string; code: string; expiresMinutes: number } | null>(null);
     const [idleProductSearch, setIdleProductSearch] = useState<Record<number, string>>({});
     const [idleProductResults, setIdleProductResults] = useState<Record<number, Product[]>>({});
+    const [idleCategories, setIdleCategories] = useState<Category[]>([]);
 
     useEffect(() => {
         loadDisplays();
+        loadIdleCategories();
     }, []);
 
     const summary = useMemo(() => {
@@ -109,6 +113,14 @@ export default function DisplaysPage() {
             setError(err?.message || 'Erro ao carregar displays');
         } finally {
             setLoading(false);
+        }
+    }
+
+    async function loadIdleCategories() {
+        try {
+            setIdleCategories(await categoryService.list(true));
+        } catch (err: any) {
+            toast.error(err?.message || 'Erro ao carregar categorias para propaganda');
         }
     }
 
@@ -241,6 +253,27 @@ export default function DisplaysPage() {
         setIdleProductResults((current) => ({ ...current, [index]: [] }));
     }
 
+    function addIdleCategory() {
+        const categories = [...(formData.idle_content?.categories || []), { category_id: '', category_name: '' }];
+        updateIdleContent({ categories });
+    }
+
+    function removeIdleCategory(index: number) {
+        const categories = (formData.idle_content?.categories || []).filter((_, itemIndex) => itemIndex !== index);
+        updateIdleContent({ categories });
+    }
+
+    function updateIdleCategory(index: number, categoryId: string) {
+        const category = idleCategories.find((item) => item.id === categoryId);
+        const categories = [...(formData.idle_content?.categories || [])];
+        categories[index] = {
+            ...(categories[index] || {}),
+            category_id: categoryId,
+            category_name: category?.name || '',
+        };
+        updateIdleContent({ categories });
+    }
+
     async function handleSave(event: React.FormEvent) {
         event.preventDefault();
         const name = String(formData.name || '').trim();
@@ -262,6 +295,7 @@ export default function DisplaysPage() {
             idle_content: {
                 banners: (formData.idle_content?.banners || []).filter((banner) => banner.image_url || banner.title),
                 products: (formData.idle_content?.products || []).filter((product) => product.name),
+                categories: (formData.idle_content?.categories || []).filter((category) => category.category_id),
                 messages: (formData.idle_content?.messages || []).map((message) => String(message || '').trim()).filter(Boolean),
             },
         };
@@ -597,7 +631,6 @@ export default function DisplaysPage() {
                                     <ToggleRow label="Mostrar resumo de itens" checked={Boolean(formData.settings?.showItems)} onChange={(value) => updateSetting('showItems', value)} />
                                     <ToggleRow label="Mostrar instrucoes" checked={Boolean(formData.settings?.showInstructions)} onChange={(value) => updateSetting('showInstructions', value)} />
                                     <ToggleRow label="Mostrar propaganda durante Pix" checked={Boolean(formData.settings?.showAdsDuringPix)} onChange={(value) => updateSetting('showAdsDuringPix', value)} />
-                                    <ToggleRow label="Mostrar categoria na propaganda" checked={formData.settings?.showProductCategory !== false} onChange={(value) => updateSetting('showProductCategory', value)} />
                                     <label className="block rounded-lg border border-slate-200 px-3 py-2">
                                         <span className="text-sm font-semibold text-slate-700">Troca das propagandas (s)</span>
                                         <input
@@ -722,6 +755,34 @@ export default function DisplaysPage() {
                                                     className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                                                 />
                                                 <button type="button" onClick={() => removeIdleProduct(index)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50">
+                                                    Remover
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+
+                                <section className="rounded-lg border border-slate-200 p-4">
+                                    <div className="mb-3 flex items-center justify-between gap-3">
+                                        <h4 className="text-sm font-bold text-slate-800">Produtos por categoria</h4>
+                                        <button type="button" onClick={addIdleCategory} className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200">
+                                            Adicionar categoria
+                                        </button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {(formData.idle_content?.categories || []).map((category, index) => (
+                                            <div key={`idle-category-${index}`} className="grid gap-2 rounded-lg bg-slate-50 p-3 md:grid-cols-[1fr_auto]">
+                                                <select
+                                                    value={category.category_id || ''}
+                                                    onChange={(event) => updateIdleCategory(index, event.target.value)}
+                                                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                                >
+                                                    <option value="">Selecionar categoria</option>
+                                                    {idleCategories.map((item) => (
+                                                        <option key={item.id} value={item.id}>{item.name}</option>
+                                                    ))}
+                                                </select>
+                                                <button type="button" onClick={() => removeIdleCategory(index)} className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50">
                                                     Remover
                                                 </button>
                                             </div>

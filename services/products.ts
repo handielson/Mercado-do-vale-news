@@ -278,6 +278,16 @@ async function searchByEAN(ean: string): Promise<Product[]> {
     return (data || []).map(transformFromDB).filter(isActiveProductForCatalog);
 }
 
+async function listByCategory(categoryId: string, limit = 120): Promise<Product[]> {
+    const data = await vpsApiService.getProducts({
+        category: categoryId,
+        status: 'active',
+        limit,
+        noCache: true,
+    });
+    return (data || []).map(transformFromDB).filter(isActiveProductForCatalog);
+}
+
 async function listChildren(parentId: string): Promise<Product[]> {
     const data = await vpsApiService.getProductsByParentId(parentId);
     return (data || []).map(transformFromDB);
@@ -586,5 +596,6 @@ export const productService = {
     delete: deleteProduct,
     search,
     searchByEAN,
+    listByCategory,
     listChildren,
 };

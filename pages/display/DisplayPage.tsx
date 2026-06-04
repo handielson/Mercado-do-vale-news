@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, MonitorSmartphone, RefreshCw, ShieldAlert, WifiOff } from 'lucide-react';
 import { pdvDisplayService } from '../../services/pdvDisplayService';
+import { productService } from '../../services/products';
 import type { PdvDisplay, PdvDisplayIdleContent, PdvDisplayState, PdvPixPayment } from '../../types/pdvDisplay';
+import type { Product } from '../../types/product';
 import { formatCurrency } from '../../utils/saleCalculations';
 
 export const PDV_DISPLAY_TOKEN_STORAGE_KEY = '@mdv_pdv_display_token';
@@ -29,7 +31,24 @@ function normalizePairingCode(value: string): string {
 }
 
 function getIdleContent(display: PdvDisplay | null): Partial<PdvDisplayIdleContent> {
-    return display?.idle_content || { messages: ['Mercado do Vale'], banners: [], products: [] };
+    return display?.idle_content || { messages: ['Mercado do Vale'], banners: [], products: [], categories: [] };
+}
+
+function shuffleArray<T>(items: T[]): T[] {
+    const shuffled = [...items];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const target = Math.floor(Math.random() * (index + 1));
+        [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
+    }
+    return shuffled;
+}
+
+function chunkProducts(products: Product[], size = 6): Product[][] {
+    const chunks: Product[][] = [];
+    for (let index = 0; index < products.length; index += size) {
+        chunks.push(products.slice(index, index + size));
+    }
+    return chunks;
 }
 
 export default function DisplayPage() {
@@ -41,6 +60,11 @@ export default function DisplayPage() {
     const [error, setError] = useState<string | null>(null);
     const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
     const [idleSlide, setIdleSlide] = useState(0);
+    const [categoryProductPages, setCategoryProductPages] = useState<Array<{
+        categoryId: string;
+        categoryName: string;
+        products: Product[];
+    }>>([]);
 
     const display = state?.display || null;
     const active_pix = state?.active_pix || null;
@@ -52,8 +76,31 @@ export default function DisplayPage() {
         const messages = (idle_content.messages || []).filter(Boolean).map((message) => ({ type: 'message' as const, message }));
         const banners = (idle_content.banners || []).filter((banner) => banner.image_url).map((banner) => ({ type: 'banner' as const, banner }));
         const products = (idle_content.products || []).filter((product) => product.name).map((product) => ({ type: 'product' as const, product }));
-        return [...banners, ...products, ...messages];
-    }, [idle_content]);
+        const productPages = categoryProductPages.map((productPage) => ({ type: 'product-page' as const, productPage }));
+        return [...banners, ...productPages, ...products, ...messages];
+    }, [idle_content, categoryProductPages]);
+
+    async function loadCategoryProducts() {
+        const categories = (idle_content.categories || []).filter((category) => category.category_id);
+        if (categories.length === 0) {
+            setCategoryProductPages([]);
+            return;
+        }
+
+        try {
+            const loaded = await Promise.all(categories.map(async (category) => {
+                const products = await productService.listByCategory(category.category_id, 120);
+                return chunkProducts(shuffleArray(products), display?.orientation === 'portrait' ? 4 : 6).map((page) => ({
+                    categoryId: category.category_id,
+                    categoryName: category.category_name || '',
+                    products: page,
+                }));
+            }));
+            setCategoryProductPages(shuffleArray(loaded.flat().filter((page) => page.products.length > 0)));
+        } catch (err: any) {
+            setError(err?.message || 'Erro ao carregar produtos da categoria');
+        }
+    }
 
     async function loadDisplayState(currentToken = token) {
         if (!currentToken) return;
@@ -96,6 +143,10 @@ export default function DisplayPage() {
         }, rotationSeconds * 1000);
         return () => clearInterval(interval);
     }, [settings.adRotationSeconds]);
+
+    useEffect(() => {
+        loadCategoryProducts();
+    }, [JSON.stringify(idle_content.categories || []), display?.orientation]);
 
     async function handlePair(event: React.FormEvent) {
         event.preventDefault();
@@ -247,7 +298,6 @@ function PixView({ payment, display }: { payment: PdvPixPayment; display: PdvDis
 
 function IdleView({ items, slide, display }: { items: Array<any>; slide: number; display: PdvDisplay | null }) {
     const current = items.length > 0 ? items[slide % items.length] : { type: 'message', message: 'Mercado do Vale' };
-    const settings = display?.settings || {};
 
     return (
         <div className="flex flex-1 items-center justify-center py-8">
@@ -263,10 +313,38 @@ function IdleView({ items, slide, display }: { items: Array<any>; slide: number;
                         {current.product.image_url && <img src={current.product.image_url} alt={current.product.name} className="mx-auto max-h-[58vh] object-contain" />}
                         <div className="text-left">
                             <p className="text-5xl font-black">{current.product.name}</p>
-                            {settings.showProductCategory !== false && current.product.category_name && (
+                            {current.product.category_name && (
                                 <p className="mt-3 text-2xl font-semibold uppercase tracking-wide text-blue-100">{current.product.category_name}</p>
                             )}
                             {current.product.price != null && <p className="mt-5 text-5xl font-bold text-blue-200">{formatCurrency(Number(current.product.price))}</p>}
+                        </div>
+                    </div>
+                )}
+                {current.type === 'product-page' && (
+                    <div className="mx-auto w-full max-w-6xl text-left">
+                        {current.productPage.categoryName && (
+                            <p className="mb-5 text-center text-4xl font-black uppercase tracking-wide text-blue-100">
+                                {current.productPage.categoryName}
+                            </p>
+                        )}
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            {current.productPage.products.map((product: Product) => (
+                                <div key={product.id} className="grid min-h-[220px] grid-cols-[130px_1fr] items-center gap-4 rounded-lg bg-white/5 p-4">
+                                    <div className="flex h-36 items-center justify-center rounded-lg bg-white">
+                                        {product.images?.[0] ? (
+                                            <img src={product.images[0]} alt={product.name} className="max-h-32 max-w-full object-contain" />
+                                        ) : (
+                                            <span className="text-center text-sm font-semibold text-slate-500">Sem imagem</span>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <p className="line-clamp-3 text-2xl font-black leading-tight">{product.name}</p>
+                                        {product.price_retail != null && (
+                                            <p className="mt-3 text-3xl font-bold text-blue-200">{formatCurrency(Number(product.price_retail))}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
