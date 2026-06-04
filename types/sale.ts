@@ -6,7 +6,7 @@
 /**
  * Payment Methods
  */
-export type PaymentMethodType = 'money' | 'credit' | 'debit' | 'pix';
+export type PaymentMethodType = 'money' | 'credit' | 'debit' | 'pix' | 'a_prazo';
 
 export interface PaymentMethod {
     method: PaymentMethodType;
@@ -15,6 +15,10 @@ export interface PaymentMethod {
     fee_percentage?: number; // Taxa aplicada (%)
     fee_amount?: number; // Valor da taxa em centavos
     total_with_fee: number; // Valor total (amount + fee_amount)
+    due_date?: string; // Data de vencimento se for a_prazo (YYYY-MM-DD)
+    pix_payment_id?: string;
+    mercado_pago_payment_id?: string;
+    pix_status?: 'pending' | 'approved' | 'rejected' | 'expired' | 'error';
 }
 
 /**
@@ -49,6 +53,9 @@ export interface SaleItem {
     product_specs?: { color?: string; ram?: string; storage?: string; imei1?: string; imei2?: string; [key: string]: string | undefined };
     product_brand?: string; // Marca do produto
     product_model?: string; // Modelo do produto
+    product_category_id?: string;
+    product_category_slug?: string;
+    product_category_name?: string;
 
     // Unidade serializada vinculada (bip de IMEI no PDV)
     serialized_unit?: {

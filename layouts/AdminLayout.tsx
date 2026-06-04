@@ -26,6 +26,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/sales', icon: <ShoppingBag size={18} />, label: 'Vendas', keywords: 'pedidos transacoes' },
         { to: '/admin/pedidos-online', icon: <Globe size={18} />, label: 'Pedidos Online', keywords: 'site web' },
         { to: '/admin/financeiro', icon: <Banknote size={18} />, label: 'Financeiro', keywords: 'dinheiro pagamentos taxas contas' },
+        { to: '/admin/financial/crediario', icon: <FileText size={18} />, label: 'Crediario', keywords: 'crediario prazo debito ficha cliente fiado recebimentos' },
         { to: '/admin/contabilidade', icon: <BookOpen size={18} />, label: 'Contabilidade', keywords: 'imposto simples nacional das nfe faturamento tributavel' },
         { to: '/admin/products', icon: <Package size={18} />, label: 'Produtos', keywords: 'catalogo itens mercadoria' },
         { to: '/admin/products/offers', icon: <Store size={18} />, label: 'Ofertas', keywords: 'kits anuncios shopee marketplace combos' },
@@ -82,6 +83,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/settings/shipping', icon: <Truck size={18} />, label: 'Frete', keywords: 'entrega correios transportadora' },
         { to: '/admin/settings/payment-fees', icon: <CreditCard size={18} />, label: 'Taxas', keywords: 'juros maquina cartao' },
         { to: '/admin/settings/integrations', icon: <Link2 size={18} />, label: 'Gateways Pagamento', keywords: 'mercado pago pagar.me stripe' },
+        { to: '/admin/settings/displays', icon: <Smartphone size={18} />, label: 'Displays Android', keywords: 'android tablet tv pix caixa propaganda qr code' },
         { to: '/admin/settings/documents', icon: <FileText size={18} />, label: 'Documentos', keywords: 'termos recibos' },
         { to: '/admin/settings/warranty-templates', icon: <Shield size={18} />, label: 'Garantias', keywords: 'padrao tempo meses' },
         { to: '/admin/settings/permissions', icon: <Shield size={18} />, label: 'Permissões', keywords: 'acesso regras', adminOnly: true },
@@ -129,7 +131,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [location.pathname, menuGroups]);
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50">
+    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50" data-admin-layout-build="2026-06-02-cache-bust">
       {DEV_MODE && (
         <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black px-4 py-2 text-center text-sm font-bold z-[100] shadow-lg">
           🔧 MODO DESENVOLVIMENTO - Autenticação Mock Ativa

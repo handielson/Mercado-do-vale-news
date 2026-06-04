@@ -32,6 +32,8 @@ interface ReceiptPreviewProps {
     finalAdjustmentDiscount?: number;
     orderNumber?: number;
     onFinalizeSale: () => void;
+    isFinalizing?: boolean;
+    hasPendingPixPayment?: boolean;
 }
 
 export default function ReceiptPreview({
@@ -44,7 +46,9 @@ export default function ReceiptPreview({
     promotionalDiscount,
     finalAdjustmentDiscount,
     orderNumber,
-    onFinalizeSale
+    onFinalizeSale,
+    isFinalizing = false,
+    hasPendingPixPayment = false
 }: ReceiptPreviewProps) {
     const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
 
@@ -489,15 +493,21 @@ export default function ReceiptPreview({
                     </div>
                 )}
 
+                {hasPendingPixPayment && (
+                    <div className="mb-4 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm font-medium text-cyan-800">
+                        Pix pendente. Atualize o pagamento antes de finalizar a venda.
+                    </div>
+                )}
+
                 <button
                     onClick={onFinalizeSale}
-                    disabled={!isComplete}
-                    className={`w-full py-3 rounded-lg font-semibold transition-all ${isComplete
+                    disabled={!isComplete || isFinalizing || hasPendingPixPayment}
+                    className={`w-full py-3 rounded-lg font-semibold transition-all ${isComplete && !isFinalizing && !hasPendingPixPayment
                         ? 'bg-green-600 text-white hover:bg-green-700 shadow-md hover:shadow-lg'
                         : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                         }`}
                 >
-                    {isComplete ? 'Finalizar Venda' : 'Complete os dados para finalizar'}
+                    {isFinalizing ? 'Finalizando...' : (hasPendingPixPayment ? 'Pix pendente' : (isComplete ? 'Finalizar Venda' : 'Complete os dados para finalizar'))}
                 </button>
             </div >
 

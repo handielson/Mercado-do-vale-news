@@ -80,6 +80,8 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
 });
+const MP_PIX_FEE_PCT = Number(process.env.MP_PIX_FEE_PCT || 0);
+const MP_CARD_FEE_PCT = Number(process.env.MP_CARD_FEE_PCT || 0.0499);
 
 const VPS_AUTH_SECRET = process.env.VPS_AUTH_SECRET || process.env.AUTH_SECRET || process.env.JWT_SECRET || process.env.SYNC_SECRET || 'dev-vps-auth-secret';
 const VPS_AUTH_TOKEN_TTL_SECONDS = Number(process.env.VPS_AUTH_TOKEN_TTL_SECONDS || 60 * 60 * 24 * 30);
@@ -708,6 +710,105 @@ async function requireSyncKeyOrAdmin(request, reply) {
   return reply.code(401).send({ error: 'Unauthorized' });
 }
 
+async function requireSyncKeyOrCustomer(request, reply) {
+  const key = request.headers['x-sync-key'] || request.headers['x-api-key'];
+  if (key && key === process.env.SYNC_SECRET) {
+    request.customerAccess = { isSync: true, isAdmin: false, customerId: null };
+    return;
+  }
+  const auth = await getVpsBearerAuthContext(request);
+  if (auth.isAdmin) {
+    request.customerAccess = { isSync: false, isAdmin: true, customerId: auth.customerId };
+    return;
+  }
+  if (auth.customerId) {
+    request.customerAccess = { isSync: false, isAdmin: false, customerId: auth.customerId };
+    return;
+  }
+  return reply.code(401).send({ error: 'Unauthorized' });
+}
+
+function hashPdvDisplaySecret(value) {
+  return crypto.createHash('sha256').update(String(value || '').trim()).digest('hex');
+}
+
+function generatePdvDisplayPairingCode() {
+  const left = String(crypto.randomInt(0, 1000)).padStart(3, '0');
+  const right = String(crypto.randomInt(0, 1000)).padStart(3, '0');
+  return `${left}-${right}`;
+}
+
+function normalizePdvDisplayPairingCode(value) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 6);
+  if (digits.length !== 6) return '';
+  return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+}
+
+function generatePdvDisplayToken() {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+function parsePdvDisplayJson(value, fallback) {
+  if (value == null || value === '') return fallback;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return fallback;
+  }
+}
+
+function mapPdvDisplayRow(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    is_active: Number(row.is_active) === 1,
+    settings: parsePdvDisplayJson(row.settings_json, {}),
+    idle_content: parsePdvDisplayJson(row.idle_content_json, { banners: [], products: [], messages: [] }),
+  };
+}
+
+function mapPdvPixPaymentRow(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    amount: Number(row.amount || 0),
+    raw_response: parsePdvDisplayJson(row.raw_response_json, null),
+  };
+}
+
+function normalizePdvPixStatus(status) {
+  const value = String(status || '').toLowerCase();
+  if (value === 'approved') return 'approved';
+  if (value === 'rejected' || value === 'cancelled' || value === 'canceled' || value === 'refunded') return 'rejected';
+  if (value === 'expired') return 'expired';
+  if (value === 'pending' || value === 'in_process' || value === 'authorized') return 'pending';
+  return value || 'pending';
+}
+
+async function getPdvMercadoPagoAccessToken() {
+  const [integrations] = await pool.query(
+    "SELECT access_token, environment FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 LIMIT 1"
+  );
+  const accessToken = integrations?.[0]?.access_token;
+  if (!accessToken) return null;
+  return {
+    accessToken,
+    environment: String(integrations?.[0]?.environment || '').toLowerCase() === 'production' ? 'production' : 'sandbox',
+  };
+}
+
+function buildPdvPixResponse(row) {
+  const payment = mapPdvPixPaymentRow(row);
+  if (!payment) return null;
+  return {
+    ...payment,
+    qr_code: row.qr_code,
+    qr_code_base64: row.qr_code_base64,
+    ticket_url: row.ticket_url,
+  };
+}
+
 fastify.post('/auth/login', async (request, reply) => {
   await ensureCustomerAuthTable();
   const body = request.body || {};
@@ -1229,6 +1330,41 @@ function buildCopyableDebug(operation, details = {}) {
   };
 }
 
+function maskDebugValue(value, visible = 4) {
+  const text = String(value || '');
+  if (!text) return '';
+  if (text.length <= visible) return '*'.repeat(text.length);
+  return `${'*'.repeat(Math.max(0, text.length - visible))}${text.slice(-visible)}`;
+}
+
+function sanitizeCustomerDebtDebugDetails(details = {}) {
+  const sanitized = { ...details };
+  if (sanitized.cpf_cnpj) sanitized.cpf_cnpj = maskDebugValue(sanitized.cpf_cnpj);
+  if (sanitized.access_token) sanitized.access_token = '[redacted]';
+  if (sanitized.authorization) sanitized.authorization = '[redacted]';
+  if (sanitized.raw_response && typeof sanitized.raw_response === 'string' && sanitized.raw_response.length > 1200) {
+    sanitized.raw_response = sanitized.raw_response.slice(0, 1200);
+  }
+  if (sanitized.raw_message && typeof sanitized.raw_message === 'string' && sanitized.raw_message.length > 1200) {
+    sanitized.raw_message = sanitized.raw_message.slice(0, 1200);
+  }
+  return sanitized;
+}
+
+function buildCustomerDebtDebug(step, details = {}) {
+  const sanitized = sanitizeCustomerDebtDebugDetails(details);
+  return {
+    timestamp: new Date().toISOString(),
+    operation: 'customer-debt',
+    step,
+    details: {
+      ...sanitized,
+      access_token: details.access_token ? '[redacted]' : sanitized.access_token,
+      authorization: details.authorization ? '[redacted]' : sanitized.authorization,
+    },
+  };
+}
+
 function quoteSqlIdentifier(identifier) {
   const value = String(identifier || '').trim();
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
@@ -1429,6 +1565,265 @@ function isMercadoPagoWebhookPayload(body) {
   return (type === 'payment' || action.startsWith('payment.')) && !!body?.data?.id;
 }
 
+function getMercadoPagoPaymentMetadata(payment) {
+  return payment?.metadata && typeof payment.metadata === 'object' ? payment.metadata : {};
+}
+
+function getCustomerDebtExternalReference(payment) {
+  return String(payment?.external_reference || '').trim();
+}
+
+function getCustomerDebtWebhookContext(payment) {
+  const metadata = getMercadoPagoPaymentMetadata(payment);
+  const external_reference = getCustomerDebtExternalReference(payment);
+  const referenceDebtId = external_reference.startsWith('customer_debt:')
+    ? external_reference.replace('customer_debt:', '').trim()
+    : '';
+  const debtId = String(metadata.debt_id || referenceDebtId || '').trim();
+  const valorLiquido = Number(
+    metadata.valor_liquido_centavos ?? metadata.valor_liquido ?? metadata.amount_centavos ?? 0
+  );
+
+  return {
+    metadata,
+    external_reference,
+    debtId,
+    valorLiquidoCentavos: Number.isFinite(valorLiquido) ? Math.round(valorLiquido) : 0,
+  };
+}
+
+function isCustomerDebtMercadoPagoPayment(payment) {
+  const { metadata, external_reference } = getCustomerDebtWebhookContext(payment);
+  return metadata.flow === 'customer_debt' || external_reference.startsWith('customer_debt:');
+}
+
+function formatDateOnly(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+async function processCustomerDebtMercadoPagoPayment(payment) {
+  const gatewayPaymentId = String(payment?.id || '').trim();
+  const { debtId, valorLiquidoCentavos, external_reference, metadata } = getCustomerDebtWebhookContext(payment);
+
+  if (!debtId) {
+    return {
+      status: 200,
+      body: {
+        error: 'customer debt not identified',
+        debug: buildCustomerDebtDebug('received webhook', {
+          step: 'identify customer debt',
+          paymentId: gatewayPaymentId,
+          external_reference,
+          metadata,
+        }),
+      },
+    };
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [debts] = await connection.query('SELECT * FROM customer_debts WHERE id = ? FOR UPDATE', [debtId]);
+    const debt = debts?.[0];
+    if (!debt) {
+      await connection.rollback();
+      return {
+        status: 200,
+        body: {
+          error: 'customer debt not found',
+          debug: buildCustomerDebtDebug('resolved customer debt', {
+            step: 'find customer debt',
+            paymentId: gatewayPaymentId,
+            debtId,
+            external_reference,
+          }),
+        },
+      };
+    }
+
+    const [existingPayments] = await connection.query(
+      'SELECT id, debt_id FROM customer_debt_payments WHERE mercado_pago_id = ? LIMIT 1',
+      [gatewayPaymentId]
+    );
+    if (existingPayments.length > 0) {
+      await connection.commit();
+      return {
+        status: 200,
+        body: {
+          message: 'already processed',
+          debt_id: existingPayments[0].debt_id,
+          payment_id: existingPayments[0].id,
+          debug: buildCustomerDebtDebug('already processed mercado_pago_id', {
+            mercado_pago_id: gatewayPaymentId,
+            debt_id: existingPayments[0].debt_id,
+          }),
+        },
+      };
+    }
+
+    const [directIntents] = await connection.query(
+      'SELECT * FROM customer_debt_payment_intents WHERE provider_intent_id = ? LIMIT 1',
+      [gatewayPaymentId]
+    );
+    let intent = directIntents?.[0] || null;
+    if (!intent) {
+      const [latestIntents] = await connection.query(
+        `SELECT * FROM customer_debt_payment_intents
+         WHERE debt_id = ? AND status = 'created'
+         ORDER BY created_at DESC LIMIT 1`,
+        [debtId]
+      );
+      intent = latestIntents?.[0] || null;
+    }
+
+    if (Number(debt.saldo_devedor || 0) <= 0 || debt.status === 'paid') {
+      if (intent) {
+        await connection.query(
+          'UPDATE customer_debt_payment_intents SET status = ?, raw_response = ? WHERE id = ?',
+          ['approved', JSON.stringify(payment), intent.id]
+        );
+      }
+      await connection.commit();
+      return { status: 200, body: { message: 'debt already paid', debt_id: debtId } };
+    }
+
+    const fallbackAmount = Math.round(Number(payment?.transaction_amount || 0) * 100);
+    const valorBase = valorLiquidoCentavos || Number(intent?.valor_liquido || 0) || fallbackAmount;
+    const valorPagoCentavos = Math.min(Math.max(0, Math.round(valorBase)), Number(debt.saldo_devedor || 0));
+
+    if (valorPagoCentavos <= 0) {
+      await connection.rollback();
+      return {
+        status: 200,
+        body: {
+        error: 'invalid customer debt payment amount',
+          debug: buildCustomerDebtDebug('validate customer debt payment amount', {
+            step: 'validate payment amount',
+            paymentId: gatewayPaymentId,
+            debtId,
+            valorLiquidoCentavos,
+            intentValorLiquido: intent?.valor_liquido || null,
+            transactionAmount: payment?.transaction_amount || null,
+          }),
+        },
+      };
+    }
+
+    const paymentId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+    const dataPagamento = formatDateOnly(payment?.date_approved || payment?.date_created || new Date());
+    const metodoPagamento = String(payment?.payment_method_id || payment?.payment_type_id || 'mercado_pago').slice(0, 40);
+    const mercadoPagoLink =
+      payment?.transaction_details?.external_resource_url ||
+      payment?.point_of_interaction?.transaction_data?.ticket_url ||
+      payment?.receipt_url ||
+      null;
+
+    await connection.query(
+      `INSERT INTO customer_debt_payments
+        (id, debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes, mercado_pago_id, mercado_pago_link)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        paymentId,
+        debtId,
+        valorPagoCentavos,
+        dataPagamento,
+        metodoPagamento,
+        'Baixa automatica via Mercado Pago',
+        gatewayPaymentId,
+        mercadoPagoLink,
+      ]
+    );
+
+    const novoSaldo = Number(debt.saldo_devedor || 0) - valorPagoCentavos;
+    const novoStatus = novoSaldo === 0 ? 'paid' : 'partial';
+    await connection.query('UPDATE customer_debts SET saldo_devedor = ?, status = ? WHERE id = ?', [
+      novoSaldo,
+      novoStatus,
+      debtId,
+    ]);
+
+    if (intent) {
+      await connection.query(
+        'UPDATE customer_debt_payment_intents SET status = ?, provider_intent_id = COALESCE(provider_intent_id, ?), raw_response = ? WHERE id = ?',
+        ['approved', gatewayPaymentId, JSON.stringify(payment), intent.id]
+      );
+    }
+
+    const [customers] = await connection.query(
+      'SELECT name, cpf_cnpj, phone, email FROM customers WHERE id = ?',
+      [debt.customer_id]
+    );
+
+    let receiptId = null;
+    if (customers.length > 0) {
+      const customer = customers[0];
+      receiptId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+      const receiptNumber = `REC-${dataPagamento.replace(/-/g, '')}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+      await connection.query(
+        `INSERT INTO avulso_receipts
+          (id, numero, tipo, nome_contato, cpf_cnpj, telefone, email, customer_id, valor, descricao, data_emissao)
+         VALUES (?, ?, 'receber', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          receiptId,
+          receiptNumber,
+          customer.name,
+          customer.cpf_cnpj || null,
+          customer.phone || null,
+          customer.email || null,
+          debt.customer_id,
+          valorPagoCentavos / 100,
+          `Baixa automatica Mercado Pago - Ref: ${debt.descricao}`,
+          dataPagamento,
+        ]
+      );
+    }
+
+    await connection.commit();
+    return {
+      status: 200,
+      body: {
+        message: 'success',
+        flow: 'customer_debt',
+        debt_id: debtId,
+        payment_id: paymentId,
+        receipt_id: receiptId,
+        saldo_devedor: novoSaldo,
+        status: novoStatus,
+        debug: buildCustomerDebtDebug('committed customer debt payment', {
+          mercado_pago_id: gatewayPaymentId,
+          debt_id: debtId,
+          payment_id: paymentId,
+          receipt_id: receiptId,
+          saldo_devedor: novoSaldo,
+          status: novoStatus,
+        }),
+      },
+    };
+  } catch (err) {
+    await connection.rollback().catch(() => {});
+    return {
+      status: 200,
+      body: {
+        error: 'customer debt payment failed',
+        debug: buildCustomerDebtDebug('process customer debt payment failed', {
+          step: 'process customer debt payment',
+          paymentId: gatewayPaymentId,
+          debtId,
+          external_reference,
+          rawMessage: err.message,
+          status: err.status || null,
+          body: err.body || null,
+        }),
+      },
+    };
+  } finally {
+    connection.release();
+  }
+}
+
 async function handleMercadoPagoWebhookVps(body) {
   const paymentId = String(body?.data?.id || '').trim();
   if (!paymentId) {
@@ -1436,8 +1831,10 @@ async function handleMercadoPagoWebhookVps(body) {
   }
 
   try {
-    const integrations = await vpsDbSelect('payment_integrations', 'select=access_token,is_active&gateway_name=eq.mercado_pago&is_active=eq.true&limit=1');
-    const integration = Array.isArray(integrations) ? integrations[0] : null;
+    const [integrations] = await pool.query(
+      "SELECT access_token, is_active FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 LIMIT 1"
+    );
+    const integration = integrations?.[0] || null;
     if (!integration?.access_token) {
       return {
         status: 200,
@@ -1479,6 +1876,10 @@ async function handleMercadoPagoWebhookVps(body) {
     const payment = await mercadoPagoResponse.json();
     if (payment.status !== 'approved') {
       return { status: 200, body: { message: 'ignored', reason: `status=${payment.status}` } };
+    }
+
+    if (isCustomerDebtMercadoPagoPayment(payment)) {
+      return processCustomerDebtMercadoPagoPayment(payment);
     }
 
     const gatewayPaymentId = String(payment.id);
@@ -3530,6 +3931,23 @@ async function fetchBlingProductDetailForWebhookVps(blingId, accessToken) {
   }
 }
 
+function readBlingCostPriceForWebhookVps(productData, detail) {
+  const cost = productData?.precoCusto
+    ?? productData?.precoCompra
+    ?? productData?.preco_custo
+    ?? productData?.preco_compra
+    ?? productData?.fornecedor?.precoCusto
+    ?? productData?.fornecedor?.precoCompra
+    ?? detail?.precoCusto
+    ?? detail?.precoCompra
+    ?? detail?.preco_custo
+    ?? detail?.preco_compra
+    ?? detail?.fornecedor?.precoCusto
+    ?? detail?.fornecedor?.precoCompra;
+  const numericCost = Number(cost);
+  return Number.isFinite(numericCost) && numericCost > 0 ? numericCost : null;
+}
+
 function pickBlingPriceStockUpdatesVps(updates = {}) {
   const fields = ['price_retail', 'price_wholesale', 'price_cost', 'price_reseller', 'price_promo', 'promo_start', 'promo_end', 'stock_quantity', 'status', 'category_id', 'track_inventory'];
   const picked = {};
@@ -3708,8 +4126,9 @@ async function handleBlingWebhookVps(request, reply) {
       const preco = productData?.preco;
       if (!blingId && !resolvedSku) return reply.code(200).send({ ok: true, message: 'No product identifier in product event' });
 
-      if ((!resolvedName || !resolvedSku) && accessToken && blingId) {
-        const detail = await fetchBlingProductDetailForWebhookVps(blingId, accessToken);
+      let detail = null;
+      if (accessToken && blingId && (!resolvedName || !resolvedSku || readBlingCostPriceForWebhookVps(productData, null) === null)) {
+        detail = await fetchBlingProductDetailForWebhookVps(blingId, accessToken);
         resolvedName = resolvedName || detail?.nome;
         resolvedSku = resolvedSku || detail?.codigo;
       }
@@ -3725,6 +4144,10 @@ async function handleBlingWebhookVps(request, reply) {
       if (resolvedName) updates.name = resolvedName;
       if (preco !== undefined && preco !== null && Number.isFinite(Number(preco))) {
         updates.price_retail = Math.round(Number(preco) * 100);
+      }
+      const blingCostPrice = readBlingCostPriceForWebhookVps(productData, detail);
+      if (blingCostPrice !== null) {
+        updates.price_cost = Math.round(Number(blingCostPrice) * 100);
       }
       const payloadStock = readBlingPayloadStockForWebhookVps(productData, body);
       if (payloadStock !== undefined && payloadStock !== null && Number.isFinite(Number(payloadStock))) {
@@ -3746,6 +4169,7 @@ async function handleBlingWebhookVps(request, reply) {
           updates.price_retail !== undefined
             ? buildBlingPriceStockPayloadVps(priceTargetSkus, {
               price_retail: updates.price_retail,
+              ...(updates.price_cost !== undefined ? { price_cost: updates.price_cost } : {}),
               ...(priceTargetSkus.length === 1 && updates.stock_quantity !== undefined ? { stock_quantity: updates.stock_quantity } : {}),
             })
             : { products: [{ sku: resolvedSku, ...pickBlingPriceStockUpdatesVps(updates) }] }
@@ -4398,23 +4822,42 @@ async function handleBlingApiVps(request, reply) {
       const authHeader = await getBlingProductDetailAuthHeaderVps(request);
       if (!authHeader) return reply.code(401).send({ error: 'Bling not connected' });
 
-      const depositResponse = await fetch('https://www.bling.com.br/Api/v3/depositos?pagina=1&limite=1', {
-        headers: { Authorization: authHeader, Accept: 'application/json' },
-      });
-      const depositBody = await readBlingProxyResponse(depositResponse);
-      if (!depositResponse.ok) {
-        return reply.code(depositResponse.status).send({
-          error: `Bling deposit error: ${depositResponse.status}`,
-          detail: depositBody.text,
-          debug: buildCopyableDebug('bling-stock-sync', {
-            resource,
-            step: 'fetch deposit',
-            upstreamStatus: depositResponse.status,
-          }),
+      const configuredDepositId = String(process.env.BLING_STOCK_SYNC_DEPOSIT_ID || '').trim();
+      let selectedDeposit = configuredDepositId ? { id: configuredDepositId, descricao: 'configured' } : null;
+
+      if (!selectedDeposit) {
+        const preferredDepositName = String(process.env.BLING_STOCK_SYNC_DEPOSIT_NAME || 'Depósito 01 (Loja)').trim();
+        const normalizeDepositName = (value) => String(value || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .trim();
+        const preferredDepositKey = normalizeDepositName(preferredDepositName);
+
+        const depositResponse = await fetch('https://www.bling.com.br/Api/v3/depositos?pagina=1&limite=100', {
+          headers: { Authorization: authHeader, Accept: 'application/json' },
         });
+        const depositBody = await readBlingProxyResponse(depositResponse);
+        if (!depositResponse.ok) {
+          return reply.code(depositResponse.status).send({
+            error: `Bling deposit error: ${depositResponse.status}`,
+            detail: depositBody.text,
+            debug: buildCopyableDebug('bling-stock-sync', {
+              resource,
+              step: 'fetch deposit',
+              upstreamStatus: depositResponse.status,
+            }),
+          });
+        }
+
+        const deposits = Array.isArray(depositBody.json?.data) ? depositBody.json.data : [];
+        selectedDeposit = deposits.find((deposit) => normalizeDepositName(deposit?.descricao || deposit?.nome) === preferredDepositKey)
+          || deposits.find((deposit) => normalizeDepositName(deposit?.descricao || deposit?.nome).includes(preferredDepositKey))
+          || deposits[0]
+          || null;
       }
 
-      const depositoId = depositBody.json?.data?.[0]?.id;
+      const depositoId = selectedDeposit?.id;
       if (!depositoId) return reply.code(422).send({ error: 'No Bling deposit found' });
 
       const stockResponse = await fetch('https://www.bling.com.br/Api/v3/estoques', {
@@ -4441,7 +4884,11 @@ async function handleBlingApiVps(request, reply) {
         });
       }
 
-      return reply.code(200).send({ ok: true });
+      return reply.code(200).send({
+        ok: true,
+        depositoId,
+        depositoNome: selectedDeposit?.descricao || selectedDeposit?.nome || null,
+      });
     } catch (err) {
       return reply.code(500).send({
         error: err.message || 'network_error',
@@ -5745,6 +6192,29 @@ function normalizeSeoImages(images) {
   return Array.isArray(images) ? images.filter(Boolean) : [];
 }
 
+function isSeoPublicImageUrl(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed || /^data:/i.test(trimmed)) return false;
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+function normalizeSeoPublicImages(images, baseUrl) {
+  const normalized = [];
+  for (const rawImage of normalizeSeoImages(images)) {
+    const image = String(rawImage || '').trim();
+    const publicImage = image.startsWith('/') ? `${baseUrl}${image}` : image;
+    if (isSeoPublicImageUrl(publicImage)) normalized.push(publicImage);
+  }
+  return [...new Set(normalized)];
+}
+
 function isUuidLike(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(String(value || ''));
 }
@@ -5859,21 +6329,21 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     }
 
     const baseUrl = buildSeoBaseUrl(request);
-    const images = normalizeSeoImages(product.images);
+    const publicImages = normalizeSeoPublicImages(product.images, baseUrl);
     const keywords = normalizeSeoKeywords(product.keywords || product.seo_keywords);
     const title = product.meta_title || `${product.name} | Mercado do Vale`;
     const cleanDescription = stripSeoHtml(product.meta_description || product.description || '');
     const description = cleanDescription.slice(0, 155) || `Compre ${product.name} no Mercado do Vale com o melhor preco.`;
     const canonicalSlug = product.slug || slug;
     const url = `${baseUrl}/produto/${encodeURIComponent(canonicalSlug)}`;
-    const image = images[0] || `${baseUrl}/og-cover.jpg`;
+    const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
     const stockQuantity = product.computed_stock_quantity ?? product.stock_quantity ?? 0;
     const availability = Number(stockQuantity) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
     const schemaProduct = {
       '@context': 'https://schema.org/',
       '@type': 'Product',
       name: product.name || '',
-      image: images.slice(0, 5),
+      image: publicImages.length ? publicImages.slice(0, 5) : [image],
       description,
       sku: product.sku || '',
       offers: {
@@ -5909,6 +6379,7 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     <meta property="og:title" content="${safeTitle}" />
     <meta property="og:description" content="${safeDescription}" />
     <meta property="og:image" content="${safeImage}" />
+    <meta property="og:image:secure_url" content="${safeImage}" />
     <meta property="og:site_name" content="Mercado do Vale" />
     <meta property="og:locale" content="pt_BR" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -13950,10 +14421,26 @@ function parseStockJson(value, fallback = null) {
 }
 
 async function getDefaultStockCompanyId() {
+  const [productCompanyRows] = await pool.query(`
+    SELECT company_id AS id, COUNT(*) AS total
+    FROM products
+    WHERE company_id IS NOT NULL
+    GROUP BY company_id
+    ORDER BY total DESC, MIN(created_at) ASC
+    LIMIT 1
+  `).catch(() => [null]);
+  if (productCompanyRows?.[0]?.id) return productCompanyRows[0].id;
+  const [stockCompanyRows] = await pool.query(`
+    SELECT company_id AS id, COUNT(*) AS total
+    FROM stock_deposits
+    WHERE company_id IS NOT NULL AND is_active = 1
+    GROUP BY company_id
+    ORDER BY total DESC, MIN(created_at) ASC
+    LIMIT 1
+  `).catch(() => [null]);
+  if (stockCompanyRows?.[0]?.id) return stockCompanyRows[0].id;
   const [companyRows] = await pool.query('SELECT id FROM companies ORDER BY created_at ASC LIMIT 1').catch(() => [null]);
   if (companyRows?.[0]?.id) return companyRows[0].id;
-  const [productRows] = await pool.query('SELECT company_id AS id FROM products WHERE company_id IS NOT NULL LIMIT 1').catch(() => [null]);
-  if (productRows?.[0]?.id) return productRows[0].id;
   return '00000000-0000-0000-0000-000000000000';
 }
 
@@ -14329,12 +14816,13 @@ function mapProductStockLocation(row) {
 }
 
 fastify.get('/stock-locations/deposits', { preHandler: requireSyncKey }, async () => {
+  const companyId = await getDefaultStockCompanyId();
   const [rows] = await pool.query(`
     SELECT *
     FROM stock_deposits
-    WHERE is_active = 1
+    WHERE is_active = 1 AND company_id = ?
     ORDER BY is_default DESC, name ASC
-  `);
+  `, [companyId]);
   return rows.map(mapStockDeposit);
 });
 
@@ -14482,6 +14970,9 @@ fastify.get('/stock-locations/locations', { preHandler: requireSyncKey }, async 
   if (req.query?.deposit_id) {
     where += ' AND deposit_id = ?';
     params.push(String(req.query.deposit_id));
+  } else {
+    where += ' AND company_id = ?';
+    params.push(await getDefaultStockCompanyId());
   }
   const [rows] = await pool.query(`
     SELECT *
@@ -15587,21 +16078,59 @@ fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, rep
   if (!sku && !bling_id) return reply.code(400).send({ error: 'sku or bling_id required' });
   if (stock_quantity === undefined || stock_quantity === null) return reply.code(400).send({ error: 'stock_quantity required' });
   const qty = Math.max(0, parseInt(stock_quantity, 10) || 0);
+
+  const whereSql = sku ? 'p.sku = ?' : 'p.bling_id = ?';
+  const whereValue = sku || String(bling_id);
+  const [matchedRows] = await pool.query(
+    `SELECT p.id, p.sku, p.bling_id, p.specs,
+            COUNT(u.id) AS unit_count
+       FROM products p
+       LEFT JOIN units u ON u.product_id = p.id
+      WHERE ${whereSql}
+      GROUP BY p.id, p.sku, p.bling_id, p.specs
+      ORDER BY CASE WHEN p.status = 'active' THEN 0 ELSE 1 END,
+               COUNT(u.id) DESC,
+               p.created_at ASC`,
+    [whereValue]
+  );
+
+  const isSerializedMatch = (matchedRows || []).some((row) => {
+    if (Number(row.unit_count || 0) > 0) return true;
+    const specs = typeof row.specs === 'string' ? (() => { try { return JSON.parse(row.specs || '{}'); } catch { return {}; } })() : (row.specs || {});
+    return Boolean(specs.imei1 || specs.imei2 || specs.serial || specs.serial_number);
+  });
+
+  if (isSerializedMatch) {
+    const canonical = matchedRows?.[0];
+    if (!canonical) return { ok: true, affectedRows: 0, serializedStockReference: true };
+    await pool.query(
+      `UPDATE products
+          SET custom_fields = JSON_SET(COALESCE(custom_fields, JSON_OBJECT()), '$.bling_stock_quantity', ?, '$.bling_stock_synced_at', CURRENT_TIMESTAMP),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [qty, canonical.id]
+    );
+    const availableStock = await syncProductStock(canonical.id);
+    const stockTargets = await getShopeeStockTargetsForProductIds([canonical.id]);
+    return {
+      ok: true,
+      affectedRows: 1,
+      serializedStockReference: true,
+      product_id: canonical.id,
+      bling_stock_quantity: qty,
+      stock_quantity: availableStock,
+      duplicateMatches: matchedRows.length,
+      stockTargets,
+    };
+  }
+
   let result;
   let changedRows = [];
-  if (sku) {
-    [result] = await pool.query(
-      'UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
-      [qty, sku]
-    );
-    [changedRows] = await pool.query('SELECT id FROM products WHERE sku=?', [sku]);
-  } else {
-    [result] = await pool.query(
-      'UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE bling_id=?',
-      [qty, String(bling_id)]
-    );
-    [changedRows] = await pool.query('SELECT id FROM products WHERE bling_id=?', [String(bling_id)]);
-  }
+  [result] = await pool.query(
+    `UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE ${sku ? 'sku=?' : 'bling_id=?'}`,
+    [qty, whereValue]
+  );
+  [changedRows] = await pool.query(`SELECT id FROM products WHERE ${sku ? 'sku=?' : 'bling_id=?'}`, [whereValue]);
   const locationSync = [];
   for (const row of changedRows || []) {
     locationSync.push(await reconcileProductStockLocationsToTotal(row.id, qty, 'bling_stock_sync', 'Total externo de estoque sincronizado para manter a distribuicao por local.'));
@@ -15786,13 +16315,13 @@ fastify.get('/units', async (req, reply) => {
 
 // Busca por IMEI 1, IMEI 2 ou serial (usado no PDV)
 fastify.get('/units/by-identifier/:q', async (req, reply) => {
-  const q = req.params.q;
+  const q = normalizeSerializedIdentifierKey(req.params.q);
   if (!q) return reply.code(400).send({ error: 'identifier required' });
   const [rows] = await pool.query(
     `SELECT u.*, p.name AS product_name, p.sku AS product_sku
        FROM units u
        LEFT JOIN products p ON p.id = u.product_id
-      WHERE u.imei_1 = ? OR u.imei_2 = ? OR u.serial = ?`,
+      WHERE LOWER(TRIM(u.imei_1)) = ? OR LOWER(TRIM(u.imei_2)) = ? OR LOWER(TRIM(u.serial)) = ?`,
     [q, q, q]
   );
   return rows;
@@ -16983,6 +17512,85 @@ fastify.post('/shipping/price-ranges', { preHandler: requireSyncKey }, async (re
   return { ok: true, id };
 });
 
+fastify.get('/customer/purchases', async (req, reply) => {
+  const auth = await getVpsBearerAuthContext(req);
+  if (!auth.customerId) return reply.code(401).send({ error: 'Unauthorized' });
+
+  const requestedCustomerId = String(req.query?.customer_id || '').trim();
+  const customerId = auth.isAdmin && requestedCustomerId ? requestedCustomerId : auth.customerId;
+
+  const [customers] = await pool.query(
+    'SELECT * FROM customers WHERE id = ? LIMIT 1',
+    [customerId]
+  );
+  const customer = customers?.[0] || null;
+  if (!customer) return reply.code(404).send({ error: 'Cliente nao encontrado' });
+
+  const [sales] = await pool.query(
+    'SELECT * FROM sales WHERE customer_id = ? ORDER BY created_at DESC LIMIT 200',
+    [customerId]
+  );
+  const saleIds = sales.map(row => row.id).filter(Boolean);
+  let saleItems = [];
+  if (saleIds.length > 0) {
+    const [rows] = await pool.query(
+      'SELECT * FROM sale_items WHERE sale_id IN (?) ORDER BY created_at ASC',
+      [saleIds]
+    );
+    saleItems = rows;
+  }
+  const saleItemsBySaleId = new Map();
+  for (const item of saleItems) {
+    const list = saleItemsBySaleId.get(String(item.sale_id)) || [];
+    list.push(item);
+    saleItemsBySaleId.set(String(item.sale_id), list);
+  }
+
+  const orderConditions = ['customer_id = ?'];
+  const orderParams = [customerId];
+  if (customer.email) {
+    orderConditions.push('LOWER(customer_email) = ?');
+    orderParams.push(String(customer.email).toLowerCase());
+  }
+
+  const [orders] = await pool.query(
+    `SELECT * FROM orders WHERE (${orderConditions.join(' OR ')}) ORDER BY created_at DESC LIMIT 200`,
+    orderParams
+  );
+  const orderIds = orders.map(row => row.id).filter(Boolean);
+  let orderItems = [];
+  if (orderIds.length > 0) {
+    const [rows] = await pool.query(
+      'SELECT * FROM order_items WHERE order_id IN (?) ORDER BY created_at ASC',
+      [orderIds]
+    );
+    orderItems = rows;
+  }
+  const orderItemsByOrderId = new Map();
+  for (const item of orderItems) {
+    const list = orderItemsByOrderId.get(String(item.order_id)) || [];
+    list.push(item);
+    orderItemsByOrderId.set(String(item.order_id), list);
+  }
+
+  return {
+    customer: publicCustomer(customer),
+    sales: sales.map(sale => ({
+      ...sale,
+      items: saleItemsBySaleId.get(String(sale.id)) || [],
+      customer: {
+        id: String(customer.id),
+        name: String(customer.name || ''),
+        cpf_cnpj: customer.cpf_cnpj || undefined,
+      },
+    })),
+    orders: orders.map(order => ({
+      ...order,
+      items: orderItemsByOrderId.get(String(order.id)) || [],
+    })),
+  };
+});
+
 fastify.patch('/shipping/price-ranges/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   const r = req.body;
   await pool.query(
@@ -17001,6 +17609,290 @@ fastify.delete('/shipping/price-ranges/:id', { preHandler: requireSyncKey }, asy
 });
 
 // ─── Payment Fees ───────────────────────────────────────────────────────────
+// Displays Android + Pix PDV
+fastify.get('/pdv/displays', { preHandler: requireSyncKey }, async () => {
+  const [rows] = await pool.query('SELECT * FROM pdv_displays ORDER BY created_at DESC');
+  return rows.map(mapPdvDisplayRow);
+});
+
+fastify.post('/pdv/displays', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const name = String(body.name || '').trim();
+  if (!name) return reply.code(400).send({ error: 'name obrigatorio' });
+  const id = crypto.randomUUID();
+  const slug = String(body.slug || name)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || id.slice(0, 8);
+  const type = ['cashier', 'ads', 'hybrid'].includes(String(body.type)) ? String(body.type) : 'cashier';
+  const orientation = ['portrait', 'landscape'].includes(String(body.orientation)) ? String(body.orientation) : 'landscape';
+  await pool.query(
+    `INSERT INTO pdv_displays
+      (id, name, slug, type, orientation, cashier_key, is_active, settings_json, idle_content_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      name,
+      slug,
+      type,
+      orientation,
+      body.cashier_key ? String(body.cashier_key).trim() : null,
+      body.is_active === false ? 0 : 1,
+      JSON.stringify(body.settings || {}),
+      JSON.stringify(body.idle_content || { banners: [], products: [], messages: [] }),
+    ]
+  );
+  const [rows] = await pool.query('SELECT * FROM pdv_displays WHERE id = ? LIMIT 1', [id]);
+  return reply.code(201).send(mapPdvDisplayRow(rows[0]));
+});
+
+fastify.patch('/pdv/displays/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const [existingRows] = await pool.query('SELECT * FROM pdv_displays WHERE id = ? LIMIT 1', [req.params.id]);
+  if (!existingRows.length) return reply.code(404).send({ error: 'Display nao encontrado' });
+  const current = mapPdvDisplayRow(existingRows[0]);
+  const type = ['cashier', 'ads', 'hybrid'].includes(String(body.type)) ? String(body.type) : current.type;
+  const orientation = ['portrait', 'landscape'].includes(String(body.orientation)) ? String(body.orientation) : current.orientation;
+  await pool.query(
+    `UPDATE pdv_displays SET
+      name = ?, slug = ?, type = ?, orientation = ?, cashier_key = ?, is_active = ?,
+      settings_json = ?, idle_content_json = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [
+      body.name ? String(body.name).trim() : current.name,
+      body.slug ? String(body.slug).trim() : current.slug,
+      type,
+      orientation,
+      body.cashier_key === undefined ? current.cashier_key : (body.cashier_key ? String(body.cashier_key).trim() : null),
+      body.is_active === undefined ? (current.is_active ? 1 : 0) : (body.is_active ? 1 : 0),
+      JSON.stringify(body.settings === undefined ? current.settings : body.settings),
+      JSON.stringify(body.idle_content === undefined ? current.idle_content : body.idle_content),
+      req.params.id,
+    ]
+  );
+  const [rows] = await pool.query('SELECT * FROM pdv_displays WHERE id = ? LIMIT 1', [req.params.id]);
+  return mapPdvDisplayRow(rows[0]);
+});
+
+fastify.delete('/pdv/displays/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [[approved]] = await pool.query(
+    'SELECT COUNT(*) AS total FROM pdv_pix_payments WHERE display_id = ? AND status = "approved"',
+    [req.params.id]
+  );
+  if (Number(approved?.total || 0) > 0) {
+    return reply.code(409).send({ error: 'Nao e possivel excluir display com Pix aprovado vinculado' });
+  }
+  await pool.query('DELETE FROM pdv_display_pairing_codes WHERE display_id = ?', [req.params.id]);
+  await pool.query('DELETE FROM pdv_display_tokens WHERE display_id = ?', [req.params.id]);
+  await pool.query('UPDATE pdv_pix_payments SET display_id = NULL WHERE display_id = ?', [req.params.id]);
+  await pool.query('DELETE FROM pdv_displays WHERE id = ?', [req.params.id]);
+  return { ok: true };
+});
+
+fastify.post('/pdv/displays/:id/pairing-code', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [displays] = await pool.query('SELECT id FROM pdv_displays WHERE id = ? LIMIT 1', [req.params.id]);
+  if (!displays.length) return reply.code(404).send({ error: 'Display nao encontrado' });
+  const code = generatePdvDisplayPairingCode();
+  const id = crypto.randomUUID();
+  const expiresMinutes = Math.max(5, Number(req.body?.expires_minutes || 30));
+  await pool.query(
+    `INSERT INTO pdv_display_pairing_codes (id, display_id, code_hash, expires_at)
+     VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))`,
+    [id, req.params.id, hashPdvDisplaySecret(code), expiresMinutes]
+  );
+  return reply.code(201).send({ id, display_id: req.params.id, code, expires_minutes: expiresMinutes });
+});
+
+fastify.post('/pdv/displays/pair', async (req, reply) => {
+  const code = normalizePdvDisplayPairingCode(req.body?.code);
+  if (!code) return reply.code(400).send({ error: 'codigo invalido' });
+  const [codes] = await pool.query(
+    `SELECT pc.*, d.is_active
+       FROM pdv_display_pairing_codes pc
+       JOIN pdv_displays d ON d.id = pc.display_id
+      WHERE pc.code_hash = ? AND pc.consumed_at IS NULL AND pc.expires_at > NOW()
+      LIMIT 1`,
+    [hashPdvDisplaySecret(code)]
+  );
+  const pairing = codes[0];
+  if (!pairing || Number(pairing.is_active) !== 1) return reply.code(404).send({ error: 'Codigo expirado ou invalido' });
+  const token = generatePdvDisplayToken();
+  const tokenId = crypto.randomUUID();
+  await pool.query('UPDATE pdv_display_pairing_codes SET consumed_at = NOW() WHERE id = ?', [pairing.id]);
+  await pool.query('UPDATE pdv_display_tokens SET revoked_at = NOW() WHERE display_id = ? AND revoked_at IS NULL', [pairing.display_id]);
+  await pool.query(
+    'INSERT INTO pdv_display_tokens (id, display_id, token_hash) VALUES (?, ?, ?)',
+    [tokenId, pairing.display_id, hashPdvDisplaySecret(token)]
+  );
+  await pool.query('UPDATE pdv_displays SET paired_at = NOW(), updated_at = CURRENT_TIMESTAMP WHERE id = ?', [pairing.display_id]);
+  return reply.code(201).send({ display_id: pairing.display_id, token });
+});
+
+fastify.post('/pdv/displays/:displayId/revoke-token', { preHandler: requireSyncKey }, async (req) => {
+  await pool.query('UPDATE pdv_display_tokens SET revoked_at = NOW() WHERE display_id = ? AND revoked_at IS NULL', [req.params.displayId]);
+  await pool.query('UPDATE pdv_displays SET paired_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [req.params.displayId]);
+  return { ok: true };
+});
+
+fastify.post('/pdv/displays/trash/cleanup', { preHandler: requireSyncKey }, async () => {
+  const [expiredCodes] = await pool.query(
+    'DELETE FROM pdv_display_pairing_codes WHERE consumed_at IS NOT NULL OR expires_at < DATE_SUB(NOW(), INTERVAL 1 DAY)'
+  );
+  const [revokedTokens] = await pool.query(
+    'DELETE FROM pdv_display_tokens WHERE revoked_at IS NOT NULL AND revoked_at < DATE_SUB(NOW(), INTERVAL 7 DAY)'
+  );
+  const [testPix] = await pool.query(
+    `DELETE FROM pdv_pix_payments
+      WHERE status IN ('pending', 'rejected', 'expired', 'failed')
+        AND created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)
+        AND (sale_draft_id IS NULL OR sale_draft_id LIKE 'test%')`
+  );
+  return {
+    ok: true,
+    deleted: {
+      pairing_codes: expiredCodes.affectedRows || 0,
+      revoked_tokens: revokedTokens.affectedRows || 0,
+      test_pix_payments: testPix.affectedRows || 0,
+    },
+  };
+});
+
+fastify.post('/pdv/pix-payments', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const amount = Math.round(Number(body.amount || body.amount_cents || 0));
+  if (!amount || amount <= 0) return reply.code(400).send({ error: 'amount obrigatorio em centavos' });
+  const mp = await getPdvMercadoPagoAccessToken();
+  if (!mp?.accessToken) return reply.code(400).send({ error: 'Mercado Pago nao configurado' });
+  const id = crypto.randomUUID();
+  const localReference = String(body.local_reference || `pdv:${id}`);
+  const displayId = body.display_id ? String(body.display_id) : null;
+  const payload = {
+    transaction_amount: Number((amount / 100).toFixed(2)),
+    description: String(body.description || 'Venda PDV Mercado do Vale').slice(0, 120),
+    payment_method_id: 'pix',
+    external_reference: localReference,
+    metadata: {
+      flow: 'pdv_pix',
+      pdv_pix_payment_id: id,
+      sale_draft_id: body.sale_draft_id || null,
+      cashier_key: body.cashier_key || null,
+      display_id: displayId,
+    },
+    notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook',
+    payer: {
+      email: String(body.payer_email || 'cliente@mercadodovale.com.br'),
+    },
+  };
+  if (body.expires_at) payload.date_of_expiration = new Date(body.expires_at).toISOString();
+  const response = await fetch('https://api.mercadopago.com/v1/payments', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mp.accessToken}`,
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': id,
+    },
+    body: JSON.stringify(payload),
+  });
+  const raw = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    await pool.query(
+      `INSERT INTO pdv_pix_payments
+        (id, sale_draft_id, local_reference, cashier_key, display_id, amount, status, raw_response_json)
+       VALUES (?, ?, ?, ?, ?, ?, 'failed', ?)`,
+      [id, body.sale_draft_id || null, localReference, body.cashier_key || null, displayId, amount, JSON.stringify(raw)]
+    );
+    return reply.code(502).send({ error: 'Falha ao criar Pix Mercado Pago', detail: raw?.message || raw?.error || response.statusText });
+  }
+  const qr = raw?.point_of_interaction?.transaction_data || {};
+  await pool.query(
+    `INSERT INTO pdv_pix_payments
+      (id, sale_draft_id, local_reference, cashier_key, display_id, mercado_pago_payment_id, amount, status, qr_code, qr_code_base64, ticket_url, raw_response_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      body.sale_draft_id || null,
+      localReference,
+      body.cashier_key || null,
+      displayId,
+      raw.id ? String(raw.id) : null,
+      amount,
+      normalizePdvPixStatus(raw.status),
+      qr.qr_code || null,
+      qr.qr_code_base64 || null,
+      qr.ticket_url || null,
+      JSON.stringify(raw),
+    ]
+  );
+  if (displayId) {
+    await pool.query('UPDATE pdv_displays SET active_pix_payment_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [id, displayId]);
+  }
+  const [rows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [id]);
+  return reply.code(201).send(buildPdvPixResponse(rows[0]));
+});
+
+fastify.get('/pdv/pix-payments/:id/status', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [rows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [req.params.id]);
+  const current = rows[0];
+  if (!current) return reply.code(404).send({ error: 'Pix nao encontrado' });
+  if (!current.mercado_pago_payment_id) return buildPdvPixResponse(current);
+  const mp = await getPdvMercadoPagoAccessToken();
+  if (!mp?.accessToken) return reply.code(400).send({ error: 'Mercado Pago nao configurado' });
+  const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(current.mercado_pago_payment_id)}`, {
+    headers: { Authorization: `Bearer ${mp.accessToken}` },
+  });
+  const raw = await response.json().catch(() => ({}));
+  if (!response.ok) return reply.code(502).send({ error: 'Falha ao consultar Mercado Pago', detail: raw?.message || raw?.error || response.statusText });
+  await pool.query(
+    'UPDATE pdv_pix_payments SET status = ?, raw_response_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [normalizePdvPixStatus(raw.status), JSON.stringify(raw), req.params.id]
+  );
+  const [updatedRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [req.params.id]);
+  return buildPdvPixResponse(updatedRows[0]);
+});
+
+fastify.post('/pdv/displays/:displayId/active-pix', { preHandler: requireSyncKey }, async (req, reply) => {
+  const pixPaymentId = String(req.body?.pix_payment_id || '').trim();
+  if (!pixPaymentId) return reply.code(400).send({ error: 'pix_payment_id obrigatorio' });
+  const [payments] = await pool.query('SELECT id FROM pdv_pix_payments WHERE id = ? LIMIT 1', [pixPaymentId]);
+  if (!payments.length) return reply.code(404).send({ error: 'Pix nao encontrado' });
+  await pool.query('UPDATE pdv_pix_payments SET display_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [req.params.displayId, pixPaymentId]);
+  await pool.query('UPDATE pdv_displays SET active_pix_payment_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [pixPaymentId, req.params.displayId]);
+  return { ok: true };
+});
+
+fastify.delete('/pdv/displays/:displayId/active-pix', { preHandler: requireSyncKey }, async (req) => {
+  await pool.query('UPDATE pdv_displays SET active_pix_payment_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [req.params.displayId]);
+  return { ok: true };
+});
+
+fastify.get('/pdv/display-state', async (req, reply) => {
+  const token = getBearerToken(req) || String(req.query?.token || '');
+  if (!token) return reply.code(401).send({ error: 'Unauthorized' });
+  const tokenHash = hashPdvDisplaySecret(token);
+  const [tokenRows] = await pool.query(
+    `SELECT dt.display_id
+       FROM pdv_display_tokens dt
+       JOIN pdv_displays d ON d.id = dt.display_id
+      WHERE dt.token_hash = ? AND dt.revoked_at IS NULL AND d.is_active = 1
+      LIMIT 1`,
+    [tokenHash]
+  );
+  const displayId = tokenRows?.[0]?.display_id;
+  if (!displayId) return reply.code(401).send({ error: 'Token revogado ou invalido' });
+  await pool.query('UPDATE pdv_display_tokens SET last_seen_at = NOW() WHERE token_hash = ?', [tokenHash]);
+  const [displayRows] = await pool.query('SELECT * FROM pdv_displays WHERE id = ? LIMIT 1', [displayId]);
+  const display = mapPdvDisplayRow(displayRows[0]);
+  let active_pix = null;
+  if (display?.active_pix_payment_id) {
+    const [pixRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [display.active_pix_payment_id]);
+    active_pix = buildPdvPixResponse(pixRows[0]);
+  }
+  return { display, active_pix };
+});
+
 fastify.get('/payment-fees', async (req, reply) => {
   const [rows] = await pool.query(
     `SELECT * FROM payment_fees ORDER BY channel, method, installments`
@@ -18301,6 +19193,20 @@ async function addIndexIfMissing(table, indexName, column) {
   }
 }
 
+async function addUniqueIndexIfMissing(table, indexName, column) {
+  const [[row]] = await pool.query(
+    `SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [table, indexName]
+  );
+  if (Number(row.cnt) === 0) {
+    await pool.query(`ALTER TABLE \`${table}\` ADD UNIQUE KEY \`${indexName}\` (\`${column}\`)`);
+    console.log(`[migration] Added unique index ${table}.${indexName}`);
+  } else {
+    console.log(`[migration] unique index ${table}.${indexName} already exists - skip`);
+  }
+}
+
 async function dropIndexIfExists(table, indexName) {
   const [[row]] = await pool.query(
     `SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.STATISTICS
@@ -19145,8 +20051,27 @@ async function runMigrations() {
       INDEX idx_units_location_id (location_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await addColumnIfMissing('units', 'product_id', 'CHAR(36) NULL');
+  await addColumnIfMissing('units', 'imei_1', 'VARCHAR(20) NULL');
+  await addColumnIfMissing('units', 'imei_2', 'VARCHAR(20) NULL');
+  await addColumnIfMissing('units', 'serial', 'VARCHAR(100) NULL');
+  await addColumnIfMissing('units', 'status', "VARCHAR(20) NOT NULL DEFAULT 'available'");
+  await addColumnIfMissing('units', 'condition', "VARCHAR(20) NOT NULL DEFAULT 'new'");
+  await addColumnIfMissing('units', 'internal_notes', 'TEXT NULL');
+  await addColumnIfMissing('units', 'cost_price', 'INT NULL');
   await addColumnIfMissing('units', 'deposit_id', 'CHAR(36) NULL');
   await addColumnIfMissing('units', 'location_id', 'CHAR(36) NULL');
+  await addColumnIfMissing('units', 'order_id', 'CHAR(36) NULL');
+  await addColumnIfMissing('units', 'sale_id', 'CHAR(36) NULL');
+  await addColumnIfMissing('units', 'reserved_at', 'TIMESTAMP NULL');
+  await addColumnIfMissing('units', 'sold_at', 'TIMESTAMP NULL');
+  await addColumnIfMissing('units', 'created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+  await addColumnIfMissing('units', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+  await addIndexIfMissing('units', 'idx_units_product_id', 'product_id');
+  await addIndexIfMissing('units', 'idx_units_imei_1', 'imei_1');
+  await addIndexIfMissing('units', 'idx_units_imei_2', 'imei_2');
+  await addIndexIfMissing('units', 'idx_units_serial', 'serial');
+  await addIndexIfMissing('units', 'idx_units_status', 'status');
   await addIndexIfMissing('units', 'idx_units_deposit_id', 'deposit_id');
   await addIndexIfMissing('units', 'idx_units_location_id', 'location_id');
   console.log('[migration] units table: OK');
@@ -19228,21 +20153,191 @@ async function runMigrations() {
   `);
   console.log('[migration] avulso_receipts table: OK');
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_displays (
+      id CHAR(36) PRIMARY KEY,
+      name VARCHAR(120) NOT NULL,
+      slug VARCHAR(120) NOT NULL,
+      type ENUM('cashier','ads','hybrid') NOT NULL DEFAULT 'cashier',
+      orientation ENUM('portrait','landscape') NOT NULL DEFAULT 'landscape',
+      cashier_key VARCHAR(120) NULL,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      settings_json JSON NULL,
+      idle_content_json JSON NULL,
+      active_pix_payment_id CHAR(36) NULL,
+      paired_at TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_pdv_displays_slug (slug),
+      INDEX idx_pdv_displays_cashier (cashier_key),
+      INDEX idx_pdv_displays_active_pix (active_pix_payment_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_display_pairing_codes (
+      id CHAR(36) PRIMARY KEY,
+      display_id CHAR(36) NOT NULL,
+      code_hash VARCHAR(128) NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      consumed_at TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_pdv_display_pairing_code_hash (code_hash),
+      INDEX idx_pdv_display_pairing_display (display_id),
+      INDEX idx_pdv_display_pairing_expires (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_display_tokens (
+      id CHAR(36) PRIMARY KEY,
+      display_id CHAR(36) NOT NULL,
+      token_hash VARCHAR(128) NOT NULL,
+      revoked_at TIMESTAMP NULL,
+      last_seen_at TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_pdv_display_token_hash (token_hash),
+      INDEX idx_pdv_display_tokens_display (display_id),
+      INDEX idx_pdv_display_tokens_revoked (revoked_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_pix_payments (
+      id CHAR(36) PRIMARY KEY,
+      sale_draft_id VARCHAR(120) NULL,
+      local_reference VARCHAR(160) NULL,
+      cashier_key VARCHAR(120) NULL,
+      display_id CHAR(36) NULL,
+      mercado_pago_payment_id VARCHAR(120) NULL,
+      amount INT NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'pending',
+      qr_code MEDIUMTEXT NULL,
+      qr_code_base64 MEDIUMTEXT NULL,
+      ticket_url TEXT NULL,
+      raw_response_json JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_pdv_pix_mp_payment (mercado_pago_payment_id),
+      INDEX idx_pdv_pix_status (status),
+      INDEX idx_pdv_pix_display (display_id),
+      INDEX idx_pdv_pix_cashier (cashier_key),
+      INDEX idx_pdv_pix_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] pdv display and pix tables: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_debts (
+      id CHAR(36) PRIMARY KEY,
+      customer_id VARCHAR(255) NOT NULL,
+      sale_id VARCHAR(36) NULL,
+      valor_total BIGINT NOT NULL,
+      saldo_devedor BIGINT NOT NULL,
+      descricao TEXT NOT NULL,
+      data_vencimento DATE NOT NULL,
+      status ENUM('pending', 'paid', 'partial', 'cancelled') NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_customer_debts_customer (customer_id),
+      INDEX idx_customer_debts_status (status),
+      INDEX idx_customer_debts_vencimento (data_vencimento),
+      INDEX idx_customer_debts_sale (sale_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] customer_debts table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_debt_payments (
+      id CHAR(36) PRIMARY KEY,
+      debt_id CHAR(36) NOT NULL,
+      valor_pago BIGINT NOT NULL,
+      data_pagamento DATE NOT NULL,
+      metodo_pagamento VARCHAR(40) NOT NULL,
+      observacoes TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_debt_payments_debt (debt_id),
+      INDEX idx_debt_payments_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] customer_debt_payments table: OK');
+
+  await addColumnIfMissing('customer_debt_payments', 'mercado_pago_id', 'VARCHAR(100) DEFAULT NULL');
+  await addColumnIfMissing('customer_debt_payments', 'mercado_pago_link', 'TEXT DEFAULT NULL');
+  await addColumnIfMissing('customer_debt_payments', 'recibo_id', 'VARCHAR(80) DEFAULT NULL');
+  await addColumnIfMissing('customer_debt_payments', 'recibo_numero', 'VARCHAR(80) DEFAULT NULL');
+  await addUniqueIndexIfMissing('customer_debt_payments', 'uniq_customer_debt_payments_mp_id', 'mercado_pago_id');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_debt_payment_intents (
+      id CHAR(36) PRIMARY KEY,
+      debt_id CHAR(36) NOT NULL,
+      provider VARCHAR(50) NOT NULL DEFAULT 'mercado_pago',
+      provider_intent_id VARCHAR(100) DEFAULT NULL,
+      metodo VARCHAR(30) NOT NULL,
+      valor_liquido BIGINT NOT NULL,
+      valor_cobrado BIGINT NOT NULL,
+      taxa_pct DECIMAL(10,6) NOT NULL DEFAULT 0,
+      status ENUM('created','approved','expired','cancelled','failed') DEFAULT 'created',
+      checkout_url TEXT DEFAULT NULL,
+      qr_code TEXT DEFAULT NULL,
+      qr_code_base64 LONGTEXT DEFAULT NULL,
+      raw_response JSON DEFAULT NULL,
+      expires_at DATETIME DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_debt_payment_intents_debt (debt_id),
+      INDEX idx_debt_payment_intents_provider (provider_intent_id),
+      INDEX idx_debt_payment_intents_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] customer_debt_payment_intents table: OK');
+
   await ensureDefaultAdminAccount();
 }
 
-// Recalcula products.stock_quantity = COUNT(units WHERE status='available') para o produto.
-async function syncProductStock(productId) {
+async function syncSerializedProductStockFromUnits(productId) {
   if (!productId) return null;
-  await pool.query(
-    `UPDATE products SET stock_quantity = (
-       SELECT COUNT(*) FROM units WHERE product_id = ? AND status = 'available'
-     ), updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-    [productId, productId]
+  const [[product]] = await pool.query('SELECT id, company_id FROM products WHERE id = ? LIMIT 1', [productId]);
+  if (!product) return null;
+
+  const companyId = product.company_id || await getDefaultStockCompanyId();
+  const fallback = await ensureDefaultStockLocation(companyId);
+  const [unitRows] = await pool.query(
+    `SELECT
+       COALESCE(deposit_id, ?) AS deposit_id,
+       COALESCE(location_id, ?) AS location_id,
+       SUM(CASE WHEN status IN ('available', 'reserved') THEN 1 ELSE 0 END) AS physical_quantity,
+       SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) AS available_quantity,
+       SUM(CASE WHEN status = 'reserved' THEN 1 ELSE 0 END) AS reserved_quantity
+     FROM units
+     WHERE product_id = ? AND status IN ('available', 'reserved')
+     GROUP BY COALESCE(deposit_id, ?), COALESCE(location_id, ?)`,
+    [fallback.depositId, fallback.locationId, productId, fallback.depositId, fallback.locationId]
   );
-  const [rows] = await pool.query('SELECT stock_quantity FROM products WHERE id = ? LIMIT 1', [productId]);
-  return rows?.[0]?.stock_quantity ?? null;
+
+  await pool.query('DELETE FROM product_stock_locations WHERE product_id = ?', [productId]);
+  for (const row of unitRows || []) {
+    const quantity = Math.max(0, Math.trunc(Number(row.physical_quantity || 0)));
+    if (quantity <= 0) continue;
+    await upsertStockLocationBalance({
+      companyId,
+      productId,
+      depositId: row.deposit_id,
+      locationId: row.location_id,
+      quantity,
+      reservedQuantity: Math.max(0, Math.trunc(Number(row.reserved_quantity || 0))),
+    });
+  }
+
+  const available = (unitRows || []).reduce((sum, row) => sum + Math.max(0, Math.trunc(Number(row.available_quantity || 0))), 0);
+  await pool.query('UPDATE products SET stock_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [available, productId]);
+  return available;
+}
+
+// Recalcula products.stock_quantity a partir das unidades serializadas disponiveis.
+async function syncProductStock(productId) {
+  return syncSerializedProductStockFromUnits(productId);
 }
 
 // ─── Recibos Avulsos ────────────────────────────────────────────────────────
@@ -19348,6 +20443,704 @@ fastify.get('/financial/avulso-receipts', { preHandler: requireSyncKey }, async 
   );
 
   return { rows, total: Number(total), limit: safeLimit, offset: safeOffset };
+});
+
+// ─── Crediário Próprio (Recebimento a Prazo) ─────────────────────────────────
+
+// Listar débitos de clientes
+fastify.get('/financial/customer-debts', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  let { customer_id, status, limit = 50, offset = 0 } = req.query || {};
+  const access = req.customerAccess || {};
+  if (!access.isSync && !access.isAdmin) customer_id = access.customerId;
+  if (!access.isSync && !access.isAdmin && req.query?.customer_id && String(req.query.customer_id) !== String(access.customerId)) {
+    return reply.code(403).send({ error: 'Forbidden' });
+  }
+  const conditions = [];
+  const params = [];
+
+  if (customer_id) {
+    conditions.push('customer_id = ?');
+    params.push(customer_id);
+  }
+  if (status) {
+    conditions.push('status = ?');
+    params.push(status);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const safeLimit = Math.min(Math.max(1, parseInt(limit) || 50), 200);
+  const safeOffset = Math.max(0, parseInt(offset) || 0);
+
+  try {
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM customer_debts ${where}`,
+      params
+    );
+
+    const [rows] = await pool.query(
+      `SELECT * FROM customer_debts ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...params, safeLimit, safeOffset]
+    );
+
+    return { rows, total: Number(total), limit: safeLimit, offset: safeOffset };
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Erro no banco de dados ao buscar debitos' });
+  }
+});
+
+// Listar pagamentos de crediário
+fastify.get('/financial/customer-debts/payments', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  let { customer_id, debt_id, limit = 50, offset = 0 } = req.query || {};
+  const access = req.customerAccess || {};
+  if (!access.isSync && !access.isAdmin) customer_id = access.customerId;
+  if (!access.isSync && !access.isAdmin && req.query?.customer_id && String(req.query.customer_id) !== String(access.customerId)) {
+    return reply.code(403).send({ error: 'Forbidden' });
+  }
+  
+  let queryStr = '';
+  const params = [];
+
+  if (debt_id) {
+    queryStr = 'SELECT p.*, d.customer_id, d.descricao as debito_descricao FROM customer_debt_payments p JOIN customer_debts d ON p.debt_id = d.id WHERE p.debt_id = ?';
+    params.push(debt_id);
+  } else if (customer_id) {
+    queryStr = 'SELECT p.*, d.customer_id, d.descricao as debito_descricao FROM customer_debt_payments p JOIN customer_debts d ON p.debt_id = d.id WHERE d.customer_id = ?';
+    params.push(customer_id);
+  } else {
+    queryStr = 'SELECT p.*, d.customer_id, d.descricao as debito_descricao FROM customer_debt_payments p JOIN customer_debts d ON p.debt_id = d.id';
+  }
+
+  const safeLimit = Math.min(Math.max(1, parseInt(limit) || 50), 200);
+  const safeOffset = Math.max(0, parseInt(offset) || 0);
+
+  try {
+    const [rows] = await pool.query(
+      `${queryStr} ORDER BY p.created_at DESC LIMIT ? OFFSET ?`,
+      [...params, safeLimit, safeOffset]
+    );
+    return { rows };
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Erro no banco de dados ao buscar pagamentos de debitos' });
+  }
+});
+
+// Criar débito manual
+fastify.post('/financial/customer-debts/manual', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const { customer_id, valor_total, descricao, data_vencimento } = body;
+
+  if (!customer_id) {
+    return reply.code(400).send({ error: 'customer_id obrigatorio' });
+  }
+  if (!valor_total || isNaN(Number(valor_total)) || Number(valor_total) <= 0) {
+    return reply.code(400).send({ error: 'valor_total invalido' });
+  }
+  if (!descricao || typeof descricao !== 'string' || !descricao.trim()) {
+    return reply.code(400).send({ error: 'descricao obrigatoria' });
+  }
+  if (!data_vencimento || !/^\d{4}-\d{2}-\d{2}$/.test(data_vencimento)) {
+    return reply.code(400).send({ error: 'data_vencimento invalida (YYYY-MM-DD)' });
+  }
+
+  const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+  const valor = Math.round(Number(valor_total)); // em centavos
+
+  try {
+    await pool.query(
+      `INSERT INTO customer_debts (id, customer_id, sale_id, valor_total, saldo_devedor, descricao, data_vencimento, status)
+       VALUES (?, ?, NULL, ?, ?, ?, ?, 'pending')`,
+      [id, customer_id, valor, valor, descricao.trim(), data_vencimento]
+    );
+
+    return reply.code(201).send({
+      id,
+      customer_id,
+      valor_total: valor,
+      saldo_devedor: valor,
+      descricao: descricao.trim(),
+      data_vencimento,
+      status: 'pending'
+    });
+  } catch (err) {
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Erro no banco de dados ao criar debito manual' });
+  }
+});
+
+// Registrar pagamento / abate de débito (Transacionado)
+// Criar debito vinculado a uma venda PDV a prazo
+fastify.post('/financial/customer-debts/from-sale', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const { customer_id, sale_id, valor_total, descricao, data_vencimento } = body;
+
+  if (!customer_id) {
+    return reply.code(400).send({
+      error: 'customer_id obrigatorio',
+      debug: buildCustomerDebtDebug('validate from-sale payload', { sale_id, customer_id, valor_total, data_vencimento }),
+    });
+  }
+  if (!sale_id) {
+    return reply.code(400).send({
+      error: 'sale_id obrigatorio',
+      debug: buildCustomerDebtDebug('validate from-sale payload', { sale_id, customer_id, valor_total, data_vencimento }),
+    });
+  }
+  if (!valor_total || isNaN(Number(valor_total)) || Number(valor_total) <= 0) {
+    return reply.code(400).send({
+      error: 'valor_total invalido',
+      debug: buildCustomerDebtDebug('validate from-sale payload', { sale_id, customer_id, valor_total, data_vencimento }),
+    });
+  }
+  if (!descricao || typeof descricao !== 'string' || !descricao.trim()) {
+    return reply.code(400).send({
+      error: 'descricao obrigatoria',
+      debug: buildCustomerDebtDebug('validate from-sale payload', { sale_id, customer_id, valor_total, data_vencimento }),
+    });
+  }
+  if (!data_vencimento || !/^\d{4}-\d{2}-\d{2}$/.test(data_vencimento)) {
+    return reply.code(400).send({
+      error: 'data_vencimento invalida (YYYY-MM-DD)',
+      debug: buildCustomerDebtDebug('validate from-sale payload', { sale_id, customer_id, valor_total, data_vencimento }),
+    });
+  }
+
+  const valor = Math.round(Number(valor_total)); // em centavos
+
+  try {
+    const [existing] = await pool.query(
+      'SELECT * FROM customer_debts WHERE sale_id = ? LIMIT 1',
+      [sale_id]
+    );
+
+    if (existing.length > 0) {
+      return reply.code(200).send(existing[0]);
+    }
+
+    const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+
+    await pool.query(
+      `INSERT INTO customer_debts (id, customer_id, sale_id, valor_total, saldo_devedor, descricao, data_vencimento, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [id, customer_id, sale_id, valor, valor, descricao.trim(), data_vencimento]
+    );
+
+    return reply.code(201).send({
+      id,
+      customer_id,
+      sale_id,
+      valor_total: valor,
+      saldo_devedor: valor,
+      descricao: descricao.trim(),
+      data_vencimento,
+      status: 'pending'
+    });
+  } catch (err) {
+    req.log.error({
+      debug: buildCustomerDebtDebug('insert from-sale debt failed', {
+        sale_id,
+        customer_id,
+        valor_total,
+        data_vencimento,
+        error: err?.message,
+      }),
+    });
+    return reply.code(500).send({
+      error: 'Erro no banco de dados ao criar debito da venda a prazo',
+      debug: buildCustomerDebtDebug('insert from-sale debt failed', {
+        sale_id,
+        customer_id,
+        valor_total,
+        data_vencimento,
+      }),
+    });
+  }
+});
+
+fastify.delete('/financial/customer-debts/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const id = String(req.params?.id || '').trim();
+  if (!id) {
+    return reply.code(400).send({ error: 'id obrigatorio' });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [debts] = await connection.query('SELECT * FROM customer_debts WHERE id = ? FOR UPDATE', [id]);
+    if (debts.length === 0) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Debito nao encontrado' });
+    }
+
+    const [[{ total: paymentCount }]] = await connection.query(
+      'SELECT COUNT(*) AS total FROM customer_debt_payments WHERE debt_id = ?',
+      [id]
+    );
+    if (Number(paymentCount || 0) > 0) {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'Nao e possivel excluir debito com pagamentos registrados' });
+    }
+
+    await connection.query('DELETE FROM customer_debt_payment_intents WHERE debt_id = ?', [id]);
+    await connection.query('DELETE FROM customer_debts WHERE id = ?', [id]);
+    await connection.commit();
+    return { success: true, id };
+  } catch (err) {
+    await connection.rollback();
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Erro no banco de dados ao excluir debito' });
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.delete('/financial/customer-debt-payments/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const id = String(req.params?.id || '').trim();
+  if (!id) {
+    return reply.code(400).send({ error: 'id obrigatorio' });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [payments] = await connection.query('SELECT * FROM customer_debt_payments WHERE id = ? FOR UPDATE', [id]);
+    if (payments.length === 0) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Pagamento nao encontrado' });
+    }
+
+    const payment = payments[0];
+    const [debts] = await connection.query('SELECT * FROM customer_debts WHERE id = ? FOR UPDATE', [payment.debt_id]);
+    if (debts.length === 0) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Debito vinculado nao encontrado' });
+    }
+
+    await connection.query('DELETE FROM customer_debt_payments WHERE id = ?', [id]);
+    if (payment.recibo_id) {
+      await connection.query('DELETE FROM avulso_receipts WHERE id = ?', [payment.recibo_id]);
+    }
+
+    const [[{ total_pago: totalPago }]] = await connection.query(
+      'SELECT COALESCE(SUM(valor_pago), 0) AS total_pago FROM customer_debt_payments WHERE debt_id = ?',
+      [payment.debt_id]
+    );
+    const debt = debts[0];
+    const paid = Math.max(0, Math.round(Number(totalPago || 0)));
+    const total = Math.max(0, Math.round(Number(debt.valor_total || 0)));
+    const novoSaldo = Math.max(0, total - paid);
+    const novoStatus = novoSaldo <= 0 ? 'paid' : paid > 0 ? 'partial' : 'pending';
+
+    await connection.query(
+      'UPDATE customer_debts SET saldo_devedor = ?, status = ? WHERE id = ?',
+      [novoSaldo, novoStatus, payment.debt_id]
+    );
+
+    await connection.commit();
+    return { success: true, payment_id: id, debt_id: payment.debt_id, novo_saldo: novoSaldo, novo_status: novoStatus };
+  } catch (err) {
+    await connection.rollback();
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Erro no banco de dados ao excluir pagamento' });
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const { debt_id, valor_liquido, metodo } = body;
+
+  if (!debt_id) {
+    return reply.code(400).send({
+      error: 'debt_id obrigatorio',
+      debug: buildCustomerDebtDebug('validate mercado pago intent payload', { debt_id, valor_liquido, metodo }),
+    });
+  }
+  if (!valor_liquido || isNaN(Number(valor_liquido)) || Number(valor_liquido) <= 0) {
+    return reply.code(400).send({
+      error: 'valor_liquido invalido',
+      debug: buildCustomerDebtDebug('validate mercado pago intent payload', { debt_id, valor_liquido, metodo }),
+    });
+  }
+  if (!['pix', 'card'].includes(String(metodo))) {
+    return reply.code(400).send({
+      error: 'metodo deve ser pix ou card',
+      debug: buildCustomerDebtDebug('validate mercado pago intent payload', { debt_id, valor_liquido, metodo }),
+    });
+  }
+
+  const valorLiquido = Math.round(Number(valor_liquido));
+  const taxa = String(metodo) === 'pix' ? MP_PIX_FEE_PCT : MP_CARD_FEE_PCT;
+  const valorCobrado = Math.ceil(valorLiquido / (1 - taxa));
+  const intentId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+  const external_reference = `customer_debt:${debt_id}`;
+  const metadata = {
+    flow: 'customer_debt',
+    debt_id,
+    valor_liquido_centavos: valorLiquido
+  };
+
+  try {
+    const [debts] = await pool.query('SELECT * FROM customer_debts WHERE id = ? LIMIT 1', [debt_id]);
+    if (debts.length === 0) {
+      return reply.code(404).send({
+        error: 'Debito nao encontrado',
+        debug: buildCustomerDebtDebug('mercado pago intent debt not found', { debt_id, metodo, valor_liquido }),
+      });
+    }
+
+    const debt = debts[0];
+    const access = req.customerAccess || {};
+    if (!access.isSync && !access.isAdmin && String(debt.customer_id) !== String(access.customerId)) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+    if (!['pending', 'partial'].includes(String(debt.status))) {
+      return reply.code(400).send({
+        error: 'Debito nao esta em aberto',
+        debug: buildCustomerDebtDebug('mercado pago intent debt not open', { debt_id, metodo, status: debt.status }),
+      });
+    }
+    if (valorLiquido > Number(debt.saldo_devedor || 0)) {
+      return reply.code(400).send({
+        error: 'valor_liquido excede saldo_devedor',
+        debug: buildCustomerDebtDebug('mercado pago intent amount exceeds debt balance', {
+          debt_id,
+          metodo,
+          valor_liquido,
+          saldo_devedor: debt.saldo_devedor,
+        }),
+      });
+    }
+
+    const [integrations] = await pool.query(
+      "SELECT access_token, environment FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 LIMIT 1"
+    );
+    const accessToken = integrations?.[0]?.access_token;
+    const mpEnvironment = String(integrations?.[0]?.environment || '').toLowerCase() === 'production' ? 'production' : 'sandbox';
+    if (!accessToken) {
+      return reply.code(400).send({
+        error: 'Mercado Pago nao configurado',
+        debug: buildCustomerDebtDebug('mercado pago integration missing', { debt_id, metodo, valor_liquido }),
+      });
+    }
+    const tokenLooksSandbox = /^TEST-/i.test(String(accessToken));
+
+    const notificationUrl = 'https://www.mercadodovale.com.br/api/mercadopago-webhook';
+    const amountReais = Number((valorCobrado / 100).toFixed(2));
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    let mpResponse;
+    let providerIntentId = null;
+    let checkoutUrl = null;
+    let qrCode = null;
+    let qrCodeBase64 = null;
+
+    if (String(metodo) === 'pix') {
+      const payload = {
+        transaction_amount: amountReais,
+        description: `Crediario Mercado do Vale - ${String(debt.descricao || debt.id).slice(0, 80)}`,
+        payment_method_id: 'pix',
+        external_reference,
+        metadata,
+        notification_url: notificationUrl,
+        date_of_expiration: expiresAt.toISOString(),
+        payer: {
+          email: 'cliente@mercadodovale.com.br'
+        }
+      };
+
+      const response = await fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': intentId
+        },
+        body: JSON.stringify(payload)
+      });
+
+      mpResponse = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        req.log.error({
+          debug: buildCustomerDebtDebug('mercado pago intent failed', {
+            debt_id,
+            metodo,
+            valor_liquido,
+            valor_cobrado: valorCobrado,
+            mercado_pago_status: response.status,
+            raw_message: JSON.stringify(mpResponse).slice(0, 1200),
+          }),
+        });
+        await pool.query(
+          `INSERT INTO customer_debt_payment_intents
+            (id, debt_id, metodo, valor_liquido, valor_cobrado, taxa_pct, status, raw_response, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'failed', ?, ?)`,
+          [intentId, debt_id, metodo, valorLiquido, valorCobrado, taxa, JSON.stringify(mpResponse), expiresAt]
+        );
+        return reply.code(502).send({
+          error: 'Falha ao criar cobranca Mercado Pago',
+          debug: buildCustomerDebtDebug('mercado pago intent failed', {
+            debt_id,
+            metodo,
+            mercado_pago_status: response.status,
+            raw_message: JSON.stringify(mpResponse).slice(0, 1200),
+          }),
+        });
+      }
+
+      providerIntentId = String(mpResponse.id || '');
+      qrCode = mpResponse?.point_of_interaction?.transaction_data?.qr_code || null;
+      qrCodeBase64 = mpResponse?.point_of_interaction?.transaction_data?.qr_code_base64 || null;
+      checkoutUrl = mpResponse?.point_of_interaction?.transaction_data?.ticket_url || null;
+    } else {
+      const payload = {
+        items: [{
+          id: debt_id,
+          title: `Crediario Mercado do Vale`,
+          description: String(debt.descricao || debt.id).slice(0, 250),
+          quantity: 1,
+          currency_id: 'BRL',
+          unit_price: amountReais
+        }],
+        external_reference,
+        metadata,
+        notification_url: notificationUrl,
+        expires: true,
+        expiration_date_to: expiresAt.toISOString(),
+        payment_methods: {
+          excluded_payment_types: [{ id: 'ticket' }],
+          installments: 12
+        }
+      };
+
+      const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      mpResponse = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        req.log.error({
+          debug: buildCustomerDebtDebug('mercado pago intent failed', {
+            debt_id,
+            metodo,
+            valor_liquido,
+            valor_cobrado: valorCobrado,
+            mercado_pago_status: response.status,
+            raw_message: JSON.stringify(mpResponse).slice(0, 1200),
+          }),
+        });
+        await pool.query(
+          `INSERT INTO customer_debt_payment_intents
+            (id, debt_id, metodo, valor_liquido, valor_cobrado, taxa_pct, status, raw_response, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'failed', ?, ?)`,
+          [intentId, debt_id, metodo, valorLiquido, valorCobrado, taxa, JSON.stringify(mpResponse), expiresAt]
+        );
+        return reply.code(502).send({
+          error: 'Falha ao criar checkout Mercado Pago',
+          debug: buildCustomerDebtDebug('mercado pago intent failed', {
+            debt_id,
+            metodo,
+            mercado_pago_status: response.status,
+            raw_message: JSON.stringify(mpResponse).slice(0, 1200),
+          }),
+        });
+      }
+
+      providerIntentId = String(mpResponse.id || '');
+      checkoutUrl = mpResponse.init_point || mpResponse.sandbox_init_point || null;
+    }
+    const isSandboxIntent = tokenLooksSandbox || mpEnvironment === 'sandbox' || String(checkoutUrl || '').includes('/sandbox/');
+
+    await pool.query(
+      `INSERT INTO customer_debt_payment_intents
+        (id, debt_id, provider_intent_id, metodo, valor_liquido, valor_cobrado, taxa_pct, status, checkout_url, qr_code, qr_code_base64, raw_response, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?, ?)`,
+      [
+        intentId,
+        debt_id,
+        providerIntentId,
+        metodo,
+        valorLiquido,
+        valorCobrado,
+        taxa,
+        checkoutUrl,
+        qrCode,
+        qrCodeBase64,
+        JSON.stringify(mpResponse),
+        expiresAt
+      ]
+    );
+
+    return reply.code(201).send({
+      id: intentId,
+      debt_id,
+      provider: 'mercado_pago',
+      provider_intent_id: providerIntentId,
+      metodo,
+      valor_liquido: valorLiquido,
+      valor_cobrado: valorCobrado,
+      taxa_pct: taxa,
+      status: 'created',
+      checkout_url: checkoutUrl,
+      qr_code: qrCode,
+      qr_code_base64: qrCodeBase64,
+      environment: isSandboxIntent ? 'sandbox' : 'production',
+      is_sandbox: isSandboxIntent,
+      external_reference,
+      metadata,
+      expires_at: expiresAt.toISOString()
+    });
+  } catch (err) {
+    req.log.error({
+      debug: buildCustomerDebtDebug('mercado pago intent failed', {
+        debt_id,
+        metodo,
+        valor_liquido,
+        error: err?.message,
+      }),
+    });
+    return reply.code(500).send({
+      error: 'Erro ao criar intent Mercado Pago do crediario',
+      debug: buildCustomerDebtDebug('mercado pago intent failed', { debt_id, metodo, valor_liquido }),
+    });
+  }
+});
+
+fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const { debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes } = body;
+
+  if (!debt_id) {
+    return reply.code(400).send({ error: 'debt_id obrigatorio' });
+  }
+  if (!valor_pago || isNaN(Number(valor_pago)) || Number(valor_pago) <= 0) {
+    return reply.code(400).send({ error: 'valor_pago invalido' });
+  }
+  if (!data_pagamento || !/^\d{4}-\d{2}-\d{2}$/.test(data_pagamento)) {
+    return reply.code(400).send({ error: 'data_pagamento invalida (YYYY-MM-DD)' });
+  }
+  if (!metodo_pagamento) {
+    return reply.code(400).send({ error: 'metodo_pagamento obrigatorio' });
+  }
+
+  const valorPagoCentavos = Math.round(Number(valor_pago));
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // 1. Obter e travar o registro do débito para atualização segura
+    const [debts] = await connection.query(
+      'SELECT * FROM customer_debts WHERE id = ? FOR UPDATE',
+      [debt_id]
+    );
+
+    if (debts.length === 0) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Debito nao encontrado' });
+    }
+
+    const debt = debts[0];
+    if (debt.saldo_devedor <= 0 || debt.status === 'paid') {
+      await connection.rollback();
+      return reply.code(400).send({ error: 'Este debito ja esta totalmente quitado' });
+    }
+
+    if (valorPagoCentavos > debt.saldo_devedor) {
+      await connection.rollback();
+      return reply.code(400).send({ 
+        error: `Valor pago excede o saldo devedor. Saldo atual: R$ ${(debt.saldo_devedor / 100).toFixed(2)}` 
+      });
+    }
+
+    // 2. Inserir o registro de pagamento
+    const paymentId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+    await connection.query(
+      `INSERT INTO customer_debt_payments (id, debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [paymentId, debt_id, valorPagoCentavos, data_pagamento, metodo_pagamento, observacoes || null]
+    );
+
+    // 3. Atualizar o saldo devedor e status do débito
+    const novoSaldo = debt.saldo_devedor - valorPagoCentavos;
+    const novoStatus = novoSaldo === 0 ? 'paid' : 'partial';
+
+    await connection.query(
+      'UPDATE customer_debts SET saldo_devedor = ?, status = ? WHERE id = ?',
+      [novoSaldo, novoStatus, debt_id]
+    );
+
+    // 4. Buscar dados do cliente para registrar o recibo avulso
+    const [customers] = await connection.query(
+      'SELECT name, cpf_cnpj, phone, email FROM customers WHERE id = ?',
+      [debt.customer_id]
+    );
+
+    let reciboId = null;
+    let reciboNumero = null;
+
+    if (customers.length > 0) {
+      const customer = customers[0];
+      reciboId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+      const prefixo = 'REC';
+      const datePart = data_pagamento.replace(/-/g, '');
+      const rand = String(Math.floor(Math.random() * 9000) + 1000);
+      reciboNumero = `${prefixo}-${datePart}-${rand}`;
+
+      // A tabela avulso_receipts armazena valor em DECIMAL (Reais).
+      // Dividimos centavos por 100.
+      const valorReais = valorPagoCentavos / 100;
+      const descRecibo = `Abate de Crediario - Ref: ${debt.descricao}`;
+
+      await connection.query(
+        `INSERT INTO avulso_receipts
+          (id, numero, tipo, nome_contato, cpf_cnpj, telefone, email, customer_id, valor, descricao, data_emissao)
+         VALUES (?, ?, 'receber', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          reciboId,
+          reciboNumero,
+          customer.name,
+          customer.cpf_cnpj || null,
+          customer.phone || null,
+          customer.email || null,
+          debt.customer_id,
+          valorReais,
+          descRecibo,
+          data_pagamento
+        ]
+      );
+
+      await connection.query(
+        'UPDATE customer_debt_payments SET recibo_id = ?, recibo_numero = ? WHERE id = ?',
+        [reciboId, reciboNumero, paymentId]
+      );
+    }
+
+    await connection.commit();
+
+    return {
+      success: true,
+      debt_id,
+      novo_saldo: novoSaldo,
+      novo_status: novoStatus,
+      payment_id: paymentId,
+      recibo_id: reciboId,
+      recibo_numero: reciboNumero
+    };
+
+  } catch (err) {
+    await connection.rollback();
+    req.log.error(err);
+    return reply.code(500).send({ error: 'Erro ao processar baixa de debito' });
+  } finally {
+    connection.release();
+  }
 });
 
 // Start

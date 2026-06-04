@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { CreditCard, DollarSign, Smartphone, Trash2 } from 'lucide-react';
+import { CreditCard, DollarSign, Smartphone, Trash2, Calendar } from 'lucide-react';
 import { PaymentMethod, PaymentMethodType } from '../../types/sale';
+import type { PdvPixPayment } from '../../types/pdvDisplay';
 import {
     calculateTotalPaid,
     calculateRemaining,
@@ -28,6 +29,19 @@ interface PaymentSectionProps {
     maxFinalAdjustmentDiscount?: number;
     onFinalAdjustmentDiscountChange?: (discount: number) => void;
     onApplyFinalPaymentAmount?: (amount: number) => void;
+    selectedCustomer?: any;
+    onUpdatePayment?: (index: number, updated: PaymentMethod) => void;
+    pdvPixPayment?: PdvPixPayment | null;
+    pdvPixLoading?: boolean;
+    pdvPixDisplayId?: string;
+    pdvPixCashierKey?: string;
+    onPdvPixDisplayIdChange?: (displayId: string) => void;
+    onPdvPixCashierKeyChange?: (cashierKey: string) => void;
+    onCreatePdvPixPayment?: (amount: number) => void;
+    onRefreshPdvPixPayment?: () => void;
+    onShowPdvPixOnDisplay?: () => void;
+    onPrintPdvPixQr?: () => void;
+    onCancelPdvPixPayment?: () => void;
 }
 
 export default function PaymentSection({
@@ -42,8 +56,26 @@ export default function PaymentSection({
     finalAdjustmentDiscount,
     maxFinalAdjustmentDiscount,
     onFinalAdjustmentDiscountChange,
-    onApplyFinalPaymentAmount
+    onApplyFinalPaymentAmount,
+    selectedCustomer,
+    onUpdatePayment,
+    pdvPixPayment,
+    pdvPixLoading = false,
+    pdvPixDisplayId = '',
+    pdvPixCashierKey = '',
+    onPdvPixDisplayIdChange,
+    onPdvPixCashierKeyChange,
+    onCreatePdvPixPayment,
+    onRefreshPdvPixPayment,
+    onShowPdvPixOnDisplay,
+    onPrintPdvPixQr,
+    onCancelPdvPixPayment
 }: PaymentSectionProps) {
+    const getDueDateDefault = () => {
+        const d = new Date();
+        d.setDate(d.getDate() + 30);
+        return d.toISOString().split('T')[0];
+    };
     const [selectedMethod, setSelectedMethod] = useState<PaymentMethodType>('money');
     const [paymentAmount, setPaymentAmount] = useState('');
     const [discountInput, setDiscountInput] = useState('');
@@ -74,6 +106,30 @@ export default function PaymentSection({
         onApplyFinalPaymentAmount(Math.round(parsedValue));
     };
 
+    const getTypedPaymentAmount = () => {
+        const amount = parseFloat(paymentAmount.replace(',', '.')) * 100;
+        return Number.isFinite(amount) ? Math.round(amount) : 0;
+    };
+
+    const handleCreatePixPayment = () => {
+        const amount = getTypedPaymentAmount();
+        if (!amount || amount <= 0) {
+            toast.error('Digite um valor valido para gerar o Pix');
+            return;
+        }
+        onCreatePdvPixPayment?.(amount);
+    };
+
+    const getPdvPixStatusLabel = (status?: string) => {
+        if (status === 'creating') return 'Criando cobranca';
+        if (status === 'pending') return 'Aguardando pagamento';
+        if (status === 'approved') return 'Pagamento aprovado';
+        if (status === 'rejected') return 'Pagamento rejeitado';
+        if (status === 'expired') return 'Pagamento expirado';
+        if (status === 'error') return 'Erro no Pix';
+        return 'Pix Mercado Pago';
+    };
+
     // Calcular preview de 12x para o Total a Pagar
     let twelveInstallmentTotal = 0;
     let twelveInstallmentValue = 0;
@@ -99,18 +155,21 @@ export default function PaymentSection({
             return;
         }
 
-        // Permite que qualquer forma de pagamento exceda o total (útil para "troco no cartão" ou acréscimos intencionais)
-
+        if (method === 'a_prazo' && !selectedCustomer) {
+            toast.error('Selecione um cliente para vender a prazo');
+            return;
+        }
 
         const payment: PaymentMethod = {
             method: method,
             amount: Math.round(amount),
-            total_with_fee: Math.round(amount) // Sem taxa por enquanto
+            total_with_fee: Math.round(amount), // Sem taxa por enquanto
+            ...(method === 'a_prazo' && { due_date: getDueDateDefault() })
         };
 
         onAddPayment(payment);
         setPaymentAmount('');
-        toast.success(`${getPaymentMethodLabel(selectedMethod)} adicionado`);
+        toast.success(`${getPaymentMethodLabel(method)} adicionado`);
     };
 
     // Enter para adicionar - Padrão é dinheiro
@@ -265,7 +324,7 @@ export default function PaymentSection({
                     {payments.map((payment, index) => (
                         <div
                             key={index}
-                            className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg"
+                            className="flex flex-col gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg sm:flex-row sm:items-center sm:justify-between"
                         >
                             <div className="flex items-center gap-2">
                                 <span className="text-xl">{getPaymentMethodIcon(payment.method)}</span>
@@ -283,13 +342,26 @@ export default function PaymentSection({
                                     </p>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => onRemovePayment(index)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Remover pagamento"
-                            >
-                                <Trash2 size={16} />
-                            </button>
+                            <div className="flex items-center gap-3">
+                                {payment.method === 'a_prazo' && (
+                                    <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                                        <span>Vencimento</span>
+                                        <input
+                                            type="date"
+                                            value={payment.due_date || getDueDateDefault()}
+                                            onChange={(event) => onUpdatePayment?.(index, { ...payment, due_date: event.target.value })}
+                                            className="h-9 rounded border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                        />
+                                    </label>
+                                )}
+                                <button
+                                    onClick={() => onRemovePayment(index)}
+                                    className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                    title="Remover pagamento"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -384,6 +456,97 @@ export default function PaymentSection({
                 )}
             </div>
 
+            <div className="mb-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                        <h4 className="text-sm font-semibold text-cyan-900">Pix Mercado Pago</h4>
+                        <p className="text-xs text-cyan-700">Cobranca segura pela VPS, com envio opcional para o display Android.</p>
+                    </div>
+                    <Smartphone size={20} className="text-cyan-700" />
+                </div>
+
+                <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <label className="text-xs font-medium text-cyan-900">
+                        Caixa
+                        <input
+                            value={pdvPixCashierKey}
+                            onChange={(event) => onPdvPixCashierKeyChange?.(event.target.value)}
+                            placeholder="caixa-01"
+                            className="mt-1 w-full rounded border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-cyan-500 focus:outline-none"
+                        />
+                    </label>
+                    <label className="text-xs font-medium text-cyan-900">
+                        Display ID
+                        <input
+                            value={pdvPixDisplayId}
+                            onChange={(event) => onPdvPixDisplayIdChange?.(event.target.value)}
+                            placeholder="opcional"
+                            className="mt-1 w-full rounded border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-cyan-500 focus:outline-none"
+                        />
+                    </label>
+                </div>
+
+                {pdvPixPayment && (
+                    <div className="mb-3 rounded border border-cyan-200 bg-white p-3 text-xs text-slate-700">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <strong className="text-cyan-900">
+                                {getPdvPixStatusLabel(pdvPixPayment.status)}
+                            </strong>
+                            <span>{formatCurrency(pdvPixPayment.amount)}</span>
+                        </div>
+                        <p className="mt-1 font-mono text-[11px] text-slate-500">ID: {pdvPixPayment.mercado_pago_payment_id || pdvPixPayment.id}</p>
+                        {pdvPixPayment.ticket_url && (
+                            <a href={pdvPixPayment.ticket_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-cyan-700 underline">
+                                Abrir ticket Mercado Pago
+                            </a>
+                        )}
+                        {pdvPixPayment.qr_code_base64 || pdvPixPayment.qr_code ? (
+                            <p className="mt-2 break-all font-mono text-[10px] text-slate-500">
+                                {pdvPixPayment.qr_code ? pdvPixPayment.qr_code.slice(0, 120) : 'QR em imagem base64 recebido'}...
+                            </p>
+                        ) : null}
+                    </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                    <button
+                        onClick={handleCreatePixPayment}
+                        disabled={Boolean(pdvPixPayment) || pdvPixLoading}
+                        className="rounded bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-cyan-700 disabled:opacity-50"
+                    >
+                        {pdvPixLoading && !pdvPixPayment ? 'Criando...' : 'Gerar Pix Mercado Pago'}
+                    </button>
+                    <button
+                        onClick={onShowPdvPixOnDisplay}
+                        disabled={!pdvPixPayment || !pdvPixDisplayId || pdvPixLoading}
+                        className="rounded bg-cyan-100 px-3 py-2 text-xs font-semibold text-cyan-800 transition-colors hover:bg-cyan-200 disabled:opacity-50"
+                    >
+                        Exibir no display
+                    </button>
+                    <button
+                        onClick={onRefreshPdvPixPayment}
+                        disabled={!pdvPixPayment || pdvPixLoading}
+                        className="rounded bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-cyan-200 transition-colors hover:bg-cyan-50 disabled:opacity-50"
+                    >
+                        Atualizar pagamento
+                    </button>
+                    <button
+                        onClick={onPrintPdvPixQr}
+                        disabled={!pdvPixPayment || pdvPixLoading}
+                        className="rounded bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-cyan-200 transition-colors hover:bg-cyan-50 disabled:opacity-50"
+                    >
+                        Imprimir QR
+                    </button>
+                    <button
+                        onClick={onCancelPdvPixPayment}
+                        disabled={!pdvPixPayment || pdvPixPayment.status === 'approved' || pdvPixLoading}
+                        className="rounded bg-white px-3 py-2 text-xs font-semibold text-red-700 ring-1 ring-red-200 transition-colors hover:bg-red-50 disabled:opacity-50"
+                    >
+                        Cancelar Pix
+                    </button>
+                </div>
+            </div>
+
             {/* Adicionar Novo Pagamento */}
             {!isComplete && (
                 <div className="space-y-3 mb-4">
@@ -408,9 +571,10 @@ export default function PaymentSection({
                         </button>
                     </div>
                     
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                         <button
                             onClick={() => handleAddPayment('pix')}
+                            disabled={Boolean(pdvPixPayment && pdvPixPayment.status !== 'approved')}
                             className="flex flex-col items-center justify-center p-3 border-2 border-cyan-200 bg-cyan-50 rounded-lg hover:bg-cyan-100 hover:border-cyan-300 transition-colors"
                         >
                             <Smartphone size={20} className="mb-1 text-cyan-700" />
@@ -429,6 +593,13 @@ export default function PaymentSection({
                         >
                             <CreditCard size={20} className="mb-1 text-purple-700" />
                             <span className="text-xs font-semibold text-purple-800">Add Débito</span>
+                        </button>
+                        <button
+                            onClick={() => handleAddPayment('a_prazo')}
+                            className="flex flex-col items-center justify-center p-3 border-2 border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                        >
+                            <Calendar size={20} className="mb-1 text-blue-700" />
+                            <span className="text-xs font-semibold text-blue-800">Add A Prazo</span>
                         </button>
                     </div>
 

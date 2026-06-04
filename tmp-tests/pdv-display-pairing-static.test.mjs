@@ -1,0 +1,44 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import assert from 'node:assert/strict';
+
+const root = resolve(import.meta.dirname, '..');
+const pagePath = resolve(root, 'pages', 'display', 'DisplayPage.tsx');
+const routesPath = resolve(root, 'routes', 'index.tsx');
+const planPath = resolve(root, 'docs', 'planos', 'android.md');
+
+assert.ok(existsSync(pagePath), 'pages/display/DisplayPage.tsx deve existir');
+
+const page = readFileSync(pagePath, 'utf8');
+const routes = readFileSync(routesPath, 'utf8');
+const plan = readFileSync(planPath, 'utf8');
+
+for (const expected of [
+  'PDV_DISPLAY_TOKEN_STORAGE_KEY',
+  'localStorage.getItem(PDV_DISPLAY_TOKEN_STORAGE_KEY)',
+  'localStorage.setItem(PDV_DISPLAY_TOKEN_STORAGE_KEY',
+  'localStorage.removeItem(PDV_DISPLAY_TOKEN_STORAGE_KEY)',
+  'pdvDisplayService.pairDisplay',
+  'pdvDisplayService.getDisplayState',
+  'setInterval',
+  'clearInterval',
+  'Token revogado',
+  'Codigo de pareamento',
+  'active_pix',
+  'qr_code_base64',
+  'qr_code',
+  'showPixAmount',
+  'showItems',
+  'showInstructions',
+  'showAdsDuringPix',
+  'idle_content',
+]) {
+  assert.ok(page.includes(expected), `DisplayPage.tsx deve conter ${expected}`);
+}
+
+assert.ok(routes.includes("const DisplayPage = lazy(() => import('../pages/display/DisplayPage'))"), 'rota deve lazy-load DisplayPage');
+assert.ok(routes.includes('path: "/display"'), 'rota /display deve existir');
+assert.ok(routes.includes('element: <DisplayPage />'), 'rota /display deve renderizar DisplayPage sem ProtectedRoute');
+assert.ok(plan.includes('### 2026-06-04 - Bloco Fase 4 Pagina Publica Android'), 'android.md deve registrar o bloco Fase 4');
+
+console.log('pdv display pairing static checks passed');

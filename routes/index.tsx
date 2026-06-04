@@ -76,6 +76,8 @@ const SystemTagsPage = lazy(() => import('../pages/admin/settings/SystemTagsPage
 const WhatsAppPage = lazy(() => import('../pages/admin/settings/WhatsAppPage'));
 const AutoResponderPage = lazy(() => import('../pages/admin/AutoResponderPage'));
 const PaymentIntegrationsPage = lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
+const DisplaysPage = lazy(() => import('../pages/admin/settings/DisplaysPage'));
+const DisplayPage = lazy(() => import('../pages/display/DisplayPage'));
 const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
 const CatalogPage = lazy(() => import('../pages/catalog/index'));
 const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
@@ -128,6 +130,7 @@ const ShopeeTemplatesPage = lazy(() => import('../pages/admin/settings/ShopeeTem
 const CheckoutPage = lazy(() => import('../pages/store/CheckoutPage'));
 const PublicProductPage = lazy(() => import('../pages/store/PublicProductPage').then(module => ({ default: module.PublicProductPage })));
 const FinancialPage = lazy(() => import('../pages/admin/financial/FinancialPage'));
+const CrediarioPage = lazy(() => import('../pages/admin/financial/CrediarioPage'));
 const AccountingPage = lazy(() => import('../pages/admin/accounting/AccountingPage'));
 const DataImportExportPage = lazy(() => import('../pages/admin/import/DataImportExportPage').then(module => ({ default: module.DataImportExportPage })));
 const MySQLExplorerPage = lazy(() => import('../pages/admin/settings/MySQLExplorerPage').then(module => ({ default: module.MySQLExplorerPage })));
@@ -218,6 +221,10 @@ export const router = createBrowserRouter([
     element: <ExtendedWarrantyPage />
   },
   {
+    path: "/display",
+    element: <DisplayPage />
+  },
+  {
     path: "/admin",
     element: (
       <ProtectedRoute requireAdmin={true}>
@@ -246,6 +253,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><FinancialPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/financial/crediario",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><CrediarioPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
@@ -528,6 +543,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><PaymentIntegrationsPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/displays",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><DisplaysPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

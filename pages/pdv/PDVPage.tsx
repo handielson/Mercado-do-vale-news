@@ -11,9 +11,13 @@ import PaymentSection from '../../components/pdv/PaymentSection';
 import DeliverySection from '../../components/pdv/DeliverySection';
 import ReceiptPreview from '../../components/pdv/ReceiptPreview';
 import InstallmentCalculator from '../../components/pdv/InstallmentCalculator';
+import { CrediarioSaveProgress, type CrediarioSaveStep } from '../../components/financial/CrediarioSaveProgress';
 import { WarrantyTermModal } from '../../components/warranty/WarrantyTermModal';
 import { printSaleReceipt } from '../../utils/printSaleReceipt';
+import { printPixQr } from '../../utils/printPixQr';
 import { createSale } from '../../services/saleService';
+import { pdvDisplayService } from '../../services/pdvDisplayService';
+import { buildPdvPixPrintData } from '../../services/pdvDisplayService';
 import { warrantyDocumentService } from '../../services/warrantyDocumentService';
 import { companySettingsService } from '../../services/companySettingsService';
 import { replaceWarrantyTags, applyWarrantyDisplayFlags, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../utils/warrantyTagReplacement';
@@ -28,8 +32,42 @@ import { categoryService } from '../../services/categories';
 import { productService } from '../../services/products';
 import { warrantyTemplateService } from '../../services/warrantyTemplates';
 import { teamService } from '../../services/team';
-import { getEffectiveRetailPrice, normalizeCentValue } from '../../utils/promoPrice';
+import { getEffectiveCustomerPrice, normalizeCentValue } from '../../utils/promoPrice';
 import { buildPdvProductName } from '../../utils/pdvProductDisplay';
+import type { PdvPixPayment } from '../../types/pdvDisplay';
+
+function extractFinalizeDebug(error: unknown, saleInput?: SaleInput) {
+    const debug = error && typeof error === 'object'
+        ? (error as any).debug || (error as any).response?.debug || (error as any).response?.data?.debug || (error as any).data?.debug
+        : null;
+
+    return {
+        message: error instanceof Error ? error.message : String(error || 'Erro desconhecido'),
+        name: error instanceof Error ? error.name : typeof error,
+        debug,
+        sale: saleInput ? {
+            customer_id: saleInput.customer_id,
+            payment_methods: saleInput.payment_methods.map((payment) => ({
+                method: payment.method,
+                amount: payment.amount,
+                total_with_fee: payment.total_with_fee,
+                due_date: (payment as any).due_date,
+            })),
+            item_count: saleInput.items.length,
+            items: saleInput.items.map((item) => ({
+                product_id: item.product_id,
+                product_name: item.product_name,
+                quantity: item.quantity,
+                unit_price: item.unit_price,
+                total: item.total,
+                serialized_unit_id: (item as any).serialized_unit?.unitId || null,
+            })),
+            promotional_discount: saleInput.promotional_discount,
+            delivery_total: saleInput.delivery_total,
+        } : undefined,
+        timestamp: new Date().toISOString(),
+    };
+}
 
 interface Customer {
     id: string;
@@ -37,6 +75,32 @@ interface Customer {
     cpf_cnpj?: string;
     email?: string;
     phone?: string;
+    customer_type?: 'wholesale' | 'resale' | 'retail' | 'ADMIN';
+    admin_preview_type?: 'retail' | 'resale' | 'wholesale';
+}
+
+const WARRANTY_TERM_CATEGORY_KEYS = new Set([
+    'smartphones-e-tablet',
+    'smartphones-e-tablets',
+    'smartphone-e-tablet',
+    'smartphone-e-tablets',
+    'celular',
+    'celulares',
+]);
+
+function normalizeWarrantyCategoryKey(value: unknown): string {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+        .replace(/&/g, ' e ')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+function isWarrantyTermCategoryValue(value: unknown): boolean {
+    return WARRANTY_TERM_CATEGORY_KEYS.has(normalizeWarrantyCategoryKey(value));
 }
 
 export default function PDVPage() {
@@ -59,6 +123,12 @@ export default function PDVPage() {
 
     // Estado dos pagamentos
     const [payments, setPayments] = useState<PaymentMethod[]>([]);
+    const [isFinalizing, setIsFinalizing] = useState(false);
+    const [finalizeSteps, setFinalizeSteps] = useState<CrediarioSaveStep[]>([]);
+    const [pdvPixPayment, setPdvPixPayment] = useState<PdvPixPayment | null>(null);
+    const [pdvPixLoading, setPdvPixLoading] = useState(false);
+    const [pdvPixCashierKey, setPdvPixCashierKey] = useState(() => localStorage.getItem('pdv_pix_cashier_key') || 'caixa-01');
+    const [pdvPixDisplayId, setPdvPixDisplayId] = useState(() => localStorage.getItem('pdv_pix_display_id') || '');
 
     // Estado da entrega
     const [deliveryType, setDeliveryType] = useState<DeliveryType | undefined>();
@@ -135,12 +205,14 @@ export default function PDVPage() {
     const { total: itemsTotal } = calculateSaleTotals(cartItems);
     const giftDiscount = cartItems.reduce((sum, item) => item.is_gift ? sum + (item.unit_price * item.quantity) : sum, 0);
     const totalFees = payments.reduce((sum, p) => sum + (p.fee_amount || 0), 0);
+    const hasAPrazoPayment = payments.some(payment => payment.method === 'a_prazo');
     const totalBeforeFinalAdjustment = itemsTotal - giftDiscount - promotionalDiscount + deliveryCostCustomer + totalFees;
     const maxFinalAdjustmentDiscount = Math.max(0, totalBeforeFinalAdjustment);
     const appliedFinalAdjustmentDiscount = Math.min(finalAdjustmentDiscount, maxFinalAdjustmentDiscount);
     const total = Math.max(0, totalBeforeFinalAdjustment - appliedFinalAdjustmentDiscount);
     const totalPaid = calculateTotalPaid(payments);
     const remainingBalance = total - totalPaid;
+    const pixPaymentPending = pdvPixPayment && ['creating', 'pending'].includes(pdvPixPayment.status);
 
     // Total do carrinho em R$ para o cupom (sem taxas, sem entrega)
     const cartTotalForCoupon = (itemsTotal - giftDiscount) / 100;
@@ -204,13 +276,13 @@ export default function PDVPage() {
         }
 
         // Novo item (produto normal ou unidade serializada individual)
-        const unitPrice = getEffectiveRetailPrice(product);
+        const unitPrice = getEffectiveCustomerPrice(product, selectedCustomer);
         const unitCost = normalizeCentValue(product.price_cost);
 
         const newItem: SaleItem = {
             id: crypto.randomUUID(),
             product_id: product.id,
-            product_name: buildPdvProductName(product.name, (product as any).specs),
+            product_name: buildPdvProductName(product.name, (product as any).specs, unitData),
             product_sku: product.sku,
             quantity: isSerialized ? 1 : quantity, // serializado sempre = 1
             unit_price: unitPrice,
@@ -224,6 +296,9 @@ export default function PDVPage() {
             product_specs: (product as any).specs || {},
             product_brand: (product as any).brand || '',
             product_model: product.model || product.name || '',
+            product_category_id: (product as any).category_id || '',
+            product_category_slug: (product as any).category_slug || '',
+            product_category_name: (product as any).category_name || (product as any).category || '',
             // Dados da unidade serializada (IMEI/Serial)
             ...(unitData && { serialized_unit: unitData }),
         };
@@ -251,6 +326,44 @@ export default function PDVPage() {
     };
 
     // Atualizar preço unitário de um item
+    const syncAPrazoPaymentAmount = (nextItems: SaleItem[]) => {
+        if (!payments.some(payment => payment.method === 'a_prazo')) return;
+
+        const nextTotals = calculateSaleTotals(nextItems);
+        const nextGiftDiscount = nextItems.reduce((sum, item) => item.is_gift ? sum + (item.unit_price * item.quantity) : sum, 0);
+        const currentTotalFees = payments.reduce((sum, payment) => sum + (payment.fee_amount || 0), 0);
+        const nextTotalBeforeFinalAdjustment = nextTotals.total - nextGiftDiscount - promotionalDiscount + deliveryCostCustomer + currentTotalFees;
+        const nextFinalAdjustmentDiscount = Math.min(finalAdjustmentDiscount, Math.max(0, nextTotalBeforeFinalAdjustment));
+        const nextSaleTotal = Math.max(0, nextTotalBeforeFinalAdjustment - nextFinalAdjustmentDiscount);
+
+        setPayments(currentPayments => {
+            let aPrazoIndex = -1;
+            for (let index = currentPayments.length - 1; index >= 0; index -= 1) {
+                if (currentPayments[index].method === 'a_prazo') {
+                    aPrazoIndex = index;
+                    break;
+                }
+            }
+
+            if (aPrazoIndex < 0) return currentPayments;
+
+            const paidWithoutAPrazo = currentPayments.reduce((sum, payment, index) => {
+                if (index === aPrazoIndex) return sum;
+                return sum + (payment.total_with_fee ?? payment.amount ?? 0);
+            }, 0);
+            const nextAPrazoAmount = Math.max(0, nextSaleTotal - paidWithoutAPrazo);
+
+            return currentPayments.map((payment, index) => {
+                if (index !== aPrazoIndex) return payment;
+                return {
+                    ...payment,
+                    amount: nextAPrazoAmount,
+                    total_with_fee: nextAPrazoAmount
+                };
+            });
+        });
+    };
+
     const handleUpdatePrice = (itemId: string, newPrice: number) => {
         const newItems = cartItems.map(item => {
             if (item.id === itemId && !item.is_gift) {
@@ -275,6 +388,11 @@ export default function PDVPage() {
             return item;
         });
         setCartItems(newItems);
+        syncAPrazoPaymentAmount(newItems);
+    };
+
+    const handleUpdateItemPrice = (itemId: string, newPrice: number) => {
+        handleUpdatePrice(itemId, newPrice);
     };
 
     // Remover item do carrinho
@@ -305,6 +423,7 @@ export default function PDVPage() {
         if (window.confirm('Deseja realmente limpar o carrinho?')) {
             setCartItems([]);
             setPayments([]);
+            setPdvPixPayment(null);
             setFinalAdjustmentDiscount(0);
             toast.info('Carrinho limpo');
         }
@@ -392,8 +511,158 @@ export default function PDVPage() {
         toast.success('Ajuste final aplicado e parcelas recalculadas');
     };
 
+    const rememberPdvPixDisplayConfig = (displayId = pdvPixDisplayId, cashierKey = pdvPixCashierKey) => {
+        localStorage.setItem('pdv_pix_display_id', displayId.trim());
+        localStorage.setItem('pdv_pix_cashier_key', cashierKey.trim() || 'caixa-01');
+    };
+
+    const addApprovedPdvPixPayment = (payment: PdvPixPayment) => {
+        setPayments(currentPayments => {
+            if (currentPayments.some(item => item.pix_payment_id === payment.id)) return currentPayments;
+            return [
+                ...currentPayments,
+                {
+                    method: 'pix',
+                    amount: payment.amount,
+                    total_with_fee: payment.amount,
+                    pix_payment_id: payment.id,
+                    mercado_pago_payment_id: payment.mercado_pago_payment_id || undefined,
+                    pix_status: 'approved'
+                }
+            ];
+        });
+    };
+
+    const handleShowPdvPixOnDisplay = async () => {
+        if (!pdvPixPayment) {
+            toast.error('Gere um Pix antes de exibir no display');
+            return;
+        }
+        const display_id = pdvPixDisplayId.trim();
+        if (!display_id) {
+            toast.error('Informe o Display ID vinculado ao caixa');
+            return;
+        }
+
+        try {
+            setPdvPixLoading(true);
+            rememberPdvPixDisplayConfig();
+            await pdvDisplayService.setActivePix(display_id, pdvPixPayment.id);
+            toast.success('Pix enviado para o display');
+        } catch (error: any) {
+            toast.error(error?.message || 'Erro ao enviar Pix para o display');
+        } finally {
+            setPdvPixLoading(false);
+        }
+    };
+
+    const handleCreatePdvPixPayment = async (amount: number) => {
+        try {
+            setPdvPixLoading(true);
+            const display_id = pdvPixDisplayId.trim();
+            const cashier_key = pdvPixCashierKey.trim() || 'caixa-01';
+            rememberPdvPixDisplayConfig(display_id, cashier_key);
+
+            const payment = await pdvDisplayService.createPixPayment({
+                amount,
+                display_id: display_id || null,
+                cashier_key,
+                local_reference: crypto.randomUUID(),
+                description: 'Venda PDV Mercado do Vale',
+                payer_email: selectedCustomer?.email || undefined
+            });
+
+            setPdvPixPayment(payment);
+
+            if (display_id) {
+                await pdvDisplayService.setActivePix(display_id, payment.id);
+            }
+
+            if (payment.status === 'approved') {
+                addApprovedPdvPixPayment(payment);
+                toast.success('Pix aprovado e adicionado ao pagamento');
+            } else {
+                toast.success('Pix gerado. Aguarde o pagamento do cliente.');
+            }
+        } catch (error: any) {
+            toast.error(error?.message || 'Erro ao gerar Pix Mercado Pago');
+        } finally {
+            setPdvPixLoading(false);
+        }
+    };
+
+    const handleRefreshPdvPixPayment = async () => {
+        if (!pdvPixPayment) return;
+
+        try {
+            setPdvPixLoading(true);
+            const payment = await pdvDisplayService.refreshPixPaymentStatus(pdvPixPayment.id);
+            setPdvPixPayment(payment);
+
+            if (payment.status === 'approved') {
+                addApprovedPdvPixPayment(payment);
+                if (pdvPixDisplayId.trim()) {
+                    await pdvDisplayService.clearActivePix(pdvPixDisplayId.trim());
+                }
+                toast.success('Pix aprovado e adicionado ao pagamento');
+                return;
+            }
+
+            if (payment.status === 'rejected' || payment.status === 'expired' || payment.status === 'error') {
+                toast.error('Pix nao aprovado. Gere uma nova cobranca se necessario.');
+                return;
+            }
+
+            toast.info('Pix ainda pendente');
+        } catch (error: any) {
+            toast.error(error?.message || 'Erro ao atualizar pagamento Pix');
+        } finally {
+            setPdvPixLoading(false);
+        }
+    };
+
+    const handleCancelPdvPixPayment = async () => {
+        if (!pdvPixPayment) return;
+        if (pdvPixPayment.status === 'approved') {
+            toast.error('Pix aprovado nao pode ser cancelado localmente');
+            return;
+        }
+
+        try {
+            setPdvPixLoading(true);
+            if (pdvPixDisplayId.trim()) {
+                await pdvDisplayService.clearActivePix(pdvPixDisplayId.trim());
+            }
+            setPdvPixPayment(null);
+            toast.info('Pix cancelado no PDV');
+        } catch (error: any) {
+            toast.error(error?.message || 'Erro ao cancelar Pix no display');
+        } finally {
+            setPdvPixLoading(false);
+        }
+    };
+
+    const handlePrintPdvPixQr = () => {
+        if (!pdvPixPayment) {
+            toast.error('Gere um Pix antes de imprimir o QR');
+            return;
+        }
+
+        printPixQr(buildPdvPixPrintData({
+            payment: pdvPixPayment,
+            storeName: 'Mercado do Vale',
+            items: cartItems,
+            instructions: 'Pague com Pix e aguarde a confirmacao no caixa.'
+        }));
+    };
+
     // Finalizar venda
     const handleFinalizeSale = async () => {
+        if (pixPaymentPending) {
+            toast.error('Aguarde o Pix ser aprovado antes de finalizar a venda');
+            return;
+        }
+
         if (!selectedCustomer) {
             toast.error('Selecione um cliente');
             return;
@@ -403,6 +672,17 @@ export default function PDVPage() {
             toast.error('Adicione produtos ao carrinho');
             return;
         }
+
+        setIsFinalizing(true);
+        setFinalizeSteps([
+            { id: 'validate', label: 'Validando venda', status: 'saving' },
+            { id: 'sale', label: 'Registrando venda na VPS', status: 'idle' },
+            { id: 'debt', label: 'Criando debito do cliente', status: 'idle' },
+            { id: 'receipt', label: 'Preparando comprovante', status: 'idle' },
+        ]);
+        const updateFinalizeStep = (id: string, status: CrediarioSaveStep['status'], detail?: string, debug?: unknown) => {
+            setFinalizeSteps((current) => current.map((step) => step.id === id ? { ...step, status, detail, debug } : step));
+        };
 
         const deliveryTotal = deliveryCostStore + deliveryCostCustomer;
 
@@ -422,7 +702,12 @@ export default function PDVPage() {
         };
 
         try {
+            updateFinalizeStep('validate', 'done');
+            updateFinalizeStep('sale', 'saving');
+            if (hasAPrazoPayment) updateFinalizeStep('debt', 'saving');
             const sale = await createSale(saleInput);
+            updateFinalizeStep('sale', 'done');
+            if (hasAPrazoPayment) updateFinalizeStep('debt', 'done');
             // Registrar uso do cupom se houver
             if (appliedCoupon) {
                 await applyCoupon(appliedCoupon.id);
@@ -515,12 +800,15 @@ export default function PDVPage() {
             });
 
             // Gerar termo de garantia
+            updateFinalizeStep('receipt', 'saving');
             await generateWarrantyTerm(sale, selectedCustomer, cartItems);
+            updateFinalizeStep('receipt', 'done');
 
             // Limpar todo o PDV
             setCartItems([]);
             setSelectedCustomer(undefined);
             setPayments([]);
+            setPdvPixPayment(null);
             setDeliveryType(undefined);
             setDeliveryPersonId(undefined);
             setDeliveryCostStore(0);
@@ -531,7 +819,12 @@ export default function PDVPage() {
             handleClearCoupon();
         } catch (error) {
             console.error('Erro ao finalizar venda:', error);
+            const debug = extractFinalizeDebug(error, saleInput);
+            const detail = error instanceof Error ? error.message : 'Erro desconhecido ao finalizar venda';
+            setFinalizeSteps((current) => current.map((step) => step.status === 'saving' ? { ...step, status: 'error', detail, debug } : step));
             toast.error('Erro ao finalizar venda. Verifique os dados e tente novamente.');
+        } finally {
+            setIsFinalizing(false);
         }
     };
 
@@ -600,6 +893,48 @@ export default function PDVPage() {
     };
 
     // Gera N termos (1 por aparelho serializado). Sem serializados → não abre modal.
+    const loadWarrantyEligibleSerializedItems = async (items: SaleItem[]): Promise<SaleItem[]> => {
+        const eligibleItems: SaleItem[] = [];
+
+        for (const item of items) {
+            if (!(item as any).serialized_unit?.unitId) continue;
+
+            if (
+                isWarrantyTermCategoryValue((item as any).product_category_slug) ||
+                isWarrantyTermCategoryValue((item as any).product_category_name)
+            ) {
+                eligibleItems.push(item);
+                continue;
+            }
+
+            try {
+                const product = item.product_id ? await productService.getById(item.product_id) : null;
+                if (!product) continue;
+
+                if (
+                    isWarrantyTermCategoryValue((product as any).category_slug) ||
+                    isWarrantyTermCategoryValue((product as any).category_name) ||
+                    isWarrantyTermCategoryValue((product as any).category)
+                ) {
+                    eligibleItems.push(item);
+                    continue;
+                }
+
+                const categoryId = (product as any).category_id || (item as any).product_category_id;
+                if (categoryId) {
+                    const category = await categoryService.getById(categoryId);
+                    if (isWarrantyTermCategoryValue(category?.slug) || isWarrantyTermCategoryValue(category?.name)) {
+                        eligibleItems.push(item);
+                    }
+                }
+            } catch (error) {
+                console.warn('[warranty] Falha ao validar categoria para termo:', error);
+            }
+        }
+
+        return eligibleItems;
+    };
+
     const generateWarrantyTerm = async (sale: any, customer: Customer, items: SaleItem[]) => {
         try {
             const settings = await companySettingsService.get();
@@ -608,7 +943,7 @@ export default function PDVPage() {
                 return;
             }
 
-            const serializedItems = items.filter(i => (i as any).serialized_unit?.unitId);
+            const serializedItems = await loadWarrantyEligibleSerializedItems(items);
             if (serializedItems.length === 0) {
                 // Sem aparelho serializado — não emite termo (acessórios não geram garantia)
                 return;
@@ -655,7 +990,7 @@ export default function PDVPage() {
         const settings = await companySettingsService.get();
         if (!settings || !settings.warranty_template) return;
 
-        const serializedItems = (lastSaleData.items || []).filter((i: any) => i.serialized_unit?.unitId);
+        const serializedItems = await loadWarrantyEligibleSerializedItems(lastSaleData.items || []);
         if (serializedItems.length === 0) return;
 
         const brands = await brandService.list();
@@ -780,15 +1115,20 @@ export default function PDVPage() {
                             onSelectCustomer={setSelectedCustomer}
                         />
 
-                        <ProductSearchSection onAddToCart={handleAddToCart} />
+                        <ProductSearchSection
+                            customer={selectedCustomer}
+                            onAddToCart={handleAddToCart}
+                        />
 
                         <CartItemsSection
                             items={cartItems}
                             warrantyOptions={warrantyOptions}
+                            allowPriceEdit={hasAPrazoPayment}
                             onUpdateQuantity={handleUpdateQuantity}
                             onRemoveItem={handleRemoveItem}
                             onUpdateWarranty={handleUpdateWarranty}
                             onUpdatePrice={handleUpdatePrice}
+                            onUpdateItemPrice={handleUpdateItemPrice}
                         />
 
                         <DeliverySection
@@ -854,6 +1194,7 @@ export default function PDVPage() {
                             <p className="text-xs text-purple-600/80">Recompensa o divulgador que indicou esta venda.</p>
                         </div>
 
+
                         <PaymentSection
                             total={total}
                             payments={payments}
@@ -865,13 +1206,36 @@ export default function PDVPage() {
                             onPromotionalDiscountChange={setPromotionalDiscount}
                             finalAdjustmentDiscount={appliedFinalAdjustmentDiscount}
                             maxFinalAdjustmentDiscount={maxFinalAdjustmentDiscount}
+                            selectedCustomer={selectedCustomer}
+                            onUpdatePayment={(index, updated) => {
+                                const next = [...payments];
+                                next[index] = updated;
+                                setPayments(next);
+                            }}
+                            pdvPixPayment={pdvPixPayment}
+                            pdvPixLoading={pdvPixLoading}
+                            pdvPixDisplayId={pdvPixDisplayId}
+                            pdvPixCashierKey={pdvPixCashierKey}
+                            onPdvPixDisplayIdChange={(displayId) => {
+                                setPdvPixDisplayId(displayId);
+                                localStorage.setItem('pdv_pix_display_id', displayId.trim());
+                            }}
+                            onPdvPixCashierKeyChange={(cashierKey) => {
+                                setPdvPixCashierKey(cashierKey);
+                                localStorage.setItem('pdv_pix_cashier_key', cashierKey.trim() || 'caixa-01');
+                            }}
+                            onCreatePdvPixPayment={handleCreatePdvPixPayment}
+                            onRefreshPdvPixPayment={handleRefreshPdvPixPayment}
+                            onShowPdvPixOnDisplay={handleShowPdvPixOnDisplay}
+                            onPrintPdvPixQr={handlePrintPdvPixQr}
+                            onCancelPdvPixPayment={handleCancelPdvPixPayment}
                             onFinalAdjustmentDiscountChange={setFinalAdjustmentDiscount}
                             onApplyFinalPaymentAmount={handleApplyFinalPaymentAmount}
                         />
                     </div>
 
-                    {/* Coluna Direita: Preview do Comprovante (50%) */}
                     <div>
+                        <CrediarioSaveProgress steps={finalizeSteps} />
                         <ReceiptPreview
                             customer={selectedCustomer}
                             items={cartItems}
@@ -881,7 +1245,9 @@ export default function PDVPage() {
                             payments={payments}
                             promotionalDiscount={promotionalDiscount}
                             finalAdjustmentDiscount={appliedFinalAdjustmentDiscount}
+                            hasPendingPixPayment={Boolean(pixPaymentPending)}
                             onFinalizeSale={handleFinalizeSale}
+                            isFinalizing={isFinalizing}
                         />
                     </div>
                 </div>
