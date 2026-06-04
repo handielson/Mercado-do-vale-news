@@ -175,8 +175,8 @@ Get-Content publicar.md
 - [ ] Verificar PDV em navegador.
 - [x] Verificar display Android em viewport tablet/TV.
 - [ ] Verificar impressao do QR.
-- [ ] Se publicar, seguir `publicar.md`.
-- [ ] Documentar no `Historico De Implementacao` comandos, resultados, release e URLs verificadas.
+- [x] Se publicar, seguir `publicar.md`.
+- [x] Documentar no `Historico De Implementacao` comandos, resultados, release e URLs verificadas.
 
 ---
 
@@ -193,7 +193,13 @@ Get-Content publicar.md
 - Checagem extra do bundle executada e aprovada: `Select-String -Path "dist\assets\*.js" -Pattern "services/supabase|@supabase/supabase-js|VITE_SUPABASE|Missing Supabase environment variables"` nao retornou resultados.
 - Verificacao local da rota publica do display: dev server temporario na porta `5181` respondeu `HTTP 200` para `http://127.0.0.1:5181/display`.
 - Limitacao: a inspecao visual local via browser interno nao concluiu porque o runtime do browser falhou no sandbox e o perfil do Chrome DevTools estava ocupado; a validacao visual final deve ocorrer no dominio publicado/VPS.
-- Pendencias deste bloco: commit/push do escopo Android/Display/Pix, publicacao do frontend na VPS, publicacao/restart da API na VPS e verificacao das URLs finais.
+- Publicacao Git: commits enviados para `origin/main` ate `3ca589d` (`fix(pdv): include customer price helper`), incluindo o MVP Android/Display/Pix e correcoes de build limpo.
+- Ajustes feitos durante publicacao limpa: removida rota/menu de crediario nao publicado que havia vazado para `routes/index.tsx`/`AdminLayout.tsx`; substituido import externo de progresso de finalizacao no PDV por componente local; incluido helper `getEffectiveCustomerPrice()` em `utils/promoPrice.ts` exigido pelo PDV publicado.
+- Publicacao frontend VPS: `npm.cmd ci` no worktree limpo exigiu execucao fora do sandbox por `EPERM` no cache do npm; `npm.cmd run deploy:vps-site` exigiu execucao fora do sandbox por `connect EACCES` na porta SSH. Release ativa publicada: `/var/www/mdv-site/releases/20260604-152419`.
+- Publicacao API VPS: `node deploy-vps-server-only.cjs` executado a partir do workspace principal porque o worktree limpo nao carregava os envs SSH do workspace; a primeira tentativa no sandbox falhou por `connect EACCES`, a repeticao fora do sandbox publicou `/var/www/mdv-api` e reiniciou `mdv-api` no PM2 como `online`.
+- Verificacoes publicas executadas: `https://mercadodovale.com.br/` retornou `200` com redirect efetivo para `https://www.mercadodovale.com.br/`; `https://www.mercadodovale.com.br/display` retornou `200`; `https://api.xiaomipetrolina.com.br/health` retornou `200` com `{"status":"ok","db":"mysql"}`; `https://api.xiaomipetrolina.com.br/pdv/display-state` sem token retornou `401 Unauthorized`, comportamento esperado para display nao pareado.
+- Observacao: `https://www.mercadodovale.com.br/api/health` retornou `404` porque a rota de health operacional esta no host da API (`https://api.xiaomipetrolina.com.br/health`), nao sob `/api/health` no dominio principal.
+- Pendencias deste bloco: validar visualmente em Android/tablet/TV real, testar pareamento com codigo gerado no admin, gerar Pix real/sandbox Mercado Pago no PDV e testar impressao termica fisica do QR.
 
 ### 2026-06-04 - Bloco Fase 1 Backend VPS
 
