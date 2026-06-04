@@ -9,7 +9,7 @@ function assert(condition, message) {
 
 for (const fileName of ['vps_server.cjs', 'vps_server.js']) {
   const source = fs.readFileSync(path.join(root, fileName), 'utf8');
-  const detailBody = source.match(/async function formatAutoresponderProductDetailReply[\s\S]*?return lines\.join\('\\n'\);\n}/)?.[0] || '';
+  const detailBody = source.match(/async function formatAutoresponderProductDetailReply[\s\S]*?return lines\.join\('\\n'\);\r?\n}/)?.[0] || '';
 
   assert(detailBody, `${fileName} must expose product detail formatter`);
   assert(!detailBody.includes('formatAutoresponderProductDescriptionLine(product)'), `${fileName} must not show description in product details`);

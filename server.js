@@ -7277,7 +7277,15 @@ async function buildAutoresponderPurchaseActionPrompt(product, selectedOption) {
     colors: getAutoresponderAvailableColors([selectedProduct]),
   }, Number(selectedOption?.option_number || 1));
 
-  return `${card}\n\nResponda:\n*1* Para comprar\n*2* Para detalhes`;
+  const productUrl = getAutoresponderProductUrl(selectedProduct);
+  const detailsBlock = [
+    'Para ver a configuracao, fotos e video dele, clica aqui',
+    productUrl,
+    '',
+    'Para comprar digite *1* ou responda com *comprar*',
+  ].join('\n');
+
+  return `${card}\n\n${detailsBlock}`;
 }
 
 function buildAutoresponderVariationPrompt(variations) {
@@ -12159,8 +12167,11 @@ fastify.route({
 
         if (isAutoresponderPurchaseDetailsRequest(message)) {
           const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
-          const detailText = await formatAutoresponderProductDetailReply(product, settings);
-          const replyText = formatAutoresponderReply(`${detailText}\n\nSe quiser comprar, responda "comprar".`, settings, false);
+          const replyText = formatAutoresponderReply(
+            await buildAutoresponderPurchaseActionPrompt(product, purchaseFlow.selected_product),
+            settings,
+            false
+          );
 
           await logAutoresponderReply({
             sender: senderKey,
