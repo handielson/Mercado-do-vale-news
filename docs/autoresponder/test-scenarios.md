@@ -21,17 +21,25 @@ Cada publicacao que altera bot deve rodar estes cenarios em `/autoresponder/test
    - Esperado: consulta de endereco, sem mensagem de instabilidade.
 
 5. Fluxo de compra com entrega
-   - Mensagens: `["redmi note 15", "1", "comprar", "1", "finalizar", "entrega", "56320690"]`
+   - Mensagens: `["redmi note 15", "1", "comprar", "1", "1", "finalizar", "entrega", "56320690"]`
    - Esperado: CEP consultado dentro da compra e pedido de numero/complemento.
 
-6. Fallback fora do fluxo
+6. Troca de CEP dentro da compra
+   - Mensagens: `["redmi note 15", "1", "comprar", "1", "1", "finalizar", "entrega", "56320690", "56330000"]`
+   - Esperado: novo CEP consultado imediatamente, mantendo itens do carrinho e pedido de numero/complemento.
+
+7. Fluxo de compra com retirada e pagamento
+   - Mensagens: `["redmi note 15", "1", "comprar", "1", "1", "finalizar", "retirada", "pix"]`
+   - Esperado: retirada confirmada, pagamento Pix salvo e pedido de dados de cadastro, sem avancar para CPF/CNPJ.
+
+8. Fallback fora do fluxo
    - Mensagens: `["xpto mensagem solta"]`
    - Esperado: fallback fora de fluxo com opcoes de caminho ou curadoria.
 
-7. Fallback contextual de CEP
+9. Fallback contextual de CEP
    - Mensagens: `["faz entrega?", "nao sei"]`
    - Esperado: pedir apenas os 8 numeros do CEP.
 
-8. Pedido humano
+10. Pedido humano
    - Mensagens: `["falar com atendente"]`
    - Esperado: resposta de atendimento humano e pausa.
