@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const serverFiles = ['vps_server.js', 'vps_server.cjs'];
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -15,7 +15,8 @@ for (const fileName of serverFiles) {
   [
     'async function findAutoresponderExistingCustomer',
     'buildAutoresponderCustomerLookupCandidates',
-    '/rest/v1/customers?select=id,name,cpf_cnpj,email,phone,address,is_active',
+    "'select=id,name,cpf_cnpj,email,phone,address,is_active'",
+    "vpsDbSelect('customers', query)",
     'existing_customer',
     "intent: 'purchase_existing_customer_found'",
     "intent: 'purchase_existing_customer_not_found'",
@@ -54,7 +55,7 @@ for (const fileName of serverFiles) {
   );
 }
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 assert(
   doc.includes('- [x] Consultar cliente existente pelo telefone do WhatsApp, CPF/CNPJ ou e-mail antes de pedir dados novamente'),
   'Bot_Whatsapp.md must mark existing customer lookup done'

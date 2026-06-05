@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const componentRoot = path.join(root, 'components', 'autoresponder');
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -27,7 +27,7 @@ for (const [fileName, tokens] of Object.entries(expectedComponents)) {
   }
 }
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 for (const fileName of Object.keys(expectedComponents)) {
   assert(
     doc.includes(`- [x] \`components/autoresponder/${fileName}\``),

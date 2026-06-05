@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const serverFiles = ['vps_server.js', 'vps_server.cjs'];
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -16,8 +16,9 @@ for (const fileName of serverFiles) {
     'async function getAutoresponderCompanyId',
     'function buildAutoresponderCustomerPayload',
     'async function createOrUpdateAutoresponderCustomer',
-    '/rest/v1/companies?select=id',
-    '/rest/v1/customers',
+    "vpsDbSelect('companies', 'select=id&slug=eq.mercado-do-vale&limit=1')",
+    "vpsDbInsert('customers', insertPayload)",
+    "vpsDbPatch('customers'",
     "intent: 'purchase_customer_upserted'",
     'customer_record',
     "status: 'customer_record_ready'",
@@ -34,7 +35,7 @@ for (const fileName of serverFiles) {
   );
 }
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 assert(
   doc.includes('- [x] Se cliente ja existir, confirmar dados cadastrados antes de atualizar'),
   'Bot_Whatsapp.md must mark existing customer confirmation before update done'

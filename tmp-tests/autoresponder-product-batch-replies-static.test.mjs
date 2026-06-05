@@ -11,8 +11,8 @@ assert.match(
 
 assert.match(
   source,
-  /const AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS = 3;/,
-  'product replies must include a small delay between Pro messages',
+  /const AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS = \[4, 9, 16, 24, 33, 43, 54, 66, 79, 93\];/,
+  'product replies must include varied human-paced Pro delays',
 );
 
 assert.match(
@@ -48,8 +48,8 @@ assert.match(
 
 assert.match(
   source,
-  /delaySeconds: index \* AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS/,
-  'each product reply after the first must carry incremental delay metadata',
+  /delaySeconds: AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS\[index\]/,
+  'each Pro reply must carry varied delay metadata',
 );
 
 assert.match(

@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc, resolveBotWhatsappDocPath } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
+const botPath = resolveBotWhatsappDocPath(root);
 const installerPath = path.join(root, 'tools', 'install-autoresponder-archive-vps-dry-run.cjs');
 const docPath = path.join(root, 'docs', 'operacional', '2026-05-05-autoresponder-archive-vps-install-dry-run.md');
-const botPath = path.join(root, 'Bot_Whatsapp.md');
 
 for (const filePath of [installerPath, docPath, botPath]) {
   assert.ok(fs.existsSync(filePath), `${path.relative(root, filePath)} should exist`);
@@ -34,7 +35,7 @@ for (const token of [
 assert.ok(!installer.includes("pm2 restart"), 'installer must not restart PM2');
 assert.ok(!installer.includes("AUTORESPONDER_ARCHIVE_DELETE_ENABLED=1"), 'installer must not enable delete');
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 for (const token of [
   "# Instalação dry-run na VPS — Archive AutoResponder",
   "VPS_ROOT_PASSWORD",
@@ -49,7 +50,7 @@ for (const token of [
   assert.ok(doc.includes(token), `doc should include ${token}`);
 }
 
-const bot = fs.readFileSync(botPath, 'utf8');
+const bot = readBotWhatsappDoc(root);
 assert.ok(bot.includes('Fase 3Z local'), 'Bot_Whatsapp.md should document Fase 3Z');
 assert.ok(bot.includes('install-autoresponder-archive-vps-dry-run.cjs'), 'Bot_Whatsapp.md should mention installer');
 

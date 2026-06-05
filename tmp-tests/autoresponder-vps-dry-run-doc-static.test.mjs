@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const docPath = path.join(root, 'docs', 'operacional', '2026-05-05-autoresponder-archive-vps-dry-run.md');
-const botDocPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -11,8 +11,8 @@ function assert(condition, message) {
 
 assert(fs.existsSync(docPath), 'VPS dry-run validation document must exist');
 
-const doc = fs.readFileSync(docPath, 'utf8');
-const botDoc = fs.readFileSync(botDocPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
+const botDoc = readBotWhatsappDoc(root);
 
 [
   '# Validação VPS — Archive AutoResponder em dry-run',

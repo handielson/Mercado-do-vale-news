@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 for (const file of ['vps_server.cjs', 'vps_server.js']) {
   const source = readFileSync(file, 'utf8');
@@ -46,7 +47,7 @@ assert.match(page, /settingsForm\.openai_admin_api_key/, 'admin page must bind O
 assert.match(page, /Chave Admin OpenAI/, 'admin page must label the OpenAI admin key separately');
 assert.match(page, /stats\?\.summary\?\.ai_finance/, 'admin page must read AI finance summary from stats');
 
-const checklist = readFileSync('Bot_Whatsapp.md', 'utf8');
+const checklist = readBotWhatsappDoc();
 assert.match(checklist, /- \[x\] Criar controle financeiro estimado de tokens\/créditos da IA/, 'checklist must mark AI finance control as completed');
 
 console.log('autoresponder AI finance static checks passed');

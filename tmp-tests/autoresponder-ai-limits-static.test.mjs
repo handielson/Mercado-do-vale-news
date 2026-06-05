@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 for (const file of ['vps_server.cjs', 'vps_server.js']) {
   const source = readFileSync(file, 'utf8');
@@ -21,7 +22,7 @@ const page = readFileSync('pages/admin/AutoResponderPage.tsx', 'utf8');
 assert.match(page, /settingsForm\.ai_daily_limit/, 'admin page must bind daily AI limit');
 assert.match(page, /settingsForm\.ai_monthly_limit/, 'admin page must bind monthly AI limit');
 
-const checklist = readFileSync('Bot_Whatsapp.md', 'utf8');
+const checklist = readBotWhatsappDoc();
 assert.match(checklist, /- \[x\] Criar limite diário\/mensal opcional para respostas com IA/, 'checklist must mark optional AI limits as completed');
 
 console.log('autoresponder AI limits static checks passed');

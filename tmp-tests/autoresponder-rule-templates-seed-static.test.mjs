@@ -1,18 +1,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const serverPaths = [
   path.join(root, 'vps_server.cjs'),
   path.join(root, 'vps_server.js'),
 ];
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 
 const requiredTemplateNames = [
   'Saudacao manha',

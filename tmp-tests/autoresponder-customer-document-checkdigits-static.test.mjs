@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const serverFiles = ['vps_server.js', 'vps_server.cjs'];
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -38,7 +38,7 @@ for (const fileName of serverFiles) {
   );
 }
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 assert(
   doc.includes('- [x] CPF/CNPJ remove pontuacao e valida digitos verificadores antes de salvar'),
   'Bot_Whatsapp.md must mark CPF/CNPJ check digit validation done'

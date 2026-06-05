@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const serverPaths = [
   path.join(root, 'vps_server.cjs'),
   path.join(root, 'vps_server.js'),
 ];
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -29,7 +29,7 @@ for (const serverPath of serverPaths) {
   assert(source.includes('detectedIntent.humanRequest'), `${filename} webhook must use detected humanRequest`);
 }
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 assert(doc.includes('- [x] Implementar `detectIntent(message)` completo'), 'Bot_Whatsapp.md must mark detectIntent done');
 
 console.log('autoresponder detect intent static checks passed');

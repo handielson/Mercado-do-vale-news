@@ -1,16 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const scriptPath = path.join(root, 'cron', 'archive-autoresponder-logs.cjs');
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 const script = fs.readFileSync(scriptPath, 'utf8');
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 
 [
   'AUTORESPONDER_ARCHIVE_BATCH_SIZE',

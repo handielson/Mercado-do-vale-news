@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 for (const file of ['vps_server.cjs', 'vps_server.js']) {
   const source = readFileSync(file, 'utf8');
@@ -14,7 +15,7 @@ for (const file of ['vps_server.cjs', 'vps_server.js']) {
   assert.match(source, /aiMeta: greetingNeedsPrompt\.aiMeta/, `${file} must log greeting AI metadata in the webhook flow`);
 }
 
-const checklist = readFileSync('Bot_Whatsapp.md', 'utf8');
+const checklist = readBotWhatsappDoc();
 assert.match(checklist, /- \[x\] Criar log específico quando a resposta usar IA/, 'checklist must mark AI logging as completed');
 assert.match(checklist, /- \[x\] Registrar consumo aproximado de tokens por resposta quando a OpenAI devolver uso/, 'checklist must mark AI token logging as completed');
 

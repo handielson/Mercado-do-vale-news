@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc, resolveBotWhatsappDocPath } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
+const botPath = resolveBotWhatsappDocPath(root);
 const scriptPath = path.join(root, 'tools', 'install-autoresponder-schema-vps-dry-run.cjs');
 const docPath = path.join(root, 'docs', 'operacional', '2026-05-05-autoresponder-schema-vps-dry-run.md');
-const botPath = path.join(root, 'Bot_Whatsapp.md');
 
 for (const filePath of [scriptPath, docPath, botPath]) {
   assert.ok(fs.existsSync(filePath), `${path.relative(root, filePath)} should exist`);
@@ -37,7 +38,7 @@ assert.ok(!script.includes('AUTORESPONDER_TOKEN='), 'schema installer must not d
 assert.ok(!script.includes('DROP TABLE'), 'schema installer must not drop tables');
 assert.ok(!script.includes('DELETE FROM'), 'schema installer must not delete data');
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 for (const token of [
   "# Schema dry-run na VPS — AutoResponder",
   "Table 'mercadodovale.autoresponder_logs' doesn't exist",
@@ -51,7 +52,7 @@ for (const token of [
   assert.ok(doc.includes(token), `schema doc should include ${token}`);
 }
 
-const bot = fs.readFileSync(botPath, 'utf8');
+const bot = readBotWhatsappDoc(root);
 assert.ok(bot.includes('Fase 3AA local'), 'Bot_Whatsapp.md should document Fase 3AA');
 assert.ok(bot.includes('install-autoresponder-schema-vps-dry-run.cjs'), 'Bot_Whatsapp.md should mention schema installer');
 

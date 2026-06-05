@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc, resolveBotWhatsappDocPath } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
+const botPath = resolveBotWhatsappDocPath(root);
 const scriptPath = path.join(root, 'tools', 'test-autoresponder-archive-vps-write.cjs');
 const docPath = path.join(root, 'docs', 'operacional', '2026-05-05-autoresponder-archive-vps-write-test.md');
-const botPath = path.join(root, 'Bot_Whatsapp.md');
 
 for (const filePath of [scriptPath, docPath, botPath]) {
   assert.ok(fs.existsSync(filePath), `${path.relative(root, filePath)} should exist`);
@@ -35,7 +36,7 @@ assert.ok(!script.includes('crontab -'), 'write test must not edit crontab');
 assert.ok(!script.includes('pm2 restart'), 'write test must not restart PM2');
 assert.ok(!script.includes('rm -rf'), 'write test must not remove directories');
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 for (const token of [
   "# Teste de escrita controlada na VPS — Archive AutoResponder",
   "AUTORESPONDER_ARCHIVE_WRITE_APPLY=1",
@@ -49,7 +50,7 @@ for (const token of [
   assert.ok(doc.includes(token), `write test doc should include ${token}`);
 }
 
-const bot = fs.readFileSync(botPath, 'utf8');
+const bot = readBotWhatsappDoc(root);
 assert.ok(bot.includes('Fase 3AB local'), 'Bot_Whatsapp.md should document Fase 3AB');
 assert.ok(bot.includes('test-autoresponder-archive-vps-write.cjs'), 'Bot_Whatsapp.md should mention write test script');
 

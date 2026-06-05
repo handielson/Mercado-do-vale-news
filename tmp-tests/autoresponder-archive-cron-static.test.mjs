@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const scriptPath = path.join(root, 'cron', 'archive-autoresponder-logs.cjs');
 const wrapperPath = path.join(root, 'cron', 'archive-autoresponder-logs.sh');
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -15,7 +15,7 @@ assert(fs.existsSync(wrapperPath), 'archive shell wrapper must exist');
 
 const script = fs.readFileSync(scriptPath, 'utf8');
 const wrapper = fs.readFileSync(wrapperPath, 'utf8');
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 
 [
   "require('dotenv')",

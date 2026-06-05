@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -30,7 +30,7 @@ for (const fileName of ['vps_server.cjs', 'vps_server.js']) {
   );
 }
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 assert(
   doc.includes('- [x] Carrinho calcula parcelamento/juros da maquina de cartao pela tabela `payment_fees`'),
   'Bot_Whatsapp.md must mark cart card fee calculation done'

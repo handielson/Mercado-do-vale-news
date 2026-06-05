@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const detailPath = path.join(root, 'pages', 'admin', 'products', 'ProductDetailPage.tsx');
 const productTypePath = path.join(root, 'types', 'product.ts');
 const productServicePath = path.join(root, 'services', 'products.ts');
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -14,7 +14,7 @@ function assert(condition, message) {
 const detail = fs.readFileSync(detailPath, 'utf8');
 const productType = fs.readFileSync(productTypePath, 'utf8');
 const productService = fs.readFileSync(productServicePath, 'utf8');
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 
 [
   'ProductTagPicker',

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const serverFiles = ['vps_server.cjs', 'vps_server.js'];
 
@@ -18,7 +19,7 @@ for (const fileName of serverFiles) {
   );
 }
 
-const checklist = readFileSync('Bot_Whatsapp.md', 'utf8');
+const checklist = readBotWhatsappDoc();
 assert.ok(checklist.includes('Busca de modelo com acessorios relacionados'), 'Bot_Whatsapp.md must document model accessory context progress');
 assert.ok(checklist.includes('tmp-tests/autoresponder-model-accessory-context-static.test.mjs'), 'Bot_Whatsapp.md must mention the model accessory context test');
 

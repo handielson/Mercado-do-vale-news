@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -38,7 +38,7 @@ for (const fileName of ['vps_server.cjs', 'vps_server.js']) {
   );
 }
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 assert(doc.includes('- [x] Confirmar nome/telefone/endereco antes de fechar'), 'Bot_Whatsapp.md must mark customer data confirmation checklist item');
 assert(doc.includes('tmp-tests/autoresponder-purchase-customer-confirmation-static.test.mjs'), 'Bot_Whatsapp.md must mention customer confirmation test');
 

@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc, resolveBotWhatsappDocPath } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
+const botPath = resolveBotWhatsappDocPath(root);
 const scriptPath = path.join(root, 'tools', 'check-autoresponder-synology-safety-gate.cjs');
 const docPath = path.join(root, 'docs', 'operacional', '2026-05-05-autoresponder-synology-safety-gate.md');
-const botPath = path.join(root, 'Bot_Whatsapp.md');
 
 for (const filePath of [scriptPath, docPath, botPath]) {
   assert.ok(fs.existsSync(filePath), `${path.relative(root, filePath)} should exist`);
@@ -46,7 +47,7 @@ assert.ok(script.includes('missingConfirmations.length > 0'), 'safety gate shoul
 assert.ok(script.includes('process.exitCode = 1'), 'safety gate should return non-zero when blocked');
 assert.ok(script.includes('ok: !blocked'), 'safety gate should only be ok when unblocked');
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 for (const token of [
   '# Safety gate Synology',
   'falha fechado',
@@ -59,7 +60,7 @@ for (const token of [
   assert.ok(doc.includes(token), `safety gate doc should include ${token}`);
 }
 
-const bot = fs.readFileSync(botPath, 'utf8');
+const bot = readBotWhatsappDoc(root);
 assert.ok(bot.includes('Fase 3AD local'), 'Bot_Whatsapp.md should document Fase 3AD');
 assert.ok(bot.includes('check-autoresponder-synology-safety-gate.cjs'), 'Bot_Whatsapp.md should mention safety gate script');
 

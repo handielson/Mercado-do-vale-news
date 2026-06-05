@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const pagePath = path.join(root, 'pages', 'admin', 'AutoResponderPage.tsx');
 const routesPath = path.join(root, 'routes', 'index.tsx');
 const layoutPath = path.join(root, 'layouts', 'AdminLayout.tsx');
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -16,7 +16,7 @@ assert(fs.existsSync(pagePath), 'pages/admin/AutoResponderPage.tsx must exist');
 const page = fs.readFileSync(pagePath, 'utf8');
 const routes = fs.readFileSync(routesPath, 'utf8');
 const layout = fs.readFileSync(layoutPath, 'utf8');
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 
 assert(page.includes('autoResponderService'), 'AutoResponderPage must consume autoResponderService');
 assert(page.includes('Tabs') && page.includes('TabList') && page.includes('TabPanel'), 'AutoResponderPage must use the shared Tabs UI');

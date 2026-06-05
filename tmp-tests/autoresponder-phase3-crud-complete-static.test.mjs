@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const pagePath = path.join(root, 'pages', 'admin', 'AutoResponderPage.tsx');
 const servicePath = path.join(root, 'services', 'autoResponderService.ts');
-const docPath = path.join(root, 'Bot_Whatsapp.md');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -12,7 +12,7 @@ function assert(condition, message) {
 
 const page = fs.readFileSync(pagePath, 'utf8');
 const service = fs.readFileSync(servicePath, 'utf8');
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 
 const serviceMethods = [
   'createRule',

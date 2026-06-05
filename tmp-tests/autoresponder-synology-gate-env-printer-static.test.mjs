@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc, resolveBotWhatsappDocPath } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
+const botPath = resolveBotWhatsappDocPath(root);
 const scriptPath = path.join(root, 'tools', 'print-autoresponder-synology-gate-env.cjs');
 const docPath = path.join(root, 'docs', 'operacional', '2026-05-05-autoresponder-synology-gate-env.md');
-const botPath = path.join(root, 'Bot_Whatsapp.md');
 
 for (const filePath of [scriptPath, docPath, botPath]) {
   assert.ok(fs.existsSync(filePath), `${path.relative(root, filePath)} should exist`);
@@ -54,7 +55,7 @@ for (const forbidden of [
 assert.ok(script.includes('missingConfirmations.length === 0'), 'printer should require complete evidence');
 assert.ok(script.includes('process.exitCode = 1'), 'printer should fail non-zero when evidence is incomplete');
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
 for (const token of [
   '# Comandos locais do safety gate',
   'somente leitura',
@@ -66,7 +67,7 @@ for (const token of [
   assert.ok(doc.includes(token), `gate env doc should include ${token}`);
 }
 
-const bot = fs.readFileSync(botPath, 'utf8');
+const bot = readBotWhatsappDoc(root);
 assert.ok(bot.includes('Fase 3AG local'), 'Bot_Whatsapp.md should document Fase 3AG');
 assert.ok(bot.includes('print-autoresponder-synology-gate-env.cjs'), 'Bot_Whatsapp.md should mention gate env printer');
 

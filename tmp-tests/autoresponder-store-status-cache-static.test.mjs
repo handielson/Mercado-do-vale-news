@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const serverPath = path.join(root, 'vps_server.cjs');
-const botPath = path.join(root, 'Bot_Whatsapp.md');
 
 const server = fs.readFileSync(serverPath, 'utf8');
-const bot = fs.readFileSync(botPath, 'utf8');
+const bot = readBotWhatsappDoc(root);
 
 for (const token of [
   'const AUTORESPONDER_STORE_STATUS_CACHE_TTL_MS = 60 * 1000',

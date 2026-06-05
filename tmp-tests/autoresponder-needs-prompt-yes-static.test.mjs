@@ -32,11 +32,21 @@ for (const fileName of serverFiles) {
   );
 
   const optInRouteIndex = source.indexOf('const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({');
+  const deliveryAfterOptInIndex = source.indexOf('isAutoresponderStandaloneDeliveryQuoteRequest(message)', optInRouteIndex);
+  const contactFlowAfterOptInIndex = source.indexOf('handleAutoresponderContactNameFlow', optInRouteIndex);
   const tokenSearchAfterOptInIndex = source.indexOf(
     'const productSearchTokens = extractAutoresponderProductSearchTokens(message);',
     optInRouteIndex
   );
   assert.ok(optInRouteIndex >= 0, `${fileName} must call the opt-in handler in the main route`);
+  assert.ok(
+    deliveryAfterOptInIndex > optInRouteIndex,
+    `${fileName} must answer yes/list after needs prompt before delivery flow`
+  );
+  assert.ok(
+    contactFlowAfterOptInIndex > optInRouteIndex,
+    `${fileName} must answer yes/list after needs prompt before contact-name flow`
+  );
   assert.ok(
     tokenSearchAfterOptInIndex > optInRouteIndex,
     `${fileName} must handle opt-in replies before generic token search`

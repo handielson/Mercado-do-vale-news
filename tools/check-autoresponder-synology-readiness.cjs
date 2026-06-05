@@ -2,10 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolveBotWhatsappDocPath } = require('./autoresponder-bot-doc.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const SYNOLOGY_DOC = path.join(ROOT, 'Synology.md');
-const BOT_DOC = path.join(ROOT, 'Bot_Whatsapp.md');
+const BOT_DOC = resolveBotWhatsappDocPath(ROOT);
 const ARCHIVE_SCRIPT = path.join(ROOT, 'cron', 'archive-autoresponder-logs.cjs');
 
 const CANONICAL_TUNNEL = {

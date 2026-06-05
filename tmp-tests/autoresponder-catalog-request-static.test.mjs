@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const serverFiles = ['vps_server.cjs', 'vps_server.js'];
 
@@ -19,9 +20,12 @@ for (const fileName of serverFiles) {
     source.includes('Se quiser receber a lista dos disponiveis, responda "lista".'),
     `${fileName} must offer an explicit list opt-in for generic phone requests`
   );
+  const webhookIndex = source.indexOf("url: '/autoresponder-webhook'");
+  const genericDeviceIndex = source.indexOf('detectAutoresponderGenericDeviceCatalogFamily(message)', webhookIndex);
+  const genericCatalogIndex = source.indexOf('if (isAutoresponderCatalogRequest(message))', genericDeviceIndex);
   assert.ok(
-    source.indexOf('detectAutoresponderGenericDeviceCatalogFamily(message)') < source.indexOf('if (isAutoresponderCatalogRequest(message))'),
-    `${fileName} must ask refinement before the generic category catalog flow`
+    webhookIndex >= 0 && genericDeviceIndex > webhookIndex && genericDeviceIndex < genericCatalogIndex,
+    `${fileName} must ask refinement before the regular generic category catalog flow`
   );
   assert.ok(source.includes('findAutoresponderCatalogCategoryForMessage'), `${fileName} must map catalog requests to a category`);
   assert.ok(source.includes("intent: 'catalog_category'"), `${fileName} must log category catalog replies distinctly`);
@@ -53,7 +57,7 @@ for (const fileName of serverFiles) {
   assert.ok(source.includes("intent: 'catalog_budget'"), `${fileName} must log budget catalog replies distinctly`);
 }
 
-const checklist = readFileSync('Bot_Whatsapp.md', 'utf8');
+const checklist = readBotWhatsappDoc();
 assert.ok(checklist.includes('Busca generica de celulares com refinamento'), 'Bot_Whatsapp.md must document generic phone refinement progress');
 assert.ok(checklist.includes('tmp-tests/autoresponder-catalog-request-static.test.mjs'), 'Bot_Whatsapp.md must mention the catalog request static test');
 

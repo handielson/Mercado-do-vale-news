@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc, resolveBotWhatsappDocPath } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
+const botPath = resolveBotWhatsappDocPath(root);
 const scriptPath = path.join(root, 'tools', 'print-autoresponder-synology-manual-checklist.cjs');
-const docPath = path.join(root, 'docs', 'operacional', '2026-05-05-autoresponder-synology-manual-checklist.md');
-const botPath = path.join(root, 'Bot_Whatsapp.md');
 
-for (const filePath of [scriptPath, docPath, botPath]) {
+for (const filePath of [scriptPath, botPath]) {
   assert.ok(fs.existsSync(filePath), `${path.relative(root, filePath)} should exist`);
 }
 
@@ -46,23 +46,15 @@ for (const forbidden of [
   assert.ok(!script.includes(forbidden), `manual checklist script must not include ${forbidden}`);
 }
 
-const doc = fs.readFileSync(docPath, 'utf8');
+const bot = readBotWhatsappDoc(root);
 for (const token of [
-  '# Checklist manual Synology',
-  'somente leitura',
-  'RAM/swap',
-  'túnel canônico',
-  'DSM API',
-  '--token',
-  'não altera Synology',
-  'não reinicia túnel',
-  'não altera crontab',
+  'Fase 3AE local',
+  'Checklist manual',
+  'print-autoresponder-synology-manual-checklist.cjs',
+  'mdv-videos',
+  '7680ed44-a7a9-4700-a37e-2026b3653360',
 ]) {
-  assert.ok(doc.includes(token), `manual checklist doc should include ${token}`);
+  assert.ok(bot.includes(token), `archived bot doc should include ${token}`);
 }
-
-const bot = fs.readFileSync(botPath, 'utf8');
-assert.ok(bot.includes('Fase 3AE local'), 'Bot_Whatsapp.md should document Fase 3AE');
-assert.ok(bot.includes('print-autoresponder-synology-manual-checklist.cjs'), 'Bot_Whatsapp.md should mention manual checklist script');
 
 console.log('autoresponder Synology manual checklist static checks passed');

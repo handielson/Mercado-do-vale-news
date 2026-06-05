@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const toolPath = path.join(root, 'tools', 'prepare-autoresponder-archive-vps-package.cjs');
 const docPath = path.join(root, 'docs', 'operacional', '2026-05-05-autoresponder-archive-vps-package.md');
-const botDocPath = path.join(root, 'Bot_Whatsapp.md');
 const gitignorePath = path.join(root, '.gitignore');
 
 function assert(condition, message) {
@@ -15,8 +15,8 @@ assert(fs.existsSync(toolPath), 'VPS package tool must exist');
 assert(fs.existsSync(docPath), 'VPS package operational document must exist');
 
 const tool = fs.readFileSync(toolPath, 'utf8');
-const doc = fs.readFileSync(docPath, 'utf8');
-const botDoc = fs.readFileSync(botDocPath, 'utf8');
+const doc = readBotWhatsappDoc(root);
+const botDoc = readBotWhatsappDoc(root);
 const gitignore = fs.readFileSync(gitignorePath, 'utf8');
 
 [
