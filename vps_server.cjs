@@ -8057,6 +8057,47 @@ async function handleAutoresponderDeliveryCepLookup({ senderKey, message, purcha
   return { replies: [{ message: replyText }] };
 }
 
+async function handleAutoresponderEngineDeliveryFlowV2({ senderKey, message, settings, purchaseFlow }) {
+  if (process.env.AUTORESPONDER_ENGINE_V2 !== '1') return null;
+
+  const currentPurchaseFlow = purchaseFlow || await getAutoresponderPurchaseFlow(senderKey);
+  const [{ normalizeConversationState }, { deliveryFlowHandler }] = await Promise.all([
+    import('./services/autoresponder/engine/state.js'),
+    import('./services/autoresponder/engine/flows/delivery.js'),
+  ]);
+  const state = normalizeConversationState(currentPurchaseFlow?.conversation_state || {});
+  const canHandle = deliveryFlowHandler.canHandle({ message, state, settings, context: {} });
+  if (!canHandle) return null;
+
+  const deliveryReply = await deliveryFlowHandler.handle({
+    sender: senderKey,
+    message,
+    state,
+    settings,
+    context: {
+      lookupCep: lookupAutoresponderCep,
+      calculateShippingOptions: calculateAutoresponderShippingOptions,
+    },
+  });
+  if (!deliveryReply) return null;
+  if (deliveryReply.intent === 'contextual_fallback' && state.flow !== 'delivery') return null;
+
+  await saveAutoresponderPurchaseFlow(senderKey, {
+    ...currentPurchaseFlow,
+    conversation_state: deliveryReply.nextState,
+  });
+  await logAutoresponderReply({
+    sender: senderKey,
+    message,
+    intent: deliveryReply.intent,
+    replyText: deliveryReply.message,
+    matchedCount: deliveryReply.matchedCount,
+    matchedProducts: deliveryReply.matchedProducts,
+  });
+  await upsertAutoresponderSuccessConversation(senderKey);
+  return { replies: [{ message: deliveryReply.message }] };
+}
+
 async function handleAutoresponderDeliveryNumberInput({ senderKey, message, purchaseFlow, settings }) {
   const numberData = parseAutoresponderNumberComplement(message);
   if (!numberData) return null;
@@ -11597,6 +11638,13 @@ fastify.route({
         await touchAutoresponderConversation(senderKey);
         return { replies: [] };
       }
+
+      const engineDeliveryReply = await handleAutoresponderEngineDeliveryFlowV2({
+        senderKey,
+        message,
+        settings,
+      });
+      if (engineDeliveryReply) return engineDeliveryReply;
 
       const contactFlowReply = await handleAutoresponderContactNameFlow({ sender: senderKey, message, contactFirstName });
       if (contactFlowReply) {
