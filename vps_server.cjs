@@ -8073,6 +8073,40 @@ function buildAutoresponderDeliveryCepConfirmationReply(address, shippingQuote) 
   return lines.join('\n');
 }
 
+function shouldAutoresponderRuleAwaitStandaloneDeliveryCep(rule, resolvedText = '') {
+  if (!rule || String(rule.reply_type || 'text') !== 'text') return false;
+  const text = normalizeAutoresponderText([
+    rule.name,
+    rule.pattern,
+    rule.reply_text,
+    resolvedText,
+  ].filter(Boolean).join(' '));
+  const asksCep = /\bcep\b/.test(text);
+  const deliveryContext = /\b(entrega|entregar|delivery|frete|motoboy|enviar|mandar)\b/.test(text);
+  return asksCep && deliveryContext;
+}
+
+function buildAutoresponderStandaloneDeliveryCepReply(address, shippingQuote) {
+  const lines = [
+    'Atendemos esse CEP:',
+    `Rua: ${address.street || 'nao informado'}`,
+    `Bairro: ${address.neighborhood || 'nao informado'}`,
+    `Cidade: ${address.city || 'nao informado'} - ${address.state || ''}`.trim(),
+    `CEP: ${formatAutoresponderCep(address.cep)}`,
+    '',
+  ];
+  if (shippingQuote) {
+    lines.push('Frete estimado:');
+    lines.push(`${shippingQuote.name}: ${shippingQuote.isFree ? 'Gratis' : formatAutoresponderCurrency(Number(shippingQuote.price || 0))}`);
+    if (shippingQuote.daysLabel) lines.push(`Prazo: ${shippingQuote.daysLabel}`);
+  } else {
+    lines.push('Nao encontrei uma regra automatica de frete para esse CEP. Um atendente confirma o valor certinho.');
+  }
+  lines.push('');
+  lines.push('Para fechar o valor com produto, responda com o numero ou nome do item que voce quer.');
+  return lines.join('\n');
+}
+
 function buildAutoresponderDeliveryNumberPrompt() {
   return 'Agora me envie o numero da casa/predio. Se tiver complemento, pode mandar junto. Ex: 123, apto 202';
 }
@@ -8163,6 +8197,52 @@ async function handleAutoresponderDeliveryCepLookup({ senderKey, message, purcha
     sender: senderKey,
     message,
     intent: 'purchase_delivery_cep_quote',
+    replyText,
+    matchedCount: shippingOptions.length,
+    matchedProducts: shippingOptions,
+  });
+  await upsertAutoresponderSuccessConversation(senderKey);
+  return { replies: [{ message: replyText }] };
+}
+
+async function handleAutoresponderStandaloneDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep }) {
+  const normalizedCep = normalizeAutoresponderCep(cep || message);
+  if (!normalizedCep) return null;
+
+  const cepAddress = await lookupAutoresponderCep(normalizedCep);
+  if (!cepAddress) {
+    const replyText = formatAutoresponderReply(buildAutoresponderDeliveryCepNotFoundReply(), settings, false);
+    await saveAutoresponderPurchaseFlow(senderKey, {
+      ...purchaseFlow,
+      status: 'awaiting_standalone_delivery_cep',
+      items: [],
+    });
+    await logAutoresponderReply({
+      sender: senderKey,
+      message,
+      intent: 'standalone_delivery_cep_not_found',
+      replyText,
+      matchedCount: 0,
+    });
+    await upsertAutoresponderSuccessConversation(senderKey);
+    return { replies: [{ message: replyText }] };
+  }
+
+  const shippingOptions = await calculateAutoresponderShippingOptions(normalizedCep, [], cepAddress);
+  const shippingQuote = shippingOptions[0] || null;
+  const replyText = formatAutoresponderReply(buildAutoresponderStandaloneDeliveryCepReply(cepAddress, shippingQuote), settings, false);
+  await saveAutoresponderPurchaseFlow(senderKey, {
+    ...purchaseFlow,
+    status: 'idle',
+    items: [],
+    standalone_delivery_address_lookup: cepAddress,
+    standalone_shipping_options: shippingOptions,
+    standalone_shipping_quote: shippingQuote,
+  });
+  await logAutoresponderReply({
+    sender: senderKey,
+    message,
+    intent: 'standalone_delivery_cep_quote',
     replyText,
     matchedCount: shippingOptions.length,
     matchedProducts: shippingOptions,
@@ -8331,7 +8411,7 @@ async function calculateAutoresponderShippingOptions(cepValue, cartItems = [], a
   if (!settings || settings.local_delivery_enabled === 0) return [];
 
   const [zones] = await pool.query('SELECT * FROM shipping_zones WHERE enabled = 1 ORDER BY display_order ASC');
-  const [ranges] = await pool.query('SELECT * FROM shipping_price_ranges ORDER BY min_km ASC');
+  const [ranges] = await pool.query('SELECT * FROM shipping_price_ranges');
   const rangesByZone = new Map();
   ranges.forEach((range) => {
     const current = rangesByZone.get(range.zone_id) || [];
@@ -8384,10 +8464,12 @@ async function calculateAutoresponderShippingOptions(cepValue, cartItems = [], a
       return;
     }
 
-    const distanceRange = distanceKm == null ? null : zoneRanges.find((range) =>
-      distanceKm >= Number(range.min_km || 0) &&
-      (range.max_km == null || distanceKm <= Number(range.max_km))
-    );
+    const distanceRange = distanceKm == null ? null : zoneRanges.find((range) => {
+      if (!Object.prototype.hasOwnProperty.call(range, 'min_km')) return false;
+      const minKm = Number(range.min_km || 0);
+      const maxKm = Object.prototype.hasOwnProperty.call(range, 'max_km') ? range.max_km : null;
+      return distanceKm >= minKm && (maxKm == null || distanceKm <= Number(maxKm));
+    });
     const price = distanceRange
       ? Number(distanceRange.price || 0)
       : zone.fixed_price != null
@@ -9576,9 +9658,8 @@ function formatAutoresponderProductWarrantyLine(product) {
 }
 
 function formatAutoresponderProductReplyInstructions(hasMore) {
-  const lines = ['Responda com o numero da opcao ou com o nome/modelo do produto.'];
+  const lines = ['vamos ficar com qual deles hoje? quer ver a lista completa?'];
   if (hasMore) {
-    lines.push('Se quiser, me diga a faixa de preco, marca ou uso que eu filtro melhor.');
     lines.push('Se quiser ver mais opcoes, digite "mais".');
   }
   return lines.join('\n');
@@ -12025,6 +12106,16 @@ fastify.route({
         }
       }
 
+      if (purchaseFlow.status === 'awaiting_standalone_delivery_cep' && !hasAutoresponderCartItems(purchaseFlow)) {
+        const cep = normalizeAutoresponderCep(message);
+        if (cep) {
+          return await handleAutoresponderStandaloneDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep });
+        }
+        const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(settings), settings, false);
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
+      }
+
       if (purchaseFlow.status === 'awaiting_delivery_address' && hasAutoresponderCartItems(purchaseFlow)) {
         const cep = normalizeAutoresponderCep(message);
         if (cep) {
@@ -13081,11 +13172,19 @@ fastify.route({
           settings,
           shouldPrefixGreeting
         );
+        const awaitsStandaloneDeliveryCep = shouldAutoresponderRuleAwaitStandaloneDeliveryCep(matchedRule, resolvedRuleText);
+        if (awaitsStandaloneDeliveryCep && !hasAutoresponderCartItems(purchaseFlow)) {
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            ...purchaseFlow,
+            status: 'awaiting_standalone_delivery_cep',
+            items: [],
+          });
+        }
 
         await logAutoresponderReply({
           sender: senderKey,
           message,
-          intent: 'rule_text',
+          intent: awaitsStandaloneDeliveryCep ? 'standalone_delivery_cep_prompt' : 'rule_text',
           replyText,
           matchedCount: 1,
           matchedRuleId: matchedRule.id,

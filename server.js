@@ -7852,7 +7852,7 @@ async function calculateAutoresponderShippingOptions(cepValue, cartItems = [], a
   if (!settings || settings.local_delivery_enabled === 0) return [];
 
   const [zones] = await pool.query('SELECT * FROM shipping_zones WHERE enabled = 1 ORDER BY display_order ASC');
-  const [ranges] = await pool.query('SELECT * FROM shipping_price_ranges ORDER BY min_km ASC');
+  const [ranges] = await pool.query('SELECT * FROM shipping_price_ranges');
   const rangesByZone = new Map();
   ranges.forEach((range) => {
     const current = rangesByZone.get(range.zone_id) || [];
@@ -7905,10 +7905,12 @@ async function calculateAutoresponderShippingOptions(cepValue, cartItems = [], a
       return;
     }
 
-    const distanceRange = distanceKm == null ? null : zoneRanges.find((range) =>
-      distanceKm >= Number(range.min_km || 0) &&
-      (range.max_km == null || distanceKm <= Number(range.max_km))
-    );
+    const distanceRange = distanceKm == null ? null : zoneRanges.find((range) => {
+      if (!Object.prototype.hasOwnProperty.call(range, 'min_km')) return false;
+      const minKm = Number(range.min_km || 0);
+      const maxKm = Object.prototype.hasOwnProperty.call(range, 'max_km') ? range.max_km : null;
+      return distanceKm >= minKm && (maxKm == null || distanceKm <= Number(maxKm));
+    });
     const price = distanceRange
       ? Number(distanceRange.price || 0)
       : zone.fixed_price != null
@@ -9097,9 +9099,8 @@ function formatAutoresponderProductWarrantyLine(product) {
 }
 
 function formatAutoresponderProductReplyInstructions(hasMore) {
-  const lines = ['Responda com o numero da opcao ou com o nome/modelo do produto.'];
+  const lines = ['vamos ficar com qual deles hoje? quer ver a lista completa?'];
   if (hasMore) {
-    lines.push('Se quiser, me diga a faixa de preco, marca ou uso que eu filtro melhor.');
     lines.push('Se quiser ver mais opcoes, digite "mais".');
   }
   return lines.join('\n');
