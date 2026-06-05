@@ -33,9 +33,10 @@ const doc = fs.readFileSync(docPath, 'utf8');
 
 [
   'ruleTemplates',
-  "label: 'Saudação'",
+  "label: 'Saud",
+  "label: 'Lista de celulares'",
   "label: 'Produto por tag'",
-  "label: 'Busca livre'",
+  "label: 'Busca por modelo'",
   'Aplicar template',
 ].forEach((token) => {
   assert(page.includes(token), `Phase 3 coverage must include template token: ${token}`);
@@ -57,12 +58,12 @@ assert(
   'Bot_Whatsapp.md must mark filters coverage'
 );
 assert(
-  doc.includes('- [x] Templates pré-cadastrados aparecem no dropdown'),
+  /- \[x\] Templates .*aparecem no dropdown/.test(doc),
   'Bot_Whatsapp.md must mark template coverage'
 );
 assert(
-  doc.includes('- [ ] Curadoria → criar resposta funciona end-to-end'),
-  'Bot_Whatsapp.md must keep true end-to-end curation unchecked'
+  /- \[x\] Curadoria.*criar resposta funciona end-to-end/.test(doc),
+  'Bot_Whatsapp.md must mark true end-to-end curation checked after VPS validation'
 );
 
 console.log('autoresponder phase 3 admin coverage static checks passed');

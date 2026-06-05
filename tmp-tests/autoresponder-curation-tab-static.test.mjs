@@ -36,7 +36,7 @@ const doc = fs.readFileSync(docPath, 'utf8');
   'Última vez',
   'Ações',
   'Criar resposta',
-  'Ignorar',
+  'Excluir',
   'Perguntas sem resposta',
   'Revise e salve a resposta sugerida',
 ].forEach((label) => {
@@ -50,7 +50,7 @@ assert(page.includes('active: false'), 'Curation tab must open suggested rules a
 
 assert(doc.includes('- [x] Tabela com pergunta / frequência / última vez / ações'), 'Bot_Whatsapp.md must mark curation table checklist item');
 assert(doc.includes('- [x] Botão "Criar resposta" (abre modal da Aba Respostas pré-preenchido)'), 'Bot_Whatsapp.md must mark create answer checklist item');
-assert(doc.includes('- [x] Botão "Ignorar"'), 'Bot_Whatsapp.md must mark ignore checklist item');
+assert(doc.includes('- [x] Botão "Excluir" remove mensagem da curadoria'), 'Bot_Whatsapp.md must mark delete checklist item');
 assert(doc.includes('- [x] Curadoria abre modal de resposta pré-preenchido'), 'Bot_Whatsapp.md must mark curation modal flow item');
 
 console.log('autoresponder curation tab static checks passed');

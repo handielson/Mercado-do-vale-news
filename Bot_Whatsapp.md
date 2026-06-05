@@ -580,6 +580,7 @@ DELETE /autoresponder/blocklist/:id                    requireSyncKey
 
 # Curadoria + Stats
 GET    /autoresponder/unanswered                       requireSyncKey
+DELETE /autoresponder/unanswered?question=...          requireSyncKey
 GET    /autoresponder/stats?source=mysql|synology      requireSyncKey
 
 # Status atual da loja (preview live na UI)
@@ -856,7 +857,7 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 
 - [x] Tabela com pergunta / frequência / última vez / ações
 - [x] Botão "Criar resposta" (abre modal da Aba Respostas pré-preenchido)
-- [x] Botão "Ignorar"
+- [x] Botão "Excluir" remove mensagem da curadoria
 - [x] Curadoria abre modal de resposta pré-preenchido
 
 #### Aba Tags

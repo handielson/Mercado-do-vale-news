@@ -40,6 +40,7 @@ const types = fs.readFileSync(typesPath, 'utf8');
   'bulkCreateBlocklist',
   'deleteBlocklistEntry',
   'listUnanswered',
+  'deleteUnanswered',
   'getStats',
   'getStoreStatus',
   'updateProductTags',

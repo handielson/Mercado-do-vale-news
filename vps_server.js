@@ -11187,6 +11187,18 @@ fastify.get('/autoresponder/unanswered', { preHandler: requireSyncKey }, async (
   return rows;
 });
 
+fastify.delete('/autoresponder/unanswered', { preHandler: requireSyncKey }, async (req, reply) => {
+  const question = String(req.query?.question || '').trim();
+  if (!question) return reply.code(400).send({ error: 'question is required' });
+  const [result] = await pool.query(
+    `DELETE FROM autoresponder_logs
+     WHERE intent = 'fallback'
+       AND question = ?`,
+    [question]
+  );
+  return { ok: true, deleted: Number(result?.affectedRows || 0) };
+});
+
 async function getAutoresponderTopProducts(limit = 10) {
   const [rows] = await pool.query(
     `SELECT matched_products

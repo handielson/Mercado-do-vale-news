@@ -166,6 +166,10 @@ export const autoResponderService = {
         return vpsClient.get<AutoResponderUnansweredQuestion[]>(withQuery('/autoresponder/unanswered', filters));
     },
 
+    deleteUnanswered: (question: string): Promise<AutoResponderOk> => {
+        return vpsClient.delete<AutoResponderOk>(withQuery('/autoresponder/unanswered', { question }));
+    },
+
     getStats: (filters: { source?: 'mysql' | 'synology'; from?: string } = {}): Promise<AutoResponderStats> => {
         return vpsClient.get<AutoResponderStats>(withQuery('/autoresponder/stats', filters));
     },
