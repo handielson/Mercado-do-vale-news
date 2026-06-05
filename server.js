@@ -8289,6 +8289,7 @@ async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -8328,6 +8329,7 @@ async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -8364,6 +8366,7 @@ async function findAutoresponderProductsByCategoryBudget(categoryId, budgetCents
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -8443,6 +8446,24 @@ function getAutoresponderProductPriceCents(product) {
 function getAutoresponderProductGroupKey(product) {
   const groupId = product?.model_id || product?.id;
   return String(groupId || '').trim();
+}
+
+function getAutoresponderProductBrandName(product) {
+  const rawBrand = product?.brand_name || product?.brandName || product?.brand || '';
+  return String(rawBrand || '').trim() || 'Outras marcas';
+}
+
+function sortAutoresponderProductGroupsByBrand(groups) {
+  return [...(Array.isArray(groups) ? groups : [])].sort((a, b) => {
+    const brandCompare = normalizeAutoresponderText(a?.brandName)
+      .localeCompare(normalizeAutoresponderText(b?.brandName), 'pt-BR');
+    if (brandCompare !== 0) return brandCompare;
+    return normalizeAutoresponderText(a?.name).localeCompare(normalizeAutoresponderText(b?.name), 'pt-BR');
+  });
+}
+
+function formatAutoresponderProductBrandHeading(brandName) {
+  return `🏷️ ${brandName}`;
 }
 
 function formatAutoresponderPriceRange(products) {
@@ -8833,6 +8854,7 @@ function groupAutoresponderProductsByModel(products) {
       key,
       model_id: representative?.model_id || null,
       name: representative?.name || 'Produto',
+      brandName: getAutoresponderProductBrandName(representative),
       products: items,
       representative,
       count: items.length,
@@ -9174,7 +9196,7 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
     return [formatAutoresponderProductListReply(safeProducts, keyword)];
   }
 
-  const groupedProducts = groupAutoresponderProductsByModel(availableProducts);
+  const groupedProducts = sortAutoresponderProductGroupsByBrand(groupAutoresponderProductsByModel(availableProducts));
   const total = pagination?.total || groupedProducts.length;
   const offset = Number(pagination?.offset || 0);
   const chunks = chunkAutoresponderArray(groupedProducts, AUTORESPONDER_PRODUCT_PAGE_SIZE);
@@ -9193,9 +9215,18 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
         : 'Encontrei estas opcoes:'))
       : 'Mais opcoes:';
     const lines = [title];
-    lines.push(...(await Promise.all(chunk.map((group, index) => (
+    const cardLines = await Promise.all(chunk.map((group, index) => (
       formatAutoresponderProductCardLine(group, firstNumber + index)
-    )))));
+    )));
+    let previousBrandName = '';
+    for (const [index, group] of chunk.entries()) {
+      const brandName = group?.brandName || 'Outras marcas';
+      if (brandName !== previousBrandName) {
+        lines.push(formatAutoresponderProductBrandHeading(brandName));
+        previousBrandName = brandName;
+      }
+      lines.push(cardLines[index]);
+    }
     return lines.join('\n\n');
   }));
 
@@ -9265,6 +9296,7 @@ async function findAutoresponderProductById(productId) {
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, description, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -9576,6 +9608,7 @@ async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) 
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl,
