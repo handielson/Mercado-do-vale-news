@@ -166,7 +166,7 @@ export const vpsClient = {
     /**
      * DELETE /resource/:id
      */
-    delete: async (path: string): Promise<void> => {
+    delete: async <T = void>(path: string): Promise<T> => {
         assertCheckpointNotBlocked(path, 'DELETE');
         const headers = await buildHeaders();
         delete (headers as Record<string, string>)['Content-Type'];
@@ -182,6 +182,8 @@ export const vpsClient = {
             }
             throw new Error(`[VPS] ${res.status} ${res.url}${summary ? ` — ${summary}` : ''}`);
         }
+        const text = await res.text().catch(() => '');
+        return (text ? JSON.parse(text) : undefined) as T;
     },
 
     /**

@@ -1379,6 +1379,7 @@ const AutoResponderPage: React.FC = () => {
     const [curationSearch, setCurationSearch] = React.useState('');
     const [curationNotice, setCurationNotice] = React.useState<string | null>(null);
     const [curationActionQuestion, setCurationActionQuestion] = React.useState<string | null>(null);
+    const [curationDraftQuestion, setCurationDraftQuestion] = React.useState<string | null>(null);
     const [tagSearch, setTagSearch] = React.useState('');
     const [tagForm, setTagForm] = React.useState<TagFormState>(emptyTagForm);
     const [editingTag, setEditingTag] = React.useState<AutoResponderTag | null>(null);
@@ -1766,12 +1767,14 @@ const AutoResponderPage: React.FC = () => {
 
     const openNewRule = () => {
         setEditingRule(null);
+        setCurationDraftQuestion(null);
         setRuleForm(emptyRuleForm);
         setIsRuleModalOpen(true);
     };
 
     const openEditRule = (rule: AutoResponderRule) => {
         setEditingRule(rule);
+        setCurationDraftQuestion(null);
         setRuleForm(ruleToForm(rule));
         setIsRuleModalOpen(true);
     };
@@ -1814,6 +1817,18 @@ const AutoResponderPage: React.FC = () => {
             const payload = ruleFormToInput(ruleForm);
             if (editingRule) {
                 await autoResponderService.updateRule(editingRule.id, payload);
+            } else if (curationDraftQuestion) {
+                await autoResponderService.createRuleFromQuestion({
+                    question: curationDraftQuestion,
+                    name: payload.name,
+                    match_type: payload.match_type,
+                    pattern: payload.pattern,
+                    reply_text: payload.reply_text,
+                    priority: payload.priority,
+                    active: payload.active,
+                    tag_ids: Array.isArray(payload.tag_ids) ? payload.tag_ids : [],
+                });
+                await autoResponderService.deleteUnanswered(curationDraftQuestion);
             } else {
                 await autoResponderService.createRule(payload);
             }
@@ -1828,6 +1843,7 @@ const AutoResponderPage: React.FC = () => {
             }
             setIsRuleModalOpen(false);
             setEditingRule(null);
+            setCurationDraftQuestion(null);
             setRuleForm(emptyRuleForm);
         } catch (err) {
             console.error('[AutoResponderPage] save rule error:', err);
@@ -2022,13 +2038,14 @@ const AutoResponderPage: React.FC = () => {
         setCurationNotice(null);
         setError(null);
         setEditingRule(null);
+        setCurationDraftQuestion(question.question);
         setRuleForm({
             ...emptyRuleForm,
             name: `Curadoria: ${question.question.slice(0, 60)}`,
             pattern: question.question,
             match_type: 'exact',
             reply_type: 'text',
-            active: false,
+            active: true,
         });
         setIsRuleModalOpen(true);
         setCurationNotice('Revise e salve a resposta sugerida');
@@ -4735,7 +4752,10 @@ const AutoResponderPage: React.FC = () => {
                     onToggleTag={toggleRuleTag}
                     onUploadAttachment={uploadRuleAttachment}
                     onRemoveAttachment={() => updateRuleForm({ attachment_url: '', attachment_caption: '' })}
-                    onClose={() => setIsRuleModalOpen(false)}
+                    onClose={() => {
+                        setIsRuleModalOpen(false);
+                        setCurationDraftQuestion(null);
+                    }}
                     onSave={saveRule}
                 />
             )}

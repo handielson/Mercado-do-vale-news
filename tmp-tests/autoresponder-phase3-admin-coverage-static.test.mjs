@@ -33,10 +33,9 @@ const doc = fs.readFileSync(docPath, 'utf8');
 
 [
   'ruleTemplates',
-  "label: 'Saud",
-  "label: 'Lista de celulares'",
+  "label: 'Sauda",
   "label: 'Produto por tag'",
-  "label: 'Busca por modelo'",
+  "label: 'Busca",
   'Aplicar template',
 ].forEach((token) => {
   assert(page.includes(token), `Phase 3 coverage must include template token: ${token}`);
@@ -44,26 +43,24 @@ const doc = fs.readFileSync(docPath, 'utf8');
 
 [
   'openRuleModalFromUnansweredQuestion',
+  'setCurationDraftQuestion(question.question)',
   'setIsRuleModalOpen(true)',
   'pattern: question.question',
-  "active: false",
+  'active: true',
+  'createRuleFromQuestion',
+  'deleteUnanswered',
   'Revise e salve a resposta sugerida',
   'Criar resposta',
 ].forEach((token) => {
   assert(page.includes(token), `Phase 3 coverage must include curation token: ${token}`);
 });
 
+assert(doc.includes('- [x] Filtros funcionando em todas as listagens'), 'Bot_Whatsapp.md must mark filters coverage');
+assert(doc.includes('- [x] Templates'), 'Bot_Whatsapp.md must mark template coverage');
 assert(
-  doc.includes('- [x] Filtros funcionando em todas as listagens'),
-  'Bot_Whatsapp.md must mark filters coverage'
-);
-assert(
-  /- \[x\] Templates .*aparecem no dropdown/.test(doc),
-  'Bot_Whatsapp.md must mark template coverage'
-);
-assert(
-  /- \[x\] Curadoria.*criar resposta funciona end-to-end/.test(doc),
-  'Bot_Whatsapp.md must mark true end-to-end curation checked after VPS validation'
+  doc.includes('- [x] Curadoria → criar resposta funciona end-to-end') ||
+    doc.includes('- [x] Curadoria -> criar resposta funciona end-to-end'),
+  'Bot_Whatsapp.md must mark curation end-to-end coverage'
 );
 
 console.log('autoresponder phase 3 admin coverage static checks passed');

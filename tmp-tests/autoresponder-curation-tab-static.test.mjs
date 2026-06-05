@@ -46,7 +46,7 @@ const doc = fs.readFileSync(docPath, 'utf8');
 assert(page.includes('listUnanswered({ limit: 100 })'), 'Dashboard must load unanswered questions with limit 100');
 assert(page.includes('setUnansweredQuestions'), 'Curation tab must update unanswered question list');
 assert(page.includes('pattern: question.question'), 'Curation tab must prefill rule pattern from unanswered question');
-assert(page.includes('active: false'), 'Curation tab must open suggested rules as inactive drafts');
+assert(page.includes('active: true'), 'Curation tab must open suggested rules as active answers');
 
 assert(doc.includes('- [x] Tabela com pergunta / frequência / última vez / ações'), 'Bot_Whatsapp.md must mark curation table checklist item');
 assert(doc.includes('- [x] Botão "Criar resposta" (abre modal da Aba Respostas pré-preenchido)'), 'Bot_Whatsapp.md must mark create answer checklist item');
