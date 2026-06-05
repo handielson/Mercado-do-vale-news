@@ -46,7 +46,8 @@ for (const fileName of serverFiles) {
   assert.ok(source.includes('🎨'), `${fileName} must show colors in the requested pattern`);
   assert.ok(source.includes('AUTORESPONDER_AI_SYSTEM_PROMPT'), `${fileName} must define a strict AI system prompt`);
   assert.ok(source.includes('PROIBIDO'), `${fileName} must explicitly forbid answers outside system data`);
-  assert.ok(source.includes('buildAutoresponderNeedsPromptReply'), `${fileName} must ask what the customer is looking for instead of listing categories on greeting`);
+  assert.ok(!source.includes('formatAutoresponderReplies([greetingText, needsPrompt.text], settings, false)'), `${fileName} greeting test reply must not add a needs prompt after greeting`);
+  assert.ok(!source.includes('formatAutoresponderReplies([greetingText, needsPromptText], settings, false)'), `${fileName} webhook greeting must not add a needs prompt after greeting`);
   assert.ok(!source.includes('formatAutoresponderReplies([greetingText, categoryListText], settings, false)'), `${fileName} greeting test reply must not list categories as response 2`);
   assert.ok(source.includes('extractAutoresponderBudgetCents'), `${fileName} must understand customer budget messages`);
   assert.ok(source.includes('findAutoresponderProductsByCategoryBudget'), `${fileName} must answer budget requests from VPS category products`);

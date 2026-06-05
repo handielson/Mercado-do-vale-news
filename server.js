@@ -24,7 +24,7 @@ const AUTORESPONDER_AI_SYSTEM_PROMPT = [
   'Nunca invente informacoes. Nunca diga que tem um produto sem ele aparecer no contexto oficial.',
   'Responda em portugues do Brasil, com tom educado, direto e vendedor.',
 ].join('\n');
-const AUTORESPONDER_NEEDS_PROMPT_FALLBACK = 'Voce esta atras de celular novo? Quer que eu mande a lista do que temos? Ou deseja alguma outra coisa?';
+const AUTORESPONDER_NEEDS_PROMPT_FALLBACK = '';
 const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
 const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS = 3;
@@ -6957,7 +6957,7 @@ async function buildAutoresponderNeedsPromptReply({ message, contactFirstName = 
       'O cliente acabou de cumprimentar ou iniciar conversa.',
       `Mensagem do cliente: ${String(message || '').trim() || '(vazia)'}`,
       name ? `Nome do cliente: ${name}` : '',
-      'Nao ha produtos consultados ainda. Pergunte se ele esta atras de celular novo, se quer receber a lista do que temos ou se deseja outra coisa.',
+      'Nao ha produtos consultados ainda. Nao envie pergunta comercial depois da saudacao.',
       'Nao cite produtos, precos, estoque, garantia, entrega ou promocoes.',
     ].filter(Boolean).join('\n'),
     maxOutputTokens: 90,
@@ -9721,7 +9721,7 @@ async function hasRecentAutoresponderNeedsPrompt(sender, validityMinutes = 15) {
 async function classifyAutoresponderNeedsPromptReplyWithAi({ message, settings }) {
   const aiReply = await callAutoresponderOpenAi({
     input: [
-      'Classifique a resposta do cliente ao prompt: "Voce esta atras de celular novo? Quer que eu mande a lista do que temos? Ou deseja alguma outra coisa?"',
+      'Classifique a resposta do cliente a um pedido anterior para receber lista de celulares disponiveis.',
       `Resposta do cliente: ${String(message || '').trim()}`,
       'Responda exatamente uma destas opcoes:',
       'phone_list_opt_in = cliente quer receber/ver a lista de celulares',
@@ -10971,22 +10971,10 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
     const contactState = await getAutoresponderContactNameState(normalizedSender);
     const contactNameStatus = String(contactState?.contact_name_status || '');
-    const contactNameSaved = ['saved_to_google', 'google_pending'].includes(contactNameStatus);
-    if (!contactNameSaved) {
-      return {
-        intent: 'contact_name_prompt',
-        matched_count: 0,
-        replies: [{ message: greetingText }],
-        sender: normalizedSender,
-      };
-    }
-    const needsPrompt = await buildAutoresponderNeedsPromptReply({ message, contactFirstName, settings });
-    const replyMessages = formatAutoresponderReplies([greetingText, needsPrompt.text], settings, false);
     return {
-      intent: 'greeting_needs_prompt',
+      intent: 'greeting',
       matched_count: 0,
-      replies: formatAutoresponderProReplies(replyMessages),
-      aiMeta: needsPrompt.aiMeta,
+      replies: [{ message: greetingText }],
       sender: normalizedSender,
     };
   }
@@ -11390,7 +11378,6 @@ fastify.route({
             ? '\n\nQual seu nome para seguirmos com o atendimento?'
           : '';
         const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
-        const contactNameSaved = ['saved_to_google', 'google_pending'].includes(contactNameStatus);
         if (shouldConfirmContactName || shouldAskContactName) {
           const replyText = [greetingText, contactPrompt.trim()].filter(Boolean).join('\n\n');
           await logAutoresponderReply({
@@ -11402,23 +11389,6 @@ fastify.route({
           });
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: greetingText }, { message: contactPrompt.trim() }] };
-        }
-
-        if (contactNameSaved) {
-          const greetingNeedsPrompt = await buildAutoresponderNeedsPromptReply({ message, contactFirstName, settings });
-          const needsPromptText = greetingNeedsPrompt.text;
-          const greetingReplies = formatAutoresponderReplies([greetingText, needsPromptText], settings, false);
-        const replyText = greetingReplies.join('\n\n');
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'greeting_needs_prompt',
-          replyText,
-          matchedCount: 0,
-          aiMeta: greetingNeedsPrompt.aiMeta,
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: greetingReplies.map((replyMessage) => ({ message: replyMessage })) };
         }
 
         await logAutoresponderReply({
