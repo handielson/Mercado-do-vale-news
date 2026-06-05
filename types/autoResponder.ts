@@ -1,5 +1,13 @@
 export type AutoResponderRuleMatchType = 'exact' | 'contains' | 'any_keyword' | 'all_keywords' | string;
 export type AutoResponderRuleReplyType = 'text' | 'product_by_tag' | 'product_search' | string;
+
+export interface AutoResponderConversationState {
+    flow: string;
+    step: string;
+    data?: Record<string, unknown>;
+    last_intent?: string | null;
+    expires_at?: string | null;
+}
 export type AutoResponderTagScope = 'conversation' | 'product' | 'rule' | string;
 export type AutoResponderBlockPatternType = 'exact' | 'contains' | 'prefix' | string;
 export type AutoResponderAiTrainingType = 'store_instruction' | 'faq' | 'category_guidance' | 'policy';
@@ -56,6 +64,7 @@ export interface AutoResponderRule {
     reply_text: string;
     reply_tag_id?: number | null;
     reply_search_query?: string | null;
+    next_state?: AutoResponderConversationState | string | null;
     attachment_url?: string | null;
     attachment_caption?: string | null;
     auto_apply_tag_id?: number | null;
@@ -218,6 +227,23 @@ export interface AutoResponderTestFlowResult {
     final_purchase_flow?: unknown;
     cleanup?: boolean;
     warning?: string | null;
+}
+
+export interface AutoResponderBotMapFlowStep {
+    id: string;
+    state: AutoResponderConversationState;
+    bot_question: string;
+    expected_answer: string;
+    contextual_fallback: string;
+}
+
+export interface AutoResponderBotMapFlow {
+    id: string;
+    title: string;
+    current_state: AutoResponderConversationState;
+    description?: string;
+    simulation_messages: string[];
+    steps: AutoResponderBotMapFlowStep[];
 }
 
 export interface AutoResponderAttachmentUpload {

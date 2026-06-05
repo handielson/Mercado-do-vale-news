@@ -28,6 +28,7 @@ import type {
     AutoResponderAiTraining,
     AutoResponderAiTrainingInput,
     AutoResponderAiTrainingType,
+    AutoResponderBotMapFlow,
     AutoResponderSettings,
     AutoResponderStats,
     AutoResponderStoreStatus,
@@ -56,6 +57,7 @@ interface RuleFormState {
     reply_text: string;
     reply_tag_id: string;
     reply_search_query: string;
+    next_state: string;
     attachment_url: string;
     attachment_caption: string;
     priority: string;
@@ -186,6 +188,7 @@ const statusLabels: Record<string, string> = {
 const tabs = [
     { id: 'fluxos', label: 'Fluxos', icon: <MessageCircle size={16} /> },
     { id: 'respostas', label: 'Respostas', icon: <MessageSquareText size={16} /> },
+    { id: 'mapa', label: 'Mapa do Bot', icon: <Bot size={16} /> },
     { id: 'conversas', label: 'Conversas', icon: <Users size={16} /> },
     { id: 'bloqueados', label: 'Bloqueados', icon: <Ban size={16} /> },
     { id: 'curadoria', label: 'Curadoria', icon: <Wand2 size={16} /> },
@@ -204,6 +207,7 @@ const emptyRuleForm: RuleFormState = {
     reply_text: '',
     reply_tag_id: '',
     reply_search_query: '',
+    next_state: '',
     attachment_url: '',
     attachment_caption: '',
     priority: '0',
@@ -339,6 +343,35 @@ const ruleTemplates: Array<{ label: string; patch: Partial<RuleFormState> }> = [
     },
 ];
 
+const ruleNextStateOptions = [
+    { value: '', label: 'Nenhum', state: null },
+    {
+        value: 'delivery.awaiting_cep',
+        label: 'Aguardar CEP de entrega',
+        state: { flow: 'delivery', step: 'awaiting_cep', data: {}, last_intent: 'rule_delivery_question', expires_at: null },
+    },
+    {
+        value: 'product_search.awaiting_choice',
+        label: 'Aguardar escolha de produto',
+        state: { flow: 'product_search', step: 'awaiting_choice', data: {}, last_intent: 'rule_product_choice_question', expires_at: null },
+    },
+    {
+        value: 'purchase.awaiting_quantity',
+        label: 'Aguardar quantidade',
+        state: { flow: 'purchase', step: 'awaiting_quantity', data: {}, last_intent: 'rule_quantity_question', expires_at: null },
+    },
+    {
+        value: 'payment.awaiting_payment_method',
+        label: 'Aguardar forma de pagamento',
+        state: { flow: 'payment', step: 'awaiting_payment_method', data: {}, last_intent: 'rule_payment_question', expires_at: null },
+    },
+    {
+        value: 'handoff.ready',
+        label: 'Aguardar atendente',
+        state: { flow: 'handoff', step: 'ready', data: {}, last_intent: 'rule_handoff_question', expires_at: null },
+    },
+] as const;
+
 function formatNumber(value: unknown): string {
     const number = Number(value || 0);
     return Number.isFinite(number) ? number.toLocaleString('pt-BR') : '0';
@@ -372,6 +405,27 @@ function parseTagIds(value: AutoResponderRule['tag_ids']): number[] {
     }
 }
 
+function parseRuleNextStateKey(value: AutoResponderRule['next_state']): string {
+    if (!value) return '';
+    const parsed = typeof value === 'string'
+        ? (() => {
+            try {
+                return JSON.parse(value);
+            } catch {
+                return null;
+            }
+        })()
+        : value;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
+    const key = `${String(parsed.flow || '')}.${String(parsed.step || '')}`;
+    return ruleNextStateOptions.some((option) => option.value === key) ? key : '';
+}
+
+function buildRuleNextState(value: string): AutoResponderRuleInput['next_state'] {
+    const option = ruleNextStateOptions.find((item) => item.value === value);
+    return option?.state ? { ...option.state, data: { ...option.state.data } } : null;
+}
+
 function ruleToForm(rule: AutoResponderRule): RuleFormState {
     return {
         name: rule.name || '',
@@ -381,6 +435,7 @@ function ruleToForm(rule: AutoResponderRule): RuleFormState {
         reply_text: rule.reply_text || '',
         reply_tag_id: rule.reply_tag_id == null ? '' : String(rule.reply_tag_id),
         reply_search_query: rule.reply_search_query || '',
+        next_state: parseRuleNextStateKey(rule.next_state),
         attachment_url: rule.attachment_url || '',
         attachment_caption: rule.attachment_caption || '',
         priority: String(rule.priority || 0),
@@ -398,6 +453,7 @@ function ruleFormToInput(form: RuleFormState): AutoResponderRuleInput {
         reply_text: form.reply_text,
         reply_tag_id: form.reply_tag_id ? Number(form.reply_tag_id) : null,
         reply_search_query: form.reply_search_query.trim() || null,
+        next_state: buildRuleNextState(form.next_state),
         attachment_url: form.attachment_url.trim() || null,
         attachment_caption: form.attachment_caption.trim() || null,
         auto_apply_tag_id: null,
@@ -878,6 +934,19 @@ const RuleEditorModal: React.FC<{
                         </label>
                     )}
 
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-semibold text-slate-700">Proximo estado</span>
+                        <select
+                            value={ruleForm.next_state}
+                            onChange={(event) => onChange({ next_state: event.target.value })}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        >
+                            {ruleNextStateOptions.map((option) => (
+                                <option key={option.value || 'none'} value={option.value}>{option.label}</option>
+                            ))}
+                        </select>
+                    </label>
+
                 </div>
 
                 <div>
@@ -1287,6 +1356,9 @@ const AutoResponderPage: React.FC = () => {
     });
     const [storeStatus, setStoreStatus] = React.useState<AutoResponderStoreStatus | null>(null);
     const [rules, setRules] = React.useState<AutoResponderRule[]>([]);
+    const [botMapFlows, setBotMapFlows] = React.useState<AutoResponderBotMapFlow[]>([]);
+    const [botMapSimulationResults, setBotMapSimulationResults] = React.useState<Record<string, AutoResponderTestFlowResult>>({});
+    const [simulatingBotMapFlowId, setSimulatingBotMapFlowId] = React.useState<string | null>(null);
     const [tags, setTags] = React.useState<AutoResponderTag[]>([]);
     const [categoryTags, setCategoryTags] = React.useState<AutoResponderCategoryTag[]>([]);
     const [conversations, setConversations] = React.useState<AutoResponderConversation[]>([]);
@@ -1311,6 +1383,7 @@ const AutoResponderPage: React.FC = () => {
     const [curationSearch, setCurationSearch] = React.useState('');
     const [curationNotice, setCurationNotice] = React.useState<string | null>(null);
     const [curationActionQuestion, setCurationActionQuestion] = React.useState<string | null>(null);
+    const [curationDraftQuestion, setCurationDraftQuestion] = React.useState<string | null>(null);
     const [tagSearch, setTagSearch] = React.useState('');
     const [tagForm, setTagForm] = React.useState<TagFormState>(emptyTagForm);
     const [editingTag, setEditingTag] = React.useState<AutoResponderTag | null>(null);
@@ -1356,6 +1429,7 @@ const AutoResponderPage: React.FC = () => {
                 statsData,
                 storeStatusData,
                 rulesData,
+                botMapData,
                 tagsData,
                 categoryTagsData,
                 conversationsData,
@@ -1370,6 +1444,7 @@ const AutoResponderPage: React.FC = () => {
                 }),
                 autoResponderService.getStoreStatus(),
                 autoResponderService.listRules(),
+                autoResponderService.getBotMap(),
                 autoResponderService.listTags(),
                 autoResponderService.listCategoryTags(),
                 autoResponderService.listConversations({ limit: 100 }),
@@ -1383,6 +1458,7 @@ const AutoResponderPage: React.FC = () => {
             setStats(statsData);
             setStoreStatus(storeStatusData);
             setRules(rulesData);
+            setBotMapFlows(botMapData);
             setTags(tagsData);
             setCategoryTags(categoryTagsData);
             setConversations(conversationsData);
@@ -1698,12 +1774,14 @@ const AutoResponderPage: React.FC = () => {
 
     const openNewRule = () => {
         setEditingRule(null);
+        setCurationDraftQuestion(null);
         setRuleForm(emptyRuleForm);
         setIsRuleModalOpen(true);
     };
 
     const openEditRule = (rule: AutoResponderRule) => {
         setEditingRule(rule);
+        setCurationDraftQuestion(null);
         setRuleForm(ruleToForm(rule));
         setIsRuleModalOpen(true);
     };
@@ -1746,6 +1824,18 @@ const AutoResponderPage: React.FC = () => {
             const payload = ruleFormToInput(ruleForm);
             if (editingRule) {
                 await autoResponderService.updateRule(editingRule.id, payload);
+            } else if (curationDraftQuestion) {
+                await autoResponderService.createRuleFromQuestion({
+                    question: curationDraftQuestion,
+                    name: payload.name,
+                    match_type: payload.match_type,
+                    pattern: payload.pattern,
+                    reply_text: payload.reply_text,
+                    priority: payload.priority,
+                    active: payload.active,
+                    tag_ids: Array.isArray(payload.tag_ids) ? payload.tag_ids : [],
+                });
+                await autoResponderService.deleteUnanswered(curationDraftQuestion);
             } else {
                 await autoResponderService.createRule(payload);
             }
@@ -1760,6 +1850,7 @@ const AutoResponderPage: React.FC = () => {
             }
             setIsRuleModalOpen(false);
             setEditingRule(null);
+            setCurationDraftQuestion(null);
             setRuleForm(emptyRuleForm);
         } catch (err) {
             console.error('[AutoResponderPage] save rule error:', err);
@@ -1831,6 +1922,20 @@ const AutoResponderPage: React.FC = () => {
         } catch (err) {
             console.error('[AutoResponderPage] resume conversation error:', err);
             setError(err instanceof Error ? err.message : 'Falha ao liberar conversa');
+        } finally {
+            setConversationActionSender(null);
+        }
+    };
+
+    const resetConversationCounters = async (sender: string) => {
+        setConversationActionSender(sender);
+        setError(null);
+        try {
+            await autoResponderService.resetConversationCounters(sender);
+            await reloadConversations();
+        } catch (err) {
+            console.error('[AutoResponderPage] reset conversation counters error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao reiniciar conversa');
         } finally {
             setConversationActionSender(null);
         }
@@ -1940,13 +2045,14 @@ const AutoResponderPage: React.FC = () => {
         setCurationNotice(null);
         setError(null);
         setEditingRule(null);
+        setCurationDraftQuestion(question.question);
         setRuleForm({
             ...emptyRuleForm,
             name: `Curadoria: ${question.question.slice(0, 60)}`,
             pattern: question.question,
             match_type: 'exact',
             reply_type: 'text',
-            active: false,
+            active: true,
         });
         setIsRuleModalOpen(true);
         setCurationNotice('Revise e salve a resposta sugerida');
@@ -2182,6 +2288,23 @@ const AutoResponderPage: React.FC = () => {
             setError(err instanceof Error ? err.message : 'Falha ao testar fluxo completo');
         } finally {
             setIsTestingFlow(false);
+        }
+    };
+
+    const simulateBotMapFlow = async (flow: AutoResponderBotMapFlow) => {
+        setSimulatingBotMapFlowId(flow.id);
+        setTestNotice(null);
+        setError(null);
+        try {
+            const result = await autoResponderService.simulateBotMapFlow(flow, {
+                contactFirstName: testContactFirstName.trim() || 'Cliente',
+            });
+            setBotMapSimulationResults((current) => ({ ...current, [flow.id]: result }));
+        } catch (err) {
+            console.error('[AutoResponderPage] simulate bot map flow error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao simular fluxo do mapa');
+        } finally {
+            setSimulatingBotMapFlowId(null);
         }
     };
 
@@ -3132,6 +3255,15 @@ const AutoResponderPage: React.FC = () => {
                                                 </button>
                                                 <button
                                                     type="button"
+                                                    onClick={() => resetConversationCounters(conversation.sender)}
+                                                    disabled={busy}
+                                                    title="Limpa pausa e contadores para o bot voltar a responder esta conversa"
+                                                    className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-60"
+                                                >
+                                                    Reiniciar conversa
+                                                </button>
+                                                <button
+                                                    type="button"
                                                     onClick={() => saveConversationTags(conversation.sender)}
                                                     disabled={busy}
                                                     className="rounded-lg border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60"
@@ -3859,6 +3991,146 @@ const AutoResponderPage: React.FC = () => {
                                         )}
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </TabPanel>
+                    <TabPanel id="mapa">
+                        <div className="space-y-4">
+                            <div className="rounded-lg border border-slate-200 bg-white p-5">
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase text-slate-500">Fluxo operacional</p>
+                                        <h2 className="mt-1 text-lg font-semibold text-slate-900">Mapa do Bot</h2>
+                                    </div>
+                                    <span className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                                        <CheckCircle2 size={16} />
+                                        {formatNumber(botMapFlows.length)} fluxos mapeados
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4">
+                                {botMapFlows.map((flow) => {
+                                    const simulationResult = botMapSimulationResults[flow.id];
+                                    const isSimulating = simulatingBotMapFlowId === flow.id;
+                                    return (
+                                        <div key={flow.id} className="rounded-lg border border-slate-200 bg-white p-5">
+                                            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                                                <div className="min-w-0">
+                                                    <p className="text-xs font-semibold uppercase text-slate-500">Fluxo</p>
+                                                    <h3 className="mt-1 text-base font-semibold text-slate-950">{flow.title}</h3>
+                                                    {flow.description && (
+                                                        <p className="mt-1 text-sm text-slate-500">{flow.description}</p>
+                                                    )}
+                                                    <div className="mt-3 flex flex-wrap gap-2">
+                                                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                                                            Estado atual: {flow.current_state.flow}.{flow.current_state.step}
+                                                        </span>
+                                                        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                                                            {flow.simulation_messages.length} mensagens de teste
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => simulateBotMapFlow(flow)}
+                                                    disabled={isSimulating}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                >
+                                                    <Bot size={16} />
+                                                    {isSimulating ? 'Simulando...' : 'Simular fluxo'}
+                                                </button>
+                                            </div>
+
+                                            <div className="mt-5 overflow-x-auto">
+                                                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                                                    <thead>
+                                                        <tr className="text-left text-xs font-semibold uppercase text-slate-500">
+                                                            <th className="px-3 py-2">Estado atual</th>
+                                                            <th className="px-3 py-2">Pergunta do bot</th>
+                                                            <th className="px-3 py-2">Resposta esperada</th>
+                                                            <th className="px-3 py-2">Fallback contextual</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {flow.steps.map((step) => (
+                                                            <tr key={step.id} className="align-top">
+                                                                <td className="px-3 py-3 font-mono text-xs text-slate-700">
+                                                                    {step.state.flow}.{step.state.step}
+                                                                </td>
+                                                                <td className="px-3 py-3 text-slate-800">{step.bot_question}</td>
+                                                                <td className="px-3 py-3 text-slate-700">{step.expected_answer}</td>
+                                                                <td className="px-3 py-3 text-slate-700">{step.contextual_fallback}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[320px_minmax(0,1fr)]">
+                                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                                    <h4 className="text-sm font-semibold text-slate-900">Roteiro da simulacao</h4>
+                                                    <ol className="mt-3 space-y-2">
+                                                        {flow.simulation_messages.map((message, index) => (
+                                                            <li key={`${flow.id}-message-${index}`} className="flex gap-2 text-sm text-slate-700">
+                                                                <span className="font-semibold text-slate-500">{index + 1}.</span>
+                                                                <span>{message}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ol>
+                                                </div>
+                                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                                    <h4 className="text-sm font-semibold text-slate-900">Resultado da ultima simulacao</h4>
+                                                    {simulationResult ? (
+                                                        <div className="mt-3 space-y-3">
+                                                            <div className="flex flex-wrap gap-2">
+                                                                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${simulationResult.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                                    {simulationResult.ok ? 'Fluxo OK' : 'Fluxo com falha'}
+                                                                </span>
+                                                                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                                                                    {formatNumber(simulationResult.steps.length)} etapas
+                                                                </span>
+                                                                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                                                                    {simulationResult.sender}
+                                                                </span>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                {simulationResult.steps.map((step) => (
+                                                                    <div key={`${flow.id}-simulation-${step.index}`} className="rounded-lg border border-slate-200 bg-white p-3">
+                                                                        <div className="text-xs font-semibold text-slate-500">
+                                                                            #{step.index} - {step.status_code} - {formatNumber(step.response_time_ms)} ms
+                                                                        </div>
+                                                                        <div className="mt-1 text-sm font-semibold text-slate-900">{step.message}</div>
+                                                                        <div className="mt-2 space-y-2">
+                                                                            {step.replies.length > 0 ? (
+                                                                                step.replies.map((reply, replyIndex) => (
+                                                                                    <pre key={`${flow.id}-simulation-${step.index}-${replyIndex}`} className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-800">
+                                                                                        {reply.message}
+                                                                                    </pre>
+                                                                                ))
+                                                                            ) : (
+                                                                                <p className="text-sm text-slate-500">Sem resposta nesta etapa.</p>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <p className="mt-3 text-sm text-slate-500">
+                                                            Nenhuma simulacao executada para este fluxo.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {botMapFlows.length === 0 && (
+                                    <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                                        Nenhum fluxo mapeado.
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </TabPanel>
@@ -4733,7 +5005,10 @@ const AutoResponderPage: React.FC = () => {
                     onToggleTag={toggleRuleTag}
                     onUploadAttachment={uploadRuleAttachment}
                     onRemoveAttachment={() => updateRuleForm({ attachment_url: '', attachment_caption: '' })}
-                    onClose={() => setIsRuleModalOpen(false)}
+                    onClose={() => {
+                        setIsRuleModalOpen(false);
+                        setCurationDraftQuestion(null);
+                    }}
                     onSave={saveRule}
                 />
             )}

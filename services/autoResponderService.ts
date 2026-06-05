@@ -5,6 +5,7 @@ import type {
     AutoResponderAiTrainingFilters,
     AutoResponderAiTrainingInput,
     AutoResponderAiTrainingUpdate,
+    AutoResponderBotMapFlow,
     AutoResponderBlocklistEntry,
     AutoResponderBlocklistInput,
     AutoResponderBlocklistUpdate,
@@ -31,9 +32,9 @@ import type {
     AutoResponderUnansweredQuestion,
 } from '../types/autoResponder';
 
-function withQuery(path: string, params: Record<string, string | number | boolean | undefined | null>): string {
+function withQuery(path: string, params: object): string {
     const query = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
+    Object.entries(params as Record<string, unknown>).forEach(([key, value]) => {
         if (value === undefined || value === null || value === '') return;
         query.set(key, String(value));
     });
@@ -45,7 +46,93 @@ function senderPath(sender: string): string {
     return encodeURIComponent(sender);
 }
 
+const localBotMapFlows: AutoResponderBotMapFlow[] = [
+    {
+        id: 'delivery',
+        title: 'Entrega fora de compra',
+        current_state: { flow: 'delivery', step: 'awaiting_cep', data: {}, last_intent: 'delivery_question', expires_at: null },
+        description: 'Consulta CEP quando o cliente pergunta sobre entrega antes de escolher produto.',
+        simulation_messages: ['faz entrega?', '56320690'],
+        steps: [
+            {
+                id: 'delivery-cep',
+                state: { flow: 'delivery', step: 'awaiting_cep', data: {}, last_intent: 'delivery_question', expires_at: null },
+                bot_question: 'Fazemos entrega sim. Me envie seu CEP com 8 numeros para consultar rapidinho.',
+                expected_answer: 'CEP de 8 digitos',
+                contextual_fallback: 'Me envie apenas os 8 numeros do CEP. Ex: 56320690',
+            },
+        ],
+    },
+    {
+        id: 'product_search',
+        title: 'Busca de produto',
+        current_state: { flow: 'product_search', step: 'awaiting_choice', data: {}, last_intent: 'product_search', expires_at: null },
+        description: 'Lista produtos e espera numero, nome do modelo ou pedido de mais opcoes.',
+        simulation_messages: ['redmi note 15', '1'],
+        steps: [
+            {
+                id: 'product-choice',
+                state: { flow: 'product_search', step: 'awaiting_choice', data: {}, last_intent: 'product_search', expires_at: null },
+                bot_question: 'Encontrei estas opcoes. Vamos ficar com qual deles hoje?',
+                expected_answer: 'numero, nome ou mais',
+                contextual_fallback: 'Me diga o numero da opcao ou o nome do modelo. Ex: 1 ou Redmi Note 15.',
+            },
+        ],
+    },
+    {
+        id: 'purchase',
+        title: 'Compra',
+        current_state: { flow: 'purchase', step: 'awaiting_quantity', data: {}, last_intent: 'purchase_intent', expires_at: null },
+        description: 'Confirma quantidade, entrega ou retirada e forma de pagamento.',
+        simulation_messages: ['redmi note 15', '1', 'comprar', '1', 'finalizar', 'retirada'],
+        steps: [
+            {
+                id: 'purchase-quantity',
+                state: { flow: 'purchase', step: 'awaiting_quantity', data: {}, last_intent: 'purchase_intent', expires_at: null },
+                bot_question: 'Quantas unidades voce quer?',
+                expected_answer: 'numero',
+                contextual_fallback: 'Me envie a quantidade em numero. Ex: 1',
+            },
+            {
+                id: 'purchase-fulfillment',
+                state: { flow: 'purchase', step: 'awaiting_fulfillment', data: {}, last_intent: 'purchase_fulfillment', expires_at: null },
+                bot_question: 'Voce prefere entrega ou retirada na loja?',
+                expected_answer: 'entrega ou retirada',
+                contextual_fallback: 'Voce prefere entrega ou retirada na loja?',
+            },
+        ],
+    },
+    {
+        id: 'handoff',
+        title: 'Atendimento humano',
+        current_state: { flow: 'handoff', step: 'ready', data: {}, last_intent: 'human_request', expires_at: null },
+        description: 'Pausa o bot e encaminha para a equipe continuar a conversa.',
+        simulation_messages: ['falar com atendente'],
+        steps: [
+            {
+                id: 'handoff-ready',
+                state: { flow: 'handoff', step: 'ready', data: {}, last_intent: 'human_request', expires_at: null },
+                bot_question: 'Vou chamar nossa equipe para continuar seu atendimento por aqui.',
+                expected_answer: 'aguardar atendente',
+                contextual_fallback: 'Nossa equipe assume esta conversa assim que possivel.',
+            },
+        ],
+    },
+];
+
 export const autoResponderService = {
+    getBotMap: async (): Promise<AutoResponderBotMapFlow[]> => {
+        return localBotMapFlows.map((flow) => ({
+            ...flow,
+            current_state: { ...flow.current_state, data: { ...(flow.current_state.data || {}) } },
+            simulation_messages: [...flow.simulation_messages],
+            steps: flow.steps.map((step) => ({
+                ...step,
+                state: { ...step.state, data: { ...(step.state.data || {}) } },
+            })),
+        }));
+    },
+
     getSettings: (): Promise<AutoResponderSettings | null> => {
         return vpsClient.get<AutoResponderSettings | null>('/autoresponder/settings');
     },
@@ -131,6 +218,10 @@ export const autoResponderService = {
         return vpsClient.post<AutoResponderOk>(`/autoresponder/conversations/${senderPath(sender)}/resume`, {});
     },
 
+    resetConversationCounters: (sender: string): Promise<AutoResponderOk> => {
+        return vpsClient.post<AutoResponderOk>(`/autoresponder/conversations/${senderPath(sender)}/reset-counters`, {});
+    },
+
     setConversationTags: (sender: string, tagIds: number[]): Promise<AutoResponderOk & { tag_ids: number[] }> => {
         return vpsClient.post<AutoResponderOk & { tag_ids: number[] }>(
             `/autoresponder/conversations/${senderPath(sender)}/tags`,
@@ -162,6 +253,10 @@ export const autoResponderService = {
         return vpsClient.get<AutoResponderUnansweredQuestion[]>(withQuery('/autoresponder/unanswered', filters));
     },
 
+    deleteUnanswered: (question: string): Promise<AutoResponderOk> => {
+        return vpsClient.delete<AutoResponderOk>(withQuery('/autoresponder/unanswered', { question }));
+    },
+
     getStats: (filters: { source?: 'mysql' | 'synology'; from?: string } = {}): Promise<AutoResponderStats> => {
         return vpsClient.get<AutoResponderStats>(withQuery('/autoresponder/stats', filters));
     },
@@ -176,6 +271,16 @@ export const autoResponderService = {
 
     testFlow: (input: { messages: string[]; sender?: string; contactFirstName?: string; cleanup?: boolean }): Promise<AutoResponderTestFlowResult> => {
         return vpsClient.post<AutoResponderTestFlowResult>('/autoresponder/test-flow', input);
+    },
+
+    simulateBotMapFlow: (flow: AutoResponderBotMapFlow, input: { sender?: string; contactFirstName?: string } = {}): Promise<AutoResponderTestFlowResult> => {
+        const safeSender = input.sender?.startsWith('mapa-') ? input.sender : `mapa-${flow.id}-${Date.now()}`;
+        return vpsClient.post<AutoResponderTestFlowResult>('/autoresponder/test-flow', {
+            messages: flow.simulation_messages,
+            sender: safeSender,
+            contactFirstName: input.contactFirstName || 'Cliente',
+            cleanup: true,
+        });
     },
 
     updateProductTags: (productId: string | number, tagIds: number[]): Promise<AutoResponderOk & { tag_ids: number[] }> => {

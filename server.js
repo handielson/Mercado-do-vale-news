@@ -24,10 +24,10 @@ const AUTORESPONDER_AI_SYSTEM_PROMPT = [
   'Nunca invente informacoes. Nunca diga que tem um produto sem ele aparecer no contexto oficial.',
   'Responda em portugues do Brasil, com tom educado, direto e vendedor.',
 ].join('\n');
-const AUTORESPONDER_NEEDS_PROMPT_FALLBACK = 'Voce esta atras de celular novo? Quer que eu mande a lista do que temos? Ou deseja alguma outra coisa?';
+const AUTORESPONDER_NEEDS_PROMPT_FALLBACK = 'Quer que eu mande a lista de celulares disponiveis?';
 const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
 const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
-const AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS = 3;
+const AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS = [4, 9, 16, 24, 33, 43, 54, 66, 79, 93];
 const AUTORESPONDER_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_PRODUCT_PAGE_SIZE * AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES;
 const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 500;
 const AUTORESPONDER_RULE_TEMPLATES = [
@@ -6099,12 +6099,101 @@ function normalizeAutoresponderText(value) {
     .toLowerCase();
 }
 
+const AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY = 'Recebi seu áudio, mas ainda não consigo ouvir por aqui. Pode me mandar em texto?';
+
+function isAutoresponderAudioMessage(message) {
+  const raw = String(message || '').trim();
+  if (!raw) return false;
+  const text = normalizeAutoresponderText(raw)
+    .replace(/[^\w\s\[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const withoutBrackets = text.replace(/^\[|\]$/g, '').trim();
+  const exactPlaceholders = new Set([
+    'audio',
+    'audio message',
+    'mensagem de audio',
+    'mensagem de voz',
+    'voice message',
+    'ptt',
+  ]);
+  if (exactPlaceholders.has(withoutBrackets)) return true;
+  return withoutBrackets.length <= 80
+    && /\b(audio message|mensagem de audio|mensagem de voz|voice message|ptt)\b/.test(withoutBrackets);
+}
+
+function collectAutoresponderPayloadStrings(value, depth = 0) {
+  if (depth > 3 || value == null) return [];
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return [String(value)];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectAutoresponderPayloadStrings(item, depth + 1));
+  }
+  if (typeof value !== 'object') return [];
+
+  const strings = [];
+  const directKeys = [
+    'type',
+    'messageType',
+    'message_type',
+    'mediaType',
+    'media_type',
+    'mimetype',
+    'mimeType',
+    'mime_type',
+    'contentType',
+    'content_type',
+    'kind',
+    'event',
+    'ptt',
+    'audio',
+    'voice',
+    'media',
+    'fileName',
+    'filename',
+  ];
+  for (const key of directKeys) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      strings.push(String(value[key]));
+    }
+  }
+
+  const nestedKeys = ['message', 'audioMessage', 'mediaMessage', 'data', 'payload', 'media', 'file', 'document'];
+  for (const key of nestedKeys) {
+    if (value[key] && typeof value[key] === 'object') {
+      strings.push(...collectAutoresponderPayloadStrings(value[key], depth + 1));
+    }
+  }
+  return strings;
+}
+
+function isAutoresponderAudioPayload(payload, message = '') {
+  if (isAutoresponderAudioMessage(message)) return true;
+  const text = normalizeAutoresponderText(collectAutoresponderPayloadStrings(payload).join(' '));
+  if (!text) return false;
+  return /\b(audio|ptt|voice|voicenote|audiomessage|mensagem de audio|mensagem de voz)\b/.test(text)
+    || text.includes('audio/');
+}
+
 function isAutoresponderHumanRequest(message) {
   const text = normalizeAutoresponderText(message);
   return /\b(humano|atendente|pessoa|vendedor|gerente|especialista)\b/.test(text)
     || text.includes('falar com alguem')
     || text.includes('pessoa real')
     || text.includes('atendimento humano');
+}
+
+function isAutoresponderStoreStatusRequest(message) {
+  const text = normalizeAutoresponderText(message)
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return false;
+  const mentionsStore = /\b(loja|voces|voce|atendimento|mercado do vale)\b/.test(text);
+  const mentionsHours = /\b(horario|funcionamento|abre|abrem|abrir|aberto|aberta|fechado|fechada|fecha|fecham|expediente)\b/.test(text);
+  if (mentionsHours && (mentionsStore || /\b(esta|ta|tá|estao|estao|ainda|hoje|agora)\b/.test(text))) return true;
+  return /^(esta|ta|tá|estao|estao) (aberto|aberta|fechado|fechada)( agora)?$/.test(text);
 }
 
 function isAutoresponderWarrantyRequest(message) {
@@ -6436,7 +6525,7 @@ function doesAutoresponderRuleMatch(message, rule) {
 
 async function findAutoresponderRuleMatch(message) {
   const [rows] = await pool.query(
-    `SELECT id, match_type, pattern, reply_type, reply_text, reply_tag_id, reply_search_query, attachment_url, attachment_caption, auto_apply_tag_id
+    `SELECT id, match_type, pattern, reply_type, reply_text, reply_tag_id, reply_search_query, next_state, attachment_url, attachment_caption, auto_apply_tag_id
      FROM autoresponder_rules
      WHERE active = 1
      ORDER BY priority DESC, id ASC`
@@ -6868,7 +6957,7 @@ async function buildAutoresponderNeedsPromptReply({ message, contactFirstName = 
       'O cliente acabou de cumprimentar ou iniciar conversa.',
       `Mensagem do cliente: ${String(message || '').trim() || '(vazia)'}`,
       name ? `Nome do cliente: ${name}` : '',
-      'Nao ha produtos consultados ainda. Pergunte se ele esta atras de celular novo, se quer receber a lista do que temos ou se deseja outra coisa.',
+      'Nao ha produtos consultados ainda. Pergunte somente se o cliente quer receber a lista de celulares disponiveis.',
       'Nao cite produtos, precos, estoque, garantia, entrega ou promocoes.',
     ].filter(Boolean).join('\n'),
     maxOutputTokens: 90,
@@ -6878,6 +6967,23 @@ async function buildAutoresponderNeedsPromptReply({ message, contactFirstName = 
     text: needsPrompt?.text || AUTORESPONDER_NEEDS_PROMPT_FALLBACK,
     aiMeta: needsPrompt?.aiMeta || null,
   };
+}
+
+async function buildAutoresponderAiFallbackReply({ message, contactFirstName = '', settings = null } = {}) {
+  const name = String(contactFirstName || '').trim();
+  return callAutoresponderOpenAi({
+    input: [
+      'Nenhuma resposta pronta ou produto correspondente foi encontrado para esta mensagem.',
+      `Mensagem do cliente: ${String(message || '').trim() || '(vazia)'}`,
+      name ? `Nome do cliente: ${name}` : '',
+      'Responda diretamente a pergunta como atendente do Mercado do Vale, usando somente o treinamento aprovado fornecido nas instrucoes.',
+      'Se a informacao necessaria nao estiver no treinamento, diga de forma natural que precisa confirmar com a equipe e faca no maximo uma pergunta realmente necessaria.',
+      'Nao envie uma resposta generica pedindo modelo ou tipo de produto, a menos que isso seja indispensavel para responder a pergunta.',
+      'Nao invente politicas, produtos, precos, estoque, garantias ou condicoes.',
+    ].filter(Boolean).join('\n'),
+    maxOutputTokens: 160,
+    settings,
+  });
 }
 
 const AUTORESPONDER_GENERIC_PHONE_CATALOG_WORDS = new Set([
@@ -7579,9 +7685,18 @@ async function handleAutoresponderDeliveryCepLookup({ senderKey, message, purcha
 }
 
 async function handleAutoresponderEngineDeliveryFlowV2({ senderKey, message, settings, purchaseFlow }) {
-  if (process.env.AUTORESPONDER_ENGINE_V2 !== '1') return null;
-
   const currentPurchaseFlow = purchaseFlow || await getAutoresponderPurchaseFlow(senderKey);
+  if (
+    hasAutoresponderCartItems(currentPurchaseFlow) &&
+    (
+      currentPurchaseFlow?.status === 'awaiting_delivery_address' ||
+      currentPurchaseFlow?.status === 'awaiting_delivery_cep_confirmation' ||
+      currentPurchaseFlow?.status === 'awaiting_delivery_number' ||
+      currentPurchaseFlow?.fulfillment === 'delivery'
+    )
+  ) {
+    return null;
+  }
   const [{ normalizeConversationState }, { deliveryFlowHandler }] = await Promise.all([
     import('./services/autoresponder/engine/state.js'),
     import('./services/autoresponder/engine/flows/delivery.js'),
@@ -7617,6 +7732,339 @@ async function handleAutoresponderEngineDeliveryFlowV2({ senderKey, message, set
   });
   await upsertAutoresponderSuccessConversation(senderKey);
   return { replies: [{ message: deliveryReply.message }] };
+}
+
+function isAutoresponderEngineV2Enabled() {
+  return process.env.AUTORESPONDER_ENGINE_V2 === '1';
+}
+
+async function handleAutoresponderEngineProductSearchFlowV2({ senderKey, message, settings, purchaseFlow }) {
+  if (!isAutoresponderEngineV2Enabled()) return null;
+
+  const currentPurchaseFlow = purchaseFlow || await getAutoresponderPurchaseFlow(senderKey);
+  const [{ normalizeConversationState }, { productSearchFlowHandler }] = await Promise.all([
+    import('./services/autoresponder/engine/state.js'),
+    import('./services/autoresponder/engine/flows/product-search.js'),
+  ]);
+  const state = normalizeConversationState(currentPurchaseFlow?.conversation_state || {});
+  const productSearchTokens = state.flow === 'product_search'
+    ? []
+    : extractAutoresponderProductSearchTokens(message);
+  const searchKeyword = productSearchTokens.join(' ');
+  const pageSize = searchKeyword ? getAutoresponderInitialProductPageSize(searchKeyword) : AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
+  let searchMeta = { hasMore: false, total: 0 };
+  const canHandle = productSearchFlowHandler.canHandle({ message, state, settings, context: { productSearchTokens } });
+  if (!canHandle) return null;
+
+  const productReply = await productSearchFlowHandler.handle({
+    sender: senderKey,
+    message,
+    state,
+    settings,
+    context: {
+      productSearchTokens,
+      pageSize,
+      get hasMore() {
+        return searchMeta.hasMore;
+      },
+      get total() {
+        return searchMeta.total;
+      },
+      async findProducts(tokens) {
+        const rows = await findAutoresponderProductsByTokens(tokens, pageSize + 1);
+        searchMeta.hasMore = rows.length > pageSize;
+        searchMeta.total = await countAutoresponderProductsByTokens(tokens);
+        return rows.slice(0, pageSize);
+      },
+      buildProductOptions: buildAutoresponderProductOptions,
+      findSelectedProduct(selectedMessage, options) {
+        return findAutoresponderSelectedOptionFromMessage(
+          selectedMessage,
+          options,
+          getAutoresponderNumberedChoice(selectedMessage)
+        );
+      },
+      async buildProductDetailReply(selectedProduct) {
+        const product = selectedProduct?.id ? await findAutoresponderProductById(selectedProduct.id) : null;
+        return buildAutoresponderPurchaseActionPrompt(product, selectedProduct);
+      },
+    },
+  });
+  if (!productReply) return null;
+  if (productReply.intent === 'contextual_fallback' && state.flow !== 'product_search') return null;
+
+  const purchaseFlowPatch = {
+    ...currentPurchaseFlow,
+    conversation_state: productReply.nextState,
+  };
+  if (productReply.intent === 'product_selected') {
+    purchaseFlowPatch.status = 'awaiting_product_action';
+    purchaseFlowPatch.selected_product = productReply.nextState?.data?.selected_product || productReply.matchedProducts?.[0] || null;
+  }
+
+  await saveAutoresponderPurchaseFlow(senderKey, purchaseFlowPatch);
+  if (productReply.intent === 'product_search') {
+    await upsertAutoresponderOptionsConversation(senderKey, productReply.matchedProducts, {
+      source: 'tokens',
+      tokens: productSearchTokens,
+      keyword: searchKeyword,
+      offset: 0,
+      limit: pageSize,
+      total: searchMeta.total,
+      hasMore: searchMeta.hasMore,
+    });
+  }
+  await logAutoresponderReply({
+    sender: senderKey,
+    message,
+    intent: productReply.intent,
+    replyText: productReply.message,
+    matchedCount: productReply.matchedCount,
+    matchedProducts: productReply.matchedProducts,
+  });
+  await upsertAutoresponderSuccessConversation(senderKey);
+  return { replies: [{ message: productReply.message }] };
+}
+
+function buildAutoresponderEnginePurchaseFlowPatch(currentPurchaseFlow, purchaseReply) {
+  const nextState = purchaseReply?.nextState || {};
+  const data = nextState.data && typeof nextState.data === 'object' ? nextState.data : {};
+  const purchaseFlowPatch = {
+    ...currentPurchaseFlow,
+    conversation_state: purchaseReply.nextState,
+  };
+
+  if (nextState.flow === 'purchase' && nextState.step === 'awaiting_action') {
+    purchaseFlowPatch.status = 'awaiting_product_action';
+    purchaseFlowPatch.selected_product = data.selected_product || purchaseFlowPatch.selected_product || null;
+  }
+  if (nextState.flow === 'purchase' && nextState.step === 'awaiting_variation') {
+    purchaseFlowPatch.status = 'awaiting_variation';
+    purchaseFlowPatch.variation_options = data.variation_options || [];
+    purchaseFlowPatch.selected_product = data.selected_product || purchaseFlowPatch.selected_product || null;
+  }
+  if (nextState.flow === 'purchase' && nextState.step === 'awaiting_quantity') {
+    purchaseFlowPatch.status = 'awaiting_quantity';
+    purchaseFlowPatch.selected_product = data.selected_product || purchaseFlowPatch.selected_product || null;
+    purchaseFlowPatch.requested_quantity = null;
+  }
+  if (nextState.flow === 'purchase' && nextState.step === 'item_added') {
+    purchaseFlowPatch.status = 'item_added';
+    purchaseFlowPatch.items = Array.isArray(data.items) ? data.items : [];
+    purchaseFlowPatch.requested_quantity = data.requested_quantity || purchaseFlowPatch.requested_quantity || null;
+  }
+  if (nextState.flow === 'purchase' && nextState.step === 'awaiting_fulfillment') {
+    purchaseFlowPatch.status = 'summary_ready';
+    purchaseFlowPatch.items = Array.isArray(data.items) ? data.items : purchaseFlowPatch.items;
+  }
+  if (nextState.flow === 'delivery' && nextState.step === 'awaiting_cep') {
+    purchaseFlowPatch.status = 'awaiting_delivery_address';
+    purchaseFlowPatch.fulfillment = 'delivery';
+    purchaseFlowPatch.items = Array.isArray(data.items) ? data.items : purchaseFlowPatch.items;
+  }
+  if (nextState.flow === 'payment' && nextState.step === 'awaiting_payment_method') {
+    purchaseFlowPatch.status = 'awaiting_payment_method';
+    purchaseFlowPatch.fulfillment = data.fulfillment || purchaseFlowPatch.fulfillment || 'pickup';
+    purchaseFlowPatch.items = Array.isArray(data.items) ? data.items : purchaseFlowPatch.items;
+    purchaseFlowPatch.totals = calculateAutoresponderCartTotalsWithShipping(purchaseFlowPatch.items, purchaseFlowPatch);
+  }
+  if (nextState.flow === 'customer_data' && nextState.step === 'awaiting_name') {
+    purchaseFlowPatch.status = 'awaiting_customer_full_name';
+    purchaseFlowPatch.selected_payment = data.payment || purchaseFlowPatch.selected_payment || null;
+  }
+  if (nextState.flow === 'customer_data' && nextState.step === 'awaiting_document') {
+    purchaseFlowPatch.status = 'awaiting_customer_document';
+    purchaseFlowPatch.customer_data = {
+      ...(purchaseFlowPatch.customer_data || {}),
+      name: data.customer_name || purchaseFlowPatch.customer_data?.name || null,
+    };
+  }
+  if (nextState.flow === 'handoff' && nextState.step === 'ready') {
+    purchaseFlowPatch.status = 'customer_registration_ready';
+    purchaseFlowPatch.customer_data = {
+      ...(purchaseFlowPatch.customer_data || {}),
+      cpf_cnpj: data.customer_document || purchaseFlowPatch.customer_data?.cpf_cnpj || null,
+    };
+  }
+
+  return purchaseFlowPatch;
+}
+
+function buildAutoresponderEngineSelectedPayment(method, purchaseFlow = {}) {
+  const cartTotals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
+  if (method === 'pix') {
+    return { method, label: 'Pix', total_cents: cartTotals.total_cents, base_total_cents: cartTotals.total_cents };
+  }
+  if (method === 'cash') {
+    return { method, label: 'Dinheiro', total_cents: cartTotals.total_cents, base_total_cents: cartTotals.total_cents };
+  }
+  if (method === 'debit') {
+    return { method, label: 'Debito', total_cents: cartTotals.total_cents, base_total_cents: cartTotals.total_cents };
+  }
+  return null;
+}
+
+async function handleAutoresponderEnginePurchaseFlowV2({ senderKey, message, settings, purchaseFlow }) {
+  if (!isAutoresponderEngineV2Enabled()) return null;
+
+  const currentPurchaseFlow = purchaseFlow || await getAutoresponderPurchaseFlow(senderKey);
+  const [{ normalizeConversationState }, { purchaseFlowHandler }] = await Promise.all([
+    import('./services/autoresponder/engine/state.js'),
+    import('./services/autoresponder/engine/flows/purchase.js'),
+  ]);
+  const state = normalizeConversationState(currentPurchaseFlow?.conversation_state || {});
+  if (!purchaseFlowHandler.canHandle({ message, state, settings, context: {} })) return null;
+
+  const purchaseReply = await purchaseFlowHandler.handle({
+    sender: senderKey,
+    message,
+    state,
+    settings,
+    context: {
+      isBuyRequest: isAutoresponderPurchaseBuyRequest,
+      isDetailsRequest: isAutoresponderPurchaseDetailsRequest,
+      isAddMoreRequest: isAutoresponderPurchaseAddMoreRequest,
+      isFinalizeRequest: isAutoresponderPurchaseFinalizeRequest,
+      isDeliveryRequest(input) {
+        return getAutoresponderPurchaseFulfillmentChoice(input) === 'delivery';
+      },
+      isPickupRequest(input) {
+        return getAutoresponderPurchaseFulfillmentChoice(input) === 'pickup';
+      },
+      parseQuantity: parseAutoresponderRequestedQuantity,
+      parsePaymentMethod: getAutoresponderPaymentMethodChoice,
+      parseCustomerDocument: normalizeAutoresponderCustomerDocument,
+      buildSelectedPayment(method, data) {
+        return buildAutoresponderEngineSelectedPayment(method, { ...currentPurchaseFlow, ...data });
+      },
+      async findProductVariations(selectedProduct) {
+        const product = selectedProduct?.id ? await findAutoresponderProductById(selectedProduct.id) : selectedProduct;
+        const variations = await findAutoresponderProductVariations(product || selectedProduct);
+        return shouldAutoresponderAskVariation(variations) ? variations : [product || selectedProduct];
+      },
+      findSelectedVariation: findAutoresponderSelectedVariation,
+      async buildProductDetailReply(selectedProduct) {
+        const product = selectedProduct?.id ? await findAutoresponderProductById(selectedProduct.id) : selectedProduct;
+        const detailText = await formatAutoresponderProductDetailReply(product, settings);
+        return formatAutoresponderReply(`${detailText}\n\nSe quiser comprar, responda "comprar".`, settings, false);
+      },
+      buildVariationPrompt(variations) {
+        return formatAutoresponderReply(buildAutoresponderVariationPrompt(variations), settings, false);
+      },
+      buildQuantityPrompt(product) {
+        return formatAutoresponderReply(buildAutoresponderQuantityPrompt(product), settings, false);
+      },
+      buildStockBlockedReply(product, quantity) {
+        const availableStock = Math.max(Number(product?.stock_quantity || 0), 0);
+        const text = availableStock <= 0
+          ? buildAutoresponderOutOfStockReply(product)
+          : buildAutoresponderInsufficientStockReply(product, quantity, availableStock);
+        return formatAutoresponderReply(text, settings, false);
+      },
+      async buildCartItem(product, quantity) {
+        const fullProduct = product?.id ? await findAutoresponderProductById(product.id) : product;
+        const selectedProduct = fullProduct || product;
+        const unitPriceCents = getAutoresponderProductPriceCents(selectedProduct);
+        return {
+          product_id: selectedProduct.id,
+          name: selectedProduct.name || product.name || null,
+          sku: selectedProduct.sku || product.sku || null,
+          slug: selectedProduct.slug || product.slug || null,
+          quantity,
+          unit_price_cents: unitPriceCents,
+          subtotal_cents: unitPriceCents * quantity,
+        };
+      },
+      buildItemAddedPrompt(item) {
+        return formatAutoresponderReply(buildAutoresponderItemAddedPrompt(item), settings, false);
+      },
+      buildAddMorePrompt() {
+        return formatAutoresponderReply(buildAutoresponderAddMorePrompt(), settings, false);
+      },
+      async buildFulfillmentPrompt(_settings) {
+        return formatAutoresponderReply(await formatAutoresponderCartSummaryReply(currentPurchaseFlow.items || state.data?.items || []), settings, false);
+      },
+      buildDeliveryCepPrompt() {
+        return formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(settings), settings, false);
+      },
+      buildPaymentMethodPrompt(nextData) {
+        return formatAutoresponderReply(buildAutoresponderPaymentMethodPrompt({ ...currentPurchaseFlow, ...nextData }), settings, false);
+      },
+      buildCustomerNamePrompt() {
+        return formatAutoresponderReply(buildAutoresponderFullNamePrompt(settings), settings, false);
+      },
+      buildCustomerDocumentPrompt() {
+        return formatAutoresponderReply(buildAutoresponderCustomerDocumentPrompt(), settings, false);
+      },
+      buildHandoffReadyReply(nextData) {
+        return formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply({ ...currentPurchaseFlow, customer_data: nextData }), settings, false);
+      },
+    },
+  });
+  if (!purchaseReply) return null;
+  if (purchaseReply.intent === 'contextual_fallback' && !['purchase', 'payment', 'customer_data', 'handoff'].includes(state.flow)) return null;
+
+  const purchaseFlowPatch = buildAutoresponderEnginePurchaseFlowPatch(currentPurchaseFlow, purchaseReply);
+  if (purchaseReply.intent === 'purchase_handoff_ready') {
+    const customerDocument = normalizeAutoresponderCustomerDocument(purchaseFlowPatch?.customer_data?.cpf_cnpj || purchaseFlowPatch?.cpf_cnpj);
+    const documentCustomerData = {
+      ...(purchaseFlowPatch.customer_data || {}),
+      cpf_cnpj: customerDocument,
+    };
+    const existingCustomer = await findAutoresponderExistingCustomer(documentCustomerData);
+    const nextPurchaseFlow = {
+      ...purchaseFlowPatch,
+      status: 'customer_registration_ready',
+      customer_data: mergeAutoresponderExistingCustomerData(documentCustomerData, existingCustomer),
+      existing_customer: existingCustomer,
+      cpf_cnpj: customerDocument,
+    };
+    const customerRecord = await createOrUpdateAutoresponderCustomer(
+      nextPurchaseFlow.customer_data || {},
+      nextPurchaseFlow,
+      senderKey
+    );
+    const linkedPurchaseFlow = buildAutoresponderCustomerLinkedPurchaseFlow(nextPurchaseFlow, customerRecord);
+    const attendantSummary = formatAutoresponderAttendantOrderSummary(linkedPurchaseFlow, senderKey);
+    const handoffPurchaseFlow = {
+      ...linkedPurchaseFlow,
+      attendant_summary: attendantSummary,
+      status: 'pedido_em_andamento',
+      handoff_created_at: new Date().toISOString(),
+    };
+    const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
+    await saveAutoresponderPurchaseFlow(senderKey, handoffPurchaseFlow);
+    await logAutoresponderReply({
+      sender: senderKey,
+      message,
+      intent: 'purchase_customer_upserted',
+      replyText: purchaseReply.message,
+      matchedCount: customerRecord ? 1 : 0,
+      matchedProducts: customerRecord ? [customerRecord] : [],
+    });
+    await logAutoresponderReply({
+      sender: senderKey,
+      message,
+      intent: 'purchase_request',
+      replyText: purchaseReply.message,
+      matchedCount: 1,
+      matchedProducts: [handoffPurchaseFlow],
+    });
+    await pauseAutoresponderConversationForPurchase(senderKey, pauseMinutes);
+    await upsertAutoresponderSuccessConversation(senderKey);
+    return { replies: [{ message: purchaseReply.message }] };
+  }
+  await saveAutoresponderPurchaseFlow(senderKey, purchaseFlowPatch);
+  await logAutoresponderReply({
+    sender: senderKey,
+    message,
+    intent: purchaseReply.intent,
+    replyText: purchaseReply.message,
+    matchedCount: purchaseReply.matchedCount,
+    matchedProducts: purchaseReply.matchedProducts,
+  });
+  await upsertAutoresponderSuccessConversation(senderKey);
+  return { replies: [{ message: purchaseReply.message }] };
 }
 
 async function handleAutoresponderDeliveryNumberInput({ senderKey, message, purchaseFlow, settings }) {
@@ -9032,7 +9480,8 @@ function formatAutoresponderProReplies(messages) {
     .filter(Boolean)
     .map((message, index) => ({
       message,
-      delaySeconds: index * AUTORESPONDER_PRODUCT_REPLY_DELAY_SECONDS,
+      delaySeconds: AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS[index]
+        ?? AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS[AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS.length - 1] + ((index - AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS.length + 1) * 16),
     }));
 }
 
@@ -9176,6 +9625,7 @@ function detectAutoresponderIntent(message) {
     greeting: isAutoresponderGreeting(message),
     greetingOnly: isAutoresponderGreetingOnly(message),
     humanRequest: isAutoresponderHumanRequest(message),
+    storeStatusRequest: isAutoresponderStoreStatusRequest(message),
     warrantyRequest: isAutoresponderWarrantyRequest(message),
     numberedChoice: getAutoresponderNumberedChoice(message),
     moreRequest: isAutoresponderMoreRequest(message),
@@ -9436,6 +9886,8 @@ const AUTORESPONDER_PRODUCT_SEARCH_STOPWORDS = new Set([
   'tem', 'ter', 'tens', 'voces', 'voce', 'vc', 'quero', 'queria',
   'preciso', 'procuro', 'ver', 'verificar', 'valor', 'preco', 'quanto',
   'produto', 'produtos', 'catalogo', 'lista', 'vende', 'vendem',
+  'oi', 'ola', 'opa', 'bom', 'boa', 'dia', 'tarde', 'noite',
+  'sim', 'nao', 'não',
 ]);
 
 function extractAutoresponderProductSearchTokens(message) {
@@ -9564,6 +10016,76 @@ function getAutoresponderFallbackReply(settings, nextFallbackCount) {
     : (settings?.fallback_message || AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE);
 
   return { replyText, shouldAutoPause };
+}
+
+async function handleAutoresponderGlobalFallbackCuration({
+  senderKey,
+  message,
+  settings,
+  contactFirstName = '',
+  shouldPrefixGreeting = false,
+}) {
+  const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings });
+  if (aiFallback?.text) {
+    const replyText = formatAutoresponderReply(aiFallback.text, settings, shouldPrefixGreeting);
+    await logAutoresponderReply({
+      sender: senderKey,
+      message,
+      intent: 'ai_fallback',
+      replyText,
+      matchedCount: 0,
+      aiMeta: aiFallback.aiMeta,
+    });
+    await upsertAutoresponderSuccessConversation(senderKey);
+    return { replies: [{ message: replyText }] };
+  }
+
+  const fallbackState = await getAutoresponderFallbackState(senderKey);
+  const nextFallbackCount = fallbackState.consecutiveFallbacks + 1;
+  const fallbackReply = getAutoresponderFallbackReply(settings, nextFallbackCount);
+  const replyText = formatAutoresponderReply(fallbackReply.replyText, settings, shouldPrefixGreeting);
+  const autoPauseMinutes = Number(settings.auto_pause_fallback_minutes) > 0
+    ? Number(settings.auto_pause_fallback_minutes)
+    : 30;
+  const intent = nextFallbackCount >= 2 ? 'curation_candidate' : 'global_fallback';
+
+  await logAutoresponderReply({
+    sender: senderKey,
+    message,
+    intent,
+    replyText,
+    matchedCount: 0,
+  });
+
+  if (fallbackReply.shouldAutoPause) {
+    await pool.query(
+      `INSERT INTO autoresponder_conversations
+        (sender, last_message_at, last_bot_reply_at, total_messages, consecutive_fallbacks, paused_until, pause_reason)
+       VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'auto_fallback')
+       ON DUPLICATE KEY UPDATE
+         last_message_at = CURRENT_TIMESTAMP,
+         last_bot_reply_at = CURRENT_TIMESTAMP,
+         total_messages = total_messages + 1,
+         consecutive_fallbacks = ?,
+         paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+         pause_reason = 'auto_fallback'`,
+      [senderKey, nextFallbackCount, autoPauseMinutes, nextFallbackCount, autoPauseMinutes]
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO autoresponder_conversations
+        (sender, last_message_at, last_bot_reply_at, total_messages, consecutive_fallbacks)
+       VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, ?)
+       ON DUPLICATE KEY UPDATE
+         last_message_at = CURRENT_TIMESTAMP,
+         last_bot_reply_at = CURRENT_TIMESTAMP,
+         total_messages = total_messages + 1,
+         consecutive_fallbacks = ?`,
+      [senderKey, nextFallbackCount, nextFallbackCount]
+    );
+  }
+
+  return { replies: [{ message: replyText }] };
 }
 
 async function logAutoresponderReply({
@@ -9905,6 +10427,23 @@ async function getCachedAutoresponderStoreStatus() {
   return value;
 }
 
+function buildAutoresponderStoreStatusReply(storeStatus) {
+  const status = String(storeStatus?.status || '');
+  if (status === 'open') {
+    return 'Estamos abertos agora. Pode mandar sua mensagem por aqui ou visitar a loja.';
+  }
+  if (status === 'closing_soon') {
+    return 'Estamos abertos agora, mas ja perto de fechar. Se quiser, me manda sua duvida por aqui que eu te ajudo.';
+  }
+  if (status === 'holiday') {
+    const holidayName = storeStatus?.message || storeStatus?.holiday?.name;
+    return holidayName
+      ? `Hoje a loja esta fechada por conta do feriado: ${holidayName}.`
+      : 'Hoje a loja esta fechada por conta de feriado.';
+  }
+  return 'No momento a loja esta fechada, mas pode mandar sua mensagem por aqui que vamos te responder assim que possivel.';
+}
+
 async function getAutoresponderReplyCount(sender, windowHours) {
   const hours = Number(windowHours) > 0 ? Number(windowHours) : 24;
   const [rows] = await pool.query(
@@ -9913,8 +10452,14 @@ async function getAutoresponderReplyCount(sender, windowHours) {
      WHERE sender = ?
        AND reply_text IS NOT NULL
        AND reply_text <> ''
-       AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)`,
-    [sender, hours]
+       AND created_at >= COALESCE(
+         (SELECT reply_window_started_at
+          FROM autoresponder_conversations
+          WHERE sender = ?
+          LIMIT 1),
+         DATE_SUB(NOW(), INTERVAL ? HOUR)
+       )`,
+    [sender, sender, hours]
   );
   return Number(rows[0]?.total || 0);
 }
@@ -10225,6 +10770,7 @@ const autoresponderRuleFields = {
   reply_text: (v) => String(v ?? ''),
   reply_tag_id: (v) => v == null || v === '' ? null : Number(v),
   reply_search_query: (v) => v == null ? null : String(v),
+  next_state: (v) => normalizeAutoresponderRuleNextState(v),
   attachment_url: (v) => v == null ? null : String(v),
   attachment_caption: (v) => v == null ? null : String(v),
   auto_apply_tag_id: (v) => v == null || v === '' ? null : Number(v),
@@ -10232,6 +10778,35 @@ const autoresponderRuleFields = {
   priority: (v) => Number(v || 0),
   active: (v) => boolInt(v),
 };
+
+function normalizeAutoresponderRuleNextState(value) {
+  if (value == null || value === '') return null;
+  const parsed = typeof value === 'string' ? parsePublicJson(value, value) : value;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const flow = String(parsed.flow || 'none');
+  const step = String(parsed.step || 'idle');
+  return jsonStr({
+    flow,
+    step,
+    data: parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data) ? parsed.data : {},
+    last_intent: parsed.last_intent == null ? null : String(parsed.last_intent),
+    expires_at: parsed.expires_at == null ? null : String(parsed.expires_at),
+  });
+}
+
+async function applyRuleNextState(senderKey, matchedRule, purchaseFlow = null) {
+  if (!matchedRule?.next_state) return null;
+  const [{ normalizeConversationState }] = await Promise.all([
+    import('./services/autoresponder/engine/state.js'),
+  ]);
+  const nextState = normalizeConversationState(parsePublicJson(matchedRule.next_state, matchedRule.next_state));
+  const currentPurchaseFlow = purchaseFlow || await getAutoresponderPurchaseFlow(senderKey);
+  await saveAutoresponderPurchaseFlow(senderKey, {
+    ...currentPurchaseFlow,
+    conversation_state: nextState,
+  });
+  return nextState;
+}
 
 fastify.get('/autoresponder/rules', { preHandler: requireSyncKey }, async (req) => {
   const active = req.query.active;
@@ -10530,6 +11105,26 @@ fastify.post('/autoresponder/conversations/:sender/resume', { preHandler: requir
   return { ok: true };
 });
 
+fastify.post('/autoresponder/conversations/:sender/reset-counters', { preHandler: requireSyncKey }, async (req) => {
+  await pool.query(
+    `INSERT INTO autoresponder_conversations (sender, last_message_at)
+     VALUES (?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       paused_until = NULL,
+       pause_reason = NULL,
+       consecutive_fallbacks = 0,
+       reply_count = 0,
+       reply_window_started_at = CURRENT_TIMESTAMP,
+       last_options_offered = NULL,
+       last_options_at = NULL,
+       purchase_flow = NULL,
+       purchase_flow_updated_at = NULL`,
+    [req.params.sender]
+  );
+  return { ok: true };
+});
+
 fastify.post('/autoresponder/conversations/:sender/tags', { preHandler: requireSyncKey }, async (req) => {
   const tagIds = Array.isArray(req.body?.tag_ids) ? req.body.tag_ids.map(Number).filter(Number.isFinite) : [];
   await pool.query(
@@ -10556,6 +11151,18 @@ fastify.get('/autoresponder/unanswered', { preHandler: requireSyncKey }, async (
      LIMIT ${limit}`
   );
   return rows;
+});
+
+fastify.delete('/autoresponder/unanswered', { preHandler: requireSyncKey }, async (req, reply) => {
+  const question = String(req.query.question || '').trim();
+  if (!question) return reply.code(400).send({ error: 'question is required' });
+  const [result] = await pool.query(
+    `DELETE FROM autoresponder_logs
+     WHERE intent = 'fallback'
+       AND question = ?`,
+    [question]
+  );
+  return { ok: true, deleted: Number(result.affectedRows || 0) };
 });
 
 async function getAutoresponderTopProducts(limit = 10) {
@@ -10841,6 +11448,15 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   const shouldPrefixGreeting = detectedIntent.greeting;
   const normalizedSender = normalizeAutoresponderSender(sender) || 'teste-bot';
 
+  if (isAutoresponderAudioMessage(message)) {
+    return {
+      intent: 'audio_unsupported',
+      matched_count: 0,
+      replies: [{ message: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY }],
+      sender: normalizedSender,
+    };
+  }
+
   if (detectedIntent.greetingOnly) {
     const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
     const contactState = await getAutoresponderContactNameState(normalizedSender);
@@ -10861,6 +11477,17 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
       matched_count: 0,
       replies: formatAutoresponderProReplies(replyMessages),
       aiMeta: needsPrompt.aiMeta,
+      sender: normalizedSender,
+    };
+  }
+
+  if (detectedIntent.storeStatusRequest) {
+    const storeStatus = await getCachedAutoresponderStoreStatus();
+    const replyText = buildAutoresponderStoreStatusReply(storeStatus);
+    return {
+      intent: 'store_status',
+      matched_count: 0,
+      replies: [{ message: formatAutoresponderReply(replyText, settings, shouldPrefixGreeting) }],
       sender: normalizedSender,
     };
   }
@@ -11051,6 +11678,17 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     }
   }
 
+  const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings });
+  if (aiFallback?.text) {
+    return {
+      intent: 'ai_fallback',
+      matched_count: 0,
+      replies: [{ message: formatAutoresponderReply(aiFallback.text, settings, shouldPrefixGreeting) }],
+      aiMeta: aiFallback.aiMeta,
+      sender: normalizedSender,
+    };
+  }
+
   const fallbackReply = getAutoresponderFallbackReply(settings, 1);
   return {
     intent: 'fallback',
@@ -11138,15 +11776,45 @@ fastify.route({
         return { replies: [] };
       }
 
+      const isAudioPayload = isAutoresponderAudioPayload(payload, message);
+      if (!message && !isAudioPayload) {
+        await touchAutoresponderConversation(senderKey);
+        return { replies: [] };
+      }
+
+      if (isAudioPayload) {
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'audio_unsupported',
+          replyText: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY,
+          matchedCount: 0,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY }] };
+      }
+
       const [conversationRows] = await pool.query(
-        'SELECT paused_until FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+        'SELECT paused_until, pause_reason FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
         [senderKey]
       );
       const pausedUntil = conversationRows[0]?.paused_until ? new Date(conversationRows[0].paused_until) : null;
       if (pausedUntil && pausedUntil.getTime() > Date.now()) {
-        await touchAutoresponderConversation(senderKey);
-        return { replies: [] };
+        if (String(conversationRows[0]?.pause_reason || '') === 'human_request') {
+          await pool.query(
+            `UPDATE autoresponder_conversations
+             SET paused_until = NULL, pause_reason = NULL
+             WHERE sender = ?`,
+            [senderKey]
+          );
+        } else {
+          await touchAutoresponderConversation(senderKey);
+          return { replies: [] };
+        }
       }
+
+      const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
+      const hasActivePurchaseFlow = hasAutoresponderCartItems(purchaseFlow);
 
       const replyLimit = Number(settings.max_replies_per_conversation) > 0
         ? Number(settings.max_replies_per_conversation)
@@ -11155,7 +11823,7 @@ fastify.route({
         ? Number(settings.max_replies_window_hours)
         : 24;
       const recentReplyCount = await getAutoresponderReplyCount(senderKey, replyWindowHours);
-      if (recentReplyCount >= replyLimit) {
+      if (!hasActivePurchaseFlow && !detectedIntent.storeStatusRequest && recentReplyCount >= replyLimit) {
         await touchAutoresponderConversation(senderKey);
         return { replies: [] };
       }
@@ -11166,6 +11834,21 @@ fastify.route({
         settings,
       });
       if (engineDeliveryReply) return engineDeliveryReply;
+
+      const engineProductSearchReply = await handleAutoresponderEngineProductSearchFlowV2({
+        senderKey,
+        message,
+        settings,
+      });
+      if (engineProductSearchReply) return engineProductSearchReply;
+
+      const enginePurchaseReply = await handleAutoresponderEnginePurchaseFlowV2({
+        senderKey,
+        message,
+        settings,
+        purchaseFlow,
+      });
+      if (enginePurchaseReply) return enginePurchaseReply;
 
       const contactFlowReply = await handleAutoresponderContactNameFlow({ sender: senderKey, message, contactFirstName });
       if (contactFlowReply) {
@@ -11181,6 +11864,24 @@ fastify.route({
         });
         await upsertAutoresponderSuccessConversation(senderKey);
         return { replies: formattedContactFlowReplies.map((replyMessage) => ({ message: replyMessage })) };
+      }
+
+      if (detectedIntent.storeStatusRequest) {
+        const storeStatus = await getCachedAutoresponderStoreStatus();
+        const replyText = formatAutoresponderReply(
+          buildAutoresponderStoreStatusReply(storeStatus),
+          settings,
+          shouldPrefixGreeting
+        );
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'store_status',
+          replyText,
+          matchedCount: 0,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
       }
 
       if (detectedIntent.greetingOnly) {
@@ -11243,7 +11944,6 @@ fastify.route({
         return { replies: [{ message: greetingText }] };
       }
 
-      const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
       if (detectedIntent.warrantyRequest) {
         return handleAutoresponderWarrantyRequest({
           sender: senderKey,
@@ -12272,7 +12972,6 @@ fastify.route({
       }
 
       if (detectedIntent.humanRequest) {
-        const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
         const storeStatus = await getCachedAutoresponderStoreStatus();
         const humanReplyText = isAutoresponderStoreInHumanHours(storeStatus)
           ? (settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS)
@@ -12286,18 +12985,7 @@ fastify.route({
           [senderKey, message || null, 'human_request', 0, replyText, 0, 0]
         );
 
-        await pool.query(
-          `INSERT INTO autoresponder_conversations
-            (sender, last_message_at, last_bot_reply_at, total_messages, paused_until, pause_reason)
-           VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'human_request')
-           ON DUPLICATE KEY UPDATE
-             last_message_at = CURRENT_TIMESTAMP,
-             last_bot_reply_at = CURRENT_TIMESTAMP,
-             total_messages = total_messages + 1,
-             paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
-             pause_reason = 'human_request'`,
-          [senderKey, pauseMinutes, pauseMinutes]
-        );
+        await upsertAutoresponderSuccessConversation(senderKey);
 
         return { replies: [{ message: replyText }] };
       }
@@ -12417,6 +13105,7 @@ fastify.route({
           matchedCount: 1,
           matchedRuleId: matchedRule.id,
         });
+        await applyRuleNextState(senderKey, matchedRule, purchaseFlow);
         await upsertAutoresponderSuccessConversation(senderKey);
         await applyAutoresponderRuleConversationTag(senderKey, matchedRule.auto_apply_tag_id);
 
@@ -12604,52 +13293,28 @@ fastify.route({
         }
       }
 
-      const fallbackState = await getAutoresponderFallbackState(senderKey);
-      const nextFallbackCount = fallbackState.consecutiveFallbacks + 1;
-      const fallbackReply = getAutoresponderFallbackReply(settings, nextFallbackCount);
-      const replyText = formatAutoresponderReply(fallbackReply.replyText, settings, shouldPrefixGreeting);
-      const autoPauseMinutes = Number(settings.auto_pause_fallback_minutes) > 0
-        ? Number(settings.auto_pause_fallback_minutes)
-        : 30;
-
-      await pool.query(
-        `INSERT INTO autoresponder_logs
-          (sender, question, intent, matched_count, reply_text, response_time_ms, is_group)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [senderKey, message || null, 'fallback', 0, replyText, 0, 0]
-      );
-
-      if (fallbackReply.shouldAutoPause) {
-        await pool.query(
-          `INSERT INTO autoresponder_conversations
-            (sender, last_message_at, last_bot_reply_at, total_messages, consecutive_fallbacks, paused_until, pause_reason)
-           VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'auto_fallback')
-           ON DUPLICATE KEY UPDATE
-             last_message_at = CURRENT_TIMESTAMP,
-             last_bot_reply_at = CURRENT_TIMESTAMP,
-             total_messages = total_messages + 1,
-             consecutive_fallbacks = ?,
-             paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
-             pause_reason = 'auto_fallback'`,
-          [senderKey, nextFallbackCount, autoPauseMinutes, nextFallbackCount, autoPauseMinutes]
-        );
-      } else {
-        await pool.query(
-          `INSERT INTO autoresponder_conversations
-            (sender, last_message_at, last_bot_reply_at, total_messages, consecutive_fallbacks)
-           VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, ?)
-           ON DUPLICATE KEY UPDATE
-             last_message_at = CURRENT_TIMESTAMP,
-             last_bot_reply_at = CURRENT_TIMESTAMP,
-             total_messages = total_messages + 1,
-             consecutive_fallbacks = ?`,
-          [senderKey, nextFallbackCount, nextFallbackCount]
-        );
+      const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings });
+      if (aiFallback?.text) {
+        const replyText = formatAutoresponderReply(aiFallback.text, settings, shouldPrefixGreeting);
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'ai_fallback',
+          replyText,
+          matchedCount: 0,
+          aiMeta: aiFallback.aiMeta,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: replyText }] };
       }
 
-      return {
-        replies: [{ message: replyText }],
-      };
+      return await handleAutoresponderGlobalFallbackCuration({
+        senderKey,
+        message,
+        settings,
+        contactFirstName,
+        shouldPrefixGreeting,
+      });
     } catch (err) {
       console.error('[autoresponder] webhook failed:', err);
       return {
@@ -16378,7 +17043,7 @@ fastify.get('/table-data/:name/export', { preHandler: requireSyncKey }, async (r
   reply.header('Content-Disposition', `attachment; filename="${name}.json"`);
   return rows;
 });
-﻿// --- Schema Inspector ---
+// --- Schema Inspector ---
 fastify.get('/schema/tables', { preHandler: requireSyncKey }, async (req, reply) => {
   const [tables] = await pool.query('SHOW TABLES');
   const result = {};
@@ -18410,6 +19075,7 @@ async function runMigrations() {
       reply_text TEXT NULL,
       reply_tag_id INT NULL,
       reply_search_query VARCHAR(255) NULL,
+      next_state JSON NULL,
       attachment_url VARCHAR(500) NULL,
       attachment_caption TEXT NULL,
       auto_apply_tag_id INT NULL,
@@ -18422,6 +19088,7 @@ async function runMigrations() {
       INDEX idx_active_priority (active, priority)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await addColumnIfMissing('autoresponder_rules', 'next_state', 'JSON NULL');
 
   await seedAutoresponderRuleTemplates();
 
@@ -18476,6 +19143,8 @@ async function runMigrations() {
       pause_reason VARCHAR(50) NULL,
       paused_by_user_id INT NULL,
       consecutive_fallbacks INT NOT NULL DEFAULT 0,
+      reply_count INT NOT NULL DEFAULT 0,
+      reply_window_started_at TIMESTAMP NULL,
       total_messages INT NOT NULL DEFAULT 0,
       tag_ids JSON NULL,
       last_options_offered JSON NULL,
@@ -18513,6 +19182,8 @@ async function runMigrations() {
   await addColumnIfMissing('autoresponder_conversations', 'contact_name_updated_at', 'TIMESTAMP NULL');
   await addColumnIfMissing('autoresponder_conversations', 'purchase_flow', 'JSON NULL');
   await addColumnIfMissing('autoresponder_conversations', 'purchase_flow_updated_at', 'TIMESTAMP NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'reply_count', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('autoresponder_conversations', 'reply_window_started_at', 'TIMESTAMP NULL');
   console.log('[migration] autoresponder phase 1A tables: OK');
 
   await pool.query(`
