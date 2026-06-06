@@ -41,8 +41,8 @@ for (const fileName of serverFiles) {
   assert.ok(source.includes('function getAutoresponderInitialProductPageSize'), `${fileName} must centralize the initial product page size`);
   assert.ok(source.includes('const pageSize = getAutoresponderInitialProductPageSize();'), `${fileName} must keep initial product replies short`);
   assert.ok(
-    source.includes('Se quiser, me diga a faixa de preco, marca ou uso que eu filtro melhor.'),
-    `${fileName} must ask the customer to refine broad product searches`
+    source.includes('vamos ficar com qual deles hoje? quer ver a lista completa?'),
+    `${fileName} must ask the customer to choose or request the complete list`
   );
   assert.ok(source.includes('calculateAutoresponderInstallmentOptions(priceCents, 12)'), `${fileName} must calculate 12x installment options for catalog cards`);
   assert.ok(source.includes('💰'), `${fileName} must show cash price in the requested pattern`);
@@ -50,7 +50,8 @@ for (const fileName of serverFiles) {
   assert.ok(source.includes('🎨'), `${fileName} must show colors in the requested pattern`);
   assert.ok(source.includes('AUTORESPONDER_AI_SYSTEM_PROMPT'), `${fileName} must define a strict AI system prompt`);
   assert.ok(source.includes('PROIBIDO'), `${fileName} must explicitly forbid answers outside system data`);
-  assert.ok(source.includes('buildAutoresponderNeedsPromptReply'), `${fileName} must ask what the customer is looking for instead of listing categories on greeting`);
+  assert.ok(!source.includes('formatAutoresponderReplies([greetingText, needsPrompt.text], settings, false)'), `${fileName} greeting test reply must not add a needs prompt after greeting`);
+  assert.ok(!source.includes('formatAutoresponderReplies([greetingText, needsPromptText], settings, false)'), `${fileName} webhook greeting must not add a needs prompt after greeting`);
   assert.ok(!source.includes('formatAutoresponderReplies([greetingText, categoryListText], settings, false)'), `${fileName} greeting test reply must not list categories as response 2`);
   assert.ok(source.includes('extractAutoresponderBudgetCents'), `${fileName} must understand customer budget messages`);
   assert.ok(source.includes('findAutoresponderProductsByCategoryBudget'), `${fileName} must answer budget requests from VPS category products`);

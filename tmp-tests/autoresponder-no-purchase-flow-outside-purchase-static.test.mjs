@@ -4,13 +4,8 @@ import { readFileSync } from 'node:fs';
 for (const file of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
   const source = readFileSync(file, 'utf8');
   const forbidden = [
-    "status: 'awaiting_standalone_delivery_cep'",
     "status: 'standalone_delivery_quote_ready'",
     'handleAutoresponderStandaloneDeliveryRequest',
-    'handleAutoresponderStandaloneDeliveryCepLookup',
-    'standalone_delivery_address_lookup',
-    'standalone_shipping_options',
-    'standalone_shipping_quote',
   ];
 
   for (const needle of forbidden) {
@@ -19,6 +14,11 @@ for (const file of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
 
   assert.ok(source.includes('conversation_state'), `${file} must use conversation_state`);
   assert.ok(source.includes('handleAutoresponderEngineDeliveryFlowV2'), `${file} must use delivery engine`);
+
+  if (file !== 'server.js') {
+    assert.ok(source.includes('shouldAutoresponderRuleAwaitStandaloneDeliveryCep(matchedRule, resolvedRuleText)'), `${file} must only keep standalone CEP as a post-rule compatibility path`);
+    assert.ok(source.includes("'standalone_delivery_cep_prompt'"), `${file} must log the compatibility CEP prompt explicitly`);
+  }
 }
 
 console.log('autoresponder no purchase flow outside purchase static checks passed');

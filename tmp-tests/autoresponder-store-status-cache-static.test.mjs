@@ -30,7 +30,7 @@ assert.ok(cacheFunction.includes('getAutoresponderStoreStatus(companyRows[0] || 
 
 const storeStatusRouteStart = server.indexOf("fastify.get('/autoresponder/store-status'");
 assert.ok(storeStatusRouteStart >= 0, 'store status route should exist');
-const storeStatusRoute = server.slice(storeStatusRouteStart, server.indexOf("fastify.patch('/products/:id/tags'", storeStatusRouteStart));
+const storeStatusRoute = server.slice(storeStatusRouteStart, server.indexOf('async function buildAutoresponderTestReply', storeStatusRouteStart));
 assert.ok(storeStatusRoute.includes('getCachedAutoresponderStoreStatus()'), 'store status route should use cached helper');
 assert.ok(!storeStatusRoute.includes('pool.query'), 'store status route should not query company_settings directly');
 

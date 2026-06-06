@@ -29,6 +29,36 @@ assert.match(
 
 assert.match(
   source,
+  /function sortAutoresponderProductGroupsByBrand\(/,
+  'product replies must sort smartphone groups by brand and model name',
+);
+
+assert.match(
+  source,
+  /function formatAutoresponderProductBrandHeading\(/,
+  'product replies must render a brand heading before each brand section',
+);
+
+assert.match(
+  source,
+  /🏷️ \$\{brandName\}/,
+  'brand headings must include an emoji before the brand name',
+);
+
+assert.match(
+  source,
+  /const groupedProducts = sortAutoresponderProductGroupsByBrand\(groupAutoresponderProductsByModel\(availableProducts\)\)/,
+  'product search replies must sort grouped products before chunking and numbering',
+);
+
+assert.match(
+  source,
+  /formatAutoresponderProductBrandHeading\(brandName\)/,
+  'product search replies must insert brand headings in the WhatsApp list',
+);
+
+assert.match(
+  source,
   /const chunks = chunkAutoresponderArray\(groupedProducts, AUTORESPONDER_PRODUCT_PAGE_SIZE\);\s*const visibleChunks = pagination\?\.completeList/s,
   'complete device lists must keep every five-product message instead of slicing to the normal cap',
 );

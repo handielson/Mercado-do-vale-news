@@ -59,7 +59,7 @@ assert.match(
 
 assert.match(
   source,
-  /SELECT id, model_id, name, sku, slug, price_retail, price_promo, stock_quantity/,
+  /SELECT id, model_id, [^\n]+name, sku, slug, [^\n]+price_retail, price_promo, stock_quantity/,
   'expected autoresponder product queries to select model_id for grouping',
 );
 

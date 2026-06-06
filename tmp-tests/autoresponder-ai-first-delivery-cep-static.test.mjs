@@ -9,7 +9,7 @@ for (const file of ['vps_server.cjs', 'vps_server.js']) {
   assert.match(source, /Se a mensagem tiver mais de uma pergunta, responda todas as perguntas/, `${file} must tell ChatGPT to answer multiple questions`);
   assert.match(source, /handleAutoresponderEngineDeliveryFlowV2/, `${file} must route delivery questions through the engine`);
   assert.match(source, /conversation_state: deliveryReply\.nextState/, `${file} must persist delivery conversation_state`);
-  assert.doesNotMatch(source, /status: 'awaiting_standalone_delivery_cep'/, `${file} must not save legacy standalone CEP state`);
+  assert.match(source, /shouldAutoresponderRuleAwaitStandaloneDeliveryCep\(matchedRule, resolvedRuleText\)/, `${file} must only arm standalone CEP after a delivery rule asks for CEP`);
 
   const webhookIndex = source.indexOf("url: '/autoresponder-webhook'");
   const deliveryEngineIndex = source.indexOf('const engineDeliveryReply = await handleAutoresponderEngineDeliveryFlowV2', webhookIndex);

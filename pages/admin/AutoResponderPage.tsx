@@ -320,10 +320,22 @@ const ruleTemplates: Array<{ label: string; patch: Partial<RuleFormState> }> = [
         },
     },
     {
+        label: 'Lista de celulares',
+        patch: {
+            name: 'Lista de celulares',
+            pattern: 'lista, celulares, smartphone, smartphones, aparelhos, modelos disponiveis',
+            match_type: 'any_keyword',
+            reply_type: 'product_search',
+            reply_search_query: 'celulares',
+            reply_text: '',
+            priority: '20',
+        },
+    },
+    {
         label: 'Produto por tag',
         patch: {
             name: 'Busca por tag',
-            pattern: 'carregador, capa, pelicula',
+            pattern: 'promocao, oferta, acessorio, carregador, capa, pelicula',
             match_type: 'any_keyword',
             reply_type: 'product_by_tag',
             reply_text: '',
@@ -331,14 +343,80 @@ const ruleTemplates: Array<{ label: string; patch: Partial<RuleFormState> }> = [
         },
     },
     {
-        label: 'Busca livre',
+        label: 'Busca por modelo',
         patch: {
-            name: 'Busca por texto',
-            pattern: 'tem, quero, procura',
+            name: 'Busca por modelo',
+            pattern: 'tem, quero, procura, modelo, redmi, poco, realme, galaxy, moto',
             match_type: 'any_keyword',
             reply_type: 'product_search',
             reply_search_query: '',
             priority: '3',
+        },
+    },
+    {
+        label: 'Garantia',
+        patch: {
+            name: 'Garantia',
+            pattern: 'garantia, defeito, problema, parou, nao liga, troca',
+            match_type: 'any_keyword',
+            reply_type: 'text',
+            reply_text: 'A garantia varia conforme o produto. Me envie o modelo ou o numero da compra que eu confiro certinho pra voce.',
+            priority: '15',
+        },
+    },
+    {
+        label: 'Pagamento',
+        patch: {
+            name: 'Formas de pagamento',
+            pattern: 'pagamento, pix, cartao, credito, debito, dinheiro, parcela, parcelamento',
+            match_type: 'any_keyword',
+            reply_type: 'text',
+            reply_text: 'Trabalhamos com Pix, dinheiro, debito e cartao de credito. Se quiser, me diga o produto que eu confiro o valor a vista e o parcelamento.',
+            priority: '15',
+        },
+    },
+    {
+        label: 'Entrega/retirada',
+        patch: {
+            name: 'Entrega ou retirada',
+            pattern: 'entrega, retirada, frete, delivery, motoboy, buscar na loja',
+            match_type: 'any_keyword',
+            reply_type: 'text',
+            reply_text: 'Voce pode retirar na loja ou pedir entrega. Para entrega, me envie o CEP ou bairro que eu confiro disponibilidade e valor.',
+            priority: '15',
+        },
+    },
+    {
+        label: 'Horario/endereco',
+        patch: {
+            name: 'Horario e endereco',
+            pattern: 'horario, abre, fecha, endereco, localizacao, onde fica, loja',
+            match_type: 'any_keyword',
+            reply_type: 'text',
+            reply_text: 'Estamos em Petrolina. Me diga se voce quer o endereco da loja ou o horario de atendimento que eu te passo certinho.',
+            priority: '15',
+        },
+    },
+    {
+        label: 'Chamar atendente',
+        patch: {
+            name: 'Chamar atendente',
+            pattern: 'atendente, humano, vendedor, pessoa, falar com alguem, especialista',
+            match_type: 'any_keyword',
+            reply_type: 'text',
+            reply_text: 'Certo, vou chamar nossa equipe para continuar seu atendimento por aqui. Por favor aguarde um instante.',
+            priority: '1000',
+        },
+    },
+    {
+        label: 'Pos-venda',
+        patch: {
+            name: 'Pos-venda',
+            pattern: 'comprei, compra, pedido, nota, recibo, suporte, ajuda com produto',
+            match_type: 'any_keyword',
+            reply_type: 'text',
+            reply_text: 'Claro. Me envie o nome usado na compra, o telefone ou uma foto do recibo para localizarmos seu atendimento.',
+            priority: '15',
         },
     },
 ];
@@ -2058,9 +2136,20 @@ const AutoResponderPage: React.FC = () => {
         setCurationNotice('Revise e salve a resposta sugerida');
     };
 
-    const ignoreUnansweredQuestion = (question: AutoResponderUnansweredQuestion) => {
-        setUnansweredQuestions((current) => current.filter((item) => item.question !== question.question));
-        setCurationNotice('Pergunta ignorada nesta sessão');
+    const deleteUnansweredQuestion = async (question: AutoResponderUnansweredQuestion) => {
+        if (!window.confirm('Excluir esta mensagem da curadoria?')) return;
+        setCurationActionQuestion(question.question);
+        setError(null);
+        try {
+            await autoResponderService.deleteUnanswered(question.question);
+            setUnansweredQuestions((current) => current.filter((item) => item.question !== question.question));
+            setCurationNotice('Mensagem excluida da curadoria');
+        } catch (err) {
+            console.error('[AutoResponderPage] delete unanswered question error:', err);
+            setError(err instanceof Error ? err.message : 'Falha ao excluir mensagem da curadoria');
+        } finally {
+            setCurationActionQuestion(null);
+        }
     };
 
     const openNewTag = () => {
@@ -2761,7 +2850,7 @@ const AutoResponderPage: React.FC = () => {
                             <aside className="rounded-lg border border-slate-200 bg-white">
                                 <div className="border-b border-slate-200 px-4 py-3">
                                     <h2 className="text-base font-semibold text-slate-900">Fluxos de conversa</h2>
-                                    <p className="mt-1 text-sm text-slate-500">A conversa completa, etapa por etapa.</p>
+                                    <p className="mt-1 text-sm text-slate-500">Atendimento pelo WhatsApp, etapa por etapa.</p>
                                 </div>
                                 <div className="divide-y divide-slate-100">
                                     {conversationEditorSteps.map((step, index) => (
@@ -3507,12 +3596,12 @@ const AutoResponderPage: React.FC = () => {
                                                             </button>
                                                             <button
                                                                 type="button"
-                                                                onClick={() => ignoreUnansweredQuestion(question)}
+                                                                onClick={() => deleteUnansweredQuestion(question)}
                                                                 disabled={busy}
-                                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                                                             >
-                                                                <X size={16} />
-                                                                Ignorar
+                                                                <Trash2 size={16} />
+                                                                Excluir
                                                             </button>
                                                         </div>
                                                     </td>

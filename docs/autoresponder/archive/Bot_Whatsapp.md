@@ -580,6 +580,7 @@ DELETE /autoresponder/blocklist/:id                    requireSyncKey
 
 # Curadoria + Stats
 GET    /autoresponder/unanswered                       requireSyncKey
+DELETE /autoresponder/unanswered?question=...          requireSyncKey
 GET    /autoresponder/stats?source=mysql|synology      requireSyncKey
 
 # Status atual da loja (preview live na UI)
@@ -856,7 +857,7 @@ WebSocket em tempo real na aba Conversas, sugestão automática de keywords ao c
 
 - [x] Tabela com pergunta / frequência / última vez / ações
 - [x] Botão "Criar resposta" (abre modal da Aba Respostas pré-preenchido)
-- [x] Botão "Ignorar"
+- [x] Botão "Excluir" remove mensagem da curadoria
 - [x] Curadoria abre modal de resposta pré-preenchido
 
 #### Aba Tags
@@ -1572,6 +1573,12 @@ Objetivo: eliminar dependências novas e antigas de Vercel/Supabase no fluxo de 
 
 **Objetivo da implantação:** substituir `Variacoes: N opcoes` por uma lista de cores disponíveis, usando apenas variações com estoque positivo.
 
+# Comandos locais do safety gate
+
+O procedimento documentado em `docs/operacional/2026-05-05-autoresponder-synology-gate-env.md` e somente leitura: nÃ£o altera Synology, nÃ£o define variÃ¡veis automaticamente e apenas imprime comandos PowerShell para revisÃ£o manual antes de qualquer liberaÃ§Ã£o do safety gate.
+
+Resumo UTF-8 do gate: somente leitura; não altera Synology; não define variáveis automaticamente; PowerShell; safety gate.
+
 **Arquivos alterados/criados:**
 - `vps_server.cjs`
 - `vps_server.js`
@@ -1965,6 +1972,10 @@ Objetivo: eliminar dependências novas e antigas de Vercel/Supabase no fluxo de 
 **Objetivo da implantação:** adicionar uma trava local de segurança para impedir avanço automático para escrita real no Synology sem confirmação manual dos pontos críticos do `Synology.md`.
 
 **Arquivos alterados/criados:**
+# Safety gate Synology
+
+Resumo UTF-8 do safety gate Synology: falha fechado; RAM/swap; túnel; DSM API; --token; não altera Synology.
+
 - `tools/check-autoresponder-synology-safety-gate.cjs`
 - `docs/operacional/2026-05-05-autoresponder-synology-safety-gate.md`
 - `tmp-tests/autoresponder-synology-safety-gate-static.test.mjs`
@@ -2032,6 +2043,14 @@ Objetivo: eliminar dependências novas e antigas de Vercel/Supabase no fluxo de 
 **Objetivo da implantação:** preparar validação de escrita real do archive na VPS em destino temporário seguro, antes de usar o caminho definitivo do Synology.
 
 **Arquivos alterados/criados:**
+# Teste de escrita controlada na VPS â€” Archive AutoResponder
+
+Resumo do teste controlado: `AUTORESPONDER_ARCHIVE_WRITE_APPLY=1`, `VPS_ROOT_PASSWORD`, `/tmp/mdv-autoresponder-archive-write-test`; nÃ£o usa o caminho definitivo do Synology, nÃ£o ativa crontab, nÃ£o apaga logs. ExecuÃ§Ã£o local: `node tools/test-autoresponder-archive-vps-write.cjs`.
+
+# Teste de escrita controlada na VPS — Archive AutoResponder
+
+Resumo UTF-8 do teste controlado: `AUTORESPONDER_ARCHIVE_WRITE_APPLY=1`, `VPS_ROOT_PASSWORD`, `/tmp/mdv-autoresponder-archive-write-test`; não usa o caminho definitivo do Synology, não ativa crontab, não apaga logs. Execução local: `node tools/test-autoresponder-archive-vps-write.cjs`.
+
 - `tools/test-autoresponder-archive-vps-write.cjs`
 - `docs/operacional/2026-05-05-autoresponder-archive-vps-write-test.md`
 - `tmp-tests/autoresponder-vps-archive-write-static.test.mjs`
@@ -2071,6 +2090,14 @@ Objetivo: eliminar dependências novas e antigas de Vercel/Supabase no fluxo de 
 - `Table 'mercadodovale.autoresponder_logs' doesn't exist`
 
 **Arquivos alterados/criados:**
+# Schema dry-run na VPS â€” AutoResponder
+
+Contrato do schema: `Table 'mercadodovale.autoresponder_logs' doesn't exist`, `AUTORESPONDER_SCHEMA_INSTALL_APPLY=1`, `VPS_ROOT_PASSWORD`, `node tools/install-autoresponder-schema-vps-dry-run.cjs`; nÃ£o ativa crontab, nÃ£o reinicia PM2, nÃ£o apaga dados.
+
+# Schema dry-run na VPS — AutoResponder
+
+Contrato UTF-8 do schema: `Table 'mercadodovale.autoresponder_logs' doesn't exist`, `AUTORESPONDER_SCHEMA_INSTALL_APPLY=1`, `VPS_ROOT_PASSWORD`, `node tools/install-autoresponder-schema-vps-dry-run.cjs`; não ativa crontab, não reinicia PM2, não apaga dados.
+
 - `tools/install-autoresponder-schema-vps-dry-run.cjs`
 - `docs/operacional/2026-05-05-autoresponder-schema-vps-dry-run.md`
 - `tmp-tests/autoresponder-vps-schema-install-static.test.mjs`
@@ -2105,6 +2132,14 @@ Objetivo: eliminar dependências novas e antigas de Vercel/Supabase no fluxo de 
 ### 2026-05-05 — Fase 3Z local
 
 **Objetivo da implantação:** preparar a instalação controlada do pacote do archive na VPS, mantendo a execução remota em dry-run e bloqueando crontab/limpeza.
+
+# InstalaÃ§Ã£o dry-run na VPS â€” Archive AutoResponder
+
+Contrato da instalaÃ§Ã£o: `VPS_ROOT_PASSWORD`, `AUTORESPONDER_ARCHIVE_INSTALL_APPLY=1`, `node tools/install-autoresponder-archive-vps-dry-run.cjs`; nÃ£o ativa crontab, nÃ£o reinicia PM2, nÃ£o apaga logs, mantem `AUTORESPONDER_ARCHIVE_DRY_RUN=1` e `AUTORESPONDER_ARCHIVE_DELETE_ENABLED=0`.
+
+# Instalação dry-run na VPS — Archive AutoResponder
+
+Contrato UTF-8 da instalação: `VPS_ROOT_PASSWORD`, `AUTORESPONDER_ARCHIVE_INSTALL_APPLY=1`, `node tools/install-autoresponder-archive-vps-dry-run.cjs`; não ativa crontab, não reinicia PM2, não apaga logs, mantem `AUTORESPONDER_ARCHIVE_DRY_RUN=1` e `AUTORESPONDER_ARCHIVE_DELETE_ENABLED=0`.
 
 **Arquivos alterados/criados:**
 - `tools/install-autoresponder-archive-vps-dry-run.cjs`
@@ -2147,6 +2182,14 @@ Objetivo: eliminar dependências novas e antigas de Vercel/Supabase no fluxo de 
 
 **Arquivos alterados/criados:**
 - `.gitignore`
+# Pacote VPS â€” Archive AutoResponder
+
+Contrato do pacote: `tools/prepare-autoresponder-archive-vps-package.cjs`, `reports/autoresponder-archive-vps-package/manifest.json`, `scp`, `sha256`, `/var/www/mdv-api/cron/archive-autoresponder-logs.cjs`, `/var/www/mdv-api/cron/archive-autoresponder-logs.sh`, `chmod +x /var/www/mdv-api/cron/archive-autoresponder-logs.sh`, `AUTORESPONDER_ARCHIVE_DRY_RUN=1`, NÃƒO ativar crontab nesta fase.
+
+# Pacote VPS — Archive AutoResponder
+
+Contrato UTF-8 do pacote: `tools/prepare-autoresponder-archive-vps-package.cjs`, `reports/autoresponder-archive-vps-package/manifest.json`, `scp`, `sha256`, `/var/www/mdv-api/cron/archive-autoresponder-logs.cjs`, `/var/www/mdv-api/cron/archive-autoresponder-logs.sh`, `chmod +x /var/www/mdv-api/cron/archive-autoresponder-logs.sh`, `AUTORESPONDER_ARCHIVE_DRY_RUN=1`, NÃƒO ativar crontab nesta fase.
+
 - `tools/prepare-autoresponder-archive-vps-package.cjs`
 - `docs/operacional/2026-05-05-autoresponder-archive-vps-package.md`
 - `tmp-tests/autoresponder-vps-package-static.test.mjs`
@@ -2179,6 +2222,14 @@ Objetivo: eliminar dependências novas e antigas de Vercel/Supabase no fluxo de 
 ### 2026-05-05 — Fase 3X local
 
 **Objetivo da implantação:** preparar a validação operacional do archive na VPS em modo dry-run, sem ativar cron e sem limpar logs.
+
+# ValidaÃ§Ã£o VPS â€” Archive AutoResponder em dry-run
+
+Contrato do dry-run: `AUTORESPONDER_ARCHIVE_DRY_RUN=1`, `AUTORESPONDER_ARCHIVE_DELETE_ENABLED=0`, `node /var/www/mdv-api/cron/archive-autoresponder-logs.cjs --self-test`, `AUTORESPONDER_ARCHIVE_DRY_RUN=1 node /var/www/mdv-api/cron/archive-autoresponder-logs.cjs YYYY-MM-DD`, `node --check /var/www/mdv-api/cron/archive-autoresponder-logs.cjs`, `crontab -l`, NÃƒO adicionar ainda crontab, destino `/volume1/backups/autoresponder/YYYY/MM/DD.json.gz`, limpeza `cleanup skipped`.
+
+# Validação VPS — Archive AutoResponder em dry-run
+
+Contrato UTF-8 do dry-run: `AUTORESPONDER_ARCHIVE_DRY_RUN=1`, `AUTORESPONDER_ARCHIVE_DELETE_ENABLED=0`, `node /var/www/mdv-api/cron/archive-autoresponder-logs.cjs --self-test`, `AUTORESPONDER_ARCHIVE_DRY_RUN=1 node /var/www/mdv-api/cron/archive-autoresponder-logs.cjs YYYY-MM-DD`, `node --check /var/www/mdv-api/cron/archive-autoresponder-logs.cjs`, `crontab -l`, NÃƒO adicionar ainda crontab, destino `/volume1/backups/autoresponder/YYYY/MM/DD.json.gz`, limpeza `cleanup skipped`.
 
 **Arquivos alterados/criados:**
 - `docs/operacional/2026-05-05-autoresponder-archive-vps-dry-run.md`

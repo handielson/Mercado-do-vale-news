@@ -32,7 +32,7 @@ for (const fileName of serverFiles) {
   );
 
   const optInRouteIndex = source.indexOf('const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({');
-  const deliveryAfterOptInIndex = source.indexOf('isAutoresponderStandaloneDeliveryQuoteRequest(message)', optInRouteIndex);
+  const deliveryAfterOptInIndex = source.indexOf('handleAutoresponderEngineDeliveryFlowV2({', optInRouteIndex);
   const contactFlowAfterOptInIndex = source.indexOf('handleAutoresponderContactNameFlow', optInRouteIndex);
   const tokenSearchAfterOptInIndex = source.indexOf(
     'const productSearchTokens = extractAutoresponderProductSearchTokens(message);',

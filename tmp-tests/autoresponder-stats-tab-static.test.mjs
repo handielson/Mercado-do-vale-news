@@ -44,7 +44,7 @@ assert(types.includes('topProducts?: Array<{ id: string; name: string; sku?: str
 assert(types.includes('avg_response_time_ms?: number'), 'AutoResponderStats summary must type avg_response_time_ms');
 assert(vps.includes('async function getAutoresponderTopProducts'), 'VPS must aggregate top products safely');
 assert(vps.includes('matched_products IS NOT NULL'), 'VPS top products must read matched_products');
-assert(vps.includes("return { source: 'mysql', summary, byIntent, topRules, topProducts }"), 'Stats endpoint must return source and topProducts');
+assert(vps.includes("return { source: 'mysql', summary: { ...summary, ai_finance: aiFinance }, byIntent, topRules, topProducts }"), 'Stats endpoint must return source and topProducts');
 
 assert(doc.includes('- [x] KPIs (cards no topo)'), 'Bot_Whatsapp.md must mark KPI checklist item');
 assert(doc.includes('- [x] Pizza por intent'), 'Bot_Whatsapp.md must mark intent chart checklist item');

@@ -28,9 +28,12 @@ for (const fileName of ['vps_server.cjs', 'vps_server.js']) {
     `${fileName} must handle add-more request before selecting a new numbered option`
   );
 
+  const selectedProductIndex = source.indexOf("intent: 'purchase_product_selected'");
+  const selectedProductBlockStart = source.lastIndexOf('await saveAutoresponderPurchaseFlow(senderKey, {', selectedProductIndex);
+  const selectedProductBlock = source.slice(selectedProductBlockStart, selectedProductIndex);
   assert(
-    !source.includes('items: [],\n          });'),
-    `${fileName} must not reset cart items when selecting another product`
+    selectedProductBlock.includes('items: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : []'),
+    `${fileName} must preserve cart items when selecting another product`
   );
 }
 

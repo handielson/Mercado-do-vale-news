@@ -24,7 +24,7 @@ const AUTORESPONDER_AI_SYSTEM_PROMPT = [
   'Nunca invente informacoes. Nunca diga que tem um produto sem ele aparecer no contexto oficial.',
   'Responda em portugues do Brasil, com tom educado, direto e vendedor.',
 ].join('\n');
-const AUTORESPONDER_NEEDS_PROMPT_FALLBACK = 'Quer que eu mande a lista de celulares disponiveis?';
+const AUTORESPONDER_NEEDS_PROMPT_FALLBACK = '';
 const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
 const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS = [4, 9, 16, 24, 33, 43, 54, 66, 79, 93];
@@ -6957,7 +6957,7 @@ async function buildAutoresponderNeedsPromptReply({ message, contactFirstName = 
       'O cliente acabou de cumprimentar ou iniciar conversa.',
       `Mensagem do cliente: ${String(message || '').trim() || '(vazia)'}`,
       name ? `Nome do cliente: ${name}` : '',
-      'Nao ha produtos consultados ainda. Pergunte somente se o cliente quer receber a lista de celulares disponiveis.',
+      'Nao ha produtos consultados ainda. Nao envie pergunta comercial depois da saudacao.',
       'Nao cite produtos, precos, estoque, garantia, entrega ou promocoes.',
     ].filter(Boolean).join('\n'),
     maxOutputTokens: 90,
@@ -7277,7 +7277,15 @@ async function buildAutoresponderPurchaseActionPrompt(product, selectedOption) {
     colors: getAutoresponderAvailableColors([selectedProduct]),
   }, Number(selectedOption?.option_number || 1));
 
-  return `${card}\n\nResponda:\n*1* Para comprar\n*2* Para detalhes`;
+  const productUrl = getAutoresponderProductUrl(selectedProduct);
+  const detailsBlock = [
+    'Para ver a configuracao, fotos e video dele, clica aqui',
+    productUrl,
+    '',
+    'Para comprar digite *1* ou responda com *comprar*',
+  ].join('\n');
+
+  return `${card}\n\n${detailsBlock}`;
 }
 
 function buildAutoresponderVariationPrompt(variations) {
@@ -7945,8 +7953,11 @@ async function handleAutoresponderEnginePurchaseFlowV2({ senderKey, message, set
       findSelectedVariation: findAutoresponderSelectedVariation,
       async buildProductDetailReply(selectedProduct) {
         const product = selectedProduct?.id ? await findAutoresponderProductById(selectedProduct.id) : selectedProduct;
-        const detailText = await formatAutoresponderProductDetailReply(product, settings);
-        return formatAutoresponderReply(`${detailText}\n\nSe quiser comprar, responda "comprar".`, settings, false);
+        return formatAutoresponderReply(
+          await buildAutoresponderPurchaseActionPrompt(product, selectedProduct),
+          settings,
+          false
+        );
       },
       buildVariationPrompt(variations) {
         return formatAutoresponderReply(buildAutoresponderVariationPrompt(variations), settings, false);
@@ -8227,7 +8238,7 @@ async function calculateAutoresponderShippingOptions(cepValue, cartItems = [], a
   if (!settings || settings.local_delivery_enabled === 0) return [];
 
   const [zones] = await pool.query('SELECT * FROM shipping_zones WHERE enabled = 1 ORDER BY display_order ASC');
-  const [ranges] = await pool.query('SELECT * FROM shipping_price_ranges ORDER BY min_km ASC');
+  const [ranges] = await pool.query('SELECT * FROM shipping_price_ranges');
   const rangesByZone = new Map();
   ranges.forEach((range) => {
     const current = rangesByZone.get(range.zone_id) || [];
@@ -8280,10 +8291,12 @@ async function calculateAutoresponderShippingOptions(cepValue, cartItems = [], a
       return;
     }
 
-    const distanceRange = distanceKm == null ? null : zoneRanges.find((range) =>
-      distanceKm >= Number(range.min_km || 0) &&
-      (range.max_km == null || distanceKm <= Number(range.max_km))
-    );
+    const distanceRange = distanceKm == null ? null : zoneRanges.find((range) => {
+      if (!Object.prototype.hasOwnProperty.call(range, 'min_km')) return false;
+      const minKm = Number(range.min_km || 0);
+      const maxKm = Object.prototype.hasOwnProperty.call(range, 'max_km') ? range.max_km : null;
+      return distanceKm >= minKm && (maxKm == null || distanceKm <= Number(maxKm));
+    });
     const price = distanceRange
       ? Number(distanceRange.price || 0)
       : zone.fixed_price != null
@@ -8664,6 +8677,7 @@ async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -8703,6 +8717,7 @@ async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -8739,6 +8754,7 @@ async function findAutoresponderProductsByCategoryBudget(categoryId, budgetCents
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -8818,6 +8834,24 @@ function getAutoresponderProductPriceCents(product) {
 function getAutoresponderProductGroupKey(product) {
   const groupId = product?.model_id || product?.id;
   return String(groupId || '').trim();
+}
+
+function getAutoresponderProductBrandName(product) {
+  const rawBrand = product?.brand_name || product?.brandName || product?.brand || '';
+  return String(rawBrand || '').trim() || 'Outras marcas';
+}
+
+function sortAutoresponderProductGroupsByBrand(groups) {
+  return [...(Array.isArray(groups) ? groups : [])].sort((a, b) => {
+    const brandCompare = normalizeAutoresponderText(a?.brandName)
+      .localeCompare(normalizeAutoresponderText(b?.brandName), 'pt-BR');
+    if (brandCompare !== 0) return brandCompare;
+    return normalizeAutoresponderText(a?.name).localeCompare(normalizeAutoresponderText(b?.name), 'pt-BR');
+  });
+}
+
+function formatAutoresponderProductBrandHeading(brandName) {
+  return `🏷️ ${brandName}`;
 }
 
 function formatAutoresponderPriceRange(products) {
@@ -9208,6 +9242,7 @@ function groupAutoresponderProductsByModel(products) {
       key,
       model_id: representative?.model_id || null,
       name: representative?.name || 'Produto',
+      brandName: getAutoresponderProductBrandName(representative),
       products: items,
       representative,
       count: items.length,
@@ -9450,9 +9485,8 @@ function formatAutoresponderProductWarrantyLine(product) {
 }
 
 function formatAutoresponderProductReplyInstructions(hasMore) {
-  const lines = ['Responda com o numero da opcao ou com o nome/modelo do produto.'];
+  const lines = ['vamos ficar com qual deles hoje? quer ver a lista completa?'];
   if (hasMore) {
-    lines.push('Se quiser, me diga a faixa de preco, marca ou uso que eu filtro melhor.');
     lines.push('Se quiser ver mais opcoes, digite "mais".');
   }
   return lines.join('\n');
@@ -9550,7 +9584,7 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
     return [formatAutoresponderProductListReply(safeProducts, keyword)];
   }
 
-  const groupedProducts = groupAutoresponderProductsByModel(availableProducts);
+  const groupedProducts = sortAutoresponderProductGroupsByBrand(groupAutoresponderProductsByModel(availableProducts));
   const total = pagination?.total || groupedProducts.length;
   const offset = Number(pagination?.offset || 0);
   const chunks = chunkAutoresponderArray(groupedProducts, AUTORESPONDER_PRODUCT_PAGE_SIZE);
@@ -9569,9 +9603,18 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
         : 'Encontrei estas opcoes:'))
       : 'Mais opcoes:';
     const lines = [title];
-    lines.push(...(await Promise.all(chunk.map((group, index) => (
+    const cardLines = await Promise.all(chunk.map((group, index) => (
       formatAutoresponderProductCardLine(group, firstNumber + index)
-    )))));
+    )));
+    let previousBrandName = '';
+    for (const [index, group] of chunk.entries()) {
+      const brandName = group?.brandName || 'Outras marcas';
+      if (brandName !== previousBrandName) {
+        lines.push(formatAutoresponderProductBrandHeading(brandName));
+        previousBrandName = brandName;
+      }
+      lines.push(cardLines[index]);
+    }
     return lines.join('\n\n');
   }));
 
@@ -9641,6 +9684,7 @@ async function findAutoresponderProductById(productId) {
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, description, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -9954,6 +9998,7 @@ async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) 
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl,
@@ -10169,7 +10214,7 @@ async function hasRecentAutoresponderNeedsPrompt(sender, validityMinutes = 15) {
 async function classifyAutoresponderNeedsPromptReplyWithAi({ message, settings }) {
   const aiReply = await callAutoresponderOpenAi({
     input: [
-      'Classifique a resposta do cliente ao prompt: "Voce esta atras de celular novo? Quer que eu mande a lista do que temos? Ou deseja alguma outra coisa?"',
+      'Classifique a resposta do cliente a um pedido anterior para receber lista de celulares disponiveis.',
       `Resposta do cliente: ${String(message || '').trim()}`,
       'Responda exatamente uma destas opcoes:',
       'phone_list_opt_in = cliente quer receber/ver a lista de celulares',
@@ -11154,7 +11199,7 @@ fastify.get('/autoresponder/unanswered', { preHandler: requireSyncKey }, async (
 });
 
 fastify.delete('/autoresponder/unanswered', { preHandler: requireSyncKey }, async (req, reply) => {
-  const question = String(req.query.question || '').trim();
+  const question = String(req.query?.question || '').trim();
   if (!question) return reply.code(400).send({ error: 'question is required' });
   const [result] = await pool.query(
     `DELETE FROM autoresponder_logs
@@ -11162,7 +11207,7 @@ fastify.delete('/autoresponder/unanswered', { preHandler: requireSyncKey }, asyn
        AND question = ?`,
     [question]
   );
-  return { ok: true, deleted: Number(result.affectedRows || 0) };
+  return { ok: true, deleted: Number(result?.affectedRows || 0) };
 });
 
 async function getAutoresponderTopProducts(limit = 10) {
@@ -11461,22 +11506,21 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
     const contactState = await getAutoresponderContactNameState(normalizedSender);
     const contactNameStatus = String(contactState?.contact_name_status || '');
-    const contactNameSaved = ['saved_to_google', 'google_pending'].includes(contactNameStatus);
-    if (!contactNameSaved) {
-      return {
-        intent: 'contact_name_prompt',
-        matched_count: 0,
-        replies: [{ message: greetingText }],
-        sender: normalizedSender,
-      };
-    }
-    const needsPrompt = await buildAutoresponderNeedsPromptReply({ message, contactFirstName, settings });
-    const replyMessages = formatAutoresponderReplies([greetingText, needsPrompt.text], settings, false);
     return {
-      intent: 'greeting_needs_prompt',
+      intent: 'greeting',
       matched_count: 0,
-      replies: formatAutoresponderProReplies(replyMessages),
-      aiMeta: needsPrompt.aiMeta,
+      replies: [{ message: greetingText }],
+      sender: normalizedSender,
+    };
+  }
+
+  if (detectedIntent.storeStatusRequest) {
+    const storeStatus = await getCachedAutoresponderStoreStatus();
+    const replyText = buildAutoresponderStoreStatusReply(storeStatus);
+    return {
+      intent: 'store_status',
+      matched_count: 0,
+      replies: [{ message: formatAutoresponderReply(replyText, settings, shouldPrefixGreeting) }],
       sender: normalizedSender,
     };
   }
@@ -11902,7 +11946,6 @@ fastify.route({
             ? '\n\nQual seu nome para seguirmos com o atendimento?'
           : '';
         const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
-        const contactNameSaved = ['saved_to_google', 'google_pending'].includes(contactNameStatus);
         if (shouldConfirmContactName || shouldAskContactName) {
           const replyText = [greetingText, contactPrompt.trim()].filter(Boolean).join('\n\n');
           await logAutoresponderReply({
@@ -11914,23 +11957,6 @@ fastify.route({
           });
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: greetingText }, { message: contactPrompt.trim() }] };
-        }
-
-        if (contactNameSaved) {
-          const greetingNeedsPrompt = await buildAutoresponderNeedsPromptReply({ message, contactFirstName, settings });
-          const needsPromptText = greetingNeedsPrompt.text;
-          const greetingReplies = formatAutoresponderReplies([greetingText, needsPromptText], settings, false);
-        const replyText = greetingReplies.join('\n\n');
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'greeting_needs_prompt',
-          replyText,
-          matchedCount: 0,
-          aiMeta: greetingNeedsPrompt.aiMeta,
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: greetingReplies.map((replyMessage) => ({ message: replyMessage })) };
         }
 
         await logAutoresponderReply({
@@ -12679,8 +12705,11 @@ fastify.route({
 
         if (isAutoresponderPurchaseDetailsRequest(message)) {
           const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
-          const detailText = await formatAutoresponderProductDetailReply(product, settings);
-          const replyText = formatAutoresponderReply(`${detailText}\n\nSe quiser comprar, responda "comprar".`, settings, false);
+          const replyText = formatAutoresponderReply(
+            await buildAutoresponderPurchaseActionPrompt(product, purchaseFlow.selected_product),
+            settings,
+            false
+          );
 
           await logAutoresponderReply({
             sender: senderKey,
@@ -19611,5 +19640,4 @@ runMigrations().then(() => {
   console.error('[startup] migration failed:', err);
   process.exit(1);
 });
-
 

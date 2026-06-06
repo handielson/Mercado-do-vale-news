@@ -35,7 +35,7 @@ const doc = readBotWhatsappDoc(root);
   'ruleTemplates',
   "label: 'Sauda",
   "label: 'Produto por tag'",
-  "label: 'Busca livre'",
+  "label: 'Busca",
   'Aplicar template',
 ].forEach((token) => {
   assert(page.includes(token), `Phase 3 coverage must include template token: ${token}`);

@@ -83,7 +83,7 @@ const requiredSnippets = [
   'settings.human_message_out_of_hours',
   'settings.max_replies_per_conversation',
   'settings.max_replies_window_hours',
-  'SELECT id, match_type, pattern, reply_type, reply_text, reply_tag_id, reply_search_query, attachment_url, attachment_caption, auto_apply_tag_id',
+  'SELECT id, match_type, pattern, reply_type, reply_text, reply_tag_id, reply_search_query, next_state, attachment_url, attachment_caption, auto_apply_tag_id',
   'FROM autoresponder_rules',
   'ORDER BY priority DESC, id ASC',
   'UPDATE autoresponder_rules SET hits = hits + 1 WHERE id = ?',

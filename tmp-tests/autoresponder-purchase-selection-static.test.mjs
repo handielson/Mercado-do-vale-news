@@ -20,10 +20,10 @@ for (const fileName of ['vps_server.cjs', 'vps_server.js']) {
     "intent: 'purchase_product_selected'",
     'formatAutoresponderProductCardLine',
     'option_number: choiceNumber',
-    'Responda:\\n*1* Para comprar\\n*2* Para detalhes',
+    'Para ver a configuracao, fotos e video dele, clica aqui',
+    'Para comprar digite *1* ou responda com *comprar*',
     'await buildAutoresponderPurchaseActionPrompt(product, selectedOption)',
     "'1'",
-    "'2'",
   ].forEach((token) => {
     assert(source.includes(token), `${fileName} must include ${token}`);
   });
@@ -31,6 +31,23 @@ for (const fileName of ['vps_server.cjs', 'vps_server.js']) {
   assert(
     !source.includes('Responda "comprar" ou "detalhes".'),
     `${fileName} must not use the old text commands after product selection`
+  );
+  assert(
+    !source.includes('Responda:\\n*1* Para comprar\\n*2* Para detalhes'),
+    `${fileName} must not offer a separate details action after product selection`
+  );
+  assert(
+    !source.includes('const detailText = await formatAutoresponderProductDetailReply(product, settings);'),
+    `${fileName} must not send the long detail reply when the customer asks for details`
+  );
+  const purchaseDetailsBranch = source.match(/if \(isAutoresponderPurchaseDetailsRequest\(message\)\) \{[\s\S]*?return \{ replies: \[\{ message: replyText \}\] \};[\s\S]*?\n        \}/)?.[0] || '';
+  assert(
+    purchaseDetailsBranch.includes('await buildAutoresponderPurchaseActionPrompt(product, purchaseFlow.selected_product)'),
+    `${fileName} details requests in purchase flow must reuse the short link-and-buy prompt`
+  );
+  assert(
+    !purchaseDetailsBranch.includes('formatAutoresponderProductDetailReply'),
+    `${fileName} purchase details branch must not include the old long product detail block`
   );
 
   assert(

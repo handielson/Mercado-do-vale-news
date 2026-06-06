@@ -19,15 +19,15 @@ assert.doesNotMatch(
   'autoresponder numbered product list must not include SKU lines',
 );
 
-assert.match(
+assert.doesNotMatch(
   detailBody,
-  /SKU: \$\{product\.sku\}/,
-  'autoresponder individual product detail must include SKU when available',
+  /SKU:/,
+  'autoresponder individual product detail must not expose SKU lines',
 );
 
 assert.match(
   source,
-  /name LIKE \? OR sku LIKE \?/,
+  /LOWER\(COALESCE\(sku, ''\)\) LIKE \?/,
   'autoresponder search should still be able to find products by SKU internally',
 );
 
