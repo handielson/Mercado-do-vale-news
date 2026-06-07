@@ -9925,7 +9925,8 @@ const AUTORESPONDER_ACCESSORY_SEARCH_WORDS = [
   'antena', 'antenas', 'adaptador', 'adaptadores', 'vidro', 'lente',
   'caneta', 'stylus', 'display', 'frontal', 'tela', 'touch', 'cooler',
   'caixa', 'som', 'camera', 'câmera', 'lnb', 'tripé', 'tripe', 'bracadeira',
-  'braçadeira', 'smartwatch', 'pulseira', 'controle remoto', 'tv stick',
+  'braçadeira', 'smartwatch', 'smartwacth', 'watch', 'pulseira', 'controle remoto', 'tv stick',
+  'kit', 'chave', 'chaves', 'lampada', 'lâmpada', 'led', 'repetidor', 'sinal',
 ];
 
 function detectAutoresponderDeviceFamilyFromSearch(keyword) {
@@ -10581,7 +10582,7 @@ function buildAutoresponderPhoneSearchSqlFilter() {
     'xiaomi', 'redmi', 'poco', 'galaxy', 'motorola', 'moto', 'samsung',
     'realme', 'infinix', 'tecno', 'apple',
   ].join('|');
-  const accessoryPattern = 'capinha|capinhas|pelicula|peliculas|capa|capas|case|cases|carregador|carregadores|cabo|cabos|fone|fones|fonte|fontes|suporte|suportes|adaptador|adaptadores|lente|vidro|acessorio|acessorios';
+  const accessoryPattern = 'capinha|capinhas|pelicula|peliculas|capa|capas|case|cases|carregador|carregadores|cabo|cabos|fone|fones|fonte|fontes|suporte|suportes|adaptador|adaptadores|lente|vidro|acessorio|acessorios|caneta|stylus|display|frontal|tela|touch|cooler|caixa|som|camera|câmera|lnb|tripe|tripé|bracadeira|braçadeira|smartwatch|smartwacth|watch|pulseira|controle remoto|tv stick|kit|chave|chaves|lampada|lâmpada|led|repetidor|sinal';
 
   return `(
     (
@@ -10606,7 +10607,7 @@ function buildAutoresponderPhoneSearchSqlFilter() {
 }
 
 function buildAutoresponderCategoryPhoneAccessorySqlFilter() {
-  const accessoryPattern = 'capinha|capinhas|pelicula|peliculas|capa|capas|case|cases|carregador|carregadores|cabo|cabos|fone|fones|fonte|fontes|suporte|suportes|adaptador|adaptadores|lente|vidro|acessorio|acessorios';
+  const accessoryPattern = 'capinha|capinhas|pelicula|peliculas|capa|capas|case|cases|carregador|carregadores|cabo|cabos|fone|fones|fonte|fontes|suporte|suportes|adaptador|adaptadores|lente|vidro|acessorio|acessorios|caneta|stylus|display|frontal|tela|touch|cooler|caixa|som|camera|câmera|lnb|tripe|tripé|bracadeira|braçadeira|smartwatch|smartwacth|watch|pulseira|controle remoto|tv stick|kit|chave|chaves|lampada|lâmpada|led|repetidor|sinal';
   return `(
     NOT EXISTS (
       SELECT 1
