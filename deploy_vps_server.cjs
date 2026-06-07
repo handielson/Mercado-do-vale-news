@@ -1,6 +1,6 @@
 /**
  * deploy_vps_server.cjs
- * Uploads vps_server.js and its runtime support files to the VPS, then restarts PM2.
+ * Uploads vps_server.cjs as server.js and its runtime support files to the VPS, then restarts PM2.
  */
 const { Client } = require('ssh2');
 const fs = require('fs');
@@ -13,7 +13,7 @@ const APP_DIR = '/var/www/mdv-api';
 
 const FILES = [
   {
-    local: path.join(__dirname, 'vps_server.js'),
+    local: path.join(__dirname, 'vps_server.cjs'),
     remote: `${APP_DIR}/server.js`,
   },
   {

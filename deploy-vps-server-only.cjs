@@ -10,7 +10,7 @@ const username = process.env.VPS_SITE_USER || process.env.VPS_USER;
 const password = process.env.VPS_SITE_PASSWORD || process.env.VPS_ROOT_PASSWORD || process.env.VPS_PASSWORD;
 const privateKeyPath = process.env.VPS_SITE_PRIVATE_KEY || process.env.VPS_PRIVATE_KEY;
 const privateKey = privateKeyPath ? fs.readFileSync(privateKeyPath) : undefined;
-const localServer = path.join(__dirname, 'vps_server.js');
+const localServer = path.join(__dirname, 'vps_server.cjs');
 const adminEmail = process.env.MDV_ADMIN_EMAIL || process.env.ADMIN_EMAIL || process.env.VPS_ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL;
 const adminPassword = process.env.MDV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || process.env.VPS_ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD;
 
