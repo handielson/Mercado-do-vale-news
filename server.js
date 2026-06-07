@@ -7700,6 +7700,7 @@ async function handleAutoresponderEngineDeliveryFlowV2({ senderKey, message, set
       currentPurchaseFlow?.status === 'awaiting_delivery_address' ||
       currentPurchaseFlow?.status === 'awaiting_delivery_cep_confirmation' ||
       currentPurchaseFlow?.status === 'awaiting_delivery_number' ||
+      currentPurchaseFlow?.status === 'summary_ready' ||
       currentPurchaseFlow?.fulfillment === 'delivery'
     )
   ) {
@@ -7710,6 +7711,9 @@ async function handleAutoresponderEngineDeliveryFlowV2({ senderKey, message, set
     import('./services/autoresponder/engine/flows/delivery.js'),
   ]);
   const state = normalizeConversationState(currentPurchaseFlow?.conversation_state || {});
+  if (state.flow === 'purchase' && state.step === 'awaiting_fulfillment') {
+    return null;
+  }
   const canHandle = deliveryFlowHandler.canHandle({ message, state, settings, context: {} });
   if (!canHandle) return null;
 
@@ -19640,4 +19644,3 @@ runMigrations().then(() => {
   console.error('[startup] migration failed:', err);
   process.exit(1);
 });
-
