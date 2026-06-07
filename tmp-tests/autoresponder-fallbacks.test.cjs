@@ -14,9 +14,32 @@ assert.equal(
   'Me diga o numero da opcao ou o nome do modelo. Ex: 1 ou Redmi Note 15.'
 );
 
+const settings = {
+  conversation_flow_messages: {
+    'fallback.purchase_action': 'Mensagem editada para acao de compra.',
+    'fallback.payment_method': 'Mensagem editada para pagamento.',
+    'fallback.global': 'Mensagem global editada.',
+  },
+};
+
+assert.equal(
+  buildContextualFallback({ flow: 'purchase', step: 'awaiting_action' }, settings).message,
+  'Mensagem editada para acao de compra.'
+);
+
+assert.equal(
+  buildContextualFallback({ flow: 'payment', step: 'awaiting_payment_method' }, settings).message,
+  'Mensagem editada para pagamento.'
+);
+
 assert.equal(
   buildGlobalFallback().message,
   'Nao consegui identificar certinho. Voce quer ver produtos, consultar entrega, formas de pagamento ou falar com atendente?'
+);
+
+assert.equal(
+  buildGlobalFallback(settings).message,
+  'Mensagem global editada.'
 );
 
 console.log('autoresponder fallback tests passed');

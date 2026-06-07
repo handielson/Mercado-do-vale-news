@@ -1,22 +1,25 @@
-function buildContextualFallback(state) {
-  const key = `${state?.flow || 'none'}.${state?.step || 'idle'}`;
-  const messages = {
-    'delivery.awaiting_cep': 'Me envie apenas os 8 numeros do CEP. Ex: 56320690',
-    'product_search.awaiting_choice': 'Me diga o numero da opcao ou o nome do modelo. Ex: 1 ou Redmi Note 15.',
-    'purchase.awaiting_action': 'Responda comprar, detalhes ou escolha outro produto.',
-    'purchase.awaiting_variation': 'Responda com o numero ou a cor desejada.',
-    'purchase.awaiting_quantity': 'Me envie a quantidade em numero. Ex: 1',
-    'purchase.item_added': 'Responda finalizar, adicionar mais ou remover item.',
-    'purchase.awaiting_fulfillment': 'Voce prefere entrega ou retirada na loja?',
-    'delivery.awaiting_number': 'Me envie o numero da residencia e complemento, se tiver.',
-    'payment.awaiting_method': 'Voce prefere Pix, dinheiro, debito ou cartao?',
-    'payment.awaiting_payment_method': 'Voce prefere Pix, dinheiro, debito ou cartao?',
-    'customer_data.awaiting_name': 'Me envie seu nome completo para finalizar.',
-    'customer_data.awaiting_document': 'Me envie CPF ou CNPJ para finalizar o cadastro.',
-    'handoff.ready': 'Vou deixar seu pedido pronto para um atendente finalizar.',
-  };
+import { resolveAutoresponderMessage } from './messages.js';
 
-  const message = messages[key] || buildGlobalFallback().message;
+const CONTEXTUAL_FALLBACK_KEYS = {
+  'delivery.awaiting_cep': 'fallback.delivery_awaiting_cep',
+  'product_search.awaiting_choice': 'fallback.product_choice',
+  'purchase.awaiting_action': 'fallback.purchase_action',
+  'purchase.awaiting_variation': 'fallback.purchase_variation',
+  'purchase.awaiting_quantity': 'fallback.purchase_quantity',
+  'purchase.item_added': 'fallback.purchase_item_added',
+  'purchase.awaiting_fulfillment': 'fallback.purchase_fulfillment',
+  'delivery.awaiting_number': 'fallback.delivery_awaiting_number',
+  'payment.awaiting_method': 'fallback.payment_method',
+  'payment.awaiting_payment_method': 'fallback.payment_method',
+  'customer_data.awaiting_name': 'fallback.customer_name',
+  'customer_data.awaiting_document': 'fallback.customer_document',
+  'handoff.ready': 'fallback.handoff_ready',
+};
+
+function buildContextualFallback(state, settings = null) {
+  const key = `${state?.flow || 'none'}.${state?.step || 'idle'}`;
+  const messageKey = CONTEXTUAL_FALLBACK_KEYS[key] || 'fallback.global';
+  const message = resolveAutoresponderMessage(settings, messageKey) || buildGlobalFallback(settings).message;
   return {
     message,
     intent: 'contextual_fallback',
@@ -26,9 +29,9 @@ function buildContextualFallback(state) {
   };
 }
 
-function buildGlobalFallback() {
+function buildGlobalFallback(settings = null) {
   return {
-    message: 'Nao consegui identificar certinho. Voce quer ver produtos, consultar entrega, formas de pagamento ou falar com atendente?',
+    message: resolveAutoresponderMessage(settings, 'fallback.global'),
     intent: 'global_fallback',
     nextState: {
       flow: 'none',
@@ -45,4 +48,5 @@ function buildGlobalFallback() {
 export {
   buildContextualFallback,
   buildGlobalFallback,
+  CONTEXTUAL_FALLBACK_KEYS,
 };

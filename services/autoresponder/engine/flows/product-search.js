@@ -84,7 +84,7 @@ const productSearchFlowHandler = {
   async handle({ message, state, settings, context }) {
     if (state.flow === 'product_search' && state.step === 'awaiting_choice') {
       const selected = (context.findSelectedProduct || findSelectedProduct)(message, state.data.options || []);
-      if (!selected) return buildContextualFallback(state);
+      if (!selected) return buildContextualFallback(state, settings);
       return {
         message: await context.buildProductDetailReply(selected),
         intent: 'product_selected',

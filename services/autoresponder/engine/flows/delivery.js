@@ -74,15 +74,15 @@ const deliveryFlowHandler = {
 
     if (state.flow === 'delivery' && state.step === 'awaiting_cep') {
       const cep = normalizeCep(message);
-      if (!cep) return buildContextualFallback(state);
+      if (!cep) return buildContextualFallback(state, settings);
       const address = await context.lookupCep(cep);
-      if (!address) return buildContextualFallback(state);
+      if (!address) return buildContextualFallback(state, settings);
       const cartItems = Array.isArray(state.data?.items) ? state.data.items : [];
       const shippingOptions = await context.calculateShippingOptions(cep, cartItems, address);
       return buildCepReply(address, shippingOptions, state.data);
     }
 
-    return buildContextualFallback(state);
+    return buildContextualFallback(state, settings);
   },
 };
 

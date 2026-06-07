@@ -56,7 +56,7 @@ const purchaseFlowHandler = {
   async handle({ message, state, settings, context }) {
     if (state.flow === 'purchase' && state.step === 'awaiting_action') {
       const selectedProduct = getSelectedProduct(state);
-      if (!selectedProduct?.id) return buildContextualFallback(state);
+      if (!selectedProduct?.id) return buildContextualFallback(state, settings);
 
       if (context.isDetailsRequest?.(message)) {
         const detailMessage = await maybeCall(context.buildProductDetailReply, selectedProduct, settings);
@@ -70,7 +70,7 @@ const purchaseFlowHandler = {
         };
       }
 
-      if (!context.isBuyRequest?.(message)) return buildContextualFallback(state);
+      if (!context.isBuyRequest?.(message)) return buildContextualFallback(state, settings);
 
       const variations = await maybeCall(context.findProductVariations, selectedProduct);
       if (Array.isArray(variations) && variations.length > 1) {
@@ -110,7 +110,7 @@ const purchaseFlowHandler = {
     if (state.flow === 'purchase' && state.step === 'awaiting_variation') {
       const variations = Array.isArray(state.data?.variation_options) ? state.data.variation_options : [];
       const selectedVariation = await maybeCall(context.findSelectedVariation, message, variations);
-      if (!selectedVariation) return buildContextualFallback(state);
+      if (!selectedVariation) return buildContextualFallback(state, settings);
       const messageText = await maybeCall(context.buildQuantityPrompt, selectedVariation, settings);
       if (!messageText) return null;
       return {
@@ -129,12 +129,12 @@ const purchaseFlowHandler = {
 
     if (state.flow === 'purchase' && state.step === 'awaiting_quantity') {
       const selectedProduct = getSelectedProduct(state);
-      if (!selectedProduct?.id) return buildContextualFallback(state);
+      if (!selectedProduct?.id) return buildContextualFallback(state, settings);
       const quantity = context.parseQuantity?.(message) || parsePositiveInteger(message);
-      if (!quantity) return buildContextualFallback(state);
+      if (!quantity) return buildContextualFallback(state, settings);
       if (!hasStock(selectedProduct, quantity)) {
         const stockMessage = await maybeCall(context.buildStockBlockedReply, selectedProduct, quantity, settings);
-        if (!stockMessage) return buildContextualFallback(state);
+        if (!stockMessage) return buildContextualFallback(state, settings);
         return {
           message: stockMessage,
           intent: 'purchase_stock_blocked',
@@ -199,7 +199,7 @@ const purchaseFlowHandler = {
         };
       }
 
-      return buildContextualFallback(state);
+      return buildContextualFallback(state, settings);
     }
 
     if (state.flow === 'purchase' && state.step === 'awaiting_fulfillment') {
@@ -227,12 +227,12 @@ const purchaseFlowHandler = {
         };
       }
 
-      return buildContextualFallback(state);
+      return buildContextualFallback(state, settings);
     }
 
     if (state.flow === 'payment' && state.step === 'awaiting_payment_method') {
       const payment = await maybeCall(context.parsePaymentMethod, message);
-      if (!payment) return buildContextualFallback({ flow: 'payment', step: 'awaiting_method', data: state.data });
+      if (!payment) return buildContextualFallback({ flow: 'payment', step: 'awaiting_method', data: state.data }, settings);
       const selectedPayment = await maybeCall(context.buildSelectedPayment, payment, state.data);
       if (!selectedPayment) return null;
       const messageText = await maybeCall(context.buildCustomerNamePrompt, settings);
@@ -248,7 +248,7 @@ const purchaseFlowHandler = {
 
     if (state.flow === 'customer_data' && state.step === 'awaiting_name') {
       const customerName = String(message || '').trim();
-      if (customerName.length < 5) return buildContextualFallback(state);
+      if (customerName.length < 5) return buildContextualFallback(state, settings);
       const messageText = await maybeCall(context.buildCustomerDocumentPrompt, settings);
       if (!messageText) return null;
       return {
@@ -262,7 +262,7 @@ const purchaseFlowHandler = {
 
     if (state.flow === 'customer_data' && state.step === 'awaiting_document') {
       const document = await maybeCall(context.parseCustomerDocument, message);
-      if (!document) return buildContextualFallback(state);
+      if (!document) return buildContextualFallback(state, settings);
       const messageText = await maybeCall(context.buildHandoffReadyReply, { ...state.data, customer_document: document }, settings);
       if (!messageText) return null;
       return {
@@ -274,7 +274,7 @@ const purchaseFlowHandler = {
       };
     }
 
-    return buildContextualFallback(state);
+    return buildContextualFallback(state, settings);
   },
 };
 

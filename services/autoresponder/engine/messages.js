@@ -8,7 +8,16 @@ const AUTORESPONDER_MESSAGE_KEYS = {
   'fallback.global': 'Nao consegui identificar certinho. Voce quer ver produtos, consultar entrega, formas de pagamento ou falar com atendente?',
   'fallback.delivery_awaiting_cep': 'Me envie apenas os 8 numeros do CEP. Ex: 56320690',
   'fallback.product_choice': 'Me diga o numero da opcao ou o nome do modelo. Ex: 1 ou Redmi Note 15.',
+  'fallback.purchase_action': 'Responda comprar, detalhes ou escolha outro produto.',
+  'fallback.purchase_variation': 'Responda com o numero ou a cor desejada.',
   'fallback.purchase_quantity': 'Me envie a quantidade em numero. Ex: 1',
+  'fallback.purchase_item_added': 'Responda finalizar, adicionar mais ou remover item.',
+  'fallback.purchase_fulfillment': 'Voce prefere entrega ou retirada na loja?',
+  'fallback.delivery_awaiting_number': 'Me envie o numero da residencia e complemento, se tiver.',
+  'fallback.payment_method': 'Voce prefere Pix, dinheiro, debito ou cartao?',
+  'fallback.customer_name': 'Me envie seu nome completo para finalizar.',
+  'fallback.customer_document': 'Me envie CPF ou CNPJ para finalizar o cadastro.',
+  'fallback.handoff_ready': 'Vou deixar seu pedido pronto para um atendente finalizar.',
 };
 
 function parseMessageConfig(settings) {
