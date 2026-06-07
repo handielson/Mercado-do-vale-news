@@ -9402,6 +9402,7 @@ function isAutoresponderPhoneDeviceProduct(product) {
     baseProduct.brand,
     baseProduct.sku,
   ].filter(Boolean).join(' '));
+  if (/\b(tablet|pad|ipad)\b/.test(text)) return false;
   return /\b(celular|celulares|smartphone|smartphones|iphone|iphones|xiaomi|redmi|poco|galaxy|motorola|moto|samsung|realme|infinix|tecno)\b/.test(text);
 }
 
@@ -9992,7 +9993,7 @@ function buildAutoresponderPhoneSearchSqlFilter() {
     'xiaomi', 'redmi', 'poco', 'galaxy', 'motorola', 'moto', 'samsung',
     'realme', 'infinix', 'tecno', 'apple',
   ].join('|');
-  const accessoryPattern = 'capinha|capinhas|pelicula|peliculas|capa|capas|case|cases|carregador|carregadores|cabo|cabos|fone|fones|fonte|fontes|suporte|suportes|adaptador|adaptadores|lente|vidro|acessorio|acessorios|caneta|stylus|display|frontal|tela|touch|cooler|caixa|som|camera|câmera|lnb|tripe|tripé|bracadeira|braçadeira|smartwatch|smartwacth|watch|pulseira|controle remoto|tv stick|kit|chave|chaves|lampada|lâmpada|led|repetidor|sinal';
+  const accessoryPattern = 'capinha|capinhas|pelicula|peliculas|capa|capas|case|cases|carregador|carregadores|cabo|cabos|fone|fones|fonte|fontes|suporte|suportes|adaptador|adaptadores|lente|vidro|acessorio|acessorios|caneta|stylus|display|frontal|tela|touch|cooler|caixa|som|camera|câmera|lnb|tripe|tripé|bracadeira|braçadeira|smartwatch|smartwacth|watch|pulseira|controle remoto|tv stick|kit|chave|chaves|lampada|lâmpada|led|repetidor|sinal|tablet|pad|ipad';
 
   return `(
     (
@@ -10015,7 +10016,7 @@ function buildAutoresponderPhoneSearchSqlFilter() {
 }
 
 function buildAutoresponderCategoryPhoneAccessorySqlFilter() {
-  const accessoryPattern = 'capinha|capinhas|pelicula|peliculas|capa|capas|case|cases|carregador|carregadores|cabo|cabos|fone|fones|fonte|fontes|suporte|suportes|adaptador|adaptadores|lente|vidro|acessorio|acessorios|caneta|stylus|display|frontal|tela|touch|cooler|caixa|som|camera|câmera|lnb|tripe|tripé|bracadeira|braçadeira|smartwatch|smartwacth|watch|pulseira|controle remoto|tv stick|kit|chave|chaves|lampada|lâmpada|led|repetidor|sinal';
+  const accessoryPattern = 'capinha|capinhas|pelicula|peliculas|capa|capas|case|cases|carregador|carregadores|cabo|cabos|fone|fones|fonte|fontes|suporte|suportes|adaptador|adaptadores|lente|vidro|acessorio|acessorios|caneta|stylus|display|frontal|tela|touch|cooler|caixa|som|camera|câmera|lnb|tripe|tripé|bracadeira|braçadeira|smartwatch|smartwacth|watch|pulseira|controle remoto|tv stick|kit|chave|chaves|lampada|lâmpada|led|repetidor|sinal|tablet|pad|ipad';
   return `(
     NOT EXISTS (
       SELECT 1

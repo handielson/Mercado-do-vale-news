@@ -46,6 +46,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
   assert.match(source, /smartwatch\|smartwacth\|watch/);
   assert.match(source, /kit\|chave\|chaves\|lampada/);
   assert.match(source, /repetidor\|sinal/);
+  assert.match(source, /tablet\|pad\|ipad/);
   assert.match(source, /smarthone/);
   assert.match(source, /filterAutoresponderAvailableProducts\(safeProducts\)[\s\S]*isAutoresponderPhoneDeviceProduct\(product\)/);
   assert.match(
