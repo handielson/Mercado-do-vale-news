@@ -504,6 +504,54 @@ function buildRuleNextState(value: string): AutoResponderRuleInput['next_state']
     return option?.state ? { ...option.state, data: { ...option.state.data } } : null;
 }
 
+function getConversationStepGroup(stepId: string): string {
+    if (stepId.startsWith('fallback')) return 'Recuperacao';
+    if (stepId.startsWith('delivery')) return 'Entrega';
+    if (stepId.startsWith('payment')) return 'Pagamento';
+    if (stepId.startsWith('product') || stepId === 'variation' || stepId === 'phone-list') return 'Produtos';
+    if (stepId === 'pickup' || stepId === 'fulfillment') return 'Fechamento';
+    if (stepId === 'human') return 'Atendente';
+    return 'Inicio';
+}
+
+const conversationStepGroupStyles: Record<string, { badge: string; accent: string; panel: string }> = {
+    Inicio: {
+        badge: 'bg-blue-50 text-blue-700 ring-blue-100',
+        accent: 'border-blue-500 bg-blue-50',
+        panel: 'border-blue-200 bg-blue-50/60',
+    },
+    Produtos: {
+        badge: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+        accent: 'border-emerald-500 bg-emerald-50',
+        panel: 'border-emerald-200 bg-emerald-50/60',
+    },
+    Entrega: {
+        badge: 'bg-amber-50 text-amber-700 ring-amber-100',
+        accent: 'border-amber-500 bg-amber-50',
+        panel: 'border-amber-200 bg-amber-50/60',
+    },
+    Pagamento: {
+        badge: 'bg-indigo-50 text-indigo-700 ring-indigo-100',
+        accent: 'border-indigo-500 bg-indigo-50',
+        panel: 'border-indigo-200 bg-indigo-50/60',
+    },
+    Fechamento: {
+        badge: 'bg-cyan-50 text-cyan-700 ring-cyan-100',
+        accent: 'border-cyan-500 bg-cyan-50',
+        panel: 'border-cyan-200 bg-cyan-50/60',
+    },
+    Atendente: {
+        badge: 'bg-violet-50 text-violet-700 ring-violet-100',
+        accent: 'border-violet-500 bg-violet-50',
+        panel: 'border-violet-200 bg-violet-50/60',
+    },
+    Recuperacao: {
+        badge: 'bg-rose-50 text-rose-700 ring-rose-100',
+        accent: 'border-rose-500 bg-rose-50',
+        panel: 'border-rose-200 bg-rose-50/60',
+    },
+};
+
 function ruleToForm(rule: AutoResponderRule): RuleFormState {
     return {
         name: rule.name || '',
@@ -2740,6 +2788,18 @@ const AutoResponderPage: React.FC = () => {
             rows: 2,
         },
     ];
+    const conversationFlowGroups = conversationEditorSteps.reduce<Array<{ name: string; steps: typeof conversationEditorSteps }>>((groups, step) => {
+        const groupName = getConversationStepGroup(step.id);
+        const currentGroup = groups.find((group) => group.name === groupName);
+        if (currentGroup) {
+            currentGroup.steps.push(step);
+        } else {
+            groups.push({ name: groupName, steps: [step] });
+        }
+        return groups;
+    }, []);
+    const editableFlowCount = conversationEditorSteps.filter((step) => Boolean((step as { messageKey?: string }).messageKey) || Boolean((step as { customerEditable?: boolean }).customerEditable)).length;
+    const fallbackFlowCount = conversationEditorSteps.filter((step) => step.id.startsWith('fallback')).length;
 
     return (
         <div className="mx-auto max-w-7xl space-y-6 pb-16">
@@ -2846,136 +2906,207 @@ const AutoResponderPage: React.FC = () => {
 
                 <TabPanels className="space-y-4">
                     <TabPanel id="fluxos">
-                        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
-                            <aside className="rounded-lg border border-slate-200 bg-white">
-                                <div className="border-b border-slate-200 px-4 py-3">
-                                    <h2 className="text-base font-semibold text-slate-900">Fluxos de conversa</h2>
-                                    <p className="mt-1 text-sm text-slate-500">Atendimento pelo WhatsApp, etapa por etapa.</p>
-                                </div>
-                                <div className="divide-y divide-slate-100">
-                                    {conversationEditorSteps.map((step, index) => (
-                                        <div
-                                            key={step.id}
-                                            className={`flex items-start gap-3 px-4 py-3 ${
-                                                index < 3 ? 'border-l-4 border-emerald-500 bg-emerald-50' : 'border-l-4 border-transparent'
-                                            }`}
-                                        >
-                                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-700 shadow-sm">
-                                                {index + 1}
-                                            </span>
-                                            <span>
-                                                <span className="block text-sm font-bold text-slate-950">{step.title}</span>
-                                                <span className="mt-1 block text-xs text-slate-600">{step.subtitle}</span>
-                                            </span>
+                        <div className="space-y-4">
+                            <section className="rounded-lg border border-slate-200 bg-white p-5">
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase text-blue-700">Fluxo completo</p>
+                                        <h2 className="mt-1 text-xl font-bold text-slate-950">Roteiro da conversa</h2>
+                                        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                                            Cada bloco mostra o que o cliente pode mandar, o que o bot responde e em qual parte do atendimento essa etapa entra.
+                                        </p>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 text-center">
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                            <span className="block text-lg font-bold text-slate-950">{formatNumber(conversationEditorSteps.length)}</span>
+                                            <span className="text-[11px] font-semibold uppercase text-slate-500">etapas</span>
                                         </div>
-                                    ))}
-                                </div>
-                            </aside>
-
-                            <section className="rounded-lg border border-slate-200 bg-white">
-                                <div className="border-b border-slate-200 px-5 py-4">
-                                    <p className="text-xs font-semibold uppercase text-emerald-700">Fluxo completo</p>
-                                    <h2 className="mt-1 text-lg font-bold text-slate-950">Mensagens do Bot</h2>
-                                    <p className="mt-1 text-sm text-slate-500">
-                                        Edite a fala do bot e as palavras que fazem cada etapa continuar sem sair do contexto.
-                                    </p>
-                                </div>
-
-                                <div className="space-y-5 px-5 py-5">
-                                    {conversationEditorSteps.map((step, index) => (
-                                        <div key={step.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                                <div>
-                                                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                                                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs text-blue-700">
-                                                            {index + 1}
-                                                        </span>
-                                                        {step.title}
-                                                    </div>
-                                                    <p className="mt-1 text-xs text-slate-500">{step.subtitle}</p>
-                                                </div>
-                                                <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-500">
-                                                    {step.customerEditable ? 'palavras editaveis' : 'resposta editavel'}
-                                                </span>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                                                <label className="block">
-                                                    <span className="mb-2 block text-sm font-semibold text-slate-700">{step.customerLabel}</span>
-                                                    {step.customerEditable ? (
-                                                        <AutoResizeTextarea
-                                                            value={settingsForm.conversation_flow_keywords.phone_list_opt_in || ''}
-                                                            onChange={(event) => updateConversationFlowKeywords('phone_list_opt_in', event.target.value)}
-                                                            minRows={3}
-                                                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                                                        />
-                                                    ) : (
-                                                        <div className="min-h-[76px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-600">
-                                                            {step.customerText}
-                                                        </div>
-                                                    )}
-                                                </label>
-
-                                                <label className="block">
-                                                    <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                                        <Bot size={16} />
-                                                        {step.botLabel}
-                                                    </span>
-                                                    {step.messageKey ? (
-                                                        <AutoResizeTextarea
-                                                            value={flowMessages[step.messageKey] || ''}
-                                                            onChange={(event) => updateConversationFlowMessage(step.messageKey, event.target.value)}
-                                                            minRows={step.rows}
-                                                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                                                        />
-                                                    ) : (
-                                                        <div className="whitespace-pre-line rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-600">
-                                                            {step.botText}
-                                                        </div>
-                                                    )}
-                                                    {step.helper && (
-                                                        <p className="mt-2 text-xs text-slate-500">{step.helper}</p>
-                                                    )}
-                                                </label>
-                                            </div>
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                            <span className="block text-lg font-bold text-slate-950">{formatNumber(editableFlowCount)}</span>
+                                            <span className="text-[11px] font-semibold uppercase text-slate-500">editaveis</span>
                                         </div>
-                                    ))}
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                            <span className="block text-lg font-bold text-slate-950">{formatNumber(fallbackFlowCount)}</span>
+                                            <span className="text-[11px] font-semibold uppercase text-slate-500">fallbacks</span>
+                                        </div>
+                                    </div>
+                                </div>
 
-                                    <label className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
-                                        <input
-                                            type="checkbox"
-                                            checked={settingsForm.ai_enabled}
-                                            onChange={(event) => updateSettingsForm({ ai_enabled: event.target.checked })}
-                                            className="mt-1 h-4 w-4 rounded border-blue-300"
-                                        />
-                                        <span>
-                                            <span className="block text-sm font-bold text-blue-900">IA na linha de frente</span>
-                                            <span className="mt-1 block text-sm text-blue-800">
-                                                Quando a resposta nao bater nas palavras acima, a IA interpreta a intencao antes do bot desistir ou fazer uma busca errada.
-                                            </span>
-                                        </span>
-                                    </label>
-
-                                    <div className="flex justify-end">
-                                        <button
-                                            type="button"
-                                            onClick={saveSettings}
-                                            disabled={isSavingSettings}
-                                            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                                        >
-                                            <Save size={16} />
-                                            {isSavingSettings ? 'Salvando...' : 'Salvar fluxo'}
-                                        </button>
+                                <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+                                    <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+                                        <span className="text-xs font-bold uppercase text-blue-700">1. Entrada</span>
+                                        <p className="mt-1 text-sm text-blue-900">O cliente manda palavras, numeros, CEP ou uma escolha.</p>
+                                    </div>
+                                    <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3">
+                                        <span className="text-xs font-bold uppercase text-emerald-700">2. Resposta</span>
+                                        <p className="mt-1 text-sm text-emerald-900">O bot responde, pergunta ou direciona para a proxima etapa.</p>
+                                    </div>
+                                    <div className="rounded-lg border border-rose-100 bg-rose-50 px-4 py-3">
+                                        <span className="text-xs font-bold uppercase text-rose-700">3. Recuperacao</span>
+                                        <p className="mt-1 text-sm text-rose-900">Fallbacks seguram respostas fora do esperado.</p>
                                     </div>
                                 </div>
                             </section>
 
-                            <aside className="rounded-lg border border-slate-200 bg-[#efe7dc] p-4">
+                            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)_360px]">
+                                <aside className="rounded-lg border border-slate-200 bg-white xl:sticky xl:top-4 xl:self-start">
+                                    <div className="border-b border-slate-200 px-4 py-3">
+                                        <h2 className="text-base font-semibold text-slate-900">Mapa rapido</h2>
+                                        <p className="mt-1 text-sm text-slate-500">Grupos do atendimento, na ordem em que aparecem.</p>
+                                    </div>
+                                    <div className="space-y-3 p-3">
+                                        {conversationFlowGroups.map((group) => {
+                                            const style = conversationStepGroupStyles[group.name] || conversationStepGroupStyles.Inicio;
+                                            return (
+                                                <div key={group.name} className={`rounded-lg border p-3 ${style.panel}`}>
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className={`rounded-full px-2 py-1 text-xs font-bold ring-1 ${style.badge}`}>
+                                                            {group.name}
+                                                        </span>
+                                                        <span className="text-xs font-semibold text-slate-500">{group.steps.length} etapas</span>
+                                                    </div>
+                                                    <div className="mt-3 space-y-2">
+                                                        {group.steps.slice(0, 4).map((step) => (
+                                                            <div key={step.id} className="text-sm">
+                                                                <span className="block font-semibold text-slate-900">{step.title}</span>
+                                                                <span className="block text-xs leading-5 text-slate-600">{step.subtitle}</span>
+                                                            </div>
+                                                        ))}
+                                                        {group.steps.length > 4 && (
+                                                            <span className="block text-xs font-semibold text-slate-500">
+                                                                +{group.steps.length - 4} etapas neste grupo
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </aside>
+
+                                <section className="rounded-lg border border-slate-200 bg-white">
+                                    <div className="border-b border-slate-200 px-5 py-4">
+                                        <p className="text-xs font-semibold uppercase text-emerald-700">Editor do roteiro</p>
+                                        <h2 className="mt-1 text-lg font-bold text-slate-950">Mensagens e palavras-chave</h2>
+                                        <p className="mt-1 text-sm text-slate-500">
+                                            Campos brancos podem ser editados. Os blocos cinza mostram exemplos ou partes calculadas pelo sistema.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-6 px-5 py-5">
+                                        {conversationFlowGroups.map((group) => {
+                                            const style = conversationStepGroupStyles[group.name] || conversationStepGroupStyles.Inicio;
+                                            return (
+                                                <div key={group.name} className="space-y-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className={`rounded-full px-3 py-1 text-xs font-bold ring-1 ${style.badge}`}>
+                                                            {group.name}
+                                                        </span>
+                                                        <div className="h-px flex-1 bg-slate-200" />
+                                                    </div>
+
+                                                    {group.steps.map((step) => {
+                                                        const stepIndex = conversationEditorSteps.findIndex((item) => item.id === step.id);
+                                                        return (
+                                                            <div key={step.id} className={`rounded-lg border-l-4 border-y border-r border-slate-200 bg-white p-4 shadow-sm ${style.accent}`}>
+                                                                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                                                    <div>
+                                                                        <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                                                                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs text-slate-700 shadow-sm">
+                                                                                {stepIndex + 1}
+                                                                            </span>
+                                                                            {step.title}
+                                                                        </div>
+                                                                        <p className="mt-1 text-xs text-slate-600">{step.subtitle}</p>
+                                                                    </div>
+                                                                    <span className="w-fit rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-500 shadow-sm">
+                                                                        {step.customerEditable ? 'palavras editaveis' : (step as { messageKey?: string }).messageKey ? 'mensagem editavel' : 'automatico'}
+                                                                    </span>
+                                                                </div>
+
+                                                                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                                                                    <label className="block rounded-lg border border-blue-100 bg-blue-50/70 p-3">
+                                                                        <span className="mb-2 block text-xs font-bold uppercase text-blue-700">Cliente</span>
+                                                                        <span className="mb-2 block text-sm font-semibold text-slate-800">{step.customerLabel}</span>
+                                                                        {step.customerEditable ? (
+                                                                            <AutoResizeTextarea
+                                                                                value={settingsForm.conversation_flow_keywords.phone_list_opt_in || ''}
+                                                                                onChange={(event) => updateConversationFlowKeywords('phone_list_opt_in', event.target.value)}
+                                                                                minRows={3}
+                                                                                className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                                                            />
+                                                                        ) : (
+                                                                            <div className="min-h-[76px] rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm leading-6 text-slate-700">
+                                                                                {step.customerText}
+                                                                            </div>
+                                                                        )}
+                                                                    </label>
+
+                                                                    <label className="block rounded-lg border border-emerald-100 bg-emerald-50/70 p-3">
+                                                                        <span className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-emerald-700">
+                                                                            <Bot size={15} />
+                                                                            Bot
+                                                                        </span>
+                                                                        <span className="mb-2 block text-sm font-semibold text-slate-800">{step.botLabel}</span>
+                                                                        {(step as { messageKey?: string }).messageKey ? (
+                                                                            <AutoResizeTextarea
+                                                                                value={flowMessages[(step as { messageKey: string }).messageKey] || ''}
+                                                                                onChange={(event) => updateConversationFlowMessage((step as { messageKey: string }).messageKey, event.target.value)}
+                                                                                minRows={step.rows}
+                                                                                className="w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm leading-6 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                                                                            />
+                                                                        ) : (
+                                                                            <div className="whitespace-pre-line rounded-lg border border-emerald-100 bg-white px-3 py-2 text-sm leading-6 text-slate-700">
+                                                                                {step.botText}
+                                                                            </div>
+                                                                        )}
+                                                                        {step.helper && (
+                                                                            <p className="mt-2 text-xs text-emerald-800">{step.helper}</p>
+                                                                        )}
+                                                                    </label>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        })}
+
+                                        <label className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                                            <input
+                                                type="checkbox"
+                                                checked={settingsForm.ai_enabled}
+                                                onChange={(event) => updateSettingsForm({ ai_enabled: event.target.checked })}
+                                                className="mt-1 h-4 w-4 rounded border-blue-300"
+                                            />
+                                            <span>
+                                                <span className="block text-sm font-bold text-blue-900">IA na linha de frente</span>
+                                                <span className="mt-1 block text-sm text-blue-800">
+                                                    Quando a resposta nao bater nas palavras acima, a IA interpreta a intencao antes do bot desistir ou fazer uma busca errada.
+                                                </span>
+                                            </span>
+                                        </label>
+
+                                        <div className="sticky bottom-0 -mx-5 flex justify-end border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
+                                            <button
+                                                type="button"
+                                                onClick={saveSettings}
+                                                disabled={isSavingSettings}
+                                                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                                            >
+                                                <Save size={16} />
+                                                {isSavingSettings ? 'Salvando...' : 'Salvar fluxo'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </section>
+
+                            <aside className="rounded-lg border border-slate-200 bg-[#efe7dc] p-4 xl:sticky xl:top-4 xl:self-start">
                                 <div className="mb-3 flex items-center gap-2 border-b border-black/10 pb-3">
                                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-700 text-sm font-bold text-white">M</div>
                                     <div>
-                                        <h3 className="text-sm font-bold text-slate-900">Preview da conversa</h3>
-                                        <p className="text-xs text-slate-600">Mercado do Vale</p>
+                                        <h3 className="text-sm font-bold text-slate-900">Exemplo no WhatsApp</h3>
+                                        <p className="text-xs text-slate-600">Preview com as mensagens editadas</p>
                                     </div>
                                 </div>
                                 <div className="space-y-3 text-sm">
@@ -3038,6 +3169,7 @@ const AutoResponderPage: React.FC = () => {
                                     </div>
                                 </div>
                             </aside>
+                            </div>
                         </div>
                     </TabPanel>
 
