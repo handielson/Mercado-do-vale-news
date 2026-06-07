@@ -7525,6 +7525,14 @@ function formatAutoresponderCep(value) {
   return cep ? cep.replace(/^(\d{5})(\d{3})$/, '$1-$2') : '';
 }
 
+function isAutoresponderStandaloneDeliveryQuoteRequest(message) {
+  const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+  const mentionsDelivery = /\b(entrega|entregas|entregar|entregam|delivery|frete|motoboy|enviar|envia|mandar|manda)\b/.test(text);
+  const asksAboutService = /\b(faz|fazem|tem|trabalha|trabalham|quanto|valor|preco|consulta|consultar)\b/.test(text) || text.includes('?');
+  return mentionsDelivery && asksAboutService;
+}
+
 function parseAutoresponderNumberComplement(message) {
   const text = normalizeAutoresponderDeliveryAddress(message);
   if (!text) return null;
