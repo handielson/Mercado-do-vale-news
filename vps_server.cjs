@@ -9955,8 +9955,7 @@ function isAutoresponderAccessoryProduct(product) {
     baseProduct.name,
     baseProduct.category_name,
     baseProduct.categoryName,
-    baseProduct.specs,
-    baseProduct.custom_fields,
+    baseProduct.sku,
   ].filter(Boolean).join(' '));
   return AUTORESPONDER_ACCESSORY_SEARCH_WORDS.some((word) => text.includes(word));
 }
@@ -9981,8 +9980,6 @@ function isAutoresponderPhoneDeviceProduct(product) {
     baseProduct.categoryName,
     baseProduct.brand,
     baseProduct.sku,
-    baseProduct.specs,
-    baseProduct.custom_fields,
   ].filter(Boolean).join(' '));
   return /\b(celular|celulares|smartphone|smartphones|iphone|iphones|xiaomi|redmi|poco|galaxy|motorola|moto|samsung|realme|infinix|tecno)\b/.test(text);
 }
@@ -10599,9 +10596,7 @@ function buildAutoresponderPhoneSearchSqlFilter() {
     )
     AND CONCAT_WS(' ',
       LOWER(COALESCE(name, '')),
-      LOWER(COALESCE(sku, '')),
-      LOWER(COALESCE(CAST(specs AS CHAR), '')),
-      LOWER(COALESCE(CAST(custom_fields AS CHAR), ''))
+      LOWER(COALESCE(sku, ''))
     ) NOT REGEXP '${accessoryPattern}'
   )`;
 }
@@ -10617,9 +10612,7 @@ function buildAutoresponderCategoryPhoneAccessorySqlFilter() {
     )
     OR CONCAT_WS(' ',
       LOWER(COALESCE(products.name, '')),
-      LOWER(COALESCE(products.sku, '')),
-      LOWER(COALESCE(CAST(products.specs AS CHAR), '')),
-      LOWER(COALESCE(CAST(products.custom_fields AS CHAR), ''))
+      LOWER(COALESCE(products.sku, ''))
     ) NOT REGEXP '${accessoryPattern}'
   )`;
 }
