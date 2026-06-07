@@ -4,12 +4,6 @@ import { resolveAutoresponderMessage } from '../messages.js';
 const DEFAULT_PRODUCT_CHOICE_PROMPT = 'vamos ficar com qual deles hoje? quer ver a lista completa?';
 const DEFAULT_PRODUCT_MORE_PROMPT = 'Se quiser ver mais opcoes, digite "mais".';
 const GENERIC_PHONE_PRODUCT_KEYWORDS = new Set(['celular', 'celulares', 'smartphone', 'smartphones', 'smarthone', 'smarthones']);
-const PHONE_ACCESSORY_FOOTER = [
-  'Temos acessorios para ele:',
-  'capinha',
-  'pelicula',
-  'outros',
-].join('\n');
 
 function formatProductSearchReplyInstructions(hasMore, settings = null) {
   const lines = [
@@ -69,11 +63,6 @@ function buildProductSearchReply(products, keyword, hasMore, settings = null) {
     if (product.priceRange) lines.push(product.priceRange);
     lines.push('');
   });
-
-  if (isGenericPhoneProductSearch(keyword)) {
-    lines.push(PHONE_ACCESSORY_FOOTER);
-    lines.push('');
-  }
 
   lines.push(formatProductSearchReplyInstructions(hasMore, settings));
 

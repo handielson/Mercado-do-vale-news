@@ -11,10 +11,10 @@ const phoneReply = buildProductSearchReply(
   null
 );
 
-assert.match(phoneReply, /Temos acessorios para ele/i);
-assert.match(phoneReply, /capinha/i);
-assert.match(phoneReply, /pelicula/i);
-assert.match(phoneReply, /outros/i);
+assert.doesNotMatch(phoneReply, /Temos acessorios para ele/i);
+assert.doesNotMatch(phoneReply, /capinha/i);
+assert.doesNotMatch(phoneReply, /pelicula/i);
+assert.doesNotMatch(phoneReply, /outros/i);
 
 const typoReply = buildProductSearchReply(
   [{ name: 'Motorola Moto G', price_text: 'R$ 999,00' }],
@@ -23,7 +23,7 @@ const typoReply = buildProductSearchReply(
   null
 );
 
-assert.match(typoReply, /Temos acessorios para ele/i);
+assert.doesNotMatch(typoReply, /Temos acessorios para ele/i);
 
 const regularReply = buildProductSearchReply(
   [{ name: 'Carregador Turbo', price_text: 'R$ 99,00' }],
@@ -54,12 +54,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
   assert.match(source, /repetidor\|sinal/);
   assert.match(source, /tablet\|pad\|ipad/);
   assert.match(source, /smarthone/);
-  assert.match(source, /const AUTORESPONDER_PHONE_ACCESSORY_FOOTER = 'Temos acessorios para ele:\\ncapinha\\npelicula\\noutros';/);
-  assert.match(
-    source,
-    /if \(isAutoresponderGenericPhoneKeyword\(keyword\) && replies\.length > 0\) \{[\s\S]*replies\[replies\.length - 1\] = `\$\{replies\[replies\.length - 1\]\}\\n\\n\$\{AUTORESPONDER_PHONE_ACCESSORY_FOOTER\}`;/,
-    `${file} must append the accessory footer to generic phone catalog replies`
-  );
+  assert.doesNotMatch(source, /AUTORESPONDER_PHONE_ACCESSORY_FOOTER/);
+  assert.doesNotMatch(source, /Temos acessorios para ele:\\ncapinha\\npelicula\\noutros/);
   assert.match(source, /filterAutoresponderAvailableProducts\(safeProducts\)[\s\S]*isAutoresponderPhoneDeviceProduct\(product\)/);
   assert.match(
     source,

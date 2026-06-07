@@ -67,7 +67,7 @@ const deliveryFlowHandler = {
   canHandle({ message, state }) {
     return state.flow === 'delivery' || isDeliveryQuestion(message);
   },
-  async handle({ message, state, context }) {
+  async handle({ message, state, settings, context }) {
     if (state.flow !== 'delivery' && isDeliveryQuestion(message)) {
       return buildAskCepReply();
     }

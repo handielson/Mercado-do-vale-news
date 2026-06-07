@@ -30,7 +30,6 @@ const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS = [4, 9, 16, 24, 33, 43, 54, 66, 79, 93];
 const AUTORESPONDER_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_PRODUCT_PAGE_SIZE * AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES;
 const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 500;
-const AUTORESPONDER_PHONE_ACCESSORY_FOOTER = 'Temos acessorios para ele:\ncapinha\npelicula\noutros';
 const AUTORESPONDER_RULE_TEMPLATES = [
   { name: 'Saudacao manha', pattern: 'bom dia, oi bom dia, dia' },
   { name: 'Saudacao tarde', pattern: 'boa tarde, tarde' },
@@ -9663,10 +9662,6 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
   if (paginationSummary) {
     replies[replies.length - 1] = `${replies[replies.length - 1]}\n\n${paginationSummary}`;
   }
-  if (isAutoresponderGenericPhoneKeyword(keyword) && replies.length > 0) {
-    replies[replies.length - 1] = `${replies[replies.length - 1]}\n\n${AUTORESPONDER_PHONE_ACCESSORY_FOOTER}`;
-  }
-
   return replies;
 }
 
@@ -10962,6 +10957,23 @@ async function applyRuleNextState(senderKey, matchedRule, purchaseFlow = null) {
   return nextState;
 }
 
+async function applyAutoresponderDeliveryCepRuleState(senderKey, message, replyText, purchaseFlow = null) {
+  if (!senderKey || !isAutoresponderDeliveryQuestion(message)) return null;
+  if (!/\bcep\b/.test(normalizeAutoresponderText(replyText))) return null;
+  return saveAutoresponderPurchaseFlow(senderKey, {
+    ...(purchaseFlow || {}),
+    status: 'awaiting_delivery_address',
+    fulfillment: 'delivery',
+    conversation_state: {
+      flow: 'delivery',
+      step: 'awaiting_cep',
+      data: {},
+      last_intent: 'delivery_cep_prompt',
+      expires_at: null,
+    },
+  });
+}
+
 fastify.get('/autoresponder/rules', { preHandler: requireSyncKey }, async (req) => {
   const active = req.query.active;
   const tagId = req.query.tag_id;
@@ -11715,6 +11727,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
       appendAutoresponderRuleAttachment(matchedRule.reply_text, matchedRule),
       settings
     );
+    await applyAutoresponderDeliveryCepRuleState(normalizedSender, message, resolvedRuleText, purchaseFlow);
     return {
       intent: 'rule_text',
       matched_count: 1,
@@ -13262,6 +13275,7 @@ fastify.route({
           matchedRuleId: matchedRule.id,
         });
         await applyRuleNextState(senderKey, matchedRule, purchaseFlow);
+        await applyAutoresponderDeliveryCepRuleState(senderKey, message, resolvedRuleText, purchaseFlow);
         await upsertAutoresponderSuccessConversation(senderKey);
         await applyAutoresponderRuleConversationTag(senderKey, matchedRule.auto_apply_tag_id);
 
