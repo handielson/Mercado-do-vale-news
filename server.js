@@ -6072,6 +6072,7 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
 });
 
 const jsonStr = (v) => v == null ? null : (typeof v === 'string' ? v : JSON.stringify(v));
+const sqlJsonStr = (v) => String(jsonStr(v) || '').replace(/\\/g, '\\\\').replace(/'/g, "''");
 const optionalBool = (v) => v == null ? null : (v ? 1 : 0);
 
 // Rejeita descrições obviamente inválidas que aparecem em alguns paths de save
@@ -19062,8 +19063,8 @@ async function runMigrations() {
       1,
       '${AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE}',
       JSON_OBJECT(),
-      '${jsonStr(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_KEYWORDS)}',
-      '${jsonStr(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES)}'
+      '${sqlJsonStr(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_KEYWORDS)}',
+      '${sqlJsonStr(AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES)}'
     );
   `);
 
