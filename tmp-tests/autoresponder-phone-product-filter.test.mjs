@@ -43,6 +43,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
   assert.match(source, /function isAutoresponderPhoneDeviceProduct/);
   assert.match(source, /function getAutoresponderProductSortBrand/);
   assert.match(source, /function sortAutoresponderProductGroupsForReply/);
+  assert.match(source, /AS brand_name/);
+  assert.match(source, /const explicitBrand = String\(product\.brand_name \|\| product\.brand \|\| ''\)\.trim\(\);/);
   assert.match(source, /const groupedProducts = sortAutoresponderProductGroupsForReply\(groupAutoresponderProductsByModel\(availableProducts\)\);/);
   assert.match(source, /brandCompare = getAutoresponderProductSortBrand\(left\)\.localeCompare\(getAutoresponderProductSortBrand\(right\), 'pt-BR'/);
   assert.match(source, /NOT REGEXP/);

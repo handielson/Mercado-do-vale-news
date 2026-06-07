@@ -8668,6 +8668,7 @@ async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -8708,6 +8709,7 @@ async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -8747,6 +8749,7 @@ async function findAutoresponderProductsByCategoryBudget(categoryId, budgetCents
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -9228,7 +9231,7 @@ function groupAutoresponderProductsByModel(products) {
 
 function getAutoresponderProductSortBrand(groupOrProduct) {
   const product = groupOrProduct?.representative || groupOrProduct || {};
-  const explicitBrand = String(product.brand || '').trim();
+  const explicitBrand = String(product.brand_name || product.brand || '').trim();
   if (explicitBrand && !/^[0-9a-f-]{24,}$/i.test(explicitBrand)) return explicitBrand;
   const text = normalizeAutoresponderText([product.name, product.sku].filter(Boolean).join(' '));
   if (/\biphone|apple\b/.test(text)) return 'Apple';
@@ -9482,7 +9485,7 @@ function isAutoresponderRealmeBrand(brandName) {
 
 function formatAutoresponderProductWarrantyLine(product) {
   const productWarrantyType = String(product?.warranty_type || 'brand').toLowerCase();
-  const brandName = String(product?.brand || '').trim();
+  const brandName = String(product?.brand_name || product?.brand || '').trim();
   const brandPeriod = formatAutoresponderWarrantyPeriod(product?.brand_warranty_days);
   const categoryPeriod = formatAutoresponderWarrantyPeriod(product?.category_warranty_days);
   const period = categoryPeriod || brandPeriod;
@@ -9718,6 +9721,7 @@ async function findAutoresponderProductById(productId) {
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, description, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl
@@ -10097,6 +10101,7 @@ async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) 
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
+       (SELECT name FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_name,
        (SELECT warranty_days FROM brands WHERE CAST(brands.id AS CHAR) = products.brand OR brands.name = products.brand LIMIT 1) AS brand_warranty_days,
        (SELECT warranty_days FROM categories WHERE categories.id = products.category_id LIMIT 1) AS category_warranty_days,
        JSON_UNQUOTE(JSON_EXTRACT(images, '$[0]')) AS imageUrl,
