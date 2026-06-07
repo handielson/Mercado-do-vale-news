@@ -3,6 +3,13 @@ import { resolveAutoresponderMessage } from '../messages.js';
 
 const DEFAULT_PRODUCT_CHOICE_PROMPT = 'vamos ficar com qual deles hoje? quer ver a lista completa?';
 const DEFAULT_PRODUCT_MORE_PROMPT = 'Se quiser ver mais opcoes, digite "mais".';
+const GENERIC_PHONE_PRODUCT_KEYWORDS = new Set(['celular', 'celulares', 'smartphone', 'smartphones', 'smarthone', 'smarthones']);
+const PHONE_ACCESSORY_FOOTER = [
+  'Temos acessorios para ele:',
+  'capinha',
+  'pelicula',
+  'outros',
+].join('\n');
 
 function formatProductSearchReplyInstructions(hasMore, settings = null) {
   const lines = [
@@ -22,6 +29,15 @@ function normalizeProductSearchText(value) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+}
+
+function isGenericPhoneProductSearch(keyword) {
+  const tokens = normalizeProductSearchText(keyword)
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  return tokens.length > 0 && tokens.every((token) => GENERIC_PHONE_PRODUCT_KEYWORDS.has(token));
 }
 
 function findSelectedProduct(message, options) {
@@ -53,6 +69,11 @@ function buildProductSearchReply(products, keyword, hasMore, settings = null) {
     if (product.priceRange) lines.push(product.priceRange);
     lines.push('');
   });
+
+  if (isGenericPhoneProductSearch(keyword)) {
+    lines.push(PHONE_ACCESSORY_FOOTER);
+    lines.push('');
+  }
 
   lines.push(formatProductSearchReplyInstructions(hasMore, settings));
 
@@ -132,4 +153,5 @@ export {
   buildProductSearchState,
   formatProductSearchReplyInstructions,
   findSelectedProduct,
+  isGenericPhoneProductSearch,
 };

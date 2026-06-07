@@ -9887,6 +9887,8 @@ const AUTORESPONDER_COMPLETE_PRODUCT_LIST_WORDS = new Set([
   'celulares',
   'smartphone',
   'smartphones',
+  'smarthone',
+  'smarthones',
   'tablet',
   'tablets',
   'tablte',
@@ -9928,7 +9930,7 @@ function detectAutoresponderDeviceFamilyFromSearch(keyword) {
   if (/\b(receptor|receptores|btv|htv|azamerica|cinebox|duosat|globalsat|gosat|tocom)\b/.test(text) || text.includes('az america')) {
     return 'receptor';
   }
-  if (/\b(celular|celulares|smartphone|smartphones|iphone|iphones|xiaomi|redmi|poco|galaxy|motorola|moto|samsung)\b/.test(text)) {
+  if (/\b(celular|celulares|smartphone|smartphones|smarthone|smarthones|iphone|iphones|xiaomi|redmi|poco|galaxy|motorola|moto|samsung)\b/.test(text)) {
     return 'smartphone';
   }
   return null;
@@ -10523,23 +10525,75 @@ function buildAutoresponderProductSearchScoreSql(tokens) {
   };
 }
 
+const AUTORESPONDER_GENERIC_PHONE_PRODUCT_SEARCH_WORDS = new Set([
+  'celular',
+  'celulares',
+  'smartphone',
+  'smartphones',
+  'smarthone',
+  'smarthones',
+]);
+
+function isAutoresponderGenericPhoneProductSearch(tokens) {
+  const safeTokens = Array.isArray(tokens) ? tokens : [];
+  return safeTokens.length > 0 && safeTokens.every((token) =>
+    AUTORESPONDER_GENERIC_PHONE_PRODUCT_SEARCH_WORDS.has(normalizeAutoresponderText(token).trim())
+  );
+}
+
+function buildAutoresponderPhoneSearchSqlFilter() {
+  const phonePattern = [
+    'celular', 'celulares', 'smartphone', 'smartphones', 'iphone', 'iphones',
+    'xiaomi', 'redmi', 'poco', 'galaxy', 'motorola', 'moto', 'samsung',
+    'realme', 'infinix', 'tecno', 'apple',
+  ].join('|');
+  const accessoryPattern = 'capinha|capinhas|pelicula|peliculas|capa|capas|case|cases|carregador|carregadores|cabo|cabos|fone|fones|fonte|fontes|suporte|suportes|adaptador|adaptadores|lente|vidro|acessorio|acessorios';
+
+  return `(
+    (
+      LOWER(COALESCE(name, '')) REGEXP '${phonePattern}'
+      OR LOWER(COALESCE(brand, '')) REGEXP '${phonePattern}'
+      OR LOWER(COALESCE(CAST(specs AS CHAR), '')) REGEXP '${phonePattern}'
+      OR LOWER(COALESCE(CAST(custom_fields AS CHAR), '')) REGEXP '${phonePattern}'
+      OR EXISTS (
+        SELECT 1
+        FROM categories
+        WHERE categories.id = products.category_id
+          AND LOWER(COALESCE(categories.name, '')) REGEXP 'celular|celulares|smartphone|smartphones|aparelho|aparelhos'
+      )
+    )
+    AND CONCAT_WS(' ',
+      LOWER(COALESCE(name, '')),
+      LOWER(COALESCE(sku, '')),
+      LOWER(COALESCE(CAST(specs AS CHAR), '')),
+      LOWER(COALESCE(CAST(custom_fields AS CHAR), ''))
+    ) NOT REGEXP '${accessoryPattern}'
+  )`;
+}
+
 async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) {
   const safeTokens = Array.isArray(tokens) ? tokens.slice(0, 6) : [];
   if (safeTokens.length === 0) return [];
 
   const safeLimit = getAutoresponderProductQueryLimit(limit);
   const safeOffset = Math.max(Number(offset) || 0, 0);
-  const clauses = safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
+  const isGenericPhoneSearch = isAutoresponderGenericPhoneProductSearch(safeTokens);
+  const clauses = isGenericPhoneSearch ? [] : safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
     OR LOWER(COALESCE(sku, '')) LIKE ?
     OR LOWER(COALESCE(brand, '')) LIKE ?
     OR LOWER(COALESCE(CAST(specs AS CHAR), '')) LIKE ?
     OR LOWER(COALESCE(CAST(custom_fields AS CHAR), '')) LIKE ?)`);
   const whereParams = [];
-  for (const token of safeTokens) {
-    const like = `%${normalizeAutoresponderText(token).trim()}%`;
-    whereParams.push(like, like, like, like, like);
+  if (!isGenericPhoneSearch) {
+    for (const token of safeTokens) {
+      const like = `%${normalizeAutoresponderText(token).trim()}%`;
+      whereParams.push(like, like, like, like, like);
+    }
   }
   const score = buildAutoresponderProductSearchScoreSql(safeTokens);
+  const searchWhere = isGenericPhoneSearch
+    ? buildAutoresponderPhoneSearchSqlFilter()
+    : clauses.join(' AND ');
 
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
@@ -10551,7 +10605,7 @@ async function findAutoresponderProductsByTokens(tokens, limit = 5, offset = 0) 
      FROM products
      WHERE status = 'active'
        AND (is_parent = 0 OR is_parent IS NULL)
-       AND ${clauses.join(' AND ')}
+       AND ${searchWhere}
      ORDER BY stock_quantity > 0 DESC, search_score DESC, updated_at DESC
      LIMIT ${safeLimit} OFFSET ${safeOffset}`,
     [...score.params, ...whereParams]
@@ -10563,16 +10617,22 @@ async function countAutoresponderProductsByTokens(tokens) {
   const safeTokens = Array.isArray(tokens) ? tokens.slice(0, 6) : [];
   if (safeTokens.length === 0) return 0;
 
-  const clauses = safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
+  const isGenericPhoneSearch = isAutoresponderGenericPhoneProductSearch(safeTokens);
+  const clauses = isGenericPhoneSearch ? [] : safeTokens.map(() => `(LOWER(COALESCE(name, '')) LIKE ?
     OR LOWER(COALESCE(sku, '')) LIKE ?
     OR LOWER(COALESCE(brand, '')) LIKE ?
     OR LOWER(COALESCE(CAST(specs AS CHAR), '')) LIKE ?
     OR LOWER(COALESCE(CAST(custom_fields AS CHAR), '')) LIKE ?)`);
   const params = [];
-  for (const token of safeTokens) {
-    const like = `%${normalizeAutoresponderText(token).trim()}%`;
-    params.push(like, like, like, like, like);
+  if (!isGenericPhoneSearch) {
+    for (const token of safeTokens) {
+      const like = `%${normalizeAutoresponderText(token).trim()}%`;
+      params.push(like, like, like, like, like);
+    }
   }
+  const searchWhere = isGenericPhoneSearch
+    ? buildAutoresponderPhoneSearchSqlFilter()
+    : clauses.join(' AND ');
 
   const [rows] = await pool.query(
     `SELECT COUNT(*) AS total
@@ -10580,7 +10640,7 @@ async function countAutoresponderProductsByTokens(tokens) {
      WHERE status = 'active'
        AND (is_parent = 0 OR is_parent IS NULL)
        AND stock_quantity > 0
-       AND ${clauses.join(' AND ')}`,
+       AND ${searchWhere}`,
     params
   );
   return Number(rows[0]?.total || 0);

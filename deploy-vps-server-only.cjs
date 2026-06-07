@@ -11,11 +11,20 @@ const password = process.env.VPS_SITE_PASSWORD || process.env.VPS_ROOT_PASSWORD 
 const privateKeyPath = process.env.VPS_SITE_PRIVATE_KEY || process.env.VPS_PRIVATE_KEY;
 const privateKey = privateKeyPath ? fs.readFileSync(privateKeyPath) : undefined;
 const localServer = path.join(__dirname, 'vps_server.cjs');
+const extraUploads = [
+  {
+    local: path.join(__dirname, 'services', 'autoresponder', 'engine', 'flows', 'product-search.js'),
+    remoteName: 'services/autoresponder/engine/flows/product-search.js',
+  },
+];
 const adminEmail = process.env.MDV_ADMIN_EMAIL || process.env.ADMIN_EMAIL || process.env.VPS_ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL;
 const adminPassword = process.env.MDV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || process.env.VPS_ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD;
 
 if (!host || !username || (!password && !privateKey)) {
   throw new Error('Missing VPS SSH env vars');
+}
+for (const file of extraUploads) {
+  if (!fs.existsSync(file.local)) throw new Error(`Missing deploy file: ${file.local}`);
 }
 
 const conn = new Client();
@@ -141,6 +150,12 @@ async function main() {
   console.log(`Uploading server to ${appDir}`);
   await upload(localServer, `${appDir}/vps_server.js`);
   await upload(localServer, `${appDir}/server.js`);
+  for (const file of extraUploads) {
+    const remoteDir = path.posix.dirname(file.remoteName);
+    await exec(`mkdir -p ${appDir}/${remoteDir}`);
+    await upload(file.local, `${appDir}/${file.remoteName}`);
+    console.log(`Uploaded ${file.remoteName}`);
+  }
   await ensureRemoteAdminEnv(appDir);
   const restartOutput = await exec(`pm2 restart ${apiProc.name} --update-env`);
   console.log(restartOutput.trim());
