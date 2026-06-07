@@ -7065,6 +7065,7 @@ const AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES = {
   phone_list_reply: 'Encontrei estas opcoes para celulares:',
   name_prompt: 'Qual seu nome para seguirmos com o atendimento?',
   product_choice_prompt: 'Responda com o numero da opcao ou com o nome/modelo do produto.',
+  'purchase.variation_prompt': 'Antes de seguir, escolha a cor/variacao disponivel:\n\n{opcoes}\n\nResponda com o numero ou com a cor desejada.',
   fulfillment_prompt: 'Agora preciso confirmar se sera retirada na loja ou entrega.',
   delivery_cep_prompt: 'Combinado: entrega. Me envie o CEP da entrega. Pode mandar somente os numeros.',
   pickup_reply: 'Combinado: retirada na loja. Agora vamos combinar a forma de pagamento.',
@@ -7851,20 +7852,18 @@ async function buildAutoresponderPurchaseActionPrompt(product, selectedOption) {
   return `${card}\n\nResponda:\n*1* Para comprar\n*2* Para detalhes`;
 }
 
-function buildAutoresponderVariationPrompt(variations) {
+function buildAutoresponderVariationPrompt(variations, settings = null) {
   const available = filterAutoresponderAvailableProducts(variations);
-  const lines = [
-    'Antes de seguir, escolha a cor/variacao disponivel:',
-    '',
-  ];
+  const optionLines = [];
   available.forEach((variation, index) => {
     const color = getAutoresponderProductColor(variation) || 'cor sob consulta';
     const price = formatAutoresponderCurrency(getAutoresponderProductPrice(variation));
-    lines.push(`${index + 1}. ${color} - ${price}`);
+    optionLines.push(`${index + 1}. ${color} - ${price}`);
   });
-  lines.push('');
-  lines.push('Responda com o numero ou com a cor desejada.');
-  return lines.join('\n');
+  const options = optionLines.join('\n');
+  const template = getAutoresponderConversationFlowMessage(settings, 'purchase.variation_prompt', AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES['purchase.variation_prompt']);
+  if (template.includes('{opcoes}')) return template.split('{opcoes}').join(options);
+  return [template, options].filter(Boolean).join('\n\n');
 }
 
 function findAutoresponderSelectedVariation(message, variations) {
@@ -8518,7 +8517,7 @@ async function handleAutoresponderEnginePurchaseFlowV2({ senderKey, message, set
         return formatAutoresponderReply(`${detailText}\n\nSe quiser comprar, responda "comprar".`, settings, false);
       },
       buildVariationPrompt(variations) {
-        return formatAutoresponderReply(buildAutoresponderVariationPrompt(variations), settings, false);
+        return formatAutoresponderReply(buildAutoresponderVariationPrompt(variations, settings), settings, false);
       },
       buildQuantityPrompt(product) {
         return formatAutoresponderReply(buildAutoresponderQuantityPrompt(product), settings, false);
@@ -13490,7 +13489,7 @@ fastify.route({
           const selectedProduct = product || purchaseFlow.selected_product;
           const variations = await findAutoresponderProductVariations(selectedProduct);
           if (shouldAutoresponderAskVariation(variations)) {
-            const replyText = formatAutoresponderReply(buildAutoresponderVariationPrompt(variations), settings, false);
+            const replyText = formatAutoresponderReply(buildAutoresponderVariationPrompt(variations, settings), settings, false);
             await saveAutoresponderPurchaseFlow(senderKey, {
               ...purchaseFlow,
               status: 'awaiting_variation',
@@ -13569,7 +13568,7 @@ fastify.route({
           : await findAutoresponderProductVariations(product || purchaseFlow.selected_product);
         const selectedVariation = findAutoresponderSelectedVariation(message, variations);
         if (!selectedVariation) {
-          const replyText = formatAutoresponderReply(buildAutoresponderVariationPrompt(variations), settings, false);
+          const replyText = formatAutoresponderReply(buildAutoresponderVariationPrompt(variations, settings), settings, false);
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: replyText }] };
         }

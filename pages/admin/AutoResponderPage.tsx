@@ -278,6 +278,7 @@ const emptySettingsForm: SettingsFormState = {
         'delivery.choose_product_after_cep': 'Para fechar o valor com produto, responda com o numero ou nome do item que voce quer.',
         'product_search.choice_prompt': 'vamos ficar com qual deles hoje? quer ver a lista completa?',
         'product_search.more_prompt': 'Se quiser ver mais opcoes, digite "mais".',
+        'purchase.variation_prompt': 'Antes de seguir, escolha a cor/variacao disponivel:\n\n{opcoes}\n\nResponda com o numero ou com a cor desejada.',
         'fallback.global': 'Nao consegui identificar certinho. Voce quer ver produtos, consultar entrega, formas de pagamento ou falar com atendente?',
         'fallback.delivery_awaiting_cep': 'Me envie apenas os 8 numeros do CEP. Ex: 56320690',
         'fallback.product_choice': 'Me diga o numero da opcao ou o nome do modelo. Ex: 1 ou Redmi Note 15.',
@@ -2436,8 +2437,9 @@ const AutoResponderPage: React.FC = () => {
             customerLabel: 'Cliente pode dizer',
             customerText: '1, azul, preto',
             botLabel: 'Bot pergunta',
-            botText: 'Antes de seguir, escolha a cor/variacao disponivel:\n\n1. Azul - R$ 980,00\n2. Preto - R$ 980,00\n\nResponda com o numero ou com a cor desejada.',
+            messageKey: 'purchase.variation_prompt',
             rows: 6,
+            helper: 'Use {opcoes} para inserir automaticamente a lista numerada de cores e precos.',
         },
         {
             id: 'fulfillment',
