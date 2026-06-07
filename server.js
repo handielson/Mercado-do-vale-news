@@ -11686,7 +11686,9 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     };
   }
 
-  const productTagMatch = findAutoresponderProductTagKeyword(message, settings);
+  const productTagMatch = isAutoresponderGenericPhoneKeyword(message)
+    ? null
+    : findAutoresponderProductTagKeyword(message, settings);
   if (productTagMatch) {
     const pageSize = getAutoresponderInitialProductPageSize(productTagMatch.keyword);
     const rows = await findAutoresponderProductsByTag(productTagMatch.tagId, pageSize + 1);
@@ -11734,7 +11736,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   }
 
   const genericDeviceCatalogFamily = detectAutoresponderGenericDeviceCatalogFamily(message);
-  if (genericDeviceCatalogFamily) {
+  if (genericDeviceCatalogFamily && genericDeviceCatalogFamily !== 'smartphone') {
     const replyText = formatAutoresponderReply(
       buildAutoresponderDeviceCatalogRefinementPrompt(genericDeviceCatalogFamily),
       settings,
@@ -13228,7 +13230,9 @@ fastify.route({
         return { replies: [{ message: replyText }] };
       }
 
-      const productTagMatch = findAutoresponderProductTagKeyword(message, settings);
+      const productTagMatch = isAutoresponderGenericPhoneKeyword(message)
+        ? null
+        : findAutoresponderProductTagKeyword(message, settings);
       if (productTagMatch) {
         const pageSize = getAutoresponderInitialProductPageSize(productTagMatch.keyword);
         const rows = await findAutoresponderProductsByTag(productTagMatch.tagId, pageSize + 1);
@@ -13311,7 +13315,7 @@ fastify.route({
       }
 
       const genericDeviceCatalogFamily = detectAutoresponderGenericDeviceCatalogFamily(message);
-      if (genericDeviceCatalogFamily) {
+      if (genericDeviceCatalogFamily && genericDeviceCatalogFamily !== 'smartphone') {
         const replyText = formatAutoresponderReply(
           buildAutoresponderDeviceCatalogRefinementPrompt(genericDeviceCatalogFamily),
           settings,

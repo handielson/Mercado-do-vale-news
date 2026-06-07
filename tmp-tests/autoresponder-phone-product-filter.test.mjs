@@ -50,6 +50,16 @@ for (const file of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
   assert.match(source, /filterAutoresponderAvailableProducts\(safeProducts\)[\s\S]*isAutoresponderPhoneDeviceProduct\(product\)/);
   assert.match(
     source,
+    /const productTagMatch = isAutoresponderGenericPhoneKeyword\(message\)[\s\S]*findAutoresponderProductTagKeyword\(message, settings\)/,
+    `${file} must skip product tags for generic phone catalog requests`
+  );
+  assert.match(
+    source,
+    /if \(genericDeviceCatalogFamily && genericDeviceCatalogFamily !== 'smartphone'\)/,
+    `${file} must let generic smartphone catalog requests reach category listing`
+  );
+  assert.match(
+    source,
     /async function findAutoresponderProductsByCategory[\s\S]*buildAutoresponderCategoryPhoneAccessorySqlFilter\(\)[\s\S]*AND \$\{categoryPhoneAccessoryFilter\}/,
     `${file} must filter accessory products when listing phone categories`
   );
