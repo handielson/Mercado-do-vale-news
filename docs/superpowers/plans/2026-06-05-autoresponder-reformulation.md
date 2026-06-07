@@ -1843,9 +1843,9 @@ rg -n "awaiting_standalone_delivery_cep|standalone_shipping|purchaseFlow.status 
 
 - [ ] **Step 2: Remover feature flag antiga**
 
-Bloqueado nesta rodada: produto e compra ainda dependem de `AUTORESPONDER_ENGINE_V2=1` para rollout; os fallbacks de `purchaseFlow.status === ...` continuam deliberados ate validacao real em producao.
+Bloqueado nesta rodada: `AUTORESPONDER_ENGINE_V2=1` ja esta ativo na VPS e os cenarios tecnicos passaram contra a API publicada, mas a remocao final ainda exige pelo menos uma rodada real de atendimento com busca, escolha, compra, entrega e pagamento sem queda para o fluxo antigo.
 
-Auditoria com subagentes nesta rodada confirmou o bloqueio: `AUTORESPONDER_ENGINE_V2` ainda existe nos tres servidores, `purchaseFlow.status === ...` segue ativo apenas em blocos de compra, e o inventario/runbook registram que a flag precisa ser ativada e validada em producao antes da remocao do legado.
+Auditoria com subagentes nesta rodada confirmou o bloqueio: `AUTORESPONDER_ENGINE_V2` ainda existe nos tres servidores, `purchaseFlow.status === ...` segue ativo apenas em blocos de compra, e o inventario/runbook registram que a flag precisa permanecer reversivel ate essa validacao real.
 
 Quando o motor novo estiver obrigatorio em producao, remover caminhos condicionais:
 
@@ -1904,6 +1904,8 @@ node deploy-vps-server-only.cjs
 
 - [ ] **Step 1: Rodar auditoria final**
 
+Nao iniciar enquanto a rodada real de atendimento da Task 9.4 nao estiver confirmada.
+
 ```powershell
 rg -n "standalone_delivery|legacy autoresponder|AUTORESPONDER_ENGINE_V2|TODO autoresponder|old autoresponder" .
 node tmp-tests\autoresponder-core-scenarios.cjs
@@ -1913,7 +1915,8 @@ npm.cmd run build
 Expected:
 
 ```text
-Nenhum caminho legado ativo encontrado.
+Depois da rodada real e da remocao final: nenhum caminho legado ativo encontrado.
+Antes disso: apenas legados deliberados de produto/compra podem permanecer.
 Cenarios centrais passam.
 Build passa.
 ```
@@ -1925,11 +1928,13 @@ Adicionar no final de `docs/autoresponder/cleanup-inventory.md`:
 ```markdown
 ## Fechamento
 
+- [x] `AUTORESPONDER_ENGINE_V2=1` foi ativado e validado tecnicamente em producao.
+- [ ] Rodada real de atendimento confirmou produto/compra sem queda para legado.
 - [x] Testes temporarios substituidos foram removidos.
 - [x] Documentos obsoletos foram arquivados ou mantidos com motivo.
-- [x] Codigo legado do motor antigo foi removido.
-- [x] Cenarios centrais passaram depois da limpeza.
-- [x] API foi publicada depois da limpeza.
+- [ ] Codigo legado restante de produto/compra foi removido apos a rodada real.
+- [ ] Cenarios centrais passaram depois da limpeza final.
+- [ ] API foi publicada depois da limpeza final.
 ```
 
 - [ ] **Step 3: Commit final da limpeza**
@@ -2002,7 +2007,7 @@ curl.exe -L -s -o NUL -w "%{http_code} %{url_effective}\n" "https://mercadodoval
 ## Riscos E Controles
 
 - Risco: quebrar atendimento real.
-  - Controle: feature flag `AUTORESPONDER_ENGINE_V2`, simulador antes de deploy e fallback para fluxo antigo.
+  - Controle: `AUTORESPONDER_ENGINE_V2=1` ativo em producao, simulador validado contra API publicada e fallback legado mantido apenas como rollback ate uma rodada real de atendimento.
 - Risco: divergencia entre `vps_server.js`, `vps_server.cjs` e `server.js`.
   - Controle: testes estaticos procurando os mesmos contratos nos arquivos relevantes.
 - Risco: IA responder fora do escopo.

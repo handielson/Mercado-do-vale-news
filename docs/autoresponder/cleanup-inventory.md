@@ -8,7 +8,7 @@ Nao apagar arquivo sem classificar como `remover`, `manter` ou `arquivar`.
 
 | Arquivo | Motivo | Acao |
 |---|---|---|
-| Nenhum nesta auditoria | Os testes temporarios ja ausentes foram registrados em `Removidos` | aguardar remocao do legado de produto/compra |
+| Nenhum nesta auditoria | Os testes temporarios ja ausentes foram registrados em `Removidos` | aguardar rodada real de atendimento antes da remocao final do legado de produto/compra |
 
 ## Removidos
 
@@ -26,7 +26,7 @@ Nao apagar arquivo sem classificar como `remover`, `manter` ou `arquivar`.
 | docs/autoresponder/response-map.md | Fonte operacional do mapa do bot |
 | docs/autoresponder/test-scenarios.md | Checklist obrigatorio de simulacao |
 | docs/autoresponder/engine-v2-rollout-audit.md | Auditoria das flags restantes antes de remover legado de produto/compra |
-| docs/autoresponder/engine-v2-rollout-runbook.md | Runbook de ativacao/rollback da flag `AUTORESPONDER_ENGINE_V2` na VPS |
+| docs/autoresponder/engine-v2-rollout-runbook.md | Runbook de rollback/revalidacao da flag `AUTORESPONDER_ENGINE_V2` ja ativa na VPS |
 | tmp-tests/autoresponder-core-scenarios.cjs | Runner principal de regressao |
 | tmp-tests/autoresponder-bot-map-admin-static.test.mjs | Trava da aba Mapa do Bot e sender seguro `mapa-*` |
 | tmp-tests/autoresponder-no-purchase-flow-outside-purchase-static.test.mjs | Trava contra retorno de estados legados fora de compra |
@@ -46,7 +46,7 @@ Nao apagar arquivo sem classificar como `remover`, `manter` ou `arquivar`.
 | vps_server.cjs | Fonte usada por `deploy-vps-server-only.cjs` para publicar `server.js` e `vps_server.js` na VPS |
 | vps_server.js | Fonte usada por scripts legados de deploy e por testes estaticos de paridade |
 | server.js | Copia local de compatibilidade; manter checagens de sintaxe, mas nao tratar como fonte primaria sem reconciliar paridade com `vps_server.cjs` |
-| AUTORESPONDER_ENGINE_V2 | Ausente em `.env`, `.env.local`, `.env.production`, `.env.vps.local` e `.env.vps.example`; produto e compra ainda dependem do fallback legado quando a flag nao esta ativa |
+| AUTORESPONDER_ENGINE_V2 | Ativo em producao na VPS em 2026-06-07; manter runbook de rollback ate concluir uma rodada real de atendimento |
 
 ## Candidatos A Arquivar
 
@@ -87,7 +87,7 @@ Nao apagar arquivo sem classificar como `remover`, `manter` ou `arquivar`.
 
 ## Pendencias Para Fechamento
 
-- [ ] Ativar `AUTORESPONDER_ENGINE_V2=1` no ambiente de producao de forma controlada.
+- [x] Ativar `AUTORESPONDER_ENGINE_V2=1` no ambiente de producao de forma controlada.
 - [ ] Validar produto e compra pelo motor novo em pelo menos uma rodada real de atendimento.
 - [x] Expandir `tmp-tests/autoresponder-core-scenarios.cjs` para troca de CEP e compra com entrega/frete.
 - [x] Migrar a ponte de `awaiting_customer_document` para o motor novo antes de remover o fallback de compra.
@@ -100,5 +100,8 @@ Nao apagar arquivo sem classificar como `remover`, `manter` ou `arquivar`.
 
 | Data | Escopo | Resultado |
 |---|---|---|
+| 2026-06-07 | Revalidacao tecnica antes da rodada real: `/health` 200, dry-run confirmou `AUTORESPONDER_ENGINE_V2=1`, `tmp-tests/autoresponder-core-scenarios.cjs` passou contra a API publicada | passou |
+| 2026-06-07 | `AUTORESPONDER_ENGINE_V2=1` ativado na VPS, `/health`, `tmp-tests/autoresponder-core-scenarios.cjs` e dump controlado de compra com entrega/frete | passou |
+| 2026-06-07 | Hotfix cirurgico: delivery V2 nao intercepta carrinho ativo; product-search V2 nao intercepta `purchase_flow.status` ativo | publicado na VPS com backups em `/var/www/mdv-api/.codex-backups` |
 | 2026-06-05 | `tmp-tests/autoresponder-core-scenarios.cjs` cobrindo busca, entrega avulsa, compra com entrega/frete, troca de CEP, retirada com Pix ate pedido de nome, fallback contextual de CEP | passou |
 | 2026-06-05 | `npm.cmd run build` com `scripts/assert-no-supabase-runtime.cjs` | passou |

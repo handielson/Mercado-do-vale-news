@@ -43,3 +43,29 @@ Cada publicacao que altera bot deve rodar estes cenarios em `/autoresponder/test
 10. Pedido humano
    - Mensagens: `["falar com atendente"]`
    - Esperado: resposta de atendimento humano e pausa.
+
+## Rodada Real Antes De Remover Legado
+
+Depois que os cenarios acima passarem contra a API publicada, executar uma conversa real controlada pelo WhatsApp da loja antes de remover `AUTORESPONDER_ENGINE_V2` ou fallbacks de `purchase_flow.status`.
+
+Sequencia minima:
+
+1. Buscar produto real.
+2. Escolher o produto ou variacao.
+3. Enviar `comprar`.
+4. Confirmar quantidade.
+5. Finalizar.
+6. Escolher entrega.
+7. Informar CEP.
+8. Informar numero/complemento.
+9. Escolher pagamento.
+10. Informar dados de cadastro quando solicitados.
+11. Confirmar chegada ao handoff para atendimento humano.
+
+Esperado:
+
+- O produto escolhido permanece o mesmo depois de `comprar`.
+- O carrinho mantem itens durante entrega, CEP e pagamento.
+- A entrega dentro da compra nao cai na entrega avulsa.
+- A conversa chega ao resumo para atendente e fica pausada.
+- Evidencia da conversa fica registrada no runbook de rollout antes da limpeza final.

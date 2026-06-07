@@ -5,13 +5,13 @@
 | Fluxo | Situacao | Motivo |
 |---|---|---|
 | Entrega | obrigatorio | `handleAutoresponderEngineDeliveryFlowV2` nao depende mais de `AUTORESPONDER_ENGINE_V2` |
-| Produto | em rollout | `handleAutoresponderEngineProductSearchFlowV2` ainda retorna `null` quando `isAutoresponderEngineV2Enabled()` e falso |
-| Compra | em rollout | `handleAutoresponderEnginePurchaseFlowV2` ainda retorna `null` quando `isAutoresponderEngineV2Enabled()` e falso |
+| Produto | validacao tecnica OK | `AUTORESPONDER_ENGINE_V2=1` ativo na VPS em 2026-06-07; cenarios centrais passaram contra a API publicada |
+| Compra | validacao tecnica OK | `AUTORESPONDER_ENGINE_V2=1` ativo na VPS em 2026-06-07; compra com entrega, troca de CEP e retirada com Pix passaram no runner |
 
 ## Pre-condicoes Para Remover O Legado
 
-- [ ] Publicar `AUTORESPONDER_ENGINE_V2=1` no ambiente da VPS.
-- [ ] Rodar `node tmp-tests\autoresponder-core-scenarios.cjs` contra a API publicada.
+- [x] Publicar `AUTORESPONDER_ENGINE_V2=1` no ambiente da VPS.
+- [x] Rodar `node tmp-tests\autoresponder-core-scenarios.cjs` contra a API publicada.
 - [ ] Confirmar uma rodada real de atendimento com busca de produto, escolha, compra, entrega e pagamento sem queda para o fluxo antigo.
 - [x] Migrar a ponte de `awaiting_customer_document` para o retorno `purchase_handoff_ready` do motor novo, preservando criacao/atualizacao de cliente, resumo de atendente e pausa da conversa.
 - [x] Registrar a data da validacao tecnica em `docs/autoresponder/cleanup-inventory.md`.
@@ -22,7 +22,7 @@
 | Dependencia | Situacao | Risco se remover agora |
 |---|---|---|
 | `purchaseReply.intent === 'purchase_handoff_ready'` nos servidores | executa `createOrUpdateAutoresponderCustomer`, `buildAutoresponderCustomerLinkedPurchaseFlow`, `pauseAutoresponderConversationForPurchase` pelo motor novo | precisa permanecer ate a remocao final do legado |
-| Bloco `purchaseFlow.status === 'awaiting_customer_document'` nos servidores | fallback legado ainda disponivel enquanto produto/compra dependem de `AUTORESPONDER_ENGINE_V2=1` | pedido deixaria de chegar ao atendente se a flag estiver desligada |
+| Bloco `purchaseFlow.status === 'awaiting_customer_document'` nos servidores | fallback legado ainda disponivel como rollback enquanto a remocao final aguarda uma rodada real de atendimento, embora `AUTORESPONDER_ENGINE_V2=1` ja esteja ativo e validado tecnicamente em producao | pedido deixaria de chegar ao atendente se a flag estiver desligada |
 | Bloco `purchaseFlow.status === 'awaiting_customer_confirmation'` nos servidores | confirma dados de cliente existente antes do handoff | cliente existente poderia perder confirmacao e vinculo |
 
 ## Travas Ativas

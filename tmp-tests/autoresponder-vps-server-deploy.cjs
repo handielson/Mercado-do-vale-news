@@ -61,6 +61,7 @@ async function main() {
     { local: path.join(root, 'services', 'synologyNasStatusService.js'), remoteName: 'services/synologyNasStatusService.js' },
     { local: path.join(root, 'services', 'synologyCommandQueueService.js'), remoteName: 'services/synologyCommandQueueService.js' },
     { local: path.join(root, 'services', 'vpsUploadPathPolicy.cjs'), remoteName: 'services/vpsUploadPathPolicy.cjs' },
+    { local: path.join(root, 'services', 'autoresponder', 'engine', 'flows', 'delivery.js'), remoteName: 'services/autoresponder/engine/flows/delivery.js' },
   ];
 
   for (const file of requiredFiles) {
@@ -93,6 +94,12 @@ async function main() {
 
   try {
     await exec(conn, `mkdir -p ${appDir}/services ${appDir}/.codex-backups`);
+    const remoteDirs = [...new Set(requiredFiles
+      .map((file) => path.posix.dirname(file.remoteName.replace(/\\/g, '/')))
+      .filter((dir) => dir && dir !== '.'))];
+    for (const dir of remoteDirs) {
+      await exec(conn, `mkdir -p ${appDir}/${dir}`);
+    }
     for (const file of requiredFiles) {
       const remote = `${appDir}/${file.remoteName}`;
       const backup = `${appDir}/.codex-backups/${file.remoteName.replace(/[\\/]/g, '__')}.${stamp}.bak`;

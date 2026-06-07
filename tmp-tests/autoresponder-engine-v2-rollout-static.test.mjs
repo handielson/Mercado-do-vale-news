@@ -6,8 +6,8 @@ const inventory = readFileSync('docs/autoresponder/cleanup-inventory.md', 'utf8'
 
 for (const needle of [
   'Entrega | obrigatorio',
-  'Produto | em rollout',
-  'Compra | em rollout',
+  'Produto | validacao tecnica OK',
+  'Compra | validacao tecnica OK',
   'AUTORESPONDER_ENGINE_V2=1',
   "purchaseFlow.status === 'awaiting_customer_document'",
   "purchaseReply.intent === 'purchase_handoff_ready'",
