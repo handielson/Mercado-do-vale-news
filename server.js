@@ -7289,8 +7289,7 @@ function buildAutoresponderVariationPrompt(variations) {
   available.forEach((variation, index) => {
     const color = getAutoresponderProductColor(variation) || 'cor sob consulta';
     const price = formatAutoresponderCurrency(getAutoresponderProductPrice(variation));
-    const stock = Number(variation?.stock_quantity || 0);
-    lines.push(`${index + 1}. ${color} - ${price}${stock > 0 ? ` (${stock} em estoque)` : ''}`);
+    lines.push(`${index + 1}. ${color} - ${price}`);
   });
   lines.push('');
   lines.push('Responda com o numero ou com a cor desejada.');
@@ -8218,7 +8217,7 @@ async function calculateAutoresponderShippingOptions(cepValue, cartItems = [], a
   if (!settings || settings.local_delivery_enabled === 0) return [];
 
   const [zones] = await pool.query('SELECT * FROM shipping_zones WHERE enabled = 1 ORDER BY display_order ASC');
-  const [ranges] = await pool.query('SELECT * FROM shipping_price_ranges ORDER BY min_km ASC');
+  const ranges = await listAutoresponderShippingPriceRanges();
   const rangesByZone = new Map();
   ranges.forEach((range) => {
     const current = rangesByZone.get(range.zone_id) || [];
@@ -8302,6 +8301,19 @@ async function calculateAutoresponderShippingOptions(cepValue, cartItems = [], a
     if (!a.isFree && b.isFree) return 1;
     return Number(a.price || 0) - Number(b.price || 0);
   });
+}
+
+async function listAutoresponderShippingPriceRanges() {
+  try {
+    const [columns] = await pool.query('SHOW COLUMNS FROM shipping_price_ranges');
+    const columnNames = new Set((Array.isArray(columns) ? columns : []).map((column) => String(column.Field || '').toLowerCase()));
+    if (!columnNames.has('min_km')) return [];
+    const [ranges] = await pool.query('SELECT * FROM shipping_price_ranges ORDER BY min_km ASC');
+    return Array.isArray(ranges) ? ranges : [];
+  } catch (err) {
+    console.warn('[autoresponder] shipping_price_ranges unavailable:', err.message);
+    return [];
+  }
 }
 
 function normalizeAutoresponderCustomerLookupPhone(value) {

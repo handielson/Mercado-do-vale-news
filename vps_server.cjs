@@ -7860,8 +7860,7 @@ function buildAutoresponderVariationPrompt(variations) {
   available.forEach((variation, index) => {
     const color = getAutoresponderProductColor(variation) || 'cor sob consulta';
     const price = formatAutoresponderCurrency(getAutoresponderProductPrice(variation));
-    const stock = Number(variation?.stock_quantity || 0);
-    lines.push(`${index + 1}. ${color} - ${price}${stock > 0 ? ` (${stock} em estoque)` : ''}`);
+    lines.push(`${index + 1}. ${color} - ${price}`);
   });
   lines.push('');
   lines.push('Responda com o numero ou com a cor desejada.');
