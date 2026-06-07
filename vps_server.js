@@ -11651,7 +11651,7 @@ async function applyRuleNextState(senderKey, matchedRule, purchaseFlow = null) {
 }
 
 async function applyAutoresponderDeliveryCepRuleState(senderKey, message, replyText, purchaseFlow = null) {
-  if (!senderKey || !isAutoresponderDeliveryQuestion(message)) return null;
+  if (!senderKey || !isAutoresponderStandaloneDeliveryQuoteRequest(message)) return null;
   if (!/\bcep\b/.test(normalizeAutoresponderText(replyText))) return null;
   return saveAutoresponderPurchaseFlow(senderKey, {
     ...(purchaseFlow || {}),
