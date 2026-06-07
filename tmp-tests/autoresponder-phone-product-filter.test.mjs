@@ -41,6 +41,10 @@ for (const file of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
   assert.match(source, /function buildAutoresponderCategoryPhoneAccessorySqlFilter/);
   assert.match(source, /function isAutoresponderGenericPhoneKeyword/);
   assert.match(source, /function isAutoresponderPhoneDeviceProduct/);
+  assert.match(source, /function getAutoresponderProductSortBrand/);
+  assert.match(source, /function sortAutoresponderProductGroupsForReply/);
+  assert.match(source, /const groupedProducts = sortAutoresponderProductGroupsForReply\(groupAutoresponderProductsByModel\(availableProducts\)\);/);
+  assert.match(source, /brandCompare = getAutoresponderProductSortBrand\(left\)\.localeCompare\(getAutoresponderProductSortBrand\(right\), 'pt-BR'/);
   assert.match(source, /NOT REGEXP/);
   assert.match(source, /capinha\|capinhas\|pelicula\|peliculas/);
   assert.match(source, /smartwatch\|smartwacth\|watch/);

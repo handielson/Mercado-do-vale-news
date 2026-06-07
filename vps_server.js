@@ -9805,6 +9805,41 @@ function groupAutoresponderProductsByModel(products) {
   });
 }
 
+function getAutoresponderProductSortBrand(groupOrProduct) {
+  const product = groupOrProduct?.representative || groupOrProduct || {};
+  const explicitBrand = String(product.brand || '').trim();
+  if (explicitBrand && !/^[0-9a-f-]{24,}$/i.test(explicitBrand)) return explicitBrand;
+  const text = normalizeAutoresponderText([product.name, product.sku].filter(Boolean).join(' '));
+  if (/\biphone|apple\b/.test(text)) return 'Apple';
+  if (/\bsamsung|galaxy\b/.test(text)) return 'Samsung';
+  if (/\bmotorola|moto\b/.test(text)) return 'Motorola';
+  if (/\brealme\b/.test(text)) return 'Realme';
+  if (/\binfinix\b/.test(text)) return 'Infinix';
+  if (/\btecno\b/.test(text)) return 'Tecno';
+  if (/\bpoco\b/.test(text)) return 'Poco';
+  if (/\bredmi|xiaomi\b/.test(text)) return 'Xiaomi';
+  return '';
+}
+
+function sortAutoresponderProductGroupsForReply(groups) {
+  return [...(Array.isArray(groups) ? groups : [])].sort((left, right) => {
+    const brandCompare = getAutoresponderProductSortBrand(left).localeCompare(getAutoresponderProductSortBrand(right), 'pt-BR', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+    if (brandCompare !== 0) return brandCompare;
+    const nameCompare = String(left?.name || '').localeCompare(String(right?.name || ''), 'pt-BR', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+    if (nameCompare !== 0) return nameCompare;
+    return String(left?.key || '').localeCompare(String(right?.key || ''), 'pt-BR', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+  });
+}
+
 function buildAutoresponderProductOptions(products) {
   return groupAutoresponderProductsByModel(filterAutoresponderAvailableProducts(products)).map((group) => {
     const product = group.representative;
@@ -10168,7 +10203,7 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
     return [formatAutoresponderProductListReply(safeProducts, keyword)];
   }
 
-  const groupedProducts = groupAutoresponderProductsByModel(availableProducts);
+  const groupedProducts = sortAutoresponderProductGroupsForReply(groupAutoresponderProductsByModel(availableProducts));
   const total = pagination?.total || groupedProducts.length;
   const offset = Number(pagination?.offset || 0);
   const chunks = chunkAutoresponderArray(groupedProducts, AUTORESPONDER_PRODUCT_PAGE_SIZE);
