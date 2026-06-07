@@ -78,7 +78,8 @@ function buildProductSearchState({ options, keyword, hasMore, pageSize, total })
 const productSearchFlowHandler = {
   name: 'product_search',
   canHandle({ state, context }) {
-    return state.flow === 'product_search' || Boolean(context?.productSearchTokens?.length);
+    if (state.flow === 'product_search') return true;
+    return state.flow === 'none' && Boolean(context?.productSearchTokens?.length);
   },
   async handle({ message, state, settings, context }) {
     if (state.flow === 'product_search' && state.step === 'awaiting_choice') {

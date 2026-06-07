@@ -7686,17 +7686,7 @@ async function handleAutoresponderDeliveryCepLookup({ senderKey, message, purcha
 
 async function handleAutoresponderEngineDeliveryFlowV2({ senderKey, message, settings, purchaseFlow }) {
   const currentPurchaseFlow = purchaseFlow || await getAutoresponderPurchaseFlow(senderKey);
-  if (
-    hasAutoresponderCartItems(currentPurchaseFlow) &&
-    (
-      currentPurchaseFlow?.status === 'awaiting_delivery_address' ||
-      currentPurchaseFlow?.status === 'awaiting_delivery_cep_confirmation' ||
-      currentPurchaseFlow?.status === 'awaiting_delivery_number' ||
-      currentPurchaseFlow?.fulfillment === 'delivery'
-    )
-  ) {
-    return null;
-  }
+  if (hasAutoresponderCartItems(currentPurchaseFlow)) return null;
   const [{ normalizeConversationState }, { deliveryFlowHandler }] = await Promise.all([
     import('./services/autoresponder/engine/state.js'),
     import('./services/autoresponder/engine/flows/delivery.js'),
@@ -7747,6 +7737,7 @@ async function handleAutoresponderEngineProductSearchFlowV2({ senderKey, message
     import('./services/autoresponder/engine/flows/product-search.js'),
   ]);
   const state = normalizeConversationState(currentPurchaseFlow?.conversation_state || {});
+  if (state.flow !== 'product_search' && String(currentPurchaseFlow?.status || 'idle') !== 'idle') return null;
   const productSearchTokens = state.flow === 'product_search'
     ? []
     : extractAutoresponderProductSearchTokens(message);

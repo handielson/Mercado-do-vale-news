@@ -29,7 +29,7 @@ function buildAskCepReply() {
   };
 }
 
-function buildCepReply(address, shippingOptions) {
+function buildCepReply(address, shippingOptions, stateData = {}) {
   const firstOption = Array.isArray(shippingOptions) ? shippingOptions[0] : null;
   const lines = [
     'Atendemos esse CEP:',
@@ -53,7 +53,7 @@ function buildCepReply(address, shippingOptions) {
     nextState: {
       flow: 'none',
       step: 'idle',
-      data: { address, shippingOptions: shippingOptions || [] },
+      data: { ...stateData, address, shippingOptions: shippingOptions || [] },
       last_intent: 'delivery_cep_quote',
       expires_at: null,
     },
@@ -77,8 +77,9 @@ const deliveryFlowHandler = {
       if (!cep) return buildContextualFallback(state);
       const address = await context.lookupCep(cep);
       if (!address) return buildContextualFallback(state);
-      const shippingOptions = await context.calculateShippingOptions(cep, [], address);
-      return buildCepReply(address, shippingOptions);
+      const cartItems = Array.isArray(state.data?.items) ? state.data.items : [];
+      const shippingOptions = await context.calculateShippingOptions(cep, cartItems, address);
+      return buildCepReply(address, shippingOptions, state.data);
     }
 
     return buildContextualFallback(state);
