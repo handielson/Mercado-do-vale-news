@@ -9344,6 +9344,9 @@ const AUTORESPONDER_ACCESSORY_SEARCH_WORDS = [
   'pelicula', 'peliculas', 'case', 'cases', 'carregador', 'cabo', 'cabos',
   'fonte', 'fontes', 'controle', 'controles', 'suporte', 'suportes',
   'antena', 'antenas', 'adaptador', 'adaptadores', 'vidro', 'lente',
+  'caneta', 'stylus', 'display', 'frontal', 'tela', 'touch', 'cooler',
+  'caixa', 'som', 'camera', 'câmera', 'lnb', 'tripé', 'tripe', 'bracadeira',
+  'braçadeira', 'smartwatch', 'pulseira', 'controle remoto', 'tv stick',
 ];
 
 function detectAutoresponderDeviceFamilyFromSearch(keyword) {
@@ -9376,6 +9379,32 @@ function isAutoresponderAccessoryProduct(product) {
     baseProduct.custom_fields,
   ].filter(Boolean).join(' '));
   return AUTORESPONDER_ACCESSORY_SEARCH_WORDS.some((word) => text.includes(word));
+}
+
+function isAutoresponderGenericPhoneKeyword(keyword) {
+  const tokens = normalizeAutoresponderText(keyword)
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  return tokens.length > 0 && tokens.every((token) =>
+    AUTORESPONDER_GENERIC_PHONE_PRODUCT_SEARCH_WORDS.has(token)
+  );
+}
+
+function isAutoresponderPhoneDeviceProduct(product) {
+  if (isAutoresponderAccessoryProduct(product)) return false;
+  const baseProduct = product?.representative || product || {};
+  const text = normalizeAutoresponderText([
+    baseProduct.name,
+    baseProduct.category_name,
+    baseProduct.categoryName,
+    baseProduct.brand,
+    baseProduct.sku,
+    baseProduct.specs,
+    baseProduct.custom_fields,
+  ].filter(Boolean).join(' '));
+  return /\b(celular|celulares|smartphone|smartphones|iphone|iphones|xiaomi|redmi|poco|galaxy|motorola|moto|samsung|realme|infinix|tecno)\b/.test(text);
 }
 
 function buildAutoresponderModelAccessorySearchTitle(products, keyword, total) {
@@ -9551,7 +9580,8 @@ async function formatAutoresponderProductSearchReply(products, keyword, settings
 
 async function formatAutoresponderProductSearchReplies(products, keyword, settings = null, pagination = null) {
   const safeProducts = Array.isArray(products) ? products : [];
-  const availableProducts = filterAutoresponderAvailableProducts(safeProducts);
+  const availableProducts = filterAutoresponderAvailableProducts(safeProducts)
+    .filter((product) => !isAutoresponderGenericPhoneKeyword(keyword) || isAutoresponderPhoneDeviceProduct(product));
   if (safeProducts.length > 0 && availableProducts.length === 0) {
     return [formatAutoresponderUnavailableProductReply(keyword)];
   }
