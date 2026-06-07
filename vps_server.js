@@ -9282,6 +9282,7 @@ async function findAutoresponderAvailableCategories(limit = 12) {
 async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset = 0) {
   const safeLimit = getAutoresponderProductQueryLimit(limit);
   const safeOffset = Math.max(Number(offset) || 0, 0);
+  const categoryPhoneAccessoryFilter = buildAutoresponderCategoryPhoneAccessorySqlFilter();
   const [rows] = await pool.query(
     `SELECT id, model_id, category_id, brand, name, sku, slug, price_retail, price_promo, stock_quantity, specs, custom_fields,
        warranty_type, warranty_template_id,
@@ -9293,6 +9294,7 @@ async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset
        AND (is_parent = 0 OR is_parent IS NULL)
        AND stock_quantity > 0
        AND category_id = ?
+       AND ${categoryPhoneAccessoryFilter}
      ORDER BY updated_at DESC
      LIMIT ${safeLimit} OFFSET ${safeOffset}`,
     [categoryId]
@@ -9301,13 +9303,15 @@ async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset
 }
 
 async function countAutoresponderProductsByCategory(categoryId) {
+  const categoryPhoneAccessoryFilter = buildAutoresponderCategoryPhoneAccessorySqlFilter();
   const [rows] = await pool.query(
     `SELECT COUNT(*) AS total
      FROM products
      WHERE status = 'active'
        AND (is_parent = 0 OR is_parent IS NULL)
        AND stock_quantity > 0
-       AND category_id = ?`,
+       AND category_id = ?
+       AND ${categoryPhoneAccessoryFilter}`,
     [categoryId]
   );
   return Number(rows[0]?.total || 0);
@@ -10567,6 +10571,24 @@ function buildAutoresponderPhoneSearchSqlFilter() {
       LOWER(COALESCE(sku, '')),
       LOWER(COALESCE(CAST(specs AS CHAR), '')),
       LOWER(COALESCE(CAST(custom_fields AS CHAR), ''))
+    ) NOT REGEXP '${accessoryPattern}'
+  )`;
+}
+
+function buildAutoresponderCategoryPhoneAccessorySqlFilter() {
+  const accessoryPattern = 'capinha|capinhas|pelicula|peliculas|capa|capas|case|cases|carregador|carregadores|cabo|cabos|fone|fones|fonte|fontes|suporte|suportes|adaptador|adaptadores|lente|vidro|acessorio|acessorios';
+  return `(
+    NOT EXISTS (
+      SELECT 1
+      FROM categories
+      WHERE categories.id = products.category_id
+        AND LOWER(COALESCE(categories.name, '')) REGEXP 'celular|celulares|smartphone|smartphones|aparelho|aparelhos'
+    )
+    OR CONCAT_WS(' ',
+      LOWER(COALESCE(products.name, '')),
+      LOWER(COALESCE(products.sku, '')),
+      LOWER(COALESCE(CAST(products.specs AS CHAR), '')),
+      LOWER(COALESCE(CAST(products.custom_fields AS CHAR), ''))
     ) NOT REGEXP '${accessoryPattern}'
   )`;
 }

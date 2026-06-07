@@ -38,9 +38,20 @@ for (const file of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
   const source = await import('node:fs').then(({ readFileSync }) => readFileSync(file, 'utf8'));
   assert.match(source, /function isAutoresponderGenericPhoneProductSearch/);
   assert.match(source, /function buildAutoresponderPhoneSearchSqlFilter/);
+  assert.match(source, /function buildAutoresponderCategoryPhoneAccessorySqlFilter/);
   assert.match(source, /NOT REGEXP/);
   assert.match(source, /capinha\|capinhas\|pelicula\|peliculas/);
   assert.match(source, /smarthone/);
+  assert.match(
+    source,
+    /async function findAutoresponderProductsByCategory[\s\S]*buildAutoresponderCategoryPhoneAccessorySqlFilter\(\)[\s\S]*AND \$\{categoryPhoneAccessoryFilter\}/,
+    `${file} must filter accessory products when listing phone categories`
+  );
+  assert.match(
+    source,
+    /async function countAutoresponderProductsByCategory[\s\S]*buildAutoresponderCategoryPhoneAccessorySqlFilter\(\)[\s\S]*AND \$\{categoryPhoneAccessoryFilter\}/,
+    `${file} must count phone categories with the same accessory filter`
+  );
 }
 
 const deployScript = await import('node:fs').then(({ readFileSync }) => readFileSync('deploy-vps-server-only.cjs', 'utf8'));
