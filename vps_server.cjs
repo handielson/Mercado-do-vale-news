@@ -30,6 +30,7 @@ const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS = [4, 9, 16, 24, 33, 43, 54, 66, 79, 93];
 const AUTORESPONDER_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_PRODUCT_PAGE_SIZE * AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES;
 const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 500;
+const AUTORESPONDER_PHONE_ACCESSORY_FOOTER = 'Temos acessorios para ele:\ncapinha\npelicula\noutros';
 const AUTORESPONDER_RULE_TEMPLATES = [
   { name: 'Saudacao manha', pattern: 'bom dia, oi bom dia, dia' },
   { name: 'Saudacao tarde', pattern: 'boa tarde, tarde' },
@@ -10202,6 +10203,9 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
   });
   if (paginationSummary) {
     replies[replies.length - 1] = `${replies[replies.length - 1]}\n\n${paginationSummary}`;
+  }
+  if (isAutoresponderGenericPhoneKeyword(keyword) && replies.length > 0) {
+    replies[replies.length - 1] = `${replies[replies.length - 1]}\n\n${AUTORESPONDER_PHONE_ACCESSORY_FOOTER}`;
   }
 
   return replies;
