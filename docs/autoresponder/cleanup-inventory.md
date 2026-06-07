@@ -8,16 +8,16 @@ Nao apagar arquivo sem classificar como `remover`, `manter` ou `arquivar`.
 
 | Arquivo | Motivo | Acao |
 |---|---|---|
-| tmp-tests/autoresponder-standalone-delivery-cep-static.test.mjs | Substituido por fluxo `delivery.js`, cenarios centrais e trava `autoresponder-no-purchase-flow-outside-purchase-static`; arquivo ja nao existe nesta rodada | registrar como ja ausente |
+| Nenhum nesta auditoria | Os testes temporarios ja ausentes foram registrados em `Removidos` | aguardar remocao do legado de produto/compra |
 
 ## Removidos
 
 | Arquivo | Commit | Substituido por |
 |---|---|---|
 | tmp-tests/autoresponder-standalone-delivery-cep-static.test.mjs | ja ausente antes desta rodada | tmp-tests/autoresponder-core-scenarios.cjs; tmp-tests/autoresponder-no-purchase-flow-outside-purchase-static.test.mjs |
-| tmp-tests/autoresponder-delivery-cep-replace-static.test.mjs | pendente | tmp-tests/autoresponder-core-scenarios.cjs (`purchase delivery cep replacement`) |
-| tmp-tests/autoresponder-delivery-cep-shipping-static.test.mjs | pendente | tmp-tests/autoresponder-core-scenarios.cjs (`purchase delivery shipping`) |
-| tmp-tests/autoresponder-choice-instructions-static.test.mjs | pendente | tmp-tests/autoresponder-product-search-engine-static.test.mjs |
+| tmp-tests/autoresponder-delivery-cep-replace-static.test.mjs | ja ausente antes desta auditoria | tmp-tests/autoresponder-core-scenarios.cjs (`purchase delivery cep replacement`) |
+| tmp-tests/autoresponder-delivery-cep-shipping-static.test.mjs | ja ausente antes desta auditoria | tmp-tests/autoresponder-core-scenarios.cjs (`purchase delivery shipping`) |
+| tmp-tests/autoresponder-choice-instructions-static.test.mjs | ja ausente antes desta auditoria | tmp-tests/autoresponder-product-search-engine-static.test.mjs |
 
 ## Candidatos A Manter
 
