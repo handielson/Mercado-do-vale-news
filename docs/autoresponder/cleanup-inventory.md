@@ -43,8 +43,9 @@ Nao apagar arquivo sem classificar como `remover`, `manter` ou `arquivar`.
 
 | Arquivo | Situacao |
 |---|---|
-| vps_server.cjs | Fonte usada por `deploy-vps-server-only.cjs` para publicar `server.js` e `vps_server.js` na VPS |
-| vps_server.js | Fonte usada por scripts legados de deploy e por testes estaticos de paridade |
+| vps_server.js | Fonte usada por `deploy-vps-server-only.cjs` para publicar `server.js` e `vps_server.js` na VPS |
+| services/autoresponder/engine/** | Modulos importados em runtime pelo AutoResponder; `deploy-vps-server-only.cjs` deve publicar esta pasta junto com o servidor |
+| vps_server.cjs | Espelho operacional usado por testes estaticos e scripts legados; manter paridade antes de deploy |
 | server.js | Copia local de compatibilidade; manter checagens de sintaxe, mas nao tratar como fonte primaria sem reconciliar paridade com `vps_server.cjs` |
 | AUTORESPONDER_ENGINE_V2 | Ausente em `.env`, `.env.local`, `.env.production`, `.env.vps.local` e `.env.vps.example`; produto e compra ainda dependem do fallback legado quando a flag nao esta ativa |
 

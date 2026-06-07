@@ -11,6 +11,16 @@ const password = process.env.VPS_SITE_PASSWORD || process.env.VPS_ROOT_PASSWORD 
 const privateKeyPath = process.env.VPS_SITE_PRIVATE_KEY || process.env.VPS_PRIVATE_KEY;
 const privateKey = privateKeyPath ? fs.readFileSync(privateKeyPath) : undefined;
 const localServer = path.join(__dirname, 'vps_server.js');
+const autoresponderEngineFiles = [
+  'services/autoresponder/engine/types.js',
+  'services/autoresponder/engine/state.js',
+  'services/autoresponder/engine/router.js',
+  'services/autoresponder/engine/fallbacks.js',
+  'services/autoresponder/engine/messages.js',
+  'services/autoresponder/engine/flows/delivery.js',
+  'services/autoresponder/engine/flows/product-search.js',
+  'services/autoresponder/engine/flows/purchase.js',
+];
 const adminEmail = process.env.MDV_ADMIN_EMAIL || process.env.ADMIN_EMAIL || process.env.VPS_ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL;
 const adminPassword = process.env.MDV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || process.env.VPS_ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD;
 
@@ -86,6 +96,18 @@ function quoteEnvValue(value) {
   return `"${String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+function remotePathJoin(...parts) {
+  return parts.join('/').replace(/\/+/g, '/');
+}
+
+async function uploadAutoresponderEngineFiles(appDir) {
+  await exec(`mkdir -p ${appDir}/services/autoresponder/engine ${appDir}/services/autoresponder/engine/flows`);
+  for (const relativePath of autoresponderEngineFiles) {
+    await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
+    console.log(`Uploaded ${relativePath}`);
+  }
+}
+
 function upsertEnv(content, entries) {
   const lines = String(content || '').replace(/\r\n/g, '\n').split('\n');
   const seen = new Set();
@@ -141,6 +163,7 @@ async function main() {
   console.log(`Uploading server to ${appDir}`);
   await upload(localServer, `${appDir}/vps_server.js`);
   await upload(localServer, `${appDir}/server.js`);
+  await uploadAutoresponderEngineFiles(appDir);
   await ensureRemoteAdminEnv(appDir);
   const restartOutput = await exec(`pm2 restart ${apiProc.name} --update-env`);
   console.log(restartOutput.trim());
