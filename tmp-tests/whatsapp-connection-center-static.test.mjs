@@ -39,6 +39,8 @@ const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.t
   'fetchInstances',
   'connectionState',
   'formatDebugValue',
+  'handleRefresh',
+  'A Evolution nao retornou QR Code para conexao.',
 ].forEach((needle) => {
   assert.ok(connectionPanel.includes(needle), `connection panel must include ${needle}`);
 });

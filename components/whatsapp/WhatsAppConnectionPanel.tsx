@@ -46,6 +46,7 @@ export function WhatsAppConnectionPanel() {
   const [debug, setDebug] = React.useState<any | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [refreshing, setRefreshing] = React.useState(false);
 
   const loadState = React.useCallback(async () => {
     try {
@@ -81,18 +82,37 @@ export function WhatsAppConnectionPanel() {
     return () => window.clearInterval(interval);
   }, [loadDebug, loadState, state]);
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await Promise.all([loadState(), loadDebug()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function handleConnect() {
     setBusy(true);
     setError(null);
     try {
       const result = await autoResponderService.connectWhatsApp();
-      setQrCode(result?.base64 || null);
-      setPairingCode(result?.pairingCode || null);
-      setState(result?.instance?.state === 'open' ? 'open' : 'connecting');
+      const nextState = result?.instance?.state === 'open' ? 'open' : 'connecting';
+      const nextQrCode = result?.base64 || null;
+      const nextPairingCode = result?.pairingCode || null;
+
+      if (nextState !== 'open' && !nextQrCode) {
+        throw new Error('A Evolution nao retornou QR Code para conexao.');
+      }
+
+      setQrCode(nextQrCode);
+      setPairingCode(nextPairingCode);
+      setState(nextState);
       await loadDebug();
-      toast.success('QR Code gerado para conexao do WhatsApp');
+      toast.success(nextState === 'open' ? 'WhatsApp ja esta conectado' : 'QR Code gerado para conexao do WhatsApp');
     } catch (err) {
       setState('close');
+      setQrCode(null);
+      setPairingCode(null);
       setError(err instanceof Error ? err.message : 'Nao foi possivel gerar o QR Code.');
     } finally {
       setBusy(false);
@@ -135,14 +155,13 @@ export function WhatsAppConnectionPanel() {
           <button
             type="button"
             onClick={() => {
-              void loadState();
-              void loadDebug();
+              void handleRefresh();
             }}
-            disabled={busy}
+            disabled={busy || refreshing}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
           >
-            <RefreshCw size={16} />
-            Atualizar
+            <RefreshCw className={refreshing ? 'animate-spin' : undefined} size={16} />
+            {refreshing ? 'Atualizando...' : 'Atualizar'}
           </button>
           {isConnected ? (
             <button
