@@ -288,4 +288,16 @@ export const autoResponderService = {
             tag_ids: tagIds,
         });
     },
+
+    getWhatsAppConnectionState: (): Promise<{ instance?: { state: string } }> => {
+        return vpsClient.get<{ instance?: { state: string } }>('/autoresponder/whatsapp/state');
+    },
+
+    connectWhatsApp: (): Promise<{ base64?: string; pairingCode?: string; instance?: { state: string } }> => {
+        return vpsClient.get<{ base64?: string; pairingCode?: string; instance?: { state: string } }>('/autoresponder/whatsapp/connect');
+    },
+
+    disconnectWhatsApp: (): Promise<any> => {
+        return vpsClient.post<any>('/autoresponder/whatsapp/disconnect', {});
+    },
 };

@@ -11444,6 +11444,73 @@ fastify.get('/health', { config: { rateLimit: { max: 60, timeWindow: '1 minute' 
 }));
 
 // ─── Upload de imagem de produto ───────────────────────────────────────────
+// ─── Evolution API Proxies ──────────────────────────────────────────────────
+const EVOLUTION_GLOBAL_API_KEY = 'ChaveSecretaGeradaParaAutenticacaoEvolution123!';
+const EVOLUTION_BASE_URL = 'http://127.0.0.1:8080';
+const EVOLUTION_INSTANCE_NAME = 'mercado_do_vale';
+
+async function callEvolutionApi(endpoint, method = 'GET', body = null) {
+  const response = await fetch(`${EVOLUTION_BASE_URL}${endpoint}`, {
+    method,
+    headers: {
+      'apikey': EVOLUTION_GLOBAL_API_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : null,
+  });
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+fastify.get('/autoresponder/whatsapp/state', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    const result = await callEvolutionApi(`/instance/connectionState/${EVOLUTION_INSTANCE_NAME}`);
+    return result;
+  } catch (err) {
+    return reply.code(500).send({ error: err.message });
+  }
+});
+
+fastify.get('/autoresponder/whatsapp/connect', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    const createBody = {
+      instanceName: EVOLUTION_INSTANCE_NAME,
+      qrcode: true,
+      integration: 'WHATSAPP-BAILEYS',
+      webhook: {
+        enabled: true,
+        url: 'https://api.xiaomipetrolina.com.br/autoresponder-webhook',
+        headers: {
+          'x-autoresponder-token': process.env.AUTORESPONDER_TOKEN || ''
+        }
+      }
+    };
+    try {
+      await callEvolutionApi('/instance/create', 'POST', createBody);
+    } catch (createErr) {
+      // Ignora erro caso a instância já exista
+    }
+
+    const result = await callEvolutionApi(`/instance/connect/${EVOLUTION_INSTANCE_NAME}`);
+    return result;
+  } catch (err) {
+    return reply.code(500).send({ error: err.message });
+  }
+});
+
+fastify.post('/autoresponder/whatsapp/disconnect', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    const result = await callEvolutionApi(`/instance/logout/${EVOLUTION_INSTANCE_NAME}`, 'POST');
+    return result;
+  } catch (err) {
+    return reply.code(500).send({ error: err.message });
+  }
+});
+
 // ─── AutoResponder WhatsApp (Fase 1A/1B) ─────────────────────────────────────
 fastify.get('/autoresponder/settings', { preHandler: requireSyncKey }, async () => {
   const [rows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');

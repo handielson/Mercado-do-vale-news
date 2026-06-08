@@ -20,6 +20,7 @@ import {
     Users,
     Wand2,
     X,
+    Smartphone,
 } from 'lucide-react';
 import { Tabs, TabList, TabPanels } from '../../components/ui/Tabs';
 import { Tab, TabPanel } from '../../components/ui/Tab';
@@ -189,6 +190,7 @@ const tabs = [
     { id: 'fluxos', label: 'Fluxos', icon: <MessageCircle size={16} /> },
     { id: 'respostas', label: 'Respostas', icon: <MessageSquareText size={16} /> },
     { id: 'mapa', label: 'Mapa do Bot', icon: <Bot size={16} /> },
+    { id: 'conexao', label: 'Conexão', icon: <Smartphone size={16} /> },
     { id: 'conversas', label: 'Conversas', icon: <Users size={16} /> },
     { id: 'bloqueados', label: 'Bloqueados', icon: <Ban size={16} /> },
     { id: 'curadoria', label: 'Curadoria', icon: <Wand2 size={16} /> },
@@ -1545,6 +1547,78 @@ const AutoResponderPage: React.FC = () => {
     const [savingTestReplyIndex, setSavingTestReplyIndex] = React.useState<number | null>(null);
     const [testNotice, setTestNotice] = React.useState<string | null>(null);
     const [error, setError] = React.useState<string | null>(null);
+
+    const [waConnectionState, setWaConnectionState] = React.useState<string>('loading');
+    const [waQrCode, setWaQrCode] = React.useState<string | null>(null);
+    const [waError, setWaError] = React.useState<string | null>(null);
+    const [isConnectingWa, setIsConnectingWa] = React.useState(false);
+
+    const checkWaConnection = React.useCallback(async () => {
+        try {
+            const res = await autoResponderService.getWhatsAppConnectionState();
+            setWaConnectionState(res?.instance?.state || 'close');
+        } catch (err) {
+            setWaConnectionState('close');
+        }
+    }, []);
+
+    const generateWaQrCode = async () => {
+        setIsConnectingWa(true);
+        setWaError(null);
+        try {
+            const res = await autoResponderService.connectWhatsApp();
+            if (res?.base64) {
+                setWaQrCode(res.base64);
+                setWaConnectionState('connecting');
+            } else if (res?.instance?.state === 'open') {
+                setWaConnectionState('open');
+                setWaQrCode(null);
+            } else {
+                setWaError('Não foi possível obter o QR Code da Evolution API.');
+            }
+        } catch (err) {
+            setWaError(err instanceof Error ? err.message : 'Erro ao conectar ao WhatsApp.');
+        } finally {
+            setIsConnectingWa(false);
+        }
+    };
+
+    const disconnectWa = async () => {
+        if (!window.confirm('Tem certeza de que deseja desconectar o WhatsApp?')) return;
+        setIsConnectingWa(true);
+        try {
+            await autoResponderService.disconnectWhatsApp();
+            await checkWaConnection();
+            setWaQrCode(null);
+        } catch (err) {
+            setWaError('Erro ao desconectar.');
+        } finally {
+            setIsConnectingWa(false);
+        }
+    };
+
+    React.useEffect(() => {
+        if (activeAutoResponderTab === 'conexao') {
+            void checkWaConnection();
+        }
+    }, [activeAutoResponderTab, checkWaConnection]);
+
+    React.useEffect(() => {
+        if (waConnectionState !== 'connecting' || activeAutoResponderTab !== 'conexao') return;
+        const interval = window.setInterval(async () => {
+            try {
+                const res = await autoResponderService.getWhatsAppConnectionState();
+                if (res?.instance?.state === 'open') {
+                    setWaConnectionState('open');
+                    setWaQrCode(null);
+                    window.clearInterval(interval);
+                }
+            } catch (e) {
+                // ignore
+            }
+        }, 4000);
+        return () => window.clearInterval(interval);
+    }, [waConnectionState, activeAutoResponderTab]);
 
     const loadDashboard = React.useCallback(async () => {
         setState('loading');
@@ -5210,6 +5284,101 @@ const AutoResponderPage: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </TabPanel>
+                    <TabPanel id="conexao">
+                        <div className="space-y-4">
+                            <section className="rounded-lg border border-slate-200 bg-white p-5">
+                                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase text-blue-700">WhatsApp Evolution</p>
+                                        <h2 className="mt-1 text-xl font-bold text-slate-950">Conexão do WhatsApp</h2>
+                                        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                                            Pare e conecte seu aparelho de WhatsApp diretamente na VPS para rodar o bot de autoresponder.
+                                        </p>
+                                    </div>
+                                    <div>
+                                        {waConnectionState === 'open' && (
+                                            <button
+                                                type="button"
+                                                onClick={disconnectWa}
+                                                disabled={isConnectingWa}
+                                                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                                            >
+                                                Desconectar WhatsApp
+                                            </button>
+                                        )}
+                                        {waConnectionState !== 'open' && waConnectionState !== 'loading' && (
+                                            <button
+                                                type="button"
+                                                onClick={generateWaQrCode}
+                                                disabled={isConnectingWa}
+                                                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                                            >
+                                                {isConnectingWa ? 'Gerando...' : 'Gerar QR Code / Conectar'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {waError && (
+                                    <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">
+                                        {waError}
+                                    </div>
+                                )}
+
+                                <div className="mt-6 flex flex-col items-center justify-center border-t border-slate-100 pt-6">
+                                    {waConnectionState === 'loading' && (
+                                        <div className="flex flex-col items-center justify-center p-8 space-y-3">
+                                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-300 border-t-blue-600"></div>
+                                            <span className="text-sm font-semibold text-slate-600">Verificando conexão com o WhatsApp...</span>
+                                        </div>
+                                    )}
+
+                                    {waConnectionState === 'open' && (
+                                        <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
+                                            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                                                <CheckCircle2 size={32} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-bold text-slate-900">WhatsApp Conectado!</h3>
+                                                <p className="text-sm text-slate-500 mt-1">O bot está pronto para receber e enviar mensagens automaticamente.</p>
+                                            </div>
+                                            <div className="text-xs rounded bg-emerald-50 px-2 py-1 font-semibold text-emerald-800 border border-emerald-100">
+                                                Instância: mercado_do_vale | Status: Ativo
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {waConnectionState === 'connecting' && waQrCode && (
+                                        <div className="flex flex-col items-center justify-center p-8 text-center space-y-4">
+                                            <h3 className="text-lg font-bold text-slate-900">Leia o QR Code abaixo com seu WhatsApp</h3>
+                                            <p className="text-sm text-slate-500 max-w-md">
+                                                Abra o WhatsApp no celular, vá em <strong>Aparelhos conectados &gt; Conectar um aparelho</strong> e aponte a câmera para esta tela.
+                                            </p>
+                                            <div className="rounded-lg border-2 border-slate-200 bg-white p-4 shadow-sm">
+                                                <img src={waQrCode} alt="WhatsApp QR Code" className="h-64 w-64" />
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                                <div className="h-2 w-2 animate-ping rounded-full bg-blue-600"></div>
+                                                Aguardando escaneamento... a tela atualizará sozinha.
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {waConnectionState === 'close' && !isConnectingWa && (
+                                        <div className="flex flex-col items-center justify-center p-8 text-center space-y-3">
+                                            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                                                <Bot size={32} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-bold text-slate-900">WhatsApp Desconectado</h3>
+                                                <p className="text-sm text-slate-500 mt-1">Você precisa conectar um aparelho para que o bot comece a atuar.</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
                         </div>
                     </TabPanel>
                 </TabPanels>
