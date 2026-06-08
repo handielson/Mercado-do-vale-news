@@ -13,15 +13,22 @@ assert.ok(
   existsSync('components/whatsapp/WhatsAppMigrationChecklist.tsx'),
   'WhatsApp center must show a migration checklist component',
 );
+assert.ok(
+  existsSync('components/whatsapp/WhatsAppConversationsPanel.tsx'),
+  'WhatsApp center must have an essential attendance panel component',
+);
 
 const connectionPanel = readFileSync('components/whatsapp/WhatsAppConnectionPanel.tsx', 'utf8');
 const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.tsx', 'utf8');
+const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversationsPanel.tsx', 'utf8');
 
 [
   'WhatsAppConnectionPanel',
   'WhatsAppMigrationChecklist',
+  'WhatsAppConversationsPanel',
   'Centro WhatsApp',
   'Conexao WhatsApp',
+  'Atendimento WhatsApp',
 ].forEach((needle) => {
   assert.ok(whatsappPage.includes(needle), `WhatsAppPage must include ${needle}`);
 });
@@ -46,8 +53,24 @@ const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.t
 });
 
 [
+  'listConversations',
+  'pauseConversation',
+  'resumeConversation',
+  'resetConversationCounters',
+  'Atendimento WhatsApp',
+  'Pausar 1h',
+  'Retomar',
+  'Resetar contadores',
+  'conversationStatusFilter',
+  'isConversationPaused',
+].forEach((needle) => {
+  assert.ok(conversationsPanel.includes(needle), `conversations panel must include ${needle}`);
+});
+
+[
   'Conexao',
   'Atendimento',
+  "status: 'testing'",
   'ChatGPT',
   'Lista de celulares',
   'Curadoria',
@@ -61,6 +84,10 @@ const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.t
   'getWhatsAppDebug',
   'connectWhatsApp',
   'disconnectWhatsApp',
+  'listConversations',
+  'pauseConversation',
+  'resumeConversation',
+  'resetConversationCounters',
 ].forEach((needle) => {
   assert.ok(service.includes(needle), `autoResponderService must keep ${needle}`);
 });

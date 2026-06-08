@@ -1,6 +1,7 @@
 import React from 'react';
 import { MessageCircle } from 'lucide-react';
 import { WhatsAppConnectionPanel } from '../../../components/whatsapp/WhatsAppConnectionPanel';
+import { WhatsAppConversationsPanel } from '../../../components/whatsapp/WhatsAppConversationsPanel';
 import { WhatsAppMigrationChecklist } from '../../../components/whatsapp/WhatsAppMigrationChecklist';
 
 export default function WhatsAppPage() {
@@ -12,13 +13,14 @@ export default function WhatsAppPage() {
           Centro WhatsApp
         </h2>
         <p className="mt-2 max-w-3xl text-sm text-slate-500">
-          Nova central para Conexao WhatsApp, atendimento, ChatGPT, ferramentas oficiais e migracao gradual das funcoes do AutoResponder legado.
+          Nova central para Conexao WhatsApp, Atendimento WhatsApp, ChatGPT, ferramentas oficiais e migracao gradual das funcoes do AutoResponder legado.
         </p>
       </div>
 
       <div className="space-y-4">
         <WhatsAppMigrationChecklist />
         <WhatsAppConnectionPanel />
+        <WhatsAppConversationsPanel />
       </div>
     </div>
   );

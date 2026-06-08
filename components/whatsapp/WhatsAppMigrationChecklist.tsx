@@ -11,7 +11,7 @@ const items: Array<{ label: string; status: MigrationStatus; description: string
   },
   {
     label: 'Atendimento',
-    status: 'pending',
+    status: 'testing',
     description: 'Fila de conversas, pausa para humano e historico de mensagens.',
   },
   {
