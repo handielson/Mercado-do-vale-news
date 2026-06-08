@@ -5,6 +5,17 @@ import { autoResponderService } from '../../services/autoResponderService';
 
 type WhatsAppState = 'loading' | 'open' | 'connecting' | 'close' | 'error';
 
+function formatDebugValue(value: unknown): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(formatDebugValue).filter(Boolean).join('; ');
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 function normalizeConnectionState(value: unknown): WhatsAppState {
   const state = String(value || '').toLowerCase();
   if (state === 'open') return 'open';
@@ -17,13 +28,14 @@ function summarizeDebug(debug: any) {
   const instance = Array.isArray(debug?.fetchInstances?.body)
     ? debug.fetchInstances.body.find((item: any) => item?.name === debug?.instanceName) || debug.fetchInstances.body[0]
     : null;
+  const rawLastError = instance?.disconnectionObject || debug?.connectionState?.body?.response?.message || '';
 
   return {
     version: debug?.evolutionStatus?.body?.version || '-',
     instanceName: debug?.instanceName || '-',
     number: instance?.number || '-',
     state: debug?.connectionState?.body?.instance?.state || instance?.connectionStatus || '-',
-    lastError: instance?.disconnectionObject || debug?.connectionState?.body?.response?.message?.join?.('; ') || '',
+    lastError: formatDebugValue(rawLastError),
   };
 }
 

@@ -38,6 +38,7 @@ const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.t
   'evolutionStatus',
   'fetchInstances',
   'connectionState',
+  'formatDebugValue',
 ].forEach((needle) => {
   assert.ok(connectionPanel.includes(needle), `connection panel must include ${needle}`);
 });
