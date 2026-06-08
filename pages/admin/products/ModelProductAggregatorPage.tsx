@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ExternalLink, FileText, Loader2, MapPin, Package, Pencil, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ExternalLink, FileText, Loader2, MapPin, Pencil, RefreshCw } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { modelService } from '../../../services/models';
@@ -22,6 +22,17 @@ function statusLabel(status: string): string {
         rma: 'RMA',
     };
     return labels[status] || status || '-';
+}
+
+function locationText(locations: any[]): string {
+    const labels = new Map<string, number>();
+    locations.forEach((location) => {
+        const label = location.label || `${location.depositName || location.deposit_name || 'Deposito'} / ${location.locationName || location.location_name || 'Local'}`;
+        labels.set(label, (labels.get(label) || 0) + Number(location.quantity || 0));
+    });
+    return [...labels.entries()]
+        .map(([label, quantity]) => `${label}: ${quantity} un.`)
+        .join(' | ') || '-';
 }
 
 export const ModelProductAggregatorPage: React.FC = () => {
@@ -153,89 +164,102 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="mt-4 space-y-4">
-                                    {memoryGroup.colors.map((colorGroup: any) => (
-                                        <div key={colorGroup.key} className="rounded-lg border border-slate-100 bg-slate-50/60 p-3 print:bg-white">
-                                            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                                                <div>
-                                                    <h3 className="font-bold text-slate-800">{colorGroup.color}</h3>
-                                                    <p className="text-xs text-slate-500">
-                                                        {colorGroup.availableCount} disponivel(is), {colorGroup.soldCount} vendido(s)
-                                                    </p>
-                                                </div>
-                                                <div className="flex flex-wrap gap-2 print:hidden">
-                                                    {colorGroup.products.map((product: any) => (
-                                                        <React.Fragment key={product.id}>
-                                                            <a href={product.publicUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
-                                                                <ExternalLink className="h-3.5 w-3.5" />
-                                                                Ver no site
-                                                            </a>
-                                                            <button type="button" onClick={() => navigate(product.editUrl)} className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
-                                                                <Pencil className="h-3.5 w-3.5" />
-                                                                Editar produto
-                                                            </button>
-                                                            <button type="button" onClick={() => navigate(product.stockLocationUrl)} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">
-                                                                <MapPin className="h-3.5 w-3.5" />
-                                                                Locais
-                                                            </button>
-                                                        </React.Fragment>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {colorGroup.locations.length > 0 && (
-                                                <div className="mt-3 flex flex-wrap gap-2">
-                                                    {colorGroup.locations.map((location: any, index: number) => (
-                                                        <span key={`${location.location_id || index}`} className="rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
-                                                            {location.deposit_name || 'Deposito'} / {location.location_name || location.location_id || 'Local'}: {Number(location.quantity || 0)} un.
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            <div className="mt-3 overflow-x-auto">
-                                                <table className="min-w-full text-left text-xs">
-                                                    <thead className="text-slate-500">
-                                                        <tr>
-                                                            <th className="px-2 py-2">SKU</th>
-                                                            <th className="px-2 py-2">IMEI 1</th>
-                                                            <th className="px-2 py-2">IMEI 2</th>
-                                                            <th className="px-2 py-2">Serial</th>
-                                                            <th className="px-2 py-2">Status</th>
-                                                            <th className="px-2 py-2">Local</th>
-                                                            <th className="px-2 py-2">Custo</th>
-                                                            <th className="px-2 py-2">Retorno</th>
+                                <div className="mt-4 overflow-x-auto">
+                                    <table className="min-w-full text-left text-sm">
+                                        <thead className="border-b border-slate-100 text-xs font-bold uppercase text-slate-400">
+                                            <tr>
+                                                <th className="px-3 py-3">Cor</th>
+                                                <th className="px-3 py-3">Produtos</th>
+                                                <th className="px-3 py-3 text-right">Estoque</th>
+                                                <th className="px-3 py-3 text-right">Vendidos</th>
+                                                <th className="px-3 py-3 text-right">Valor estoque</th>
+                                                <th className="px-3 py-3">Locais</th>
+                                                <th className="px-3 py-3 print:hidden">Acoes</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {memoryGroup.colors.map((colorGroup: any) => (
+                                                <React.Fragment key={colorGroup.key}>
+                                                    <tr className="align-top">
+                                                        <td className="px-3 py-4">
+                                                            <div className="font-bold text-slate-900">{colorGroup.color}</div>
+                                                            <div className="mt-1 text-xs text-slate-500">
+                                                                {money(colorGroup.investedValue)} investido
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-3 py-4">
+                                                            <div className="space-y-1">
+                                                                {colorGroup.products.map((product: any) => (
+                                                                    <div key={product.id} className="font-mono text-xs text-slate-700">
+                                                                        {product.sku || '-'}
+                                                                        <span className="font-sans text-slate-400"> · {product.availableCount} un.</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-3 py-4 text-right font-bold text-slate-900">{colorGroup.availableCount} un.</td>
+                                                        <td className="px-3 py-4 text-right">{colorGroup.soldCount} un.</td>
+                                                        <td className="px-3 py-4 text-right font-semibold text-slate-900">{money(colorGroup.stockCostValue)}</td>
+                                                        <td className="px-3 py-4 text-xs leading-5 text-slate-600">{locationText(colorGroup.locations)}</td>
+                                                        <td className="px-3 py-4 print:hidden">
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {colorGroup.products.map((product: any) => (
+                                                                    <ProductActions key={product.id} product={product} onNavigate={navigate} />
+                                                                ))}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    {colorGroup.units.length > 0 && (
+                                                        <tr className="bg-slate-50/70">
+                                                            <td colSpan={7} className="px-3 py-3">
+                                                                <details>
+                                                                    <summary className="cursor-pointer text-xs font-bold text-slate-500">
+                                                                        Ver IMEIs e seriais ({colorGroup.units.length})
+                                                                    </summary>
+                                                                    <div className="mt-3 overflow-x-auto">
+                                                                        <table className="min-w-full text-left text-xs">
+                                                                            <thead className="text-slate-500">
+                                                                                <tr>
+                                                                                    <th className="px-2 py-2">SKU</th>
+                                                                                    <th className="px-2 py-2">IMEI 1</th>
+                                                                                    <th className="px-2 py-2">IMEI 2</th>
+                                                                                    <th className="px-2 py-2">Serial</th>
+                                                                                    <th className="px-2 py-2">Status</th>
+                                                                                    <th className="px-2 py-2">Local</th>
+                                                                                    <th className="px-2 py-2">Custo</th>
+                                                                                    <th className="px-2 py-2">Retorno</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody className="divide-y divide-slate-100 bg-white">
+                                                                                {colorGroup.units.map((unit: any) => {
+                                                                                    const product = colorGroup.products.find((item: any) => item.id === unit.productId);
+                                                                                    return (
+                                                                                        <tr key={unit.id}>
+                                                                                            <td className="px-2 py-2 font-semibold text-slate-700">{product?.sku || '-'}</td>
+                                                                                            <td className="px-2 py-2 font-mono">{unit.imei1 || '-'}</td>
+                                                                                            <td className="px-2 py-2 font-mono">{unit.imei2 || '-'}</td>
+                                                                                            <td className="px-2 py-2 font-mono">{unit.serial || '-'}</td>
+                                                                                            <td className="px-2 py-2">{statusLabel(unit.status)}</td>
+                                                                                            <td className="px-2 py-2">{unit.locationId || unit.depositId || '-'}</td>
+                                                                                            <td className="px-2 py-2">{money(unit.costValue)}</td>
+                                                                                            <td className="px-2 py-2">
+                                                                                                {unit.returnedValue ? money(unit.returnedValue) : '-'}
+                                                                                                {unit.returnedValueEstimated ? <span className="ml-1 text-amber-600">(estimado)</span> : null}
+                                                                                            </td>
+                                                                                        </tr>
+                                                                                    );
+                                                                                })}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </details>
+                                                            </td>
                                                         </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-100 bg-white">
-                                                        {colorGroup.units.map((unit: any) => {
-                                                            const product = colorGroup.products.find((item: any) => item.id === unit.productId);
-                                                            return (
-                                                                <tr key={unit.id}>
-                                                                    <td className="px-2 py-2 font-semibold text-slate-700">{product?.sku || '-'}</td>
-                                                                    <td className="px-2 py-2 font-mono">{unit.imei1 || '-'}</td>
-                                                                    <td className="px-2 py-2 font-mono">{unit.imei2 || '-'}</td>
-                                                                    <td className="px-2 py-2 font-mono">{unit.serial || '-'}</td>
-                                                                    <td className="px-2 py-2">{statusLabel(unit.status)}</td>
-                                                                    <td className="px-2 py-2">{unit.locationId || unit.depositId || '-'}</td>
-                                                                    <td className="px-2 py-2">{money(unit.costValue)}</td>
-                                                                    <td className="px-2 py-2">
-                                                                        {unit.returnedValue ? money(unit.returnedValue) : '-'}
-                                                                        {unit.returnedValueEstimated ? <span className="ml-1 text-amber-600">(estimado)</span> : null}
-                                                                    </td>
-                                                                </tr>
-                                                            );
-                                                        })}
-                                                        {colorGroup.units.length === 0 && (
-                                                            <tr>
-                                                                <td colSpan={8} className="px-2 py-4 text-center text-slate-400">Nenhuma unidade serializada vinculada.</td>
-                                                            </tr>
-                                                        )}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    ))}
+                                                    )}
+                                                </React.Fragment>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </article>
                         ))}
@@ -257,5 +281,38 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
     <div className="rounded-lg bg-slate-50 px-3 py-2 print:bg-white">
         <p className="text-[10px] font-bold uppercase text-slate-400">{label}</p>
         <p className="font-bold text-slate-800">{value}</p>
+    </div>
+);
+
+const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void }> = ({ product, onNavigate }) => (
+    <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <a
+            href={product.publicUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            title={`Ver ${product.sku || 'produto'} no site`}
+        >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Site
+        </a>
+        <button
+            type="button"
+            onClick={() => onNavigate(product.editUrl)}
+            className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+            title={`Editar ${product.sku || 'produto'}`}
+        >
+            <Pencil className="h-3.5 w-3.5" />
+            Editar
+        </button>
+        <button
+            type="button"
+            onClick={() => onNavigate(product.stockLocationUrl)}
+            className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+            title={`Locais de ${product.sku || 'produto'}`}
+        >
+            <MapPin className="h-3.5 w-3.5" />
+            Locais
+        </button>
     </div>
 );

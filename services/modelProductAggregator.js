@@ -23,6 +23,10 @@ function normalizeKey(value) {
     .trim();
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
+}
+
 function productLinks(product) {
   const slug = product.slug || slugify(product.name || product.sku || product.id);
   const searchTerm = product.sku || product.name || product.id;
@@ -68,6 +72,30 @@ function addUnitToTotals(target, unit) {
   if (['available', 'reserved', 'sold', 'rma'].includes(unit.status)) {
     target.investedValue += unit.costValue;
   }
+}
+
+function normalizeLocation(location) {
+  const depositName = location.deposit_name || location.deposit?.name || 'Deposito';
+  const rawLocationName = location.location_name || location.location?.name || '';
+  const locationName = rawLocationName && !isUuid(rawLocationName) ? rawLocationName : 'Local sem nome';
+  const quantity = Number(location.quantity || 0);
+  const reservedQuantity = Number(location.reserved_quantity || 0);
+  return {
+    ...location,
+    depositName,
+    locationName,
+    label: `${depositName} / ${locationName}`,
+    quantity,
+    reservedQuantity,
+    availableQuantity: Math.max(0, quantity - reservedQuantity),
+  };
+}
+
+function addAvailableFallback(target, quantity, costValue) {
+  if (quantity <= 0) return;
+  target.availableCount += quantity;
+  target.stockCostValue += quantity * costValue;
+  target.investedValue += quantity * costValue;
 }
 
 export function getProductVariationSpecs(product) {
@@ -130,6 +158,7 @@ export function aggregateModelProducts(input) {
       stockLocationUrl: links.stockLocationUrl,
       priceCost: Number(product.price_cost || 0),
       priceRetail: Number(product.price_retail || 0),
+      availableCount: Number(product.stock_quantity || 0),
       status: String(product.status || ''),
       raw: product,
     };
@@ -149,7 +178,8 @@ export function aggregateModelProducts(input) {
       memoryGroup.colors.push(colorGroup);
     }
     colorGroup.products.push(productView);
-    colorGroup.locations.push(...(locationsByProductId[String(product.id)] || []));
+    const normalizedLocations = (locationsByProductId[String(product.id)] || []).map(normalizeLocation);
+    colorGroup.locations.push(...normalizedLocations);
 
     const productUnits = unitsByProductId.get(String(product.id)) || [];
     for (const unit of productUnits) {
@@ -178,6 +208,14 @@ export function aggregateModelProducts(input) {
       colorGroup.units.push(unitView);
       addUnitToTotals(colorGroup, unitView);
       addUnitToTotals(memoryGroup, unitView);
+    }
+
+    if (productUnits.length === 0) {
+      const locationQuantity = normalizedLocations.reduce((sum, location) => sum + location.quantity, 0);
+      const fallbackQuantity = locationQuantity > 0 ? locationQuantity : Number(product.stock_quantity || 0);
+      addAvailableFallback(colorGroup, fallbackQuantity, productView.priceCost);
+      addAvailableFallback(memoryGroup, fallbackQuantity, productView.priceCost);
+      productView.availableCount = fallbackQuantity;
     }
   }
 

@@ -104,6 +104,47 @@ const incomplete = result.memoryGroups.find((group) => group.isIncomplete);
 assert.ok(incomplete);
 assert.equal(incomplete.missingFields.includes('storage'), true);
 
+const locationOnlyResult = aggregateModelProducts({
+  model,
+  products: [
+    {
+      id: 'p-roxo-sem-serial',
+      model_id: 'model-redmi-15',
+      name: 'Redmi 15',
+      sku: 'R158256R2',
+      slug: 'redmi-15-roxo-2',
+      specs: { ram: '8GB', storage: '256GB', color: 'Roxo' },
+      price_cost: 100000,
+      price_retail: 120000,
+      stock_quantity: 3,
+      status: 'active',
+    },
+  ],
+  units: [],
+  locationsByProductId: {
+    'p-roxo-sem-serial': [
+      {
+        deposit: { name: 'Loja Centro' },
+        location: { name: 'Vitrine' },
+        quantity: 2,
+        reserved_quantity: 1,
+      },
+      {
+        deposit_name: 'Estoque',
+        location_name: '26081933-d030-4a38-a84b-d839e0035218',
+        quantity: 1,
+      },
+    ],
+  },
+});
+
+assert.equal(locationOnlyResult.totals.availableCount, 3);
+assert.equal(locationOnlyResult.totals.stockCostValue, 300000);
+assert.equal(locationOnlyResult.totals.investedValue, 300000);
+assert.equal(locationOnlyResult.memoryGroups[0].colors[0].locations[0].label, 'Loja Centro / Vitrine');
+assert.equal(locationOnlyResult.memoryGroups[0].colors[0].locations[1].label, 'Estoque / Local sem nome');
+assert.equal(locationOnlyResult.memoryGroups[0].colors[0].products[0].availableCount, 3);
+
 const source = readFileSync(new URL('./modelProductAggregator.js', import.meta.url), 'utf8');
 assert.doesNotMatch(source, /supabase|vercel|VITE_SUPABASE|SUPABASE/i);
 
