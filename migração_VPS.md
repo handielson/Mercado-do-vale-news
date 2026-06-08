@@ -8087,3 +8087,11 @@ Resultado local inicial:
 - `node tmp-tests\model-aggregator-no-legacy-runtime-static.test.mjs`: OK.
 - `npm.cmd run build`: OK.
 - Browser local: Vite subiu em `http://127.0.0.1:5181/`, mas a ferramenta de navegador recebeu `ERR_CONNECTION_REFUSED`; validar visualmente no dev local ou na VPS antes de considerar a tela aprovada para uso diario.
+
+Publicacao VPS:
+- Branch limpa enviada: `codex/model-product-aggregator-clean-20260608`.
+- Commit publicado: `ef7880c` (`feat(products): add model aggregator page`).
+- Comando: `npm.cmd run deploy:vps-site`.
+- Resultado: OK em 2026-06-08. Release ativa: `/var/www/mdv-site/releases/20260608-160118`.
+- Verificacao publica: `https://www.mercadodovale.com.br/index.html` apontou para `index-DxIr6aBC.js`; `https://www.mercadodovale.com.br/assets/ModelProductAggregatorPage-BaKgpxJf.js` respondeu `200 OK`.
+- Rollback: `ssh root@76.13.232.162 "ln -sfn /var/www/mdv-site/previous /var/www/mdv-site/current"`.
