@@ -69,6 +69,9 @@ export function ProductSpecifications({
 
     if (!categoryConfig) return null;
 
+    const storageRequirement: FieldRequirement = categoryConfig.storage === 'required' ? 'required' : 'optional';
+    const ramRequirement: FieldRequirement = categoryConfig.ram === 'required' ? 'required' : 'optional';
+
     // Helper para Labels com Asterisco
     const FieldLabel = ({ label, required }: { label: string, required: boolean }) => (
         <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -300,24 +303,21 @@ export function ProductSpecifications({
                 )}
 
                 {/* ARMAZENAMENTO */}
-                {categoryConfig.storage && categoryConfig.storage !== 'off' && (
-                    <div className="space-y-1 min-w-0">
-                        <CapacitySelect
-                            value={watch('specs.storage') || ''}
-                            onChange={(val) => setValue('specs.storage', val)}
-                            label="Armazenamento"
-                            technicalName="specs.storage"
-                            placeholder="Selecione o armazenamento"
-                        />
-                        {categoryConfig.storage === 'required' && errors?.specs?.storage && (
-                            <p className="text-xs text-red-600 mt-1">{(errors.specs.storage as any)?.message}</p>
-                        )}
-                    </div>
-                )}
+                <div className="space-y-1 min-w-0">
+                    <CapacitySelect
+                        value={watch('specs.storage') || ''}
+                        onChange={(val) => setValue('specs.storage', val)}
+                        label="Armazenamento"
+                        technicalName="specs.storage"
+                        placeholder="Selecione o armazenamento"
+                    />
+                    {storageRequirement === 'required' && errors?.specs?.storage && (
+                        <p className="text-xs text-red-600 mt-1">{(errors.specs.storage as any)?.message}</p>
+                    )}
+                </div>
 
                 {/* RAM */}
-                {categoryConfig.ram && categoryConfig.ram !== 'off' && (
-                    <div className="space-y-1 min-w-0">
+                <div className="space-y-1 min-w-0">
                         <CapacitySelect
                             value={watch('specs.ram') || ''}
                             onChange={(val) => setValue('specs.ram', val)}
@@ -326,11 +326,10 @@ export function ProductSpecifications({
                             placeholder="Selecione a RAM"
                             type="ram"
                         />
-                        {categoryConfig.ram === 'required' && errors?.specs?.ram && (
+                        {ramRequirement === 'required' && errors?.specs?.ram && (
                             <p className="text-xs text-red-600 mt-1">{(errors.specs.ram as any)?.message}</p>
                         )}
-                    </div>
-                )}
+                </div>
 
                 {/* VERSÃO */}
                 {categoryConfig.version && categoryConfig.version !== 'off' && !templateValues?.['version'] && (
