@@ -279,38 +279,38 @@ export function generateClientOrderText(
     const { delivery, paymentLabel, grandTotal, address } = opts;
 
     const lines: string[] = [
-        '🛒 *Novo Pedido - Mercado do Vale*',
-        `📅 ${formatDate()}`,
+        'NOVO PEDIDO - Mercado do Vale',
+        `Data: ${formatDate()}`,
         '',
         'ITENS:',
     ];
 
     for (const item of items) {
         const { product, unit_price, quantity, selected_color, selected_memory } = item;
-        const variantParts = [selected_memory, selected_color].filter(Boolean).join(' • ');
-        const variantLabel = variantParts ? ` — ${variantParts}` : '';
+        const variantParts = [selected_memory, selected_color].filter(Boolean).join(' / ');
+        const variantLabel = variantParts ? ` - ${variantParts}` : '';
         const qtyLabel = quantity > 1 ? ` (x${quantity})` : '';
 
         lines.push(`* ${product.name}${variantLabel}${qtyLabel}  ${formatPrice(unit_price * quantity)}`);
-        lines.push(`  🔗 ${getProductUrl(product)}`);
+        lines.push(`  Link: ${getProductUrl(product)}`);
     }
 
     lines.push('');
-    lines.push(`💰 *Pagamento:* ${paymentLabel}`);
+    lines.push(`Pagamento: ${paymentLabel}`);
 
     if (delivery.type === 'delivery' && delivery.shippingOption) {
         const freight = formatPrice(Math.round((delivery.shippingOption.price ?? 0) * 100));
-        lines.push(`🚚 *Entrega:* ${delivery.shippingOption.name} — ${freight}`);
+        lines.push(`Entrega: ${delivery.shippingOption.name} - ${freight}`);
     } else {
-        lines.push('🏪 *Retirada na loja*');
+        lines.push('Retirada na loja');
     }
 
     if (address?.trim()) {
-        lines.push(`📍 *Endereço:* ${address.trim()}`);
+        lines.push(`Endereco: ${address.trim()}`);
     }
 
     lines.push('');
-    lines.push(`*Total: ${formatPrice(grandTotal)}*`);
+    lines.push(`Total: ${formatPrice(grandTotal)}`);
 
     return lines.join('\n');
 }

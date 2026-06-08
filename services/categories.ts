@@ -21,6 +21,24 @@ function generateSlug(name: string): string {
         .replace(/^-+|-+$/g, '');
 }
 
+function normalizeCategoryConfig(row: any): Category['config'] {
+    const config = typeof row.config === 'string' ? JSON.parse(row.config) : (row.config || {});
+    const categoryKey = String(row.slug || row.name || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    if (categoryKey === 'smartphones' || categoryKey === 'celulares') {
+        return {
+            ...config,
+            ram: config.ram && config.ram !== 'off' ? config.ram : 'required',
+            storage: config.storage && config.storage !== 'off' ? config.storage : 'required',
+        };
+    }
+
+    return config;
+}
+
 function mapRow(row: any): Category {
     return {
         id: row.id,
@@ -28,7 +46,7 @@ function mapRow(row: any): Category {
         sort_order: row.sort_order ?? 0,
         name: row.name,
         slug: row.slug,
-        config: typeof row.config === 'string' ? JSON.parse(row.config) : (row.config || {}),
+        config: normalizeCategoryConfig(row),
         warranty_days: row.warranty_days || 90,
         production_days: row.production_days || 0,
         extended_warranty_enabled: !!row.extended_warranty_enabled,
