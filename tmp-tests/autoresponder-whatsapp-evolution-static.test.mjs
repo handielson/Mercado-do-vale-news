@@ -17,13 +17,26 @@ const server = readFileSync('vps_server.js', 'utf8');
 
 [
   "getWhatsAppConnectionState",
+  "getWhatsAppDebug",
   "connectWhatsApp",
   "disconnectWhatsApp",
+  "/autoresponder/whatsapp/debug",
   "/autoresponder/whatsapp/state",
   "/autoresponder/whatsapp/connect",
   "/autoresponder/whatsapp/disconnect",
 ].forEach((needle) => {
   assert.ok(service.includes(needle) || server.includes(needle), `Evolution API wiring must include ${needle}`);
+});
+
+[
+  "evolutionStatus",
+  "fetchInstances",
+  "connectionState",
+  "formatEvolutionMessage",
+  "number: process.env.EVOLUTION_INSTANCE_NUMBER || ''",
+  "events: ['CONNECTION_UPDATE', 'MESSAGES_UPSERT']",
+].forEach((needle) => {
+  assert.ok(server.includes(needle), `Evolution API debug must expose ${needle}`);
 });
 
 [

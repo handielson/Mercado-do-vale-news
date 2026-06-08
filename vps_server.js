@@ -11449,7 +11449,21 @@ const EVOLUTION_GLOBAL_API_KEY = 'ChaveSecretaGeradaParaAutenticacaoEvolution123
 const EVOLUTION_BASE_URL = 'http://127.0.0.1:8080';
 const EVOLUTION_INSTANCE_NAME = 'mercado_do_vale';
 
-async function callEvolutionApi(endpoint, method = 'GET', body = null) {
+function formatEvolutionMessage(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(formatEvolutionMessage).filter(Boolean).join('; ');
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+async function callEvolutionApiDetailed(endpoint, method = 'GET', body = null) {
   const response = await fetch(`${EVOLUTION_BASE_URL}${endpoint}`, {
     method,
     headers: {
@@ -11459,11 +11473,22 @@ async function callEvolutionApi(endpoint, method = 'GET', body = null) {
     body: body ? JSON.stringify(body) : null,
   });
   const text = await response.text();
+  let parsed = text;
   try {
-    return JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch {
-    return text;
+    parsed = text;
   }
+  return {
+    ok: response.ok,
+    status: response.status,
+    body: parsed,
+  };
+}
+
+async function callEvolutionApi(endpoint, method = 'GET', body = null) {
+  const result = await callEvolutionApiDetailed(endpoint, method, body);
+  return result.body;
 }
 
 fastify.get('/autoresponder/whatsapp/state', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -11475,28 +11500,75 @@ fastify.get('/autoresponder/whatsapp/state', { preHandler: requireSyncKey }, asy
   }
 });
 
+fastify.get('/autoresponder/whatsapp/debug', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    const [evolutionStatus, fetchInstances, connectionState] = await Promise.all([
+      callEvolutionApiDetailed('/'),
+      callEvolutionApiDetailed('/instance/fetchInstances'),
+      callEvolutionApiDetailed(`/instance/connectionState/${EVOLUTION_INSTANCE_NAME}`),
+    ]);
+
+    return {
+      baseUrl: EVOLUTION_BASE_URL,
+      instanceName: EVOLUTION_INSTANCE_NAME,
+      evolutionStatus,
+      fetchInstances,
+      connectionState,
+    };
+  } catch (err) {
+    return reply.code(500).send({
+      error: true,
+      message: err.message,
+      baseUrl: EVOLUTION_BASE_URL,
+      instanceName: EVOLUTION_INSTANCE_NAME,
+    });
+  }
+});
+
 fastify.get('/autoresponder/whatsapp/connect', { preHandler: requireSyncKey }, async (req, reply) => {
   try {
     const createBody = {
       instanceName: EVOLUTION_INSTANCE_NAME,
       qrcode: true,
+      number: process.env.EVOLUTION_INSTANCE_NUMBER || '',
       integration: 'WHATSAPP-BAILEYS',
       webhook: {
         enabled: true,
         url: 'https://api.xiaomipetrolina.com.br/autoresponder-webhook',
+        byEvents: true,
+        base64: false,
         headers: {
           'x-autoresponder-token': process.env.AUTORESPONDER_TOKEN || ''
-        }
+        },
+        events: ['CONNECTION_UPDATE', 'MESSAGES_UPSERT']
       }
     };
-    try {
-      await callEvolutionApi('/instance/create', 'POST', createBody);
-    } catch (createErr) {
-      // Ignora erro caso a instância já exista
+
+    const createResult = await callEvolutionApiDetailed('/instance/create', 'POST', createBody);
+    const createMessage = formatEvolutionMessage(createResult.body?.message || createResult.body?.response || createResult.body);
+    const alreadyExists = /already exists|existe|exist/i.test(createMessage);
+    if ((!createResult.ok || createResult.body?.error === true) && !alreadyExists) {
+      return reply.code(502).send({
+        error: true,
+        phase: 'create',
+        message: createMessage || 'Evolution API failed to create the WhatsApp instance.',
+        evolutionStatus: createResult.status,
+        evolution: createResult.body,
+      });
     }
 
-    const result = await callEvolutionApi(`/instance/connect/${EVOLUTION_INSTANCE_NAME}`);
-    return result;
+    const connectResult = await callEvolutionApiDetailed(`/instance/connect/${EVOLUTION_INSTANCE_NAME}`);
+    if (!connectResult.ok || connectResult.body?.error === true) {
+      return reply.code(502).send({
+        error: true,
+        phase: 'connect',
+        message: formatEvolutionMessage(connectResult.body?.message || connectResult.body?.response || connectResult.body)
+          || 'Evolution API failed to connect the WhatsApp instance.',
+        evolutionStatus: connectResult.status,
+        evolution: connectResult.body,
+      });
+    }
+    return connectResult.body;
   } catch (err) {
     return reply.code(500).send({ error: err.message });
   }

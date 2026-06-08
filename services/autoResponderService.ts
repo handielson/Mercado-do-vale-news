@@ -293,6 +293,10 @@ export const autoResponderService = {
         return vpsClient.get<{ instance?: { state: string } }>('/autoresponder/whatsapp/state');
     },
 
+    getWhatsAppDebug: (): Promise<any> => {
+        return vpsClient.get<any>('/autoresponder/whatsapp/debug');
+    },
+
     connectWhatsApp: (): Promise<{ base64?: string; pairingCode?: string; instance?: { state: string } }> => {
         return vpsClient.get<{ base64?: string; pairingCode?: string; instance?: { state: string } }>('/autoresponder/whatsapp/connect');
     },
