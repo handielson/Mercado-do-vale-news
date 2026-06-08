@@ -260,6 +260,59 @@ assert.deepEqual(
   ['860176074323905', '860176074350221', '860176074227403']
 );
 
+const serializedStockQuantityNoiseResult = aggregateModelProducts({
+  model,
+  products: [
+    {
+      id: 'p-roxo-noise-a',
+      model_id: 'model-redmi-15',
+      name: 'Redmi 15',
+      sku: 'R158256R',
+      slug: 'redmi-15-roxo-noise-a',
+      specs: { ram: '8GB', storage: '256GB', color: 'Roxo', imei1: '860176074323905' },
+      price_cost: 102600,
+      stock_quantity: 2,
+      status: 'active',
+    },
+    {
+      id: 'p-roxo-noise-b',
+      model_id: 'model-redmi-15',
+      name: 'Redmi 15',
+      sku: 'R158256R',
+      slug: 'redmi-15-roxo-noise-b',
+      specs: { ram: '8GB', storage: '256GB', color: 'Roxo', imei1: '860176074350221' },
+      price_cost: 102600,
+      stock_quantity: 2,
+      status: 'active',
+    },
+    {
+      id: 'p-roxo-noise-c',
+      model_id: 'model-redmi-15',
+      name: 'Redmi 15',
+      sku: 'R158256R',
+      slug: 'redmi-15-roxo-noise-c',
+      specs: { ram: '8GB', storage: '256GB', color: 'Roxo', imei1: '860176074227403' },
+      price_cost: 102600,
+      stock_quantity: 1,
+      status: 'active',
+    },
+  ],
+  units: [],
+  locationsByProductId: {
+    'p-roxo-noise-a': [{ location_id: 'geral', deposit_name: 'Loja Principal', location_name: 'Estoque Geral', quantity: 3 }],
+    'p-roxo-noise-b': [{ location_id: 'geral', deposit_name: 'Loja Principal', location_name: 'Estoque Geral', quantity: 3 }],
+    'p-roxo-noise-c': [{ location_id: 'geral', deposit_name: 'Loja Principal', location_name: 'Estoque Geral', quantity: 3 }],
+  },
+});
+
+const roxoWithNoisyStockQuantity = serializedStockQuantityNoiseResult.memoryGroups[0].colors[0];
+assert.equal(roxoWithNoisyStockQuantity.availableCount, 3);
+assert.equal(roxoWithNoisyStockQuantity.skuGroups[0].registeredCount, 3);
+assert.equal(roxoWithNoisyStockQuantity.skuGroups[0].locationCount, 3);
+assert.equal(roxoWithNoisyStockQuantity.skuGroups[0].stockQuantityCount, 5);
+assert.equal(roxoWithNoisyStockQuantity.skuGroups[0].hasStockDivergence, false);
+assert.equal(roxoWithNoisyStockQuantity.stockDivergences.length, 0);
+
 const source = readFileSync(new URL('./modelProductAggregator.js', import.meta.url), 'utf8');
 assert.doesNotMatch(source, /supabase|vercel|VITE_SUPABASE|SUPABASE/i);
 

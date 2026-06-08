@@ -205,7 +205,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                         <span className="font-sans text-slate-400"> · {product.availableCount} un.</span>
                                                                         {product.hasStockDivergence && (
                                                                             <span className="block font-sans text-[11px] font-semibold text-amber-700">
-                                                                                Divergencia: {product.registeredCount} identificadores, {product.locationCount} em locais, {product.stockQuantityCount} no estoque
+                                                                                Divergencia: {product.registeredCount} IMEIs cadastrados, {product.locationCount} em locais
                                                                             </span>
                                                                         )}
                                                                     </div>
@@ -220,7 +220,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                             <div>{locationText(colorGroup.locations)}</div>
                                                             {colorGroup.stockDivergences?.length > 0 && (
                                                                 <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-semibold text-amber-800">
-                                                                    Conferir locais: identificadores e saldos nao batem.
+                                                                    Conferir locais: IMEIs cadastrados e locais nao batem.
                                                                 </div>
                                                             )}
                                                         </td>

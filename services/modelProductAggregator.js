@@ -251,9 +251,7 @@ function applyFallbackStockBySku(colorGroup) {
     const representative = group.products.reduce((best, product) => (
       Number(product.availableCount || 0) > Number(best.availableCount || 0) ? product : best
     ), group.products[0]);
-    const hasStockDivergence = registeredQuantity > 0 && (
-      registeredQuantity !== locationQuantity || registeredQuantity !== stockQuantity
-    );
+    const hasStockDivergence = registeredQuantity > 0 && registeredQuantity !== locationQuantity;
 
     addAvailableFallback(colorGroup, quantity, representative.priceCost);
     const skuGroup = {
