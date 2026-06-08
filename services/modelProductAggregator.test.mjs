@@ -85,6 +85,7 @@ assert.ok(memoryGroup);
 assert.equal(memoryGroup.availableCount, 2);
 assert.equal(memoryGroup.soldCount, 1);
 assert.equal(memoryGroup.stockCostValue, 228000);
+assert.equal(memoryGroup.averageStockCost, 114000);
 assert.equal(memoryGroup.investedValue, 339000);
 assert.equal(memoryGroup.returnedValue, 122600);
 assert.equal(memoryGroup.colors.length, 2);
@@ -93,9 +94,11 @@ const roxo = memoryGroup.colors.find((group) => group.color === 'Roxo');
 assert.ok(roxo);
 assert.equal(roxo.availableCount, 1);
 assert.equal(roxo.soldCount, 1);
+assert.equal(roxo.averageStockCost, 110000);
 assert.equal(roxo.units.length, 2);
 assert.equal(roxo.locations.length, 1);
 assert.equal(roxo.locations[0].location_name, 'Loja');
+assert.equal(roxo.units[0].locationLabel, 'Principal / Loja');
 assert.equal(roxo.products[0].publicUrl, '/produto/redmi-15-roxo');
 assert.equal(roxo.products[0].editUrl, '/admin/products/p-roxo/redmi-15-roxo');
 assert.equal(roxo.products[0].modelPanelUrl, '/admin/products/models/model-redmi-15');
@@ -140,10 +143,122 @@ const locationOnlyResult = aggregateModelProducts({
 
 assert.equal(locationOnlyResult.totals.availableCount, 3);
 assert.equal(locationOnlyResult.totals.stockCostValue, 300000);
+assert.equal(locationOnlyResult.totals.averageStockCost, 100000);
 assert.equal(locationOnlyResult.totals.investedValue, 300000);
 assert.equal(locationOnlyResult.memoryGroups[0].colors[0].locations[0].label, 'Loja Centro / Vitrine');
 assert.equal(locationOnlyResult.memoryGroups[0].colors[0].locations[1].label, 'Estoque / Local sem nome');
 assert.equal(locationOnlyResult.memoryGroups[0].colors[0].products[0].availableCount, 3);
+
+const duplicateSkuResult = aggregateModelProducts({
+  model,
+  products: [
+    {
+      id: 'p-titanio-a',
+      model_id: 'model-redmi-15',
+      name: 'Redmi 15',
+      sku: 'R158256T',
+      slug: 'redmi-15-titanio-a',
+      specs: { ram: '8GB', storage: '256GB', color: 'Titanio' },
+      price_cost: 109400,
+      stock_quantity: 3,
+      status: 'active',
+    },
+    {
+      id: 'p-titanio-b',
+      model_id: 'model-redmi-15',
+      name: 'Redmi 15',
+      sku: 'R158256T',
+      slug: 'redmi-15-titanio-b',
+      specs: { ram: '8GB', storage: '256GB', color: 'Titanio' },
+      price_cost: 109400,
+      stock_quantity: 3,
+      status: 'active',
+    },
+    {
+      id: 'p-titanio-c',
+      model_id: 'model-redmi-15',
+      name: 'Redmi 15',
+      sku: 'R158256T',
+      slug: 'redmi-15-titanio-c',
+      specs: { ram: '8GB', storage: '256GB', color: 'Titanio' },
+      price_cost: 109400,
+      stock_quantity: 3,
+      status: 'active',
+    },
+  ],
+  units: [],
+  locationsByProductId: {
+    'p-titanio-a': [{ location_id: 'loja-geral', deposit_name: 'Loja Principal', location_name: 'Estoque Geral', quantity: 3 }],
+    'p-titanio-b': [{ location_id: 'loja-geral', deposit_name: 'Loja Principal', location_name: 'Estoque Geral', quantity: 3 }],
+    'p-titanio-c': [{ location_id: 'loja-geral', deposit_name: 'Loja Principal', location_name: 'Estoque Geral', quantity: 3 }],
+  },
+});
+
+const duplicateTitanio = duplicateSkuResult.memoryGroups[0].colors[0];
+assert.equal(duplicateTitanio.availableCount, 3);
+assert.equal(duplicateTitanio.stockCostValue, 328200);
+assert.equal(duplicateTitanio.skuGroups.length, 1);
+assert.equal(duplicateTitanio.skuGroups[0].sku, 'R158256T');
+assert.equal(duplicateTitanio.skuGroups[0].availableCount, 3);
+
+const serializedDivergenceResult = aggregateModelProducts({
+  model,
+  products: [
+    {
+      id: 'p-roxo-a',
+      model_id: 'model-redmi-15',
+      name: 'Redmi 15',
+      sku: 'R158256R',
+      slug: 'redmi-15-roxo-a',
+      specs: { ram: '8GB', storage: '256GB', color: 'Roxo', imei1: '860176074323905', imei2: '860176074323913' },
+      price_cost: 102600,
+      stock_quantity: 1,
+      status: 'active',
+    },
+    {
+      id: 'p-roxo-b',
+      model_id: 'model-redmi-15',
+      name: 'Redmi 15',
+      sku: 'R158256R',
+      slug: 'redmi-15-roxo-b',
+      specs: { ram: '8GB', storage: '256GB', color: 'Roxo', imei1: '860176074350221', imei2: '860176074350239' },
+      price_cost: 102600,
+      stock_quantity: 0,
+      status: 'active',
+    },
+    {
+      id: 'p-roxo-c',
+      model_id: 'model-redmi-15',
+      name: 'Redmi 15',
+      sku: 'R158256R',
+      slug: 'redmi-15-roxo-c',
+      specs: { ram: '8GB', storage: '256GB', color: 'Roxo', imei1: '860176074227403', imei2: '860176074227411' },
+      price_cost: 102600,
+      stock_quantity: 1,
+      status: 'active',
+    },
+  ],
+  units: [],
+  locationsByProductId: {
+    'p-roxo-a': [{ location_id: 'entrada', deposit_name: 'Deposito', location_name: 'Entrada / Conferencia', quantity: 1 }],
+    'p-roxo-b': [],
+    'p-roxo-c': [{ location_id: 'geral', deposit_name: 'Loja Principal', location_name: 'Estoque Geral', quantity: 1 }],
+  },
+});
+
+const divergentRoxo = serializedDivergenceResult.memoryGroups[0].colors[0];
+assert.equal(divergentRoxo.availableCount, 3);
+assert.equal(divergentRoxo.stockCostValue, 307800);
+assert.equal(divergentRoxo.skuGroups[0].registeredCount, 3);
+assert.equal(divergentRoxo.skuGroups[0].locationCount, 2);
+assert.equal(divergentRoxo.skuGroups[0].stockQuantityCount, 2);
+assert.equal(divergentRoxo.skuGroups[0].hasStockDivergence, true);
+assert.equal(divergentRoxo.stockDivergences.length, 1);
+assert.equal(divergentRoxo.skuGroups[0].identifiers.length, 3);
+assert.deepEqual(
+  divergentRoxo.skuGroups[0].identifiers.map((item) => item.imei1),
+  ['860176074323905', '860176074350221', '860176074227403']
+);
 
 const source = readFileSync(new URL('./modelProductAggregator.js', import.meta.url), 'utf8');
 assert.doesNotMatch(source, /supabase|vercel|VITE_SUPABASE|SUPABASE/i);

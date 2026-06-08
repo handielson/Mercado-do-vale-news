@@ -53,6 +53,7 @@ function emptyTotals() {
     reservedCount: 0,
     rmaCount: 0,
     stockCostValue: 0,
+    averageStockCost: 0,
     investedValue: 0,
     returnedValue: 0,
   };
@@ -74,6 +75,21 @@ function addUnitToTotals(target, unit) {
   }
 }
 
+function resetTotals(target) {
+  const totals = emptyTotals();
+  for (const [key, value] of Object.entries(totals)) target[key] = value;
+}
+
+function addTotals(target, source) {
+  target.availableCount += source.availableCount;
+  target.soldCount += source.soldCount;
+  target.reservedCount += source.reservedCount;
+  target.rmaCount += source.rmaCount;
+  target.stockCostValue += source.stockCostValue;
+  target.investedValue += source.investedValue;
+  target.returnedValue += source.returnedValue;
+}
+
 function normalizeLocation(location) {
   const depositName = location.deposit_name || location.deposit?.name || 'Deposito';
   const rawLocationName = location.location_name || location.location?.name || '';
@@ -91,11 +107,176 @@ function normalizeLocation(location) {
   };
 }
 
+function locationKey(location) {
+  return String(location.location_id || location.id || location.label || '').trim()
+    || `${location.depositName || location.deposit_name || ''}|${location.locationName || location.location_name || ''}`;
+}
+
+function dedupeLocations(locations) {
+  const byLocation = new Map();
+  for (const location of locations || []) {
+    const key = locationKey(location);
+    const existing = byLocation.get(key);
+    if (!existing) {
+      byLocation.set(key, { ...location });
+      continue;
+    }
+    existing.quantity = Math.max(Number(existing.quantity || 0), Number(location.quantity || 0));
+    existing.reservedQuantity = Math.max(Number(existing.reservedQuantity || 0), Number(location.reservedQuantity || 0));
+    existing.availableQuantity = Math.max(0, existing.quantity - existing.reservedQuantity);
+  }
+  return [...byLocation.values()];
+}
+
+function applyAverageStockCost(target) {
+  target.averageStockCost = target.availableCount > 0
+    ? Math.round(target.stockCostValue / target.availableCount)
+    : 0;
+}
+
 function addAvailableFallback(target, quantity, costValue) {
   if (quantity <= 0) return;
   target.availableCount += quantity;
   target.stockCostValue += quantity * costValue;
   target.investedValue += quantity * costValue;
+}
+
+function hasProductIdentifier(product) {
+  const specs = product.raw?.specs || {};
+  return Boolean(
+    String(specs.imei1 || specs.imei_1 || specs.imei2 || specs.imei_2 || specs.serial || specs.serial_number || '').trim()
+  );
+}
+
+function productIdentifier(product) {
+  const specs = product.raw?.specs || {};
+  const identifier = {
+    productId: product.id,
+    sku: product.sku || '',
+    imei1: String(specs.imei1 || specs.imei_1 || '').trim(),
+    imei2: String(specs.imei2 || specs.imei_2 || '').trim(),
+    serial: String(specs.serial || specs.serial_number || '').trim(),
+    editUrl: product.editUrl,
+  };
+  return identifier.imei1 || identifier.imei2 || identifier.serial ? identifier : null;
+}
+
+function isActiveProduct(product) {
+  return !['inactive', 'archived', 'deleted', 'sold'].includes(String(product.status || '').toLowerCase());
+}
+
+function skuKey(product) {
+  return normalizeKey(product.sku) || String(product.id || '');
+}
+
+function buildSkuGroups(colorGroup) {
+  const groups = new Map();
+  for (const product of colorGroup.products) {
+    const key = skuKey(product);
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        sku: product.sku || 'Sem SKU',
+        products: [],
+        identifiers: [],
+        availableCount: 0,
+        editUrl: product.editUrl,
+        publicUrl: product.publicUrl,
+        stockLocationUrl: product.stockLocationUrl,
+      };
+      groups.set(key, group);
+    }
+    group.products.push(product);
+    const identifier = productIdentifier(product);
+    if (identifier) group.identifiers.push(identifier);
+  }
+
+  for (const fallbackGroup of colorGroup.fallbackSkuGroups || []) {
+    const group = groups.get(fallbackGroup.key);
+    if (group) {
+      group.availableCount = fallbackGroup.availableCount;
+      group.registeredCount = fallbackGroup.registeredCount;
+      group.locationCount = fallbackGroup.locationCount;
+      group.stockQuantityCount = fallbackGroup.stockQuantityCount;
+      group.hasStockDivergence = fallbackGroup.hasStockDivergence;
+      group.identifiers = fallbackGroup.identifiers;
+    }
+  }
+
+  for (const group of groups.values()) {
+    if (group.availableCount === 0) {
+      group.availableCount = group.products.reduce((sum, product) => sum + Number(product.availableCount || 0), 0);
+    }
+    if (group.products.length > 1) {
+      group.duplicateCount = group.products.length;
+    }
+  }
+
+  return [...groups.values()].sort((a, b) => a.sku.localeCompare(b.sku));
+}
+
+function applyFallbackStockBySku(colorGroup) {
+  const fallbackSources = colorGroup.fallbackSources || [];
+  if (fallbackSources.length === 0) {
+    colorGroup.locations = dedupeLocations(colorGroup.locations);
+    colorGroup.skuGroups = buildSkuGroups(colorGroup);
+    return;
+  }
+
+  const fallbackBySku = new Map();
+  for (const source of fallbackSources) {
+    const key = skuKey(source.product);
+    let group = fallbackBySku.get(key);
+    if (!group) {
+      group = { key, products: [], locations: [] };
+      fallbackBySku.set(key, group);
+    }
+    group.products.push(source.product);
+    group.locations.push(...source.locations);
+  }
+
+  const fallbackSkuGroups = [];
+  const divergences = [];
+  for (const group of fallbackBySku.values()) {
+    const dedupedLocations = dedupeLocations(group.locations);
+    const locationQuantity = dedupedLocations.reduce((sum, location) => sum + Number(location.quantity || 0), 0);
+    const registeredQuantity = group.products.filter((product) => isActiveProduct(product) && hasProductIdentifier(product)).length;
+    const identifiers = group.products
+      .map(productIdentifier)
+      .filter(Boolean);
+    const stockQuantity = group.products.reduce((sum, product) => sum + Number(product.availableCount || 0), 0);
+    const maxProductQuantity = Math.max(...group.products.map((product) => Number(product.availableCount || 0)), 0);
+    const quantity = registeredQuantity > 0 ? registeredQuantity : (locationQuantity > 0 ? locationQuantity : maxProductQuantity);
+    const representative = group.products.reduce((best, product) => (
+      Number(product.availableCount || 0) > Number(best.availableCount || 0) ? product : best
+    ), group.products[0]);
+    const hasStockDivergence = registeredQuantity > 0 && (
+      registeredQuantity !== locationQuantity || registeredQuantity !== stockQuantity
+    );
+
+    addAvailableFallback(colorGroup, quantity, representative.priceCost);
+    const skuGroup = {
+      key: group.key,
+      sku: representative.sku || 'Sem SKU',
+      availableCount: quantity,
+      registeredCount: registeredQuantity,
+      locationCount: locationQuantity,
+      stockQuantityCount: stockQuantity,
+      stockCostValue: quantity * representative.priceCost,
+      products: group.products,
+      identifiers,
+      locations: dedupedLocations,
+      hasStockDivergence,
+    };
+    fallbackSkuGroups.push(skuGroup);
+    if (hasStockDivergence) divergences.push(skuGroup);
+  }
+
+  colorGroup.locations = dedupeLocations(colorGroup.locations);
+  colorGroup.fallbackSkuGroups = fallbackSkuGroups;
+  colorGroup.skuGroups = buildSkuGroups(colorGroup);
+  colorGroup.stockDivergences = divergences;
 }
 
 export function getProductVariationSpecs(product) {
@@ -173,12 +354,21 @@ export function aggregateModelProducts(input) {
         products: [],
         units: [],
         locations: [],
+        fallbackSources: [],
+        fallbackSkuGroups: [],
+        skuGroups: [],
+        stockDivergences: [],
         ...emptyTotals(),
       };
       memoryGroup.colors.push(colorGroup);
     }
     colorGroup.products.push(productView);
     const normalizedLocations = (locationsByProductId[String(product.id)] || []).map(normalizeLocation);
+    const locationLabelById = new Map(
+      normalizedLocations
+        .map((location) => [String(location.location_id || location.id || ''), location.label])
+        .filter(([id]) => id)
+    );
     colorGroup.locations.push(...normalizedLocations);
 
     const productUnits = unitsByProductId.get(String(product.id)) || [];
@@ -196,6 +386,7 @@ export function aggregateModelProducts(input) {
         status,
         locationId: unit.location_id || null,
         depositId: unit.deposit_id || null,
+        locationLabel: locationLabelById.get(String(unit.location_id || '')) || '',
         saleId: unit.sale_id || null,
         orderId: unit.order_id || null,
         costValue,
@@ -207,23 +398,30 @@ export function aggregateModelProducts(input) {
       };
       colorGroup.units.push(unitView);
       addUnitToTotals(colorGroup, unitView);
-      addUnitToTotals(memoryGroup, unitView);
     }
 
     if (productUnits.length === 0) {
-      const locationQuantity = normalizedLocations.reduce((sum, location) => sum + location.quantity, 0);
-      const fallbackQuantity = locationQuantity > 0 ? locationQuantity : Number(product.stock_quantity || 0);
-      addAvailableFallback(colorGroup, fallbackQuantity, productView.priceCost);
-      addAvailableFallback(memoryGroup, fallbackQuantity, productView.priceCost);
-      productView.availableCount = fallbackQuantity;
+      colorGroup.fallbackSources.push({
+        product: productView,
+        locations: normalizedLocations,
+      });
     }
   }
 
   const memoryGroups = [...memoryGroupMap.values()]
-    .map((memoryGroup) => ({
-      ...memoryGroup,
-      colors: memoryGroup.colors.sort((a, b) => a.color.localeCompare(b.color)),
-    }))
+    .map((memoryGroup) => {
+      resetTotals(memoryGroup);
+      memoryGroup.colors.forEach((colorGroup) => {
+        applyFallbackStockBySku(colorGroup);
+        applyAverageStockCost(colorGroup);
+        addTotals(memoryGroup, colorGroup);
+      });
+      applyAverageStockCost(memoryGroup);
+      return {
+        ...memoryGroup,
+        colors: memoryGroup.colors.sort((a, b) => a.color.localeCompare(b.color)),
+      };
+    })
     .sort((a, b) => {
       if (a.isIncomplete !== b.isIncomplete) return a.isIncomplete ? 1 : -1;
       return `${a.ram} ${a.storage}`.localeCompare(`${b.ram} ${b.storage}`);
@@ -239,6 +437,7 @@ export function aggregateModelProducts(input) {
     totals.investedValue += group.investedValue;
     totals.returnedValue += group.returnedValue;
   }
+  applyAverageStockCost(totals);
 
   return {
     model: input.model,

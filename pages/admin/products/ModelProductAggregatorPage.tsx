@@ -35,6 +35,10 @@ function locationText(locations: any[]): string {
         .join(' | ') || '-';
 }
 
+function unitLocationText(unit: any): string {
+    return unit.locationLabel || unit.locationId || unit.depositId || '-';
+}
+
 export const ModelProductAggregatorPage: React.FC = () => {
     const { modelId } = useParams<{ modelId: string }>();
     const navigate = useNavigate();
@@ -133,10 +137,11 @@ export const ModelProductAggregatorPage: React.FC = () => {
 
             {data && (
                 <>
-                    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
                         <SummaryCard label="Estoque atual" value={`${data.totals.availableCount} un.`} />
                         <SummaryCard label="Vendidos" value={`${data.totals.soldCount} un.`} />
                         <SummaryCard label="Valor em estoque" value={money(data.totals.stockCostValue)} />
+                        <SummaryCard label="Preco medio estoque" value={money(data.totals.averageStockCost)} />
                         <SummaryCard label="Valor investido" value={money(data.totals.investedValue)} />
                         <SummaryCard label="Valor ja retornado" value={money(data.totals.returnedValue)} />
                     </section>
@@ -155,10 +160,11 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                             </p>
                                         )}
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-5">
+                                    <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-3 xl:grid-cols-6">
                                         <Metric label="Estoque" value={`${memoryGroup.availableCount} un.`} />
                                         <Metric label="Vendidos" value={`${memoryGroup.soldCount} un.`} />
                                         <Metric label="Em estoque" value={money(memoryGroup.stockCostValue)} />
+                                        <Metric label="Preco medio" value={money(memoryGroup.averageStockCost)} />
                                         <Metric label="Investido" value={money(memoryGroup.investedValue)} />
                                         <Metric label="Retornado" value={money(memoryGroup.returnedValue)} />
                                     </div>
@@ -173,8 +179,9 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                 <th className="px-3 py-3 text-right">Estoque</th>
                                                 <th className="px-3 py-3 text-right">Vendidos</th>
                                                 <th className="px-3 py-3 text-right">Valor estoque</th>
+                                                <th className="px-3 py-3 text-right">Preco medio</th>
                                                 <th className="px-3 py-3">Locais</th>
-                                                <th className="px-3 py-3 print:hidden">Acoes</th>
+                                                <th className="px-3 py-3 print:hidden">Atalhos por SKU</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -189,10 +196,18 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                         </td>
                                                         <td className="px-3 py-4">
                                                             <div className="space-y-1">
-                                                                {colorGroup.products.map((product: any) => (
-                                                                    <div key={product.id} className="font-mono text-xs text-slate-700">
+                                                                {(colorGroup.skuGroups || colorGroup.products).map((product: any) => (
+                                                                    <div key={product.key || product.id} className="font-mono text-xs text-slate-700">
                                                                         {product.sku || '-'}
+                                                                        {product.duplicateCount > 1 && (
+                                                                            <span className="font-sans text-amber-600"> ({product.duplicateCount} cadastros)</span>
+                                                                        )}
                                                                         <span className="font-sans text-slate-400"> · {product.availableCount} un.</span>
+                                                                        {product.hasStockDivergence && (
+                                                                            <span className="block font-sans text-[11px] font-semibold text-amber-700">
+                                                                                Divergencia: {product.registeredCount} identificadores, {product.locationCount} em locais, {product.stockQuantityCount} no estoque
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -200,22 +215,73 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                         <td className="px-3 py-4 text-right font-bold text-slate-900">{colorGroup.availableCount} un.</td>
                                                         <td className="px-3 py-4 text-right">{colorGroup.soldCount} un.</td>
                                                         <td className="px-3 py-4 text-right font-semibold text-slate-900">{money(colorGroup.stockCostValue)}</td>
-                                                        <td className="px-3 py-4 text-xs leading-5 text-slate-600">{locationText(colorGroup.locations)}</td>
+                                                        <td className="px-3 py-4 text-right font-semibold text-slate-900">{money(colorGroup.averageStockCost)}</td>
+                                                        <td className="px-3 py-4 text-xs leading-5 text-slate-600">
+                                                            <div>{locationText(colorGroup.locations)}</div>
+                                                            {colorGroup.stockDivergences?.length > 0 && (
+                                                                <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 font-semibold text-amber-800">
+                                                                    Conferir locais: identificadores e saldos nao batem.
+                                                                </div>
+                                                            )}
+                                                        </td>
                                                         <td className="px-3 py-4 print:hidden">
-                                                            <div className="flex flex-wrap gap-1.5">
-                                                                {colorGroup.products.map((product: any) => (
-                                                                    <ProductActions key={product.id} product={product} onNavigate={navigate} />
+                                                            <div className="space-y-2">
+                                                                {(colorGroup.skuGroups || colorGroup.products).map((product: any) => (
+                                                                    <ProductActions key={product.key || product.id} product={product} onNavigate={navigate} />
                                                                 ))}
                                                             </div>
                                                         </td>
                                                     </tr>
+                                                    {(colorGroup.skuGroups || []).some((group: any) => group.identifiers?.length > 0) && (
+                                                        <tr className="bg-slate-50/70">
+                                                            <td colSpan={8} className="px-3 py-3">
+                                                                <div>
+                                                                    <div className="text-xs font-bold uppercase text-slate-500">
+                                                                        IMEIs cadastrados nos produtos
+                                                                    </div>
+                                                                    <div className="mt-3 overflow-x-auto">
+                                                                        <table className="min-w-full text-left text-xs">
+                                                                            <thead className="text-slate-500">
+                                                                                <tr>
+                                                                                    <th className="px-2 py-2">SKU</th>
+                                                                                    <th className="px-2 py-2">IMEI 1</th>
+                                                                                    <th className="px-2 py-2">IMEI 2</th>
+                                                                                    <th className="px-2 py-2">Serial</th>
+                                                                                    <th className="px-2 py-2 print:hidden">Cadastro</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody className="divide-y divide-slate-100 bg-white">
+                                                                                {(colorGroup.skuGroups || []).flatMap((group: any) => group.identifiers || []).map((identifier: any) => (
+                                                                                    <tr key={identifier.productId}>
+                                                                                        <td className="px-2 py-2 font-semibold text-slate-700">{identifier.sku || '-'}</td>
+                                                                                        <td className="px-2 py-2 font-mono">{identifier.imei1 || '-'}</td>
+                                                                                        <td className="px-2 py-2 font-mono">{identifier.imei2 || '-'}</td>
+                                                                                        <td className="px-2 py-2 font-mono">{identifier.serial || '-'}</td>
+                                                                                        <td className="px-2 py-2 print:hidden">
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => navigate(identifier.editUrl)}
+                                                                                                className="text-xs font-semibold text-blue-700 hover:text-blue-900"
+                                                                                            >
+                                                                                                Abrir
+                                                                                            </button>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
                                                     {colorGroup.units.length > 0 && (
                                                         <tr className="bg-slate-50/70">
-                                                            <td colSpan={7} className="px-3 py-3">
-                                                                <details>
-                                                                    <summary className="cursor-pointer text-xs font-bold text-slate-500">
-                                                                        Ver IMEIs e seriais ({colorGroup.units.length})
-                                                                    </summary>
+                                                            <td colSpan={8} className="px-3 py-3">
+                                                                <div>
+                                                                    <div className="text-xs font-bold uppercase text-slate-500">
+                                                                        Unidades com IMEI, serial e custo ({colorGroup.units.length})
+                                                                    </div>
                                                                     <div className="mt-3 overflow-x-auto">
                                                                         <table className="min-w-full text-left text-xs">
                                                                             <thead className="text-slate-500">
@@ -240,7 +306,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                                             <td className="px-2 py-2 font-mono">{unit.imei2 || '-'}</td>
                                                                                             <td className="px-2 py-2 font-mono">{unit.serial || '-'}</td>
                                                                                             <td className="px-2 py-2">{statusLabel(unit.status)}</td>
-                                                                                            <td className="px-2 py-2">{unit.locationId || unit.depositId || '-'}</td>
+                                                                                            <td className="px-2 py-2">{unitLocationText(unit)}</td>
                                                                                             <td className="px-2 py-2">{money(unit.costValue)}</td>
                                                                                             <td className="px-2 py-2">
                                                                                                 {unit.returnedValue ? money(unit.returnedValue) : '-'}
@@ -252,7 +318,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                             </tbody>
                                                                         </table>
                                                                     </div>
-                                                                </details>
+                                                                </div>
                                                             </td>
                                                         </tr>
                                                     )}
@@ -285,34 +351,37 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
 );
 
 const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void }> = ({ product, onNavigate }) => (
-    <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <a
-            href={product.publicUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            title={`Ver ${product.sku || 'produto'} no site`}
-        >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Site
-        </a>
-        <button
-            type="button"
-            onClick={() => onNavigate(product.editUrl)}
-            className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-            title={`Editar ${product.sku || 'produto'}`}
-        >
-            <Pencil className="h-3.5 w-3.5" />
-            Editar
-        </button>
-        <button
-            type="button"
-            onClick={() => onNavigate(product.stockLocationUrl)}
-            className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-            title={`Locais de ${product.sku || 'produto'}`}
-        >
-            <MapPin className="h-3.5 w-3.5" />
-            Locais
-        </button>
+    <div className="flex flex-wrap items-center gap-1.5">
+        <span className="min-w-[86px] font-mono text-xs font-bold text-slate-700">{product.sku || 'Sem SKU'}</span>
+        <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <a
+                href={product.publicUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                title={`Abre a pagina publica do SKU ${product.sku || 'produto'}`}
+            >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Site publico
+            </a>
+            <button
+                type="button"
+                onClick={() => onNavigate(product.editUrl)}
+                className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                title={`Abre o cadastro do SKU ${product.sku || 'produto'}`}
+            >
+                <Pencil className="h-3.5 w-3.5" />
+                Cadastro
+            </button>
+            <button
+                type="button"
+                onClick={() => onNavigate(product.stockLocationUrl)}
+                className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                title={`Abre os locais de estoque filtrados pelo SKU ${product.sku || 'produto'}`}
+            >
+                <MapPin className="h-3.5 w-3.5" />
+                Estoque
+            </button>
+        </div>
     </div>
 );
