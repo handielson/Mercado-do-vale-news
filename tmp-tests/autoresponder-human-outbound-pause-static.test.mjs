@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-for (const file of ['server.js', 'vps_server.cjs']) {
+for (const file of ['server.js', 'vps_server.cjs', 'vps_server.js']) {
   const source = readFileSync(file, 'utf8');
 
   assert.match(

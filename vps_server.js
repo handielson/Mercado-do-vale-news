@@ -6578,6 +6578,85 @@ function normalizeAutoresponderText(value) {
     .toLowerCase();
 }
 
+function getAutoresponderPayloadPath(payload, path) {
+  return path.split('.').reduce((current, key) => (
+    current && typeof current === 'object' ? current[key] : undefined
+  ), payload);
+}
+
+function isAutoresponderTruthyPayloadValue(value) {
+  if (value === true) return true;
+  if (typeof value === 'number') return value === 1;
+  const text = normalizeAutoresponderText(value);
+  return ['true', '1', 'yes', 'sim'].includes(text);
+}
+
+function isAutoresponderHumanOutboundPayload(payload) {
+  if (!payload || typeof payload !== 'object') return false;
+
+  const fromMeValues = [
+    payload.fromMe,
+    payload.from_me,
+    payload.isFromMe,
+    payload.sentByMe,
+    payload?.key?.fromMe,
+    payload?.data?.key?.fromMe,
+    payload?.message?.key?.fromMe,
+    payload?.payload?.key?.fromMe,
+  ];
+  if (fromMeValues.some(isAutoresponderTruthyPayloadValue)) return true;
+
+  const directionValues = [
+    payload.direction,
+    payload.messageDirection,
+    payload.message_direction,
+    payload.type,
+    payload.event,
+    payload.status,
+  ].map((value) => normalizeAutoresponderText(value));
+
+  return directionValues.some((value) =>
+    ['outgoing', 'outbound', 'sent', 'send', 'from_me', 'fromme', 'message_sent'].includes(value)
+  );
+}
+
+function getAutoresponderPayloadSender(payload, outbound = false) {
+  const preferredPaths = outbound
+    ? [
+        'to',
+        'recipient',
+        'remoteJid',
+        'key.remoteJid',
+        'data.key.remoteJid',
+        'message.key.remoteJid',
+        'payload.key.remoteJid',
+        'chatId',
+        'jid',
+        'phone',
+        'number',
+        'contact',
+        'sender',
+        'from',
+      ]
+    : [
+        'sender',
+        'from',
+        'phone',
+        'number',
+        'contact',
+        'remoteJid',
+        'key.remoteJid',
+        'data.key.remoteJid',
+        'message.key.remoteJid',
+      ];
+
+  for (const path of preferredPaths) {
+    const value = String(getAutoresponderPayloadPath(payload, path) || '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
 const AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY = 'Recebi seu áudio, mas ainda não consigo ouvir por aqui. Pode me mandar em texto?';
 
 function isAutoresponderAudioMessage(message) {
@@ -11171,6 +11250,36 @@ async function touchAutoresponderConversation(sender) {
   );
 }
 
+async function pauseAutoresponderConversationForHumanOutbound(sender, pauseMinutes = 60) {
+  const minutes = Number(pauseMinutes) > 0 ? Number(pauseMinutes) : 60;
+  await pool.query(
+    `INSERT INTO autoresponder_conversations (sender, last_message_at, paused_until, pause_reason)
+     VALUES (?, CURRENT_TIMESTAMP, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'human_outbound')
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+       pause_reason = 'human_outbound'`,
+    [sender, minutes, minutes]
+  );
+}
+
+async function isAutoresponderRecentBotReplyEcho(sender, message, windowMinutes = 10) {
+  const normalizedMessage = String(message || '').trim();
+  if (!normalizedMessage) return false;
+  const minutes = Number(windowMinutes) > 0 ? Number(windowMinutes) : 10;
+  const [rows] = await pool.query(
+    `SELECT id
+     FROM autoresponder_logs
+     WHERE sender = ?
+       AND reply_text = ?
+       AND created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+     ORDER BY id DESC
+     LIMIT 1`,
+    [sender, normalizedMessage, minutes]
+  );
+  return rows.length > 0;
+}
+
 async function isAutoresponderBlocked(sender) {
   const rawSender = String(sender || '').trim();
   const normalizedSender = normalizeAutoresponderSender(rawSender);
@@ -12531,7 +12640,8 @@ fastify.route({
       const requestBody = req.body || {};
       const nestedQuery = requestBody && typeof requestBody.query === 'object' ? requestBody.query : {};
       const payload = { ...(req.query || {}), ...nestedQuery, ...requestBody };
-      const sender = String(payload.sender || payload.from || payload.phone || payload.number || payload.contact || '').trim();
+      const isHumanOutbound = isAutoresponderHumanOutboundPayload(payload);
+      const sender = getAutoresponderPayloadSender(payload, isHumanOutbound);
       const message = String(payload.message || payload.text || payload.query || payload.body || payload.received_message || '').trim();
       const isGroup = payload.isGroup === true || String(payload.isGroup || '').toLowerCase() === 'true';
       const senderKey = normalizeAutoresponderSender(sender) || sender || 'unknown';
@@ -12550,6 +12660,14 @@ fastify.route({
       }
 
       if (isGroup) {
+        return { replies: [] };
+      }
+
+      if (isHumanOutbound) {
+        if (!(await isAutoresponderRecentBotReplyEcho(senderKey, message))) {
+          const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
+          await pauseAutoresponderConversationForHumanOutbound(senderKey, pauseMinutes);
+        }
         return { replies: [] };
       }
 
