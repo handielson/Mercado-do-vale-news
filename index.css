@@ -202,3 +202,19 @@
     color: #2563eb;
     text-decoration: underline;
 }
+
+@media print {
+    body {
+        background: #fff;
+    }
+
+    aside,
+    nav,
+    .print\:hidden {
+        display: none !important;
+    }
+
+    main {
+        padding: 0 !important;
+    }
+}

@@ -8071,3 +8071,19 @@ Validacao:
 - `node tmp-tests\vps-final-flags-static.test.mjs`: OK.
 
 Rollback: voltar essas quatro flags para `false` somente se uma validacao funcional bloquear admin, catalogo publico, checkout, pedidos ou PDV.
+# 2026-06-08 - Painel agregado por modelo
+
+- Escopo: criar painel operacional em Produtos para agregar modelo, RAM, armazenamento, cor, produtos/SKUs, unidades serializadas, localizacao, vendidos e valores.
+- Fonte operacional: VPS/MySQL via servicos existentes.
+- Regra: nenhuma dependencia nova de Vercel ou Supabase.
+- Diario obrigatorio: cada deploy, validacao e limpeza desta entrega deve ser registrado aqui.
+- Validacoes locais previstas:
+  - `node services\modelProductAggregator.test.mjs`
+  - `node tmp-tests\model-aggregator-no-legacy-runtime-static.test.mjs`
+  - `npm.cmd run build`
+
+Resultado local inicial:
+- `node services\modelProductAggregator.test.mjs`: OK.
+- `node tmp-tests\model-aggregator-no-legacy-runtime-static.test.mjs`: OK.
+- `npm.cmd run build`: OK.
+- Browser local: Vite subiu em `http://127.0.0.1:5181/`, mas a ferramenta de navegador recebeu `ERR_CONNECTION_REFUSED`; validar visualmente no dev local ou na VPS antes de considerar a tela aprovada para uso diario.

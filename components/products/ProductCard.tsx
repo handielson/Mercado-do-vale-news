@@ -1203,6 +1203,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                 </span>
                             )}
                         </button>
+                        {product.model_id && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.location.href = `/admin/products/models/${encodeURIComponent(product.model_id)}`;
+                                }}
+                                className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                                title="Ver painel do modelo"
+                            >
+                                <Package className="w-4 h-4 text-slate-600" />
+                            </button>
+                        )}
                         <button
                             onClick={() => onEdit?.(product)}
                             className="shrink-0 p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
@@ -1378,6 +1390,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                 </span>
                             )}
                         </button>
+                        {product.model_id && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.location.href = `/admin/products/models/${encodeURIComponent(product.model_id)}`;
+                                }}
+                                className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                                title="Ver painel do modelo"
+                            >
+                                <Package className="w-4 h-4 text-slate-600" />
+                            </button>
+                        )}
                         <button
                             onClick={() => onEdit?.(product)}
                             className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"

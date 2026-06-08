@@ -1244,3 +1244,9 @@ A migracao Supabase sera considerada concluida quando:
 - nao apagar tabelas Supabase sem backup e aprovacao explicita;
 - nao remover fallback sem teste de leitura e escrita no destino novo;
 - nao versionar fotos, videos ou arquivos grandes.
+
+## 2026-06-08 - Painel agregado por modelo sem Supabase novo
+
+- Supabase permanece legado para esta entrega.
+- A nova pagina agregadora nao deve criar tabela, migration, storage, edge function, client read/write ou env var no Supabase.
+- Qualquer necessidade de dado ausente deve ser resolvida via VPS/MySQL ou registrada para fase separada.

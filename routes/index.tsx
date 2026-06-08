@@ -111,6 +111,7 @@ const ProductListPage = lazy(() => import('../pages/admin/products/ProductListPa
 const ProductLabelPrintPage = lazy(() => import('../pages/admin/products/ProductLabelPrintPage').then(module => ({ default: module.ProductLabelPrintPage })));
 const ProductFormPage = lazy(() => import('../pages/admin/products/ProductFormPage').then(module => ({ default: module.ProductFormPage })));
 const ProductDetailPage = lazy(() => import('../pages/admin/products/ProductDetailPage').then(module => ({ default: module.ProductDetailPage })));
+const ModelProductAggregatorPage = lazy(() => import('../pages/admin/products/ModelProductAggregatorPage').then(module => ({ default: module.ModelProductAggregatorPage })));
 const ProductCombosPage = lazy(() => import('../pages/admin/products/ProductCombosPage').then(module => ({ default: module.ProductCombosPage })));
 const ProductImageBankPage = lazy(() => import('../pages/admin/products/ProductImageBankPage').then(module => ({ default: module.ProductImageBankPage })));
 const InventoryPage = lazy(() => import('../pages/admin/inventory/InventoryPage').then(module => ({ default: module.InventoryPage })));
@@ -286,6 +287,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ProductLabelPrintPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/products/models/:modelId",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ModelProductAggregatorPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
