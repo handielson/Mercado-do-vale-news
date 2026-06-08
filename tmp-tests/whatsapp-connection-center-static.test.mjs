@@ -4,6 +4,8 @@ import { existsSync, readFileSync } from 'node:fs';
 const whatsappPage = readFileSync('pages/admin/settings/WhatsAppPage.tsx', 'utf8');
 const routes = readFileSync('routes/index.tsx', 'utf8');
 const service = readFileSync('services/autoResponderService.ts', 'utf8');
+const types = readFileSync('types/autoResponder.ts', 'utf8');
+const server = readFileSync('vps_server.cjs', 'utf8');
 
 assert.ok(
   existsSync('components/whatsapp/WhatsAppConnectionPanel.tsx'),
@@ -57,12 +59,21 @@ const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversatio
   'pauseConversation',
   'resumeConversation',
   'resetConversationCounters',
+  'listConversationLogs',
   'Atendimento WhatsApp',
+  'Ver historico',
+  'Ocultar historico',
+  'Historico da conversa',
+  'conversationLogsBySender',
+  'selectedConversationSender',
+  'loadConversationLogs',
   'Pausar 1h',
   'Retomar',
   'Resetar contadores',
   'conversationStatusFilter',
   'isConversationPaused',
+  'Pausa humana',
+  'Pausada ate',
 ].forEach((needle) => {
   assert.ok(conversationsPanel.includes(needle), `conversations panel must include ${needle}`);
 });
@@ -85,11 +96,31 @@ const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversatio
   'connectWhatsApp',
   'disconnectWhatsApp',
   'listConversations',
+  'listConversationLogs',
   'pauseConversation',
   'resumeConversation',
   'resetConversationCounters',
 ].forEach((needle) => {
   assert.ok(service.includes(needle), `autoResponderService must keep ${needle}`);
+});
+
+[
+  'export interface AutoResponderConversationLog',
+  'question?: string | null',
+  'reply_text?: string | null',
+  'response_time_ms?: number | null',
+].forEach((needle) => {
+  assert.ok(types.includes(needle), `autoResponder types must include ${needle}`);
+});
+
+[
+  "fastify.get('/autoresponder/conversations/:sender/logs'",
+  'FROM autoresponder_logs',
+  'WHERE sender = ?',
+  'ORDER BY created_at DESC',
+  'LIMIT ${limit}',
+].forEach((needle) => {
+  assert.ok(server.includes(needle), `VPS server must include ${needle}`);
 });
 
 assert.ok(

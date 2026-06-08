@@ -12,6 +12,8 @@ import type {
     AutoResponderCategoryTag,
     AutoResponderConversation,
     AutoResponderConversationFilters,
+    AutoResponderConversationLog,
+    AutoResponderConversationLogFilters,
     AutoResponderOk,
     AutoResponderRule,
     AutoResponderRuleFilters,
@@ -205,6 +207,10 @@ export const autoResponderService = {
 
     listConversations: (filters: AutoResponderConversationFilters = {}): Promise<AutoResponderConversation[]> => {
         return vpsClient.get<AutoResponderConversation[]>(withQuery('/autoresponder/conversations', filters));
+    },
+
+    listConversationLogs: (sender: string, filters: AutoResponderConversationLogFilters = {}): Promise<AutoResponderConversationLog[]> => {
+        return vpsClient.get<AutoResponderConversationLog[]>(withQuery(`/autoresponder/conversations/${senderPath(sender)}/logs`, filters));
     },
 
     pauseConversation: (sender: string, minutes: number, reason = 'admin'): Promise<AutoResponderOk> => {

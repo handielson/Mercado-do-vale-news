@@ -121,6 +121,20 @@ export interface AutoResponderConversation {
     updated_at?: string;
 }
 
+export interface AutoResponderConversationLog {
+    id: number;
+    created_at?: string;
+    sender?: string | null;
+    question?: string | null;
+    intent?: string | null;
+    matched_rule_id?: number | null;
+    matched_count?: number;
+    reply_text?: string | null;
+    response_time_ms?: number | null;
+    ai_assisted?: boolean | number;
+    ai_model?: string | null;
+}
+
 export interface AutoResponderBlocklistEntry {
     id: number;
     pattern: string;
@@ -299,6 +313,10 @@ export interface AutoResponderConversationFilters {
     offset?: number;
     status?: 'paused' | 'active';
     tag_id?: number;
+}
+
+export interface AutoResponderConversationLogFilters {
+    limit?: number;
 }
 
 export interface AutoResponderUnansweredFilters {

@@ -1,8 +1,8 @@
 import React from 'react';
-import { AlertCircle, Clock, MessageCircle, Pause, Play, RefreshCw, RotateCcw, Search } from 'lucide-react';
+import { AlertCircle, Bot, ChevronDown, ChevronUp, Clock, MessageCircle, Pause, Play, RefreshCw, RotateCcw, Search, UserRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { autoResponderService } from '../../services/autoResponderService';
-import type { AutoResponderConversation } from '../../types/autoResponder';
+import type { AutoResponderConversation, AutoResponderConversationLog } from '../../types/autoResponder';
 
 type ConversationStatusFilter = 'all' | 'active' | 'paused';
 
@@ -27,11 +27,19 @@ function formatNumber(value?: number): string {
   return new Intl.NumberFormat('pt-BR').format(Number(value || 0));
 }
 
+function formatResponseTime(value?: number | null): string {
+  if (value == null || Number.isNaN(Number(value))) return '-';
+  return `${formatNumber(Number(value))} ms`;
+}
+
 export function WhatsAppConversationsPanel() {
   const [conversations, setConversations] = React.useState<AutoResponderConversation[]>([]);
+  const [conversationLogsBySender, setConversationLogsBySender] = React.useState<Record<string, AutoResponderConversationLog[]>>({});
   const [conversationStatusFilter, setConversationStatusFilter] = React.useState<ConversationStatusFilter>('all');
+  const [selectedConversationSender, setSelectedConversationSender] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState('');
   const [loading, setLoading] = React.useState(true);
+  const [logsLoadingSender, setLogsLoadingSender] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [actionSender, setActionSender] = React.useState<string | null>(null);
 
@@ -64,6 +72,30 @@ export function WhatsAppConversationsPanel() {
       setError(err instanceof Error ? err.message : 'Falha ao atualizar atendimento.');
     } finally {
       setActionSender(null);
+    }
+  }
+
+  async function loadConversationLogs(sender: string) {
+    setLogsLoadingSender(sender);
+    setError(null);
+    try {
+      const logs = await autoResponderService.listConversationLogs(sender, { limit: 20 });
+      setConversationLogsBySender((current) => ({ ...current, [sender]: logs }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao carregar historico da conversa.');
+    } finally {
+      setLogsLoadingSender(null);
+    }
+  }
+
+  async function toggleConversationDetails(sender: string) {
+    if (selectedConversationSender === sender) {
+      setSelectedConversationSender(null);
+      return;
+    }
+    setSelectedConversationSender(sender);
+    if (!conversationLogsBySender[sender]) {
+      await loadConversationLogs(sender);
     }
   }
 
@@ -148,6 +180,9 @@ export function WhatsAppConversationsPanel() {
             {filteredConversations.map((conversation) => {
               const paused = isConversationPaused(conversation);
               const busy = actionSender === conversation.sender;
+              const expanded = selectedConversationSender === conversation.sender;
+              const logs = conversationLogsBySender[conversation.sender] || [];
+              const loadingLogs = logsLoadingSender === conversation.sender;
               return (
                 <article key={conversation.sender} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -171,6 +206,20 @@ export function WhatsAppConversationsPanel() {
                       {conversation.pause_reason && (
                         <p className="mt-2 text-xs font-medium text-amber-700">Motivo da pausa: {conversation.pause_reason}</p>
                       )}
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+                        <p className="text-xs font-semibold uppercase text-slate-500">Pausa humana</p>
+                        <div className="mt-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
+                          <span>
+                            <strong className="text-slate-800">Status:</strong> {paused ? 'Bot pausado' : 'Bot ativo'}
+                          </span>
+                          <span>
+                            <strong className="text-slate-800">Pausada ate:</strong> {paused ? formatDateTime(conversation.paused_until) : '-'}
+                          </span>
+                          <span>
+                            <strong className="text-slate-800">Motivo:</strong> {conversation.pause_reason || '-'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 text-center lg:w-64">
@@ -199,6 +248,17 @@ export function WhatsAppConversationsPanel() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={loadingLogs}
+                        onClick={() => {
+                          void toggleConversationDetails(conversation.sender);
+                        }}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                      >
+                        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        {expanded ? 'Ocultar historico' : 'Ver historico'}
+                      </button>
                       {paused ? (
                         <button
                           type="button"
@@ -267,6 +327,73 @@ export function WhatsAppConversationsPanel() {
                       </button>
                     </div>
                   </div>
+
+                  {expanded && (
+                    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase text-emerald-600">Historico da conversa</p>
+                          <h5 className="mt-1 text-sm font-semibold text-slate-900">Ultimos registros do bot</h5>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={loadingLogs}
+                          onClick={() => {
+                            void loadConversationLogs(conversation.sender);
+                          }}
+                          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          <RefreshCw className={loadingLogs ? 'animate-spin' : undefined} size={14} />
+                          Atualizar historico
+                        </button>
+                      </div>
+
+                      {loadingLogs && logs.length === 0 ? (
+                        <div className="mt-4 flex items-center gap-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
+                          <RefreshCw className="animate-spin" size={16} />
+                          Carregando historico...
+                        </div>
+                      ) : logs.length === 0 ? (
+                        <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
+                          Nenhum registro recente encontrado para esta conversa.
+                        </div>
+                      ) : (
+                        <div className="mt-4 space-y-3">
+                          {logs.map((log) => (
+                            <div key={log.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                                <span>{formatDateTime(log.created_at)}</span>
+                                <span className="rounded-full bg-white px-2 py-1 font-semibold text-slate-700">
+                                  {log.intent || 'sem_intencao'}
+                                </span>
+                              </div>
+                              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                                <div className="rounded-lg bg-white p-3">
+                                  <p className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+                                    <UserRound size={14} />
+                                    Cliente
+                                  </p>
+                                  <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{log.question || '-'}</p>
+                                </div>
+                                <div className="rounded-lg bg-white p-3">
+                                  <p className="flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+                                    <Bot size={14} />
+                                    Bot
+                                  </p>
+                                  <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{log.reply_text || '-'}</p>
+                                </div>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+                                <span>Matches: {formatNumber(log.matched_count)}</span>
+                                <span>Tempo: {formatResponseTime(log.response_time_ms)}</span>
+                                {log.ai_assisted ? <span>IA: {log.ai_model || 'ativa'}</span> : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </article>
               );
             })}
