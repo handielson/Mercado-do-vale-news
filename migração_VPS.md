@@ -8095,3 +8095,12 @@ Publicacao VPS:
 - Resultado: OK em 2026-06-08. Release ativa: `/var/www/mdv-site/releases/20260608-160118`.
 - Verificacao publica: `https://www.mercadodovale.com.br/index.html` apontou para `index-DxIr6aBC.js`; `https://www.mercadodovale.com.br/assets/ModelProductAggregatorPage-BaKgpxJf.js` respondeu `200 OK`.
 - Rollback: `ssh root@76.13.232.162 "ln -sfn /var/www/mdv-site/previous /var/www/mdv-site/current"`.
+
+Correcao visual do painel agregado:
+- Commit publicado: `a2ab09d` (`fix(products): simplify model aggregator page`).
+- Mudanca: painel passou a usar tabela operacional por cor, acoes agrupadas por SKU, detalhe de IMEI/serial recolhido, fallback de estoque por `stock_quantity`/localizacao quando nao ha unidades serializadas carregadas e ocultacao de UUID bruto de local.
+- Validacao local: `node services\modelProductAggregator.test.mjs`, `node tmp-tests\model-aggregator-no-legacy-runtime-static.test.mjs`, `git diff --check` e `npm.cmd run build`: OK.
+- Comando: `npm.cmd run deploy:vps-site`.
+- Resultado: OK em 2026-06-08. Release ativa: `/var/www/mdv-site/releases/20260608-161752`.
+- Verificacao publica: `https://www.mercadodovale.com.br/index.html` apontou para `index-qSk9cHRI.js`; o deploy registrou upload de `ModelProductAggregatorPage-CeR8DB--.js`. Checagem HTTP direta do asset foi bloqueada por limite de aprovacao da ferramenta.
+- Rollback: `ssh root@76.13.232.162 "ln -sfn /var/www/mdv-site/previous /var/www/mdv-site/current"`.
