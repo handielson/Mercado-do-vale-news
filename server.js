@@ -6274,16 +6274,19 @@ function isAutoresponderHumanOutboundPayload(payload) {
 function getAutoresponderPayloadSender(payload, outbound = false) {
   const preferredPaths = outbound
     ? [
-        'sender',
-        'phone',
-        'number',
-        'contact',
         'to',
         'recipient',
         'remoteJid',
         'key.remoteJid',
         'data.key.remoteJid',
         'message.key.remoteJid',
+        'payload.key.remoteJid',
+        'chatId',
+        'jid',
+        'phone',
+        'number',
+        'contact',
+        'sender',
         'from',
       ]
     : [
