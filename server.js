@@ -17051,6 +17051,24 @@ function isValidTable(name) {
   return /^[a-zA-Z0-9_]+$/.test(name);
 }
 
+const tableDataColumnCache = new Map();
+
+async function getTableDataColumnNames(tableName) {
+  const cached = tableDataColumnCache.get(tableName);
+  if (cached) return cached;
+
+  const [columns] = await pool.query('DESCRIBE ??', [tableName]);
+  const columnNames = new Set(columns.map(column => column.Field));
+  tableDataColumnCache.set(tableName, columnNames);
+  return columnNames;
+}
+
+function filterTableDataWritableEntries(row, columnNames, blockedColumns = new Set()) {
+  return Object.entries(row || {}).filter(([key]) => (
+    columnNames.has(key) && !blockedColumns.has(key)
+  ));
+}
+
 // INSERT individual
 fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, reply) => {
   const { name } = req.params;
@@ -17061,8 +17079,12 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
     return reply.code(400).send({ error: 'Body must be a JSON object' });
   }
 
-  const cols = Object.keys(body);
-  const vals = Object.values(body);
+  const columnNames = await getTableDataColumnNames(name);
+  const entries = filterTableDataWritableEntries(body, columnNames);
+  if (!entries.length) return reply.code(400).send({ error: 'No writable fields provided' });
+
+  const cols = entries.map(([key]) => key);
+  const vals = entries.map(([, value]) => value);
   const placeholders = cols.map(() => '?').join(', ');
   const colList = cols.map(c => `\`${c}\``).join(', ');
 
@@ -17091,11 +17113,14 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
     return reply.code(400).send({ error: 'Body must be a non-empty array' });
   }
 
-  const cols = Object.keys(rows[0]);
+  const columnNames = await getTableDataColumnNames(name);
+  const writableRows = rows.map(row => Object.fromEntries(filterTableDataWritableEntries(row, columnNames)));
+  const cols = Object.keys(writableRows[0]);
+  if (!cols.length) return reply.code(400).send({ error: 'No writable fields provided' });
   const colList = cols.map(c => `\`${c}\``).join(', ');
   const placeholders = `(${cols.map(() => '?').join(', ')})`;
-  const allPlaceholders = rows.map(() => placeholders).join(', ');
-  const allValues = rows.flatMap(r => cols.map(c => r[c] ?? null));
+  const allPlaceholders = writableRows.map(() => placeholders).join(', ');
+  const allValues = writableRows.flatMap(r => cols.map(c => r[c] ?? null));
 
   await pool.query(
     `INSERT INTO \`${name}\` (${colList}) VALUES ${allPlaceholders}`,
@@ -17116,7 +17141,8 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
     return reply.code(400).send({ error: 'Body must be a JSON object' });
   }
 
-  const entries = Object.entries(body).filter(([k]) => k !== pkCol);
+  const columnNames = await getTableDataColumnNames(name);
+  const entries = filterTableDataWritableEntries(body, columnNames, new Set([pkCol]));
   if (!entries.length) return reply.code(400).send({ error: 'No fields to update' });
 
   const setClauses = entries.map(([k]) => `\`${k}\` = ?`).join(', ');
