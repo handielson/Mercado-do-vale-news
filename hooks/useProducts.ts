@@ -8,6 +8,7 @@ import { shopeeProductService } from '../services/shopeeProducts';
 import { ProductFiltersState } from '../components/products/ProductFilters';
 import { prefetchModelImages } from '../services/modelImageCache';
 import { filterAdminProducts, mergeProductsById } from './adminProductFilters';
+import { groupAdminSerializedProducts } from './adminSerializedProductGrouping';
 
 /** Converte resposta do VPS MySQL para o tipo Product */
 function mapVpsProduct(row: any): Product {
@@ -90,7 +91,7 @@ function loadFromCache(): Product[] | null {
         if (age > CACHE_TTL_MS) return null;
         const raw = localStorage.getItem(CACHE_KEY);
         if (!raw) return null;
-        return JSON.parse(raw) as Product[];
+        return groupAdminSerializedProducts(JSON.parse(raw) as Product[]);
     } catch {
         return null;
     }
@@ -188,10 +189,11 @@ export const useProducts = () => {
             const vpsData = await fetchAllAdminVpsProducts();
             if (vpsData) {
                 data = await enrichProductsWithShopeeLinks(vpsData.map(mapVpsProduct));
+                data = groupAdminSerializedProducts(data);
                 console.log(`[useProducts] VPS: ${data.length} produtos`);
             } else {
                 console.warn('[useProducts] VPS indisponível — usando VPS');
-                data = await productService.list();
+                data = groupAdminSerializedProducts(await productService.list());
             }
 
             setProducts(data);
@@ -285,7 +287,7 @@ export const useProducts = () => {
                 if (remoteProducts.length === 0) return;
 
                 setProducts(current => {
-                    const merged = mergeProductsById(current, remoteProducts);
+                    const merged = groupAdminSerializedProducts(mergeProductsById(current, remoteProducts));
                     saveToCache(merged);
                     return merged;
                 });

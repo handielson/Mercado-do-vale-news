@@ -280,6 +280,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const shopeeModalProduct = mapProductToShopeeLocalProduct(shopeeModalProductSource as Product & Record<string, any>) as LocalProduct;
     const emptyShopeeHistory: ShopeeProduct[] = [];
     const currentStockQuantity = Math.max(0, Number(currentStock || 0));
+    const serializedUnits = Array.isArray(product.specs?._serialized_units)
+        ? product.specs._serialized_units
+        : [];
     const displayStockLocationRows = stockLocationRows.length > 0
         ? stockLocationRows.map((item) => ({
             id: item.id,
@@ -1498,26 +1501,50 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 )}
 
                 {/* Unique Identifiers (IMEI / Serial) */}
-                {(product.specs?.imei1 || product.specs?.serial || product.specs?.serial_number) && (
+                {(serializedUnits.length > 0 || product.specs?.imei1 || product.specs?.serial || product.specs?.serial_number) && (
                     <div className="border-t border-slate-100 pt-2 space-y-1">
                         <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide">Identificadores</p>
-                        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-                            {product.specs?.imei1 && (
-                                <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
-                                    IMEI1 {product.specs.imei1}
-                                </span>
-                            )}
-                            {product.specs?.imei2 && (
-                                <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
-                                    IMEI2 {product.specs.imei2}
-                                </span>
-                            )}
-                            {!product.specs?.imei1 && (product.specs?.serial || product.specs?.serial_number) && (
-                                <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
-                                    Serial {product.specs?.serial || product.specs?.serial_number}
-                                </span>
-                            )}
-                        </div>
+                        {serializedUnits.length > 0 ? (
+                            <div className="max-h-20 space-y-1 overflow-y-auto pr-1">
+                                {serializedUnits.map((unit: any, index: number) => (
+                                    <div key={`${unit.product_id || unit.sku || index}`} className="flex flex-wrap gap-x-1.5 gap-y-0.5">
+                                        {unit.imei1 && (
+                                            <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                                IMEI1 {unit.imei1}
+                                            </span>
+                                        )}
+                                        {unit.imei2 && (
+                                            <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                                IMEI2 {unit.imei2}
+                                            </span>
+                                        )}
+                                        {unit.serial && (
+                                            <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                                Serial {unit.serial}
+                                            </span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                                {product.specs?.imei1 && (
+                                    <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                        IMEI1 {product.specs.imei1}
+                                    </span>
+                                )}
+                                {product.specs?.imei2 && (
+                                    <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                        IMEI2 {product.specs.imei2}
+                                    </span>
+                                )}
+                                {!product.specs?.imei1 && (product.specs?.serial || product.specs?.serial_number) && (
+                                    <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                        Serial {product.specs?.serial || product.specs?.serial_number}
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 

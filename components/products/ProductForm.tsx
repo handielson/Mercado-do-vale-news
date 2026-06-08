@@ -35,6 +35,7 @@ import { colorService } from '../../services/colors';
 import { getAuthSessionToken } from '../../services/authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
+import { unitService } from '../../services/units';
 import { findBlingProductByExactSku } from '../../services/blingService';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
@@ -43,6 +44,7 @@ import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl }
 import { buildSerializedBatchPlan, findSerializedBatchDuplicates, hasSerializedIdentity, resolveSerializedBatchItemImages } from './serializedBatch.js';
 import { getProductSaveProgressPercent } from './productSaveProgress.js';
 import { getBlingSkuPriceAutofill } from './blingSkuPriceAutofill.js';
+import { UnitStatus } from '../../utils/field-standards';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -113,6 +115,62 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [serialList, setSerialList] = useState<BatchItem[]>([]);
     const [batchImageUploadingId, setBatchImageUploadingId] = useState<string | null>(null);
     const [batchBlingLinkingId, setBatchBlingLinkingId] = useState<string | null>(null);
+
+    function stripSerializedIdentityFromSpecs(specs: Record<string, any> = {}) {
+        const {
+            imei1: _imei1,
+            imei2: _imei2,
+            serial: _serial,
+            serial_number: _serialNumber,
+            ...baseSpecs
+        } = specs;
+        return baseSpecs;
+    }
+
+    function getSerializedBatchGroupKey(item: ProductInput) {
+        const specs = item.specs || {};
+        return [
+            item.model_id || '',
+            String(specs.color || '').trim().toLowerCase(),
+            String(specs.storage || '').trim().toLowerCase(),
+            String(specs.ram || '').trim().toLowerCase(),
+            String(specs.version || '').trim().toLowerCase(),
+            Number(item.price_retail || 0),
+            Number(item.price_reseller || 0),
+            Number(item.price_wholesale || 0),
+        ].join('|');
+    }
+
+    function groupSerializedBatchItemsForUnits(items: ProductInput[]) {
+        const groups = new Map<string, { base: ProductInput; units: ProductInput[] }>();
+
+        for (const item of items) {
+            const key = getSerializedBatchGroupKey(item);
+            const existing = groups.get(key);
+            if (existing) {
+                existing.units.push(item);
+                existing.base.stock_quantity = existing.units.length;
+                continue;
+            }
+
+            groups.set(key, {
+                base: {
+                    ...item,
+                    stock_quantity: 1,
+                    specs: stripSerializedIdentityFromSpecs(item.specs || {}),
+                },
+                units: [item],
+            });
+        }
+
+        return Array.from(groups.values()).map((group) => ({
+            ...group,
+            base: {
+                ...group.base,
+                stock_quantity: group.units.length,
+            },
+        }));
+    }
 
     const handleAddToBatchList = (overrides: Partial<BatchItem> = {}) => {
         const currentProductImages = getValues('images') || imagePreviews;
@@ -979,6 +1037,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         );
                         if (existing) {
                             duplicates.push(`${label}: ${val}`);
+                            continue;
+                        }
+                        const existingUnit = await unitService.searchByIdentifier(String(val).trim()).catch(() => []);
+                        if (existingUnit.length > 0) {
+                            duplicates.push(`${label}: ${val}`);
                         }
                     }
                 }
@@ -1011,6 +1074,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     }
                 }));
                 const batchPlan = buildSerializedBatchPlan(mergedData, linkedSerialList);
+                const plannedItems: ProductInput[] = [];
 
                 // Todos únicos — salvar um por um
                 for (let index = 0; index < linkedSerialList.length; index++) {
@@ -1018,7 +1082,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     setSaveProgress({
                         current: index,
                         total: totalToSave,
-                        message: `Salvando produto ${index + 1} de ${totalToSave}...`
+                        message: `Preparando unidade ${index + 1} de ${totalToSave}...`
                     });
                     // Resolver imagens da cor específica do item
                     let colorImages: string[] = [];
@@ -1041,16 +1105,50 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         colorImages,
                         fallbackImages: mergedData.images,
                     });
-                    const itemData = { ...batchPlan.items[index], images: itemImages };
-                    const savedProduct = await onSubmit(itemData);
-                    showVariationPriceAdjustmentToast(savedProduct);
-                    setSaveProgress({
-                        current: index + 1,
-                        total: totalToSave,
-                        message: `Produto ${index + 1} de ${totalToSave} salvo.`
-                    });
+                    plannedItems.push({ ...batchPlan.items[index], images: itemImages });
                 }
-                toast.success(`${serialList.length} produto(s) cadastrado(s) com sucesso!`);
+                const groupedBatch = groupSerializedBatchItemsForUnits(plannedItems);
+                let savedUnits = 0;
+
+                for (let groupIndex = 0; groupIndex < groupedBatch.length; groupIndex++) {
+                    const group = groupedBatch[groupIndex];
+                    setSaveProgress({
+                        current: savedUnits,
+                        total: totalToSave,
+                        message: `Salvando produto base ${groupIndex + 1} de ${groupedBatch.length}...`
+                    });
+                    const savedProduct = await onSubmit(group.base);
+                    showVariationPriceAdjustmentToast(savedProduct);
+                    if (!savedProduct?.id) {
+                        throw new Error('Produto base salvo sem ID. Cadastro das unidades cancelado.');
+                    }
+
+                    for (const unitItem of group.units) {
+                        const specs = unitItem.specs || {};
+                        setSaveProgress({
+                            current: savedUnits,
+                            total: totalToSave,
+                            message: `Salvando unidade ${savedUnits + 1} de ${totalToSave}...`
+                        });
+                        await unitService.create({
+                            product_id: savedProduct.id,
+                            imei_1: specs.imei1 || undefined,
+                            imei_2: specs.imei2 || undefined,
+                            serial_number: specs.serial || undefined,
+                            condition: 'new',
+                            status: UnitStatus.AVAILABLE,
+                            cost_price: unitItem.price_cost,
+                        });
+                        savedUnits += 1;
+                    }
+                }
+
+                setSaveProgress({
+                    current: totalToSave,
+                    total: totalToSave,
+                    message: `${totalToSave} unidade(s) salvas.`
+                });
+                toast.success(`${groupedBatch.length} produto(s) e ${serialList.length} unidade(s) cadastrados com sucesso!`);
                 setSerialList([]);
                 onBatchComplete?.();
             } else {
@@ -1070,6 +1168,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                             String(product.specs?.[field] || '').trim() === String(val).trim()
                         );
                         if (existing) {
+                            toast.error(`${field === 'imei1' ? 'IMEI 1' : field === 'imei2' ? 'IMEI 2' : 'Serial'} já cadastrado no sistema: ${val}`);
+                            return;
+                        }
+                        const existingUnit = await unitService.searchByIdentifier(String(val).trim()).catch(() => []);
+                        if (existingUnit.some((unit) => unit.product_id !== initialData?.id)) {
                             toast.error(`${field === 'imei1' ? 'IMEI 1' : field === 'imei2' ? 'IMEI 2' : 'Serial'} já cadastrado no sistema: ${val}`);
                             return;
                         }
@@ -1355,7 +1458,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     )}
                     {serialList.length > 0 && (
                         <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
-                            💡 Ao clicar em <strong>Salvar Produto</strong>, serão criados <strong>{serialList.length} produto(s)</strong> com os dados acima, um para cada item da lista.
+                            Ao clicar em <strong>Salvar Produto</strong>, será criado um produto base e <strong>{serialList.length} unidade(s)</strong> com os IMEIs/seriais da lista.
                         </p>
                     )}
                 </div>
@@ -1672,7 +1775,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 >
                     <span className="inline-flex items-center gap-2">
                         {isSavingOperation && <Loader2 size={16} className="animate-spin" />}
-                        {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : serialList.length > 1 ? `Salvar ${serialList.length} Produtos` : 'Salvar Produto'}
+                        {blocksSubmitForDuplicateEAN ? 'EAN Duplicado - Nao Permitido' : isSavingOperation ? (saveProgress?.message || 'Salvando...') : serialList.length > 1 ? `Salvar ${serialList.length} Unidades` : 'Salvar Produto'}
                     </span>
                 </button>
                 </div>
