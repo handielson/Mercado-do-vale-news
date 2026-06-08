@@ -171,6 +171,15 @@ function skuKey(product) {
 
 function buildSkuGroups(colorGroup) {
   const groups = new Map();
+  const skuByProductId = new Map(colorGroup.products.map((product) => [String(product.id), skuKey(product)]));
+  const unitCountsBySku = new Map();
+  for (const unit of colorGroup.units || []) {
+    if (unit.status !== 'available') continue;
+    const key = skuByProductId.get(String(unit.productId || ''));
+    if (!key) continue;
+    unitCountsBySku.set(key, (unitCountsBySku.get(key) || 0) + 1);
+  }
+
   for (const product of colorGroup.products) {
     const key = skuKey(product);
     let group = groups.get(key);
@@ -205,6 +214,9 @@ function buildSkuGroups(colorGroup) {
   }
 
   for (const group of groups.values()) {
+    if (unitCountsBySku.has(group.key)) {
+      group.availableCount = unitCountsBySku.get(group.key) || 0;
+    }
     if (group.availableCount === 0) {
       group.availableCount = group.products.reduce((sum, product) => sum + Number(product.availableCount || 0), 0);
     }
@@ -224,9 +236,17 @@ function applyFallbackStockBySku(colorGroup) {
     return;
   }
 
+  const skuByProductId = new Map(colorGroup.products.map((product) => [String(product.id), skuKey(product)]));
+  const serializedSkuKeys = new Set(
+    (colorGroup.units || [])
+      .map((unit) => skuByProductId.get(String(unit.productId || '')))
+      .filter(Boolean)
+  );
+
   const fallbackBySku = new Map();
   for (const source of fallbackSources) {
     const key = skuKey(source.product);
+    if (serializedSkuKeys.has(key)) continue;
     let group = fallbackBySku.get(key);
     if (!group) {
       group = { key, products: [], locations: [] };
@@ -306,8 +326,9 @@ export function aggregateModelProducts(input) {
       !storage ? 'storage' : '',
       !color ? 'color' : '',
     ].filter(Boolean);
+    const incompleteIdentity = normalizeKey(product.sku) || normalizeKey(product.id);
     const memoryKey = missingFields.length
-      ? `incomplete|${normalizeKey(ram)}|${normalizeKey(storage)}|${normalizeKey(product.id)}`
+      ? `incomplete|${normalizeKey(ram)}|${normalizeKey(storage)}|${incompleteIdentity}`
       : `${normalizeKey(ram)}|${normalizeKey(storage)}`;
 
     let memoryGroup = memoryGroupMap.get(memoryKey);

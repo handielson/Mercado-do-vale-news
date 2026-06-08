@@ -365,6 +365,66 @@ assert.equal(roxoWithOvercountedLocations.skuGroups[0].locationCount, 4);
 assert.equal(roxoWithOvercountedLocations.skuGroups[0].hasStockDivergence, false);
 assert.equal(roxoWithOvercountedLocations.stockDivergences.length, 0);
 
+const serializedSkuWithSiblingFallbackResult = aggregateModelProducts({
+  model: { id: 'model-athomics', name: 'Athomics Inspire Lite' },
+  products: [
+    {
+      id: 'p-rail-units',
+      model_id: 'model-athomics',
+      name: 'Athomics Inspire Lite',
+      sku: 'RAIL',
+      slug: 'athomics-inspire-lite-serializado',
+      specs: {},
+      price_cost: 27500,
+      price_retail: 45000,
+      stock_quantity: 24,
+      status: 'active',
+    },
+    {
+      id: 'p-rail-fallback',
+      model_id: 'model-athomics',
+      name: 'Athomics Inspire Lite',
+      sku: 'RAIL',
+      slug: 'athomics-inspire-lite-cadastro',
+      specs: {},
+      price_cost: 27500,
+      price_retail: 45000,
+      stock_quantity: 137,
+      status: 'active',
+    },
+  ],
+  units: [
+    { id: 'rail-u1', product_id: 'p-rail-units', status: 'available', serial_number: 'AT1', cost_price: 27500 },
+    { id: 'rail-u2', product_id: 'p-rail-units', status: 'available', serial_number: 'AT2', cost_price: 27500 },
+    { id: 'rail-u3', product_id: 'p-rail-units', status: 'available', serial_number: 'AT3', cost_price: 27500 },
+    { id: 'rail-u4', product_id: 'p-rail-units', status: 'available', serial_number: 'AT4', cost_price: 27500 },
+    { id: 'rail-u5', product_id: 'p-rail-units', status: 'available', serial_number: 'AT5', cost_price: 27500 },
+    { id: 'rail-u6', product_id: 'p-rail-units', status: 'available', serial_number: 'AT6', cost_price: 27500 },
+    { id: 'rail-u7', product_id: 'p-rail-units', status: 'sold', serial_number: 'AT7', cost_price: 27500, sale_id: 'sale-rail-1' },
+    { id: 'rail-u8', product_id: 'p-rail-units', status: 'sold', serial_number: 'AT8', cost_price: 27500, sale_id: 'sale-rail-2' },
+  ],
+  saleReturnByUnitId: {
+    'rail-u7': 45000,
+    'rail-u8': 45000,
+  },
+  locationsByProductId: {
+    'p-rail-units': [{ location_id: 'entrada', deposit_name: 'Deposito', location_name: 'Entrada / Conferencia', quantity: 18 }],
+    'p-rail-fallback': [{ location_id: 'loja', deposit_name: 'Loja Principal', location_name: 'Estoque Geral', quantity: 6 }],
+  },
+});
+
+const athomicsIncomplete = serializedSkuWithSiblingFallbackResult.memoryGroups[0];
+const athomicsColor = athomicsIncomplete.colors[0];
+assert.equal(serializedSkuWithSiblingFallbackResult.totals.availableCount, 6);
+assert.equal(serializedSkuWithSiblingFallbackResult.totals.soldCount, 2);
+assert.equal(serializedSkuWithSiblingFallbackResult.totals.stockCostValue, 165000);
+assert.equal(serializedSkuWithSiblingFallbackResult.totals.investedValue, 220000);
+assert.equal(serializedSkuWithSiblingFallbackResult.totals.returnedValue, 90000);
+assert.equal(athomicsColor.availableCount, 6);
+assert.equal(athomicsColor.soldCount, 2);
+assert.equal(athomicsColor.skuGroups[0].sku, 'RAIL');
+assert.equal(athomicsColor.skuGroups[0].availableCount, 6);
+
 const source = readFileSync(new URL('./modelProductAggregator.js', import.meta.url), 'utf8');
 assert.doesNotMatch(source, /supabase|vercel|VITE_SUPABASE|SUPABASE/i);
 
