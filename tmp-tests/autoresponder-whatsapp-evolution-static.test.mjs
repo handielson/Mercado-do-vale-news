@@ -35,6 +35,7 @@ const server = readFileSync('vps_server.js', 'utf8');
   "formatEvolutionMessage",
   "number: process.env.EVOLUTION_INSTANCE_NUMBER || ''",
   "events: ['CONNECTION_UPDATE', 'MESSAGES_UPSERT']",
+  "already exists|existe|exist|in use",
 ].forEach((needle) => {
   assert.ok(server.includes(needle), `Evolution API debug must expose ${needle}`);
 });

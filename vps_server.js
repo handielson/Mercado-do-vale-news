@@ -11546,7 +11546,7 @@ fastify.get('/autoresponder/whatsapp/connect', { preHandler: requireSyncKey }, a
 
     const createResult = await callEvolutionApiDetailed('/instance/create', 'POST', createBody);
     const createMessage = formatEvolutionMessage(createResult.body?.message || createResult.body?.response || createResult.body);
-    const alreadyExists = /already exists|existe|exist/i.test(createMessage);
+    const alreadyExists = /already exists|existe|exist|in use/i.test(createMessage);
     if ((!createResult.ok || createResult.body?.error === true) && !alreadyExists) {
       return reply.code(502).send({
         error: true,
