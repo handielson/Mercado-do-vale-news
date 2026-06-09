@@ -28,12 +28,17 @@ assert.ok(
   existsSync('components/whatsapp/WhatsAppAttendantsPanel.tsx'),
   'WhatsApp center must have an attendants panel component',
 );
+assert.ok(
+  existsSync('components/whatsapp/WhatsAppInternalBotTester.tsx'),
+  'WhatsApp center must have an internal bot tester component',
+);
 
 const connectionPanel = readFileSync('components/whatsapp/WhatsAppConnectionPanel.tsx', 'utf8');
 const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.tsx', 'utf8');
 const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversationsPanel.tsx', 'utf8');
 const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPanel.tsx', 'utf8');
 const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPanel.tsx', 'utf8');
+const internalBotTester = readFileSync('components/whatsapp/WhatsAppInternalBotTester.tsx', 'utf8');
 
 [
   'WhatsAppConnectionPanel',
@@ -41,6 +46,7 @@ const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPane
   'WhatsAppConversationsPanel',
   'WhatsAppBotSettingsPanel',
   'WhatsAppAttendantsPanel',
+  'WhatsAppInternalBotTester',
   'Centro WhatsApp',
   'Conexao WhatsApp',
   'Atendimento WhatsApp',
@@ -126,6 +132,21 @@ const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPane
 });
 
 [
+  'WhatsAppInternalBotTester',
+  'sendInternalChatMessage',
+  'resetInternalChat',
+  'WhatsApp interno',
+  'Laboratorio do bot',
+  'Limpar conversa',
+  'Novo cliente de teste',
+  'Digite como se fosse o cliente',
+  'Bot processando',
+  'nao sao enviadas ao WhatsApp real',
+].forEach((needle) => {
+  assert.ok(internalBotTester.includes(needle), `internal bot tester must include ${needle}`);
+});
+
+[
   'WhatsAppBotSettingsPanel',
   'getSettings',
   'updateSettings',
@@ -183,6 +204,8 @@ const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPane
   'resetConversationCounters',
   'updateConversationAttendant',
   'sendManualMessage',
+  'sendInternalChatMessage',
+  'resetInternalChat',
 ].forEach((needle) => {
   assert.ok(service.includes(needle), `autoResponderService must keep ${needle}`);
 });
@@ -191,6 +214,7 @@ const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPane
   'export interface AutoResponderConversationLog',
   'export interface AutoResponderManualMessageInput',
   'export interface AutoResponderManualMessageResult',
+  'export interface AutoResponderInternalChatResult',
   'export interface AutoResponderAttendant',
   'manual_finish_pause_days',
   'days_paused_after_finish',
@@ -213,6 +237,9 @@ const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPane
   'CREATE TABLE IF NOT EXISTS autoresponder_attendants',
   "addColumnIfMissing('autoresponder_conversations', 'attendant_name'",
   'attendant_changed',
+  "fastify.post('/autoresponder/internal-chat/message'",
+  "fastify.post('/autoresponder/internal-chat/reset'",
+  'runAutoresponderInternalChatMessage',
   "fastify.post('/autoresponder/conversations/:sender/manual-message'",
   'sendAutoresponderEvolutionTextMessage',
   'attendant_name',

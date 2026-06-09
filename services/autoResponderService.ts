@@ -28,6 +28,7 @@ import type {
     AutoResponderStats,
     AutoResponderStoreStatus,
     AutoResponderTestFlowResult,
+    AutoResponderInternalChatResult,
     AutoResponderTestReplyResult,
     AutoResponderTag,
     AutoResponderTagFilters,
@@ -303,6 +304,14 @@ export const autoResponderService = {
 
     testFlow: (input: { messages: string[]; sender?: string; contactFirstName?: string; cleanup?: boolean }): Promise<AutoResponderTestFlowResult> => {
         return vpsClient.post<AutoResponderTestFlowResult>('/autoresponder/test-flow', input);
+    },
+
+    sendInternalChatMessage: (input: { message: string; sender?: string; contactFirstName?: string }): Promise<AutoResponderInternalChatResult> => {
+        return vpsClient.post<AutoResponderInternalChatResult>('/autoresponder/internal-chat/message', input);
+    },
+
+    resetInternalChat: (input: { sender: string }): Promise<AutoResponderOk & { sender: string }> => {
+        return vpsClient.post<AutoResponderOk & { sender: string }>('/autoresponder/internal-chat/reset', input);
     },
 
     simulateBotMapFlow: (flow: AutoResponderBotMapFlow, input: { sender?: string; contactFirstName?: string } = {}): Promise<AutoResponderTestFlowResult> => {

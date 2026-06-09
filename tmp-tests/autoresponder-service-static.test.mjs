@@ -47,6 +47,8 @@ const types = fs.readFileSync(typesPath, 'utf8');
   'deleteUnanswered',
   'getStats',
   'getStoreStatus',
+  'sendInternalChatMessage',
+  'resetInternalChat',
   'updateProductTags',
 ].forEach((method) => {
   assert(service.includes(`${method}:`), `autoResponderService must expose ${method}`);
@@ -75,6 +77,7 @@ assert(
   'AutoResponderUnansweredQuestion',
   'AutoResponderStats',
   'AutoResponderStoreStatus',
+  'AutoResponderInternalChatResult',
 ].forEach((typeName) => {
   assert(types.includes(`interface ${typeName}`) || types.includes(`type ${typeName}`), `${typeName} type must exist`);
 });

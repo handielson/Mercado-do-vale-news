@@ -275,6 +275,17 @@ export interface AutoResponderTestFlowResult {
     warning?: string | null;
 }
 
+export interface AutoResponderInternalChatResult {
+    ok: boolean;
+    sender: string;
+    message: string;
+    status_code: number;
+    response_time_ms: number;
+    replies: AutoResponderTestReply[];
+    body?: unknown;
+    final_purchase_flow?: unknown;
+}
+
 export interface AutoResponderBotMapFlowStep {
     id: string;
     state: AutoResponderConversationState;

@@ -14801,6 +14801,68 @@ async function runAutoresponderTestFlow({ messages, sender, contactFirstName, cl
   };
 }
 
+async function runAutoresponderInternalChatMessage({ message, sender, contactFirstName }) {
+  const senderKey = normalizeAutoresponderSender(sender) || String(sender || '').trim();
+  const text = String(message || '').trim();
+  const token = process.env.AUTORESPONDER_TOKEN || '';
+  if (!senderKey) {
+    return { ok: false, error: 'sender is required' };
+  }
+  if (!text) {
+    return { ok: false, error: 'message is required' };
+  }
+  if (!token) {
+    return {
+      ok: false,
+      sender: senderKey,
+      message: text,
+      status_code: 500,
+      response_time_ms: 0,
+      replies: [],
+      warning: 'AUTORESPONDER_TOKEN nao configurado na VPS.',
+    };
+  }
+
+  const startedAt = Date.now();
+  const injected = await fastify.inject({
+    method: 'POST',
+    url: '/autoresponder-webhook',
+    headers: {
+      'content-type': 'application/json',
+      'x-autoresponder-token': token,
+    },
+    payload: {
+      sender: senderKey,
+      message: text,
+      isGroup: false,
+      name: contactFirstName || '',
+    },
+  });
+
+  let body = null;
+  try {
+    body = injected.payload ? JSON.parse(injected.payload) : null;
+  } catch {
+    body = { raw: injected.payload };
+  }
+
+  const [conversationRows] = await pool.query(
+    'SELECT purchase_flow FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+    [senderKey]
+  );
+
+  return {
+    ok: injected.statusCode >= 200 && injected.statusCode < 300,
+    sender: senderKey,
+    message: text,
+    status_code: injected.statusCode,
+    response_time_ms: Date.now() - startedAt,
+    replies: Array.isArray(body?.replies) ? body.replies : [],
+    body,
+    final_purchase_flow: normalizeAutoresponderPurchaseFlow(conversationRows[0]?.purchase_flow),
+  };
+}
+
 fastify.post('/autoresponder/test-flow', { preHandler: requireSyncKey }, async (req, reply) => {
   const body = req.body || {};
   const messages = Array.isArray(body.messages)
@@ -14819,6 +14881,25 @@ fastify.post('/autoresponder/test-flow', { preHandler: requireSyncKey }, async (
     contactFirstName: body.contactFirstName || body.contact_first_name || '',
     cleanup: body.cleanup !== false,
   });
+});
+
+fastify.post('/autoresponder/internal-chat/message', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const result = await runAutoresponderInternalChatMessage({
+    message: body.message,
+    sender: body.sender || `laboratorio-whatsapp-${Date.now()}`,
+    contactFirstName: body.contactFirstName || body.contact_first_name || 'Cliente',
+  });
+  if (!result.ok && result.error) return reply.code(400).send({ error: result.error });
+  return result;
+});
+
+fastify.post('/autoresponder/internal-chat/reset', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const sender = normalizeAutoresponderSender(body.sender) || String(body.sender || '').trim();
+  if (!sender) return reply.code(400).send({ error: 'sender is required' });
+  await cleanupAutoresponderTestFlowSender(sender);
+  return { ok: true, sender };
 });
 
 // POST /products/:id/upload-image  (multipart/form-data, campo "file")

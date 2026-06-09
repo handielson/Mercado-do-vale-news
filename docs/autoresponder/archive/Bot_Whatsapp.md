@@ -1091,6 +1091,7 @@ Objetivo: separar operação diária da configuração do robô.
 - [ ] Criar controle operacional para **desligar o bot por completo** e **ligar novamente**, usando `autoresponder_settings.enabled`.
 - [ ] Mostrar histórico de mensagens da conversa.
 - [ ] Criar campo para resposta manual quando houver integração de envio disponível.
+- [ ] Criar WhatsApp interno/laboratorio do bot para testar conversas completas sem envio real, sem limite curto de mensagens e com estado preservado por sender de teste.
 - [ ] Validar se a integração atual permite exibir "digitando..." no WhatsApp; se permitir, acionar antes de respostas geradas pelo bot/IA.
 - [ ] Criar espaço de atendentes salvo na VPS, sem `localStorage`, com lista visível no Centro WhatsApp.
 - [ ] Permitir filtrar atendimentos por atendente atual.
