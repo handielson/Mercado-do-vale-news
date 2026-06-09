@@ -19,6 +19,8 @@ export interface AutoResponderSettings {
     human_message_out_of_hours: string;
     human_pause_minutes: number;
     manual_finish_pause_days?: number;
+    days_paused_after_finish?: number;
+    finish_pause_days?: number;
     response_tone_mode?: 'a' | 'b' | 'c' | 'auto_abc';
     auto_pause_fallback_threshold: number;
     auto_pause_fallback_minutes: number;
@@ -105,6 +107,8 @@ export interface AutoResponderConversation {
     id?: number;
     sender: string;
     contact_name?: string | null;
+    attendant_name?: string | null;
+    attendant_updated_at?: string | null;
     last_message?: string | null;
     last_message_at?: string | null;
     last_reply_at?: string | null;
@@ -143,6 +147,14 @@ export interface AutoResponderManualMessageInput {
     send_tag_id?: number | null;
     finish_attendance?: boolean;
     pause_minutes?: number;
+}
+
+export interface AutoResponderAttendant {
+    id: number;
+    name: string;
+    active: boolean | number;
+    created_at?: string;
+    updated_at?: string;
 }
 
 export interface AutoResponderManualMessageResult extends AutoResponderOk {
@@ -333,6 +345,7 @@ export interface AutoResponderConversationFilters {
     offset?: number;
     status?: 'paused' | 'active' | 'finished';
     tag_id?: number;
+    attendant_name?: string;
 }
 
 export interface AutoResponderConversationLogFilters {

@@ -6617,6 +6617,12 @@ function normalizeAutoresponderResponseToneMode(value) {
   return ['a', 'b', 'c', 'auto_abc'].includes(mode) ? mode : 'auto_abc';
 }
 
+function normalizeAutoresponderAttendantName(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function getAutoresponderStableToneKey(sender = '') {
   const text = String(sender || '');
   let total = 0;
@@ -11582,6 +11588,13 @@ fastify.get('/autoresponder/settings', { preHandler: requireSyncKey }, async () 
 
 fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (req, reply) => {
   const body = req.body || {};
+  if (!Object.prototype.hasOwnProperty.call(body, 'manual_finish_pause_days')) {
+    if (Object.prototype.hasOwnProperty.call(body, 'days_paused_after_finish')) {
+      body.manual_finish_pause_days = body.days_paused_after_finish;
+    } else if (Object.prototype.hasOwnProperty.call(body, 'finish_pause_days')) {
+      body.manual_finish_pause_days = body.finish_pause_days;
+    }
+  }
   const allowed = {
     enabled: (v) => boolInt(v),
     human_message_in_hours: (v) => String(v ?? ''),
@@ -12031,11 +12044,44 @@ fastify.delete('/autoresponder/blocklist/:id', { preHandler: requireSyncKey }, a
   return { ok: true };
 });
 
+fastify.get('/autoresponder/attendants', { preHandler: requireSyncKey }, async (req) => {
+  const params = [];
+  let sql = 'SELECT * FROM autoresponder_attendants WHERE 1=1';
+  if (req.query?.active !== undefined && req.query?.active !== null && String(req.query.active) !== '') {
+    sql += ' AND active = ?';
+    params.push(boolInt(req.query.active));
+  }
+  sql += ' ORDER BY active DESC, name ASC, id ASC';
+  const [rows] = await pool.query(sql, params);
+  return rows;
+});
+
+fastify.post('/autoresponder/attendants', { preHandler: requireSyncKey }, async (req, reply) => {
+  const name = normalizeAutoresponderAttendantName(req.body?.name);
+  if (!name) return reply.code(400).send({ error: 'name is required' });
+  await pool.query(
+    `INSERT INTO autoresponder_attendants (name, active)
+     VALUES (?, 1)
+     ON DUPLICATE KEY UPDATE active = 1`,
+    [name]
+  );
+  const [rows] = await pool.query('SELECT * FROM autoresponder_attendants WHERE name = ? LIMIT 1', [name]);
+  return rows[0] || null;
+});
+
+fastify.delete('/autoresponder/attendants/:id', { preHandler: requireSyncKey }, async (req, reply) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return reply.code(400).send({ error: 'Invalid id' });
+  await pool.query('UPDATE autoresponder_attendants SET active = 0 WHERE id = ?', [id]);
+  return { ok: true };
+});
+
 fastify.get('/autoresponder/conversations', { preHandler: requireSyncKey }, async (req) => {
   const limit = Math.min(Number(req.query.limit) || 50, 200);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
   const status = req.query.status;
   const tagId = req.query.tag_id;
+  const attendantName = String(req.query.attendant_name || '').trim();
   let sql = 'SELECT * FROM autoresponder_conversations WHERE 1=1';
   const params = [];
   if (status === 'paused') sql += ' AND paused_until > NOW()';
@@ -12044,6 +12090,12 @@ fastify.get('/autoresponder/conversations', { preHandler: requireSyncKey }, asyn
   if (tagId) {
     sql += ' AND JSON_CONTAINS(tag_ids, JSON_ARRAY(?))';
     params.push(Number(tagId));
+  }
+  if (attendantName === '__none__') {
+    sql += " AND (attendant_name IS NULL OR attendant_name = '')";
+  } else if (attendantName) {
+    sql += ' AND attendant_name = ?';
+    params.push(attendantName);
   }
   sql += ` ORDER BY last_message_at DESC LIMIT ${limit} OFFSET ${offset}`;
   const [rows] = await pool.query(sql, params);
@@ -12106,6 +12158,60 @@ fastify.post('/autoresponder/conversations/:sender/reset-counters', { preHandler
     [req.params.sender]
   );
   return { ok: true };
+});
+
+fastify.post('/autoresponder/conversations/:sender/attendant', { preHandler: requireSyncKey }, async (req, reply) => {
+  const sender = normalizeAutoresponderSender(req.params.sender) || String(req.params.sender || '').trim();
+  if (!sender) return reply.code(400).send({ error: 'sender is required' });
+
+  const attendantName = normalizeAutoresponderAttendantName(req.body?.attendant_name);
+  if (attendantName) {
+    const [attendants] = await pool.query(
+      'SELECT id, name FROM autoresponder_attendants WHERE name = ? AND active = 1 LIMIT 1',
+      [attendantName]
+    );
+    if (!attendants[0]) return reply.code(400).send({ error: 'attendant_name is not registered' });
+  }
+
+  const [previousRows] = await pool.query(
+    'SELECT attendant_name FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+    [sender]
+  );
+  const previousAttendantName = previousRows[0]?.attendant_name || null;
+  if ((previousAttendantName || '') === (attendantName || '')) {
+    return {
+      ok: true,
+      sender,
+      attendant_name: attendantName || null,
+      previous_attendant_name: previousAttendantName,
+      unchanged: true,
+    };
+  }
+
+  await pool.query(
+    `INSERT INTO autoresponder_conversations (sender, last_message_at, attendant_name, attendant_updated_at)
+     VALUES (?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       attendant_name = ?,
+       attendant_updated_at = CURRENT_TIMESTAMP`,
+    [sender, attendantName || null, attendantName || null]
+  );
+
+  await logAutoresponderReply({
+    sender,
+    message: 'Alteracao de atendente',
+    intent: 'attendant_changed',
+    replyText: `Atendente: ${previousAttendantName || 'sem atendente'} -> ${attendantName || 'sem atendente'}`,
+    matchedCount: 0,
+  });
+
+  return {
+    ok: true,
+    sender,
+    attendant_name: attendantName || null,
+    previous_attendant_name: previousAttendantName,
+  };
 });
 
 fastify.post('/autoresponder/conversations/:sender/manual-message', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -12179,6 +12285,15 @@ fastify.post('/autoresponder/conversations/:sender/manual-message', { preHandler
          paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
          pause_reason = 'human_handoff'`,
       [sender, pauseMinutes, pauseMinutes]
+    );
+  }
+
+  if (attendantName) {
+    await pool.query(
+      `UPDATE autoresponder_conversations
+       SET attendant_name = ?, attendant_updated_at = CURRENT_TIMESTAMP
+       WHERE sender = ? AND (attendant_name IS NULL OR attendant_name = '')`,
+      [attendantName, sender]
     );
   }
 
@@ -21127,6 +21242,17 @@ async function runMigrations() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS autoresponder_attendants (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(120) NOT NULL UNIQUE,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_autoresponder_attendants_active_name (active, name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_logs (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -21178,6 +21304,8 @@ async function runMigrations() {
       contact_name_confirmed VARCHAR(120) NULL,
       google_contact_resource_name VARCHAR(120) NULL,
       contact_name_updated_at TIMESTAMP NULL,
+      attendant_name VARCHAR(120) NULL,
+      attendant_updated_at TIMESTAMP NULL,
       INDEX idx_paused (paused_until)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
@@ -21206,6 +21334,8 @@ async function runMigrations() {
   await addColumnIfMissing('autoresponder_conversations', 'purchase_flow_updated_at', 'TIMESTAMP NULL');
   await addColumnIfMissing('autoresponder_conversations', 'reply_count', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('autoresponder_conversations', 'reply_window_started_at', 'TIMESTAMP NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'attendant_name', 'VARCHAR(120) NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'attendant_updated_at', 'TIMESTAMP NULL');
   console.log('[migration] autoresponder phase 1A tables: OK');
 
   await pool.query(`

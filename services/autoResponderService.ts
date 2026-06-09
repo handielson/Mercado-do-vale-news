@@ -6,6 +6,7 @@ import type {
     AutoResponderAiTrainingInput,
     AutoResponderAiTrainingUpdate,
     AutoResponderBotMapFlow,
+    AutoResponderAttendant,
     AutoResponderBlocklistEntry,
     AutoResponderBlocklistInput,
     AutoResponderBlocklistUpdate,
@@ -211,6 +212,18 @@ export const autoResponderService = {
         return vpsClient.get<AutoResponderConversation[]>(withQuery('/autoresponder/conversations', filters));
     },
 
+    listAttendants: (filters: { active?: boolean | number } = {}): Promise<AutoResponderAttendant[]> => {
+        return vpsClient.get<AutoResponderAttendant[]>(withQuery('/autoresponder/attendants', filters));
+    },
+
+    createAttendant: (input: { name: string }): Promise<AutoResponderAttendant> => {
+        return vpsClient.post<AutoResponderAttendant>('/autoresponder/attendants', input);
+    },
+
+    deleteAttendant: (id: number): Promise<void> => {
+        return vpsClient.delete(`/autoresponder/attendants/${id}`);
+    },
+
     listConversationLogs: (sender: string, filters: AutoResponderConversationLogFilters = {}): Promise<AutoResponderConversationLog[]> => {
         return vpsClient.get<AutoResponderConversationLog[]>(withQuery(`/autoresponder/conversations/${senderPath(sender)}/logs`, filters));
     },
@@ -228,6 +241,13 @@ export const autoResponderService = {
 
     resetConversationCounters: (sender: string): Promise<AutoResponderOk> => {
         return vpsClient.post<AutoResponderOk>(`/autoresponder/conversations/${senderPath(sender)}/reset-counters`, {});
+    },
+
+    updateConversationAttendant: (sender: string, attendant_name: string | null): Promise<AutoResponderOk & { attendant_name?: string | null; previous_attendant_name?: string | null }> => {
+        return vpsClient.post<AutoResponderOk & { attendant_name?: string | null; previous_attendant_name?: string | null }>(
+            `/autoresponder/conversations/${senderPath(sender)}/attendant`,
+            { attendant_name }
+        );
     },
 
     sendManualMessage: (sender: string, input: AutoResponderManualMessageInput): Promise<AutoResponderManualMessageResult> => {

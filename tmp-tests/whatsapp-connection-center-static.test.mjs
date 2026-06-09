@@ -24,17 +24,23 @@ assert.ok(
   existsSync('components/whatsapp/WhatsAppBotSettingsPanel.tsx'),
   'WhatsApp center must have a bot settings panel component',
 );
+assert.ok(
+  existsSync('components/whatsapp/WhatsAppAttendantsPanel.tsx'),
+  'WhatsApp center must have an attendants panel component',
+);
 
 const connectionPanel = readFileSync('components/whatsapp/WhatsAppConnectionPanel.tsx', 'utf8');
 const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.tsx', 'utf8');
 const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversationsPanel.tsx', 'utf8');
 const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPanel.tsx', 'utf8');
+const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPanel.tsx', 'utf8');
 
 [
   'WhatsAppConnectionPanel',
   'WhatsAppMigrationChecklist',
   'WhatsAppConversationsPanel',
   'WhatsAppBotSettingsPanel',
+  'WhatsAppAttendantsPanel',
   'Centro WhatsApp',
   'Conexao WhatsApp',
   'Atendimento WhatsApp',
@@ -71,10 +77,13 @@ const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPa
   'manualMessageDrafts',
   'selectedSendTagBySender',
   'selectedAttendantBySender',
-  'newAttendantName',
   'attendants',
-  'Atendente',
-  'Cadastrar atendente',
+  'attendantFilter',
+  'Atendente atual',
+  'Todos atendentes',
+  'Sem atendente',
+  'Salvar atendente',
+  'Bloquear numero',
   'Tag de envio',
   'Enviar mensagem',
   'Finalizar atendimento',
@@ -96,15 +105,43 @@ const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPa
   'isConversationPaused',
   'Pausa humana',
   'Pausada ate',
+  'updateConversationAttendant',
+  'createBlocklistEntry',
 ].forEach((needle) => {
   assert.ok(conversationsPanel.includes(needle), `conversations panel must include ${needle}`);
+});
+
+[
+  'WhatsAppAttendantsPanel',
+  'listAttendants',
+  'createAttendant',
+  'deleteAttendant',
+  'newAttendantName',
+  'Equipe de atendimento',
+  'Atendentes ativos',
+  'Cadastrar atendente',
+  'Salvo na VPS',
+].forEach((needle) => {
+  assert.ok(attendantsPanel.includes(needle), `attendants panel must include ${needle}`);
 });
 
 [
   'WhatsAppBotSettingsPanel',
   'getSettings',
   'updateSettings',
+  'enabled',
+  'botEnabled',
+  'toggleBotEnabled',
+  'Bot ligado',
+  'Bot desligado',
+  'Ligar bot',
+  'Desligar bot',
   'manual_finish_pause_days',
+  'days_paused_after_finish',
+  'finish_pause_days',
+  'Power',
+  'Minus',
+  'Plus',
   'response_tone_mode',
   'responseToneMode',
   'Tom das respostas',
@@ -138,9 +175,13 @@ const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPa
   'disconnectWhatsApp',
   'listConversations',
   'listConversationLogs',
+  'listAttendants',
+  'createAttendant',
+  'deleteAttendant',
   'pauseConversation',
   'resumeConversation',
   'resetConversationCounters',
+  'updateConversationAttendant',
   'sendManualMessage',
 ].forEach((needle) => {
   assert.ok(service.includes(needle), `autoResponderService must keep ${needle}`);
@@ -150,9 +191,12 @@ const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPa
   'export interface AutoResponderConversationLog',
   'export interface AutoResponderManualMessageInput',
   'export interface AutoResponderManualMessageResult',
+  'export interface AutoResponderAttendant',
   'manual_finish_pause_days',
+  'days_paused_after_finish',
   "response_tone_mode?: 'a' | 'b' | 'c' | 'auto_abc'",
   'attendant_name?: string',
+  'attendant_updated_at?: string | null',
   'send_tag_id?: number',
   'question?: string | null',
   'reply_text?: string | null',
@@ -162,6 +206,13 @@ const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPa
 });
 
 [
+  "fastify.get('/autoresponder/attendants'",
+  "fastify.post('/autoresponder/attendants'",
+  "fastify.delete('/autoresponder/attendants/:id'",
+  "fastify.post('/autoresponder/conversations/:sender/attendant'",
+  'CREATE TABLE IF NOT EXISTS autoresponder_attendants',
+  "addColumnIfMissing('autoresponder_conversations', 'attendant_name'",
+  'attendant_changed',
   "fastify.post('/autoresponder/conversations/:sender/manual-message'",
   'sendAutoresponderEvolutionTextMessage',
   'attendant_name',

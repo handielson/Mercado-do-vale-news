@@ -1088,9 +1088,14 @@ Objetivo: separar operação diária da configuração do robô.
 - [ ] Criar botão **Assumir atendimento**.
 - [ ] Criar botão **Pausar bot**.
 - [ ] Criar botão **Retomar bot**.
+- [ ] Criar controle operacional para **desligar o bot por completo** e **ligar novamente**, usando `autoresponder_settings.enabled`.
 - [ ] Mostrar histórico de mensagens da conversa.
 - [ ] Criar campo para resposta manual quando houver integração de envio disponível.
 - [ ] Validar se a integração atual permite exibir "digitando..." no WhatsApp; se permitir, acionar antes de respostas geradas pelo bot/IA.
+- [ ] Criar espaço de atendentes salvo na VPS, sem `localStorage`, com lista visível no Centro WhatsApp.
+- [ ] Permitir filtrar atendimentos por atendente atual.
+- [ ] Permitir trocar atendente durante a conversa, registrando a troca em log de auditoria append-only.
+- [ ] Permitir bloquear número direto pelo atendimento, gravando em `autoresponder_blocklist` e mantendo o bot em silêncio para aquele sender.
 - [ ] Permitir aplicar tags de conversa.
 - [ ] Filtros: não respondidas, pausadas, pedido em andamento, por tag e por período.
 - [ ] Mostrar resumo interno do pedido quando `purchase_flow.attendant_summary` existir.
@@ -1116,6 +1121,9 @@ Objetivo: impedir que bot e humano respondam ao mesmo tempo.
 - [ ] Central de Atendimento fica focada em mensagens, fila, pausa/retomada e operação humana.
 - [ ] Criar lista de transmissao do WhatsApp somente com opt-in explicito: perguntar ao cliente se ele quer fazer parte antes de incluir o contato.
 - [ ] Registrar o aceite da lista de transmissao no historico/contato para evitar inclusao manual sem consentimento.
+- [ ] Respostas automaticas devem parecer atendimento humano: enviar indicador de "digitando" quando a Evolution permitir, aplicar pequenos intervalos e evitar despejar texto grande de uma vez.
+- [ ] Quebrar respostas longas em blocos curtos e naturais. Exemplo: se o cliente disser "bom dia" junto com uma pergunta, responder a saudacao em uma mensagem e a pergunta em outra.
+- [ ] Quando a API do WhatsApp permitir, responder citando/selecionando a mensagem do cliente que originou a resposta.
 - [ ] Se Treinamento IA crescer demais, mover para página própria no menu `IA > Treinamento`.
 - [ ] Criar documentação curta para equipe: quando usar AutoResponder, Central de Atendimento e Treinamento IA.
 - [ ] Criar métricas: conversas com IA, conversas assumidas por humano, pedidos gerados e taxa de fallback.

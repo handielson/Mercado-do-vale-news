@@ -1,15 +1,15 @@
 import React from 'react';
-import { AlertCircle, Bot, CheckCircle2, ChevronDown, ChevronUp, Clock, MessageCircle, Pause, Play, RefreshCw, RotateCcw, Search, UserRound } from 'lucide-react';
+import { AlertCircle, Ban, Bot, CheckCircle2, ChevronDown, ChevronUp, Clock, MessageCircle, Pause, Play, RefreshCw, RotateCcw, Save, Search, UserRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { autoResponderService } from '../../services/autoResponderService';
-import type { AutoResponderConversation, AutoResponderConversationLog, AutoResponderTag } from '../../types/autoResponder';
+import type { AutoResponderAttendant, AutoResponderConversation, AutoResponderConversationLog, AutoResponderTag } from '../../types/autoResponder';
 
 type ConversationStatusFilter = 'all' | 'active' | 'paused' | 'finished';
 
 const DEFAULT_FINISH_MESSAGE = 'Atendimento finalizado, mas qualquer duvida estamos por aqui.';
-const ATTENDANTS_STORAGE_KEY = 'whatsapp_center_attendants';
 const HUMAN_HANDOFF_REASON = 'human_handoff';
 const MANUAL_FINISHED_REASON = 'manual_finished';
+const UNASSIGNED_ATTENDANT_FILTER = '__none__';
 
 function isConversationPaused(conversation: AutoResponderConversation): boolean {
   if (!conversation.paused_until) return false;
@@ -51,21 +51,13 @@ export function WhatsAppConversationsPanel() {
   const [conversations, setConversations] = React.useState<AutoResponderConversation[]>([]);
   const [conversationLogsBySender, setConversationLogsBySender] = React.useState<Record<string, AutoResponderConversationLog[]>>({});
   const [conversationStatusFilter, setConversationStatusFilter] = React.useState<ConversationStatusFilter>('all');
+  const [attendantFilter, setAttendantFilter] = React.useState('all');
   const [selectedConversationSender, setSelectedConversationSender] = React.useState<string | null>(null);
   const [manualMessageDrafts, setManualMessageDrafts] = React.useState<Record<string, string>>({});
   const [selectedSendTagBySender, setSelectedSendTagBySender] = React.useState<Record<string, string>>({});
   const [selectedAttendantBySender, setSelectedAttendantBySender] = React.useState<Record<string, string>>({});
   const [sendTags, setSendTags] = React.useState<AutoResponderTag[]>([]);
-  const [attendants, setAttendants] = React.useState<string[]>(() => {
-    try {
-      const stored = window.localStorage.getItem(ATTENDANTS_STORAGE_KEY);
-      const parsed = stored ? JSON.parse(stored) : [];
-      return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [newAttendantName, setNewAttendantName] = React.useState('');
+  const [attendants, setAttendants] = React.useState<AutoResponderAttendant[]>([]);
   const [search, setSearch] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [logsLoadingSender, setLogsLoadingSender] = React.useState<string | null>(null);
@@ -77,22 +69,42 @@ export function WhatsAppConversationsPanel() {
     setError(null);
     try {
       const status = conversationStatusFilter === 'all' ? undefined : conversationStatusFilter;
-      const data = await autoResponderService.listConversations({ limit: 25, status });
+      const attendant_name = attendantFilter === 'all' ? undefined : attendantFilter;
+      const data = await autoResponderService.listConversations({ limit: 25, status, attendant_name });
       setConversations(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar atendimentos.');
     } finally {
       setLoading(false);
     }
-  }, [conversationStatusFilter]);
+  }, [attendantFilter, conversationStatusFilter]);
+
+  const loadAttendants = React.useCallback(async () => {
+    try {
+      const data = await autoResponderService.listAttendants({ active: 1 });
+      setAttendants(data.filter((attendant) => attendant.active === true || String(attendant.active) === '1'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao carregar atendentes.');
+    }
+  }, []);
 
   React.useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
 
   React.useEffect(() => {
-    window.localStorage.setItem(ATTENDANTS_STORAGE_KEY, JSON.stringify(attendants));
-  }, [attendants]);
+    void loadAttendants();
+  }, [loadAttendants]);
+
+  React.useEffect(() => {
+    setSelectedAttendantBySender((current) => {
+      const next = { ...current };
+      conversations.forEach((conversation) => {
+        next[conversation.sender] = conversation.attendant_name || '';
+      });
+      return next;
+    });
+  }, [conversations]);
 
   React.useEffect(() => {
     let mounted = true;
@@ -135,16 +147,40 @@ export function WhatsAppConversationsPanel() {
     }
   }
 
-  function addAttendant() {
-    const name = newAttendantName.trim();
-    if (!name) return;
-    setAttendants((current) => current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b)));
-    setNewAttendantName('');
+  async function saveConversationAttendant(conversation: AutoResponderConversation) {
+    const sender = conversation.sender;
+    const attendantName = selectedAttendantBySender[sender] || '';
+    await runConversationAction(
+      sender,
+      () => autoResponderService.updateConversationAttendant(sender, attendantName || null),
+      attendantName ? 'Atendente da conversa atualizado' : 'Conversa sem atendente definido'
+    );
+    if (selectedConversationSender === sender) {
+      await loadConversationLogs(sender);
+    }
+  }
+
+  async function blockConversation(conversation: AutoResponderConversation) {
+    if (!window.confirm(`Bloquear o numero ${conversation.sender} para o bot?`)) return;
+    await runConversationAction(
+      conversation.sender,
+      async () => {
+        await autoResponderService.createBlocklistEntry({
+          pattern: conversation.sender,
+          pattern_type: 'exact',
+          contact_name: conversation.contact_name || null,
+          reason: 'Bloqueado pelo Centro WhatsApp',
+          active: true,
+        });
+        await autoResponderService.pauseConversation(conversation.sender, 60 * 24 * 3650, 'blocklist_whatsapp_center');
+      },
+      'Numero bloqueado para o bot'
+    );
   }
 
   async function sendManualMessage(conversation: AutoResponderConversation, finishAttendance = false) {
     const sender = conversation.sender;
-    const attendantName = selectedAttendantBySender[sender] || '';
+    const attendantName = selectedAttendantBySender[sender] || conversation.attendant_name || '';
     const message = finishAttendance ? DEFAULT_FINISH_MESSAGE : (manualMessageDrafts[sender] || '').trim();
     const sendTagValue = selectedSendTagBySender[sender] || '';
 
@@ -159,13 +195,18 @@ export function WhatsAppConversationsPanel() {
 
     await runConversationAction(
       sender,
-      () => autoResponderService.sendManualMessage(sender, {
-        message,
-        attendant_name: attendantName,
-        send_tag_id: sendTagValue ? Number(sendTagValue) : null,
-        finish_attendance: finishAttendance,
-        pause_minutes: finishAttendance ? undefined : 240,
-      }),
+      async () => {
+        if ((conversation.attendant_name || '') !== attendantName) {
+          await autoResponderService.updateConversationAttendant(sender, attendantName);
+        }
+        return autoResponderService.sendManualMessage(sender, {
+          message,
+          attendant_name: attendantName,
+          send_tag_id: sendTagValue ? Number(sendTagValue) : null,
+          finish_attendance: finishAttendance,
+          pause_minutes: finishAttendance ? undefined : 240,
+        });
+      },
       finishAttendance ? 'Atendimento finalizado' : 'Mensagem enviada pelo WhatsApp'
     );
 
@@ -236,6 +277,17 @@ export function WhatsAppConversationsPanel() {
             <option value="paused">Pausadas</option>
             <option value="finished">Atendimento finalizado</option>
           </select>
+          <select
+            value={attendantFilter}
+            onChange={(event) => setAttendantFilter(event.target.value)}
+            className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+          >
+            <option value="all">Todos atendentes</option>
+            <option value={UNASSIGNED_ATTENDANT_FILTER}>Sem atendente</option>
+            {attendants.map((attendant) => (
+              <option key={attendant.id} value={attendant.name}>{attendant.name}</option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={() => {
@@ -258,34 +310,11 @@ export function WhatsAppConversationsPanel() {
           </div>
         )}
 
-        <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end">
-            <label className="flex-1 text-xs font-semibold uppercase text-slate-500">
-              Cadastrar atendente
-              <input
-                type="text"
-                value={newAttendantName}
-                onChange={(event) => setNewAttendantName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    addAttendant();
-                  }
-                }}
-                placeholder="Nome do atendente"
-                className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={addAttendant}
-              disabled={!newAttendantName.trim()}
-              className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-            >
-              Cadastrar atendente
-            </button>
+        {attendants.length === 0 && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-800">
+            Cadastre pelo menos um atendente no painel Equipe de atendimento para enviar mensagens manuais.
           </div>
-        </div>
+        )}
 
         {loading && conversations.length === 0 ? (
           <div className="flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border border-slate-100 bg-slate-50 text-slate-500">
@@ -339,9 +368,12 @@ export function WhatsAppConversationsPanel() {
                       )}
                       <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
                         <p className="text-xs font-semibold uppercase text-slate-500">Pausa humana</p>
-                        <div className="mt-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
+                        <div className="mt-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-4">
                           <span>
                             <strong className="text-slate-800">Status:</strong> {statusLabel}
+                          </span>
+                          <span>
+                            <strong className="text-slate-800">Atendente:</strong> {conversation.attendant_name || '-'}
                           </span>
                           <span>
                             <strong className="text-slate-800">Pausada ate:</strong> {paused ? formatDateTime(conversation.paused_until) : '-'}
@@ -456,6 +488,17 @@ export function WhatsAppConversationsPanel() {
                         <RotateCcw size={14} />
                         Resetar contadores
                       </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          void blockConversation(conversation);
+                        }}
+                        className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                      >
+                        <Ban size={14} />
+                        Bloquear numero
+                      </button>
                     </div>
                   </div>
 
@@ -463,22 +506,35 @@ export function WhatsAppConversationsPanel() {
                     <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
                       <div className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3">
                         <div className="grid gap-3 lg:grid-cols-2">
-                          <label className="text-xs font-semibold uppercase text-emerald-700">
-                            Atendente
-                            <select
-                              value={selectedAttendantBySender[conversation.sender] || ''}
-                              onChange={(event) => setSelectedAttendantBySender((current) => ({
-                                ...current,
-                                [conversation.sender]: event.target.value,
-                              }))}
-                              className="mt-1 h-10 w-full rounded-lg border border-emerald-100 bg-white px-3 text-sm font-medium normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                          <div>
+                            <label className="text-xs font-semibold uppercase text-emerald-700">
+                              Atendente atual
+                              <select
+                                value={selectedAttendantBySender[conversation.sender] || ''}
+                                onChange={(event) => setSelectedAttendantBySender((current) => ({
+                                  ...current,
+                                  [conversation.sender]: event.target.value,
+                                }))}
+                                className="mt-1 h-10 w-full rounded-lg border border-emerald-100 bg-white px-3 text-sm font-medium normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                              >
+                                <option value="">Sem atendente</option>
+                                {attendants.map((attendant) => (
+                                  <option key={attendant.id} value={attendant.name}>{attendant.name}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              type="button"
+                              disabled={busy || (selectedAttendantBySender[conversation.sender] || '') === (conversation.attendant_name || '')}
+                              onClick={() => {
+                                void saveConversationAttendant(conversation);
+                              }}
+                              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
                             >
-                              <option value="">Selecione o atendente</option>
-                              {attendants.map((attendant) => (
-                                <option key={attendant} value={attendant}>{attendant}</option>
-                              ))}
-                            </select>
-                          </label>
+                              <Save size={14} />
+                              Salvar atendente
+                            </button>
+                          </div>
 
                           <label className="text-xs font-semibold uppercase text-emerald-700">
                             Tag de envio

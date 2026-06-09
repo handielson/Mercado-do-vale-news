@@ -1,5 +1,6 @@
 import React from 'react';
 import { MessageCircle } from 'lucide-react';
+import { WhatsAppAttendantsPanel } from '../../../components/whatsapp/WhatsAppAttendantsPanel';
 import { WhatsAppBotSettingsPanel } from '../../../components/whatsapp/WhatsAppBotSettingsPanel';
 import { WhatsAppConnectionPanel } from '../../../components/whatsapp/WhatsAppConnectionPanel';
 import { WhatsAppConversationsPanel } from '../../../components/whatsapp/WhatsAppConversationsPanel';
@@ -22,6 +23,7 @@ export default function WhatsAppPage() {
         <WhatsAppMigrationChecklist />
         <WhatsAppConnectionPanel />
         <WhatsAppBotSettingsPanel />
+        <WhatsAppAttendantsPanel />
         <WhatsAppConversationsPanel />
       </div>
     </div>
