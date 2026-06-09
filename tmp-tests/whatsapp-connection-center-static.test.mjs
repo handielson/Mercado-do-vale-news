@@ -32,6 +32,10 @@ assert.ok(
   existsSync('components/whatsapp/WhatsAppInternalBotTester.tsx'),
   'WhatsApp center must have an internal bot tester component',
 );
+assert.ok(
+  existsSync('components/whatsapp/WhatsAppResponseCenterPanel.tsx'),
+  'WhatsApp center must have a response center panel component',
+);
 
 const connectionPanel = readFileSync('components/whatsapp/WhatsAppConnectionPanel.tsx', 'utf8');
 const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.tsx', 'utf8');
@@ -39,6 +43,7 @@ const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversatio
 const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPanel.tsx', 'utf8');
 const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPanel.tsx', 'utf8');
 const internalBotTester = readFileSync('components/whatsapp/WhatsAppInternalBotTester.tsx', 'utf8');
+const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCenterPanel.tsx', 'utf8');
 
 [
   'WhatsAppConnectionPanel',
@@ -47,6 +52,7 @@ const internalBotTester = readFileSync('components/whatsapp/WhatsAppInternalBotT
   'WhatsAppBotSettingsPanel',
   'WhatsAppAttendantsPanel',
   'WhatsAppInternalBotTester',
+  'WhatsAppResponseCenterPanel',
   'Centro WhatsApp',
   'Conexao WhatsApp',
   'Atendimento WhatsApp',
@@ -144,6 +150,26 @@ const internalBotTester = readFileSync('components/whatsapp/WhatsAppInternalBotT
   'nao sao enviadas ao WhatsApp real',
 ].forEach((needle) => {
   assert.ok(internalBotTester.includes(needle), `internal bot tester must include ${needle}`);
+});
+
+[
+  'WhatsAppResponseCenterPanel',
+  'Centro de respostas',
+  'Mensagens editaveis do bot',
+  'Mensagens padrao',
+  'Respostas por gatilho',
+  'getSettings',
+  'updateSettings',
+  'listRules',
+  'createRule',
+  'updateRule',
+  'uploadAttachment',
+  'RuleEditor',
+  'Carrinho abandonado',
+  'Nova resposta',
+  'Todas salvas na VPS',
+].forEach((needle) => {
+  assert.ok(responseCenterPanel.includes(needle), `response center panel must include ${needle}`);
 });
 
 [

@@ -1092,6 +1092,7 @@ Objetivo: separar operação diária da configuração do robô.
 - [ ] Mostrar histórico de mensagens da conversa.
 - [ ] Criar campo para resposta manual quando houver integração de envio disponível.
 - [ ] Criar WhatsApp interno/laboratorio do bot para testar conversas completas sem envio real, sem limite curto de mensagens e com estado preservado por sender de teste.
+- [ ] Criar Centro de Respostas no Centro WhatsApp para editar mensagens padrao e respostas por gatilho salvas na VPS, sem mensagens automaticas escondidas.
 - [ ] Validar se a integração atual permite exibir "digitando..." no WhatsApp; se permitir, acionar antes de respostas geradas pelo bot/IA.
 - [ ] Criar espaço de atendentes salvo na VPS, sem `localStorage`, com lista visível no Centro WhatsApp.
 - [ ] Permitir filtrar atendimentos por atendente atual.

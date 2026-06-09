@@ -6,6 +6,7 @@ import { WhatsAppConnectionPanel } from '../../../components/whatsapp/WhatsAppCo
 import { WhatsAppConversationsPanel } from '../../../components/whatsapp/WhatsAppConversationsPanel';
 import { WhatsAppInternalBotTester } from '../../../components/whatsapp/WhatsAppInternalBotTester';
 import { WhatsAppMigrationChecklist } from '../../../components/whatsapp/WhatsAppMigrationChecklist';
+import { WhatsAppResponseCenterPanel } from '../../../components/whatsapp/WhatsAppResponseCenterPanel';
 
 export default function WhatsAppPage() {
   return (
@@ -25,6 +26,7 @@ export default function WhatsAppPage() {
         <WhatsAppConnectionPanel />
         <WhatsAppBotSettingsPanel />
         <WhatsAppInternalBotTester />
+        <WhatsAppResponseCenterPanel />
         <WhatsAppAttendantsPanel />
         <WhatsAppConversationsPanel />
       </div>
