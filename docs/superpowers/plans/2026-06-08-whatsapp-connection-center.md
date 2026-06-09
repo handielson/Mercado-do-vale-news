@@ -10,6 +10,41 @@
 
 ---
 
+## Progress Update - 2026-06-08
+
+Implemented and deployed:
+
+- WhatsApp Center available at `/admin/settings/whatsapp` with connection/status/debug panel.
+- Migration checklist added to the WhatsApp Center.
+- Recent conversations/attendance panel added to the WhatsApp Center.
+- Human pause controls added for 1h, 4h and reset.
+- Bot log history panel added to each conversation.
+- Missing deployed VPS route fixed for `GET /autoresponder/conversations/:sender/logs`.
+- Customer name confirmation flow connected to Google Contacts integration.
+- Customer-facing replies now use only the first name after confirmation; the full confirmed name remains available for Google Contacts.
+- Broadcast list opt-in documented in `docs/autoresponder/archive/Bot_Whatsapp.md`: customer must be asked before being included.
+
+Verification already performed:
+
+- `node tmp-tests\whatsapp-connection-center-static.test.mjs`
+- `node tmp-tests\autoresponder-admin-page-static.test.mjs`
+- `node tmp-tests\autoresponder-greeting-message-static.test.mjs`
+- `node tmp-tests\autoresponder-google-contact-flow-static.test.mjs`
+- `npm.cmd run build`
+- Production VPS route check returned `200 OK` for the conversation history endpoint after backend deploy.
+
+Latest pushed commits for this block:
+
+- `0c840d9 fix(whatsapp): deploy conversation logs route`
+- `05a2494 feat(whatsapp): use first name for confirmed contacts`
+
+Next recommended block:
+
+- Continue in the WhatsApp Center with the atendimento/operation surface: message sending from the panel, clearer queue states and human handoff workflow.
+- Keep ChatGPT/tooling migration as the next larger block after attendance is operationally comfortable.
+
+---
+
 ## File Structure
 
 - Modify `pages/admin/settings/WhatsAppPage.tsx`: turn the existing simple settings page into the new WhatsApp center shell and render the connection panel.
