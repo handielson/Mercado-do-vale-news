@@ -17,6 +17,38 @@ const AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS = 'Certo, vou chamar um especiali
 const AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE = 'Nao consegui localizar exatamente isso agora. Me diga o modelo do aparelho ou o tipo de produto que voce procura.';
 const AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE = 'Vou chamar um atendente para te ajudar melhor. Assim conseguimos conferir certinho pra voce.';
 const AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE = 'Pitoco, assistente virtual do Mercado do Vale. Se precisar de ajuda personalizada, nossa equipe continua o atendimento por aqui.';
+const AUTORESPONDER_RESPONSE_TONE_VARIANTS = {
+  a: {
+    humanIn: 'Certo, vou chamar um atendente para continuar seu atendimento.',
+    humanOut: 'Certo, vou chamar um atendente. Estamos fora do horario humano agora, mas sua mensagem ficou registrada.',
+    fallback: 'Nao localizei isso com seguranca. Me envie o modelo do aparelho ou o produto que voce procura.',
+    autoPause: 'Vou passar para um atendente conferir isso certinho para voce.',
+    audioUnsupported: 'Recebi seu audio, mas por aqui preciso que voce envie em texto.',
+    orderConfirmed: 'Dados confirmados. Vou separar o pedido para um atendente finalizar.',
+    orderHandoff: 'Pedido separado. Vou pausar o bot para nossa equipe finalizar seu atendimento.',
+    finish: 'Atendimento finalizado, mas qualquer duvida estamos por aqui.',
+  },
+  b: {
+    humanIn: 'Certo, vou chamar alguem da equipe para te ajudar melhor por aqui.',
+    humanOut: 'Certo, vou chamar alguem da equipe. Agora estamos fora do horario humano, mas sua mensagem ja ficou registrada.',
+    fallback: 'Ainda nao encontrei exatamente o que voce precisa. Me diga o modelo do aparelho ou mais detalhes do produto?',
+    autoPause: 'Para nao te passar uma informacao errada, vou chamar um atendente para conferir com carinho.',
+    audioUnsupported: 'Recebi seu audio, mas ainda nao consigo ouvir por aqui. Pode me mandar em texto?',
+    orderConfirmed: 'Dados confirmados. Vou deixar o pedido separado para um atendente finalizar com voce.',
+    orderHandoff: 'Seu pedido ficou separado. Vou pausar o bot para a equipe continuar o atendimento com voce.',
+    finish: 'Atendimento finalizado. Se aparecer qualquer duvida, pode chamar por aqui.',
+  },
+  c: {
+    humanIn: 'Combinado, vou chamar um atendente aqui pra continuar com voce.',
+    humanOut: 'Combinado, vou chamar um atendente. Agora estamos fora do horario, mas sua mensagem ja ficou anotada.',
+    fallback: 'Nao achei certinho ainda. Me manda o modelo do aparelho ou explica rapidinho o que voce procura?',
+    autoPause: 'Vou chamar alguem da equipe pra olhar isso melhor com voce.',
+    audioUnsupported: 'Recebi seu audio, mas nao consigo ouvir por aqui ainda. Me manda em texto?',
+    orderConfirmed: 'Tudo certo com os dados. Vou separar o pedido pra um atendente finalizar com voce.',
+    orderHandoff: 'Pedido separado. Vou pausar o bot por aqui e a equipe continua com voce.',
+    finish: 'Atendimento finalizado, mas se precisar e so chamar por aqui.',
+  },
+};
 const AUTORESPONDER_AI_SYSTEM_PROMPT = [
   'Voce e o atendente virtual do Mercado do Vale.',
   'PROIBIDO responder produtos, precos, estoque, prazos, garantias, promocoes ou condicoes que nao estejam no contexto enviado pelo sistema.',
@@ -6580,6 +6612,37 @@ function normalizeAutoresponderText(value) {
 
 const AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY = 'Recebi seu áudio, mas ainda não consigo ouvir por aqui. Pode me mandar em texto?';
 
+function normalizeAutoresponderResponseToneMode(value) {
+  const mode = String(value || 'auto_abc').trim().toLowerCase();
+  return ['a', 'b', 'c', 'auto_abc'].includes(mode) ? mode : 'auto_abc';
+}
+
+function getAutoresponderStableToneKey(sender = '') {
+  const text = String(sender || '');
+  let total = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    total = (total + text.charCodeAt(index) * (index + 1)) % 9973;
+  }
+  return ['a', 'b', 'c'][total % 3];
+}
+
+function selectAutoresponderResponseTone(settings = null, sender = '') {
+  const mode = normalizeAutoresponderResponseToneMode(settings?.response_tone_mode);
+  if (mode === 'auto_abc') return getAutoresponderStableToneKey(sender);
+  return mode;
+}
+
+function getAutoresponderToneMessage(settings = null, sender = '', key = '', fallback = '') {
+  const toneKey = selectAutoresponderResponseTone(settings, sender);
+  return AUTORESPONDER_RESPONSE_TONE_VARIANTS[toneKey]?.[key] || fallback || '';
+}
+
+function getAutoresponderFixedToneMessage(settings = null, sender = '', key = '', configuredValue = '', defaultValue = '') {
+  const configured = String(configuredValue || '').trim();
+  if (configured && configured !== defaultValue) return configured;
+  return getAutoresponderToneMessage(settings, sender, key, defaultValue);
+}
+
 function isAutoresponderAudioMessage(message) {
   const raw = String(message || '').trim();
   if (!raw) return false;
@@ -8683,7 +8746,7 @@ async function handleAutoresponderEnginePurchaseFlowV2({ senderKey, message, set
         return formatAutoresponderReply(buildAutoresponderCustomerDocumentPrompt(), settings, false);
       },
       buildHandoffReadyReply(nextData) {
-        return formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply({ ...currentPurchaseFlow, customer_data: nextData }), settings, false);
+        return formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply(settings, senderKey), settings, false);
       },
     },
   });
@@ -9220,8 +9283,8 @@ function buildAutoresponderCustomerDataConfirmationReply(customerData) {
   return lines.join('\n');
 }
 
-function buildAutoresponderCustomerDataConfirmedReply() {
-  return 'Dados confirmados. Vou separar o pedido para um atendente finalizar com voce.';
+function buildAutoresponderCustomerDataConfirmedReply(settings = null, sender = '') {
+  return getAutoresponderToneMessage(settings, sender, 'orderConfirmed', 'Dados confirmados. Vou separar o pedido para um atendente finalizar com voce.');
 }
 
 function formatAutoresponderAttendantOrderSummary(purchaseFlow = {}, sender = '') {
@@ -9275,8 +9338,8 @@ function formatAutoresponderAttendantOrderSummary(purchaseFlow = {}, sender = ''
   return lines.join('\n');
 }
 
-function buildAutoresponderCustomerOrderHandoffReply() {
-  return 'Seu pedido foi separado para um atendente finalizar com voce. Vou pausar o bot por aqui para nossa equipe continuar o atendimento.';
+function buildAutoresponderCustomerOrderHandoffReply(settings = null, sender = '') {
+  return getAutoresponderToneMessage(settings, sender, 'orderHandoff', 'Seu pedido foi separado para um atendente finalizar com voce. Vou pausar o bot por aqui para nossa equipe continuar o atendimento.');
 }
 
 function buildAutoresponderCustomerLinkedPurchaseFlow(purchaseFlow = {}, customerRecord = null) {
@@ -10747,14 +10810,14 @@ async function getAutoresponderFallbackState(sender) {
   };
 }
 
-function getAutoresponderFallbackReply(settings, nextFallbackCount) {
+function getAutoresponderFallbackReply(settings, nextFallbackCount, sender = '') {
   const threshold = Number(settings?.auto_pause_fallback_threshold) > 0
     ? Number(settings.auto_pause_fallback_threshold)
     : 3;
   const shouldAutoPause = nextFallbackCount >= threshold;
   const replyText = shouldAutoPause
-    ? (settings?.auto_pause_fallback_message || settings?.fallback_message || AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE)
-    : (settings?.fallback_message || 'Vou chamar um atendente para te ajudar melhor com isso.');
+    ? getAutoresponderFixedToneMessage(settings, sender, 'autoPause', settings?.auto_pause_fallback_message || settings?.fallback_message, AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE)
+    : getAutoresponderFixedToneMessage(settings, sender, 'fallback', settings?.fallback_message, AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE);
 
   return { replyText, shouldAutoPause };
 }
@@ -10783,7 +10846,7 @@ async function handleAutoresponderGlobalFallbackCuration({
 
   const fallbackState = await getAutoresponderFallbackState(senderKey);
   const nextFallbackCount = fallbackState.consecutiveFallbacks + 1;
-  const fallbackReply = getAutoresponderFallbackReply(settings, nextFallbackCount);
+  const fallbackReply = getAutoresponderFallbackReply(settings, nextFallbackCount, senderKey);
   const replyText = formatAutoresponderReply(fallbackReply.replyText, settings, shouldPrefixGreeting);
   const autoPauseMinutes = Number(settings.auto_pause_fallback_minutes) > 0
     ? Number(settings.auto_pause_fallback_minutes)
@@ -11501,6 +11564,17 @@ async function callEvolutionApi(endpoint, method = 'GET', body = null) {
   return result.body;
 }
 
+async function sendAutoresponderEvolutionTextMessage(sender, text) {
+  const number = normalizeAutoresponderSender(sender);
+  if (!number) {
+    throw new Error('sender is required');
+  }
+  return callEvolutionApiDetailed(`/message/sendText/${EVOLUTION_INSTANCE_NAME}`, 'POST', {
+    number,
+    text,
+  });
+}
+
 fastify.get('/autoresponder/whatsapp/state', { preHandler: requireSyncKey }, async (req, reply) => {
   try {
     const result = await callEvolutionApi(`/instance/connectionState/${EVOLUTION_INSTANCE_NAME}`);
@@ -11606,6 +11680,8 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
     human_message_in_hours: (v) => String(v ?? ''),
     human_message_out_of_hours: (v) => String(v ?? ''),
     human_pause_minutes: (v) => Number(v),
+    manual_finish_pause_days: (v) => Math.max(1, Math.min(Math.round(Number(v) || 30), 3650)),
+    response_tone_mode: (v) => normalizeAutoresponderResponseToneMode(v),
     auto_pause_fallback_threshold: (v) => Number(v),
     auto_pause_fallback_minutes: (v) => Number(v),
     auto_pause_fallback_message: (v) => String(v ?? ''),
@@ -12056,7 +12132,8 @@ fastify.get('/autoresponder/conversations', { preHandler: requireSyncKey }, asyn
   let sql = 'SELECT * FROM autoresponder_conversations WHERE 1=1';
   const params = [];
   if (status === 'paused') sql += ' AND paused_until > NOW()';
-  if (status === 'active') sql += ' AND (paused_until IS NULL OR paused_until <= NOW())';
+  if (status === 'active') sql += " AND (paused_until IS NULL OR paused_until <= NOW()) AND (pause_reason IS NULL OR pause_reason <> 'manual_finished')";
+  if (status === 'finished') sql += " AND pause_reason = 'manual_finished'";
   if (tagId) {
     sql += ' AND JSON_CONTAINS(tag_ids, JSON_ARRAY(?))';
     params.push(Number(tagId));
@@ -12122,6 +12199,95 @@ fastify.post('/autoresponder/conversations/:sender/reset-counters', { preHandler
     [req.params.sender]
   );
   return { ok: true };
+});
+
+fastify.post('/autoresponder/conversations/:sender/manual-message', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const sender = normalizeAutoresponderSender(req.params.sender) || String(req.params.sender || '').trim();
+  let message = String(body.message || '').trim();
+  const attendantName = String(body.attendant_name || '').trim();
+  const sendTagId = body.send_tag_id == null || body.send_tag_id === '' ? null : Number(body.send_tag_id);
+  const finishAttendance = body.finish_attendance === true;
+  let defaultFinishPauseDays = 30;
+  if (finishAttendance && (body.pause_minutes === undefined || body.pause_minutes === null || body.pause_minutes === '')) {
+    const [settingsRows] = await pool.query('SELECT manual_finish_pause_days FROM autoresponder_settings WHERE id = 1 LIMIT 1');
+    const configuredDays = Number(settingsRows[0]?.manual_finish_pause_days || 30);
+    if (Number.isFinite(configuredDays)) {
+      defaultFinishPauseDays = Math.max(1, Math.min(Math.round(configuredDays), 3650));
+    }
+  }
+  const rawPauseMinutes = Number(body.pause_minutes || (finishAttendance ? defaultFinishPauseDays * 1440 : 240));
+  const pauseMinutes = Math.max(1, Math.min(rawPauseMinutes, finishAttendance ? 60 * 24 * 3650 : 60 * 24 * 7));
+
+  if (!sender) return reply.code(400).send({ error: 'sender is required' });
+  if (!message) return reply.code(400).send({ error: 'message is required' });
+  if (sendTagId != null && !Number.isFinite(sendTagId)) return reply.code(400).send({ error: 'send_tag_id is invalid' });
+
+  if (finishAttendance && message === 'Atendimento finalizado, mas qualquer duvida estamos por aqui.') {
+    const [settingsRows] = await pool.query('SELECT response_tone_mode FROM autoresponder_settings WHERE id = 1 LIMIT 1');
+    message = getAutoresponderToneMessage(settingsRows[0] || null, sender, 'finish', message);
+  }
+
+  let evolutionResult;
+  try {
+    evolutionResult = await sendAutoresponderEvolutionTextMessage(sender, message);
+  } catch (err) {
+    return reply.code(502).send({ error: err.message || 'Evolution API send failed' });
+  }
+
+  if (!evolutionResult.ok || evolutionResult.body?.error === true) {
+    return reply.code(502).send({
+      error: true,
+      message: formatEvolutionMessage(evolutionResult.body?.message || evolutionResult.body?.response || evolutionResult.body) || 'Evolution API failed to send the WhatsApp message.',
+      evolutionStatus: evolutionResult.status,
+      evolution: evolutionResult.body,
+    });
+  }
+
+  const intent = finishAttendance ? 'manual_finished' : 'manual_message';
+  await logAutoresponderReply({
+    sender,
+    message: attendantName ? `Atendente: ${attendantName}` : 'Atendimento manual',
+    intent,
+    replyText: message,
+    matchedCount: 0,
+  });
+
+  if (finishAttendance) {
+    await pool.query(
+      `INSERT INTO autoresponder_conversations (sender, last_message_at, paused_until, pause_reason)
+       VALUES (?, CURRENT_TIMESTAMP, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'manual_finished')
+       ON DUPLICATE KEY UPDATE
+         last_message_at = CURRENT_TIMESTAMP,
+         paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+         pause_reason = 'manual_finished'`,
+      [sender, pauseMinutes, pauseMinutes]
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO autoresponder_conversations (sender, last_message_at, paused_until, pause_reason)
+       VALUES (?, CURRENT_TIMESTAMP, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'human_handoff')
+       ON DUPLICATE KEY UPDATE
+         last_message_at = CURRENT_TIMESTAMP,
+         paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+         pause_reason = 'human_handoff'`,
+      [sender, pauseMinutes, pauseMinutes]
+    );
+  }
+
+  if (sendTagId != null) {
+    await applyAutoresponderRuleConversationTag(sender, sendTagId);
+  }
+
+  return {
+    ok: true,
+    sender,
+    message,
+    attendant_name: attendantName || null,
+    send_tag_id: sendTagId,
+    pause_reason: finishAttendance ? 'manual_finished' : 'human_handoff',
+    evolution: evolutionResult.body,
+  };
 });
 
 fastify.post('/autoresponder/conversations/:sender/tags', { preHandler: requireSyncKey }, async (req) => {
@@ -12479,10 +12645,11 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   };
 
   if (isAutoresponderAudioMessage(message)) {
+    const audioReplyText = getAutoresponderToneMessage(settings, normalizedSender, 'audioUnsupported', AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY);
     return {
       intent: 'audio_unsupported',
       matched_count: 0,
-      replies: [{ message: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY }],
+      replies: [{ message: audioReplyText }],
       sender: normalizedSender,
     };
   }
@@ -12513,10 +12680,11 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   }
 
   if (isAutoresponderAudioMessage(message)) {
+    const audioReplyText = getAutoresponderToneMessage(settings, normalizedSender, 'audioUnsupported', AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY);
     return {
       intent: 'audio_unsupported',
       matched_count: 0,
-      replies: [{ message: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY }],
+      replies: [{ message: audioReplyText }],
       sender: normalizedSender,
     };
   }
@@ -12564,8 +12732,8 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   if (detectedIntent.humanRequest) {
     const storeStatus = await getCachedAutoresponderStoreStatus();
     const humanReplyText = isAutoresponderStoreInHumanHours(storeStatus)
-      ? (settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS)
-      : (settings.human_message_out_of_hours || settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS);
+      ? getAutoresponderFixedToneMessage(settings, normalizedSender, 'humanIn', settings.human_message_in_hours, AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS)
+      : getAutoresponderFixedToneMessage(settings, normalizedSender, 'humanOut', settings.human_message_out_of_hours || settings.human_message_in_hours, AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS);
     return {
       intent: 'human_request',
       matched_count: 0,
@@ -12776,7 +12944,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     };
   }
 
-  const fallbackReply = getAutoresponderFallbackReply(settings, 1);
+  const fallbackReply = getAutoresponderFallbackReply(settings, 1, normalizedSender);
   return {
     intent: 'fallback',
     matched_count: 0,
@@ -12870,15 +13038,16 @@ fastify.route({
       }
 
       if (isAudioPayload) {
+        const audioReplyText = getAutoresponderToneMessage(settings, senderKey, 'audioUnsupported', AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY);
         await logAutoresponderReply({
           sender: senderKey,
           message,
           intent: 'audio_unsupported',
-          replyText: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY,
+          replyText: audioReplyText,
           matchedCount: 0,
         });
         await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY }] };
+        return { replies: [{ message: audioReplyText }] };
       }
 
       const [conversationRows] = await pool.query(
@@ -13559,7 +13728,7 @@ fastify.route({
             status: 'pedido_em_andamento',
             handoff_created_at: new Date().toISOString(),
           };
-          const replyText = formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply(), settings, false);
+          const replyText = formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply(settings, senderKey), settings, false);
           const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
           await saveAutoresponderPurchaseFlow(senderKey, handoffPurchaseFlow);
           await logAutoresponderReply({
@@ -13631,7 +13800,7 @@ fastify.route({
             status: 'pedido_em_andamento',
             handoff_created_at: new Date().toISOString(),
           };
-          const replyText = formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply(), settings, false);
+          const replyText = formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply(settings, senderKey), settings, false);
           const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
           await saveAutoresponderPurchaseFlow(senderKey, handoffPurchaseFlow);
           await logAutoresponderReply({
@@ -14146,8 +14315,8 @@ fastify.route({
       if (detectedIntent.humanRequest) {
         const storeStatus = await getCachedAutoresponderStoreStatus();
         const humanReplyText = isAutoresponderStoreInHumanHours(storeStatus)
-          ? (settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS)
-          : (settings.human_message_out_of_hours || settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS);
+          ? getAutoresponderFixedToneMessage(settings, senderKey, 'humanIn', settings.human_message_in_hours, AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS)
+          : getAutoresponderFixedToneMessage(settings, senderKey, 'humanOut', settings.human_message_out_of_hours || settings.human_message_in_hours, AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS);
         const replyText = formatAutoresponderReply(humanReplyText, settings, shouldPrefixGreeting);
 
         await pool.query(
@@ -20917,6 +21086,8 @@ async function runMigrations() {
       human_message_in_hours TEXT NULL,
       human_message_out_of_hours TEXT NULL,
       human_pause_minutes INT NOT NULL DEFAULT 60,
+      manual_finish_pause_days INT NOT NULL DEFAULT 30,
+      response_tone_mode VARCHAR(16) NOT NULL DEFAULT 'auto_abc',
       auto_pause_fallback_threshold INT NOT NULL DEFAULT 3,
       auto_pause_fallback_minutes INT NOT NULL DEFAULT 30,
       auto_pause_fallback_message TEXT NULL,
@@ -20948,6 +21119,8 @@ async function runMigrations() {
   `);
 
   await addColumnIfMissing('autoresponder_settings', 'signature_enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
+  await addColumnIfMissing('autoresponder_settings', 'manual_finish_pause_days', 'INT NOT NULL DEFAULT 30');
+  await addColumnIfMissing('autoresponder_settings', 'response_tone_mode', "VARCHAR(16) NOT NULL DEFAULT 'auto_abc'");
   await addColumnIfMissing('autoresponder_settings', 'signature_message', 'TEXT NULL');
   await addColumnIfMissing('autoresponder_settings', 'ai_enabled', 'TINYINT(1) NOT NULL DEFAULT 0');
   await addColumnIfMissing('autoresponder_settings', 'ai_model', "VARCHAR(80) NOT NULL DEFAULT 'gpt-5-nano'");

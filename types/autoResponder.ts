@@ -18,6 +18,8 @@ export interface AutoResponderSettings {
     human_message_in_hours: string;
     human_message_out_of_hours: string;
     human_pause_minutes: number;
+    manual_finish_pause_days?: number;
+    response_tone_mode?: 'a' | 'b' | 'c' | 'auto_abc';
     auto_pause_fallback_threshold: number;
     auto_pause_fallback_minutes: number;
     auto_pause_fallback_message: string;
@@ -133,6 +135,24 @@ export interface AutoResponderConversationLog {
     response_time_ms?: number | null;
     ai_assisted?: boolean | number;
     ai_model?: string | null;
+}
+
+export interface AutoResponderManualMessageInput {
+    message: string;
+    attendant_name?: string;
+    send_tag_id?: number | null;
+    finish_attendance?: boolean;
+    pause_minutes?: number;
+}
+
+export interface AutoResponderManualMessageResult extends AutoResponderOk {
+    sender: string;
+    message: string;
+    attendant_name?: string | null;
+    send_tag_id?: number | null;
+    pause_reason?: string | null;
+    paused_until?: string | null;
+    evolution?: unknown;
 }
 
 export interface AutoResponderBlocklistEntry {
@@ -311,7 +331,7 @@ export interface AutoResponderTagFilters {
 export interface AutoResponderConversationFilters {
     limit?: number;
     offset?: number;
-    status?: 'paused' | 'active';
+    status?: 'paused' | 'active' | 'finished';
     tag_id?: number;
 }
 

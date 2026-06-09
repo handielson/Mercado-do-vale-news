@@ -14,6 +14,8 @@ import type {
     AutoResponderConversationFilters,
     AutoResponderConversationLog,
     AutoResponderConversationLogFilters,
+    AutoResponderManualMessageInput,
+    AutoResponderManualMessageResult,
     AutoResponderOk,
     AutoResponderRule,
     AutoResponderRuleFilters,
@@ -226,6 +228,10 @@ export const autoResponderService = {
 
     resetConversationCounters: (sender: string): Promise<AutoResponderOk> => {
         return vpsClient.post<AutoResponderOk>(`/autoresponder/conversations/${senderPath(sender)}/reset-counters`, {});
+    },
+
+    sendManualMessage: (sender: string, input: AutoResponderManualMessageInput): Promise<AutoResponderManualMessageResult> => {
+        return vpsClient.post<AutoResponderManualMessageResult>(`/autoresponder/conversations/${senderPath(sender)}/manual-message`, input);
     },
 
     setConversationTags: (sender: string, tagIds: number[]): Promise<AutoResponderOk & { tag_ids: number[] }> => {

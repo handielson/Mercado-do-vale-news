@@ -1,14 +1,23 @@
 import React from 'react';
-import { AlertCircle, Bot, ChevronDown, ChevronUp, Clock, MessageCircle, Pause, Play, RefreshCw, RotateCcw, Search, UserRound } from 'lucide-react';
+import { AlertCircle, Bot, CheckCircle2, ChevronDown, ChevronUp, Clock, MessageCircle, Pause, Play, RefreshCw, RotateCcw, Search, UserRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { autoResponderService } from '../../services/autoResponderService';
-import type { AutoResponderConversation, AutoResponderConversationLog } from '../../types/autoResponder';
+import type { AutoResponderConversation, AutoResponderConversationLog, AutoResponderTag } from '../../types/autoResponder';
 
-type ConversationStatusFilter = 'all' | 'active' | 'paused';
+type ConversationStatusFilter = 'all' | 'active' | 'paused' | 'finished';
+
+const DEFAULT_FINISH_MESSAGE = 'Atendimento finalizado, mas qualquer duvida estamos por aqui.';
+const ATTENDANTS_STORAGE_KEY = 'whatsapp_center_attendants';
+const HUMAN_HANDOFF_REASON = 'human_handoff';
+const MANUAL_FINISHED_REASON = 'manual_finished';
 
 function isConversationPaused(conversation: AutoResponderConversation): boolean {
   if (!conversation.paused_until) return false;
   return new Date(conversation.paused_until).getTime() > Date.now();
+}
+
+function isConversationFinished(conversation: AutoResponderConversation): boolean {
+  return conversation.pause_reason === MANUAL_FINISHED_REASON;
 }
 
 function formatDateTime(value?: string | null): string {
@@ -32,11 +41,31 @@ function formatResponseTime(value?: number | null): string {
   return `${formatNumber(Number(value))} ms`;
 }
 
+function formatPauseReason(value?: string | null): string {
+  if (value === HUMAN_HANDOFF_REASON) return 'Atendimento humano';
+  if (value === MANUAL_FINISHED_REASON) return 'Atendimento finalizado';
+  return value || '-';
+}
+
 export function WhatsAppConversationsPanel() {
   const [conversations, setConversations] = React.useState<AutoResponderConversation[]>([]);
   const [conversationLogsBySender, setConversationLogsBySender] = React.useState<Record<string, AutoResponderConversationLog[]>>({});
   const [conversationStatusFilter, setConversationStatusFilter] = React.useState<ConversationStatusFilter>('all');
   const [selectedConversationSender, setSelectedConversationSender] = React.useState<string | null>(null);
+  const [manualMessageDrafts, setManualMessageDrafts] = React.useState<Record<string, string>>({});
+  const [selectedSendTagBySender, setSelectedSendTagBySender] = React.useState<Record<string, string>>({});
+  const [selectedAttendantBySender, setSelectedAttendantBySender] = React.useState<Record<string, string>>({});
+  const [sendTags, setSendTags] = React.useState<AutoResponderTag[]>([]);
+  const [attendants, setAttendants] = React.useState<string[]>(() => {
+    try {
+      const stored = window.localStorage.getItem(ATTENDANTS_STORAGE_KEY);
+      const parsed = stored ? JSON.parse(stored) : [];
+      return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [newAttendantName, setNewAttendantName] = React.useState('');
   const [search, setSearch] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [logsLoadingSender, setLogsLoadingSender] = React.useState<string | null>(null);
@@ -60,6 +89,24 @@ export function WhatsAppConversationsPanel() {
   React.useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
+
+  React.useEffect(() => {
+    window.localStorage.setItem(ATTENDANTS_STORAGE_KEY, JSON.stringify(attendants));
+  }, [attendants]);
+
+  React.useEffect(() => {
+    let mounted = true;
+    autoResponderService.listTags({ scope: 'conversation' })
+      .then((tags) => {
+        if (mounted) setSendTags(tags);
+      })
+      .catch((err) => {
+        if (mounted) setError(err instanceof Error ? err.message : 'Falha ao carregar tags de envio.');
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   async function runConversationAction(sender: string, action: () => Promise<unknown>, successMessage: string) {
     setActionSender(sender);
@@ -88,6 +135,46 @@ export function WhatsAppConversationsPanel() {
     }
   }
 
+  function addAttendant() {
+    const name = newAttendantName.trim();
+    if (!name) return;
+    setAttendants((current) => current.includes(name) ? current : [...current, name].sort((a, b) => a.localeCompare(b)));
+    setNewAttendantName('');
+  }
+
+  async function sendManualMessage(conversation: AutoResponderConversation, finishAttendance = false) {
+    const sender = conversation.sender;
+    const attendantName = selectedAttendantBySender[sender] || '';
+    const message = finishAttendance ? DEFAULT_FINISH_MESSAGE : (manualMessageDrafts[sender] || '').trim();
+    const sendTagValue = selectedSendTagBySender[sender] || '';
+
+    if (!attendantName) {
+      setError('Selecione um atendente antes de enviar a mensagem manual.');
+      return;
+    }
+    if (!message) {
+      setError('Digite uma mensagem antes de enviar.');
+      return;
+    }
+
+    await runConversationAction(
+      sender,
+      () => autoResponderService.sendManualMessage(sender, {
+        message,
+        attendant_name: attendantName,
+        send_tag_id: sendTagValue ? Number(sendTagValue) : null,
+        finish_attendance: finishAttendance,
+        pause_minutes: finishAttendance ? undefined : 240,
+      }),
+      finishAttendance ? 'Atendimento finalizado' : 'Mensagem enviada pelo WhatsApp'
+    );
+
+    setManualMessageDrafts((current) => ({ ...current, [sender]: '' }));
+    if (selectedConversationSender === sender) {
+      await loadConversationLogs(sender);
+    }
+  }
+
   async function toggleConversationDetails(sender: string) {
     if (selectedConversationSender === sender) {
       setSelectedConversationSender(null);
@@ -101,13 +188,21 @@ export function WhatsAppConversationsPanel() {
 
   const filteredConversations = React.useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return conversations;
-    return conversations.filter((conversation) =>
+    const statusFiltered = conversations.filter((conversation) => {
+      const paused = isConversationPaused(conversation);
+      const finished = isConversationFinished(conversation);
+      if (conversationStatusFilter === 'finished') return finished;
+      if (conversationStatusFilter === 'active') return !paused && !finished;
+      if (conversationStatusFilter === 'paused') return paused && !finished;
+      return true;
+    });
+    if (!term) return statusFiltered;
+    return statusFiltered.filter((conversation) =>
       [conversation.sender, conversation.contact_name, conversation.last_message, conversation.pause_reason]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term))
     );
-  }, [conversations, search]);
+  }, [conversationStatusFilter, conversations, search]);
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white">
@@ -139,6 +234,7 @@ export function WhatsAppConversationsPanel() {
             <option value="all">Todas</option>
             <option value="active">Ativas</option>
             <option value="paused">Pausadas</option>
+            <option value="finished">Atendimento finalizado</option>
           </select>
           <button
             type="button"
@@ -162,6 +258,35 @@ export function WhatsAppConversationsPanel() {
           </div>
         )}
 
+        <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end">
+            <label className="flex-1 text-xs font-semibold uppercase text-slate-500">
+              Cadastrar atendente
+              <input
+                type="text"
+                value={newAttendantName}
+                onChange={(event) => setNewAttendantName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addAttendant();
+                  }
+                }}
+                placeholder="Nome do atendente"
+                className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={addAttendant}
+              disabled={!newAttendantName.trim()}
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              Cadastrar atendente
+            </button>
+          </div>
+        </div>
+
         {loading && conversations.length === 0 ? (
           <div className="flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border border-slate-100 bg-slate-50 text-slate-500">
             <RefreshCw className="animate-spin" size={26} />
@@ -179,6 +304,8 @@ export function WhatsAppConversationsPanel() {
           <div className="space-y-3">
             {filteredConversations.map((conversation) => {
               const paused = isConversationPaused(conversation);
+              const finished = isConversationFinished(conversation);
+              const statusLabel = finished ? 'Atendimento finalizado' : paused ? 'Com humano' : 'Bot ativo';
               const busy = actionSender === conversation.sender;
               const expanded = selectedConversationSender === conversation.sender;
               const logs = conversationLogsBySender[conversation.sender] || [];
@@ -193,10 +320,14 @@ export function WhatsAppConversationsPanel() {
                         </h4>
                         <span
                           className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                            paused ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                            finished
+                              ? 'bg-slate-200 text-slate-700'
+                              : paused
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-emerald-100 text-emerald-700'
                           }`}
                         >
-                          {paused ? 'Pausada' : 'Ativa'}
+                          {statusLabel}
                         </span>
                       </div>
                       <p className="mt-1 font-mono text-xs text-slate-500">{conversation.sender}</p>
@@ -204,19 +335,19 @@ export function WhatsAppConversationsPanel() {
                         {conversation.last_message || 'Sem mensagem registrada.'}
                       </p>
                       {conversation.pause_reason && (
-                        <p className="mt-2 text-xs font-medium text-amber-700">Motivo da pausa: {conversation.pause_reason}</p>
+                        <p className="mt-2 text-xs font-medium text-amber-700">Motivo da pausa: {formatPauseReason(conversation.pause_reason)}</p>
                       )}
                       <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
                         <p className="text-xs font-semibold uppercase text-slate-500">Pausa humana</p>
                         <div className="mt-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
                           <span>
-                            <strong className="text-slate-800">Status:</strong> {paused ? 'Bot pausado' : 'Bot ativo'}
+                            <strong className="text-slate-800">Status:</strong> {statusLabel}
                           </span>
                           <span>
                             <strong className="text-slate-800">Pausada ate:</strong> {paused ? formatDateTime(conversation.paused_until) : '-'}
                           </span>
                           <span>
-                            <strong className="text-slate-800">Motivo:</strong> {conversation.pause_reason || '-'}
+                            <strong className="text-slate-800">Motivo:</strong> {formatPauseReason(conversation.pause_reason)}
                           </span>
                         </div>
                       </div>
@@ -259,7 +390,7 @@ export function WhatsAppConversationsPanel() {
                         {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         {expanded ? 'Ocultar historico' : 'Ver historico'}
                       </button>
-                      {paused ? (
+                      {paused || finished ? (
                         <button
                           type="button"
                           disabled={busy}
@@ -330,6 +461,85 @@ export function WhatsAppConversationsPanel() {
 
                   {expanded && (
                     <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          <label className="text-xs font-semibold uppercase text-emerald-700">
+                            Atendente
+                            <select
+                              value={selectedAttendantBySender[conversation.sender] || ''}
+                              onChange={(event) => setSelectedAttendantBySender((current) => ({
+                                ...current,
+                                [conversation.sender]: event.target.value,
+                              }))}
+                              className="mt-1 h-10 w-full rounded-lg border border-emerald-100 bg-white px-3 text-sm font-medium normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                            >
+                              <option value="">Selecione o atendente</option>
+                              {attendants.map((attendant) => (
+                                <option key={attendant} value={attendant}>{attendant}</option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="text-xs font-semibold uppercase text-emerald-700">
+                            Tag de envio
+                            <select
+                              value={selectedSendTagBySender[conversation.sender] || ''}
+                              onChange={(event) => setSelectedSendTagBySender((current) => ({
+                                ...current,
+                                [conversation.sender]: event.target.value,
+                              }))}
+                              className="mt-1 h-10 w-full rounded-lg border border-emerald-100 bg-white px-3 text-sm font-medium normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                            >
+                              <option value="">Sem tag de envio</option>
+                              {sendTags.map((tag) => (
+                                <option key={tag.id} value={tag.id}>{tag.name}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+
+                        <label className="mt-3 block text-xs font-semibold uppercase text-emerald-700">
+                          Mensagem manual
+                          <textarea
+                            value={manualMessageDrafts[conversation.sender] || ''}
+                            onChange={(event) => setManualMessageDrafts((current) => ({
+                              ...current,
+                              [conversation.sender]: event.target.value,
+                            }))}
+                            placeholder="Digite a resposta para o cliente"
+                            rows={3}
+                            className="mt-1 w-full resize-y rounded-lg border border-emerald-100 bg-white px-3 py-2 text-sm font-medium normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                          />
+                        </label>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={busy || !selectedAttendantBySender[conversation.sender] || !(manualMessageDrafts[conversation.sender] || '').trim()}
+                            onClick={() => {
+                              void sendManualMessage(conversation, false);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                          >
+                            <MessageCircle size={14} />
+                            Enviar mensagem
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy || !selectedAttendantBySender[conversation.sender]}
+                            onClick={() => {
+                              if (!window.confirm('Enviar mensagem de atendimento finalizado?')) return;
+                              void sendManualMessage(conversation, true);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                          >
+                            <CheckCircle2 size={14} />
+                            Finalizar atendimento
+                          </button>
+                          <span className="text-xs text-emerald-800">{DEFAULT_FINISH_MESSAGE}</span>
+                        </div>
+                      </div>
+
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-xs font-semibold uppercase text-emerald-600">Historico da conversa</p>

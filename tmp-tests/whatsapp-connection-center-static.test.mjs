@@ -20,15 +20,21 @@ assert.ok(
   existsSync('components/whatsapp/WhatsAppConversationsPanel.tsx'),
   'WhatsApp center must have an essential attendance panel component',
 );
+assert.ok(
+  existsSync('components/whatsapp/WhatsAppBotSettingsPanel.tsx'),
+  'WhatsApp center must have a bot settings panel component',
+);
 
 const connectionPanel = readFileSync('components/whatsapp/WhatsAppConnectionPanel.tsx', 'utf8');
 const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.tsx', 'utf8');
 const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversationsPanel.tsx', 'utf8');
+const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPanel.tsx', 'utf8');
 
 [
   'WhatsAppConnectionPanel',
   'WhatsAppMigrationChecklist',
   'WhatsAppConversationsPanel',
+  'WhatsAppBotSettingsPanel',
   'Centro WhatsApp',
   'Conexao WhatsApp',
   'Atendimento WhatsApp',
@@ -61,6 +67,21 @@ const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversatio
   'resumeConversation',
   'resetConversationCounters',
   'listConversationLogs',
+  'sendManualMessage',
+  'manualMessageDrafts',
+  'selectedSendTagBySender',
+  'selectedAttendantBySender',
+  'newAttendantName',
+  'attendants',
+  'Atendente',
+  'Cadastrar atendente',
+  'Tag de envio',
+  'Enviar mensagem',
+  'Finalizar atendimento',
+  'Atendimento finalizado',
+  'Atendimento finalizado, mas qualquer duvida estamos por aqui.',
+  'human_handoff',
+  'manual_finished',
   'Atendimento WhatsApp',
   'Ver historico',
   'Ocultar historico',
@@ -77,6 +98,25 @@ const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversatio
   'Pausada ate',
 ].forEach((needle) => {
   assert.ok(conversationsPanel.includes(needle), `conversations panel must include ${needle}`);
+});
+
+[
+  'WhatsAppBotSettingsPanel',
+  'getSettings',
+  'updateSettings',
+  'manual_finish_pause_days',
+  'response_tone_mode',
+  'responseToneMode',
+  'Tom das respostas',
+  'A - Direto',
+  'B - Consultivo',
+  'C - Humano',
+  'Auto A/B/C',
+  'finishPauseDays',
+  'Dias pausado apos finalizar',
+  'Salvar configuracoes',
+].forEach((needle) => {
+  assert.ok(botSettingsPanel.includes(needle), `bot settings panel must include ${needle}`);
 });
 
 [
@@ -101,12 +141,19 @@ const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversatio
   'pauseConversation',
   'resumeConversation',
   'resetConversationCounters',
+  'sendManualMessage',
 ].forEach((needle) => {
   assert.ok(service.includes(needle), `autoResponderService must keep ${needle}`);
 });
 
 [
   'export interface AutoResponderConversationLog',
+  'export interface AutoResponderManualMessageInput',
+  'export interface AutoResponderManualMessageResult',
+  'manual_finish_pause_days',
+  "response_tone_mode?: 'a' | 'b' | 'c' | 'auto_abc'",
+  'attendant_name?: string',
+  'send_tag_id?: number',
   'question?: string | null',
   'reply_text?: string | null',
   'response_time_ms?: number | null',
@@ -115,6 +162,25 @@ const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversatio
 });
 
 [
+  "fastify.post('/autoresponder/conversations/:sender/manual-message'",
+  'sendAutoresponderEvolutionTextMessage',
+  'attendant_name',
+  'send_tag_id',
+  'manual_finish_pause_days',
+  'response_tone_mode',
+  'AUTORESPONDER_RESPONSE_TONE_VARIANTS',
+  'selectAutoresponderResponseTone',
+  'getAutoresponderToneMessage',
+  "addColumnIfMissing('autoresponder_settings', 'response_tone_mode'",
+  "addColumnIfMissing('autoresponder_settings', 'manual_finish_pause_days'",
+  'manual_message',
+  'manual_finished',
+  'human_handoff',
+  "status === 'finished'",
+  "pause_reason = 'manual_finished'",
+  'finishAttendance ? 60 * 24 * 3650 : 60 * 24 * 7',
+  "VALUES (?, CURRENT_TIMESTAMP, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'manual_finished')",
+  'applyAutoresponderRuleConversationTag(sender, sendTagId)',
   "fastify.get('/autoresponder/conversations/:sender/logs'",
   'FROM autoresponder_logs',
   'WHERE sender = ?',
