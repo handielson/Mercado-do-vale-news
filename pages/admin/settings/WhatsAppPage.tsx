@@ -3,7 +3,6 @@ import { MessageCircle } from 'lucide-react';
 import { WhatsAppAttendantsPanel } from '../../../components/whatsapp/WhatsAppAttendantsPanel';
 import { WhatsAppBotSettingsPanel } from '../../../components/whatsapp/WhatsAppBotSettingsPanel';
 import { WhatsAppConnectionPanel } from '../../../components/whatsapp/WhatsAppConnectionPanel';
-import { WhatsAppConversationsPanel } from '../../../components/whatsapp/WhatsAppConversationsPanel';
 import { WhatsAppInternalBotTester } from '../../../components/whatsapp/WhatsAppInternalBotTester';
 import { WhatsAppMigrationChecklist } from '../../../components/whatsapp/WhatsAppMigrationChecklist';
 import { WhatsAppResponseCenterPanel } from '../../../components/whatsapp/WhatsAppResponseCenterPanel';
@@ -28,7 +27,6 @@ export default function WhatsAppPage() {
         <WhatsAppInternalBotTester />
         <WhatsAppResponseCenterPanel />
         <WhatsAppAttendantsPanel />
-        <WhatsAppConversationsPanel />
       </div>
     </div>
   );

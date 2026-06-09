@@ -48,7 +48,6 @@ const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCe
 [
   'WhatsAppConnectionPanel',
   'WhatsAppMigrationChecklist',
-  'WhatsAppConversationsPanel',
   'WhatsAppBotSettingsPanel',
   'WhatsAppAttendantsPanel',
   'WhatsAppInternalBotTester',
