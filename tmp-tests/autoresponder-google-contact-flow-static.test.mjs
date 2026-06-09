@@ -2,6 +2,9 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
 const source = readFileSync('vps_server.cjs', 'utf8');
+const deployedSource = readFileSync('vps_server.js', 'utf8');
+
+function assertGoogleContactFlow(sourceText, label) {
 
 [
   'contact_name_status',
@@ -9,85 +12,113 @@ const source = readFileSync('vps_server.cjs', 'utf8');
   'contact_name_confirmed',
   'google_contact_resource_name',
 ].forEach((column) => {
-  assert.match(source, new RegExp(column), `autoresponder conversations must persist ${column}`);
+  assert.match(sourceText, new RegExp(column), `${label} autoresponder conversations must persist ${column}`);
 });
 
 assert.match(
-  source,
+  sourceText,
   /async function getAutoresponderContactNameState\(sender\)/,
-  'autoresponder must load contact name confirmation state',
+  `${label} autoresponder must load contact name confirmation state`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /async function handleAutoresponderContactNameFlow\(\{ sender, message, contactFirstName \}\)/,
-  'autoresponder must handle pending contact name confirmation before normal replies',
+  `${label} autoresponder must handle pending contact name confirmation before normal replies`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /Seu nome e \$\{contactFirstName\}\?/,
-  'autoresponder must ask the customer to confirm the detected first name',
+  `${label} autoresponder must ask the customer to confirm the detected first name`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /Qual nome devo colocar no seu contato\?/,
-  'autoresponder must ask for the correct name when the customer says no',
+  `${label} autoresponder must ask for the correct name when the customer says no`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /async function createOrUpdateGoogleContact\(\{ sender, name \}\)/,
-  'autoresponder must expose a Google Contacts integration function',
+  `${label} autoresponder must expose a Google Contacts integration function`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /https:\/\/people\.googleapis\.com\/v1\/people:createContact/,
-  'Google Contacts integration must call People API createContact',
+  `${label} Google Contacts integration must call People API createContact`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /const contactFlowReply = await handleAutoresponderContactNameFlow\(\{ sender: senderKey, message, contactFirstName \}\)/,
-  'webhook must check the contact name flow before product search',
+  `${label} webhook must check the contact name flow before product search`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /await startAutoresponderContactNameConfirmation\(senderKey, contactFirstName\)/,
-  'pure greeting with contact name must start the confirmation flow',
+  `${label} pure greeting with contact name must start the confirmation flow`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /await markAutoresponderContactNameAwaitingInput\(senderKey\)/,
-  'pure greeting without contact name must start the manual name capture flow',
+  `${label} pure greeting without contact name must start the manual name capture flow`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /Qual seu nome para seguirmos com o atendimento\?/,
-  'pure greeting without contact name must ask for the customer name professionally',
+  `${label} pure greeting without contact name must ask for the customer name professionally`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /return \{ replies: \[\{ message: greetingText \}, \{ message: contactPrompt\.trim\(\) \}\] \}/,
-  'greeting contact prompts must be returned as a second Pro reply',
+  `${label} greeting contact prompts must be returned as a second Pro reply`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /const contactFlowReplies = Array\.isArray\(contactFlowReply\)/,
-  'contact name flow must support multiple Pro replies',
+  `${label} contact name flow must support multiple Pro replies`,
 );
 
 assert.match(
-  source,
+  sourceText,
   /formatAutoresponderContactFollowUpReply\(\)/,
-  'saved contact flow must add the help question after saving the contact',
+  `${label} saved contact flow must add the help question after saving the contact`,
 );
+
+assert.match(
+  sourceText,
+  /function getAutoresponderContactFirstNameFromName\(name\)/,
+  `${label} must expose a helper to derive the first name from the confirmed full name`,
+);
+
+assert.match(
+  sourceText,
+  /formatAutoresponderContactSavedReply\(name, googleResult\)[\s\S]*?const firstName = getAutoresponderContactFirstNameFromName\(name\)/,
+  `${label} saved-contact reply must address the customer by first name only`,
+);
+
+assert.match(
+  sourceText,
+  /getAutoresponderGreetingReply\(message, contactFirstName = '', settings = null\)[\s\S]*?getAutoresponderContactFirstNameFromName\(contactFirstName\)/,
+  `${label} greeting must use only the first name even when a full name is available`,
+);
+
+assert.match(
+  sourceText,
+  /const typedName = normalizeAutoresponderContactName\(message\)[\s\S]*?confirmAutoresponderContactName\(sender, typedName\)/,
+  `${label} manual name input must keep the full confirmed name for Google Contacts`,
+);
+}
+
+assertGoogleContactFlow(source, 'cjs');
+assertGoogleContactFlow(deployedSource, 'deployed');
 
 console.log('autoresponder google contact flow static checks passed');

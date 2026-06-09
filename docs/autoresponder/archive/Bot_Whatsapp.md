@@ -925,6 +925,7 @@ Objetivo: permitir que o cliente avance da consulta de produto para um pedido as
 - [x] Ocultar SKU na lista e mostrar SKU apenas no produto individual
 - [x] Captar nome do cliente quando nao vier no payload
 - [x] Confirmar/salvar nome do cliente no Google Contacts
+- [x] Usar apenas o primeiro nome nas respostas do atendimento, mesmo quando o contato salvo tiver nome completo.
 - [x] Pausar conversa quando o cliente pedir atendimento humano
 - [x] Saudacao inicial mostra lista numerada de categorias disponiveis
 - [x] Cliente pode responder com numero ou nome da categoria
@@ -1113,6 +1114,8 @@ Objetivo: impedir que bot e humano respondam ao mesmo tempo.
 
 - [ ] AutoResponder fica focado em automação, regras, treinamento, testes e configurações.
 - [ ] Central de Atendimento fica focada em mensagens, fila, pausa/retomada e operação humana.
+- [ ] Criar lista de transmissao do WhatsApp somente com opt-in explicito: perguntar ao cliente se ele quer fazer parte antes de incluir o contato.
+- [ ] Registrar o aceite da lista de transmissao no historico/contato para evitar inclusao manual sem consentimento.
 - [ ] Se Treinamento IA crescer demais, mover para página própria no menu `IA > Treinamento`.
 - [ ] Criar documentação curta para equipe: quando usar AutoResponder, Central de Atendimento e Treinamento IA.
 - [ ] Criar métricas: conversas com IA, conversas assumidas por humano, pedidos gerados e taxa de fallback.

@@ -6716,6 +6716,12 @@ function normalizeAutoresponderContactName(value) {
     .slice(0, 120);
 }
 
+function getAutoresponderContactFirstNameFromName(name) {
+  const cleanName = normalizeAutoresponderContactName(name);
+  const firstName = cleanName.split(' ')[0] || '';
+  return firstName.length >= 2 ? firstName : cleanName;
+}
+
 function isAutoresponderYes(message) {
   const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
   return /^(sim|s|isso|correto|confirmo|pode|pode sim|ta certo|esta certo)$/.test(text);
@@ -6825,25 +6831,28 @@ async function markAutoresponderContactNameAwaitingInput(sender) {
 
 async function saveAutoresponderConfirmedContactName(sender, name, googleResult) {
   const status = googleResult?.ok ? 'saved_to_google' : 'google_pending';
+  const firstName = getAutoresponderContactFirstNameFromName(name);
   await pool.query(
     `INSERT INTO autoresponder_conversations
-      (sender, last_message_at, contact_name_status, contact_name_confirmed, google_contact_resource_name, contact_name_updated_at)
-     VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, CURRENT_TIMESTAMP)
+      (sender, last_message_at, contact_name, contact_name_status, contact_name_confirmed, google_contact_resource_name, contact_name_updated_at)
+     VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON DUPLICATE KEY UPDATE
        last_message_at = CURRENT_TIMESTAMP,
+       contact_name = ?,
        contact_name_status = ?,
        contact_name_confirmed = ?,
        google_contact_resource_name = ?,
        contact_name_updated_at = CURRENT_TIMESTAMP`,
-    [sender, status, name, googleResult?.resourceName || null, status, name, googleResult?.resourceName || null]
+    [sender, firstName || name, status, name, googleResult?.resourceName || null, firstName || name, status, name, googleResult?.resourceName || null]
   );
 }
 
 function formatAutoresponderContactSavedReply(name, googleResult) {
+  const firstName = getAutoresponderContactFirstNameFromName(name);
   if (googleResult?.ok) {
-    return `Perfeito, ${name}! Vou salvar seu contato aqui. ✅`;
+    return `Perfeito, ${firstName}! Vou salvar seu contato aqui. ✅`;
   }
-  return `Perfeito, ${name}! Vou deixar seu contato salvo aqui. ✅`;
+  return `Perfeito, ${firstName}! Vou deixar seu contato salvo aqui. ✅`;
 }
 
 function formatAutoresponderContactFollowUpReply() {
@@ -6932,7 +6941,8 @@ function getAutoresponderGreetingReply(message, contactFirstName = '', settings 
       ? 'Boa tarde'
       : 'Boa noite';
   const emoji = period === 'night' ? '🌙' : '✨';
-  const nameText = contactFirstName ? `, ${contactFirstName}` : '';
+  const firstName = getAutoresponderContactFirstNameFromName(contactFirstName);
+  const nameText = firstName ? `, ${firstName}` : '';
   return `${greeting}${nameText}! 😊 Seja bem-vindo ao Mercado do Vale.\nComo posso ajudar voce hoje? ${emoji}`;
 }
 
