@@ -181,7 +181,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
                                 <Icon className="h-5 w-5" />
                             </div>
                             <p className="text-xs font-semibold uppercase text-slate-500">{card.label}</p>
-                            <p className="mt-1 text-2xl font-black text-slate-950">{card.value}</p>
+                            <p className="mt-1 text-2xl font-semibold text-slate-800">{card.value}</p>
                             <p className="mt-1 text-sm text-slate-500">{card.detail}</p>
                         </div>
                     );
@@ -192,7 +192,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <h2 className="text-lg font-bold text-slate-950">Resumo da conta</h2>
+                            <h2 className="text-lg font-semibold text-slate-800">Resumo da conta</h2>
                             <p className="mt-1 text-sm text-slate-500">Dados essenciais para compras, beneficios e entregas.</p>
                         </div>
                         <button
@@ -220,7 +220,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
                     <div className="mt-5">
                         <div className="mb-2 flex items-center justify-between">
                             <p className="text-sm font-semibold text-slate-700">Progresso do cadastro</p>
-                            <span className="text-sm font-bold text-blue-700">{profileCompletion.percent}%</span>
+                            <span className="text-sm font-semibold text-blue-700">{profileCompletion.percent}%</span>
                         </div>
                         <div className="h-3 overflow-hidden rounded-full bg-slate-100">
                             <div
@@ -237,7 +237,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <h2 className="text-lg font-bold text-slate-950">Acoes rapidas</h2>
+                    <h2 className="text-lg font-semibold text-slate-800">Acoes rapidas</h2>
                     <div className="mt-4 space-y-2">
                         {quickActions.map((action) => {
                             const Icon = action.icon;
@@ -252,7 +252,7 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
                                         <Icon className="h-5 w-5" />
                                     </span>
                                     <span className="min-w-0">
-                                        <span className="block text-sm font-bold text-slate-900">{action.label}</span>
+                                        <span className="block text-sm font-semibold text-slate-800">{action.label}</span>
                                         <span className="block truncate text-xs text-slate-500">{action.detail}</span>
                                     </span>
                                 </button>
@@ -307,19 +307,19 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
 
                 {isAdminPreview && (
                     <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                        <strong>Visualizacao do admin:</strong> voce esta vendo esta pagina como o cliente ve. Use esta tela para conferir historico, beneficios e dados antes de corrigir o cadastro.
+                        <span className="font-semibold">Visualizacao do admin:</span> voce esta vendo esta pagina como o cliente ve. Use esta tela para conferir historico, beneficios e dados antes de corrigir o cadastro.
                     </div>
                 )}
 
                 <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:p-7">
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex items-center gap-4">
-                            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-xl font-black text-white shadow-sm">
+                            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-xl font-semibold text-white shadow-sm">
                                 {firstName.slice(0, 1).toUpperCase()}
                             </div>
                             <div>
                                 <p className="text-sm font-semibold text-blue-700">Painel do Cliente</p>
-                                <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+                                <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-800 sm:text-3xl">
                                     Ola, {firstName}
                                 </h1>
                                 <p className="mt-1 text-sm text-slate-500">
@@ -331,11 +331,11 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
                         <div className="grid grid-cols-2 gap-3 sm:flex sm:items-center">
                             <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
                                 <p className="text-xs font-semibold uppercase text-blue-700">Conta</p>
-                                <p className="text-sm font-black text-slate-950">{accountLabel}</p>
+                                <p className="text-sm font-semibold text-slate-800">{accountLabel}</p>
                             </div>
                             <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
                                 <p className="text-xs font-semibold uppercase text-emerald-700">Cadastro</p>
-                                <p className="text-sm font-black text-slate-950">{profileCompletion.percent}% completo</p>
+                                <p className="text-sm font-semibold text-slate-800">{profileCompletion.percent}% completo</p>
                             </div>
                         </div>
                     </div>
@@ -353,9 +353,9 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
                                         type="button"
                                         aria-current={isActive ? 'page' : undefined}
                                         onClick={() => setActiveTab(tab.id)}
-                                        className={`flex min-w-max items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition lg:min-w-0 ${isActive
+                                        className={`flex min-w-max items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition lg:min-w-0 ${isActive
                                             ? 'bg-blue-600 text-white shadow-sm'
-                                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
                                             }`}
                                     >
                                         <Icon className="h-5 w-5" />

@@ -87,7 +87,7 @@ export function CoinsTab() {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <p className="text-sm font-semibold text-amber-700">Central de moedas</p>
-                        <h2 className="mt-1 flex items-center gap-2 text-2xl font-black text-slate-950">
+                        <h2 className="mt-1 flex items-center gap-2 text-2xl font-semibold text-slate-800">
                             <Coins className="h-6 w-6 text-amber-500" />
                             Moedas do Vale
                         </h2>
@@ -110,21 +110,21 @@ export function CoinsTab() {
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-100">
                     <p className="text-xs font-bold uppercase text-amber-700">Saldo disponivel</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{coinsSummary.balance.toLocaleString('pt-BR')}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{coinsSummary.balance.toLocaleString('pt-BR')}</p>
                 </div>
                 <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
                     <p className="text-xs font-bold uppercase text-emerald-700">Valor em desconto</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">
                         R$ {coinsSummary.discountValue.toFixed(2).replace('.', ',')}
                     </p>
                 </div>
                 <div className="rounded-xl bg-blue-50 p-4 ring-1 ring-blue-100">
                     <p className="text-xs font-bold uppercase text-blue-700">Ganhos recentes</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{coinsSummary.earned.toLocaleString('pt-BR')}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{coinsSummary.earned.toLocaleString('pt-BR')}</p>
                 </div>
                 <div className="rounded-xl bg-rose-50 p-4 ring-1 ring-rose-100">
                     <p className="text-xs font-bold uppercase text-rose-700">Usos recentes</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{coinsSummary.spent.toLocaleString('pt-BR')}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{coinsSummary.spent.toLocaleString('pt-BR')}</p>
                 </div>
             </section>
 
@@ -135,7 +135,7 @@ export function CoinsTab() {
                             <div>
                                 <p className="text-xs font-bold uppercase text-slate-500">Saldo disponivel</p>
                                 <div className="mt-2 flex items-baseline gap-2">
-                                    <span className="text-4xl font-black text-slate-950">
+                                    <span className="text-4xl font-semibold text-slate-800">
                                         {coinsSummary.balance.toLocaleString('pt-BR')}
                                     </span>
                                     <span className="text-sm font-bold text-amber-600">moedas</span>
@@ -150,7 +150,7 @@ export function CoinsTab() {
                                 <Info className="h-4 w-4 text-slate-400" />
                                 Poder de compra
                             </div>
-                            <p className="mt-2 text-lg font-black text-slate-950">
+                            <p className="mt-2 text-lg font-semibold text-slate-800">
                                 R$ {coinsSummary.discountValue.toFixed(2).replace('.', ',')} em descontos
                             </p>
                         </div>
@@ -159,7 +159,7 @@ export function CoinsTab() {
                     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                         <div className="mb-4 flex items-center gap-2">
                             <Flame className="h-5 w-5 text-orange-500" />
-                            <h3 className="text-lg font-black text-slate-950">Check-in diario</h3>
+                            <h3 className="text-lg font-semibold text-slate-800">Check-in diario</h3>
                         </div>
                         <DailyCheckinWidget
                             customerId={customer.id}
@@ -172,7 +172,7 @@ export function CoinsTab() {
                         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
                             <Gift className="h-5 w-5" />
                         </div>
-                        <h3 className="mt-4 text-lg font-black text-slate-950">Como ganhar moedas</h3>
+                        <h3 className="mt-4 text-lg font-semibold text-slate-800">Como ganhar moedas</h3>
                         <div className="mt-4 space-y-3 text-sm text-slate-600">
                             <p>1. Compre produtos participantes.</p>
                             <p>2. Faca check-in diario para manter sequencia.</p>
@@ -184,7 +184,7 @@ export function CoinsTab() {
 
                 <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div className="border-b border-slate-100 bg-slate-50 p-5">
-                        <h3 className="flex items-center gap-2 text-lg font-black text-slate-950">
+                        <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-800">
                             <ReceiptText className="h-5 w-5 text-slate-500" />
                             Extrato de Moedas
                         </h3>
@@ -238,7 +238,7 @@ export function CoinsTab() {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className={`flex items-center gap-1 text-lg font-black ${amountColor}`}>
+                                            <div className={`flex items-center gap-1 text-lg font-semibold ${amountColor}`}>
                                                 {isPositive && !isCancelled ? '+' : ''}{tx.amount}
                                                 <Coins className="h-4 w-4" />
                                             </div>

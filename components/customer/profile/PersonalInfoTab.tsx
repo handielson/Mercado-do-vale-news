@@ -348,7 +348,7 @@ export const PersonalInfoTab: React.FC = () => {
                             )}
                         </div>
                         <div>
-                            <h3 className="text-lg font-black text-slate-950">Dados de contato</h3>
+                            <h3 className="text-lg font-semibold text-slate-800">Dados de contato</h3>
                             <p className="mt-1 text-sm text-slate-500">Nome, telefone e foto usados no atendimento e pedidos.</p>
                             <button
                                 type="button"
@@ -466,7 +466,7 @@ export const PersonalInfoTab: React.FC = () => {
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <h3 className="text-lg font-black text-slate-950">Endereco principal</h3>
+                        <h3 className="text-lg font-semibold text-slate-800">Endereco principal</h3>
                         <p className="mt-1 text-sm text-slate-500">Usado para calculo de frete e separacao de entrega.</p>
                     </div>
                     {addressData.zipCode ? (
@@ -594,7 +594,7 @@ export const PersonalInfoTab: React.FC = () => {
         <form onSubmit={handlePasswordSubmit} className="space-y-6">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div>
-                    <h3 className="text-lg font-black text-slate-950">Seguranca da conta</h3>
+                    <h3 className="text-lg font-semibold text-slate-800">Seguranca da conta</h3>
                     <p className="mt-1 text-sm text-slate-500">Atualize sua senha de acesso quando precisar.</p>
                 </div>
 
@@ -664,7 +664,7 @@ export const PersonalInfoTab: React.FC = () => {
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <p className="text-sm font-bold text-blue-700">Resumo dos dados</p>
-                        <h2 className="mt-1 text-2xl font-black text-slate-950">Meus Dados</h2>
+                        <h2 className="mt-1 text-2xl font-semibold text-slate-800">Meus Dados</h2>
                         <p className="mt-1 text-sm text-slate-500">Cadastro, entrega e acesso em uma area unica.</p>
                     </div>
 
@@ -705,7 +705,7 @@ export const PersonalInfoTab: React.FC = () => {
                                 <Icon className="h-5 w-5" />
                             </span>
                             <span className="min-w-0">
-                                <span className="block text-sm font-black text-slate-950">{section.label}</span>
+                                <span className="block text-sm font-semibold text-slate-800">{section.label}</span>
                                 <span className="block truncate text-xs font-medium text-slate-500">{section.detail}</span>
                             </span>
                         </button>

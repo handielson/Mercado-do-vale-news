@@ -442,7 +442,7 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                 )}
                 <div>
                     <p className="text-sm font-semibold text-blue-700">Central de compras</p>
-                    <h2 className="mt-1 text-2xl font-black text-slate-950">Historico de Compras</h2>
+                    <h2 className="mt-1 text-2xl font-semibold text-slate-800">Historico de Compras</h2>
                     <p className="mt-1 text-sm text-slate-500">
                         Pedidos, comprovantes, pagamentos e entrega em {companyHeader.name}.
                     </p>
@@ -459,19 +459,19 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
                     <p className="text-xs font-bold uppercase text-slate-500">Pedidos recentes</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{purchaseSummary.total}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{purchaseSummary.total}</p>
                 </div>
                 <div className="rounded-xl bg-blue-50 p-4 ring-1 ring-blue-100">
                     <p className="text-xs font-bold uppercase text-blue-700">Em andamento</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{purchaseSummary.active}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{purchaseSummary.active}</p>
                 </div>
                 <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
                     <p className="text-xs font-bold uppercase text-emerald-700">Concluidos</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{purchaseSummary.completed}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{purchaseSummary.completed}</p>
                 </div>
                 <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-100">
                     <p className="text-xs font-bold uppercase text-amber-700">Total investido</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{fmt(purchaseSummary.totalSpent)}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{fmt(purchaseSummary.totalSpent)}</p>
                 </div>
             </div>
 
@@ -480,7 +480,7 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
                             <p className="text-sm font-semibold text-emerald-700">Crediario</p>
-                            <h3 className="mt-1 text-xl font-black text-slate-950">Pagar debitos em aberto</h3>
+                            <h3 className="mt-1 text-xl font-semibold text-slate-800">Pagar debitos em aberto</h3>
                             <p className="mt-1 text-sm text-slate-500">
                                 Saldo selecionado: <strong>{formatCurrencyCents(selectedPixFullAmount)}</strong>
                             </p>
@@ -557,7 +557,7 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                                 type="button"
                                 onClick={createDebtPixPayment}
                                 disabled={creatingDebtPix}
-                                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-60"
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                             >
                                 {creatingDebtPix ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
                                 Pagar via Pix
@@ -569,7 +569,7 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                                 <div className="space-y-3">
                                     <div>
                                         <p className="text-xs font-bold uppercase text-slate-500">Pix Mercado Pago</p>
-                                        <p className="mt-1 text-2xl font-black text-slate-950">{formatCurrencyCents(debtPixIntent.valor_liquido)}</p>
+                                        <p className="mt-1 text-2xl font-semibold text-slate-800">{formatCurrencyCents(debtPixIntent.valor_liquido)}</p>
                                     </div>
                                     {debtPixIntent.qr_code_base64 && (
                                         <img

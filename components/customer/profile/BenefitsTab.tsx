@@ -63,7 +63,7 @@ export const BenefitsTab: React.FC = () => {
             <div className="space-y-6">
                 <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                     <p className="text-sm font-semibold text-blue-700">Central de beneficios</p>
-                    <h2 className="mt-1 text-2xl font-black text-slate-950">Meus Beneficios</h2>
+                    <h2 className="mt-1 text-2xl font-semibold text-slate-800">Meus Beneficios</h2>
                     <p className="mt-2 max-w-2xl text-sm text-slate-500">
                         Aqui ficam beneficios como pelicula gratis, regras de uso e historico de resgates.
                     </p>
@@ -86,7 +86,7 @@ export const BenefitsTab: React.FC = () => {
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <p className="text-sm font-semibold text-blue-700">Central de beneficios</p>
-                        <h2 className="mt-1 text-2xl font-black text-slate-950">Meus Beneficios</h2>
+                        <h2 className="mt-1 text-2xl font-semibold text-slate-800">Meus Beneficios</h2>
                         <p className="mt-2 max-w-2xl text-sm text-slate-500">
                             Acompanhe beneficios ativos, disponibilidade do mes, validade e historico de uso.
                         </p>
@@ -101,19 +101,19 @@ export const BenefitsTab: React.FC = () => {
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
                     <p className="text-xs font-bold uppercase text-slate-500">Beneficios ativos</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{benefitsSummary.active}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{benefitsSummary.active}</p>
                 </div>
                 <div className="rounded-xl bg-emerald-50 p-4 ring-1 ring-emerald-100">
                     <p className="text-xs font-bold uppercase text-emerald-700">Disponiveis agora</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{benefitsSummary.availableNow}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{benefitsSummary.availableNow}</p>
                 </div>
                 <div className="rounded-xl bg-blue-50 p-4 ring-1 ring-blue-100">
                     <p className="text-xs font-bold uppercase text-blue-700">Meses restantes</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{benefitsSummary.remaining}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{benefitsSummary.remaining}</p>
                 </div>
                 <div className="rounded-xl bg-amber-50 p-4 ring-1 ring-amber-100">
                     <p className="text-xs font-bold uppercase text-amber-700">Resgates usados</p>
-                    <p className="mt-2 text-2xl font-black text-slate-950">{benefitsSummary.used}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-800">{benefitsSummary.used}</p>
                 </div>
             </section>
 
@@ -135,7 +135,7 @@ export const BenefitsTab: React.FC = () => {
                                                 <ShieldCheck className="h-3.5 w-3.5" />
                                                 Beneficio ativo
                                             </div>
-                                            <h3 className="mt-3 text-xl font-black text-slate-950">1 Ano de Pelicula Gratis</h3>
+                                            <h3 className="mt-3 text-xl font-semibold text-slate-800">1 Ano de Pelicula Gratis</h3>
                                             <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
                                                 <span className="inline-flex items-center gap-1">
                                                     <Calendar className="h-3.5 w-3.5" />
@@ -148,7 +148,7 @@ export const BenefitsTab: React.FC = () => {
                                             </div>
                                         </div>
                                         <div className="rounded-2xl bg-slate-950 px-5 py-4 text-center text-white">
-                                            <span className="block text-3xl font-black">{item.monthsRemaining}/12</span>
+                                            <span className="block text-3xl font-semibold">{item.monthsRemaining}/12</span>
                                             <span className="mt-1 block text-xs font-bold uppercase text-white/70">restantes</span>
                                         </div>
                                     </div>
@@ -182,7 +182,7 @@ export const BenefitsTab: React.FC = () => {
                                             </div>
                                             <div>
                                                 <p className="text-xs font-bold uppercase text-slate-500">Status deste mes</p>
-                                                <h4 className="mt-1 text-base font-black text-slate-900">
+                                                <h4 className="mt-1 text-base font-semibold text-slate-900">
                                                     {item.canRedeemThisMonth
                                                         ? 'Pelicula disponivel'
                                                         : item.monthsRemaining === 0
@@ -212,7 +212,7 @@ export const BenefitsTab: React.FC = () => {
                                 <div className="border-t border-slate-100 bg-slate-50 p-5">
                                     <div className="mb-4 flex items-center gap-2">
                                         <History className="h-4 w-4 text-slate-500" />
-                                        <h4 className="text-sm font-black uppercase text-slate-700">Extrato de resgates</h4>
+                                        <h4 className="text-sm font-semibold uppercase text-slate-700">Extrato de resgates</h4>
                                     </div>
 
                                     {item.redemptions.length > 0 ? (
@@ -220,7 +220,7 @@ export const BenefitsTab: React.FC = () => {
                                             {item.redemptions.map((redemption, index) => (
                                                 <div key={redemption.id} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-sm font-black text-blue-700">
+                                                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-sm font-semibold text-blue-700">
                                                             {item.redemptions.length - index}
                                                         </div>
                                                         <div>
@@ -251,7 +251,7 @@ export const BenefitsTab: React.FC = () => {
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
                         <Gift className="h-5 w-5" />
                     </div>
-                    <h3 className="mt-4 text-lg font-black text-slate-950">Como usar</h3>
+                    <h3 className="mt-4 text-lg font-semibold text-slate-800">Como usar</h3>
                     <div className="mt-4 space-y-3 text-sm text-slate-600">
                         <p>1. Confira se o status do mes esta disponivel.</p>
                         <p>2. Va ate a loja com o aparelho.</p>
