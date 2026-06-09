@@ -32,6 +32,25 @@ Quando o pedido for `comitar`, `publicar`, `deployar` ou equivalente:
 
 Nunca usar `git add .` neste projeto. Stagear por arquivo.
 
+## Caminho Padrao Mais Rapido
+
+Para a maioria das publicacoes da VPS, o fluxo certo e este:
+
+1. conferir o estado do repo e garantir que o commit certo ja foi preparado;
+2. rodar o deploy oficial, que ja faz o build por conta propria:
+
+```powershell
+npm.cmd run deploy:vps-site
+```
+
+3. conferir a saida do script, que deve mostrar a release ativa e o `current`;
+4. validar a URL publica afetada no navegador ou por `curl`;
+5. registrar a release ativa neste arquivo ou na nota da entrega.
+
+Use `VPS_SITE_SKIP_BUILD=1` somente quando o `dist/` ja tiver sido gerado e validado exatamente a partir do commit que sera publicado. Fora isso, deixe o script reconstruir o bundle.
+
+Use worktree separado apenas quando houver necessidade real de isolamento. Para publicacao normal, ele nao e obrigatorio e costuma atrasar.
+
 ## Sandbox Do Synology Drive
 
 O workspace fica dentro do Synology Drive e o sandbox pode bloquear Git, build, deploy e acesso de rede. Quando uma tentativa falhar com erro como `Access is denied`, `Could not resolve vite.config.ts`, `connect EACCES`, DNS bloqueado ou erro de permissao em pasta sincronizada, repetir o mesmo comando fora do sandbox com aprovacao.
@@ -75,20 +94,16 @@ Use este fluxo quando a mudanca afetar paginas, componentes, estilos, rotas, ass
 git ls-remote origin refs/heads/main
 ```
 
-2. preferir worktree limpo dentro do repo, para o script carregar tambem os envs do workspace principal:
+2. se for necessario isolar a publicacao, criar worktree limpo dentro do repo para manter os envs do workspace principal:
 
 ```powershell
 git fetch origin main
 git worktree add .worktrees\publish-site origin/main
 ```
 
-3. no worktree limpo:
+3. no workspace escolhido, fazer o deploy:
 
 ```powershell
-cd .worktrees\publish-site
-npm.cmd ci
-node scripts\assert-no-supabase-runtime.cjs
-npm.cmd run build
 npm.cmd run deploy:vps-site
 ```
 
