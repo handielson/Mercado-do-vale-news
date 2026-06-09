@@ -12,6 +12,15 @@ import { getCoinBalance, getCoinsEarnedForReference } from '../../../services/ca
 import { generateLegacySalePdf } from '../../../utils/legacySalePdfGenerator';
 import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
+import type { Customer } from '../../../types/customer';
+import {
+    createCustomerDebtMercadoPagoIntent,
+    formatCurrencyCents,
+    listCustomerDebts,
+    toCents,
+    type CustomerDebt,
+    type CustomerDebtMercadoPagoIntent,
+} from '../../../services/customerDebtService';
 import { toast } from 'sonner';
 
 const fmt = (v: number) =>
@@ -73,8 +82,13 @@ function getStatusBadge(status: string): { label: string; className: string } {
     }
 }
 
-export const PurchaseHistoryTab: React.FC = () => {
+interface PurchaseHistoryTabProps {
+    customerOverride?: Customer;
+}
+
+export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customerOverride }) => {
     const { customer } = useVpsAuth();
+    const effectiveCustomer = customerOverride || customer;
     const [sales, setSales] = useState<SaleWithItems[]>([]);
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
     const [loading, setLoading] = useState(true);
@@ -82,6 +96,12 @@ export const PurchaseHistoryTab: React.FC = () => {
     const [printingComprovanteId, setPrintingComprovanteId] = useState<string | null>(null);
     const [companyHeader, setCompanyHeader] = useState<{ name: string; logoUrl: string }>({ name: 'Mercado do Vale', logoUrl: '' });
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'attention'>('all');
+    const [customerDebts, setCustomerDebts] = useState<CustomerDebt[]>([]);
+    const [pixDebtScope, setPixDebtScope] = useState<'all' | string>('all');
+    const [pixAmountMode, setPixAmountMode] = useState<'full' | 'partial'>('full');
+    const [pixPartialValue, setPixPartialValue] = useState('');
+    const [creatingDebtPix, setCreatingDebtPix] = useState(false);
+    const [debtPixIntent, setDebtPixIntent] = useState<CustomerDebtMercadoPagoIntent | null>(null);
 
     useEffect(() => {
         companySettingsService.get()
@@ -133,8 +153,8 @@ export const PurchaseHistoryTab: React.FC = () => {
             });
             const pdfBlob = await generateLegacySalePdf({
                 sale:         { ...sale, sale_date: sale.created_at, total_amount: (sale as any).total_amount ?? 0, payment_method: (sale as any).payment_method || '' } as any,
-                customerName: customer?.name || '',
-                customerCpf:  (customer as any)?.cpf_cnpj || '',
+            customerName: effectiveCustomer?.name || '',
+            customerCpf:  (effectiveCustomer as any)?.cpf_cnpj || '',
                 items,
                 company,
             });
@@ -179,12 +199,12 @@ export const PurchaseHistoryTab: React.FC = () => {
                     payment_gateway: (sale as any).payment_gateway,
                     gateway_payment_id: (sale as any).gateway_payment_id,
                     gateway_pix_data: (sale as any).gateway_pix_data,
-                    customer_name: customer?.name,
-                    customer_cpf: (customer as any)?.cpf_cnpj,
+                    customer_name: effectiveCustomer?.name,
+                    customer_cpf: (effectiveCustomer as any)?.cpf_cnpj,
                 }, settings);
                 return;
             }
-            const customerId = customer?.id;
+            const customerId = effectiveCustomer?.id;
             const [settings, coinBalance, benefitStatuses, coinsThisSale] = await Promise.all([
                 companySettingsService.get(),
                 customerId ? getCoinBalance(customerId).catch(() => null) : Promise.resolve(null),
@@ -208,14 +228,16 @@ export const PurchaseHistoryTab: React.FC = () => {
     };
 
     useEffect(() => {
-        if (!customer?.id) return;
+        if (!effectiveCustomer?.id) return;
         (async () => {
             try {
                 // Fetch PDV Sales and Online Orders simultaneously
-                const [pdvSales, onlineOrders] = await Promise.all([
-                    getSales({ customer_id: customer.id }),
-                    getOrders({ customer_id: customer.id })
+                const [pdvSales, onlineOrders, debtRows] = await Promise.all([
+                    getSales({ customer_id: effectiveCustomer.id }),
+                    getOrders({ customer_id: effectiveCustomer.id }),
+                    listCustomerDebts(effectiveCustomer.id).catch(() => []),
                 ]);
+                setCustomerDebts(debtRows);
 
                 // Map online orders to match the Sale structure for UI compatibility.
                 // Preservamos o status original do pedido (awaiting_payment, paid,
@@ -299,7 +321,7 @@ export const PurchaseHistoryTab: React.FC = () => {
                 setLoading(false);
             }
         })();
-    }, [customer?.id]);
+    }, [effectiveCustomer?.id]);
 
     const purchaseSummary = useMemo(() => {
         const activeStatuses = new Set(['pending', 'awaiting_payment', 'paid', 'preparing', 'shipped']);
@@ -335,6 +357,70 @@ export const PurchaseHistoryTab: React.FC = () => {
         { id: 'completed' as const, label: 'Concluidos', count: purchaseSummary.completed },
         { id: 'attention' as const, label: 'Atencao', count: purchaseSummary.attention },
     ];
+
+    const openCustomerDebts = useMemo(() => {
+        return customerDebts
+            .filter((debt) => toCents(debt.saldo_devedor) > 0 && String(debt.status || '').toLowerCase() !== 'paid')
+            .sort((a, b) => String(a.data_vencimento || '').localeCompare(String(b.data_vencimento || '')));
+    }, [customerDebts]);
+
+    const selectedPixDebts = useMemo(() => {
+        if (pixDebtScope === 'all') return openCustomerDebts;
+        return openCustomerDebts.filter((debt) => debt.id === pixDebtScope);
+    }, [openCustomerDebts, pixDebtScope]);
+
+    const selectedPixFullAmount = useMemo(() => {
+        return selectedPixDebts.reduce((sum, debt) => sum + toCents(debt.saldo_devedor), 0);
+    }, [selectedPixDebts]);
+
+    const parsePixPartialValue = () => {
+        const normalized = pixPartialValue.replace(/\./g, '').replace(',', '.').trim();
+        const amount = Number(normalized);
+        return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+    };
+
+    const buildDebtPixAllocations = (targetAmount: number) => {
+        let remaining = targetAmount;
+        return selectedPixDebts.flatMap((debt) => {
+            if (remaining <= 0) return [];
+            const balance = toCents(debt.saldo_devedor);
+            const value = Math.min(balance, remaining);
+            remaining -= value;
+            return value > 0 ? [{ debt_id: debt.id, valor_liquido: value }] : [];
+        });
+    };
+
+    const createDebtPixPayment = async () => {
+        const targetAmount = pixAmountMode === 'full' ? selectedPixFullAmount : parsePixPartialValue();
+        if (targetAmount <= 0) {
+            toast.error('Informe um valor valido para gerar o Pix');
+            return;
+        }
+        if (targetAmount > selectedPixFullAmount) {
+            toast.error('O valor escolhido e maior que o saldo selecionado');
+            return;
+        }
+        const allocations = buildDebtPixAllocations(targetAmount);
+        if (allocations.length === 0) {
+            toast.error('Nenhum debito em aberto selecionado');
+            return;
+        }
+        setCreatingDebtPix(true);
+        try {
+            const intent = await createCustomerDebtMercadoPagoIntent({
+                debt_id: allocations[0].debt_id,
+                valor_liquido: targetAmount,
+                metodo: 'pix',
+                allocations,
+            });
+            setDebtPixIntent(intent);
+            toast.success('Pix gerado');
+        } catch (err: any) {
+            toast.error(err?.message || 'Erro ao gerar Pix Mercado Pago');
+        } finally {
+            setCreatingDebtPix(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -388,6 +474,141 @@ export const PurchaseHistoryTab: React.FC = () => {
                     <p className="mt-2 text-2xl font-black text-slate-950">{fmt(purchaseSummary.totalSpent)}</p>
                 </div>
             </div>
+
+            {openCustomerDebts.length > 0 && (
+                <section className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <p className="text-sm font-semibold text-emerald-700">Crediario</p>
+                            <h3 className="mt-1 text-xl font-black text-slate-950">Pagar debitos em aberto</h3>
+                            <p className="mt-1 text-sm text-slate-500">
+                                Saldo selecionado: <strong>{formatCurrencyCents(selectedPixFullAmount)}</strong>
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setDebtPixIntent(null)}
+                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                        >
+                            Atualizar Pix
+                        </button>
+                    </div>
+
+                    <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+                        <div className="space-y-3">
+                            <label className="block">
+                                <span className="text-sm font-bold text-slate-700">Conta para pagar</span>
+                                <select
+                                    value={pixDebtScope}
+                                    onChange={(event) => {
+                                        setPixDebtScope(event.target.value);
+                                        setDebtPixIntent(null);
+                                    }}
+                                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                                >
+                                    <option value="all">Pagar todos os debitos</option>
+                                    {openCustomerDebts.map((debt) => (
+                                        <option key={debt.id} value={debt.id}>
+                                            {debt.descricao || 'Debito'} - {formatCurrencyCents(debt.saldo_devedor)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setPixAmountMode('full');
+                                        setDebtPixIntent(null);
+                                    }}
+                                    className={`rounded-xl border px-3 py-2 text-sm font-bold ${pixAmountMode === 'full' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600'}`}
+                                >
+                                    Valor completo
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setPixAmountMode('partial');
+                                        setDebtPixIntent(null);
+                                    }}
+                                    className={`rounded-xl border px-3 py-2 text-sm font-bold ${pixAmountMode === 'partial' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600'}`}
+                                >
+                                    Valor parcial
+                                </button>
+                            </div>
+
+                            {pixAmountMode === 'partial' && (
+                                <label className="block">
+                                    <span className="text-sm font-bold text-slate-700">Valor parcial</span>
+                                    <input
+                                        value={pixPartialValue}
+                                        onChange={(event) => {
+                                            setPixPartialValue(event.target.value);
+                                            setDebtPixIntent(null);
+                                        }}
+                                        placeholder="0,00"
+                                        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                                    />
+                                </label>
+                            )}
+
+                            <button
+                                type="button"
+                                onClick={createDebtPixPayment}
+                                disabled={creatingDebtPix}
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                                {creatingDebtPix ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                                Pagar via Pix
+                            </button>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            {debtPixIntent ? (
+                                <div className="space-y-3">
+                                    <div>
+                                        <p className="text-xs font-bold uppercase text-slate-500">Pix Mercado Pago</p>
+                                        <p className="mt-1 text-2xl font-black text-slate-950">{formatCurrencyCents(debtPixIntent.valor_liquido)}</p>
+                                    </div>
+                                    {debtPixIntent.qr_code_base64 && (
+                                        <img
+                                            src={`data:image/png;base64,${debtPixIntent.qr_code_base64}`}
+                                            alt="QR Code Pix Mercado Pago"
+                                            className="mx-auto h-44 w-44 rounded-lg bg-white p-2"
+                                        />
+                                    )}
+                                    {debtPixIntent.qr_code && (
+                                        <textarea
+                                            readOnly
+                                            value={debtPixIntent.qr_code}
+                                            className="h-24 w-full rounded-lg border border-slate-200 bg-white p-2 text-xs"
+                                        />
+                                    )}
+                                    {debtPixIntent.checkout_url && (
+                                        <a
+                                            href={debtPixIntent.checkout_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-bold text-white hover:bg-blue-700"
+                                        >
+                                            <ExternalLink className="h-4 w-4" />
+                                            Abrir Mercado Pago
+                                        </a>
+                                    )}
+                                    <p className="text-xs text-slate-500">A baixa acontece automaticamente quando o Mercado Pago confirmar o Pix.</p>
+                                </div>
+                            ) : (
+                                <div className="flex h-full min-h-52 flex-col items-center justify-center text-center text-slate-500">
+                                    <CreditCard className="mb-3 h-8 w-8 text-emerald-600" />
+                                    <p className="text-sm font-bold text-slate-700">Escolha valor completo ou parcial</p>
+                                    <p className="mt-1 text-xs">Depois gere o Pix para pagar direto pelo Mercado Pago.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </section>
+            )}
 
             <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-2 px-2 text-sm font-bold text-slate-700">

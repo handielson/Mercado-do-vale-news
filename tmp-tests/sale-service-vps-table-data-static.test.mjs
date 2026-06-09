@@ -18,6 +18,8 @@ for (const helper of [
   'deleteSaleRow',
   'createLocalId',
   'serializeSaleRowForTable',
+  'serializeSaleItemRowForTable',
+  'summarizePaymentMethodForSalesTable',
 ]) {
   assert.match(source, new RegExp(`function\\s+${helper}|const\\s+${helper}\\s*=`), `saleService must define ${helper}`);
 }
@@ -63,6 +65,26 @@ assert.match(
   createSaleBody,
   /vpsClient\.post\([\s\S]*['"]\/table-data\/sale_items\/bulk['"]/,
   'createSale must insert sale items through VPS table-data bulk insert',
+);
+assert.doesNotMatch(
+  createSaleBody,
+  /subtotal:\s*totals\.subtotal|discount_total:\s*discountTotal|cost_total:\s*totals\.cost_total|profit:\s*totals\.profit|payment_methods:\s*saleInput\.payment_methods/,
+  'createSale must not send rich Sale fields that are absent from the VPS sales table',
+);
+assert.match(
+  createSaleBody,
+  /discount:\s*discountTotal/,
+  'createSale must map discount_total to the VPS sales.discount column',
+);
+assert.match(
+  createSaleBody,
+  /payment_method:\s*summarizePaymentMethodForSalesTable\(saleInput\.payment_methods\)/,
+  'createSale must map payment_methods to the VPS sales.payment_method column',
+);
+assert.match(
+  createSaleBody,
+  /serializeSaleItemRowForTable/,
+  'createSale must filter sale item fields to the VPS sale_items schema',
 );
 assert.doesNotMatch(
   createSaleBody,

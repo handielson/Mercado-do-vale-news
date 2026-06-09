@@ -57,6 +57,7 @@ const PaymentFeesPage = lazy(() => import('../pages/admin/settings/PaymentFeesPa
 const CustomFieldsLibraryPage = lazy(() => import('../pages/admin/settings/CustomFieldsLibraryPage').then(module => ({ default: module.CustomFieldsLibraryPage })));
 const CustomerFormPage = lazy(() => import('../pages/customers/CustomerFormPage'));
 const CustomerDetailsPage = lazy(() => import('../pages/customers/CustomerDetailsPage'));
+const AdminCustomerProfilePreviewPage = lazy(() => import('../pages/customers/AdminCustomerProfilePreviewPage'));
 const TeamFormPage = lazy(() => import('../pages/team/TeamFormPage'));
 const TeamListPage = lazy(() => import('../pages/team/TeamListPage'));
 const CompanyDataPage = lazy(() => import('../pages/admin/settings/CompanyDataPage').then(module => ({ default: module.CompanyDataPage })));
@@ -131,6 +132,7 @@ const ShopeeTemplatesPage = lazy(() => import('../pages/admin/settings/ShopeeTem
 const CheckoutPage = lazy(() => import('../pages/store/CheckoutPage'));
 const PublicProductPage = lazy(() => import('../pages/store/PublicProductPage').then(module => ({ default: module.PublicProductPage })));
 const FinancialPage = lazy(() => import('../pages/admin/financial/FinancialPage'));
+const CustomerCreditLedgerPage = lazy(() => import('../pages/admin/financial/CustomerCreditLedgerPage'));
 const AccountingPage = lazy(() => import('../pages/admin/accounting/AccountingPage'));
 const DataImportExportPage = lazy(() => import('../pages/admin/import/DataImportExportPage').then(module => ({ default: module.DataImportExportPage })));
 const MySQLExplorerPage = lazy(() => import('../pages/admin/settings/MySQLExplorerPage').then(module => ({ default: module.MySQLExplorerPage })));
@@ -253,6 +255,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><FinancialPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/financeiro/crediario",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><CustomerCreditLedgerPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/financial/crediario",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><CustomerCreditLedgerPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
@@ -688,6 +706,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><CustomerDetailsPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/customers/:id/preview",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminCustomerProfilePreviewPage />
       </ProtectedRoute>
     )
   },

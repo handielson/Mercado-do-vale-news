@@ -9,7 +9,9 @@ import {
     SaleWithItems,
     SaleFilters,
     SaleSummary,
-    SaleItem
+    SaleItem,
+    PaymentMethod,
+    PaymentMethodType
 } from '../types/sale';
 import { calculateSaleTotals } from '../utils/saleCalculations';
 import { promotionService } from './promotionService';
@@ -90,38 +92,171 @@ function serializeJsonValue(value: unknown): unknown {
     return JSON.stringify(value);
 }
 
-function serializeSaleRowForTable<T extends Record<string, unknown>>(row: T): T {
+function summarizePaymentMethodForSalesTable(paymentMethods: PaymentMethod[] = []): string | null {
+    const methods = paymentMethods.map(payment => payment.method).filter(Boolean);
+    if (methods.length === 0) return null;
+    return Array.from(new Set(methods)).join(',');
+}
+
+function paymentMethodFromSalesTable(value: unknown, amount: number): PaymentMethod[] {
+    const method = String(value || '').split(',')[0].trim() as PaymentMethodType;
+    if (!method) return [];
+    return [{
+        method,
+        amount,
+        total_with_fee: amount,
+    }];
+}
+
+function serializeSaleRowForTable<T extends Record<string, unknown>>(row: T): Record<string, unknown> {
     return {
-        ...row,
-        payment_methods: serializeJsonValue(row.payment_methods),
+        id: row.id,
+        customer_id: row.customer_id || null,
+        seller_id: row.seller_id || null,
+        total: row.total || 0,
+        discount: row.discount || 0,
+        payment_method: row.payment_method || null,
+        payment_status: row.payment_status || 'paid',
+        notes: row.notes || null,
     };
 }
 
-function normalizeSaleRow(row: any): Sale {
+function serializeSaleItemRowForTable(item: SaleItem, saleId: string): Record<string, unknown> {
+    return {
+        sale_id: saleId,
+        product_id: item.product_id || null,
+        product_name: item.product_name || null,
+        quantity: item.quantity || 1,
+        unit_price: item.unit_price || 0,
+        total: item.total || 0,
+        warranty_months: item.warranty_months || 0,
+        imei: item.serialized_unit?.imei1 || item.serialized_unit?.serial || null,
+        serialized_unit_id: item.serialized_unit?.unitId || null,
+    };
+}
+
+function toNumber(value: unknown): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function hasDecimalMoney(value: unknown): boolean {
+    const n = Number(value);
+    return Number.isFinite(n) && Math.abs(n - Math.round(n)) > 0.001;
+}
+
+function looksLikeCentStoredMoney(value: unknown): boolean {
+    const n = Math.abs(Number(value));
+    return Number.isFinite(n) && Math.abs(n - Math.round(n)) <= 0.001 && n >= 1000;
+}
+
+function scaleMoneyValue(value: unknown, moneyScale: number): number {
+    return Math.round(toNumber(value) * moneyScale);
+}
+
+function normalizePaymentMethods(paymentMethods: PaymentMethod[], moneyScale: number): PaymentMethod[] {
+    return paymentMethods.map((payment) => ({
+        ...payment,
+        amount: scaleMoneyValue(payment.amount, moneyScale),
+        fee_amount: payment.fee_amount == null ? payment.fee_amount : scaleMoneyValue(payment.fee_amount, moneyScale),
+        total_with_fee: scaleMoneyValue(payment.total_with_fee ?? payment.amount, moneyScale),
+    }));
+}
+
+function getDefaultDebtDueDate(): string {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 30);
+    return dueDate.toISOString().split('T')[0];
+}
+
+function getAPrazoPayment(paymentMethods: PaymentMethod[] = []): PaymentMethod | null {
+    return paymentMethods.find(payment => payment.method === 'a_prazo' && Number(payment.amount) > 0) || null;
+}
+
+async function createCustomerDebtForAPrazoSale(saleInput: SaleInput, sale: Sale): Promise<void> {
+    const aPrazoPayment = getAPrazoPayment(saleInput.payment_methods);
+    if (!aPrazoPayment) return;
+    if (!saleInput.customer_id) return;
+
+    await vpsClient.post('/financial/customer-debts/from-sale', {
+        customer_id: saleInput.customer_id,
+        sale_id: sale.id,
+        valor_total: aPrazoPayment.amount,
+        descricao: `Venda PDV #${sale.id.slice(0, 8).toUpperCase()}`,
+        data_vencimento: aPrazoPayment.due_date || getDefaultDebtDueDate(),
+    });
+}
+
+function shouldScaleSaleMoneyFromReais(sale: any, saleItems: any[] = []): boolean {
+    const saleMoneyValues = [
+        sale.total,
+        sale.discount,
+        sale.discount_total,
+        sale.subtotal,
+        sale.delivery_total,
+        sale.delivery_cost_store,
+        sale.delivery_cost_customer,
+    ];
+    const itemMoneyValues = saleItems.flatMap(item => [
+        item.unit_price,
+        item.total,
+        item.subtotal,
+        item.discount,
+        item.warranty_price,
+    ]);
+    const moneyValues = [
+        ...saleMoneyValues,
+        ...saleItems.flatMap(item => [
+            item.unit_price,
+            item.total,
+            item.subtotal,
+            item.discount,
+            item.warranty_price,
+        ]),
+    ];
+
+    if (itemMoneyValues.some(looksLikeCentStoredMoney)) return false;
+
+    return moneyValues.some(hasDecimalMoney);
+}
+
+function normalizeSaleRow(row: any, moneyScale = 1): Sale {
+    const rawTotal = toNumber(row.total);
+    const discountTotal = scaleMoneyValue(row.discount_total ?? row.discount, moneyScale);
+    const total = scaleMoneyValue(rawTotal, moneyScale);
+    const paymentMethods = Array.isArray(row.payment_methods)
+        ? row.payment_methods
+        : parseJsonField(row.payment_methods, paymentMethodFromSalesTable(row.payment_method, rawTotal));
+
     return {
         ...row,
-        subtotal: Number(row.subtotal) || 0,
-        discount_total: Number(row.discount_total) || 0,
-        total: Number(row.total) || 0,
-        cost_total: Number(row.cost_total) || 0,
-        profit: Number(row.profit) || 0,
-        delivery_cost_store: Number(row.delivery_cost_store) || 0,
-        delivery_cost_customer: Number(row.delivery_cost_customer) || 0,
-        delivery_total: Number(row.delivery_total) || 0,
-        promotional_discount: Number(row.promotional_discount) || 0,
-        payment_methods: parseJsonField(row.payment_methods, []),
+        subtotal: row.subtotal == null ? total + discountTotal : scaleMoneyValue(row.subtotal, moneyScale),
+        discount_total: discountTotal,
+        total,
+        cost_total: scaleMoneyValue(row.cost_total, moneyScale),
+        profit: scaleMoneyValue(row.profit, moneyScale),
+        delivery_cost_store: scaleMoneyValue(row.delivery_cost_store, moneyScale),
+        delivery_cost_customer: scaleMoneyValue(row.delivery_cost_customer, moneyScale),
+        delivery_total: scaleMoneyValue(row.delivery_total, moneyScale),
+        promotional_discount: scaleMoneyValue(row.promotional_discount, moneyScale),
+        payment_methods: normalizePaymentMethods(paymentMethods, moneyScale),
+        status: row.status || (row.payment_status === 'cancelled' ? 'cancelled' : 'completed'),
     } as Sale;
 }
 
-function normalizeSaleItemRow(row: any): SaleItem {
+function normalizeSaleItemRow(row: any, moneyScale = 1): SaleItem {
+    const quantity = Number(row.quantity) || 0;
+    const unitPrice = scaleMoneyValue(row.unit_price, moneyScale);
+    const total = row.total == null ? unitPrice * quantity : scaleMoneyValue(row.total, moneyScale);
+
     return {
         ...row,
-        quantity: Number(row.quantity) || 0,
-        unit_price: Number(row.unit_price) || 0,
-        unit_cost: Number(row.unit_cost) || 0,
-        discount: Number(row.discount) || 0,
-        subtotal: Number(row.subtotal) || 0,
-        total: Number(row.total) || 0,
+        quantity,
+        unit_price: unitPrice,
+        unit_cost: scaleMoneyValue(row.unit_cost, moneyScale),
+        discount: scaleMoneyValue(row.discount, moneyScale),
+        subtotal: row.subtotal == null ? total : scaleMoneyValue(row.subtotal, moneyScale),
+        total,
         is_gift: row.is_gift === true || row.is_gift === 1,
     } as SaleItem;
 }
@@ -149,21 +284,27 @@ async function loadSaleRows(): Promise<Sale[]> {
 
 async function loadSaleItemsBySaleId(saleId: string): Promise<SaleItem[]> {
     const rows = await loadTableRows<any>('sale_items');
-    return rows
-        .filter(row => String(row.sale_id || '') === String(saleId))
-        .map(normalizeSaleItemRow);
+    const saleRows = await loadTableRows<any>('sales');
+    const sale = saleRows.find(row => String(row.id) === String(saleId));
+    const saleItems = rows.filter(row => String(row.sale_id || '') === String(saleId));
+    const moneyScale = shouldScaleSaleMoneyFromReais(sale || {}, saleItems) ? 100 : 1;
+    return saleItems.map(row => normalizeSaleItemRow(row, moneyScale));
 }
 
 async function loadSaleWithItemsById(saleId: string): Promise<SaleWithItems | null> {
-    const sales = await loadSaleRows();
-    const sale = sales.find(row => String(row.id) === String(saleId));
-    if (!sale) return null;
-
-    const [items, customers, teamMembers] = await Promise.all([
-        loadSaleItemsBySaleId(saleId),
+    const [saleRows, itemRows, customers, teamMembers] = await Promise.all([
+        loadTableRows<any>('sales'),
+        loadTableRows<any>('sale_items'),
         loadTableRows<any>('customers'),
         loadTableRows<any>('team_members'),
     ]);
+    const saleRow = saleRows.find(row => String(row.id) === String(saleId));
+    if (!saleRow) return null;
+
+    const saleItemRows = itemRows.filter(row => String(row.sale_id || '') === String(saleId));
+    const moneyScale = shouldScaleSaleMoneyFromReais(saleRow, saleItemRows) ? 100 : 1;
+    const sale = normalizeSaleRow(saleRow, moneyScale);
+    const items = saleItemRows.map(row => normalizeSaleItemRow(row, moneyScale));
 
     const customer = customers.find(row => String(row.id || '') === String(sale.customer_id));
     const seller = teamMembers.find(row => String(row.id || '') === String(sale.seller_id || ''));
@@ -203,9 +344,28 @@ function saleMatchesFilters(sale: Sale, filters?: SaleFilters): boolean {
 }
 
 async function patchSale(id: string, patch: Partial<Sale>): Promise<Sale> {
+    const tablePatch: Record<string, unknown> = { ...patch };
+    if (Object.prototype.hasOwnProperty.call(tablePatch, 'status')) {
+        tablePatch.payment_status = tablePatch.status === 'cancelled' || tablePatch.status === 'refunded'
+            ? 'cancelled'
+            : 'paid';
+        delete tablePatch.status;
+    }
+    delete tablePatch.subtotal;
+    delete tablePatch.discount_total;
+    delete tablePatch.cost_total;
+    delete tablePatch.profit;
+    delete tablePatch.payment_methods;
+    delete tablePatch.delivery_type;
+    delete tablePatch.delivery_person_id;
+    delete tablePatch.delivery_cost_store;
+    delete tablePatch.delivery_cost_customer;
+    delete tablePatch.delivery_total;
+    delete tablePatch.promotional_discount;
+
     return normalizeSaleRow(await vpsClient.patch<any>(
         `/table-data/sales/${encodeURIComponent(id)}?pk=id`,
-        patch
+        tablePatch
     ));
 }
 
@@ -225,33 +385,16 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         const discountTotal = totals.discount_total + (saleInput.delivery_cost_store || 0) + promotionalDiscount;
         const saleTotal = Math.max(0, totals.total + (saleInput.delivery_cost_customer || 0) - promotionalDiscount);
 
-        // Prepare sale data
-        const isValidUUID = (id?: string) =>
-            !!id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
         const saleId = createLocalId();
         const saleData = {
             id: saleId,
             customer_id: saleInput.customer_id,
             seller_id: saleInput.seller_id,
-            subtotal: totals.subtotal,
-            discount_total: discountTotal,
             total: saleTotal,
-            cost_total: totals.cost_total,
-            profit: totals.profit - promotionalDiscount,
-            payment_methods: saleInput.payment_methods,
+            discount: discountTotal,
+            payment_method: summarizePaymentMethodForSalesTable(saleInput.payment_methods),
+            payment_status: 'paid',
             notes: saleInput.notes,
-            status: 'completed' as const,
-
-            // Delivery fields
-            delivery_type: saleInput.delivery_type,
-            // Only send delivery_person_id if it is a real UUID (not a mock placeholder)
-            delivery_person_id: isValidUUID(saleInput.delivery_person_id)
-                ? saleInput.delivery_person_id
-                : undefined,
-            delivery_cost_store: saleInput.delivery_cost_store || 0,
-            delivery_cost_customer: saleInput.delivery_cost_customer || 0,
-            delivery_total: saleInput.delivery_total || 0
         };
 
         // Insert sale
@@ -262,20 +405,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         if (!sale) throw new Error('Failed to create sale');
 
         // Insert sale items (persiste serialized_unit_id pra rastreio do IMEI)
-        const saleItems = saleInput.items.map(item => ({
-            sale_id: sale.id,
-            product_id: item.product_id,
-            product_name: item.product_name,
-            product_sku: item.product_sku,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            unit_cost: item.unit_cost,
-            discount: item.discount,
-            subtotal: item.subtotal,
-            total: item.total,
-            is_gift: item.is_gift,
-            serialized_unit_id: (item as any).serialized_unit?.unitId || null,
-        }));
+        const saleItems = saleInput.items.map(item => serializeSaleItemRowForTable(item, sale.id));
 
         try {
             await vpsClient.post('/table-data/sale_items/bulk', saleItems);
@@ -283,6 +413,17 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             // Rollback: delete sale if items insertion fails
             await deleteSaleRow(sale.id);
             throw itemsError;
+        }
+
+        try {
+            await createCustomerDebtForAPrazoSale(saleInput, sale);
+        } catch (debtError) {
+            try {
+                await deleteSaleRow(sale.id);
+            } catch (rollbackError) {
+                console.error(`[saleService] Falha ao desfazer venda ${sale.id} apos erro no crediario:`, rollbackError);
+            }
+            throw debtError;
         }
 
         // Marca units serializadas como vendidas (VPS) — markAsSold dispara
@@ -401,8 +542,8 @@ export const getSaleById = async (id: string): Promise<SaleWithItems | null> => 
  */
 export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> => {
     try {
-        const [sales, saleItems, customers, teamMembers] = await Promise.all([
-            loadSaleRows(),
+        const [saleRows, saleItems, customers, teamMembers] = await Promise.all([
+            loadTableRows<any>('sales'),
             loadTableRows<any>('sale_items'),
             loadTableRows<any>('customers'),
             loadTableRows<any>('team_members'),
@@ -411,17 +552,25 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
         const customerById = new Map(customers.map(row => [String(row.id), row]));
         const sellerById = new Map(teamMembers.map(row => [String(row.id), row]));
 
-        return sales
-            .filter(sale => saleMatchesFilters(sale, filters))
-            .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
-            .map((sale) => {
+        return saleRows
+            .map((saleRow) => {
+                const rawItems = saleItems.filter(row => String(row.sale_id || '') === String(saleRow.id));
+                const moneyScale = shouldScaleSaleMoneyFromReais(saleRow, rawItems) ? 100 : 1;
+                const sale = normalizeSaleRow(saleRow, moneyScale);
+                return { sale, rawItems, moneyScale };
+            })
+            .map(({ sale, rawItems, moneyScale }) => ({
+                sale,
+                items: rawItems.map(row => normalizeSaleItemRow(row, moneyScale)),
+            }))
+            .filter(({ sale }) => saleMatchesFilters(sale, filters))
+            .sort((a, b) => String(b.sale.created_at || '').localeCompare(String(a.sale.created_at || '')))
+            .map(({ sale, items }) => {
                 const customer = customerById.get(String(sale.customer_id || ''));
                 const seller = sellerById.get(String(sale.seller_id || ''));
                 return {
                     ...sale,
-                    items: saleItems
-                        .filter(row => String(row.sale_id || '') === String(sale.id))
-                        .map(normalizeSaleItemRow),
+                    items,
                     customer: customer ? {
                         id: String(customer.id),
                         name: String(customer.name || ''),

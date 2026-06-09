@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Edit, Trash2, User, Mail, Phone, MapPin, FileText, Calendar, CheckCircle, XCircle, Printer, ShoppingBag, RefreshCw, Receipt } from 'lucide-react';
+import { ArrowLeft, Edit, Eye, Trash2, User, Mail, Phone, MapPin, FileText, Calendar, CheckCircle, XCircle, Printer, ShoppingBag, RefreshCw, Receipt, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { Customer } from '../../types/customer';
@@ -16,6 +16,7 @@ import { getCoinBalance, getCoinsEarnedForReference } from '../../services/cashb
 import { generateLegacySalePdf } from '../../utils/legacySalePdfGenerator';
 import { vpsApiService } from '../../services/vpsApiService';
 import { warrantyTemplateService } from '../../services/warrantyTemplates';
+import { getCustomerFinancialSummary, type CustomerFinancialSummary } from '../../services/customerFinancialSummaryService';
 
 /**
  * Customer Details Page
@@ -34,6 +35,8 @@ export default function CustomerDetailsPage() {
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [benefits, setBenefits] = useState<BenefitStatus[]>([]);
     const [salesHistory, setSalesHistory] = useState<SaleWithItems[]>([]);
+    const [financialSummary, setFinancialSummary] = useState<CustomerFinancialSummary | null>(null);
+    const [financialSummaryLoading, setFinancialSummaryLoading] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -270,6 +273,7 @@ export default function CustomerDetailsPage() {
             loadCustomer(id);
             loadBenefits(id);
             loadSalesHistory(id);
+            loadFinancialSummary(id);
         }
     }, [id]);
 
@@ -319,6 +323,19 @@ export default function CustomerDetailsPage() {
             setSaleProductSpecs(map);
         } catch (err) {
             console.error('Error loading sales history:', err);
+        }
+    };
+
+    const loadFinancialSummary = async (customerId: string) => {
+        try {
+            setFinancialSummaryLoading(true);
+            const summary = await getCustomerFinancialSummary(customerId);
+            setFinancialSummary(summary);
+        } catch (err) {
+            console.error('Error loading customer financial summary:', err);
+            setFinancialSummary(null);
+        } finally {
+            setFinancialSummaryLoading(false);
         }
     };
 
@@ -385,6 +402,10 @@ export default function CustomerDetailsPage() {
         return new Date(value).toLocaleDateString('pt-BR');
     };
 
+    const formatCurrencyCents = (value: number) => {
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
+    };
+
     // Loading state
     if (loading) {
         return (
@@ -435,6 +456,13 @@ export default function CustomerDetailsPage() {
                         <Printer className="w-4 h-4" />
                         Imprimir Ficha
                     </button>
+                    <Link
+                        to={`/admin/customers/${customer.id}/preview`}
+                        className="flex items-center gap-2 px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors no-print"
+                    >
+                        <Eye className="w-4 h-4" />
+                        Ver como cliente
+                    </Link>
                     <Link
                         to={`/admin/customers/${customer.id}/edit`}
                         className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors no-print"
@@ -490,6 +518,49 @@ export default function CustomerDetailsPage() {
             </div>
 
             {/* Tab: Informações */}
+            <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm no-print">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                            <DollarSign className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-bold text-slate-900">Resumo financeiro</h2>
+                            <p className="text-xs text-slate-500">
+                                {financialSummaryLoading
+                                    ? 'Carregando saldos do cliente...'
+                                    : `${financialSummary?.totalDebts || 0} registro(s) de crediario`}
+                            </p>
+                        </div>
+                    </div>
+                    <Link
+                        to={`/admin/financial/crediario?customer_id=${encodeURIComponent(customer.id)}`}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                    >
+                        <DollarSign className="h-4 w-4" />
+                        Ir ao crediario
+                    </Link>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-lg bg-slate-50 p-3">
+                        <p className="text-xs font-bold uppercase text-slate-500">Saldo em aberto</p>
+                        <p className="mt-1 text-lg font-black text-slate-900">{formatCurrencyCents(financialSummary?.openBalanceCents || 0)}</p>
+                    </div>
+                    <div className="rounded-lg bg-red-50 p-3">
+                        <p className="text-xs font-bold uppercase text-red-600">Vencido</p>
+                        <p className="mt-1 text-lg font-black text-red-700">{formatCurrencyCents(financialSummary?.overdueBalanceCents || 0)}</p>
+                    </div>
+                    <div className="rounded-lg bg-emerald-50 p-3">
+                        <p className="text-xs font-bold uppercase text-emerald-700">Pago</p>
+                        <p className="mt-1 text-lg font-black text-emerald-800">{formatCurrencyCents(financialSummary?.paidTotalCents || 0)}</p>
+                    </div>
+                    <div className="rounded-lg bg-blue-50 p-3">
+                        <p className="text-xs font-bold uppercase text-blue-700">Total gerado</p>
+                        <p className="mt-1 text-lg font-black text-blue-800">{formatCurrencyCents(financialSummary?.totalDebtCents || 0)}</p>
+                    </div>
+                </div>
+            </div>
+
             {activeTab === 'info' && (
                 <div className="space-y-6">
                     {/* Basic Info */}

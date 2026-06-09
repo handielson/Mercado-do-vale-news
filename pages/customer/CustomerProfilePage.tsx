@@ -14,8 +14,9 @@ import {
     User,
     WalletCards,
 } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useVpsAuth } from '../../hooks/useVpsAuth';
+import type { Customer } from '../../types/customer';
 import { PersonalInfoTab } from '../../components/customer/profile/PersonalInfoTab';
 import { PurchaseHistoryTab } from '../../components/customer/profile/PurchaseHistoryTab';
 import { TypeUpgradeTab } from '../../components/customer/profile/TypeUpgradeTab';
@@ -42,10 +43,16 @@ const accountTypeLabel: Record<string, string> = {
     ADMIN: 'Administrador',
 };
 
-export const CustomerProfilePage: React.FC = () => {
+interface CustomerProfilePageProps {
+    customerOverride?: Customer;
+    isAdminPreview?: boolean;
+}
+
+export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ customerOverride, isAdminPreview = false }) => {
     const location = useLocation();
     const navigate = useNavigate();
     const { customer, isLoading } = useVpsAuth();
+    const effectiveCustomer = customerOverride || customer;
     const [activeTab, setActiveTab] = useState<TabType>(() => getInitialTab(location));
 
     useEffect(() => {
@@ -53,15 +60,15 @@ export const CustomerProfilePage: React.FC = () => {
     }, [location]);
 
     const profileCompletion = useMemo(() => {
-        if (!customer) return { total: 0, done: 0, percent: 0, missing: [] as string[] };
+        if (!effectiveCustomer) return { total: 0, done: 0, percent: 0, missing: [] as string[] };
 
         const checks = [
-            { label: 'Nome', done: Boolean(customer.name) },
-            { label: 'E-mail', done: Boolean(customer.email) },
-            { label: 'Telefone', done: Boolean(customer.phone) },
-            { label: 'CPF/CNPJ', done: Boolean(customer.cpf_cnpj) },
-            { label: 'Nascimento', done: Boolean(customer.birth_date) },
-            { label: 'Endereco', done: Boolean(customer.address?.street && customer.address?.city) },
+            { label: 'Nome', done: Boolean(effectiveCustomer.name) },
+            { label: 'E-mail', done: Boolean(effectiveCustomer.email) },
+            { label: 'Telefone', done: Boolean(effectiveCustomer.phone) },
+            { label: 'CPF/CNPJ', done: Boolean(effectiveCustomer.cpf_cnpj) },
+            { label: 'Nascimento', done: Boolean(effectiveCustomer.birth_date) },
+            { label: 'Endereco', done: Boolean(effectiveCustomer.address?.street && effectiveCustomer.address?.city) },
         ];
         const done = checks.filter((item) => item.done).length;
         return {
@@ -70,9 +77,9 @@ export const CustomerProfilePage: React.FC = () => {
             percent: Math.round((done / checks.length) * 100),
             missing: checks.filter((item) => !item.done).map((item) => item.label),
         };
-    }, [customer]);
+    }, [effectiveCustomer]);
 
-    if (isLoading) {
+    if (isLoading && !customerOverride) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-slate-50">
                 <div className="text-center">
@@ -83,7 +90,7 @@ export const CustomerProfilePage: React.FC = () => {
         );
     }
 
-    if (!customer) {
+    if (!effectiveCustomer) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
                 <div className="max-w-sm rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
@@ -103,15 +110,15 @@ export const CustomerProfilePage: React.FC = () => {
         { id: 'coins' as TabType, label: 'Moedas', icon: Coins },
     ];
 
-    const accountLabel = accountTypeLabel[customer.customer_type || 'retail'] || 'Varejo';
-    const firstName = customer.name?.split(' ')?.[0] || 'cliente';
-    const memberSince = customer.created_at ? new Date(customer.created_at).toLocaleDateString('pt-BR') : 'cadastro recente';
+    const accountLabel = accountTypeLabel[effectiveCustomer.customer_type || 'retail'] || 'Varejo';
+    const firstName = effectiveCustomer.name?.split(' ')?.[0] || 'cliente';
+    const memberSince = effectiveCustomer.created_at ? new Date(effectiveCustomer.created_at).toLocaleDateString('pt-BR') : 'cadastro recente';
 
     const overviewCards = [
         {
             label: 'Tipo de conta',
             value: accountLabel,
-            detail: customer.account_status === 'pending' ? 'Ativacao pendente' : 'Conta ativa',
+            detail: effectiveCustomer.account_status === 'pending' ? 'Ativacao pendente' : 'Conta ativa',
             icon: TrendingUp,
             tone: 'blue',
         },
@@ -124,8 +131,8 @@ export const CustomerProfilePage: React.FC = () => {
         },
         {
             label: 'Moedas do Vale',
-            value: customer.referral_code || 'Ativo',
-            detail: customer.referral_code ? 'Codigo de indicacao' : 'Programa habilitado',
+            value: effectiveCustomer.referral_code || 'Ativo',
+            detail: effectiveCustomer.referral_code ? 'Codigo de indicacao' : 'Programa habilitado',
             icon: Coins,
             tone: 'amber',
         },
@@ -201,12 +208,12 @@ export const CustomerProfilePage: React.FC = () => {
                         <div className="rounded-xl bg-slate-50 p-4">
                             <Mail className="mb-2 h-4 w-4 text-slate-400" />
                             <p className="text-xs font-semibold uppercase text-slate-500">E-mail</p>
-                            <p className="mt-1 truncate text-sm font-medium text-slate-800">{customer.email || 'Nao informado'}</p>
+                            <p className="mt-1 truncate text-sm font-medium text-slate-800">{effectiveCustomer.email || 'Nao informado'}</p>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-4">
                             <Phone className="mb-2 h-4 w-4 text-slate-400" />
                             <p className="text-xs font-semibold uppercase text-slate-500">Telefone</p>
-                            <p className="mt-1 text-sm font-medium text-slate-800">{customer.phone || 'Nao informado'}</p>
+                            <p className="mt-1 text-sm font-medium text-slate-800">{effectiveCustomer.phone || 'Nao informado'}</p>
                         </div>
                     </div>
 
@@ -257,6 +264,35 @@ export const CustomerProfilePage: React.FC = () => {
         </div>
     );
 
+    const renderAdminPersonalInfo = () => (
+        <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-500">Nome</p>
+                    <p className="mt-1 text-sm font-medium text-slate-800">{effectiveCustomer.name || 'Nao informado'}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-500">CPF/CNPJ</p>
+                    <p className="mt-1 text-sm font-medium text-slate-800">{effectiveCustomer.cpf_cnpj || 'Nao informado'}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-500">E-mail</p>
+                    <p className="mt-1 text-sm font-medium text-slate-800">{effectiveCustomer.email || 'Nao informado'}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-slate-500">Telefone</p>
+                    <p className="mt-1 text-sm font-medium text-slate-800">{effectiveCustomer.phone || 'Nao informado'}</p>
+                </div>
+            </div>
+            <Link
+                to={`/admin/customers/${effectiveCustomer.id}/edit`}
+                className="inline-flex items-center justify-center rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+                Corrigir cadastro
+            </Link>
+        </div>
+    );
+
     return (
         <div className="min-h-screen bg-[#f6f8fb]">
             <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
@@ -268,6 +304,12 @@ export const CustomerProfilePage: React.FC = () => {
                     <ArrowLeft className="h-4 w-4" />
                     Voltar a loja
                 </button>
+
+                {isAdminPreview && (
+                    <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        <strong>Visualizacao do admin:</strong> voce esta vendo esta pagina como o cliente ve. Use esta tela para conferir historico, beneficios e dados antes de corrigir o cadastro.
+                    </div>
+                )}
 
                 <header className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:p-7">
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
@@ -328,8 +370,8 @@ export const CustomerProfilePage: React.FC = () => {
                         {activeTab === 'overview' && renderOverview()}
                         {activeTab !== 'overview' && (
                             <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-                                {activeTab === 'personal' && <PersonalInfoTab />}
-                                {activeTab === 'history' && <PurchaseHistoryTab />}
+                                {activeTab === 'personal' && (isAdminPreview ? renderAdminPersonalInfo() : <PersonalInfoTab />)}
+                                {activeTab === 'history' && <PurchaseHistoryTab customerOverride={effectiveCustomer} />}
                                 {activeTab === 'benefits' && <BenefitsTab />}
                                 {activeTab === 'upgrade' && <TypeUpgradeTab />}
                                 {activeTab === 'coins' && <CoinsTab />}
