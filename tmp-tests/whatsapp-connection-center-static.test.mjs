@@ -6,6 +6,7 @@ const routes = readFileSync('routes/index.tsx', 'utf8');
 const service = readFileSync('services/autoResponderService.ts', 'utf8');
 const types = readFileSync('types/autoResponder.ts', 'utf8');
 const server = readFileSync('vps_server.cjs', 'utf8');
+const deployedServer = readFileSync('vps_server.js', 'utf8');
 
 assert.ok(
   existsSync('components/whatsapp/WhatsAppConnectionPanel.tsx'),
@@ -121,6 +122,7 @@ const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversatio
   'LIMIT ${limit}',
 ].forEach((needle) => {
   assert.ok(server.includes(needle), `VPS server must include ${needle}`);
+  assert.ok(deployedServer.includes(needle), `deployed VPS server must include ${needle}`);
 });
 
 assert.ok(

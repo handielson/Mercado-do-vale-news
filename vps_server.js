@@ -12056,6 +12056,19 @@ fastify.get('/autoresponder/conversations', { preHandler: requireSyncKey }, asyn
   return rows;
 });
 
+fastify.get('/autoresponder/conversations/:sender/logs', { preHandler: requireSyncKey }, async (req) => {
+  const limit = Math.min(Number(req.query.limit) || 25, 100);
+  const [rows] = await pool.query(
+    `SELECT id, created_at, sender, question, intent, matched_rule_id, matched_count, reply_text, response_time_ms, ai_assisted, ai_model
+     FROM autoresponder_logs
+     WHERE sender = ?
+     ORDER BY created_at DESC
+     LIMIT ${limit}`,
+    [req.params.sender]
+  );
+  return rows;
+});
+
 fastify.post('/autoresponder/conversations/:sender/pause', { preHandler: requireSyncKey }, async (req) => {
   const body = req.body || {};
   const minutes = Number(body.minutes || 60);
