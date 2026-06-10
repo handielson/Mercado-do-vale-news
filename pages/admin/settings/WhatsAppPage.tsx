@@ -2,6 +2,7 @@ import React from 'react';
 import { MessageCircle } from 'lucide-react';
 import { WhatsAppAttendantsPanel } from '../../../components/whatsapp/WhatsAppAttendantsPanel';
 import { WhatsAppBotSettingsPanel } from '../../../components/whatsapp/WhatsAppBotSettingsPanel';
+import { WhatsAppChatGptPanel } from '../../../components/whatsapp/WhatsAppChatGptPanel';
 import { WhatsAppConnectionPanel } from '../../../components/whatsapp/WhatsAppConnectionPanel';
 import { WhatsAppInternalBotTester } from '../../../components/whatsapp/WhatsAppInternalBotTester';
 import { WhatsAppMigrationChecklist } from '../../../components/whatsapp/WhatsAppMigrationChecklist';
@@ -24,6 +25,7 @@ export default function WhatsAppPage() {
         <WhatsAppMigrationChecklist />
         <WhatsAppConnectionPanel />
         <WhatsAppBotSettingsPanel />
+        <WhatsAppChatGptPanel />
         <WhatsAppInternalBotTester />
         <WhatsAppResponseCenterPanel />
         <WhatsAppAttendantsPanel />

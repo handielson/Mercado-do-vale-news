@@ -16,7 +16,7 @@ const items: Array<{ label: string; status: MigrationStatus; description: string
   },
   {
     label: 'ChatGPT',
-    status: 'pending',
+    status: 'testing',
     description: 'Atendente principal com limites, ferramentas oficiais e fallback seguro.',
   },
   {
