@@ -14130,6 +14130,7 @@ fastify.route({
       const sender = String(payload.sender || payload.from || payload.phone || payload.number || payload.contact || '').trim();
       const message = String(payload.message || payload.text || payload.query || payload.body || payload.received_message || '').trim();
       const isGroup = payload.isGroup === true || String(payload.isGroup || '').toLowerCase() === 'true';
+      const isInternalLab = payload.internalLab === true || payload.internal_lab === true;
       const senderKey = normalizeAutoresponderSender(sender) || sender || 'unknown';
       req.autoresponderWebhookSource = payload.source || '';
       req.autoresponderSender = senderKey;
@@ -14152,7 +14153,7 @@ fastify.route({
 
       const [settingsRows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
       const settings = settingsRows[0];
-      if (!settings || Number(settings.enabled) !== 1) {
+      if (!settings || (!isInternalLab && Number(settings.enabled) !== 1)) {
         return { replies: [] };
       }
 
@@ -14368,7 +14369,7 @@ fastify.route({
         ? Number(settings.max_replies_window_hours)
         : 24;
       const recentReplyCount = await getAutoresponderReplyCount(senderKey, replyWindowHours);
-      if (!hasActivePurchaseFlow && !(detectedIntent.storeStatusRequest || aiIntentPlan?.storeStatusRequest) && recentReplyCount >= replyLimit) {
+      if (!isInternalLab && !hasActivePurchaseFlow && !(detectedIntent.storeStatusRequest || aiIntentPlan?.storeStatusRequest) && recentReplyCount >= replyLimit) {
         await touchAutoresponderConversation(senderKey);
         return { replies: [] };
       }
@@ -16065,6 +16066,7 @@ async function runAutoresponderInternalChatMessage({ message, sender, contactFir
       sender: senderKey,
       message: text,
       isGroup: false,
+      internalLab: true,
       name: contactFirstName || '',
     },
   });
