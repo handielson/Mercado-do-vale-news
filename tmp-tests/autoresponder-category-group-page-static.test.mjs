@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 for (const fileName of ['vps_server.js', 'vps_server.cjs']) {
-  const source = readFileSync(fileName, 'utf8');
+  const source = readFileSync(fileName, 'utf8').replace(/\r\n/g, '\n');
 
   assert.match(
     source,
@@ -21,10 +21,29 @@ for (const fileName of ['vps_server.js', 'vps_server.cjs']) {
     /sortAutoresponderProductGroupsByBrand\(groupAutoresponderProductsByModel\(rows\)\)/,
     `${fileName} must group and sort before slicing visible category options`
   );
+  assert.doesNotMatch(
+    helperBody,
+    /AUTORESPONDER_PRODUCT_RESPONSE_LIMIT/,
+    `${fileName} category group paging must not cap complete smartphone lists at the generic 50-product response limit`
+  );
   assert.match(
     helperBody,
     /groups\.slice\(safeGroupOffset, safeGroupOffset \+ safePageSize\)/,
     `${fileName} must slice by grouped options, not raw product rows`
+  );
+
+  const completeKeywordBody = source.match(/function isAutoresponderCompleteProductListKeyword[\s\S]*?\n}\n\nfunction getAutoresponderProductQueryLimit/)?.[0] || '';
+  assert.match(
+    completeKeywordBody,
+    /AUTORESPONDER_SMARTPHONE_CATEGORY_NAMES\.has\(text\)/,
+    `${fileName} must treat exact Smartphones/Celulares category names as complete lists`
+  );
+
+  const initialPageSizeBody = source.match(/function getAutoresponderInitialProductPageSize[\s\S]*?\n}\n\nfunction chunkAutoresponderArray/)?.[0] || '';
+  assert.match(
+    initialPageSizeBody,
+    /isAutoresponderSmartphoneCategoryName\(keyword\)[\s\S]*AUTORESPONDER_SMARTPHONE_COMPLETE_PRODUCT_RESPONSE_LIMIT/,
+    `${fileName} must use the smartphone complete-list limit for Smartphones/Celulares categories`
   );
 
   const categoryReplyStart = source.indexOf('async function buildAutoresponderCatalogCategoryReplyData');

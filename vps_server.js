@@ -62,6 +62,9 @@ const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS = [4, 9, 16, 24, 33, 43, 54, 66, 79, 93];
 const AUTORESPONDER_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_PRODUCT_PAGE_SIZE * AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES;
 const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 20;
+const AUTORESPONDER_CATEGORY_GROUP_RAW_RESPONSE_LIMIT = 500;
+const AUTORESPONDER_SMARTPHONE_COMPLETE_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_CATEGORY_GROUP_RAW_RESPONSE_LIMIT;
+const AUTORESPONDER_SMARTPHONE_CATEGORY_NAMES = new Set(['smartphones', 'smartphone', 'celulares', 'celular']);
 const AUTORESPONDER_RULE_TEMPLATES = [
   { name: 'Saudacao manha', pattern: 'bom dia, oi bom dia, dia' },
   { name: 'Saudacao tarde', pattern: 'boa tarde, tarde' },
@@ -10111,10 +10114,7 @@ async function findAutoresponderProductGroupPageByCategory(categoryId, pageSize 
   const safePageSize = Math.max(Number(pageSize) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1);
   const safeGroupOffset = Math.max(Number(groupOffset) || 0, 0);
   const targetGroupCount = safeGroupOffset + safePageSize + 1;
-  const rawLimit = Math.min(
-    Math.max(targetGroupCount * 6, safePageSize + 1),
-    AUTORESPONDER_PRODUCT_RESPONSE_LIMIT
-  );
+  const rawLimit = Math.min(Math.max(targetGroupCount * 6, safePageSize + 1), AUTORESPONDER_CATEGORY_GROUP_RAW_RESPONSE_LIMIT);
   const rows = await findAutoresponderProductsByCategory(categoryId, rawLimit, 0);
   const groups = sortAutoresponderProductGroupsByBrand(groupAutoresponderProductsByModel(rows));
   const pageGroups = groups.slice(safeGroupOffset, safeGroupOffset + safePageSize);
@@ -10737,15 +10737,24 @@ function isAutoresponderCompleteProductListKeyword(keyword) {
     .replace(/[^a-z0-9\s-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return /\b(lista completa|catalogo completo|todos os modelos|todas as opcoes|ver tudo|mostrar tudo)\b/.test(text);
+  return AUTORESPONDER_SMARTPHONE_CATEGORY_NAMES.has(text)
+    || /\b(lista completa|catalogo completo|todos os modelos|todas as opcoes|ver tudo|mostrar tudo)\b/.test(text);
 }
 
 function getAutoresponderProductQueryLimit(limit) {
   const safeLimit = Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1);
   const maxLimit = safeLimit > AUTORESPONDER_PRODUCT_RESPONSE_LIMIT
-    ? AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT
+    ? AUTORESPONDER_CATEGORY_GROUP_RAW_RESPONSE_LIMIT
     : AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
   return Math.min(safeLimit, maxLimit);
+}
+
+function isAutoresponderSmartphoneCategoryName(keyword) {
+  const text = normalizeAutoresponderText(keyword)
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return AUTORESPONDER_SMARTPHONE_CATEGORY_NAMES.has(text);
 }
 
 const AUTORESPONDER_ACCESSORY_SEARCH_WORDS = [
@@ -10917,6 +10926,7 @@ function formatAutoresponderProductReplyInstructions(hasMore) {
 }
 
 function getAutoresponderInitialProductPageSize(keyword = '') {
+  if (isAutoresponderSmartphoneCategoryName(keyword)) return AUTORESPONDER_SMARTPHONE_COMPLETE_PRODUCT_RESPONSE_LIMIT;
   return isAutoresponderCompleteProductListKeyword(keyword)
     ? AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT
     : AUTORESPONDER_PRODUCT_PAGE_SIZE;
