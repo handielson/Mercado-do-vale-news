@@ -16,6 +16,8 @@ for (const file of files) {
     'consumeAutoresponderEvolutionWebhookEvent',
     'releaseAutoresponderEvolutionWebhookEvent',
     "duplicate: true",
+    'genericPhoneSearchTokens',
+    'productSearchTokens.every((token) => genericPhoneSearchTokens.has(token))',
   ].forEach((needle) => {
     assert.ok(normalized.includes(needle.replace(/\s+/g, ' ')), `${file} must include ${needle}`);
   });

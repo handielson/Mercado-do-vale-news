@@ -11230,6 +11230,11 @@ async function buildAutoresponderPriorityProductSearchReplyData({ message, conta
   if (!isAutoresponderLikelyProductModelRequest(message)) return null;
   const productSearchTokens = extractAutoresponderProductSearchTokens(message);
   if (productSearchTokens.length === 0) return null;
+  const genericPhoneSearchTokens = new Set([
+    'celular', 'celulares', 'smartphone', 'smartphones',
+    'telefone', 'telefones', 'phone', 'phones', 'aparelho', 'aparelhos',
+  ]);
+  if (productSearchTokens.every((token) => genericPhoneSearchTokens.has(token))) return null;
 
   const searchKeyword = productSearchTokens.join(' ');
   const pageSize = getAutoresponderInitialProductPageSize(searchKeyword);
