@@ -25,6 +25,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
     const [imeiQuery, setImeiQuery] = useState('');
     const [isImeiSearching, setIsImeiSearching] = useState(false);
     const imeiInputRef = useRef<HTMLInputElement>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     // Foco automático no campo IMEI ao trocar de tab
     useEffect(() => {
@@ -74,6 +75,25 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
 
             setSearchResults(availableProducts);
             setSkuStockMap(skuMap);
+
+            // Se retornar exatamente 1 resultado, adiciona automaticamente ao carrinho
+            if (availableProducts.length === 1) {
+                const singleProduct = availableProducts[0];
+                const quantity = quantities[singleProduct.id] || 1;
+                if (singleProduct.track_inventory && singleProduct.stock_quantity !== undefined) {
+                    if (singleProduct.stock_quantity < quantity) {
+                        return;
+                    }
+                }
+                onAddToCart(singleProduct, quantity);
+                toast.success(`${singleProduct.name} adicionado ao carrinho`);
+                setSearchResults([]);
+                setSearchTerm('');
+                setTimeout(() => {
+                    searchInputRef.current?.focus();
+                    searchInputRef.current?.select();
+                }, 50);
+            }
         } catch (error) {
             console.error('Erro ao buscar produtos:', error);
             toast.error('Erro ao buscar produtos');
@@ -153,7 +173,10 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
 
             toast.success(`✅ ${product.name} — IMEI: ${unit.imei_1 || unit.serial_number}`);
             setImeiQuery('');
-            setTimeout(() => imeiInputRef.current?.focus(), 100);
+            setTimeout(() => {
+                imeiInputRef.current?.focus();
+                imeiInputRef.current?.select();
+            }, 50);
 
         } catch (error: any) {
             console.error('Erro na busca por IMEI:', error);
@@ -207,6 +230,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                     <div className="mb-4">
                         <div className="relative">
                             <input
+                                ref={searchInputRef}
                                 type="text"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}

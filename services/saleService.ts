@@ -446,7 +446,10 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         }
 
         // Sync bidirecional: deduzir estoque no Bling (fire-and-forget, não bloqueia a venda)
-        for (const item of itemsWithInventory) {
+        const itemsToSyncBling = saleInput.items.filter(
+            item => item.track_inventory && item.product_id
+        );
+        for (const item of itemsToSyncBling) {
             syncStockToBling(
                 item.product_id!,
                 item.quantity,

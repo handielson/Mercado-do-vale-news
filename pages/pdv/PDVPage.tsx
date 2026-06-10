@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, ArrowLeft, Ticket, X as XIcon } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, Ticket, X as XIcon, Printer, FileText, User, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Product } from '../../types/product';
 import { SaleItem, PaymentMethod, SaleInput, DeliveryType } from '../../types/sale';
 import { calculateSaleTotals, calculateTotalPaid } from '../../utils/saleCalculations';
@@ -139,6 +139,7 @@ export default function PDVPage() {
     // Estado do carrinho
     const [cartItems, setCartItems] = useState<SaleItem[]>([]);
     const [warrantyOptions, setWarrantyOptions] = useState<WarrantyOption[]>([]);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     React.useEffect(() => {
         companySettingsService.get().then(settings => {
@@ -401,8 +402,7 @@ export default function PDVPage() {
                 // Se o item tem "warranty_months", precisamos re-calcular o preço da garantia 
                 // pois a garantia é um % do valor base. Mas dependendo de como as regras 
                 // da empresa funcionam, pode-se querer manter fixo. 
-                // Aqui iremos manter o preço da garantia anterior (ou atualizar se preferir).
-                // Como não sabemos a porcentagem exata aqui sem as options, vamos manter o valor da garantia como está,
+                // Aqui iremos manter o valor da garantia como está,
                 // ou apenas somá-lo ao novo subtotal.
                 
                 const subtotal = (newPrice * item.quantity) + (item.warranty_price || 0);
@@ -864,10 +864,8 @@ export default function PDVPage() {
                 items: cartItems
             });
 
-            // Gerar termo de garantia
-            updateFinalizeStep('receipt', 'saving');
-            await generateWarrantyTerm(sale, selectedCustomer, cartItems);
-            updateFinalizeStep('receipt', 'done');
+            // Mostrar modal de sucesso
+            setShowSuccessModal(true);
 
             // Limpar todo o PDV
             setCartItems([]);
@@ -1329,6 +1327,66 @@ export default function PDVPage() {
                 warrantyTagDataList={warrantyTagDataList}
                 onPrintReceipt={handlePrintReceiptFromModal}
             />
+
+            {/* Sale Success Modal */}
+            {showSuccessModal && lastSaleData && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-md w-full p-6 mx-4 animate-in zoom-in-95 duration-200">
+                        <div className="flex flex-col items-center text-center">
+                            <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center text-green-600 mb-4">
+                                <CheckCircle2 size={40} />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-800 mb-1">Venda Finalizada!</h2>
+                            <p className="text-sm text-slate-500 mb-6 font-mono text-center">Código: #{lastSaleId?.slice(0, 8).toUpperCase()}</p>
+
+                            <div className="w-full space-y-3">
+                                <button
+                                    onClick={() => {
+                                        handlePrintReceiptFromModal();
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-xl transition-colors"
+                                >
+                                    <Printer size={18} />
+                                    Imprimir Comprovante
+                                </button>
+
+                                {lastSaleData.items.some((it: any) => it.serialized_unit?.unitId) && (
+                                    <button
+                                        onClick={() => {
+                                            generateWarrantyTerm(lastSaleData.sale, lastSaleData.customer, lastSaleData.items);
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-xl transition-colors border border-blue-100"
+                                    >
+                                        <FileText size={18} />
+                                        Gerar Termo de Garantia
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => {
+                                        setShowSuccessModal(false);
+                                        navigate(`/admin/customers/${lastSaleData.customer.id}`);
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold rounded-xl transition-colors border border-purple-100"
+                                >
+                                    <User size={18} />
+                                    Ver no Cadastro do Cliente
+                                </button>
+
+                                <button
+                                    onClick={() => {
+                                        setShowSuccessModal(false);
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors shadow-sm"
+                                >
+                                    <RotateCcw size={18} />
+                                    Nova Venda
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
