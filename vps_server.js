@@ -11697,6 +11697,27 @@ async function sendAutoresponderEvolutionTextMessage(sender, text) {
   });
 }
 
+function buildAutoresponderEvolutionWebhookConfig() {
+  return {
+    enabled: true,
+    url: 'https://api.xiaomipetrolina.com.br/autoresponder-webhook',
+    byEvents: false,
+    webhookByEvents: false,
+    base64: false,
+    webhookBase64: false,
+    headers: {
+      'x-autoresponder-token': process.env.AUTORESPONDER_TOKEN || ''
+    },
+    events: ['CONNECTION_UPDATE', 'MESSAGES_UPSERT']
+  };
+}
+
+async function syncAutoresponderEvolutionWebhook() {
+  return callEvolutionApiDetailed(`/webhook/set/${EVOLUTION_INSTANCE_NAME}`, 'POST', {
+    webhook: buildAutoresponderEvolutionWebhookConfig()
+  });
+}
+
 fastify.get('/autoresponder/whatsapp/state', { preHandler: requireSyncKey }, async (req, reply) => {
   try {
     const result = await callEvolutionApi(`/instance/connectionState/${EVOLUTION_INSTANCE_NAME}`);
@@ -11738,16 +11759,7 @@ fastify.get('/autoresponder/whatsapp/connect', { preHandler: requireSyncKey }, a
       qrcode: true,
       number: process.env.EVOLUTION_INSTANCE_NUMBER || '',
       integration: 'WHATSAPP-BAILEYS',
-      webhook: {
-        enabled: true,
-        url: 'https://api.xiaomipetrolina.com.br/autoresponder-webhook',
-        byEvents: true,
-        base64: false,
-        headers: {
-          'x-autoresponder-token': process.env.AUTORESPONDER_TOKEN || ''
-        },
-        events: ['CONNECTION_UPDATE', 'MESSAGES_UPSERT']
-      }
+      webhook: buildAutoresponderEvolutionWebhookConfig()
     };
 
     const createResult = await callEvolutionApiDetailed('/instance/create', 'POST', createBody);
@@ -11763,6 +11775,11 @@ fastify.get('/autoresponder/whatsapp/connect', { preHandler: requireSyncKey }, a
       });
     }
 
+    const webhookResult = await syncAutoresponderEvolutionWebhook().catch((err) => ({
+      ok: false,
+      status: 0,
+      body: { message: err.message || 'Evolution webhook sync failed' }
+    }));
     const connectResult = await callEvolutionApiDetailed(`/instance/connect/${EVOLUTION_INSTANCE_NAME}`);
     if (!connectResult.ok || connectResult.body?.error === true) {
       return reply.code(502).send({
@@ -11772,9 +11789,29 @@ fastify.get('/autoresponder/whatsapp/connect', { preHandler: requireSyncKey }, a
           || 'Evolution API failed to connect the WhatsApp instance.',
         evolutionStatus: connectResult.status,
         evolution: connectResult.body,
+        webhook: webhookResult.body,
       });
     }
-    return connectResult.body;
+    return { ...connectResult.body, webhook: webhookResult.body };
+  } catch (err) {
+    return reply.code(500).send({ error: err.message });
+  }
+});
+
+fastify.post('/autoresponder/whatsapp/sync-webhook', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    const webhookResult = await syncAutoresponderEvolutionWebhook();
+    if (!webhookResult.ok || webhookResult.body?.error === true) {
+      return reply.code(502).send({
+        error: true,
+        phase: 'webhook',
+        message: formatEvolutionMessage(webhookResult.body?.message || webhookResult.body?.response || webhookResult.body)
+          || 'Evolution API failed to sync the WhatsApp webhook.',
+        evolutionStatus: webhookResult.status,
+        evolution: webhookResult.body,
+      });
+    }
+    return { ok: true, webhook: webhookResult.body };
   } catch (err) {
     return reply.code(500).send({ error: err.message });
   }
@@ -13220,8 +13257,96 @@ fastify.patch('/products/:id/tags', { preHandler: requireSyncKey }, async (req, 
   return { ok: true, tag_ids: tagIds };
 });
 
+function extractEvolutionMessageText(messagePayload) {
+  const message = messagePayload || {};
+  return String(
+    message.conversation
+    || message.extendedTextMessage?.text
+    || message.imageMessage?.caption
+    || message.videoMessage?.caption
+    || message.buttonsResponseMessage?.selectedDisplayText
+    || message.buttonsResponseMessage?.selectedButtonId
+    || message.listResponseMessage?.title
+    || message.listResponseMessage?.singleSelectReply?.selectedRowId
+    || message.templateButtonReplyMessage?.selectedDisplayText
+    || message.templateButtonReplyMessage?.selectedId
+    || ''
+  ).trim();
+}
+
+function normalizeEvolutionWebhookPayload(rawPayload) {
+  const payload = rawPayload && typeof rawPayload === 'object' ? rawPayload : {};
+  const data = payload.data && typeof payload.data === 'object' ? payload.data : payload;
+  const key = data.key && typeof data.key === 'object' ? data.key : {};
+  const eventName = String(payload.event || payload.type || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const remoteJid = String(key.remoteJid || data.remoteJid || data.from || '').trim();
+  const remoteJidAlt = String(key.remoteJidAlt || data.remoteJidAlt || '').trim();
+  const participant = String(key.participant || data.participant || '').trim();
+  const participantAlt = String(key.participantAlt || data.participantAlt || '').trim();
+  const senderJid = remoteJid.endsWith('@lid') && remoteJidAlt ? remoteJidAlt : remoteJid;
+  const participantJid = participant.endsWith('@lid') && participantAlt ? participantAlt : participant;
+  const messagePayload = data.message || payload.message || {};
+  const messageText = extractEvolutionMessageText(messagePayload) || String(data.text || data.messageText || '').trim();
+  const isEvolution = Boolean(
+    payload.instance
+    || payload.instanceName
+    || payload.server_url
+    || key.remoteJid
+    || eventName === 'MESSAGES_UPSERT'
+  );
+
+  if (!isEvolution) return null;
+
+  const pushName = String(data.pushName || payload.pushName || payload.name || '').trim();
+  return {
+    sender: senderJid || participantJid,
+    message: messageText,
+    isGroup: remoteJid.endsWith('@g.us'),
+    fromMe: key.fromMe === true || data.fromMe === true,
+    pushName,
+    name: pushName,
+    event: eventName,
+    evolutionMessageSource: String(data.source || payload.source || '').trim(),
+    source: 'evolution',
+  };
+}
+
+async function sendAutoresponderEvolutionReplies(sender, replies) {
+  const replyItems = Array.isArray(replies) ? replies : [];
+  const results = [];
+  for (const replyItem of replyItems) {
+    const text = String(replyItem?.message || replyItem || '').trim();
+    if (!text) continue;
+    results.push(await sendAutoresponderEvolutionTextMessage(sender, text));
+  }
+  return results;
+}
+
 fastify.addHook('onSend', async (req, reply, payload) => {
   if (!String(req.url || '').startsWith('/autoresponder-webhook')) return payload;
+  if (req.autoresponderWebhookSource === 'evolution') {
+    try {
+      const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+      if (reply.statusCode >= 400 || !Object.prototype.hasOwnProperty.call(parsed || {}, 'replies')) return payload;
+      const replies = Array.isArray(parsed?.replies) ? parsed.replies : [];
+      const sent = await sendAutoresponderEvolutionReplies(req.autoresponderSender, replies);
+      reply.header('Content-Type', 'application/json; charset=utf-8');
+      return JSON.stringify({
+        ok: true,
+        source: 'evolution',
+        sender: req.autoresponderSender,
+        replies: replies.length,
+        sent: sent.map((item) => ({ ok: item.ok, status: item.status, body: item.body })),
+      });
+    } catch (err) {
+      reply.code(502);
+      return JSON.stringify({ ok: false, source: 'evolution', error: err.message || 'Evolution send failed' });
+    }
+  }
   const responseFormat = String(req.query?.format || req.query?.response_format || '').toLowerCase();
   if (!['text', 'plain', 'message'].includes(responseFormat)) return payload;
   try {
@@ -13243,11 +13368,21 @@ fastify.route({
     try {
       const requestBody = req.body || {};
       const nestedQuery = requestBody && typeof requestBody.query === 'object' ? requestBody.query : {};
-      const payload = { ...(req.query || {}), ...nestedQuery, ...requestBody };
+      const rawPayload = { ...(req.query || {}), ...nestedQuery, ...requestBody };
+      const evolutionPayload = normalizeEvolutionWebhookPayload(rawPayload);
+      const payload = { ...rawPayload, ...(evolutionPayload || {}) };
       const sender = String(payload.sender || payload.from || payload.phone || payload.number || payload.contact || '').trim();
       const message = String(payload.message || payload.text || payload.query || payload.body || payload.received_message || '').trim();
       const isGroup = payload.isGroup === true || String(payload.isGroup || '').toLowerCase() === 'true';
       const senderKey = normalizeAutoresponderSender(sender) || sender || 'unknown';
+      req.autoresponderWebhookSource = payload.source || '';
+      req.autoresponderSender = senderKey;
+      if (payload.source === 'evolution' && payload.event && payload.event !== 'MESSAGES_UPSERT') {
+        return { replies: [] };
+      }
+      if (payload.source === 'evolution' && !normalizeAutoresponderSender(sender)) {
+        return { replies: [] };
+      }
       const detectedIntent = detectAutoresponderIntent(message);
       let shouldPrefixGreeting = detectedIntent.greeting;
       const contactFirstName = getAutoresponderContactFirstName(payload);
@@ -13259,6 +13394,10 @@ fastify.route({
       }
 
       if (await isAutoresponderBlocked(sender)) {
+        return { replies: [] };
+      }
+
+      if (payload.fromMe === true) {
         return { replies: [] };
       }
 
