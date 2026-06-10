@@ -18,11 +18,6 @@ import type {
     AutoResponderManualMessageInput,
     AutoResponderManualMessageResult,
     AutoResponderOk,
-    AutoResponderRule,
-    AutoResponderRuleFilters,
-    AutoResponderRuleFromQuestionInput,
-    AutoResponderRuleInput,
-    AutoResponderRuleUpdate,
     AutoResponderSettings,
     AutoResponderSettingsInput,
     AutoResponderStats,
@@ -161,26 +156,6 @@ export const autoResponderService = {
 
     deleteAiTraining: (id: number): Promise<void> => {
         return vpsClient.delete(`/autoresponder/ai-training/${id}`);
-    },
-
-    listRules: (filters: AutoResponderRuleFilters = {}): Promise<AutoResponderRule[]> => {
-        return vpsClient.get<AutoResponderRule[]>(withQuery('/autoresponder/rules', filters));
-    },
-
-    createRule: (rule: AutoResponderRuleInput): Promise<AutoResponderRule> => {
-        return vpsClient.post<AutoResponderRule>('/autoresponder/rules', rule);
-    },
-
-    updateRule: (id: number, updates: AutoResponderRuleUpdate): Promise<AutoResponderRule | null> => {
-        return vpsClient.patch<AutoResponderRule | null>(`/autoresponder/rules/${id}`, updates);
-    },
-
-    deleteRule: (id: number): Promise<void> => {
-        return vpsClient.delete(`/autoresponder/rules/${id}`);
-    },
-
-    createRuleFromQuestion: (input: AutoResponderRuleFromQuestionInput): Promise<AutoResponderRule> => {
-        return vpsClient.post<AutoResponderRule>('/autoresponder/rules/from-question', input);
     },
 
     uploadAttachment: (file: File): Promise<AutoResponderAttachmentUpload> => {

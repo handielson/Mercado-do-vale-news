@@ -13665,6 +13665,23 @@ fastify.route({
 
       const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
       const hasActivePurchaseFlow = hasAutoresponderCartItems(purchaseFlow);
+      if (!hasActivePurchaseFlow && message) {
+        const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: senderKey });
+        if (aiFirst?.text) {
+          const replyText = formatAutoresponderReply(aiFirst.text, settings, shouldPrefixGreeting);
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'ai_first',
+            replyText,
+            matchedCount: 0,
+            aiMeta: aiFirst.aiMeta,
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
       const numberedChoice = detectedIntent.numberedChoice;
       if (!hasActivePurchaseFlow && Number(settings.use_numbered_lists) === 1) {
         const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
@@ -13911,23 +13928,6 @@ fastify.route({
           purchaseFlow,
           shouldPrefixGreeting,
         });
-      }
-
-      if (shouldAutoresponderTryAiFirst({ message, detectedIntent, purchaseFlow })) {
-        const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: senderKey });
-        if (aiFirst?.text) {
-          const replyText = formatAutoresponderReply(aiFirst.text, settings, shouldPrefixGreeting);
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'ai_first',
-            replyText,
-            matchedCount: 0,
-            aiMeta: aiFirst.aiMeta,
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
       }
 
       if (hasAutoresponderCartItems(purchaseFlow) && isAutoresponderPurchaseCancelRequest(message)) {
