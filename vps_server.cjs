@@ -7717,6 +7717,8 @@ const AUTORESPONDER_GENERIC_PHONE_CATALOG_FILLER_WORDS = new Set([
   'de', 'do', 'da', 'dos', 'das', 'um', 'uma', 'uns', 'umas', 'algum',
   'alguns', 'alguma', 'algumas', 'novo', 'novos', 'nova', 'novas',
   'disponivel', 'disponiveis', 'pra', 'para', 'quero', 'queria',
+  'lista', 'listar', 'catalogo', 'opcoes', 'opcao', 'modelos', 'modelo',
+  'ver', 'mostrar', 'mostra', 'manda', 'mande', 'envia', 'envie',
   ...AUTORESPONDER_GENERIC_PHONE_CATALOG_WORDS,
   ...AUTORESPONDER_GENERIC_TABLET_CATALOG_WORDS,
   ...AUTORESPONDER_GENERIC_RECEIVER_CATALOG_WORDS,

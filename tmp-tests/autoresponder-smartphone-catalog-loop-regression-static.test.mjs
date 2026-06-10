@@ -18,6 +18,7 @@ for (const file of files) {
     "duplicate: true",
     'detectAutoresponderGenericDeviceCatalogFamily(message)',
     'meaningfulTokens.length === 0 ? family : null',
+    "'lista', 'listar', 'catalogo'",
     'findAutoresponderAvailableCategories(100)',
     'resolveAutoresponderCatalogCategoryForMessage(message, categories)',
     'findAutoresponderPreferredPhoneCatalogCategory',
