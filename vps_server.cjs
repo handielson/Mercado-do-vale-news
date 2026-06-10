@@ -16,7 +16,7 @@ const AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS = 'Certo, vou chamar um especialista 
 const AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS = 'Certo, vou chamar um especialista. Estamos fora do horario de atendimento humano agora, mas sua mensagem ficou registrada e vamos te responder assim que possivel.';
 const AUTORESPONDER_DEFAULT_FALLBACK_MESSAGE = 'Nao consegui localizar exatamente isso agora. Me diga o modelo do aparelho ou o tipo de produto que voce procura.';
 const AUTORESPONDER_DEFAULT_AUTO_PAUSE_MESSAGE = 'Vou chamar um atendente para te ajudar melhor. Assim conseguimos conferir certinho pra voce.';
-const AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE = 'Pitoco, assistente virtual do Mercado do Vale. Se precisar de ajuda personalizada, nossa equipe continua o atendimento por aqui.';
+const AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE = '';
 const AUTORESPONDER_RESPONSE_TONE_VARIANTS = {
   a: {
     humanIn: 'Certo, vou chamar um atendente para continuar seu atendimento.',
@@ -7496,7 +7496,9 @@ function getAutoresponderGreetingReply(message, contactFirstName = '', settings 
 
 function getAutoresponderSignatureMessage(settings) {
   if (settings?.signature_enabled === 0 || settings?.signature_enabled === false) return '';
-  return String(settings?.signature_message || AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE).trim();
+  const signature = String(settings?.signature_message || AUTORESPONDER_DEFAULT_SIGNATURE_MESSAGE).trim();
+  if (/^pitoco,\s*assistente virtual do mercado do vale/i.test(signature)) return '';
+  return signature;
 }
 
 function applyAutoresponderGreetingPrefix(replyText, settings, shouldPrefixGreeting) {
@@ -7517,6 +7519,32 @@ function formatAutoresponderReply(replyText, settings, shouldPrefixGreeting) {
   return appendAutoresponderSignatureMessage(
     applyAutoresponderGreetingPrefix(replyText, settings, shouldPrefixGreeting),
     settings
+  );
+}
+
+function splitAutoresponderAiReplyMessages(replyText, maxMessages = 2) {
+  const raw = String(replyText || '').trim();
+  if (!raw) return [];
+  const safeMax = Math.max(1, Number(maxMessages) || 2);
+  const delimiterParts = raw
+    .split(/\r?\n\s*(?:---MSG---|---)\s*\r?\n|\r?\n{2,}/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const parts = delimiterParts.length > 1
+    ? delimiterParts
+    : raw.split(/\r?\n+/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length <= safeMax) return parts;
+  return [
+    ...parts.slice(0, safeMax - 1),
+    parts.slice(safeMax - 1).join('\n\n'),
+  ].filter(Boolean);
+}
+
+function formatAutoresponderAiReplyMessages(replyText, settings, shouldPrefixGreeting) {
+  return formatAutoresponderReplies(
+    splitAutoresponderAiReplyMessages(replyText, 2),
+    settings,
+    shouldPrefixGreeting
   );
 }
 
@@ -8038,7 +8066,7 @@ async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings 
         input,
         max_output_tokens: maxOutputTokens,
       }),
-      signal: AbortSignal.timeout(Number(process.env.AUTORESPONDER_AI_TIMEOUT_MS || 5000)),
+      signal: AbortSignal.timeout(Math.max(Number(process.env.AUTORESPONDER_AI_TIMEOUT_MS || 0) || 0, 20000)),
     });
     if (!response.ok) {
       console.warn('[autoresponder-ai] OpenAI response failed:', response.status, await response.text());
@@ -8046,7 +8074,17 @@ async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings 
     }
     const responseJson = await response.json();
     const text = extractAutoresponderOpenAiText(responseJson);
-    if (!text) return null;
+    if (!text) {
+      console.warn('[autoresponder-ai] empty text:', JSON.stringify({
+        status: responseJson?.status || null,
+        incomplete_details: responseJson?.incomplete_details || null,
+        output_types: Array.isArray(responseJson?.output)
+          ? responseJson.output.map((item) => item?.type || null).filter(Boolean)
+          : [],
+        usage: responseJson?.usage || null,
+      }));
+      return null;
+    }
     return {
       text,
       aiMeta: normalizeAutoresponderOpenAiUsage(responseJson, aiConfig.model, settings),
@@ -8108,13 +8146,15 @@ async function buildAutoresponderAiFirstReply({ message, contactFirstName = '', 
       `Mensagem do cliente: ${String(message || '').trim() || '(vazia)'}`,
       name ? `Nome do cliente: ${name}` : '',
       'Responda como atendente virtual do Mercado do Vale, de forma curta, natural e util.',
+      'Quando for uma saudacao ou inicio de conversa, responda em exatamente duas mensagens curtas separadas por uma linha em branco.',
+      'Para outras perguntas gerais, use no maximo duas mensagens curtas separadas por uma linha em branco.',
       'Se a mensagem tiver mais de uma pergunta, responda todas as perguntas na mesma resposta.',
       'Use somente o treinamento aprovado fornecido nas instrucoes.',
       'Se o cliente perguntar sobre entrega ou frete, diga que fazemos entrega e peca o CEP para consultar.',
       'Se faltar informacao para responder com seguranca, faca no maximo uma pergunta objetiva.',
       'Nao invente politicas, produtos, precos, estoque, garantias ou condicoes.',
     ].filter(Boolean).join('\n'),
-    maxOutputTokens: 190,
+    maxOutputTokens: 600,
     settings,
     sender,
   });
@@ -14225,8 +14265,6 @@ fastify.route({
 
       const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
       const hasActivePurchaseFlow = hasAutoresponderCartItems(purchaseFlow);
-      const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: senderKey });
-      shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
 
       const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({
         message,
@@ -14235,6 +14273,31 @@ fastify.route({
         shouldPrefixGreeting: false,
       });
       if (phoneListOptInReply) return phoneListOptInReply;
+
+      if (detectedIntent.greetingOnly && isAutoresponderAiEnabled(settings) && !hasActivePurchaseFlow) {
+        const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: senderKey });
+        if (aiFirst?.text) {
+          const replyMessages = formatAutoresponderAiReplyMessages(aiFirst.text, settings, false);
+          const replyText = replyMessages.join('\n\n');
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'ai_first',
+            replyText,
+            matchedCount: 0,
+            aiMeta: aiFirst.aiMeta,
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: formatAutoresponderProReplies(replyMessages) };
+        }
+        if (isInternalLab) {
+          await touchAutoresponderConversation(senderKey);
+          return { replies: [] };
+        }
+      }
+
+      const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: senderKey });
+      shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
 
       if (detectedIntent.greetingOnly) {
         const contactState = await getAutoresponderContactNameState(senderKey);
@@ -14489,7 +14552,8 @@ fastify.route({
       if (shouldAutoresponderTryAiFirst({ message, detectedIntent, purchaseFlow })) {
         const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: senderKey });
         if (aiFirst?.text) {
-          const replyText = formatAutoresponderReply(aiFirst.text, settings, shouldPrefixGreeting);
+          const replyMessages = formatAutoresponderAiReplyMessages(aiFirst.text, settings, shouldPrefixGreeting);
+          const replyText = replyMessages.join('\n\n');
           await logAutoresponderReply({
             sender: senderKey,
             message,
@@ -14499,7 +14563,7 @@ fastify.route({
             aiMeta: aiFirst.aiMeta,
           });
           await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
+          return { replies: formatAutoresponderProReplies(replyMessages) };
         }
       }
 
