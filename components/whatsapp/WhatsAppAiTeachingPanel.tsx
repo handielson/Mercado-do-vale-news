@@ -24,6 +24,18 @@ function isEnabled(value: unknown): boolean {
   return value === true || Number(value) === 1 || String(value) === 'true';
 }
 
+function autoResizeTextarea(textarea: HTMLTextAreaElement | null) {
+  if (!textarea) return;
+  textarea.style.height = 'auto';
+  textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+function useAutoResizeTextarea(ref: React.RefObject<HTMLTextAreaElement>, value: string) {
+  React.useLayoutEffect(() => {
+    autoResizeTextarea(ref.current);
+  }, [ref, value]);
+}
+
 export function WhatsAppAiTeachingPanel() {
   const [entries, setEntries] = React.useState<AutoResponderAiTraining[]>([]);
   const [form, setForm] = React.useState(emptyForm);
@@ -31,6 +43,11 @@ export function WhatsAppAiTeachingPanel() {
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const keywordsRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const contentRef = React.useRef<HTMLTextAreaElement | null>(null);
+
+  useAutoResizeTextarea(keywordsRef, form.keywords);
+  useAutoResizeTextarea(contentRef, form.content);
 
   async function loadEntries() {
     setLoading(true);
@@ -163,36 +180,41 @@ export function WhatsAppAiTeachingPanel() {
           </div>
 
           <label className="block text-xs font-semibold uppercase text-slate-500">
-            Palavras-chave
+            Quando acionar
             <textarea
+              ref={keywordsRef}
               value={form.keywords}
               onChange={(event) => setForm((current) => ({ ...current, keywords: event.target.value.slice(0, 1000) }))}
-              rows={3}
+              rows={1}
               placeholder="redmi note 15, note 15, capinha note 15"
-              className="mt-2 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm normal-case leading-6 text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+              className="mt-2 w-full overflow-hidden rounded-lg border border-slate-200 px-3 py-2 text-sm normal-case leading-6 text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
             />
           </label>
 
           <label className="block text-xs font-semibold uppercase text-slate-500">
-            Instrucao para IA
+            Como a IA deve responder
             <textarea
+              ref={contentRef}
               value={form.content}
               onChange={(event) => setForm((current) => ({ ...current, content: event.target.value.slice(0, 8000) }))}
-              rows={7}
+              rows={8}
               placeholder="Quando o cliente falar desse modelo, responder primeiro os aparelhos disponiveis do estoque oficial. Se tambem houver capinhas compativeis, sugerir em outra mensagem."
-              className="mt-2 w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm normal-case leading-6 text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+              className="mt-2 w-full overflow-hidden rounded-lg border border-slate-200 px-3 py-2 text-sm normal-case leading-6 text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
             />
           </label>
 
           <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
             <label className="block text-xs font-semibold uppercase text-slate-500">
-              Prioridade
+              Ordem
               <input
                 type="number"
                 value={form.priority}
                 onChange={(event) => setForm((current) => ({ ...current, priority: Number(event.target.value || 0) }))}
                 className="mt-2 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
               />
+              <span className="mt-1 block text-[11px] font-medium normal-case text-slate-400">
+                Maior numero aparece primeiro.
+              </span>
             </label>
 
             <label className="mt-6 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
@@ -244,7 +266,7 @@ export function WhatsAppAiTeachingPanel() {
                       <p className="text-sm font-semibold text-slate-900">{entry.title}</p>
                       <p className="mt-1 text-xs font-medium text-slate-500">
                         {trainingTypes.find((type) => type.value === entry.training_type)?.label || entry.training_type}
-                        {isEnabled(entry.active) ? ' ativo' : ' inativo'} · prioridade {Number(entry.priority || 0)}
+                        {isEnabled(entry.active) ? ' ativo' : ' inativo'} - ordem {Number(entry.priority || 0)}
                       </p>
                     </div>
                     <div className="flex shrink-0 gap-1">
@@ -271,7 +293,7 @@ export function WhatsAppAiTeachingPanel() {
                   {entry.keywords && (
                     <p className="mt-2 text-xs font-semibold text-emerald-700">{entry.keywords}</p>
                   )}
-                  <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-slate-600">{entry.content}</p>
+                  <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-slate-600">{entry.content}</p>
                 </div>
               ))}
             </div>

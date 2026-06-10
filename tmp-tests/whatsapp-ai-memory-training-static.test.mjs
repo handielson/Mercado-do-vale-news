@@ -23,8 +23,8 @@ assert.match(types, /keywords\?: string \| null/, 'AutoResponderAiTraining must 
 assert.match(types, /keywords\?: string \| null/, 'AutoResponderAiTrainingInput must allow editable keywords');
 
 assert.match(memoryPanel, /WhatsAppAiTeachingPanel/, 'Memoria IA page panel must render the IA teaching editor');
-assert.match(teachingPanel, /Palavras-chave/, 'IA teaching editor must expose keywords');
-assert.match(teachingPanel, /Instru(?:c|ç)(?:o|õ)es? para IA|Instrucao para IA/, 'IA teaching editor must expose IA instruction text');
+assert.match(teachingPanel, /Quando acionar/, 'IA teaching editor must expose keywords in plain language');
+assert.match(teachingPanel, /Como a IA deve responder/, 'IA teaching editor must expose IA instruction text in plain language');
 assert.match(teachingPanel, /createAiTraining/, 'IA teaching editor must create training entries');
 assert.match(teachingPanel, /updateAiTraining/, 'IA teaching editor must update training entries');
 assert.match(teachingPanel, /deleteAiTraining/, 'IA teaching editor must delete training entries');
