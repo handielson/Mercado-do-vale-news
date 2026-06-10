@@ -1,6 +1,6 @@
 # Guia de Publicacao
 
-Atualizado em `01/06/2026`.
+Atualizado em `10/06/2026`.
 
 Este arquivo e o runbook principal para commit, push e publicacao do Mercado do Vale.
 
@@ -37,23 +37,50 @@ Nunca usar `git add .` neste projeto. Stagear por arquivo.
 Para a maioria das publicacoes da VPS, o fluxo certo e este:
 
 1. conferir o estado do repo e garantir que o commit certo ja foi preparado;
-2. rodar o deploy oficial, que ja faz o build por conta propria:
+2. rodar o deploy oficial, que ja faz o build por conta propria, sempre fora do sandbox com permissao elevada:
 
 ```powershell
 npm.cmd run deploy:vps-site
 ```
 
-3. conferir a saida do script, que deve mostrar a release ativa e o `current`;
-4. validar a URL publica afetada no navegador ou por `curl`;
+No Codex, nao tentar esse comando primeiro dentro do sandbox. Ele precisa abrir SSH para a VPS e normalmente falha com `connect EACCES` ou bloqueio equivalente. Chamar direto o `shell_command` com:
+
+```text
+sandbox_permissions: "require_escalated"
+justification: "Permite conectar via SSH ao VPS para publicar a release do site?"
+prefix_rule: ["npm.cmd", "run", "deploy:vps-site"]
+```
+
+3. conferir a saida do script, que deve mostrar `Site release active` e o `current`;
+4. validar a URL publica afetada no navegador ou por `curl` tambem fora do sandbox com permissao elevada;
 5. registrar a release ativa neste arquivo ou na nota da entrega.
 
 Use `VPS_SITE_SKIP_BUILD=1` somente quando o `dist/` ja tiver sido gerado e validado exatamente a partir do commit que sera publicado. Fora isso, deixe o script reconstruir o bundle.
+
+O deploy do site sempre publica o `dist/` inteiro em uma nova release dentro de `/var/www/mdv-site/releases/YYYYMMDD-HHMMSS` e depois troca o symlink `/var/www/mdv-site/current`. Nao publicar apenas arquivos modificados do frontend: o Vite gera nomes com hash e pode alterar chunks compartilhados, CSS, manifest implicito no `index.html` e dependencias mesmo quando a mudanca parece pequena. O rollback tambem depende de cada release estar completa.
 
 Use worktree separado apenas quando houver necessidade real de isolamento. Para publicacao normal, ele nao e obrigatorio e costuma atrasar.
 
 ## Sandbox Do Synology Drive
 
-O workspace fica dentro do Synology Drive e o sandbox pode bloquear Git, build, deploy e acesso de rede. Quando uma tentativa falhar com erro como `Access is denied`, `Could not resolve vite.config.ts`, `connect EACCES`, DNS bloqueado ou erro de permissao em pasta sincronizada, repetir o mesmo comando fora do sandbox com aprovacao.
+O workspace fica dentro do Synology Drive e o sandbox pode bloquear Git, build, deploy e acesso de rede. Para publicacao na VPS, nao fazer tentativa inicial dentro do sandbox: executar direto fora do sandbox com permissao elevada. Quando outros comandos falharem com erro como `Access is denied`, `Could not resolve vite.config.ts`, `connect EACCES`, DNS bloqueado ou erro de permissao em pasta sincronizada, repetir o mesmo comando fora do sandbox com aprovacao.
+
+Na pratica, publicacao na VPS e verificacao externa quase sempre batem no sandbox. Para evitar perder tempo, ja executar estes comandos com permissao elevada:
+
+```text
+sandbox_permissions: "require_escalated"
+justification: "Quer permitir rodar este comando fora do sandbox? Publicacao/verificacao externa na VPS costuma ser bloqueada pelo sandbox."
+```
+
+Comandos que devem ir direto com permissao elevada:
+
+```powershell
+npm.cmd run deploy:vps-site
+node deploy-vps-server-only.cjs
+curl.exe -s -I https://www.mercadodovale.com.br/
+curl.exe -s -I https://www.mercadodovale.com.br/admin/financeiro
+curl.exe -s -i https://api.xiaomipetrolina.com.br/status
+```
 
 Para Codex, usar este caminho no `shell_command`:
 
@@ -65,13 +92,177 @@ justification: "Quer permitir rodar este comando fora do sandbox? O Synology Dri
 Prefixos uteis para pedir regra persistente quando fizer sentido:
 
 ```text
-["npm", "run", "build"]
-["npm", "run", "deploy:vps-site"]
+["npm.cmd", "run", "build"]
+["npm.cmd", "run", "deploy:vps-site"]
 ["node", "deploy-vps-server-only.cjs"]
+["curl.exe"]
 ["git", "push"]
 ```
 
 Nao tentar contornar com comandos destrutivos. Repetir exatamente o comando necessario, com escopo claro.
+
+Observacao importante: se `npm.cmd run deploy:vps-site` demorar muito e estourar timeout, repetir com timeout maior. O deploy pode subir centenas de assets e precisa terminar ate exibir `Site release active`.
+
+## Registro Da Publicacao 09/06/2026
+
+Ultima publicacao confirmada:
+
+```text
+Site release active: /var/www/mdv-site/releases/20260609-151407
+Nginx root: /var/www/mdv-site/current
+Verificacao publica: https://www.mercadodovale.com.br/admin/financial/crediario?customer_id=8f0b9fab-64c5-4f8b-aa86-e7b6a063f63b retornou HTTP 200
+```
+
+Atualizacao complementar publicada em `09/06/2026`:
+
+```text
+Site release active: /var/www/mdv-site/releases/20260609-154254
+API VPS: mdv-api reiniciada via PM2 e ficou online
+Verificacao publica crediario: HTTP 200
+Verificacao publica API: https://api.xiaomipetrolina.com.br/status retornou HTTP 200, mysql.ok=true
+```
+
+O que entrou nessa atualizacao:
+
+- correcao da escala da venda vinculada no crediario: a divida/pagamentos continuam em centavos, mas os itens e total da venda nao sao divididos por 100 novamente;
+- botao `Dar baixa` no crediario admin, com valor parcial/total, forma da baixa (`pix`, `dinheiro`, `cartao`, `outro`) e observacoes;
+- bloco de crediario no cadastro do cliente para gerar Pix Mercado Pago;
+- cliente pode escolher pagar todos os debitos selecionados ou um valor parcial;
+- API do Mercado Pago agora grava `allocations_json` no intent para permitir um Pix unico baixando varios debitos automaticamente no webhook;
+- protecoes contra regressao para a rota antiga do crediario, baixa manual, Pix do cliente e alocacao multi-debito.
+
+Validacoes adicionais:
+
+```powershell
+node tmp-tests\customer-credit-ledger-route-static.test.mjs
+node tmp-tests\customer-profile-credit-payments-static.test.mjs
+node tmp-tests\customer-debt-mercadopago-allocation-static.test.mjs
+node tmp-tests\customer-details-financial-summary-static.test.mjs
+node tmp-tests\sale-service-customer-debt-static.test.mjs
+node --check vps_server.js
+node --check vps_server.cjs
+npm.cmd run build
+npm.cmd run deploy:vps-site
+node deploy-vps-server-only.cjs
+curl.exe -s -I "https://www.mercadodovale.com.br/admin/financial/crediario?customer_id=8f0b9fab-64c5-4f8b-aa86-e7b6a063f63b"
+curl.exe -s -i https://api.xiaomipetrolina.com.br/status
+```
+
+O que entrou nessa publicacao:
+
+- restauracao da tela antiga de crediario em `/admin/financial/crediario`;
+- alias tambem disponivel em `/admin/financeiro/crediario`;
+- correcao do atalho do cliente para abrir o crediario com `customer_id`;
+- historico de pagamentos do crediario com pedido vinculado e itens da venda;
+- resumo financeiro do cliente na tela de detalhes;
+- registro automatico de debito em `customer_debts` para venda PDV com pagamento `a_prazo`;
+- normalizacao para valores de venda migrados/salvos em centavos com sufixo decimal;
+- exibicao do crediario dividindo valores de pagamento, total e itens por 100;
+- backfill no financeiro do cliente `Leandro Lino De Oliveira`:
+  - pedido `#5EE58EF8`: debito criado com saldo `R$ 597,10`;
+  - pedido `#A916C426`: debito e baixas ajustados dividindo por 100, saldo final `R$ 2,77`;
+  - saldo em aberto confirmado na VPS: `R$ 599,87`.
+
+Validacoes rodadas antes/depois:
+
+```powershell
+node tmp-tests\customer-credit-ledger-route-static.test.mjs
+node tmp-tests\customer-details-financial-summary-static.test.mjs
+node tmp-tests\sale-service-customer-debt-static.test.mjs
+node tmp-tests\sale-service-currency-normalization-static.test.mjs
+node tmp-tests\sale-service-vps-table-data-static.test.mjs
+npm.cmd run build
+npm.cmd run deploy:vps-site
+curl.exe -s -I "https://www.mercadodovale.com.br/admin/financial/crediario?customer_id=8f0b9fab-64c5-4f8b-aa86-e7b6a063f63b"
+```
+
+Comportamento esperado daqui para frente: toda nova venda `a_prazo` deve criar o debito do cliente automaticamente no financeiro. A tela correta do crediario e `/admin/financial/crediario?customer_id=...`; `/admin/financeiro` e outra tela e nao substitui o crediario. Se uma venda antiga nao aparecer no financeiro, verificar `customer_debts` pelo `sale_id` antes de assumir erro da tela.
+
+## WhatsApp API Evolution Validada 09/06/2026
+
+A pendencia anterior do WhatsApp foi resolvida e conferida contra a VPS em producao:
+
+- `GET https://api.xiaomipetrolina.com.br/status` retornou HTTP 200 com MySQL ok;
+- `GET /autoresponder/whatsapp/state` retornou a instancia `mercado_do_vale` em `state: "open"`;
+- `GET /autoresponder/whatsapp/debug` confirmou Evolution API `2.3.7` em `http://127.0.0.1:8080`;
+- `POST /autoresponder/whatsapp/sync-webhook` confirmou webhook ativo em `https://api.xiaomipetrolina.com.br/autoresponder-webhook` para `CONNECTION_UPDATE` e `MESSAGES_UPSERT`;
+- teste controlado com `test-flow` respondeu sem deixar conversa no banco (`cleanup: true`);
+- payload Evolution `MESSAGES_UPSERT` com `fromMe: true` e `source: "web"` foi reconhecido como `source: "evolution"` e pausou a conversa como `human_handoff`, sem envio real (`sent: []`).
+
+Observacao: durante a validacao o autoresponder estava desligado (`enabled: 0`), foi ligado apenas temporariamente para o teste e restaurado para `enabled: 0` ao final.
+
+## Publicacao API Autoresponder 09/06/2026
+
+Publicacao feita com `node deploy-vps-server-only.cjs` seguindo o fluxo deste runbook.
+
+O que entrou:
+
+- trava para o fluxo de captura de nome nao salvar pergunta comercial como nome do contato;
+- preservacao do fluxo Evolution/Google Contacts ja validado na VPS;
+- correcao manual previa do contato `558796246812`, consolidando a conversa duplicada em uma unica chave com nome `Handielson`.
+
+Validacoes rodadas:
+
+```powershell
+node tmp-tests\autoresponder-contact-name-invalid-replies-static.test.mjs
+node tmp-tests\autoresponder-google-contact-flow-static.test.mjs
+node tmp-tests\autoresponder-whatsapp-evolution-static.test.mjs
+node --check vps_server.js
+node --check vps_server.cjs
+node deploy-vps-server-only.cjs
+curl.exe -s -i https://api.xiaomipetrolina.com.br/status
+```
+
+Validacao em producao:
+
+- PM2 reiniciou `mdv-api` e ficou `online`;
+- `/status` retornou HTTP 200, `mysql.ok=true`;
+- arquivo remoto `/var/www/mdv-api/vps_server.js` contem `looksLikeCommercialQuestion`, `normalizeEvolutionWebhookPayload` e `findGoogleContactByPhone`;
+- `test-flow` com `oi` + `vende tablet?` respondeu como busca de produto e nao gravou `vende tablet` como nome;
+- `autoresponder_settings.enabled` foi restaurado para `0` ao fim do teste.
+
+## Publicacao API Autoresponder Google Contacts 09/06/2026
+
+Motivo: evitar regressao na identificacao de nomes ja salvos no Google Contacts quando o telefone chega do WhatsApp sem o nono digito brasileiro ou quando o contato ainda esta em "Outros contatos".
+
+O que entrou:
+
+- busca de contato primeiro em `people:searchContacts`;
+- fallback por `people/me/connections` para comparar telefones direto na lista de contatos quando a busca indexada nao retornar o numero;
+- fallback por `otherContacts:search`, sem quebrar o atendimento se o token ainda nao tiver o escopo de "Outros contatos";
+- comparacao de telefone brasileiro com e sem o nono digito;
+- OAuth local atualizado para pedir tambem `contacts.other.readonly`.
+
+Validacoes rodadas antes da publicacao:
+
+```powershell
+node tmp-tests\autoresponder-google-contact-flow-static.test.mjs
+node tmp-tests\google-contacts-oauth-static.test.mjs
+node tmp-tests\autoresponder-contact-name-invalid-replies-static.test.mjs
+node tmp-tests\autoresponder-whatsapp-evolution-static.test.mjs
+node --check vps_server.js
+node --check vps_server.cjs
+```
+
+Publicacao feita com `node deploy-vps-server-only.cjs`.
+
+Validacao em producao:
+
+- PM2 reiniciou `mdv-api` e ficou `online`;
+- `/status` retornou HTTP 200, `ok=true`, `mysql.ok=true`;
+- arquivo remoto `/var/www/mdv-api/vps_server.js` contem `getAutoresponderPhoneMatchKeys`, `people/me/connections` e `otherContacts:search`;
+- `/autoresponder/whatsapp/state` autenticado retornou HTTP 200 com instancia `mercado_do_vale` em `state: "open"`;
+- `test-flow` autenticado com `cleanup: true` nao deixou conversa residual. Como `autoresponder_settings.enabled` estava desligado, nao houve replies nesse teste.
+
+Observacao: no teste direto da People API, a conta ja retorna o contato `Handielson Amorim` por nome, mas ainda nao retorna telefone no payload da API apesar de ele aparecer na tela do Google Contacts. Por isso a protecao de nono digito e conexoes ficou no codigo, mas a validacao final do contato especifico tambem depende do Google expor o telefone pelo endpoint.
+
+Pendencias de nome do contato:
+
+- a tabela `autoresponder_contact_name_curation` guarda apenas mensagens rejeitadas durante captura de nome do contato;
+- nao substitui a fila de perguntas nao respondidas;
+- admin pode salvar o nome manualmente ou ignorar a pendencia;
+- publicar API antes do frontend quando houver mudanca de rota/tabela;
+- validacao local: `npm.cmd run test:autoresponder:whatsapp`.
 
 ## Validacoes Comuns
 

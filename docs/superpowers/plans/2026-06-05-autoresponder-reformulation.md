@@ -1474,6 +1474,8 @@ node tmp-tests\autoresponder-core-scenarios.cjs
 
 Esta fase substitui a ideia antiga de manter uma aba "Mapa do Bot" no AutoResponder legado. A decisao de produto em 10/06/2026 e: **nao migrar Tags nem Mapa do Bot**. O roteamento inteligente passa a ser responsabilidade do prompt/IA e das instrucoes oficiais; o admin novo deve focar somente no que ainda e operacional.
 
+Tambem em 10/06/2026 ficou definido que a tela antiga `Mensagens Auto` / `Mensagem de Boas-Vindas` nao esta em uso operacional no momento. A mensagem de boas-vindas deve voltar como implementacao nova: envio automatico via Evolution API quando um novo cadastro de cliente for criado, sem depender da tela legada manual.
+
 ### Task 7.1: Atualizar Checklist De Migracao Do Centro WhatsApp
 
 **Files:**
@@ -1494,6 +1496,7 @@ const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.t
   'Bloqueio invisivel',
   'Curadoria de perguntas',
   'Novas estatisticas do bot',
+  'Boas-vindas automaticas',
   "status: 'pending'",
 ].forEach((needle) => {
   assert.ok(checklist.includes(needle), `migration checklist must include ${needle}`);
@@ -1528,6 +1531,11 @@ Em `components/whatsapp/WhatsAppMigrationChecklist.tsx`, manter os itens ja migr
   label: 'Novas estatisticas do bot',
   status: 'pending',
   description: 'Indicadores de mensagens recebidas, respostas, falhas, pausas, custo/uso de IA e lacunas de curadoria.',
+},
+{
+  label: 'Boas-vindas automaticas',
+  status: 'pending',
+  description: 'Enviar mensagem de boas-vindas via Evolution API automaticamente quando um novo cadastro de cliente for criado.',
 },
 ```
 
@@ -1789,6 +1797,78 @@ npm.cmd run build
 ```
 
 Tambem removidos nesta rodada os testes estaticos antigos que exigiam `pages/admin/AutoResponderPage.tsx`, abas legadas, Tags ou Mapa do Bot. A cobertura nova da decisao fica em `tmp-tests/autoresponder-legacy-admin-removal-static.test.mjs` e `tmp-tests/whatsapp-connection-center-static.test.mjs`.
+
+### Task 7.6: Criar Boas-Vindas Automaticas Para Novo Cadastro
+
+**Files:**
+- Modify: `services/welcomeMessageService.ts`
+- Modify: fluxo de criacao de clientes
+- Modify: integracao Evolution API existente
+- Test: `tmp-tests/customer-welcome-message-evolution-static.test.mjs`
+
+Objetivo: substituir o uso manual da tela antiga `Mensagens Auto` por um disparo automatico. Ao criar um novo cadastro de cliente com telefone valido, o sistema deve montar a mensagem de boas-vindas e enviar pelo WhatsApp via Evolution API.
+
+Texto atual para reaproveitar:
+
+```text
+Ola {nome}! Seja muito bem-vindo(a) ao Mercado do Vale. Agradecemos a preferencia! Seu cadastro foi realizado com sucesso em nosso sistema.
+
+Acesse seu Painel do Cliente:
+Neste portal exclusivo voce podera:
+- Consultar todo seu historico de compras
+- Baixar/Reimprimir comprovantes
+- Acessar seus termos de garantia
+
+Link de Acesso: {link}
+(Selecione a opcao Cliente)
+
+Login (CPF): {cpf}
+Senha: {senha}
+
+Moedas do Vale - Programa de Fidelidade
+Ao comprar conosco voce acumula Moedas do Vale que podem ser trocadas por descontos reais! Faca check-in diario no aplicativo para ganhar ainda mais moedas.
+
+Ganhe ainda mais indicando amigos!
+Compartilhe nossas ofertas. Quando alguem comprar usando o seu codigo de indicacao, voce ganha Moedas do Vale automaticamente!
+Seu Codigo de Indicacao: *{codigo_indicacao}*
+
+Regulamento completo: {link}moedas-do-vale
+```
+
+- [ ] **Step 1: Criar teste estatico**
+
+Criar `tmp-tests/customer-welcome-message-evolution-static.test.mjs` validando que:
+
+- o fluxo de criacao de cliente chama o servico de boas-vindas;
+- o envio usa a Evolution API ja configurada para WhatsApp;
+- o texto usa `buildMessage` ou sucessor equivalente;
+- o envio nao depende da rota/pagina legada `/admin/settings/messages`.
+
+- [ ] **Step 2: Implementar envio automatico**
+
+No sucesso da criacao de um novo cliente:
+
+- buscar template/default da mensagem de boas-vindas;
+- montar texto com nome, CPF mascarado, senha inicial, link do portal e codigo de indicacao;
+- normalizar telefone para formato aceito pela Evolution API;
+- enviar a mensagem automaticamente;
+- registrar erro sem bloquear a criacao do cadastro.
+
+- [ ] **Step 3: Definir controle operacional**
+
+Adicionar controle simples para evitar disparo indevido:
+
+- nao enviar se o cliente nao tiver telefone valido;
+- nao enviar em atualizacao de cadastro existente;
+- nao reenviar se o fluxo ja marcou boas-vindas enviada para aquele cadastro;
+- permitir desligar o envio por configuracao caso necessario.
+
+- [ ] **Step 4: Validar**
+
+```powershell
+node tmp-tests\customer-welcome-message-evolution-static.test.mjs
+npm.cmd run build
+```
 
 ---
 
@@ -2204,6 +2284,7 @@ git commit -m "docs(autoresponder): close cleanup checklist"
 - [ ] Centro WhatsApp tem bloqueio invisivel ao bot e a IA.
 - [ ] Centro WhatsApp tem curadoria de perguntas dos clientes que o bot/IA nao conseguiu responder.
 - [ ] Centro WhatsApp tem novas estatisticas do bot.
+- [ ] Novo cadastro de cliente envia mensagem de boas-vindas automaticamente via Evolution API.
 - [ ] Tags nao fazem parte da migracao para o Centro WhatsApp.
 - [ ] Mapa do Bot nao faz parte da migracao para o Centro WhatsApp; decisao/roteamento visual fica substituido por prompt/instrucoes da IA.
 - [ ] `/autoresponder/test-flow` cobre os cenarios obrigatorios.
@@ -2226,7 +2307,7 @@ git commit -m "docs(autoresponder): close cleanup checklist"
 5. Fase 4: busca/escolha de produto.
 6. Fase 5: compra.
 7. Fase 6: regras, IA e curadoria.
-8. Fase 7: migrar bloqueio invisivel, curadoria e estatisticas para o Centro WhatsApp.
+8. Fase 7: migrar bloqueio invisivel, curadoria, estatisticas e boas-vindas automaticas para o Centro WhatsApp/automacoes novas.
 9. Fase 8: limpeza do legado.
 10. Fase 9: limpeza final de arquivos.
 

@@ -63,7 +63,6 @@ const TeamListPage = lazy(() => import('../pages/team/TeamListPage'));
 const CompanyDataPage = lazy(() => import('../pages/admin/settings/CompanyDataPage').then(module => ({ default: module.CompanyDataPage })));
 const DocumentSettingsPage = lazy(() => import('../pages/admin/settings/DocumentSettingsPage'));
 const WarrantyTemplatesPage = lazy(() => import('../pages/admin/settings/WarrantyTemplatesPage'));
-const MessagesPage = lazy(() => import('../pages/admin/settings/MessagesPage'));
 const EmailTemplatesPage = lazy(() => import('../pages/admin/settings/EmailTemplatesPage'));
 const BannerManagementPage = lazy(() => import('../pages/admin/settings/BannerManagementPage'));
 const CatalogSettingsPage = lazy(() => import('../pages/admin/settings/CatalogSettingsPage'));
@@ -570,14 +569,6 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><DisplaysPage /></AdminLayout>
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: "/admin/settings/messages",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><MessagesPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
