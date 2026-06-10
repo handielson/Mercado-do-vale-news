@@ -13539,6 +13539,40 @@ fastify.route({
 
       const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
       const hasActivePurchaseFlow = hasAutoresponderCartItems(purchaseFlow);
+      const numberedChoice = detectedIntent.numberedChoice;
+      if (!hasActivePurchaseFlow && Number(settings.use_numbered_lists) === 1) {
+        const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
+        const selectedOption = findAutoresponderSelectedOptionFromMessage(message, options, numberedChoice);
+        if (selectedOption?.id) {
+          const product = await findAutoresponderProductById(selectedOption.id);
+          const replyText = formatAutoresponderReply(await buildAutoresponderPurchaseActionPrompt(product, selectedOption), settings, false);
+          await saveAutoresponderPurchaseFlow(senderKey, {
+            status: 'awaiting_product_action',
+            selected_product: {
+              id: selectedOption.id,
+              name: product?.name || selectedOption.name || null,
+              sku: product?.sku || selectedOption.sku || null,
+              slug: product?.slug || selectedOption.slug || null,
+              price_cents: product ? getAutoresponderProductPriceCents(product) : null,
+              stock_quantity: product?.stock_quantity == null ? null : Number(product.stock_quantity),
+            },
+            items: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
+          });
+
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'purchase_product_selected',
+            replyText,
+            matchedCount: product ? 1 : 0,
+            matchedProducts: [selectedOption],
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+
+          return { replies: [{ message: replyText }] };
+        }
+      }
+
       const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: senderKey });
       shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
 
@@ -14693,7 +14727,6 @@ fastify.route({
         return { replies: [{ message: replyText }] };
       }
 
-      const numberedChoice = detectedIntent.numberedChoice;
       if (Number(settings.use_numbered_lists) === 1) {
         const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
         const selectedOption = findAutoresponderSelectedOptionFromMessage(message, options, numberedChoice);
