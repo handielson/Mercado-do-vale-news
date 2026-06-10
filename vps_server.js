@@ -7269,6 +7269,11 @@ function sanitizeAutoresponderAiTrainingInput(body = {}, partial = false) {
     input.training_type = normalizeAutoresponderAiTrainingType(body.training_type);
   }
 
+  if (!partial || Object.prototype.hasOwnProperty.call(body, 'keywords')) {
+    input.keywords = String(body.keywords || '').trim();
+    if (input.keywords.length > 1000) throw new Error('Palavras-chave devem ter no maximo 1000 caracteres');
+  }
+
   if (!partial || Object.prototype.hasOwnProperty.call(body, 'content')) {
     input.content = String(body.content || '').trim();
     if (!input.content) throw new Error('Conteudo do treinamento e obrigatorio');
@@ -7290,7 +7295,7 @@ function sanitizeAutoresponderAiTrainingInput(body = {}, partial = false) {
 
 async function loadActiveAutoresponderAiTraining(limit = 12) {
   const [rows] = await pool.query(
-    `SELECT id, title, training_type, content, priority
+    `SELECT id, title, training_type, keywords, content, priority
      FROM autoresponder_ai_training
      WHERE active = 1
      ORDER BY priority DESC, id ASC
@@ -7304,7 +7309,10 @@ function buildAutoresponderAiTrainingContext(entries = []) {
   if (!Array.isArray(entries) || entries.length === 0) return '';
   const lines = ['Treinamento adicional aprovado pelo Mercado do Vale:'];
   entries.forEach((entry, index) => {
-    lines.push(`${index + 1}. [${entry.training_type}] ${entry.title}: ${entry.content}`);
+    const keywords = String(entry.keywords || '').trim();
+    lines.push(`${index + 1}. [${entry.training_type}] ${entry.title}`);
+    if (keywords) lines.push(`   Palavras-chave: ${keywords}`);
+    lines.push(`   Instrucao para IA: ${entry.content}`);
   });
   return lines.join('\n');
 }
@@ -9661,7 +9669,7 @@ function sortAutoresponderProductGroupsByBrand(groups) {
 }
 
 function formatAutoresponderProductBrandHeading(brandName) {
-  return `🏷️ ${brandName}`;
+  return String(brandName || 'Outras marcas').trim();
 }
 
 function formatAutoresponderPriceRange(products) {
@@ -9832,21 +9840,26 @@ async function formatAutoresponderProductCardPaymentLine(product) {
   const options = await calculateAutoresponderInstallmentOptions(priceCents, 12);
   const plan = options.find((option) => Number(option.installments) === 12) || options[options.length - 1];
   if (!plan?.installments || !plan?.value || !plan?.total) return '';
-  return `💳 ${plan.installments}x de ${formatAutoresponderCurrency(plan.value / 100)} (${formatAutoresponderCurrency(plan.total / 100)})`;
+  return `💳 Cartao: ${plan.installments}x de ${formatAutoresponderCurrency(plan.value / 100)} (total ${formatAutoresponderCurrency(plan.total / 100)})`;
 }
 
 async function formatAutoresponderProductCardLine(group, number) {
   const product = getAutoresponderCheapestProduct(group?.products) || group?.representative || {};
   const variationLabel = getAutoresponderProductVariationLabel(product);
   const paymentLine = await formatAutoresponderProductCardPaymentLine(product);
+  const productUrl = getAutoresponderProductUrl(product);
   const lines = [
     `${number}. ${group?.name || product?.name || 'Produto'}`,
   ];
   if (variationLabel) lines.push(`📱 ${variationLabel}`);
-  lines.push(`💰 ${group?.priceRange || formatAutoresponderCurrency(getAutoresponderProductPrice(product))} à vista`);
+  lines.push(`💰 ${group?.priceRange || formatAutoresponderCurrency(getAutoresponderProductPrice(product))} à vista no PIX`);
   if (paymentLine) lines.push(paymentLine);
   if (Array.isArray(group?.colors) && group.colors.length > 0) {
     lines.push(`🎨 Cores: ${group.colors.join(', ')}`);
+  }
+  if (productUrl) {
+    lines.push('🔗 Ver produto:');
+    lines.push(productUrl);
   }
   return lines.join('\n');
 }
@@ -10233,6 +10246,51 @@ function buildAutoresponderModelAccessorySearchTitle(products, keyword, total) {
   return `${intro}\n${accessoryLineByFamily[family]}`;
 }
 
+function splitAutoresponderModelAccessoryGroups(groupedProducts, keyword) {
+  const safeGroups = Array.isArray(groupedProducts) ? groupedProducts : [];
+  const family = detectAutoresponderDeviceFamilyFromSearch(keyword);
+  if (!family || isAutoresponderAccessorySearchKeyword(keyword)) {
+    return { primaryGroups: safeGroups, accessoryGroups: [] };
+  }
+  const primaryGroups = [];
+  const accessoryGroups = [];
+  for (const group of safeGroups) {
+    const products = Array.isArray(group?.products) ? group.products : [group?.representative].filter(Boolean);
+    const accessory = products.some((product) => isAutoresponderAccessoryProduct(product));
+    if (accessory) accessoryGroups.push(group);
+    else primaryGroups.push(group);
+  }
+  if (primaryGroups.length === 0 || accessoryGroups.length === 0) {
+    return { primaryGroups: safeGroups, accessoryGroups: [] };
+  }
+  return { primaryGroups, accessoryGroups };
+}
+
+async function buildAutoresponderModelAccessoryFollowUpReplies(accessoryGroups, keyword, numberOffset = 0) {
+  const safeGroups = Array.isArray(accessoryGroups) ? accessoryGroups : [];
+  if (safeGroups.length === 0) return [];
+  const chunks = chunkAutoresponderArray(safeGroups, AUTORESPONDER_PRODUCT_PAGE_SIZE);
+  const replies = [];
+  let previousBrandName = '';
+  for (const [chunkIndex, chunk] of chunks.entries()) {
+    const firstNumber = Number(numberOffset || 0) + (chunkIndex * AUTORESPONDER_PRODUCT_PAGE_SIZE) + 1;
+    const lines = [chunkIndex === 0 ? 'Encontramos tambem capinha para ele:' : 'Mais acessorios compativeis:'];
+    const cardLines = await Promise.all(chunk.map((group, index) => (
+      formatAutoresponderProductCardLine(group, firstNumber + index)
+    )));
+    for (const [index, group] of chunk.entries()) {
+      const brandName = group?.brandName || 'Outras marcas';
+      if (brandName !== previousBrandName) {
+        lines.push(formatAutoresponderProductBrandHeading(brandName));
+        previousBrandName = brandName;
+      }
+      lines.push(cardLines[index]);
+    }
+    replies.push(lines.join('\n\n'));
+  }
+  return replies;
+}
+
 function formatAutoresponderWarrantyPeriod(days) {
   const safeDays = Number(days || 0);
   if (!Number.isFinite(safeDays) || safeDays <= 0) return '';
@@ -10395,28 +10453,29 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
   }
 
   const groupedProducts = sortAutoresponderProductGroupsByBrand(groupAutoresponderProductsByModel(availableProducts));
+  const isCompleteList = Boolean(pagination?.completeList);
+  const splitGroups = splitAutoresponderModelAccessoryGroups(groupedProducts, keyword);
+  const primaryGroups = splitGroups.primaryGroups;
+  const accessoryGroups = splitGroups.accessoryGroups;
   const total = pagination?.total || groupedProducts.length;
   const offset = Number(pagination?.offset || 0);
-  const chunks = chunkAutoresponderArray(groupedProducts, AUTORESPONDER_PRODUCT_PAGE_SIZE);
-  const visibleChunks = pagination?.completeList
+  const chunks = chunkAutoresponderArray(primaryGroups, AUTORESPONDER_PRODUCT_PAGE_SIZE);
+  const visibleChunks = isCompleteList
     ? chunks
     : chunks.slice(0, AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES);
-  const replies = await Promise.all(visibleChunks.map(async (chunk, chunkIndex) => {
+  const replies = [];
+  let previousBrandName = '';
+  for (const [chunkIndex, chunk] of visibleChunks.entries()) {
     const firstNumber = offset + (chunkIndex * AUTORESPONDER_PRODUCT_PAGE_SIZE) + 1;
-    const lastNumber = firstNumber + chunk.length - 1;
-    const modelAccessoryTitle = chunkIndex === 0
-      ? buildAutoresponderModelAccessorySearchTitle(chunk, keyword, total)
-      : null;
     const title = chunkIndex === 0
-      ? (modelAccessoryTitle || (keyword
+      ? (keyword
         ? `Encontrei estas opcoes para ${keyword}:`
-        : 'Encontrei estas opcoes:'))
+        : 'Encontrei estas opcoes:')
       : 'Mais opcoes:';
     const lines = [title];
     const cardLines = await Promise.all(chunk.map((group, index) => (
       formatAutoresponderProductCardLine(group, firstNumber + index)
     )));
-    let previousBrandName = '';
     for (const [index, group] of chunk.entries()) {
       const brandName = group?.brandName || 'Outras marcas';
       if (brandName !== previousBrandName) {
@@ -10425,10 +10484,11 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
       }
       lines.push(cardLines[index]);
     }
-    return lines.join('\n\n');
-  }));
+    replies.push(lines.join('\n\n'));
+  }
+  replies.push(...await buildAutoresponderModelAccessoryFollowUpReplies(accessoryGroups, keyword, offset + primaryGroups.length));
 
-  if (groupedProducts.length > 1 || safeProducts.length > groupedProducts.length) {
+  if (replies.length > 0 && (groupedProducts.length > 1 || safeProducts.length > groupedProducts.length)) {
     replies[replies.length - 1] = `${replies[replies.length - 1]}\n\nVer busca no site: ${getAutoresponderCatalogSearchUrl(keyword)}`;
   }
   const paginationSummary = formatAutoresponderPaginationSummary({
@@ -10438,6 +10498,9 @@ async function formatAutoresponderProductSearchReplies(products, keyword, settin
   });
   if (paginationSummary) {
     replies[replies.length - 1] = `${replies[replies.length - 1]}\n\n${paginationSummary}`;
+  }
+  if (!isCompleteList && replies.length > 0) {
+    replies[replies.length - 1] = `${replies[replies.length - 1]}\n\nEra isso que voce estava procurando?`;
   }
 
   return replies;
@@ -11841,9 +11904,9 @@ fastify.post('/autoresponder/ai-training', { preHandler: requireSyncKey }, async
   }
 
   const [result] = await pool.query(
-    `INSERT INTO autoresponder_ai_training (title, training_type, content, priority, active)
-     VALUES (?, ?, ?, ?, ?)`,
-    [input.title, input.training_type, input.content, input.priority, input.active]
+    `INSERT INTO autoresponder_ai_training (title, training_type, keywords, content, priority, active)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [input.title, input.training_type, input.keywords, input.content, input.priority, input.active]
   );
   const [rows] = await pool.query('SELECT * FROM autoresponder_ai_training WHERE id = ? LIMIT 1', [result.insertId]);
   return rows[0] || null;
@@ -21401,6 +21464,7 @@ async function runMigrations() {
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       title VARCHAR(120) NOT NULL,
       training_type ENUM('store_instruction','faq','category_guidance','policy') NOT NULL DEFAULT 'store_instruction',
+      keywords TEXT NULL,
       content TEXT NOT NULL,
       priority INT NOT NULL DEFAULT 0,
       active TINYINT(1) NOT NULL DEFAULT 1,
@@ -21410,6 +21474,7 @@ async function runMigrations() {
       INDEX idx_ai_training_type (training_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await addColumnIfMissing('autoresponder_ai_training', 'keywords', 'TEXT NULL');
 
   await pool.query(`
     INSERT IGNORE INTO autoresponder_settings (

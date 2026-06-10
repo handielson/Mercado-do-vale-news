@@ -192,6 +192,7 @@ export interface AutoResponderAiTraining {
     id: number;
     title: string;
     training_type: AutoResponderAiTrainingType;
+    keywords?: string | null;
     content: string;
     priority: number;
     active: boolean | number;
@@ -328,6 +329,7 @@ export type AutoResponderBlocklistUpdate = Partial<AutoResponderBlocklistInput>;
 export interface AutoResponderAiTrainingInput {
     title: string;
     training_type: AutoResponderAiTrainingType;
+    keywords?: string | null;
     content: string;
     priority: number;
     active: boolean;

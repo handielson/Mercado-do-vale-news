@@ -2,6 +2,7 @@ import React from 'react';
 import { Brain, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { autoResponderService } from '../../services/autoResponderService';
+import { WhatsAppAiTeachingPanel } from './WhatsAppAiTeachingPanel';
 
 const memoryLimitOptions = [
   { value: 10, label: 'Ultimas 10 mensagens' },
@@ -77,8 +78,9 @@ export function WhatsAppAiMemoryPanel() {
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white">
-      <div className="flex flex-col gap-4 border-b border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
+    <>
+      <section className="rounded-lg border border-slate-200 bg-white">
+        <div className="flex flex-col gap-4 border-b border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="flex items-center gap-2 text-xs font-semibold uppercase text-emerald-600">
             <Brain size={15} />
@@ -183,6 +185,8 @@ export function WhatsAppAiMemoryPanel() {
           {error}
         </div>
       )}
-    </section>
+      </section>
+      <WhatsAppAiTeachingPanel />
+    </>
   );
 }
