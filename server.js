@@ -6208,7 +6208,12 @@ function isAutoresponderGreeting(message) {
 
 function isAutoresponderGreetingOnly(message) {
   const text = normalizeAutoresponderText(message).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
-  return /^(oi|ola|olá|bom dia|boa tarde|boa noite|e ai|opa|bomdia|boatarde|boanoite)$/.test(text);
+  if (/^(oi|ola|bom dia|boa tarde|boa noite|e ai|opa|bomdia|boatarde|boanoite)$/.test(text)) return true;
+  const withoutGreeting = text
+    .replace(/^(oi|ola|bom dia|boa tarde|boa noite|e ai|opa|bomdia|boatarde|boanoite)\b/, '')
+    .trim();
+  if (!withoutGreeting) return true;
+  return /^(tudo bem|td bem|tudo bom|td bom|como vai|como voce esta|como vc esta|beleza|blz)$/.test(withoutGreeting);
 }
 
 function getAutoresponderContactFirstName(payload) {
