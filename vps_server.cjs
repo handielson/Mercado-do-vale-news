@@ -13680,6 +13680,16 @@ fastify.route({
           await upsertAutoresponderSuccessConversation(senderKey);
           return { replies: [{ message: replyText }] };
         }
+
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'ai_no_reply',
+          replyText: null,
+          matchedCount: 0,
+        });
+        await touchAutoresponderConversation(senderKey);
+        return { replies: [] };
       }
 
       const numberedChoice = detectedIntent.numberedChoice;
