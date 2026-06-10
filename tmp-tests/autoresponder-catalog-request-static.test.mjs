@@ -41,8 +41,12 @@ for (const fileName of serverFiles) {
   assert.ok(source.includes('function getAutoresponderInitialProductPageSize'), `${fileName} must centralize the initial product page size`);
   assert.ok(source.includes('const pageSize = getAutoresponderInitialProductPageSize();'), `${fileName} must keep initial product replies short`);
   assert.ok(
-    source.includes('vamos ficar com qual deles hoje? quer ver a lista completa?'),
-    `${fileName} must ask the customer to choose or request the complete list`
+    !source.includes('vamos ficar com qual deles hoje? quer ver a lista completa?'),
+    `${fileName} must not keep the old AutoResponder WA product-list footer`
+  );
+  assert.ok(
+    !source.includes('Se quiser ver mais opcoes, digite "mais".'),
+    `${fileName} must not keep the old AutoResponder WA more-options footer`
   );
   assert.ok(source.includes('calculateAutoresponderInstallmentOptions(priceCents, 12)'), `${fileName} must calculate 12x installment options for catalog cards`);
   assert.ok(source.includes('💰'), `${fileName} must show cash price in the requested pattern`);

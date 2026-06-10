@@ -51,12 +51,13 @@ function assertIncludesAny(text, needles, message) {
 
 const scenarios = [
   {
-    name: 'product search footer',
+    name: 'product search without legacy footer',
     messages: ['redmi note 15'],
     assert: (result) => {
       const text = responseText(result);
-      if (!text.includes('vamos ficar com qual deles hoje?')) {
-        throw new Error('product footer did not include new choice prompt');
+      assertIncludesAny(text, ['Redmi', 'redmi', 'NOTE', 'Note'], 'product search did not return product data');
+      if (/vamos ficar com qual|Responda com o numero da opcao|Se quiser ver mais opcoes/i.test(text)) {
+        throw new Error('product search still returned legacy footer text');
       }
     },
   },

@@ -7580,6 +7580,11 @@ async function findAutoresponderRuleMatch(message) {
   }) || null;
 }
 
+function shouldUseAutoresponderPredefinedRules(settings = null) {
+  if (Number(settings?.predefined_rules_enabled) === 1) return true;
+  return String(process.env.AUTORESPONDER_PREDEFINED_RULES_ENABLED || '').trim() === '1';
+}
+
 function normalizeAutoresponderTagKeywordMap(value) {
   const parsed = parsePublicJson(value, {});
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
@@ -7617,7 +7622,7 @@ const AUTORESPONDER_DEFAULT_CONVERSATION_FLOW_MESSAGES = {
   phone_list_prompt: AUTORESPONDER_NEEDS_PROMPT_FALLBACK,
   phone_list_reply: 'Encontrei estas opcoes para celulares:',
   name_prompt: 'Qual seu nome para seguirmos com o atendimento?',
-  product_choice_prompt: 'Responda com o numero da opcao ou com o nome/modelo do produto.',
+  product_choice_prompt: '',
   fulfillment_prompt: 'Agora preciso confirmar se sera retirada na loja ou entrega.',
   delivery_cep_prompt: 'Combinado: entrega. Me envie o CEP da entrega. Pode mandar somente os numeros.',
   pickup_reply: 'Combinado: retirada na loja. Agora vamos combinar a forma de pagamento.',
@@ -10829,11 +10834,7 @@ function formatAutoresponderProductWarrantyLine(product) {
 }
 
 function formatAutoresponderProductReplyInstructions(hasMore) {
-  const lines = ['vamos ficar com qual deles hoje? quer ver a lista completa?'];
-  if (hasMore) {
-    lines.push('Se quiser ver mais opcoes, digite "mais".');
-  }
-  return lines.join('\n');
+  return '';
 }
 
 function getAutoresponderInitialProductPageSize(keyword = '') {
@@ -11600,7 +11601,7 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   }
 
   const categories = await findAutoresponderAvailableCategories(20);
-  const selectedCategory = findAutoresponderCatalogCategoryForMessage('celulares', categories);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage('smartphones', categories);
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
@@ -13582,6 +13583,18 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     };
   }
 
+  if (isAutoresponderCatalogRequest(message) || aiIntentPlan?.catalogRequest) {
+    const catalogCategoryReply = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
+    if (catalogCategoryReply) {
+      return {
+        intent: 'catalog_category',
+        matched_count: catalogCategoryReply.products.length,
+        replies: formatAutoresponderProReplies(catalogCategoryReply.replyMessages),
+        sender: normalizedSender,
+      };
+    }
+  }
+
   if (isAutoresponderAudioMessage(message)) {
     const audioReplyText = getAutoresponderToneMessage(settings, normalizedSender, 'audioUnsupported', AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY);
     return {
@@ -13673,7 +13686,9 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     }
   }
 
-  const matchedRule = await findAutoresponderRuleMatch(message);
+  const matchedRule = shouldUseAutoresponderPredefinedRules(settings)
+    ? await findAutoresponderRuleMatch(message)
+    : null;
   if (matchedRule) {
     const replyType = String(matchedRule.reply_type || 'text');
     if (replyType === 'product_by_tag') {
@@ -14239,6 +14254,60 @@ fastify.route({
         return { replies: [{ message: greetingText }] };
       }
 
+      const greetingCatalogReply = await buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings);
+      if (greetingCatalogReply) {
+        const replyText = greetingCatalogReply.replyMessages.join('\n\n');
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'greeting_catalog_category',
+          replyText,
+          matchedCount: greetingCatalogReply.products.length,
+          matchedProducts: greetingCatalogReply.productOptions,
+          aiMeta: aiIntentPlan?.aiMeta || null,
+        });
+        await upsertAutoresponderOptionsConversation(senderKey, greetingCatalogReply.productOptions, {
+          source: 'category',
+          categoryId: greetingCatalogReply.selectedCategory.id,
+          keyword: greetingCatalogReply.selectedCategory.name,
+          offset: 0,
+          limit: greetingCatalogReply.pageSize,
+          total: greetingCatalogReply.total,
+          hasMore: greetingCatalogReply.hasMore,
+          completeList: isAutoresponderCompleteProductListKeyword(greetingCatalogReply.selectedCategory.name),
+        });
+
+        return { replies: formatAutoresponderProReplies(greetingCatalogReply.replyMessages) };
+      }
+
+      if (isAutoresponderCatalogRequest(message) || aiIntentPlan?.catalogRequest) {
+        const catalogCategoryReply = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
+        if (catalogCategoryReply) {
+          const replyText = catalogCategoryReply.replyMessages.join('\n\n');
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'catalog_category',
+            replyText,
+            matchedCount: catalogCategoryReply.products.length,
+            matchedProducts: catalogCategoryReply.productOptions,
+            aiMeta: aiIntentPlan?.aiMeta || null,
+          });
+          await upsertAutoresponderOptionsConversation(senderKey, catalogCategoryReply.productOptions, {
+            source: 'category',
+            categoryId: catalogCategoryReply.selectedCategory.id,
+            keyword: catalogCategoryReply.selectedCategory.name,
+            offset: 0,
+            limit: catalogCategoryReply.pageSize,
+            total: catalogCategoryReply.total,
+            hasMore: catalogCategoryReply.hasMore,
+            completeList: isAutoresponderCompleteProductListKeyword(catalogCategoryReply.selectedCategory.name),
+          });
+
+          return { replies: formatAutoresponderProReplies(catalogCategoryReply.replyMessages) };
+        }
+      }
+
       const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
         message,
         contactFirstName,
@@ -14301,31 +14370,6 @@ fastify.route({
         purchaseFlow,
       });
       if (enginePurchaseReply) return enginePurchaseReply;
-
-      const greetingCatalogReply = await buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings);
-      if (greetingCatalogReply) {
-        const replyText = greetingCatalogReply.replyMessages.join('\n\n');
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'greeting_catalog_category',
-          replyText,
-          matchedCount: greetingCatalogReply.products.length,
-          matchedProducts: greetingCatalogReply.productOptions,
-        });
-        await upsertAutoresponderOptionsConversation(senderKey, greetingCatalogReply.productOptions, {
-          source: 'category',
-          categoryId: greetingCatalogReply.selectedCategory.id,
-          keyword: greetingCatalogReply.selectedCategory.name,
-          offset: 0,
-          limit: greetingCatalogReply.pageSize,
-          total: greetingCatalogReply.total,
-          hasMore: greetingCatalogReply.hasMore,
-          completeList: isAutoresponderCompleteProductListKeyword(greetingCatalogReply.selectedCategory.name),
-        });
-
-        return { replies: formatAutoresponderProReplies(greetingCatalogReply.replyMessages) };
-      }
 
       const contactFlowReply = await handleAutoresponderContactNameFlow({ sender: senderKey, message, contactFirstName });
       if (contactFlowReply) {
@@ -15521,7 +15565,9 @@ fastify.route({
         return { replies: formatAutoresponderProReplies(catalogCategoryReply.replyMessages) };
       }
 
-      const matchedRule = await findAutoresponderRuleMatch(message);
+      const matchedRule = shouldUseAutoresponderPredefinedRules(settings)
+        ? await findAutoresponderRuleMatch(message)
+        : null;
       if (matchedRule) {
         await pool.query(
           'UPDATE autoresponder_rules SET hits = hits + 1 WHERE id = ?',

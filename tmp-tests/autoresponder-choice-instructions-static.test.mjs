@@ -12,16 +12,10 @@ assert.match(
   'expected a centralized product reply instruction helper',
 );
 
-assert.match(
+assert.doesNotMatch(
   helperSource,
-  /vamos ficar com qual deles hoje\? quer ver a lista completa\?/,
-  'expected customer instruction to invite a product choice and complete list request',
-);
-
-assert.match(
-  helperSource,
-  /Se quiser ver mais opcoes, digite "mais"\./,
-  'expected customer instruction to request more results when available',
+  /vamos ficar com qual/i,
+  'legacy AutoResponder WA choice footer should be removed from product replies',
 );
 
 assert.doesNotMatch(
@@ -34,6 +28,12 @@ assert.doesNotMatch(
   helperSource,
   /Responda com o numero da opcao ou com o nome\/modelo do produto/,
   'old number/name instruction should be removed from product result footer',
+);
+
+assert.doesNotMatch(
+  helperSource,
+  /Se quiser ver mais opcoes/i,
+  'legacy more-options footer should be removed from product replies',
 );
 
 console.log('autoresponder choice instructions static checks passed');

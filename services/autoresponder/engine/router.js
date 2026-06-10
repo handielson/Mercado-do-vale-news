@@ -8,6 +8,11 @@ async function routeAutoresponderMessage(args) {
     }
   }
 
+  const controlledAi = handlers.controlledAi;
+  if (controlledAi?.canHandle(args)) {
+    return controlledAi.handle(args);
+  }
+
   const manualRule = handlers.manualRule;
   if (manualRule?.canHandle(args)) {
     return manualRule.handle(args);
@@ -21,11 +26,6 @@ async function routeAutoresponderMessage(args) {
   const productSearch = handlers.productSearch;
   if (productSearch?.canHandle(args)) {
     return productSearch.handle(args);
-  }
-
-  const controlledAi = handlers.controlledAi;
-  if (controlledAi?.canHandle(args)) {
-    return controlledAi.handle(args);
   }
 
   const globalFallback = handlers.globalFallback;

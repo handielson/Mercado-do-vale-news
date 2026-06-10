@@ -1,19 +1,7 @@
 import { buildContextualFallback } from '../fallbacks.js';
-import { resolveAutoresponderMessage } from '../messages.js';
-
-const DEFAULT_PRODUCT_CHOICE_PROMPT = 'vamos ficar com qual deles hoje? quer ver a lista completa?';
-const DEFAULT_PRODUCT_MORE_PROMPT = 'Se quiser ver mais opcoes, digite "mais".';
 
 function formatProductSearchReplyInstructions(hasMore, settings = null) {
-  const lines = [
-    resolveAutoresponderMessage(settings, 'product_search.choice_prompt') || DEFAULT_PRODUCT_CHOICE_PROMPT,
-    'Responda com o numero da opcao ou com o nome/modelo do produto.',
-  ];
-  if (hasMore) {
-    lines.push('Se quiser, me diga a faixa de preco, marca ou uso que eu filtro melhor.');
-    lines.push(resolveAutoresponderMessage(settings, 'product_search.more_prompt') || DEFAULT_PRODUCT_MORE_PROMPT);
-  }
-  return lines.filter(Boolean).join('\n');
+  return '';
 }
 
 function normalizeProductSearchText(value) {
@@ -54,7 +42,8 @@ function buildProductSearchReply(products, keyword, hasMore, settings = null) {
     lines.push('');
   });
 
-  lines.push(formatProductSearchReplyInstructions(hasMore, settings));
+  const instructions = formatProductSearchReplyInstructions(hasMore, settings);
+  if (instructions) lines.push(instructions);
 
   return lines.join('\n').trim();
 }

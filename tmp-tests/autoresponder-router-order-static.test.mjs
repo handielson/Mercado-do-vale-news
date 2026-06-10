@@ -5,10 +5,10 @@ const router = readFileSync('services/autoresponder/engine/router.js', 'utf8');
 
 const expectedOrder = [
   'activeFlow',
+  'controlledAi',
   'manualRule',
   'knownIntent',
   'productSearch',
-  'controlledAi',
   'globalFallback',
 ];
 
@@ -20,6 +20,6 @@ for (const token of expectedOrder) {
 }
 
 assert.ok(router.includes("if (state.flow !== 'none')"), 'router must prioritize active flow');
-assert.ok(router.includes('controlledAi'), 'router must keep AI behind deterministic handlers');
+assert.ok(router.includes('controlledAi'), 'router must let controlled AI classify before predefined/manual rules');
 
 console.log('autoresponder router order static checks passed');

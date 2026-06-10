@@ -39,9 +39,9 @@ for (const fileName of serverFiles) {
 
   if (fileName.startsWith('vps_server')) {
     const explicitCatalogIndex = source.indexOf('buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting)', webhookStart);
-    const fixedRuleIndex = source.indexOf('const matchedRule = await findAutoresponderRuleMatch(message);', webhookStart);
+    const fixedRuleIndex = source.indexOf('shouldUseAutoresponderPredefinedRules(settings)', webhookStart);
     assert.ok(explicitCatalogIndex > webhookStart, `${fileName} webhook must have explicit catalog handling`);
-    assert.ok(fixedRuleIndex > webhookStart, `${fileName} webhook must still support fixed rules`);
+    assert.ok(fixedRuleIndex > webhookStart, `${fileName} webhook must keep predefined rules behind the explicit opt-in gate`);
     assert.ok(
       explicitCatalogIndex < fixedRuleIndex,
       `${fileName} must handle explicit catalog/list requests before predefined fixed rules`

@@ -16,26 +16,25 @@ const servers = ['vps_server.js', 'vps_server.cjs', 'server.js'].map((file) => (
   'findProducts',
   'findSelectedProduct',
   'formatProductSearchReplyInstructions',
-  'Responda com o numero da opcao ou com o nome/modelo do produto',
-  'Se quiser ver mais opcoes, digite "mais".',
-  'vamos ficar com qual deles hoje?',
   'visibleOptions',
 ].forEach((needle) => {
   assert.ok(source.includes(needle), `product search flow must include ${needle}`);
 });
 
-assert.ok(
-  !source.includes('Responda "mais" para ver outras opcoes'),
-  'product search flow must not use the old ambiguous more-only instruction',
-);
+[
+  'Responda com o numero da opcao ou com o nome/modelo do produto',
+  'Se quiser ver mais opcoes, digite "mais".',
+  'vamos ficar com qual deles hoje?',
+  'Responda "mais" para ver outras opcoes',
+].forEach((needle) => {
+  assert.ok(!source.includes(needle), `product search flow must not ship legacy instruction: ${needle}`);
+});
 
 for (const server of servers) {
   [
     'handleAutoresponderEngineProductSearchFlowV2',
     'AUTORESPONDER_ENGINE_V2',
     'function formatAutoresponderProductReplyInstructions(hasMore)',
-    'Responda com o numero da opcao ou com o nome/modelo do produto.',
-    'Se quiser ver mais opcoes, digite "mais".',
     "status = 'awaiting_product_action'",
     'selected_product',
     'conversation_state: productReply.nextState',
@@ -44,10 +43,13 @@ for (const server of servers) {
     assert.ok(server.source.includes(needle), `${server.file} must include ${needle}`);
   });
 
-  assert.ok(
-    !server.source.includes('Responda "mais" para ver outras opcoes'),
-    `${server.file} must not use the old ambiguous more-only instruction`,
-  );
+  [
+    'Responda com o numero da opcao ou com o nome/modelo do produto.',
+    'Se quiser ver mais opcoes, digite "mais".',
+    'Responda "mais" para ver outras opcoes',
+  ].forEach((needle) => {
+    assert.ok(!server.source.includes(needle), `${server.file} must not ship legacy instruction: ${needle}`);
+  });
 }
 
 console.log('autoresponder product search engine static checks passed');
