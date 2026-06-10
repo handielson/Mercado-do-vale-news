@@ -9524,7 +9524,7 @@ async function findAutoresponderProductsByTag(tagId, limit = 5, offset = 0) {
 }
 
 async function findAutoresponderAvailableCategories(limit = 12) {
-  const safeLimit = Math.min(Math.max(Number(limit) || 12, 1), 20);
+  const safeLimit = Math.min(Math.max(Number(limit) || 12, 1), 100);
   const [rows] = await pool.query(
     `SELECT c.id, c.name, c.slug, COUNT(p.id) AS product_count
      FROM categories c
@@ -11132,7 +11132,7 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
     return null;
   }
 
-  const categories = await findAutoresponderAvailableCategories(20);
+  const categories = await findAutoresponderAvailableCategories(100);
   const selectedCategory = findAutoresponderCatalogCategoryForMessage('smartphones', categories);
   if (!selectedCategory?.id) return null;
 
@@ -11172,7 +11172,7 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
 }
 
 async function buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting = false) {
-  const categories = await findAutoresponderAvailableCategories(20);
+  const categories = await findAutoresponderAvailableCategories(100);
   const selectedCategory = findAutoresponderCatalogCategoryForMessage(message, categories);
   if (!selectedCategory?.id) return null;
 
@@ -13133,7 +13133,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   }
 
   {
-    const categories = await findAutoresponderAvailableCategories(20);
+    const categories = await findAutoresponderAvailableCategories(100);
     const budgetRequest = getAutoresponderBudgetCategoryRequest(message, categories);
     if (budgetRequest?.category?.id) {
       const budgetKeyword = budgetRequest.category.name;
@@ -13175,7 +13175,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   }
 
   if (isAutoresponderCatalogRequest(message)) {
-    const categories = await findAutoresponderAvailableCategories(20);
+    const categories = await findAutoresponderAvailableCategories(100);
     const selectedCategory = findAutoresponderCatalogCategoryForMessage(message, categories);
     if (selectedCategory?.id) {
       const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
@@ -14935,7 +14935,7 @@ fastify.route({
       }
 
       {
-        const categories = await findAutoresponderAvailableCategories(20);
+        const categories = await findAutoresponderAvailableCategories(100);
         const budgetRequest = getAutoresponderBudgetCategoryRequest(message, categories);
         if (budgetRequest?.category?.id) {
           const budgetKeyword = budgetRequest.category.name;
@@ -15000,7 +15000,7 @@ fastify.route({
       }
 
       if (isAutoresponderCatalogRequest(message)) {
-        const categories = await findAutoresponderAvailableCategories(20);
+        const categories = await findAutoresponderAvailableCategories(100);
         const selectedCategory = findAutoresponderCatalogCategoryForMessage(message, categories);
         if (selectedCategory?.id) {
           const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);

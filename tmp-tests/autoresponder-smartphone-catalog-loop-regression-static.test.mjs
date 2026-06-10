@@ -18,6 +18,7 @@ for (const file of files) {
     "duplicate: true",
     'normalizedMessage = normalizeAutoresponderText(message).trim()',
     'lista|catalogo|opcoes|modelos',
+    'findAutoresponderAvailableCategories(100)',
     'genericPhoneSearchTokens',
     'productSearchTokens.every((token) => genericPhoneSearchTokens.has(token))',
   ].forEach((needle) => {
