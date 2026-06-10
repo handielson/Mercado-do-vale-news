@@ -11227,6 +11227,12 @@ function buildAutoresponderReplyMessagesWithSeparateGreeting(replyMessages, { me
 
 async function buildAutoresponderPriorityProductSearchReplyData({ message, contactFirstName = '', settings = null, shouldPrefixGreeting = false } = {}) {
   if (normalizeAutoresponderCep(message)) return null;
+  const normalizedMessage = normalizeAutoresponderText(message).trim();
+  if (
+    /\b(lista|catalogo|opcoes|modelos|ver|mostrar|manda|mande|tem|vende|quero|procuro)\b/.test(normalizedMessage)
+    && /\b(celular|celulares|smartphone|smartphones|telefone|telefones|aparelho|aparelhos)\b/.test(normalizedMessage)
+    && !/\b(redmi|iphone|iphones|xiaomi|poco|galaxy|motorola|moto|samsung|note|pro|max|plus|ultra)\b/.test(normalizedMessage)
+  ) return null;
   if (!isAutoresponderLikelyProductModelRequest(message)) return null;
   const productSearchTokens = extractAutoresponderProductSearchTokens(message);
   if (productSearchTokens.length === 0) return null;

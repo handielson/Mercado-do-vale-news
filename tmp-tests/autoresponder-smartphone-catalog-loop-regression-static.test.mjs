@@ -16,6 +16,8 @@ for (const file of files) {
     'consumeAutoresponderEvolutionWebhookEvent',
     'releaseAutoresponderEvolutionWebhookEvent',
     "duplicate: true",
+    'normalizedMessage = normalizeAutoresponderText(message).trim()',
+    'lista|catalogo|opcoes|modelos',
     'genericPhoneSearchTokens',
     'productSearchTokens.every((token) => genericPhoneSearchTokens.has(token))',
   ].forEach((needle) => {
