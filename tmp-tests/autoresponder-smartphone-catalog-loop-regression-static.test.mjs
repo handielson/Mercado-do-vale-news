@@ -11,7 +11,7 @@ for (const file of files) {
   const normalized = source.replace(/\s+/g, ' ');
   [
     "AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 20",
-    "findAutoresponderCatalogCategoryForMessage('smartphones', categories)",
+    "resolveAutoresponderCatalogCategoryForMessage('smartphones', categories)",
     "messageId: String(key.id || data.messageId || data.id || '').trim()",
     'consumeAutoresponderEvolutionWebhookEvent',
     'releaseAutoresponderEvolutionWebhookEvent',
@@ -19,6 +19,9 @@ for (const file of files) {
     'normalizedMessage = normalizeAutoresponderText(message).trim()',
     'lista|catalogo|opcoes|modelos',
     'findAutoresponderAvailableCategories(100)',
+    'resolveAutoresponderCatalogCategoryForMessage(message, categories)',
+    'findAutoresponderPreferredPhoneCatalogCategory',
+    'return null;',
     'genericPhoneSearchTokens',
     'productSearchTokens.every((token) => genericPhoneSearchTokens.has(token))',
   ].forEach((needle) => {
