@@ -13590,6 +13590,7 @@ fastify.route({
       const sender = String(payload.sender || payload.from || payload.phone || payload.number || payload.contact || '').trim();
       const message = String(payload.message || payload.text || payload.query || payload.body || payload.received_message || '').trim();
       const isGroup = payload.isGroup === true || String(payload.isGroup || '').toLowerCase() === 'true';
+      const isInternalLabRequest = payload.internalLab === true || payload.source === 'internal-lab';
       const senderKey = normalizeAutoresponderSender(sender) || sender || 'unknown';
       req.autoresponderWebhookSource = payload.source || '';
       req.autoresponderSender = senderKey;
@@ -13609,7 +13610,7 @@ fastify.route({
 
       const [settingsRows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
       const settings = settingsRows[0];
-      if (!settings || Number(settings.enabled) !== 1) {
+      if (!settings || (Number(settings.enabled) !== 1 && !isInternalLabRequest)) {
         return { replies: [] };
       }
 
@@ -15476,6 +15477,8 @@ async function runAutoresponderInternalChatMessage({ message, sender, contactFir
       message: text,
       isGroup: false,
       name: contactFirstName || '',
+      source: 'internal-lab',
+      internalLab: true,
     },
   });
 
