@@ -8054,25 +8054,37 @@ async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings 
       conversationContext,
       trainingContext,
     ].filter(Boolean).join('\n\n');
+    const requestBody = {
+      model: aiConfig.model,
+      instructions,
+      input,
+      max_output_tokens: maxOutputTokens,
+    };
+    if (/^gpt-5/i.test(aiConfig.model)) {
+      requestBody.reasoning = { effort: 'minimal' };
+      requestBody.text = { verbosity: 'low' };
+    }
     const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${aiConfig.apiKey}`,
       },
-      body: JSON.stringify({
-        model: aiConfig.model,
-        instructions,
-        input,
-        max_output_tokens: maxOutputTokens,
-      }),
-      signal: AbortSignal.timeout(Math.max(Number(process.env.AUTORESPONDER_AI_TIMEOUT_MS || 0) || 0, 20000)),
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(Math.max(Number(process.env.AUTORESPONDER_AI_TIMEOUT_MS || 0) || 0, 30000)),
     });
     if (!response.ok) {
       console.warn('[autoresponder-ai] OpenAI response failed:', response.status, await response.text());
       return null;
     }
     const responseJson = await response.json();
+    if (responseJson?.status === 'incomplete') {
+      console.warn('[autoresponder-ai] incomplete response:', JSON.stringify({
+        incomplete_details: responseJson?.incomplete_details || null,
+        usage: responseJson?.usage || null,
+      }));
+      return null;
+    }
     const text = extractAutoresponderOpenAiText(responseJson);
     if (!text) {
       console.warn('[autoresponder-ai] empty text:', JSON.stringify({
@@ -8155,7 +8167,7 @@ async function buildAutoresponderAiFirstReply({ message, contactFirstName = '', 
       'Se faltar informacao para responder com seguranca, faca no maximo uma pergunta objetiva.',
       'Nao invente politicas, produtos, precos, estoque, garantias ou condicoes.',
     ].filter(Boolean).join('\n'),
-    maxOutputTokens: 600,
+    maxOutputTokens: 1200,
     settings,
     sender,
   });
