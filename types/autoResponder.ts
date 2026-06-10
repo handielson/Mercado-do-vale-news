@@ -49,6 +49,10 @@ export interface AutoResponderSettings {
     ai_credit_alert_usd?: number;
     ai_input_cost_per_1m_usd?: number;
     ai_output_cost_per_1m_usd?: number;
+    ai_conversation_memory_enabled?: boolean | number;
+    ai_conversation_memory_limit?: number;
+    ai_conversation_memory_days?: number;
+    ai_context_memory?: string;
     openai_api_key?: string;
     openai_admin_api_key?: string;
     has_openai_api_key?: boolean | number;

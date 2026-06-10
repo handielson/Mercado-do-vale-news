@@ -7309,6 +7309,49 @@ function buildAutoresponderAiTrainingContext(entries = []) {
   return lines.join('\n');
 }
 
+function normalizeAutoresponderAiConversationMemoryLimit(value) {
+  const number = Number(value || 20);
+  if ([10, 20, 30, 50].includes(number)) return number;
+  return Math.max(1, Math.min(Math.round(number) || 20, 50));
+}
+
+function normalizeAutoresponderAiConversationMemoryDays(value) {
+  const number = Number(value || 7);
+  return Number.isFinite(number) ? Math.max(1, Math.min(Math.round(number), 90)) : 7;
+}
+
+async function loadAutoresponderAiConversationMemory({ sender, settings = null } = {}) {
+  if (Number(settings?.ai_conversation_memory_enabled ?? 1) !== 1) return [];
+  const senderKey = normalizeAutoresponderSender(sender) || String(sender || '').trim();
+  if (!senderKey) return [];
+  const limit = normalizeAutoresponderAiConversationMemoryLimit(settings?.ai_conversation_memory_limit);
+  const days = normalizeAutoresponderAiConversationMemoryDays(settings?.ai_conversation_memory_days);
+  const [rows] = await pool.query(
+    `SELECT created_at, question, reply_text, intent, ai_assisted
+     FROM autoresponder_logs
+     WHERE sender = ?
+       AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+     ORDER BY created_at DESC
+     LIMIT ${limit}`,
+    [senderKey, days]
+  );
+  return Array.isArray(rows) ? rows.reverse() : [];
+}
+
+function buildAutoresponderAiConversationMemoryContext(rows = []) {
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+  const lines = ['Memoria recente desta conversa no WhatsApp:'];
+  rows.forEach((row, index) => {
+    const question = limitText(String(row?.question || '').trim(), 500) || '(sem texto)';
+    const reply = limitText(String(row?.reply_text || '').trim(), 700);
+    const intent = String(row?.intent || '').trim();
+    const createdAt = row?.created_at ? String(row.created_at).slice(0, 19) : '';
+    lines.push(`${index + 1}. ${createdAt ? `[${createdAt}] ` : ``}Cliente: ${question}`);
+    if (reply) lines.push(`   Bot${intent ? ` (${intent})` : ``}: ${reply}`);
+  });
+  return lines.join('\n');
+}
+
 function getAutoresponderAiConfig(settings = null) {
   const settingsKey = String(settings?.openai_api_key || '').trim();
   const envKey = String(process.env.OPENAI_API_KEY || '').trim();
@@ -7475,15 +7518,22 @@ function normalizeAutoresponderOpenAiUsage(responseJson, model, settings = null)
   };
 }
 
-async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings = null }) {
+async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings = null, sender = null }) {
   if (!isAutoresponderAiEnabled(settings)) return null;
   if (await isAutoresponderAiLimitReached(settings)) return null;
   const aiConfig = getAutoresponderAiConfig(settings);
   try {
     const trainingContext = buildAutoresponderAiTrainingContext(await loadActiveAutoresponderAiTraining());
-    const instructions = trainingContext
-      ? `${AUTORESPONDER_AI_SYSTEM_PROMPT}\n\n${trainingContext}`
-      : AUTORESPONDER_AI_SYSTEM_PROMPT;
+    const conversationContext = buildAutoresponderAiConversationMemoryContext(
+      await loadAutoresponderAiConversationMemory({ sender, settings })
+    );
+    const globalContext = limitText(String(settings?.ai_context_memory || '').trim(), 6000);
+    const instructions = [
+      AUTORESPONDER_AI_SYSTEM_PROMPT,
+      globalContext ? `Memoria personalizada e instrucoes globais da IA:\n${globalContext}` : '',
+      conversationContext,
+      trainingContext,
+    ].filter(Boolean).join('\n\n');
     const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
@@ -7540,7 +7590,7 @@ async function buildAutoresponderNeedsPromptReply({ message, contactFirstName = 
   };
 }
 
-async function buildAutoresponderAiFallbackReply({ message, contactFirstName = '', settings = null } = {}) {
+async function buildAutoresponderAiFallbackReply({ message, contactFirstName = '', settings = null, sender = null } = {}) {
   const name = String(contactFirstName || '').trim();
   return callAutoresponderOpenAi({
     input: [
@@ -7554,10 +7604,11 @@ async function buildAutoresponderAiFallbackReply({ message, contactFirstName = '
     ].filter(Boolean).join('\n'),
     maxOutputTokens: 160,
     settings,
+    sender,
   });
 }
 
-async function buildAutoresponderAiFirstReply({ message, contactFirstName = '', settings = null } = {}) {
+async function buildAutoresponderAiFirstReply({ message, contactFirstName = '', settings = null, sender = null } = {}) {
   const name = String(contactFirstName || '').trim();
   return callAutoresponderOpenAi({
     input: [
@@ -7573,6 +7624,7 @@ async function buildAutoresponderAiFirstReply({ message, contactFirstName = '', 
     ].filter(Boolean).join('\n'),
     maxOutputTokens: 190,
     settings,
+    sender,
   });
 }
 
@@ -7589,7 +7641,7 @@ function parseAutoresponderAiJsonObject(text) {
   }
 }
 
-async function buildAutoresponderAiIntentPlan({ message, contactFirstName = '', settings = null } = {}) {
+async function buildAutoresponderAiIntentPlan({ message, contactFirstName = '', settings = null, sender = null } = {}) {
   const name = String(contactFirstName || '').trim();
   const aiPlan = await callAutoresponderOpenAi({
     input: [
@@ -7606,6 +7658,7 @@ async function buildAutoresponderAiIntentPlan({ message, contactFirstName = '', 
     ].filter(Boolean).join('\n'),
     maxOutputTokens: 120,
     settings,
+    sender,
   });
   const parsed = parseAutoresponderAiJsonObject(aiPlan?.text);
   if (!parsed || typeof parsed !== 'object') return null;
@@ -10835,7 +10888,7 @@ async function handleAutoresponderGlobalFallbackCuration({
   contactFirstName = '',
   shouldPrefixGreeting = false,
 }) {
-  const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings });
+  const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings, sender: senderKey });
   if (aiFallback?.text) {
     const replyText = formatAutoresponderReply(aiFallback.text, settings, shouldPrefixGreeting);
     await logAutoresponderReply({
@@ -11629,6 +11682,10 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
     ai_credit_alert_usd: (v) => Math.max(0, Number(v) || 0),
     ai_input_cost_per_1m_usd: (v) => Math.max(0, Number(v) || 0),
     ai_output_cost_per_1m_usd: (v) => Math.max(0, Number(v) || 0),
+    ai_conversation_memory_enabled: (v) => boolInt(v),
+    ai_conversation_memory_limit: (v) => normalizeAutoresponderAiConversationMemoryLimit(v),
+    ai_conversation_memory_days: (v) => normalizeAutoresponderAiConversationMemoryDays(v),
+    ai_context_memory: (v) => String(v ?? '').slice(0, 6000),
     openai_api_key: (v) => String(v || '').trim(),
     openai_admin_api_key: (v) => String(v || '').trim(),
   };
@@ -12635,7 +12692,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   let shouldPrefixGreeting = detectedIntent.greeting;
   const normalizedSender = normalizeAutoresponderSender(sender) || 'teste-bot';
   const purchaseFlow = await getAutoresponderPurchaseFlow(normalizedSender);
-  const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings });
+  const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: normalizedSender });
   shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
 
   const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
@@ -12765,7 +12822,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   }
 
   if (shouldAutoresponderTryAiFirst({ message, detectedIntent, purchaseFlow })) {
-    const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings });
+    const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: normalizedSender });
     if (aiFirst?.text) {
       return {
         intent: 'ai_first',
@@ -12955,7 +13012,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     }
   }
 
-  const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings });
+  const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings, sender: normalizedSender });
   if (aiFallback?.text) {
     return {
       intent: 'ai_fallback',
@@ -13093,7 +13150,7 @@ fastify.route({
 
       const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
       const hasActivePurchaseFlow = hasAutoresponderCartItems(purchaseFlow);
-      const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings });
+      const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: senderKey });
       shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
 
       const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
@@ -13283,7 +13340,7 @@ fastify.route({
       }
 
       if (shouldAutoresponderTryAiFirst({ message, detectedIntent, purchaseFlow })) {
-        const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings });
+        const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: senderKey });
         if (aiFirst?.text) {
           const replyText = formatAutoresponderReply(aiFirst.text, settings, shouldPrefixGreeting);
           await logAutoresponderReply({
@@ -14684,7 +14741,7 @@ fastify.route({
         }
       }
 
-      const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings });
+      const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings, sender: senderKey });
       if (aiFallback?.text) {
         const replyText = formatAutoresponderReply(aiFallback.text, settings, shouldPrefixGreeting);
         await logAutoresponderReply({
@@ -21214,6 +21271,10 @@ async function runMigrations() {
       ai_credit_alert_usd DECIMAL(12,6) NOT NULL DEFAULT 5,
       ai_input_cost_per_1m_usd DECIMAL(12,6) NOT NULL DEFAULT 0,
       ai_output_cost_per_1m_usd DECIMAL(12,6) NOT NULL DEFAULT 0,
+      ai_conversation_memory_enabled TINYINT(1) NOT NULL DEFAULT 1,
+      ai_conversation_memory_limit INT NOT NULL DEFAULT 20,
+      ai_conversation_memory_days INT NOT NULL DEFAULT 7,
+      ai_context_memory TEXT NULL,
       openai_admin_api_key TEXT NULL,
       archive_to_synology TINYINT(1) NOT NULL DEFAULT 1,
       archive_after_days INT NOT NULL DEFAULT 7,
@@ -21234,6 +21295,10 @@ async function runMigrations() {
   await addColumnIfMissing('autoresponder_settings', 'ai_credit_alert_usd', 'DECIMAL(12,6) NOT NULL DEFAULT 5');
   await addColumnIfMissing('autoresponder_settings', 'ai_input_cost_per_1m_usd', 'DECIMAL(12,6) NOT NULL DEFAULT 0');
   await addColumnIfMissing('autoresponder_settings', 'ai_output_cost_per_1m_usd', 'DECIMAL(12,6) NOT NULL DEFAULT 0');
+  await addColumnIfMissing('autoresponder_settings', 'ai_conversation_memory_enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
+  await addColumnIfMissing('autoresponder_settings', 'ai_conversation_memory_limit', 'INT NOT NULL DEFAULT 20');
+  await addColumnIfMissing('autoresponder_settings', 'ai_conversation_memory_days', 'INT NOT NULL DEFAULT 7');
+  await addColumnIfMissing('autoresponder_settings', 'ai_context_memory', 'TEXT NULL');
   await addColumnIfMissing('autoresponder_settings', 'openai_admin_api_key', 'TEXT NULL');
   await addColumnIfMissing('autoresponder_settings', 'conversation_flow_keywords', 'JSON NULL');
   await addColumnIfMissing('autoresponder_settings', 'conversation_flow_messages', 'JSON NULL');
