@@ -19,10 +19,25 @@ for (const fileName of ['vps_server.js', 'vps_server.cjs']) {
     /if \(isAutoresponderCatalogRequest\(message\)\) return null;/,
     `${fileName} must route generic catalog requests before broad token search`
   );
-  assert.match(
+  assert.doesNotMatch(
     source,
     /findAutoresponderCatalogCategoryForMessage\('smartphones', categories\)/,
-    `${fileName} must resolve phone list opt-in through the Smartphones category`
+    `${fileName} must not hardcode a Smartphones category lookup for customer phrases`
+  );
+  assert.match(
+    source,
+    /catalog_query/,
+    `${fileName} must ask AI for the catalog query to consult in official data`
+  );
+  assert.match(
+    source,
+    /catalogQuery: String\(parsed\.catalog_query \|\| ''\)\.trim\(\)/,
+    `${fileName} must parse the AI catalog query from structured intent JSON`
+  );
+  assert.match(
+    source,
+    /getAutoresponderAiCatalogQuery\(aiIntentPlan, message\)/,
+    `${fileName} must route catalog lookup through the AI-selected catalog query`
   );
   const orderAnchor = source.indexOf('const purchaseFlow = await getAutoresponderPurchaseFlow');
   const phoneListIndex = source.indexOf('const phoneListOptInReply = await handleAutoresponderPhoneListOptIn', orderAnchor);

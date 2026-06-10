@@ -29,9 +29,10 @@ for (const fileName of runtimeFiles) {
   assert.ok(webhookIndex >= 0, `${fileName} must expose the autoresponder webhook`);
 
   const greetingCatalogIndex = source.indexOf(
-    'buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings)',
+    'buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings',
     webhookIndex
   );
+  const aiCatalogQueryIndex = source.indexOf('const catalogQuery = getAutoresponderAiCatalogQuery(aiIntentPlan, message)', webhookIndex);
   const prioritySearchIndex = source.indexOf(
     'buildAutoresponderPriorityProductSearchReplyData({',
     webhookIndex
@@ -49,6 +50,12 @@ for (const fileName of runtimeFiles) {
     greetingCatalogIndex > webhookIndex,
     `${fileName} must route "Bom dia, tem celular?" through greeting-catalog handling`
   );
+  if (fileName.startsWith('vps_server')) {
+    assert.ok(
+      aiCatalogQueryIndex > webhookIndex && aiCatalogQueryIndex < greetingCatalogIndex,
+      `${fileName} must let AI select the catalog query before greeting-catalog handling`
+    );
+  }
   if (prioritySearchIndex >= 0) {
     assert.ok(
       greetingCatalogIndex < prioritySearchIndex,

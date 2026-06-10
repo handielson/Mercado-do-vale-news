@@ -6991,6 +6991,19 @@ async function buildAutoresponderAiFallbackReply({ message, contactFirstName = '
   });
 }
 
+function parseAutoresponderAiJsonObject(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  const jsonText = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const objectText = jsonText.startsWith('{') ? jsonText : jsonText.match(/\{[\s\S]*\}/)?.[0];
+  if (!objectText) return null;
+  try {
+    return JSON.parse(objectText);
+  } catch {
+    return null;
+  }
+}
+
 const AUTORESPONDER_GENERIC_PHONE_CATALOG_WORDS = new Set([
   'celular', 'celulares', 'smartphone', 'smartphones', 'aparelho', 'aparelhos',
   'telefone', 'telefones', 'phone', 'phones',
@@ -10223,15 +10236,26 @@ async function classifyAutoresponderNeedsPromptReplyWithAi({ message, settings }
     input: [
       'Classifique a resposta do cliente a um pedido anterior para receber lista de celulares disponiveis.',
       `Resposta do cliente: ${String(message || '').trim()}`,
-      'Responda exatamente uma destas opcoes:',
-      'phone_list_opt_in = cliente quer receber/ver a lista de celulares',
-      'other = cliente pediu outra coisa, esta confuso ou nao confirmou a lista',
+      'Responda SOMENTE JSON valido, sem markdown.',
+      'Campos: intent e catalog_query.',
+      'intent deve ser "phone_list_opt_in" se o cliente quer receber/ver a lista, ou "other" se pediu outra coisa.',
+      'catalog_query deve ser a categoria/termo de catalogo que a IA decidiu consultar nos dados oficiais conforme o contexto anterior.',
     ].join('\n'),
-    maxOutputTokens: 20,
+    maxOutputTokens: 80,
     settings,
   });
+  const parsed = parseAutoresponderAiJsonObject(aiReply?.text);
+  if (parsed && typeof parsed === 'object') {
+    return {
+      intent: parsed.intent === 'phone_list_opt_in' ? 'phone_list_opt_in' : 'other',
+      catalogQuery: String(parsed.catalog_query || '').trim(),
+    };
+  }
   const text = normalizeAutoresponderText(aiReply?.text || '').trim();
-  return text.includes('phone_list_opt_in') ? 'phone_list_opt_in' : 'other';
+  return {
+    intent: text.includes('phone_list_opt_in') ? 'phone_list_opt_in' : 'other',
+    catalogQuery: '',
+  };
 }
 
 async function handleAutoresponderPhoneListOptIn({ sender, message, settings, shouldPrefixGreeting }) {
@@ -10240,17 +10264,15 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   const matchesBuiltInConfirmation = isAutoresponderYes(message) || isAutoresponderExplicitCatalogListRequest(message);
   const matchesConfiguredKeyword = doesAutoresponderMessageMatchFlowKeywords(message, flowKeywords)
     || matchesBuiltInConfirmation;
-  const classification = matchesConfiguredKeyword
-    ? 'phone_list_opt_in'
-    : await classifyAutoresponderNeedsPromptReplyWithAi({ message, settings });
-  if (classification === 'phone_list_opt_in') {
+  const classification = await classifyAutoresponderNeedsPromptReplyWithAi({ message, settings });
+  if (matchesConfiguredKeyword || classification.intent === 'phone_list_opt_in') {
     // Continue below and send the phone catalog.
   } else {
     return null;
   }
 
   const categories = await findAutoresponderAvailableCategories(20);
-  const selectedCategory = findAutoresponderCatalogCategoryForMessage('smartphones', categories);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage(classification.catalogQuery || message, categories);
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
@@ -11484,9 +11506,9 @@ fastify.get('/autoresponder/store-status', { preHandler: requireSyncKey }, async
   return getCachedAutoresponderStoreStatus();
 });
 
-async function buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting = false) {
+async function buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting = false, catalogQuery = null) {
   const categories = await findAutoresponderAvailableCategories(20);
-  const selectedCategory = findAutoresponderCatalogCategoryForMessage(message, categories);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage(catalogQuery || message, categories);
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
@@ -11516,9 +11538,9 @@ async function buildAutoresponderCatalogCategoryReplyData(message, settings, sho
   };
 }
 
-async function buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings) {
+async function buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings, catalogQuery = null) {
   if (!isAutoresponderGreeting(message) || !isAutoresponderCatalogRequest(message)) return null;
-  const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, false);
+  const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, false, catalogQuery);
   if (!catalogData) return null;
   const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
   return {

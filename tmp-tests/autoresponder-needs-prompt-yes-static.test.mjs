@@ -27,8 +27,19 @@ for (const fileName of serverFiles) {
   );
 
   assert.ok(
-    source.includes("const selectedCategory = findAutoresponderCatalogCategoryForMessage('celulares', categories);"),
-    `${fileName} must force the opt-in search to the celulares category instead of searching for sim`
+    source.includes('const selectedCategory = findAutoresponderCatalogCategoryForMessage(classification.catalogQuery || message, categories);'),
+    `${fileName} must use the AI-selected catalog query for opt-in replies`
+  );
+
+  assert.ok(
+    source.includes('catalog_query deve ser a categoria/termo de catalogo'),
+    `${fileName} must ask AI where to consult official catalog data`
+  );
+
+  assert.doesNotMatch(
+    source,
+    /findAutoresponderCatalogCategoryForMessage\('(celulares|smartphones)'/,
+    `${fileName} must not hardcode phone category lookup for opt-in replies`
   );
 
   const optInRouteIndex = source.indexOf('const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({');

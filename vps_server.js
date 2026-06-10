@@ -8138,6 +8138,8 @@ async function buildAutoresponderAiIntentPlan({ message, contactFirstName = '', 
       name ? `Nome do cliente: ${name}` : '',
       'Responda SOMENTE JSON valido, sem markdown.',
       'Campos booleanos: greeting, store_status, catalog_request, delivery_quote, payment_question, warranty_question, human_request, needs_ai_text_answer.',
+      'Campo texto opcional: catalog_query. Quando catalog_request=true, preencha com a categoria ou termo que deve ser consultado nos dados oficiais.',
+      'Para perguntas genericas sobre celular/aparelho/smartphone, siga o treinamento aprovado e use catalog_query="Smartphones" quando essa for a categoria correta.',
       'catalog_request = pergunta sobre produto, celular, smartphone, tablet, receptor, acessorio, opcoes, lista, estoque ou disponibilidade.',
       'store_status = pergunta se a loja esta aberta, fechada, horario, funcionamento ou feriado.',
       'delivery_quote = pergunta sobre entrega, frete, CEP, motoboy ou delivery.',
@@ -8158,6 +8160,7 @@ async function buildAutoresponderAiIntentPlan({ message, contactFirstName = '', 
     warrantyRequest: parsed.warranty_question === true,
     humanRequest: parsed.human_request === true,
     needsAiTextAnswer: parsed.needs_ai_text_answer === true,
+    catalogQuery: String(parsed.catalog_query || '').trim(),
     aiMeta: aiPlan.aiMeta,
   };
 }
@@ -11574,15 +11577,26 @@ async function classifyAutoresponderNeedsPromptReplyWithAi({ message, settings }
     input: [
       'Classifique a resposta do cliente a um pedido anterior para receber lista de celulares disponiveis.',
       `Resposta do cliente: ${String(message || '').trim()}`,
-      'Responda exatamente uma destas opcoes:',
-      'phone_list_opt_in = cliente quer receber/ver a lista de celulares',
-      'other = cliente pediu outra coisa, esta confuso ou nao confirmou a lista',
+      'Responda SOMENTE JSON valido, sem markdown.',
+      'Campos: intent e catalog_query.',
+      'intent deve ser "phone_list_opt_in" se o cliente quer receber/ver a lista, ou "other" se pediu outra coisa.',
+      'catalog_query deve ser a categoria/termo de catalogo que a IA decidiu consultar nos dados oficiais conforme o contexto anterior.',
     ].join('\n'),
-    maxOutputTokens: 20,
+    maxOutputTokens: 80,
     settings,
   });
+  const parsed = parseAutoresponderAiJsonObject(aiReply?.text);
+  if (parsed && typeof parsed === 'object') {
+    return {
+      intent: parsed.intent === 'phone_list_opt_in' ? 'phone_list_opt_in' : 'other',
+      catalogQuery: String(parsed.catalog_query || '').trim(),
+    };
+  }
   const text = normalizeAutoresponderText(aiReply?.text || '').trim();
-  return text.includes('phone_list_opt_in') ? 'phone_list_opt_in' : 'other';
+  return {
+    intent: text.includes('phone_list_opt_in') ? 'phone_list_opt_in' : 'other',
+    catalogQuery: '',
+  };
 }
 
 async function handleAutoresponderPhoneListOptIn({ sender, message, settings, shouldPrefixGreeting }) {
@@ -11591,17 +11605,15 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   const matchesBuiltInConfirmation = isAutoresponderYes(message) || isAutoresponderExplicitCatalogListRequest(message);
   const matchesConfiguredKeyword = doesAutoresponderMessageMatchFlowKeywords(message, flowKeywords)
     || matchesBuiltInConfirmation;
-  const classification = matchesConfiguredKeyword
-    ? 'phone_list_opt_in'
-    : await classifyAutoresponderNeedsPromptReplyWithAi({ message, settings });
-  if (classification === 'phone_list_opt_in') {
+  const classification = await classifyAutoresponderNeedsPromptReplyWithAi({ message, settings });
+  if (matchesConfiguredKeyword || classification.intent === 'phone_list_opt_in') {
     // Continue below and send the phone catalog.
   } else {
     return null;
   }
 
   const categories = await findAutoresponderAvailableCategories(20);
-  const selectedCategory = findAutoresponderCatalogCategoryForMessage('smartphones', categories);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage(classification.catalogQuery || message, categories);
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
@@ -11639,9 +11651,14 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   return { replies: formatAutoresponderProReplies(replyMessages) };
 }
 
-async function buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting = false) {
+function getAutoresponderAiCatalogQuery(aiIntentPlan, fallbackMessage) {
+  const query = String(aiIntentPlan?.catalogQuery || '').trim();
+  return query || fallbackMessage;
+}
+
+async function buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting = false, catalogQuery = null) {
   const categories = await findAutoresponderAvailableCategories(20);
-  const selectedCategory = findAutoresponderCatalogCategoryForMessage(message, categories);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage(catalogQuery || message, categories);
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
@@ -11671,9 +11688,9 @@ async function buildAutoresponderCatalogCategoryReplyData(message, settings, sho
   };
 }
 
-async function buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings) {
+async function buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings, catalogQuery = null) {
   if (!isAutoresponderGreeting(message) || !isAutoresponderCatalogRequest(message)) return null;
-  const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, false);
+  const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, false, catalogQuery);
   if (!catalogData) return null;
   const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
   return {
@@ -13574,7 +13591,8 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     };
   }
 
-  const greetingCatalogReply = await buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings);
+  const catalogQuery = getAutoresponderAiCatalogQuery(aiIntentPlan, message);
+  const greetingCatalogReply = await buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings, catalogQuery);
   if (greetingCatalogReply) {
     return {
       intent: 'greeting_catalog_category',
@@ -13585,7 +13603,7 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   }
 
   if (isAutoresponderCatalogRequest(message) || aiIntentPlan?.catalogRequest) {
-    const catalogCategoryReply = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
+    const catalogCategoryReply = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting, catalogQuery);
     if (catalogCategoryReply) {
       return {
         intent: 'catalog_category',
@@ -14255,7 +14273,8 @@ fastify.route({
         return { replies: [{ message: greetingText }] };
       }
 
-      const greetingCatalogReply = await buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings);
+      const catalogQuery = getAutoresponderAiCatalogQuery(aiIntentPlan, message);
+      const greetingCatalogReply = await buildAutoresponderGreetingCatalogReplyData(message, contactFirstName, settings, catalogQuery);
       if (greetingCatalogReply) {
         const replyText = greetingCatalogReply.replyMessages.join('\n\n');
         await logAutoresponderReply({
@@ -14282,7 +14301,7 @@ fastify.route({
       }
 
       if (isAutoresponderCatalogRequest(message) || aiIntentPlan?.catalogRequest) {
-        const catalogCategoryReply = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
+        const catalogCategoryReply = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting, catalogQuery);
         if (catalogCategoryReply) {
           const replyText = catalogCategoryReply.replyMessages.join('\n\n');
           await logAutoresponderReply({
