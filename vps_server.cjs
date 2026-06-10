@@ -61,7 +61,7 @@ const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
 const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS = [4, 9, 16, 24, 33, 43, 54, 66, 79, 93];
 const AUTORESPONDER_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_PRODUCT_PAGE_SIZE * AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES;
-const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 500;
+const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 20;
 const AUTORESPONDER_RULE_TEMPLATES = [
   { name: 'Saudacao manha', pattern: 'bom dia, oi bom dia, dia' },
   { name: 'Saudacao tarde', pattern: 'boa tarde, tarde' },
@@ -7789,18 +7789,28 @@ function findAutoresponderCatalogCategoryForMessage(message, categories) {
   const safeCategories = Array.isArray(categories) ? categories : [];
   if (!text || safeCategories.length === 0) return null;
 
-  const directMatch = safeCategories.find((category) => {
-    const name = normalizeAutoresponderText(category?.name || '').trim();
-    return name && (text.includes(name) || name.includes(text));
-  });
-  if (directMatch) return directMatch;
-
   const phoneCategoryHints = [
     'celular', 'celulares', 'smartphone', 'smartphones', 'aparelho', 'aparelhos',
     'telefone', 'telefones', 'phone', 'phones', 'iphone', 'xiaomi', 'samsung',
     'tablet', 'tablets', 'tablte', 'tabltes', 'receptor', 'receptores',
   ];
   const asksForPhone = phoneCategoryHints.some((keyword) => text.includes(keyword));
+  const preferredPhoneCategoryNames = ['smartphones', 'smartphone', 'celulares', 'celular'];
+  if (asksForPhone) {
+    const preferredCategory = preferredPhoneCategoryNames
+      .map((preferredName) => safeCategories.find((category) => (
+        normalizeAutoresponderText(category?.name || '').trim() === preferredName
+      )))
+      .find(Boolean);
+    if (preferredCategory) return preferredCategory;
+  }
+
+  const directMatch = safeCategories.find((category) => {
+    const name = normalizeAutoresponderText(category?.name || '').trim();
+    return name && (text.includes(name) || name.includes(text));
+  });
+  if (directMatch) return directMatch;
+
   if (!asksForPhone) return null;
 
   return safeCategories.find((category) => {
@@ -10172,12 +10182,11 @@ const AUTORESPONDER_COMPLETE_PRODUCT_LIST_WORDS = new Set([
 ]);
 
 function isAutoresponderCompleteProductListKeyword(keyword) {
-  const tokens = normalizeAutoresponderText(keyword)
+  const text = normalizeAutoresponderText(keyword)
     .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter(Boolean);
-  return tokens.some((token) => AUTORESPONDER_COMPLETE_PRODUCT_LIST_WORDS.has(token));
+    .replace(/\s+/g, ' ')
+    .trim();
+  return /\b(lista completa|catalogo completo|todos os modelos|todas as opcoes|ver tudo|mostrar tudo)\b/.test(text);
 }
 
 function getAutoresponderProductQueryLimit(limit) {
@@ -11124,7 +11133,7 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   }
 
   const categories = await findAutoresponderAvailableCategories(20);
-  const selectedCategory = findAutoresponderCatalogCategoryForMessage('celulares', categories);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage('smartphones', categories);
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
@@ -13310,9 +13319,32 @@ function normalizeEvolutionWebhookPayload(rawPayload) {
     pushName,
     name: pushName,
     event: eventName,
+    messageId: String(key.id || data.messageId || data.id || '').trim(),
     evolutionMessageSource: String(data.source || payload.source || '').trim(),
     source: 'evolution',
   };
+}
+
+const autoresponderEvolutionWebhookEvents = new Map();
+
+function consumeAutoresponderEvolutionWebhookEvent(messageId) {
+  const key = String(messageId || '').trim();
+  if (!key) return false;
+  const now = Date.now();
+  const expiresAt = autoresponderEvolutionWebhookEvents.get(key) || 0;
+  if (expiresAt > now) return true;
+  autoresponderEvolutionWebhookEvents.set(key, now + 10 * 60 * 1000);
+  if (autoresponderEvolutionWebhookEvents.size > 2000) {
+    for (const [eventId, eventExpiresAt] of autoresponderEvolutionWebhookEvents) {
+      if (eventExpiresAt <= now) autoresponderEvolutionWebhookEvents.delete(eventId);
+    }
+  }
+  return false;
+}
+
+function releaseAutoresponderEvolutionWebhookEvent(messageId) {
+  const key = String(messageId || '').trim();
+  if (key) autoresponderEvolutionWebhookEvents.delete(key);
 }
 
 async function sendAutoresponderEvolutionReplies(sender, replies) {
@@ -13334,9 +13366,14 @@ fastify.addHook('onSend', async (req, reply, payload) => {
       if (reply.statusCode >= 400 || !Object.prototype.hasOwnProperty.call(parsed || {}, 'replies')) return payload;
       const replies = Array.isArray(parsed?.replies) ? parsed.replies : [];
       const sent = await sendAutoresponderEvolutionReplies(req.autoresponderSender, replies);
+      const allSent = sent.every((item) => item.ok);
+      if (!allSent) {
+        releaseAutoresponderEvolutionWebhookEvent(req.autoresponderMessageId);
+        reply.code(502);
+      }
       reply.header('Content-Type', 'application/json; charset=utf-8');
       return JSON.stringify({
-        ok: true,
+        ok: allSent,
         source: 'evolution',
         sender: req.autoresponderSender,
         replies: replies.length,
@@ -13377,11 +13414,15 @@ fastify.route({
       const senderKey = normalizeAutoresponderSender(sender) || sender || 'unknown';
       req.autoresponderWebhookSource = payload.source || '';
       req.autoresponderSender = senderKey;
+      req.autoresponderMessageId = payload.messageId || '';
       if (payload.source === 'evolution' && payload.event && payload.event !== 'MESSAGES_UPSERT') {
         return { replies: [] };
       }
       if (payload.source === 'evolution' && !normalizeAutoresponderSender(sender)) {
         return { replies: [] };
+      }
+      if (payload.source === 'evolution' && consumeAutoresponderEvolutionWebhookEvent(payload.messageId)) {
+        return { replies: [], duplicate: true };
       }
       const detectedIntent = detectAutoresponderIntent(message);
       let shouldPrefixGreeting = detectedIntent.greeting;
