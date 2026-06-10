@@ -7735,7 +7735,7 @@ function isAutoresponderGenericPhoneCatalogRequest(message) {
 
 function detectAutoresponderGenericDeviceCatalogFamily(message) {
   const text = normalizeAutoresponderText(message).trim();
-  if (!text || isAutoresponderExplicitCatalogListRequest(text) || isAutoresponderCompleteProductListKeyword(text)) return null;
+  if (!text) return null;
   const tokens = text.split(/\s+/).filter(Boolean);
   const family = tokens.some((token) => AUTORESPONDER_GENERIC_PHONE_CATALOG_WORDS.has(token))
     ? 'smartphone'
@@ -11260,12 +11260,7 @@ function buildAutoresponderReplyMessagesWithSeparateGreeting(replyMessages, { me
 
 async function buildAutoresponderPriorityProductSearchReplyData({ message, contactFirstName = '', settings = null, shouldPrefixGreeting = false } = {}) {
   if (normalizeAutoresponderCep(message)) return null;
-  const normalizedMessage = normalizeAutoresponderText(message).trim();
-  if (
-    /\b(lista|catalogo|opcoes|modelos|ver|mostrar|manda|mande|tem|vende|quero|procuro)\b/.test(normalizedMessage)
-    && /\b(celular|celulares|smartphone|smartphones|telefone|telefones|aparelho|aparelhos)\b/.test(normalizedMessage)
-    && !/\b(redmi|iphone|iphones|xiaomi|poco|galaxy|motorola|moto|samsung|note|pro|max|plus|ultra)\b/.test(normalizedMessage)
-  ) return null;
+  if (isAutoresponderGenericPhoneCatalogRequest(message)) return null;
   if (!isAutoresponderLikelyProductModelRequest(message)) return null;
   const productSearchTokens = extractAutoresponderProductSearchTokens(message);
   if (productSearchTokens.length === 0) return null;
@@ -12941,6 +12936,18 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: normalizedSender });
   shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
 
+  if (isAutoresponderGenericPhoneCatalogRequest(message)) {
+    const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
+    if (catalogData) {
+      return {
+        intent: 'catalog_category',
+        matched_count: catalogData.products.length,
+        replies: formatAutoresponderProReplies(catalogData.replyMessages),
+        sender: normalizedSender,
+      };
+    }
+  }
+
   const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
     message,
     contactFirstName,
@@ -13532,6 +13539,31 @@ fastify.route({
       const hasActivePurchaseFlow = hasAutoresponderCartItems(purchaseFlow);
       const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: senderKey });
       shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
+
+      if (isAutoresponderGenericPhoneCatalogRequest(message)) {
+        const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
+        if (catalogData) {
+          const replyText = catalogData.replyMessages.join('\n\n');
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'catalog_category',
+            replyText,
+            matchedCount: catalogData.products.length,
+            matchedProducts: catalogData.productOptions,
+            aiMeta: aiIntentPlan?.aiMeta || null,
+          });
+          await upsertAutoresponderOptionsConversation(senderKey, catalogData.productOptions, {
+            source: 'category',
+            categoryId: catalogData.selectedCategory.id,
+            offset: 0,
+            limit: catalogData.pageSize,
+            total: catalogData.total,
+            hasMore: catalogData.hasMore,
+          });
+          return { replies: formatAutoresponderProReplies(catalogData.replyMessages) };
+        }
+      }
 
       const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
         message,
