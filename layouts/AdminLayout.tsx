@@ -61,7 +61,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/settings/whatsapp', icon: <MessageCircle size={18} />, label: 'WhatsApp', keywords: 'conexao evolution atendimento contato' },
         { to: '/admin/whatsapp/mensagens', icon: <MessageSquareDashed size={18} />, label: 'Mensagens WhatsApp', keywords: 'whatsapp conversas atendimento mensagens historico humano' },
         { to: '/admin/whatsapp/memoria-ia', icon: <Bot size={18} />, label: 'Memoria IA', keywords: 'whatsapp chatgpt ia memoria contexto prompt historico' },
-        { to: '/admin/atendimento-automatico', icon: <Bot size={18} />, label: 'AutoResponder', keywords: 'whatsapp autoresponder respostas automaticas bot atendimento' },
         { to: '/admin/settings/telegram', icon: <Bot size={18} />, label: 'Automações Bot', keywords: 'robo respostas' },
         { to: '/admin/settings/messages', icon: <MessageCircle size={18} />, label: 'Mensagens Auto', keywords: 'automaticas template' },
         { to: '/admin/settings/email', icon: <Mail size={18} />, label: 'E-mail', keywords: 'email templates html cadastro promocao compra' },

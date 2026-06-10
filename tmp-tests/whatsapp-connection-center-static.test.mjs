@@ -63,8 +63,17 @@ const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCe
   'getWhatsAppConnectionState',
   'getWhatsAppDebug',
   'connectWhatsApp',
+  'syncWhatsAppWebhook',
   'disconnectWhatsApp',
   'Gerar QR Code / Conectar',
+  'Sincronizar Evolution',
+  'syncStatus',
+  'Estado atual',
+  'Conectado',
+  'Desconectado',
+  'Sincronizacao',
+  'Webhook sincronizado com sucesso',
+  'Falha ao sincronizar webhook',
   'Desconectar WhatsApp',
   'pairingCode',
   'base64',
@@ -210,6 +219,7 @@ const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCe
   'Lista de celulares',
   'Curadoria',
   'Configuracoes',
+  'sem depender do AutoResponder WA',
 ].forEach((needle) => {
   assert.ok(checklist.includes(needle), `migration checklist must include ${needle}`);
 });
@@ -218,6 +228,7 @@ const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCe
   'getWhatsAppConnectionState',
   'getWhatsAppDebug',
   'connectWhatsApp',
+  'syncWhatsAppWebhook',
   'disconnectWhatsApp',
   'listConversations',
   'listConversationLogs',
@@ -267,6 +278,11 @@ const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCe
   'runAutoresponderInternalChatMessage',
   "fastify.post('/autoresponder/conversations/:sender/manual-message'",
   'sendAutoresponderEvolutionTextMessage',
+  'normalizeEvolutionWebhookPayload',
+  'sendAutoresponderEvolutionReplies',
+  "fastify.post('/autoresponder/whatsapp/sync-webhook'",
+  "payload.event !== 'MESSAGES_UPSERT'",
+  "!normalizeAutoresponderSender(sender)",
   'attendant_name',
   'send_tag_id',
   'manual_finish_pause_days',
@@ -299,8 +315,8 @@ assert.ok(
   'new WhatsApp center route must stay at /admin/settings/whatsapp',
 );
 assert.ok(
-  routes.includes('path: "/admin/atendimento-automatico"'),
-  'legacy AutoResponder route must remain during phase 1',
+  !routes.includes('path: "/admin/atendimento-automatico"'),
+  'legacy AutoResponder route must stay removed',
 );
 
 console.log('whatsapp connection center static checks passed');

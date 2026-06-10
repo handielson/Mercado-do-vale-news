@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Reorganizar o AutoResponder em um motor de conversa previsivel, com mapa de perguntas/respostas, estados explicitos, fallbacks contextuais e fallback fora do fluxo.
+**Goal:** Reorganizar o AutoResponder em um motor de conversa previsivel, com estados explicitos, fallbacks contextuais, curadoria de lacunas reais e fallback fora do fluxo.
 
-**Architecture:** Criar um motor novo em paralelo ao fluxo atual, migrando primeiro observabilidade e mapa, depois estado unificado, depois fluxos de maior risco. O arquivo grande de servidor continua funcionando enquanto modulos novos assumem responsabilidades com contrato claro e testes de simulacao.
+**Architecture:** Criar um motor novo em paralelo ao fluxo atual, migrando primeiro observabilidade, bloqueios, curadoria e estatisticas, depois estado unificado, depois fluxos de maior risco. O arquivo grande de servidor continua funcionando enquanto modulos novos assumem responsabilidades com contrato claro e testes de simulacao.
 
-**Tech Stack:** Node/Fastify na VPS (`vps_server.js` publicado como `server.js`), MySQL, React admin em `pages/admin/AutoResponderPage.tsx`, cliente VPS em `services/autoResponderService.ts`, testes estaticos e simulacoes via `tmp-tests` e `/autoresponder/test-flow`.
+**Tech Stack:** Node/Fastify na VPS (`vps_server.js` publicado como `server.js`), MySQL, React admin no Centro WhatsApp (`pages/admin/settings/WhatsAppPage.tsx` e `components/whatsapp/`), cliente VPS em `services/autoResponderService.ts`, testes estaticos e simulacoes via `tmp-tests` e `/autoresponder/test-flow`.
 
 ---
 
@@ -67,8 +67,10 @@
   - Expor campos de estado e resultado de simulacao para o admin.
 - Modificar: `services/autoResponderService.ts`
   - Expor endpoints de mapa, simulador e estado quando forem criados.
-- Modificar: `pages/admin/AutoResponderPage.tsx`
-  - Adicionar visao "Mapa do Bot", melhorar simulador e expor todas as mensagens editaveis.
+- Modificar: `pages/admin/settings/WhatsAppPage.tsx` e componentes em `components/whatsapp/`
+  - Migrar as funcoes ainda uteis do AutoResponder legado para o Centro WhatsApp: bloqueio invisivel ao bot/IA, curadoria de perguntas sem resposta e novas estatisticas do bot.
+- Removido por decisao de produto em 10/06/2026: `pages/admin/AutoResponderPage.tsx`
+  - A pagina legada saiu antes da migracao completa para evitar reaproveitar fluxos antigos. O Centro WhatsApp novo deve recriar bloqueio invisivel, curadoria e estatisticas com as condicoes novas. Tags e Mapa do Bot nao devem ser migrados.
 
 ---
 
@@ -1468,77 +1470,325 @@ node tmp-tests\autoresponder-core-scenarios.cjs
 
 ---
 
-## Fase 7: Admin "Mapa Do Bot"
+## Fase 7: Migrar O Que Ainda Falta Para O Centro WhatsApp
 
-### Task 7.1: Criar Aba Operacional
+Esta fase substitui a ideia antiga de manter uma aba "Mapa do Bot" no AutoResponder legado. A decisao de produto em 10/06/2026 e: **nao migrar Tags nem Mapa do Bot**. O roteamento inteligente passa a ser responsabilidade do prompt/IA e das instrucoes oficiais; o admin novo deve focar somente no que ainda e operacional.
+
+### Task 7.1: Atualizar Checklist De Migracao Do Centro WhatsApp
 
 **Files:**
-- Modify: `pages/admin/AutoResponderPage.tsx`
-- Modify: `types/autoResponder.ts`
-- Modify: `services/autoResponderService.ts`
-- Test: `tmp-tests/autoresponder-bot-map-admin-static.test.mjs`
+- Modify: `components/whatsapp/WhatsAppMigrationChecklist.tsx`
+- Test: `tmp-tests/whatsapp-migration-checklist-static.test.mjs`
 
-- [x] **Step 1: Criar teste**
+- [ ] **Step 1: Criar teste estatico do checklist**
 
-Criar `tmp-tests/autoresponder-bot-map-admin-static.test.mjs`:
+Criar `tmp-tests/whatsapp-migration-checklist-static.test.mjs`:
 
 ```js
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const page = readFileSync('pages/admin/AutoResponderPage.tsx', 'utf8');
+const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.tsx', 'utf8');
 
 [
-  "id: 'mapa'",
-  'Mapa do Bot',
-  'Fluxo',
-  'Pergunta do bot',
-  'Resposta esperada',
-  'Fallback contextual',
-  'Simular fluxo',
+  'Bloqueio invisivel',
+  'Curadoria de perguntas',
+  'Novas estatisticas do bot',
+  "status: 'pending'",
 ].forEach((needle) => {
-  assert.ok(page.includes(needle), `AutoResponderPage must include ${needle}`);
+  assert.ok(checklist.includes(needle), `migration checklist must include ${needle}`);
 });
 
-console.log('autoresponder bot map admin static checks passed');
+[
+  'Mapa do Bot',
+  'Tags',
+].forEach((needle) => {
+  assert.ok(!checklist.includes(needle), `migration checklist must not include legacy item ${needle}`);
+});
+
+console.log('whatsapp migration checklist static checks passed');
 ```
 
-- [x] **Step 2: Adicionar aba**
+- [ ] **Step 2: Atualizar os itens do checklist**
 
-Adicionar aba `Mapa do Bot` no admin com:
+Em `components/whatsapp/WhatsAppMigrationChecklist.tsx`, manter os itens ja migrados e ajustar os pendentes para:
 
-- [x] Lista de fluxos.
-- [x] Estado atual de cada fluxo.
-- [x] Perguntas do bot.
-- [x] Respostas esperadas.
-- [x] Fallback contextual.
-- [x] Botao "Simular fluxo".
-- [x] Resultado da ultima simulacao.
+```ts
+{
+  label: 'Bloqueio invisivel',
+  status: 'pending',
+  description: 'Contato bloqueado nao aparece para o bot, regras nem ChatGPT; a IA deve ignorar esse cliente.',
+},
+{
+  label: 'Curadoria de perguntas',
+  status: 'pending',
+  description: 'Fila de perguntas dos clientes que o bot e a IA nao conseguiram responder com confianca.',
+},
+{
+  label: 'Novas estatisticas do bot',
+  status: 'pending',
+  description: 'Indicadores de mensagens recebidas, respostas, falhas, pausas, custo/uso de IA e lacunas de curadoria.',
+},
+```
 
-- [x] **Step 3: Validar UI por build**
+Remover do checklist de migracao qualquer item de `Tags`, `Mapa do Bot` ou equivalente.
+
+- [ ] **Step 3: Rodar teste e build**
 
 ```powershell
-node tmp-tests\autoresponder-bot-map-admin-static.test.mjs
+node tmp-tests\whatsapp-migration-checklist-static.test.mjs
+npm.cmd run build
+```
+
+Expected:
+
+```text
+whatsapp migration checklist static checks passed
+```
+
+- [ ] **Step 4: Commit**
+
+```powershell
+git add -- components/whatsapp/WhatsAppMigrationChecklist.tsx tmp-tests/whatsapp-migration-checklist-static.test.mjs
+git commit -m "docs(whatsapp): update autoresponder migration checklist"
+```
+
+### Task 7.2: Criar Bloqueio Invisivel Ao Bot E IA
+
+**Files:**
+- Create: `components/whatsapp/WhatsAppInvisibleBlocklistPanel.tsx`
+- Modify: `pages/admin/settings/WhatsAppPage.tsx`
+- Modify: `services/autoResponderService.ts`
+- Modify: `types/autoResponder.ts`
+- Test: `tmp-tests/whatsapp-invisible-blocklist-static.test.mjs`
+
+Objetivo: permitir bloquear um contato para que ele fique invisivel ao bot, regras e ChatGPT. O bloqueio deve reaproveitar a blocklist operacional da VPS/MySQL e deixar claro no texto da UI que numero bloqueado nao deve receber resposta automatica nem interpretacao da IA.
+
+- [ ] **Step 1: Criar teste estatico**
+
+Criar `tmp-tests/whatsapp-invisible-blocklist-static.test.mjs`:
+
+```js
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const panel = readFileSync('components/whatsapp/WhatsAppInvisibleBlocklistPanel.tsx', 'utf8');
+const page = readFileSync('pages/admin/settings/WhatsAppPage.tsx', 'utf8');
+const service = readFileSync('services/autoResponderService.ts', 'utf8');
+
+[
+  'WhatsAppInvisibleBlocklistPanel',
+  'listBlocklist',
+  'createBlocklistEntry',
+  'deleteBlocklistEntry',
+  'invisivel ao bot e a IA',
+].forEach((needle) => {
+  assert.ok(panel.includes(needle) || service.includes(needle), `blocklist implementation must include ${needle}`);
+});
+
+assert.ok(page.includes('WhatsAppInvisibleBlocklistPanel'), 'WhatsAppPage must render invisible blocklist panel');
+
+console.log('whatsapp invisible blocklist static checks passed');
+```
+
+- [ ] **Step 2: Implementar painel**
+
+Criar painel com:
+
+- lista de bloqueios atuais;
+- campo para numero/padrao;
+- tipo `exact`, `prefix` ou `regex`;
+- nome/motivo opcional;
+- botao para criar bloqueio ativo;
+- botao para excluir bloqueio;
+- texto visivel: `Contato bloqueado fica invisivel ao bot e a IA.`
+
+- [ ] **Step 3: Integrar no Centro WhatsApp**
+
+Importar e renderizar `WhatsAppInvisibleBlocklistPanel` em `pages/admin/settings/WhatsAppPage.tsx`, perto do atendimento/conversas.
+
+- [ ] **Step 4: Validar**
+
+```powershell
+node tmp-tests\whatsapp-invisible-blocklist-static.test.mjs
+npm.cmd run build
+```
+
+### Task 7.3: Criar Curadoria De Perguntas Sem Resposta
+
+**Files:**
+- Create: `components/whatsapp/WhatsAppQuestionCurationPanel.tsx`
+- Modify: `pages/admin/settings/WhatsAppPage.tsx`
+- Test: `tmp-tests/whatsapp-question-curation-static.test.mjs`
+
+Objetivo: trazer para o Centro WhatsApp a fila das perguntas que clientes fizeram e que o bot/IA nao conseguiu responder com confianca. Tags nao entram nesta migracao.
+
+- [ ] **Step 1: Criar teste estatico**
+
+Criar `tmp-tests/whatsapp-question-curation-static.test.mjs`:
+
+```js
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const panel = readFileSync('components/whatsapp/WhatsAppQuestionCurationPanel.tsx', 'utf8');
+const page = readFileSync('pages/admin/settings/WhatsAppPage.tsx', 'utf8');
+
+[
+  'WhatsAppQuestionCurationPanel',
+  'listUnanswered',
+  'deleteUnanswered',
+  'listContactNameCuration',
+  'resolveContactNameCuration',
+  'ignoreContactNameCuration',
+  'Perguntas sem resposta',
+].forEach((needle) => {
+  assert.ok(panel.includes(needle), `curation panel must include ${needle}`);
+});
+
+assert.ok(page.includes('WhatsAppQuestionCurationPanel'), 'WhatsAppPage must render question curation panel');
+
+console.log('whatsapp question curation static checks passed');
+```
+
+- [ ] **Step 2: Implementar painel**
+
+Criar painel com duas listas:
+
+- `Perguntas sem resposta`: usa `autoResponderService.listUnanswered({ limit: 100 })`, mostra pergunta, ocorrencias e ultima data, com acao para ignorar/remover.
+- `Pendencias de nome`: usa `listContactNameCuration({ limit: 100, status: 'open' })`, permite salvar nome correto ou ignorar pendencia.
+
+- [ ] **Step 3: Integrar no Centro WhatsApp**
+
+Renderizar o painel em `pages/admin/settings/WhatsAppPage.tsx` abaixo da area de respostas/treinamento.
+
+- [ ] **Step 4: Validar**
+
+```powershell
+node tmp-tests\whatsapp-question-curation-static.test.mjs
+npm.cmd run build
+```
+
+### Task 7.4: Criar Novas Estatisticas Do Bot
+
+**Files:**
+- Create: `components/whatsapp/WhatsAppBotStatsPanel.tsx`
+- Modify: `pages/admin/settings/WhatsAppPage.tsx`
+- Test: `tmp-tests/whatsapp-bot-stats-static.test.mjs`
+
+Objetivo: substituir a aba antiga de estatisticas por um painel simples no Centro WhatsApp, focado em leitura operacional antes do teste real.
+
+- [ ] **Step 1: Criar teste estatico**
+
+Criar `tmp-tests/whatsapp-bot-stats-static.test.mjs`:
+
+```js
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const panel = readFileSync('components/whatsapp/WhatsAppBotStatsPanel.tsx', 'utf8');
+const page = readFileSync('pages/admin/settings/WhatsAppPage.tsx', 'utf8');
+
+[
+  'WhatsAppBotStatsPanel',
+  'getStats',
+  'Mensagens recebidas',
+  'Respostas do bot',
+  'Falhas',
+  'Pausas para humano',
+  'Uso de IA',
+  'Perguntas sem resposta',
+].forEach((needle) => {
+  assert.ok(panel.includes(needle), `bot stats panel must include ${needle}`);
+});
+
+assert.ok(page.includes('WhatsAppBotStatsPanel'), 'WhatsAppPage must render bot stats panel');
+
+console.log('whatsapp bot stats static checks passed');
+```
+
+- [ ] **Step 2: Implementar painel**
+
+Criar cards de estatistica usando `autoResponderService.getStats({ source: 'mysql' })`. Exibir, quando disponiveis:
+
+- mensagens recebidas;
+- respostas do bot;
+- falhas/fallbacks;
+- pausas para humano;
+- uso/custo de IA;
+- perguntas sem resposta.
+
+Quando algum campo nao existir no payload atual, mostrar `-` e manter o painel carregando sem quebrar.
+
+- [ ] **Step 3: Integrar no Centro WhatsApp**
+
+Renderizar `WhatsAppBotStatsPanel` no topo do Centro WhatsApp, depois do checklist de migracao.
+
+- [ ] **Step 4: Validar**
+
+```powershell
+node tmp-tests\whatsapp-bot-stats-static.test.mjs
+npm.cmd run build
+```
+
+### Task 7.5: Remover AutoResponder Legado Do Menu
+
+**Files:**
+- Modify: `layouts/AdminLayout.tsx`
+- Modify: `routes/index.tsx`
+- Delete: `pages/admin/AutoResponderPage.tsx`
+- Delete: `components/autoresponder/BlockNumberModal.tsx` se continuar sem import
+- Delete: `components/autoresponder/ConversationCard.tsx` se continuar sem import
+- Test: `tmp-tests/autoresponder-legacy-admin-removal-static.test.mjs`
+
+Decisao de produto em 10/06/2026: remover agora a pagina legada para nao reaproveitar tela/fluxos antigos. As Tasks 7.1, 7.2, 7.3 e 7.4 continuam necessarias, mas devem criar as experiencias novas no Centro WhatsApp do zero. Nao apagar `RuleEditor.tsx`, `AttachmentUpload.tsx`, `MessagePreview.tsx` nem `TagPicker.tsx`, porque o Centro de Respostas ainda usa essa cadeia.
+
+- [x] **Step 1: Criar teste de remocao**
+
+Criar `tmp-tests/autoresponder-legacy-admin-removal-static.test.mjs`:
+
+```js
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+
+const routes = readFileSync('routes/index.tsx', 'utf8');
+const layout = readFileSync('layouts/AdminLayout.tsx', 'utf8');
+
+assert.ok(!routes.includes('AutoResponderPage'), 'routes must not import AutoResponderPage');
+assert.ok(!routes.includes('/admin/atendimento-automatico'), 'legacy autoresponder route must be removed');
+assert.ok(!layout.includes('AutoResponder'), 'legacy AutoResponder menu item must be removed');
+assert.ok(!existsSync('pages/admin/AutoResponderPage.tsx'), 'legacy AutoResponderPage file must be deleted');
+
+console.log('autoresponder legacy admin removal static checks passed');
+```
+
+- [x] **Step 2: Remover rota e menu**
+
+Remover import lazy de `AutoResponderPage`, rota `/admin/atendimento-automatico` e item `AutoResponder` do menu.
+
+- [x] **Step 3: Remover arquivos legados seguros**
+
+Remover:
+
+- `pages/admin/AutoResponderPage.tsx`;
+- `components/autoresponder/BlockNumberModal.tsx`, se `rg "BlockNumberModal"` nao retornar import real;
+- `components/autoresponder/ConversationCard.tsx`, se `rg "ConversationCard"` nao retornar import real.
+
+- [x] **Step 4: Validar**
+
+```powershell
+node tmp-tests\autoresponder-legacy-admin-removal-static.test.mjs
 npm.cmd run build
 ```
 
 Validado nesta rodada:
 
 ```powershell
-node tmp-tests\autoresponder-bot-map-admin-static.test.mjs
+node tmp-tests\autoresponder-legacy-admin-removal-static.test.mjs
 npm.cmd run build
 ```
 
-Observacao: a aba atual usa mapa local em `services/autoResponderService.ts`; se o "estado atual" precisar ser operacional/vivo, ainda falta endpoint do backend para o mapa.
-
-- [ ] **Step 4: Publicar frontend**
-
-```powershell
-git add -- pages/admin/AutoResponderPage.tsx types/autoResponder.ts services/autoResponderService.ts tmp-tests/autoresponder-bot-map-admin-static.test.mjs
-git commit -m "feat(autoresponder): add bot map admin view"
-git push origin HEAD:main
-npm.cmd run deploy:vps-site
-```
+Tambem removidos nesta rodada os testes estaticos antigos que exigiam `pages/admin/AutoResponderPage.tsx`, abas legadas, Tags ou Mapa do Bot. A cobertura nova da decisao fica em `tmp-tests/autoresponder-legacy-admin-removal-static.test.mjs` e `tmp-tests/whatsapp-connection-center-static.test.mjs`.
 
 ---
 
@@ -1639,7 +1889,7 @@ Nao apagar arquivo sem classificar como `remover`, `manter` ou `arquivar`.
 
 | Arquivo | Motivo |
 |---|---|
-| docs/autoresponder/response-map.md | Fonte operacional do mapa do bot |
+| docs/autoresponder/response-map.md | Inventario tecnico historico dos fluxos; nao significa manter Mapa do Bot no admin |
 | docs/autoresponder/test-scenarios.md | Checklist obrigatorio de simulacao |
 | tmp-tests/autoresponder-core-scenarios.cjs | Runner principal de regressao |
 
@@ -1943,7 +2193,7 @@ git commit -m "docs(autoresponder): close cleanup checklist"
 
 ## Checklist De Pronto
 
-- [ ] `docs/autoresponder/response-map.md` cobre saudacao, produto, entrega, compra, pagamento, humano, curadoria e fallback.
+- [ ] `docs/autoresponder/response-map.md` cobre saudacao, produto, entrega, compra, pagamento, humano, curadoria e fallback como inventario tecnico, sem exigir Mapa do Bot no admin.
 - [ ] Toda pergunta do bot salva `conversation_state`.
 - [ ] Todo `conversation_state` tem fallback contextual.
 - [ ] Toda resposta exibida ao cliente existe em `AUTORESPONDER_MESSAGE_KEYS`.
@@ -1951,8 +2201,13 @@ git commit -m "docs(autoresponder): close cleanup checklist"
 - [ ] Fallback fora do fluxo oferece caminhos claros.
 - [ ] IA nao roda antes de fluxo ativo, regra, intent ou busca.
 - [ ] Curadoria recebe apenas lacunas reais.
+- [ ] Centro WhatsApp tem bloqueio invisivel ao bot e a IA.
+- [ ] Centro WhatsApp tem curadoria de perguntas dos clientes que o bot/IA nao conseguiu responder.
+- [ ] Centro WhatsApp tem novas estatisticas do bot.
+- [ ] Tags nao fazem parte da migracao para o Centro WhatsApp.
+- [ ] Mapa do Bot nao faz parte da migracao para o Centro WhatsApp; decisao/roteamento visual fica substituido por prompt/instrucoes da IA.
 - [ ] `/autoresponder/test-flow` cobre os cenarios obrigatorios.
-- [ ] Admin mostra mapa do bot e simulador.
+- [ ] Admin novo mostra simulador/teste interno sem depender da pagina legada `AutoResponder`.
 - [ ] `purchase_flow` volta a representar apenas compra.
 - [ ] Arquivos temporarios substituidos foram removidos ou arquivados.
 - [ ] Documentos operacionais obsoletos foram arquivados com rastreabilidade.
@@ -1971,7 +2226,7 @@ git commit -m "docs(autoresponder): close cleanup checklist"
 5. Fase 4: busca/escolha de produto.
 6. Fase 5: compra.
 7. Fase 6: regras, IA e curadoria.
-8. Fase 7: admin.
+8. Fase 7: migrar bloqueio invisivel, curadoria e estatisticas para o Centro WhatsApp.
 9. Fase 8: limpeza do legado.
 10. Fase 9: limpeza final de arquivos.
 
