@@ -7,6 +7,10 @@ import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
 import { usePageTitle } from '../hooks/usePageTitle';
 
+function isLikelyCredentialAutofill(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, customer, signOut } = useVpsAuth();
   const { settings } = useTheme();
@@ -16,6 +20,11 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const [search, setSearch] = useState('');
 
   usePageTitle();
+
+  function handleMenuSearchChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const nextSearch = event.target.value;
+    setSearch(isLikelyCredentialAutofill(nextSearch) ? '' : nextSearch);
+  }
 
   const menuGroups = useMemo(() => [
     {
@@ -163,9 +172,13 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input 
               type="text" 
+              name="admin-menu-search"
               placeholder="Buscar no menu..." 
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={handleMenuSearchChange}
               className="w-full bg-slate-800 border border-slate-700 text-white placeholder-slate-400 text-xs rounded-lg py-2 pl-9 pr-3 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
             />
           </div>
