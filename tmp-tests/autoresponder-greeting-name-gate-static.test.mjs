@@ -16,7 +16,7 @@ for (const file of ['vps_server.cjs', 'vps_server.js']) {
   }
   assert.match(source, /if \(shouldConfirmContactName \|\| shouldAskContactName\) \{[\s\S]*return \{ replies: \[\{ message: greetingText \}, \{ message: contactPrompt\.trim\(\) \}\] \};[\s\S]*\}/, `${file} must return only the name prompt until the name is captured`);
 
-  const testReplyGreeting = source.match(/if \(detectedIntent\.greetingOnly\) \{[\s\S]*?\n  \}\n\n  if \(detectedIntent\.storeStatusRequest\)/)?.[0] || '';
+  const testReplyGreeting = source.match(/if \(detectedIntent\.greetingOnly\) \{[\s\S]*?\r?\n  \}\r?\n\r?\n  if \(detectedIntent\.storeStatusRequest\)/)?.[0] || '';
   assert.ok(testReplyGreeting, `${file} must keep a greeting-only branch in test replies`);
   assert.ok(!testReplyGreeting.includes('buildAutoresponderNeedsPromptReply'), `${file} test reply greeting must not build a needs prompt`);
   assert.ok(!testReplyGreeting.includes("intent: 'greeting_needs_prompt'"), `${file} test reply greeting must not use greeting_needs_prompt intent`);

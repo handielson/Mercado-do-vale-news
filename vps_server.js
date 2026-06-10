@@ -8258,6 +8258,10 @@ function isAutoresponderCatalogRequest(message) {
   return asksForList && asksForPhone;
 }
 
+function isAutoresponderAccessoryCategoryName(name) {
+  return /\b(acessorio|acessorios|capa|capas|capinha|capinhas|pelicula|peliculas|suporte|suportes|carregador|carregadores|cabo|cabos|fone|fones)\b/.test(name);
+}
+
 function findAutoresponderCatalogCategoryForMessage(message, categories) {
   const text = normalizeAutoresponderText(message).trim();
   const safeCategories = Array.isArray(categories) ? categories : [];
@@ -8281,6 +8285,7 @@ function findAutoresponderCatalogCategoryForMessage(message, categories) {
 
   const directMatch = safeCategories.find((category) => {
     const name = normalizeAutoresponderText(category?.name || '').trim();
+    if (asksForPhone && isAutoresponderAccessoryCategoryName(name)) return false;
     return name && (text.includes(name) || name.includes(text));
   });
   if (directMatch) return directMatch;
@@ -8289,7 +8294,8 @@ function findAutoresponderCatalogCategoryForMessage(message, categories) {
 
   return safeCategories.find((category) => {
     const name = normalizeAutoresponderText(category?.name || '').trim();
-    return phoneCategoryHints.some((keyword) => name.includes(keyword));
+    return !isAutoresponderAccessoryCategoryName(name)
+      && phoneCategoryHints.some((keyword) => name.includes(keyword));
   }) || null;
 }
 
@@ -11594,7 +11600,7 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   }
 
   const categories = await findAutoresponderAvailableCategories(20);
-  const selectedCategory = findAutoresponderCatalogCategoryForMessage('smartphones', categories);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage('celulares', categories);
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
@@ -13542,21 +13548,6 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     sender: normalizedSender,
   };
 
-  const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
-    message,
-    contactFirstName,
-    settings,
-    shouldPrefixGreeting,
-  });
-  if (priorityProductReply) {
-    return {
-      intent: 'product_search_priority',
-      matched_count: priorityProductReply.products.length,
-      replies: formatAutoresponderProReplies(priorityProductReply.replyMessages),
-      sender: normalizedSender,
-    };
-  }
-
   if (isAutoresponderAudioMessage(message)) {
     const audioReplyText = getAutoresponderToneMessage(settings, normalizedSender, 'audioUnsupported', AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY);
     return {
@@ -13651,6 +13642,21 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
       intent: 'human_request',
       matched_count: 0,
       replies: [{ message: formatAutoresponderReply(humanReplyText, settings, shouldPrefixGreeting) }],
+      sender: normalizedSender,
+    };
+  }
+
+  const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
+    message,
+    contactFirstName,
+    settings,
+    shouldPrefixGreeting,
+  });
+  if (priorityProductReply) {
+    return {
+      intent: 'product_search_priority',
+      matched_count: priorityProductReply.products.length,
+      replies: formatAutoresponderProReplies(priorityProductReply.replyMessages),
       sender: normalizedSender,
     };
   }
@@ -14191,6 +14197,48 @@ fastify.route({
         shouldPrefixGreeting: false,
       });
       if (phoneListOptInReply) return phoneListOptInReply;
+
+      if (detectedIntent.greetingOnly) {
+        const contactState = await getAutoresponderContactNameState(senderKey);
+        const contactNameStatus = String(contactState?.contact_name_status || '');
+        const shouldConfirmContactName = contactFirstName
+          && !['awaiting_name_confirmation', 'awaiting_name_input', 'saved_to_google', 'google_pending'].includes(contactNameStatus);
+        const shouldAskContactName = !contactFirstName
+          && !['awaiting_name_confirmation', 'awaiting_name_input', 'saved_to_google', 'google_pending'].includes(contactNameStatus);
+        if (shouldConfirmContactName) {
+          await startAutoresponderContactNameConfirmation(senderKey, contactFirstName);
+        } else if (shouldAskContactName) {
+          await markAutoresponderContactNameAwaitingInput(senderKey);
+        }
+        const contactPrompt = shouldConfirmContactName
+          ? `\n\nSeu nome e ${contactFirstName}? \u{1F60A}\nResponda "sim" para confirmar ou "nao" para informar outro nome.`
+          : shouldAskContactName
+            ? '\n\nQual seu nome para seguirmos com o atendimento?'
+            : '';
+        const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
+        if (shouldConfirmContactName || shouldAskContactName) {
+          const replyText = [greetingText, contactPrompt.trim()].filter(Boolean).join('\n\n');
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'contact_name_prompt',
+            replyText,
+            matchedCount: 0,
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: greetingText }, { message: contactPrompt.trim() }] };
+        }
+
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'greeting',
+          replyText: greetingText,
+          matchedCount: 0,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: greetingText }] };
+      }
 
       const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
         message,
@@ -15448,6 +15496,31 @@ fastify.route({
         shouldPrefixGreeting,
       });
       if (latePhoneListOptInReply) return latePhoneListOptInReply;
+
+      const catalogCategoryReply = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
+      if (catalogCategoryReply) {
+        const replyText = catalogCategoryReply.replyMessages.join('\n\n');
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'catalog_category',
+          replyText,
+          matchedCount: catalogCategoryReply.products.length,
+          matchedProducts: catalogCategoryReply.productOptions,
+        });
+        await upsertAutoresponderOptionsConversation(senderKey, catalogCategoryReply.productOptions, {
+          source: 'category',
+          categoryId: catalogCategoryReply.selectedCategory.id,
+          keyword: catalogCategoryReply.selectedCategory.name,
+          offset: 0,
+          limit: catalogCategoryReply.pageSize,
+          total: catalogCategoryReply.total,
+          hasMore: catalogCategoryReply.hasMore,
+          completeList: isAutoresponderCompleteProductListKeyword(catalogCategoryReply.selectedCategory.name),
+        });
+
+        return { replies: formatAutoresponderProReplies(catalogCategoryReply.replyMessages) };
+      }
 
       const matchedRule = await findAutoresponderRuleMatch(message);
       if (matchedRule) {

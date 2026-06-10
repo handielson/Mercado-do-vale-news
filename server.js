@@ -7071,6 +7071,10 @@ function isAutoresponderCatalogRequest(message) {
   return asksForList && asksForPhone;
 }
 
+function isAutoresponderAccessoryCategoryName(name) {
+  return /\b(acessorio|acessorios|capa|capas|capinha|capinhas|pelicula|peliculas|suporte|suportes|carregador|carregadores|cabo|cabos|fone|fones)\b/.test(name);
+}
+
 function findAutoresponderCatalogCategoryForMessage(message, categories) {
   const text = normalizeAutoresponderText(message).trim();
   const safeCategories = Array.isArray(categories) ? categories : [];
@@ -7094,6 +7098,7 @@ function findAutoresponderCatalogCategoryForMessage(message, categories) {
 
   const directMatch = safeCategories.find((category) => {
     const name = normalizeAutoresponderText(category?.name || '').trim();
+    if (asksForPhone && isAutoresponderAccessoryCategoryName(name)) return false;
     return name && (text.includes(name) || name.includes(text));
   });
   if (directMatch) return directMatch;
@@ -7102,7 +7107,8 @@ function findAutoresponderCatalogCategoryForMessage(message, categories) {
 
   return safeCategories.find((category) => {
     const name = normalizeAutoresponderText(category?.name || '').trim();
-    return phoneCategoryHints.some((keyword) => name.includes(keyword));
+    return !isAutoresponderAccessoryCategoryName(name)
+      && phoneCategoryHints.some((keyword) => name.includes(keyword));
   }) || null;
 }
 
@@ -10243,7 +10249,7 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   }
 
   const categories = await findAutoresponderAvailableCategories(20);
-  const selectedCategory = findAutoresponderCatalogCategoryForMessage('smartphones', categories);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage('celulares', categories);
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
@@ -11870,6 +11876,48 @@ fastify.route({
       if (!hasActivePurchaseFlow && !detectedIntent.storeStatusRequest && recentReplyCount >= replyLimit) {
         await touchAutoresponderConversation(senderKey);
         return { replies: [] };
+      }
+
+      if (detectedIntent.greetingOnly) {
+        const contactState = await getAutoresponderContactNameState(senderKey);
+        const contactNameStatus = String(contactState?.contact_name_status || '');
+        const shouldConfirmContactName = contactFirstName
+          && !['awaiting_name_confirmation', 'awaiting_name_input', 'saved_to_google', 'google_pending'].includes(contactNameStatus);
+        const shouldAskContactName = !contactFirstName
+          && !['awaiting_name_confirmation', 'awaiting_name_input', 'saved_to_google', 'google_pending'].includes(contactNameStatus);
+        if (shouldConfirmContactName) {
+          await startAutoresponderContactNameConfirmation(senderKey, contactFirstName);
+        } else if (shouldAskContactName) {
+          await markAutoresponderContactNameAwaitingInput(senderKey);
+        }
+        const contactPrompt = shouldConfirmContactName
+          ? `\n\nSeu nome e ${contactFirstName}? \u{1F60A}\nResponda "sim" para confirmar ou "nao" para informar outro nome.`
+          : shouldAskContactName
+            ? '\n\nQual seu nome para seguirmos com o atendimento?'
+            : '';
+        const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
+        if (shouldConfirmContactName || shouldAskContactName) {
+          const replyText = [greetingText, contactPrompt.trim()].filter(Boolean).join('\n\n');
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'contact_name_prompt',
+            replyText,
+            matchedCount: 0,
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: greetingText }, { message: contactPrompt.trim() }] };
+        }
+
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'greeting',
+          replyText: greetingText,
+          matchedCount: 0,
+        });
+        await upsertAutoresponderSuccessConversation(senderKey);
+        return { replies: [{ message: greetingText }] };
       }
 
       const engineDeliveryReply = await handleAutoresponderEngineDeliveryFlowV2({
