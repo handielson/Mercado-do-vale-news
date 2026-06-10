@@ -43,6 +43,7 @@ export interface AutoResponderSettings {
     archive_after_days: number;
     ai_enabled?: boolean | number;
     ai_model?: string;
+    ai_reasoning_effort?: 'low' | 'medium' | 'high' | string;
     ai_daily_limit?: number;
     ai_monthly_limit?: number;
     ai_credit_balance_usd?: number;

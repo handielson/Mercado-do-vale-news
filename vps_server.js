@@ -7496,7 +7496,13 @@ function getAutoresponderAiConfig(settings = null) {
     enabled: settingsEnabled == null ? envEnabled : settingsEnabled,
     apiKey,
     model: String(settings?.ai_model || process.env.AUTORESPONDER_AI_MODEL || 'gpt-5-nano').trim() || 'gpt-5-nano',
+    reasoningEffort: normalizeAutoresponderAiReasoningEffort(settings?.ai_reasoning_effort || process.env.AUTORESPONDER_AI_REASONING_EFFORT),
   };
+}
+
+function normalizeAutoresponderAiReasoningEffort(value) {
+  const normalized = String(value || 'low').trim().toLowerCase();
+  return ['low', 'medium', 'high'].includes(normalized) ? normalized : 'low';
 }
 
 function isAutoresponderAiEnabled(settings = null) {
@@ -7657,6 +7663,7 @@ async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings 
   if (await isAutoresponderAiLimitReached(settings)) return null;
   const aiConfig = getAutoresponderAiConfig(settings);
   try {
+    const outputTokenBudget = Math.max(600, Number(maxOutputTokens) || 0);
     const trainingContext = buildAutoresponderAiTrainingContext(await loadActiveAutoresponderAiTraining());
     const conversationContext = buildAutoresponderAiConversationMemoryContext(
       await loadAutoresponderAiConversationMemory({ sender, settings })
@@ -7678,7 +7685,9 @@ async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings 
         model: aiConfig.model,
         instructions,
         input,
-        max_output_tokens: maxOutputTokens,
+        max_output_tokens: outputTokenBudget,
+        reasoning: { effort: aiConfig.reasoningEffort },
+        text: { verbosity: 'low' },
       }),
       signal: AbortSignal.timeout(Number(process.env.AUTORESPONDER_AI_TIMEOUT_MS || 5000)),
     });
@@ -12045,6 +12054,7 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
     archive_after_days: (v) => Number(v),
     ai_enabled: (v) => boolInt(v),
     ai_model: (v) => String(v || 'gpt-5-nano').trim() || 'gpt-5-nano',
+    ai_reasoning_effort: (v) => normalizeAutoresponderAiReasoningEffort(v),
     ai_daily_limit: (v) => Math.max(0, Number(v) || 0),
     ai_monthly_limit: (v) => Math.max(0, Number(v) || 0),
     ai_credit_balance_usd: (v) => Math.max(0, Number(v) || 0),
@@ -21874,6 +21884,7 @@ async function runMigrations() {
   await addColumnIfMissing('autoresponder_settings', 'signature_message', 'TEXT NULL');
   await addColumnIfMissing('autoresponder_settings', 'ai_enabled', 'TINYINT(1) NOT NULL DEFAULT 0');
   await addColumnIfMissing('autoresponder_settings', 'ai_model', "VARCHAR(80) NOT NULL DEFAULT 'gpt-5-nano'");
+  await addColumnIfMissing('autoresponder_settings', 'ai_reasoning_effort', "VARCHAR(16) NOT NULL DEFAULT 'low'");
   await addColumnIfMissing('autoresponder_settings', 'openai_api_key', 'TEXT NULL');
   await addColumnIfMissing('autoresponder_settings', 'ai_daily_limit', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('autoresponder_settings', 'ai_monthly_limit', 'INT NOT NULL DEFAULT 0');

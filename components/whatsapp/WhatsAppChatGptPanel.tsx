@@ -7,6 +7,7 @@ import type { AutoResponderSettings, AutoResponderStats } from '../../types/auto
 type ChatGptFormState = {
   ai_enabled: boolean;
   ai_model: string;
+  ai_reasoning_effort: string;
   ai_daily_limit: string;
   ai_monthly_limit: string;
   ai_credit_balance_usd: string;
@@ -24,6 +25,7 @@ type ChatGptFormState = {
 const defaultForm: ChatGptFormState = {
   ai_enabled: false,
   ai_model: 'gpt-5-nano',
+  ai_reasoning_effort: 'low',
   ai_daily_limit: '0',
   ai_monthly_limit: '0',
   ai_credit_balance_usd: '0',
@@ -52,6 +54,7 @@ function settingsToForm(settings: AutoResponderSettings | null): ChatGptFormStat
   return {
     ai_enabled: isEnabled(settings.ai_enabled),
     ai_model: settings.ai_model || defaultForm.ai_model,
+    ai_reasoning_effort: settings.ai_reasoning_effort || defaultForm.ai_reasoning_effort,
     ai_daily_limit: numericText(settings.ai_daily_limit, defaultForm.ai_daily_limit),
     ai_monthly_limit: numericText(settings.ai_monthly_limit, defaultForm.ai_monthly_limit),
     ai_credit_balance_usd: numericText(settings.ai_credit_balance_usd, defaultForm.ai_credit_balance_usd),
@@ -137,6 +140,7 @@ export function WhatsAppChatGptPanel() {
       const payload: Record<string, unknown> = {
         ai_enabled: form.ai_enabled,
         ai_model: form.ai_model.trim() || defaultForm.ai_model,
+        ai_reasoning_effort: form.ai_reasoning_effort || defaultForm.ai_reasoning_effort,
         ai_daily_limit: toNumber(form.ai_daily_limit),
         ai_monthly_limit: toNumber(form.ai_monthly_limit),
         ai_credit_balance_usd: toNumber(form.ai_credit_balance_usd),
@@ -223,6 +227,22 @@ export function WhatsAppChatGptPanel() {
                 className="mt-2 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
               />
             </label>
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Raciocinio
+              <select
+                value={form.ai_reasoning_effort}
+                onChange={(event) => updateForm({ ai_reasoning_effort: event.target.value })}
+                disabled={loading}
+                className="mt-2 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm font-semibold normal-case text-slate-700 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 disabled:opacity-60"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
             <label className="text-xs font-semibold uppercase text-slate-500">
               Limite diario
               <input
