@@ -6599,8 +6599,134 @@ function sanitizeDescription(v) {
 }
 const boolInt = (v) => v ? 1 : 0;
 
+function normalizeAutoresponderBrazilMobileSender(digits) {
+  if (/^55\d{10}$/.test(digits) && /^[6-9]$/.test(digits.slice(4, 5))) {
+    return `${digits.slice(0, 4)}9${digits.slice(4)}`;
+  }
+  return digits;
+}
+
 function normalizeAutoresponderSender(value) {
-  return String(value || '').replace(/\D+/g, '');
+  const digits = String(value || '').replace(/\D+/g, '');
+  return normalizeAutoresponderBrazilMobileSender(digits);
+}
+
+function maxAutoresponderDate(...values) {
+  const dates = values
+    .map((value) => value ? new Date(value) : null)
+    .filter((value) => value && !Number.isNaN(value.getTime()));
+  if (!dates.length) return null;
+  return new Date(Math.max(...dates.map((value) => value.getTime())));
+}
+
+function minAutoresponderDate(...values) {
+  const dates = values
+    .map((value) => value ? new Date(value) : null)
+    .filter((value) => value && !Number.isNaN(value.getTime()));
+  if (!dates.length) return null;
+  return new Date(Math.min(...dates.map((value) => value.getTime())));
+}
+
+function selectAutoresponderNewerJson(currentValue, currentDate, incomingValue, incomingDate) {
+  if (incomingValue == null) return currentValue ?? null;
+  if (currentValue == null) return incomingValue;
+  const currentTime = currentDate ? new Date(currentDate).getTime() : 0;
+  const incomingTime = incomingDate ? new Date(incomingDate).getTime() : 0;
+  return incomingTime >= currentTime ? incomingValue : currentValue;
+}
+
+async function canonicalizeAutoresponderBrazilMobileSenders() {
+  const [rows] = await pool.query(
+    "SELECT * FROM autoresponder_conversations WHERE sender REGEXP '^55[0-9]{10}$'"
+  );
+  let migrated = 0;
+
+  for (const row of rows) {
+    const sender = String(row.sender || '');
+    const canonicalSender = normalizeAutoresponderBrazilMobileSender(sender);
+    if (!sender || canonicalSender === sender) continue;
+
+    await pool.query('UPDATE autoresponder_logs SET sender = ? WHERE sender = ?', [canonicalSender, sender]);
+
+    const [targetRows] = await pool.query(
+      'SELECT * FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+      [canonicalSender]
+    );
+    const target = targetRows[0];
+
+    if (!target) {
+      await pool.query('UPDATE autoresponder_conversations SET sender = ? WHERE sender = ?', [canonicalSender, sender]);
+      migrated += 1;
+      continue;
+    }
+
+    const mergedLastOptions = selectAutoresponderNewerJson(
+      target.last_options_offered,
+      target.last_options_at,
+      row.last_options_offered,
+      row.last_options_at
+    );
+    const mergedPurchaseFlow = selectAutoresponderNewerJson(
+      target.purchase_flow,
+      target.purchase_flow_updated_at,
+      row.purchase_flow,
+      row.purchase_flow_updated_at
+    );
+
+    await pool.query(
+      `UPDATE autoresponder_conversations
+       SET first_seen_at = ?,
+           last_message_at = ?,
+           last_bot_reply_at = ?,
+           paused_until = ?,
+           pause_reason = ?,
+           consecutive_fallbacks = ?,
+           reply_count = ?,
+           total_messages = ?,
+           tag_ids = COALESCE(tag_ids, ?),
+           last_options_offered = ?,
+           last_options_at = ?,
+           purchase_flow = ?,
+           purchase_flow_updated_at = ?,
+           contact_name_status = COALESCE(contact_name_status, ?),
+           contact_name_suggestion = COALESCE(contact_name_suggestion, ?),
+           contact_name_confirmed = COALESCE(contact_name_confirmed, ?),
+           google_contact_resource_name = COALESCE(google_contact_resource_name, ?),
+           contact_name_updated_at = ?,
+           attendant_name = COALESCE(attendant_name, ?),
+           attendant_updated_at = ?
+       WHERE sender = ?`,
+      [
+        minAutoresponderDate(target.first_seen_at, row.first_seen_at),
+        maxAutoresponderDate(target.last_message_at, row.last_message_at) || new Date(),
+        maxAutoresponderDate(target.last_bot_reply_at, row.last_bot_reply_at),
+        maxAutoresponderDate(target.paused_until, row.paused_until),
+        target.pause_reason || row.pause_reason || null,
+        Math.max(Number(target.consecutive_fallbacks || 0), Number(row.consecutive_fallbacks || 0)),
+        Number(target.reply_count || 0) + Number(row.reply_count || 0),
+        Number(target.total_messages || 0) + Number(row.total_messages || 0),
+        jsonStr(row.tag_ids),
+        jsonStr(mergedLastOptions),
+        maxAutoresponderDate(target.last_options_at, row.last_options_at),
+        jsonStr(mergedPurchaseFlow),
+        maxAutoresponderDate(target.purchase_flow_updated_at, row.purchase_flow_updated_at),
+        row.contact_name_status || null,
+        row.contact_name_suggestion || null,
+        row.contact_name_confirmed || null,
+        row.google_contact_resource_name || null,
+        maxAutoresponderDate(target.contact_name_updated_at, row.contact_name_updated_at),
+        row.attendant_name || null,
+        maxAutoresponderDate(target.attendant_updated_at, row.attendant_updated_at),
+        canonicalSender,
+      ]
+    );
+    await pool.query('DELETE FROM autoresponder_conversations WHERE sender = ?', [sender]);
+    migrated += 1;
+  }
+
+  if (migrated > 0) {
+    console.log(`[migration] autoresponder BR mobile senders canonicalized: ${migrated}`);
+  }
 }
 
 function normalizeAutoresponderText(value) {
@@ -21931,6 +22057,7 @@ async function runMigrations() {
   await addColumnIfMissing('autoresponder_conversations', 'reply_window_started_at', 'TIMESTAMP NULL');
   await addColumnIfMissing('autoresponder_conversations', 'attendant_name', 'VARCHAR(120) NULL');
   await addColumnIfMissing('autoresponder_conversations', 'attendant_updated_at', 'TIMESTAMP NULL');
+  await canonicalizeAutoresponderBrazilMobileSenders();
   console.log('[migration] autoresponder phase 1A tables: OK');
 
   await pool.query(`
