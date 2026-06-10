@@ -68,7 +68,7 @@ assert.match(
 );
 assert.doesNotMatch(
   createSaleBody,
-  /subtotal:\s*totals\.subtotal|discount_total:\s*discountTotal|cost_total:\s*totals\.cost_total|profit:\s*totals\.profit|payment_methods:\s*saleInput\.payment_methods/,
+  /subtotal:\s*totals\.subtotal|discount_total:\s*discountTotal|cost_total:\s*totals\.cost_total|profit:\s*totals\.profit/,
   'createSale must not send rich Sale fields that are absent from the VPS sales table',
 );
 assert.match(

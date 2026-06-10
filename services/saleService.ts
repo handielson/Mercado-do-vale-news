@@ -116,6 +116,7 @@ function serializeSaleRowForTable<T extends Record<string, unknown>>(row: T): Re
         total: row.total || 0,
         discount: row.discount || 0,
         payment_method: row.payment_method || null,
+        payment_methods: row.payment_methods ? serializeJsonValue(row.payment_methods) : null,
         payment_status: row.payment_status || 'paid',
         notes: row.notes || null,
     };
