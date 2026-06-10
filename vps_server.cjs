@@ -10107,6 +10107,24 @@ async function findAutoresponderProductsByCategory(categoryId, limit = 5, offset
   return rows;
 }
 
+async function findAutoresponderProductGroupPageByCategory(categoryId, pageSize = AUTORESPONDER_PRODUCT_PAGE_SIZE, groupOffset = 0) {
+  const safePageSize = Math.max(Number(pageSize) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1);
+  const safeGroupOffset = Math.max(Number(groupOffset) || 0, 0);
+  const targetGroupCount = safeGroupOffset + safePageSize + 1;
+  const rawLimit = Math.min(
+    Math.max(targetGroupCount * 6, safePageSize + 1),
+    AUTORESPONDER_PRODUCT_RESPONSE_LIMIT
+  );
+  const rows = await findAutoresponderProductsByCategory(categoryId, rawLimit, 0);
+  const groups = sortAutoresponderProductGroupsByBrand(groupAutoresponderProductsByModel(rows));
+  const pageGroups = groups.slice(safeGroupOffset, safeGroupOffset + safePageSize);
+  return {
+    products: pageGroups.flatMap((group) => Array.isArray(group.products) ? group.products : []),
+    hasMore: groups.length > safeGroupOffset + safePageSize,
+    groupCount: groups.length,
+  };
+}
+
 async function countAutoresponderProductsByCategory(categoryId) {
   const [rows] = await pool.query(
     `SELECT COUNT(*) AS total
@@ -11675,9 +11693,9 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
-  const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
-  const products = rows.slice(0, pageSize);
-  const hasMore = rows.length > pageSize;
+  const groupPage = await findAutoresponderProductGroupPageByCategory(selectedCategory.id, pageSize, 0);
+  const products = groupPage.products;
+  const hasMore = groupPage.hasMore;
   const total = await countAutoresponderProductsByCategory(selectedCategory.id);
   const productOptions = buildAutoresponderProductOptions(products);
   const productReplyMessages = appendAutoresponderReplyFooter(
@@ -11720,9 +11738,9 @@ async function buildAutoresponderCatalogCategoryReplyData(message, settings, sho
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
-  const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
-  const products = rows.slice(0, pageSize);
-  const hasMore = rows.length > pageSize;
+  const groupPage = await findAutoresponderProductGroupPageByCategory(selectedCategory.id, pageSize, 0);
+  const products = groupPage.products;
+  const hasMore = groupPage.hasMore;
   const total = await countAutoresponderProductsByCategory(selectedCategory.id);
   const productOptions = buildAutoresponderProductOptions(products);
   const productReplyMessages = appendAutoresponderReplyFooter(
