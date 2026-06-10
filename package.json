@@ -7,6 +7,7 @@
     "dev": "vite",
     "prebuild": "node scripts/assert-no-supabase-runtime.cjs",
     "build": "vite build",
+    "test:autoresponder:whatsapp": "node tmp-tests/google-contacts-oauth-static.test.mjs && node tmp-tests/autoresponder-contact-name-invalid-replies-static.test.mjs && node tmp-tests/autoresponder-contact-name-curation-static.test.mjs && node tmp-tests/autoresponder-google-contact-flow-static.test.mjs && node tmp-tests/autoresponder-smartphone-catalog-loop-regression-static.test.mjs",
     "deploy:vps-site": "node scripts/deploy-vps-site.cjs",
     "preview": "vite preview"
   },

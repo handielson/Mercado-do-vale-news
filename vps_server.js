@@ -61,7 +61,7 @@ const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
 const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS = [4, 9, 16, 24, 33, 43, 54, 66, 79, 93];
 const AUTORESPONDER_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_PRODUCT_PAGE_SIZE * AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES;
-const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 500;
+const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 20;
 const AUTORESPONDER_RULE_TEMPLATES = [
   { name: 'Saudacao manha', pattern: 'bom dia, oi bom dia, dia' },
   { name: 'Saudacao tarde', pattern: 'boa tarde, tarde' },
@@ -760,6 +760,96 @@ async function requireSyncKeyOrCustomer(request, reply) {
   return reply.code(401).send({ error: 'Unauthorized' });
 }
 
+function getDashboardProfitPassword() {
+  return String(
+    process.env.DASHBOARD_PROFIT_PASSWORD ||
+    process.env.MDV_DASHBOARD_PROFIT_PASSWORD ||
+    ''
+  );
+}
+
+function verifyDashboardProfitPassword(input) {
+  const configured = getDashboardProfitPassword();
+  const candidate = String(input || '');
+  if (!configured) return { ok: false, missing: true };
+  const configuredBuffer = Buffer.from(configured);
+  const candidateBuffer = Buffer.from(candidate);
+  if (configuredBuffer.length !== candidateBuffer.length) return { ok: false, missing: false };
+  return { ok: crypto.timingSafeEqual(configuredBuffer, candidateBuffer), missing: false };
+}
+
+function normalizeDashboardDateKey(value) {
+  const raw = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const date = raw ? new Date(raw) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function calculateDashboardSaleProfit(sale, items) {
+  const rowProfit = Number(sale?.profit);
+  if (Number.isFinite(rowProfit) && rowProfit !== 0) return rowProfit;
+  if (!Array.isArray(items) || items.length === 0) return Number.isFinite(rowProfit) ? rowProfit : 0;
+  return items.reduce((sum, item) => {
+    const quantity = Number(item.quantity) || 0;
+    const itemTotal = item.total == null
+      ? (Number(item.unit_price) || 0) * quantity
+      : Number(item.total) || 0;
+    const unitCost = Number(item.unit_cost ?? item.product_cost) || 0;
+    return sum + itemTotal - (unitCost * quantity);
+  }, 0);
+}
+
+async function calculateDashboardProfitForDate(referenceDate) {
+  const dateKey = normalizeDashboardDateKey(referenceDate);
+  if (!dateKey) return { profitCents: 0, referenceDate: '', salesCount: 0 };
+
+  const [sales] = await pool.query(
+    `SELECT id, total, profit, status, payment_status, created_at
+     FROM sales
+     WHERE DATE(created_at) = ?
+       AND (
+         status = 'completed'
+         OR payment_status = 'paid'
+         OR (status IS NULL AND COALESCE(payment_status, 'paid') <> 'cancelled')
+       )`,
+    [dateKey]
+  );
+
+  const saleIds = (Array.isArray(sales) ? sales : []).map((sale) => sale.id).filter(Boolean);
+  if (saleIds.length === 0) return { profitCents: 0, referenceDate: dateKey, salesCount: 0 };
+
+  const [items] = await pool.query(
+    `SELECT si.sale_id, si.product_id, si.quantity, si.unit_price, si.total,
+            COALESCE(NULLIF(si.unit_cost, 0), p.price_cost, 0) AS unit_cost
+     FROM sale_items si
+     LEFT JOIN products p ON p.id = si.product_id
+     WHERE si.sale_id IN (?)`,
+    [saleIds]
+  );
+
+  const itemsBySaleId = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const saleId = String(item.sale_id || '');
+    if (!itemsBySaleId.has(saleId)) itemsBySaleId.set(saleId, []);
+    itemsBySaleId.get(saleId).push(item);
+  }
+
+  const profitCents = sales.reduce((sum, sale) => (
+    sum + calculateDashboardSaleProfit(sale, itemsBySaleId.get(String(sale.id)) || [])
+  ), 0);
+
+  return {
+    profitCents,
+    referenceDate: dateKey,
+    salesCount: sales.length,
+  };
+}
+
 function hashPdvDisplaySecret(value) {
   return crypto.createHash('sha256').update(String(value || '').trim()).digest('hex');
 }
@@ -1239,6 +1329,23 @@ fastify.patch('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, 
   };
 });
 
+fastify.post('/admin/dashboard/profit', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const verification = verifyDashboardProfitPassword(req.body?.password);
+  if (verification.missing) {
+    return reply.code(503).send({ error: 'dashboard_profit_password_not_configured' });
+  }
+  if (!verification.ok) {
+    return reply.code(401).send({ error: 'invalid_dashboard_profit_password' });
+  }
+
+  try {
+    return await calculateDashboardProfitForDate(req.body?.referenceDate);
+  } catch (error) {
+    console.error('[admin-dashboard-profit] failed:', error);
+    return reply.code(500).send({ error: 'failed_to_calculate_dashboard_profit' });
+  }
+});
+
 function normalizeVpsProxyPath(input) {
   const value = Array.isArray(input) ? input[0] : input;
   const proxyPath = String(value || '').trim();
@@ -1643,6 +1750,89 @@ function formatDateOnly(value) {
   return date.toISOString().slice(0, 10);
 }
 
+function parseCustomerDebtPaymentAllocations(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function processCustomerDebtPaymentAllocation(connection, {
+  debt,
+  valorPagoCentavos,
+  dataPagamento,
+  metodoPagamento,
+  mercadoPagoId,
+  mercadoPagoLink,
+  payment,
+}) {
+  const paymentId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+  await connection.query(
+    `INSERT INTO customer_debt_payments
+      (id, debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes, mercado_pago_id, mercado_pago_link)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      paymentId,
+      debt.id,
+      valorPagoCentavos,
+      dataPagamento,
+      metodoPagamento,
+      'Baixa automatica via Mercado Pago',
+      mercadoPagoId,
+      mercadoPagoLink,
+    ]
+  );
+
+  const novoSaldo = Math.max(0, Number(debt.saldo_devedor || 0) - valorPagoCentavos);
+  const novoStatus = novoSaldo === 0 ? 'paid' : 'partial';
+  await connection.query('UPDATE customer_debts SET saldo_devedor = ?, status = ? WHERE id = ?', [
+    novoSaldo,
+    novoStatus,
+    debt.id,
+  ]);
+
+  const [customers] = await connection.query(
+    'SELECT name, cpf_cnpj, phone, email FROM customers WHERE id = ?',
+    [debt.customer_id]
+  );
+
+  let receiptId = null;
+  if (customers.length > 0) {
+    const customer = customers[0];
+    receiptId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+    const receiptNumber = `REC-${dataPagamento.replace(/-/g, '')}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+    await connection.query(
+      `INSERT INTO avulso_receipts
+        (id, numero, tipo, nome_contato, cpf_cnpj, telefone, email, customer_id, valor, descricao, data_emissao)
+       VALUES (?, ?, 'receber', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        receiptId,
+        receiptNumber,
+        customer.name,
+        customer.cpf_cnpj || null,
+        customer.phone || null,
+        customer.email || null,
+        debt.customer_id,
+        valorPagoCentavos / 100,
+        `Baixa automatica Mercado Pago - Ref: ${debt.descricao}`,
+        dataPagamento,
+      ]
+    );
+  }
+
+  return {
+    payment_id: paymentId,
+    receipt_id: receiptId,
+    debt_id: debt.id,
+    saldo_devedor: novoSaldo,
+    status: novoStatus,
+  };
+}
+
 async function processCustomerDebtMercadoPagoPayment(payment) {
   const gatewayPaymentId = String(payment?.id || '').trim();
   const { debtId, valorLiquidoCentavos, external_reference, metadata } = getCustomerDebtWebhookContext(payment);
@@ -1717,6 +1907,77 @@ async function processCustomerDebtMercadoPagoPayment(payment) {
         [debtId]
       );
       intent = latestIntents?.[0] || null;
+    }
+
+    const intentAllocations = parseCustomerDebtPaymentAllocations(intent?.allocations_json);
+    if (intent && intentAllocations.length > 0) {
+      if (intent.status === 'approved') {
+        await connection.commit();
+        return { status: 200, body: { message: 'already processed', intent_id: intent.id } };
+      }
+
+      const fallbackAmount = Math.round(Number(payment?.transaction_amount || 0) * 100);
+      const valorBase = valorLiquidoCentavos || Number(intent?.valor_liquido || 0) || fallbackAmount;
+      const expectedTotal = intentAllocations.reduce((sum, allocation) => sum + Math.max(0, Math.round(Number(allocation.valor_liquido || 0))), 0);
+      if (expectedTotal <= 0 || Math.round(valorBase) < expectedTotal) {
+        await connection.rollback();
+        return {
+          status: 200,
+          body: {
+            error: 'invalid customer debt allocation amount',
+            debug: buildCustomerDebtDebug('validate customer debt allocations', {
+              paymentId: gatewayPaymentId,
+              intent_id: intent.id,
+              valorBase,
+              expectedTotal,
+            }),
+          },
+        };
+      }
+
+      const dataPagamento = formatDateOnly(payment?.date_approved || payment?.date_created || new Date());
+      const metodoPagamento = String(payment?.payment_method_id || payment?.payment_type_id || 'mercado_pago').slice(0, 40);
+      const mercadoPagoLink =
+        payment?.transaction_details?.external_resource_url ||
+        payment?.point_of_interaction?.transaction_data?.ticket_url ||
+        payment?.receipt_url ||
+        null;
+      const processed = [];
+
+      for (const allocation of intentAllocations) {
+        const allocationDebtId = String(allocation.debt_id || '').trim();
+        const allocationValue = Math.max(0, Math.round(Number(allocation.valor_liquido || 0)));
+        if (!allocationDebtId || allocationValue <= 0) continue;
+        const [allocationDebts] = await connection.query('SELECT * FROM customer_debts WHERE id = ? FOR UPDATE', [allocationDebtId]);
+        const allocationDebt = allocationDebts?.[0];
+        if (!allocationDebt || Number(allocationDebt.saldo_devedor || 0) <= 0 || allocationDebt.status === 'paid') continue;
+        const valueToPay = Math.min(allocationValue, Number(allocationDebt.saldo_devedor || 0));
+        const result = await processCustomerDebtPaymentAllocation(connection, {
+          debt: allocationDebt,
+          valorPagoCentavos: valueToPay,
+          dataPagamento,
+          metodoPagamento,
+          mercadoPagoId: `${gatewayPaymentId}:${allocationDebtId.slice(0, 8)}`,
+          mercadoPagoLink,
+          payment,
+        });
+        processed.push(result);
+      }
+
+      await connection.query(
+        'UPDATE customer_debt_payment_intents SET status = ?, provider_intent_id = COALESCE(provider_intent_id, ?), raw_response = ? WHERE id = ?',
+        ['approved', gatewayPaymentId, JSON.stringify(payment), intent.id]
+      );
+      await connection.commit();
+      return {
+        status: 200,
+        body: {
+          message: 'success',
+          flow: 'customer_debt',
+          intent_id: intent.id,
+          processed,
+        },
+      };
     }
 
     if (Number(debt.saldo_devedor || 0) <= 0 || debt.status === 'paid') {
@@ -6860,9 +7121,125 @@ async function createOrUpdateGoogleContact({ sender, name }) {
   return { ok: true, resourceName: contact.resourceName || null };
 }
 
+function getGoogleContactDisplayName(person) {
+  const names = Array.isArray(person?.names) ? person.names : [];
+  const primaryName = names.find((name) => name.metadata?.primary) || names[0] || null;
+  return normalizeAutoresponderContactName(
+    primaryName?.displayName || primaryName?.unstructuredName || primaryName?.givenName || ''
+  );
+}
+
+function googleContactPhoneMatches(person, sender) {
+  const senderKeys = getAutoresponderPhoneMatchKeys(sender);
+  if (!senderKeys.length) return false;
+  const phoneNumbers = Array.isArray(person?.phoneNumbers) ? person.phoneNumbers : [];
+  return phoneNumbers.some((phone) => {
+    const valueKeys = getAutoresponderPhoneMatchKeys(phone?.canonicalForm || phone?.value || '');
+    return valueKeys.some((valueDigits) => senderKeys.some((senderDigits) => (
+      valueDigits === senderDigits
+      || valueDigits.endsWith(senderDigits)
+      || senderDigits.endsWith(valueDigits)
+    )));
+  });
+}
+
+function getAutoresponderPhoneMatchKeys(value) {
+  const digits = normalizeAutoresponderSender(value);
+  if (!digits) return [];
+  const keys = new Set([digits]);
+  if (digits.startsWith('55')) {
+    if (digits.length === 12) {
+      keys.add(`${digits.slice(0, 4)}9${digits.slice(4)}`);
+    } else if (digits.length === 13 && digits[4] === '9') {
+      keys.add(`${digits.slice(0, 4)}${digits.slice(5)}`);
+    }
+  }
+  return Array.from(keys);
+}
+
+async function searchGooglePeopleByPhone({ accessToken, endpoint, sender, phoneNumber, allowForbidden = false }) {
+  const query = new URLSearchParams({
+    query: phoneNumber,
+    readMask: 'names,phoneNumbers',
+    pageSize: '10',
+  });
+  const res = await fetch(`https://people.googleapis.com/v1/${endpoint}?${query.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    if (allowForbidden && (res.status === 401 || res.status === 403)) {
+      console.warn(`[autoresponder] Google Contacts lookup skipped ${endpoint}: ${res.status}`);
+      return null;
+    }
+    throw new Error(`Google contact search failed: ${res.status} ${await res.text()}`);
+  }
+
+  const data = await res.json();
+  const results = Array.isArray(data.results) ? data.results : [];
+  return results
+    .map((result) => result.person)
+    .find((candidate) => googleContactPhoneMatches(candidate, sender));
+}
+
+async function listGoogleConnectionsByPhone({ accessToken, sender }) {
+  let pageToken = '';
+  let pages = 0;
+  do {
+    const query = new URLSearchParams({
+      resourceName: 'people/me',
+      personFields: 'names,phoneNumbers',
+      pageSize: '1000',
+    });
+    if (pageToken) query.set('pageToken', pageToken);
+    const res = await fetch(`https://people.googleapis.com/v1/people/me/connections?${query.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) {
+      throw new Error(`Google connections lookup failed: ${res.status} ${await res.text()}`);
+    }
+    const data = await res.json();
+    const person = (Array.isArray(data.connections) ? data.connections : [])
+      .find((candidate) => googleContactPhoneMatches(candidate, sender));
+    if (person) return person;
+    pageToken = data.nextPageToken || '';
+    pages += 1;
+  } while (pageToken && pages < 10);
+  return null;
+}
+
+async function findGoogleContactByPhone(sender) {
+  const accessToken = await getGoogleContactsAccessToken();
+  if (!accessToken) return { ok: false, skipped: true, reason: 'google_contacts_not_configured' };
+
+  const phoneNumber = formatAutoresponderPhoneForGoogle(sender);
+  if (!phoneNumber) return { ok: false, skipped: true, reason: 'missing_phone' };
+
+  const person = await searchGooglePeopleByPhone({
+    accessToken,
+    endpoint: 'people:searchContacts',
+    sender,
+    phoneNumber,
+  }) || await listGoogleConnectionsByPhone({
+    accessToken,
+    sender,
+  }) || await searchGooglePeopleByPhone({
+    accessToken,
+    endpoint: 'otherContacts:search',
+    sender,
+    phoneNumber,
+    allowForbidden: true,
+  });
+  const name = getGoogleContactDisplayName(person);
+  if (!person || !name) return { ok: false, skipped: true, reason: 'not_found' };
+
+  return { ok: true, name, resourceName: person.resourceName || null };
+}
+
 async function getAutoresponderContactNameState(sender) {
   const [rows] = await pool.query(
-    `SELECT contact_name_status, contact_name_suggestion, contact_name_confirmed, google_contact_resource_name
+    `SELECT contact_name, contact_name_status, contact_name_suggestion, contact_name_confirmed, google_contact_resource_name
      FROM autoresponder_conversations
      WHERE sender = ?
      LIMIT 1`,
@@ -6916,6 +7293,48 @@ async function saveAutoresponderConfirmedContactName(sender, name, googleResult)
   );
 }
 
+async function saveAutoresponderGoogleContactMatch(sender, googleContact) {
+  const name = normalizeAutoresponderContactName(googleContact?.name);
+  if (!name) return null;
+  const firstName = getAutoresponderContactFirstNameFromName(name);
+  const aliasCandidates = Array.from(new Set([name, firstName].filter(Boolean)));
+  await pool.query(
+    `INSERT INTO autoresponder_conversations
+      (sender, last_message_at, contact_name, contact_name_status, contact_name_confirmed, google_contact_resource_name, contact_name_updated_at)
+     VALUES (?, CURRENT_TIMESTAMP, ?, 'google_synced', ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       contact_name = ?,
+       contact_name_status = 'google_synced',
+       contact_name_confirmed = ?,
+       google_contact_resource_name = ?,
+       contact_name_updated_at = CURRENT_TIMESTAMP`,
+    [sender, firstName || name, name, googleContact.resourceName || null, firstName || name, name, googleContact.resourceName || null]
+  );
+  await mergeAutoresponderConversationAliases(aliasCandidates, sender);
+  return firstName || name;
+}
+
+async function resolveAutoresponderContactFirstName(sender, payloadContactFirstName = '') {
+  const existingName = getAutoresponderContactFirstNameFromName(payloadContactFirstName);
+  if (existingName) return existingName;
+
+  const state = await getAutoresponderContactNameState(sender);
+  const savedName = getAutoresponderContactFirstNameFromName(
+    state?.contact_name_confirmed || state?.contact_name || ''
+  );
+  if (savedName) return savedName;
+
+  const googleContact = await findGoogleContactByPhone(sender).catch((err) => {
+    console.warn('[autoresponder] google contact lookup failed:', err.message);
+    return null;
+  });
+  if (googleContact?.ok) {
+    return saveAutoresponderGoogleContactMatch(sender, googleContact);
+  }
+
+  return '';
+}
+
 function formatAutoresponderContactSavedReply(name, googleResult) {
   const firstName = getAutoresponderContactFirstNameFromName(name);
   if (googleResult?.ok) {
@@ -6928,12 +7347,59 @@ function formatAutoresponderContactFollowUpReply() {
   return 'Em que posso ajudar voce hoje? ✨';
 }
 
+async function ensureAutoresponderContactNameCurationTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS autoresponder_contact_name_curation (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      source_type ENUM('invalid_contact_name') NOT NULL DEFAULT 'invalid_contact_name',
+      sender VARCHAR(80) NOT NULL,
+      contact_name VARCHAR(160) NULL,
+      message TEXT NOT NULL,
+      reason VARCHAR(80) NOT NULL DEFAULT 'invalid_contact_name_reply',
+      occurrences INT UNSIGNED NOT NULL DEFAULT 1,
+      status ENUM('open','resolved','ignored') NOT NULL DEFAULT 'open',
+      last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      resolved_name VARCHAR(160) NULL,
+      resolved_at TIMESTAMP NULL,
+      UNIQUE KEY uniq_contact_name_curation_open (sender, message(160), status),
+      KEY idx_contact_name_curation_status (status, last_seen_at),
+      KEY idx_contact_name_curation_sender (sender)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+}
+
+async function recordAutoresponderContactNameCuration({ sender, message, contactName = null, reason = 'invalid_contact_name_reply' }) {
+  const cleanMessage = String(message || '').trim();
+  if (!sender || !cleanMessage) return null;
+  await ensureAutoresponderContactNameCurationTable();
+  await pool.query(
+    `INSERT INTO autoresponder_contact_name_curation
+      (source_type, sender, contact_name, message, reason, occurrences, status, last_seen_at)
+     VALUES ('invalid_contact_name', ?, ?, ?, ?, 1, 'open', CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       occurrences = occurrences + 1,
+       contact_name = COALESCE(VALUES(contact_name), contact_name),
+       reason = VALUES(reason),
+       last_seen_at = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP`,
+    [sender, contactName, cleanMessage, reason]
+  );
+  return { ok: true };
+}
+
 function isAutoresponderInvalidContactNameReply(message) {
+  const raw = String(message || '').trim();
+  const text = normalizeAutoresponderText(raw).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const looksLikeCommercialQuestion = raw.includes('?')
+    || /\b(vende|vender|tem|quero|queria|procuro|preciso|manda|mande|lista|celular|celulares|smartphone|smartphones|tablet|capa|capinha|iphone|xiaomi|redmi|samsung|entrega|entregar|loja|aberto|preco|preco|valor|quanto|comprar|compra|detalhes|mais)\b/.test(text);
   return isAutoresponderYes(message)
     || isAutoresponderNo(message)
     || isAutoresponderExplicitCatalogListRequest(message)
     || isAutoresponderStandaloneDeliveryQuoteRequest(message)
-    || normalizeAutoresponderCep(message);
+    || normalizeAutoresponderCep(message)
+    || looksLikeCommercialQuestion;
 }
 
 async function confirmAutoresponderContactName(sender, name) {
@@ -6953,7 +7419,7 @@ async function handleAutoresponderContactNameFlow({ sender, message, contactFirs
   const status = String(state?.contact_name_status || '');
   const suggestedName = normalizeAutoresponderContactName(state?.contact_name_suggestion || contactFirstName);
 
-  if (status === 'saved_to_google' || status === 'google_pending') return null;
+  if (status === 'saved_to_google' || status === 'google_pending' || status === 'google_synced') return null;
 
   if (status === 'awaiting_name_confirmation') {
     if (isAutoresponderYes(message) && suggestedName) {
@@ -6969,6 +7435,14 @@ async function handleAutoresponderContactNameFlow({ sender, message, contactFirs
   if (status === 'awaiting_name_input') {
     const typedName = normalizeAutoresponderContactName(message);
     if (isAutoresponderInvalidContactNameReply(message) || typedName.length < 2 || typedName.split(' ').length > 5) {
+      await recordAutoresponderContactNameCuration({
+        sender,
+        message,
+        contactName: state?.contact_name || state?.contact_name_suggestion || null,
+        reason: 'invalid_contact_name_reply',
+      }).catch((err) => {
+        console.warn('[autoresponder] contact name curation record failed:', err.message);
+      });
       return 'Me envie apenas o nome que devo colocar no seu contato, por favor. 😊';
     }
     return confirmAutoresponderContactName(sender, typedName);
@@ -7354,8 +7828,8 @@ function buildAutoresponderAiConversationMemoryContext(rows = []) {
     const reply = limitText(String(row?.reply_text || '').trim(), 700);
     const intent = String(row?.intent || '').trim();
     const createdAt = row?.created_at ? String(row.created_at).slice(0, 19) : '';
-    lines.push(`${index + 1}. ${createdAt ? `[${createdAt}] ` : ``}Cliente: ${question}`);
-    if (reply) lines.push(`   Bot${intent ? ` (${intent})` : ``}: ${reply}`);
+    lines.push(`${index + 1}. ${createdAt ? `[${createdAt}] ` : ''}Cliente: ${question}`);
+    if (reply) lines.push(`   Bot${intent ? ` (${intent})` : ''}: ${reply}`);
   });
   return lines.join('\n');
 }
@@ -7789,18 +8263,28 @@ function findAutoresponderCatalogCategoryForMessage(message, categories) {
   const safeCategories = Array.isArray(categories) ? categories : [];
   if (!text || safeCategories.length === 0) return null;
 
-  const directMatch = safeCategories.find((category) => {
-    const name = normalizeAutoresponderText(category?.name || '').trim();
-    return name && (text.includes(name) || name.includes(text));
-  });
-  if (directMatch) return directMatch;
-
   const phoneCategoryHints = [
     'celular', 'celulares', 'smartphone', 'smartphones', 'aparelho', 'aparelhos',
     'telefone', 'telefones', 'phone', 'phones', 'iphone', 'xiaomi', 'samsung',
     'tablet', 'tablets', 'tablte', 'tabltes', 'receptor', 'receptores',
   ];
   const asksForPhone = phoneCategoryHints.some((keyword) => text.includes(keyword));
+  const preferredPhoneCategoryNames = ['smartphones', 'smartphone', 'celulares', 'celular'];
+  if (asksForPhone) {
+    const preferredCategory = preferredPhoneCategoryNames
+      .map((preferredName) => safeCategories.find((category) => (
+        normalizeAutoresponderText(category?.name || '').trim() === preferredName
+      )))
+      .find(Boolean);
+    if (preferredCategory) return preferredCategory;
+  }
+
+  const directMatch = safeCategories.find((category) => {
+    const name = normalizeAutoresponderText(category?.name || '').trim();
+    return name && (text.includes(name) || name.includes(text));
+  });
+  if (directMatch) return directMatch;
+
   if (!asksForPhone) return null;
 
   return safeCategories.find((category) => {
@@ -10158,26 +10642,12 @@ function formatAutoresponderPaginationSummary({ offset = 0, limit = AUTORESPONDE
   return '';
 }
 
-const AUTORESPONDER_COMPLETE_PRODUCT_LIST_WORDS = new Set([
-  'celular',
-  'celulares',
-  'smartphone',
-  'smartphones',
-  'tablet',
-  'tablets',
-  'tablte',
-  'tabltes',
-  'receptor',
-  'receptores',
-]);
-
 function isAutoresponderCompleteProductListKeyword(keyword) {
-  const tokens = normalizeAutoresponderText(keyword)
+  const text = normalizeAutoresponderText(keyword)
     .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter(Boolean);
-  return tokens.some((token) => AUTORESPONDER_COMPLETE_PRODUCT_LIST_WORDS.has(token));
+    .replace(/\s+/g, ' ')
+    .trim();
+  return /\b(lista completa|catalogo completo|todos os modelos|todas as opcoes|ver tudo|mostrar tudo)\b/.test(text);
 }
 
 function getAutoresponderProductQueryLimit(limit) {
@@ -11124,7 +11594,7 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   }
 
   const categories = await findAutoresponderAvailableCategories(20);
-  const selectedCategory = findAutoresponderCatalogCategoryForMessage('celulares', categories);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage('smartphones', categories);
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
@@ -11218,6 +11688,7 @@ function buildAutoresponderReplyMessagesWithSeparateGreeting(replyMessages, { me
 
 async function buildAutoresponderPriorityProductSearchReplyData({ message, contactFirstName = '', settings = null, shouldPrefixGreeting = false } = {}) {
   if (normalizeAutoresponderCep(message)) return null;
+  if (isAutoresponderCatalogRequest(message)) return null;
   if (!isAutoresponderLikelyProductModelRequest(message)) return null;
   const productSearchTokens = extractAutoresponderProductSearchTokens(message);
   if (productSearchTokens.length === 0) return null;
@@ -11506,6 +11977,125 @@ async function touchAutoresponderConversation(sender) {
   );
 }
 
+async function pauseAutoresponderConversationForHumanHandoff(sender, pauseMinutes = 240) {
+  const minutes = Math.max(1, Math.min(Number(pauseMinutes) || 240, 60 * 24 * 7));
+  await pool.query(
+    `INSERT INTO autoresponder_conversations (sender, last_message_at, paused_until, pause_reason)
+     VALUES (?, CURRENT_TIMESTAMP, DATE_ADD(NOW(), INTERVAL ? MINUTE), 'human_handoff')
+     ON DUPLICATE KEY UPDATE
+       last_message_at = CURRENT_TIMESTAMP,
+       paused_until = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+       pause_reason = 'human_handoff'`,
+    [sender, minutes, minutes]
+  );
+}
+
+function getAutoresponderConversationAliasCandidates(payload = {}) {
+  const candidates = [
+    payload.pushName,
+    payload.contactName,
+    payload.senderName,
+    payload.sender_name,
+    payload.contact_name,
+    payload.name,
+  ]
+    .map((value) => normalizeAutoresponderContactName(value))
+    .filter(Boolean)
+    .filter((value) => normalizeAutoresponderSender(value).length < 8)
+    .filter((value) => !['Voce', 'Você', 'Mercado do Vale'].includes(value));
+  return Array.from(new Set(candidates));
+}
+
+function latestDateValue(...values) {
+  const dates = values
+    .filter(Boolean)
+    .map((value) => new Date(value))
+    .filter((date) => !Number.isNaN(date.getTime()));
+  if (!dates.length) return null;
+  return dates.reduce((latest, date) => (date > latest ? date : latest), dates[0]);
+}
+
+async function mergeAutoresponderConversationAlias(aliasSender, canonicalSender) {
+  const alias = String(aliasSender || '').trim();
+  const canonical = normalizeAutoresponderSender(canonicalSender) || String(canonicalSender || '').trim();
+  if (!alias || !canonical || alias === canonical) return false;
+
+  const [aliasRows] = await pool.query(
+    'SELECT * FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+    [alias]
+  );
+  const aliasConversation = aliasRows[0];
+  if (!aliasConversation) return false;
+
+  const [canonicalRows] = await pool.query(
+    'SELECT * FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
+    [canonical]
+  );
+  const canonicalConversation = canonicalRows[0];
+
+  if (!canonicalConversation) {
+    await pool.query('UPDATE autoresponder_conversations SET sender = ? WHERE sender = ?', [canonical, alias]);
+    await pool.query('UPDATE autoresponder_logs SET sender = ? WHERE sender = ?', [canonical, alias]);
+    return true;
+  }
+
+  const lastMessageAt = latestDateValue(canonicalConversation.last_message_at, aliasConversation.last_message_at);
+  const lastBotReplyAt = latestDateValue(canonicalConversation.last_bot_reply_at, aliasConversation.last_bot_reply_at);
+  const pausedUntil = latestDateValue(canonicalConversation.paused_until, aliasConversation.paused_until);
+  const contactName = canonicalConversation.contact_name || aliasConversation.contact_name || alias;
+  const contactNameConfirmed = canonicalConversation.contact_name_confirmed || aliasConversation.contact_name_confirmed || alias;
+
+  await pool.query(
+    `UPDATE autoresponder_conversations
+     SET first_seen_at = COALESCE(LEAST(first_seen_at, ?), first_seen_at, ?),
+         last_message_at = COALESCE(?, last_message_at),
+         last_bot_reply_at = COALESCE(?, last_bot_reply_at),
+         paused_until = COALESCE(?, paused_until),
+         pause_reason = COALESCE(pause_reason, ?),
+         consecutive_fallbacks = GREATEST(consecutive_fallbacks, ?),
+         reply_count = reply_count + ?,
+         total_messages = total_messages + ?,
+         contact_name = COALESCE(contact_name, ?),
+         contact_name_status = COALESCE(contact_name_status, ?),
+         contact_name_suggestion = COALESCE(contact_name_suggestion, ?),
+         contact_name_confirmed = COALESCE(contact_name_confirmed, ?),
+         google_contact_resource_name = COALESCE(google_contact_resource_name, ?),
+         contact_name_updated_at = COALESCE(contact_name_updated_at, ?),
+         attendant_name = COALESCE(attendant_name, ?),
+         attendant_updated_at = COALESCE(attendant_updated_at, ?)
+     WHERE sender = ?`,
+    [
+      aliasConversation.first_seen_at,
+      aliasConversation.first_seen_at,
+      lastMessageAt,
+      lastBotReplyAt,
+      pausedUntil,
+      aliasConversation.pause_reason || null,
+      Number(aliasConversation.consecutive_fallbacks || 0),
+      Number(aliasConversation.reply_count || 0),
+      Number(aliasConversation.total_messages || 0),
+      contactName,
+      aliasConversation.contact_name_status || null,
+      aliasConversation.contact_name_suggestion || null,
+      contactNameConfirmed,
+      aliasConversation.google_contact_resource_name || null,
+      aliasConversation.contact_name_updated_at || null,
+      aliasConversation.attendant_name || null,
+      aliasConversation.attendant_updated_at || null,
+      canonical,
+    ]
+  );
+  await pool.query('UPDATE autoresponder_logs SET sender = ? WHERE sender = ?', [canonical, alias]);
+  await pool.query('DELETE FROM autoresponder_conversations WHERE sender = ?', [alias]);
+  return true;
+}
+
+async function mergeAutoresponderConversationAliases(aliasCandidates, canonicalSender) {
+  for (const alias of Array.isArray(aliasCandidates) ? aliasCandidates : []) {
+    await mergeAutoresponderConversationAlias(alias, canonicalSender);
+  }
+}
+
 async function isAutoresponderBlocked(sender) {
   const rawSender = String(sender || '').trim();
   const normalizedSender = normalizeAutoresponderSender(rawSender);
@@ -11697,6 +12287,27 @@ async function sendAutoresponderEvolutionTextMessage(sender, text) {
   });
 }
 
+function buildAutoresponderEvolutionWebhookConfig() {
+  return {
+    enabled: true,
+    url: 'https://api.xiaomipetrolina.com.br/autoresponder-webhook',
+    byEvents: false,
+    webhookByEvents: false,
+    base64: false,
+    webhookBase64: false,
+    headers: {
+      'x-autoresponder-token': process.env.AUTORESPONDER_TOKEN || ''
+    },
+    events: ['CONNECTION_UPDATE', 'MESSAGES_UPSERT']
+  };
+}
+
+async function syncAutoresponderEvolutionWebhook() {
+  return callEvolutionApiDetailed(`/webhook/set/${EVOLUTION_INSTANCE_NAME}`, 'POST', {
+    webhook: buildAutoresponderEvolutionWebhookConfig()
+  });
+}
+
 fastify.get('/autoresponder/whatsapp/state', { preHandler: requireSyncKey }, async (req, reply) => {
   try {
     const result = await callEvolutionApi(`/instance/connectionState/${EVOLUTION_INSTANCE_NAME}`);
@@ -11738,16 +12349,7 @@ fastify.get('/autoresponder/whatsapp/connect', { preHandler: requireSyncKey }, a
       qrcode: true,
       number: process.env.EVOLUTION_INSTANCE_NUMBER || '',
       integration: 'WHATSAPP-BAILEYS',
-      webhook: {
-        enabled: true,
-        url: 'https://api.xiaomipetrolina.com.br/autoresponder-webhook',
-        byEvents: true,
-        base64: false,
-        headers: {
-          'x-autoresponder-token': process.env.AUTORESPONDER_TOKEN || ''
-        },
-        events: ['CONNECTION_UPDATE', 'MESSAGES_UPSERT']
-      }
+      webhook: buildAutoresponderEvolutionWebhookConfig()
     };
 
     const createResult = await callEvolutionApiDetailed('/instance/create', 'POST', createBody);
@@ -11763,6 +12365,11 @@ fastify.get('/autoresponder/whatsapp/connect', { preHandler: requireSyncKey }, a
       });
     }
 
+    const webhookResult = await syncAutoresponderEvolutionWebhook().catch((err) => ({
+      ok: false,
+      status: 0,
+      body: { message: err.message || 'Evolution webhook sync failed' }
+    }));
     const connectResult = await callEvolutionApiDetailed(`/instance/connect/${EVOLUTION_INSTANCE_NAME}`);
     if (!connectResult.ok || connectResult.body?.error === true) {
       return reply.code(502).send({
@@ -11772,9 +12379,29 @@ fastify.get('/autoresponder/whatsapp/connect', { preHandler: requireSyncKey }, a
           || 'Evolution API failed to connect the WhatsApp instance.',
         evolutionStatus: connectResult.status,
         evolution: connectResult.body,
+        webhook: webhookResult.body,
       });
     }
-    return connectResult.body;
+    return { ...connectResult.body, webhook: webhookResult.body };
+  } catch (err) {
+    return reply.code(500).send({ error: err.message });
+  }
+});
+
+fastify.post('/autoresponder/whatsapp/sync-webhook', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    const webhookResult = await syncAutoresponderEvolutionWebhook();
+    if (!webhookResult.ok || webhookResult.body?.error === true) {
+      return reply.code(502).send({
+        error: true,
+        phase: 'webhook',
+        message: formatEvolutionMessage(webhookResult.body?.message || webhookResult.body?.response || webhookResult.body)
+          || 'Evolution API failed to sync the WhatsApp webhook.',
+        evolutionStatus: webhookResult.status,
+        evolution: webhookResult.body,
+      });
+    }
+    return { ok: true, webhook: webhookResult.body };
   } catch (err) {
     return reply.code(500).send({ error: err.message });
   }
@@ -12565,6 +13192,57 @@ fastify.delete('/autoresponder/unanswered', { preHandler: requireSyncKey }, asyn
   return { ok: true, deleted: Number(result?.affectedRows || 0) };
 });
 
+fastify.get('/autoresponder/contact-name-curation', { preHandler: requireSyncKey }, async (req) => {
+  await ensureAutoresponderContactNameCurationTable();
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const requestedStatus = String(req.query.status || 'open');
+  const status = ['open', 'resolved', 'ignored'].includes(requestedStatus) ? requestedStatus : 'open';
+  const [rows] = await pool.query(
+    `SELECT id, source_type, sender, contact_name, message, reason, occurrences, status, last_seen_at, created_at, updated_at, resolved_name, resolved_at
+     FROM autoresponder_contact_name_curation
+     WHERE status = ?
+     ORDER BY last_seen_at DESC
+     LIMIT ${limit}`,
+    [status]
+  );
+  return rows;
+});
+
+fastify.post('/autoresponder/contact-name-curation/:id/ignore', { preHandler: requireSyncKey }, async (req, reply) => {
+  await ensureAutoresponderContactNameCurationTable();
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return reply.code(400).send({ error: 'invalid id' });
+  await pool.query(
+    `UPDATE autoresponder_contact_name_curation
+     SET status = 'ignored', updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [id]
+  );
+  return { ok: true };
+});
+
+fastify.post('/autoresponder/contact-name-curation/:id/resolve', { preHandler: requireSyncKey }, async (req, reply) => {
+  await ensureAutoresponderContactNameCurationTable();
+  const id = Number(req.params.id);
+  const resolvedName = normalizeAutoresponderContactName(req.body?.name || '');
+  if (!Number.isFinite(id) || id <= 0) return reply.code(400).send({ error: 'invalid id' });
+  if (!resolvedName) return reply.code(400).send({ error: 'name is required' });
+  const [rows] = await pool.query(
+    `SELECT sender FROM autoresponder_contact_name_curation WHERE id = ? LIMIT 1`,
+    [id]
+  );
+  const sender = rows[0]?.sender;
+  if (!sender) return reply.code(404).send({ error: 'curation item not found' });
+  await saveAutoresponderConfirmedContactName(sender, resolvedName, { ok: false });
+  await pool.query(
+    `UPDATE autoresponder_contact_name_curation
+     SET status = 'resolved', resolved_name = ?, resolved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [resolvedName, id]
+  );
+  return { ok: true, sender, name: resolvedName };
+});
+
 async function getAutoresponderTopProducts(limit = 10) {
   const [rows] = await pool.query(
     `SELECT matched_products
@@ -12851,6 +13529,19 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: normalizedSender });
   shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
 
+  const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({
+    sender: normalizedSender,
+    message,
+    settings,
+    shouldPrefixGreeting: false,
+  });
+  if (phoneListOptInReply) return {
+    intent: 'catalog_phone_opt_in',
+    matched_count: phoneListOptInReply.replies?.length || 0,
+    replies: phoneListOptInReply.replies,
+    sender: normalizedSender,
+  };
+
   const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
     message,
     contactFirstName,
@@ -12865,19 +13556,6 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
       sender: normalizedSender,
     };
   }
-
-  const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({
-    sender: normalizedSender,
-    message,
-    settings,
-    shouldPrefixGreeting: false,
-  });
-  if (phoneListOptInReply) return {
-    intent: 'catalog_phone_opt_in',
-    matched_count: phoneListOptInReply.replies?.length || 0,
-    replies: phoneListOptInReply.replies,
-    sender: normalizedSender,
-  };
 
   if (isAutoresponderAudioMessage(message)) {
     const audioReplyText = getAutoresponderToneMessage(settings, normalizedSender, 'audioUnsupported', AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY);
@@ -13220,8 +13898,168 @@ fastify.patch('/products/:id/tags', { preHandler: requireSyncKey }, async (req, 
   return { ok: true, tag_ids: tagIds };
 });
 
+function extractEvolutionMessageText(messagePayload) {
+  const message = messagePayload || {};
+  return String(
+    message.conversation
+    || message.extendedTextMessage?.text
+    || message.imageMessage?.caption
+    || message.videoMessage?.caption
+    || message.buttonsResponseMessage?.selectedDisplayText
+    || message.buttonsResponseMessage?.selectedButtonId
+    || message.listResponseMessage?.title
+    || message.listResponseMessage?.singleSelectReply?.selectedRowId
+    || message.templateButtonReplyMessage?.selectedDisplayText
+    || message.templateButtonReplyMessage?.selectedId
+    || ''
+  ).trim();
+}
+
+function normalizeEvolutionWebhookPayload(rawPayload) {
+  const payload = rawPayload && typeof rawPayload === 'object' ? rawPayload : {};
+  const data = payload.data && typeof payload.data === 'object' ? payload.data : payload;
+  const key = data.key && typeof data.key === 'object' ? data.key : {};
+  const eventName = String(payload.event || payload.type || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const remoteJid = String(key.remoteJid || data.remoteJid || data.from || '').trim();
+  const remoteJidAlt = String(key.remoteJidAlt || data.remoteJidAlt || '').trim();
+  const participant = String(key.participant || data.participant || '').trim();
+  const participantAlt = String(key.participantAlt || data.participantAlt || '').trim();
+  const senderJid = remoteJid.endsWith('@lid') && remoteJidAlt
+    ? remoteJidAlt
+    : remoteJid;
+  const participantJid = participant.endsWith('@lid') && participantAlt
+    ? participantAlt
+    : participant;
+  const messagePayload = data.message || payload.message || {};
+  const messageText = extractEvolutionMessageText(messagePayload) || String(data.text || data.messageText || '').trim();
+  const isEvolution = Boolean(
+    payload.instance
+    || payload.instanceName
+    || payload.server_url
+    || key.remoteJid
+    || eventName === 'MESSAGES_UPSERT'
+  );
+
+  if (!isEvolution) return null;
+
+  const pushName = String(data.pushName || payload.pushName || payload.name || '').trim();
+  return {
+    sender: senderJid || participantJid,
+    message: messageText,
+    isGroup: remoteJid.endsWith('@g.us'),
+    fromMe: key.fromMe === true || data.fromMe === true,
+    pushName,
+    name: pushName,
+    event: eventName,
+    messageId: String(key.id || data.messageId || data.id || '').trim(),
+    evolutionMessageSource: String(data.source || payload.source || '').trim(),
+    source: 'evolution',
+  };
+}
+
+const autoresponderEvolutionBotSendGuards = new Map();
+const autoresponderEvolutionWebhookEvents = new Map();
+
+function consumeAutoresponderEvolutionWebhookEvent(messageId) {
+  const key = String(messageId || '').trim();
+  if (!key) return false;
+  const now = Date.now();
+  const expiresAt = autoresponderEvolutionWebhookEvents.get(key) || 0;
+  if (expiresAt > now) return true;
+  autoresponderEvolutionWebhookEvents.set(key, now + 10 * 60 * 1000);
+  if (autoresponderEvolutionWebhookEvents.size > 2000) {
+    for (const [eventId, eventExpiresAt] of autoresponderEvolutionWebhookEvents) {
+      if (eventExpiresAt <= now) autoresponderEvolutionWebhookEvents.delete(eventId);
+    }
+  }
+  return false;
+}
+
+function releaseAutoresponderEvolutionWebhookEvent(messageId) {
+  const key = String(messageId || '').trim();
+  if (key) autoresponderEvolutionWebhookEvents.delete(key);
+}
+
+function normalizeAutoresponderEvolutionGuardText(value) {
+  return normalizeAutoresponderText(value).replace(/\s+/g, ' ').trim();
+}
+
+function rememberAutoresponderEvolutionBotReplies(sender, replies) {
+  const senderKey = normalizeAutoresponderSender(sender) || String(sender || '').trim();
+  if (!senderKey) return;
+  const texts = (Array.isArray(replies) ? replies : [])
+    .map((replyItem) => normalizeAutoresponderEvolutionGuardText(replyItem?.message || replyItem || ''))
+    .filter(Boolean);
+  if (!texts.length) return;
+  autoresponderEvolutionBotSendGuards.set(senderKey, {
+    expiresAt: Date.now() + 120000,
+    texts,
+  });
+}
+
+function consumeAutoresponderEvolutionBotReplyGuard(sender, message) {
+  const senderKey = normalizeAutoresponderSender(sender) || String(sender || '').trim();
+  const guard = autoresponderEvolutionBotSendGuards.get(senderKey);
+  if (!guard) return false;
+  if (guard.expiresAt <= Date.now()) {
+    autoresponderEvolutionBotSendGuards.delete(senderKey);
+    return false;
+  }
+  const text = normalizeAutoresponderEvolutionGuardText(message);
+  if (!text) return false;
+  const index = guard.texts.indexOf(text);
+  if (index < 0) return false;
+  guard.texts.splice(index, 1);
+  if (!guard.texts.length) autoresponderEvolutionBotSendGuards.delete(senderKey);
+  return true;
+}
+
+function isAutoresponderHumanOutboundEvolutionSource(source) {
+  return ['web', 'android', 'ios', 'desktop'].includes(String(source || '').trim().toLowerCase());
+}
+
+async function sendAutoresponderEvolutionReplies(sender, replies) {
+  const replyItems = Array.isArray(replies) ? replies : [];
+  const results = [];
+  for (const replyItem of replyItems) {
+    const text = String(replyItem?.message || replyItem || '').trim();
+    if (!text) continue;
+    results.push(await sendAutoresponderEvolutionTextMessage(sender, text));
+  }
+  return results;
+}
+
 fastify.addHook('onSend', async (req, reply, payload) => {
   if (!String(req.url || '').startsWith('/autoresponder-webhook')) return payload;
+  if (req.autoresponderWebhookSource === 'evolution') {
+    try {
+      const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+      if (reply.statusCode >= 400 || !Object.prototype.hasOwnProperty.call(parsed || {}, 'replies')) return payload;
+      const replies = Array.isArray(parsed?.replies) ? parsed.replies : [];
+      rememberAutoresponderEvolutionBotReplies(req.autoresponderSender, replies);
+      const sent = await sendAutoresponderEvolutionReplies(req.autoresponderSender, replies);
+      const allSent = sent.every((item) => item.ok);
+      if (!allSent) {
+        releaseAutoresponderEvolutionWebhookEvent(req.autoresponderMessageId);
+        reply.code(502);
+      }
+      reply.header('Content-Type', 'application/json; charset=utf-8');
+      return JSON.stringify({
+        ok: allSent,
+        source: 'evolution',
+        sender: req.autoresponderSender,
+        replies: replies.length,
+        sent: sent.map((item) => ({ ok: item.ok, status: item.status, body: item.body })),
+      });
+    } catch (err) {
+      reply.code(502);
+      return JSON.stringify({ ok: false, source: 'evolution', error: err.message || 'Evolution send failed' });
+    }
+  }
   const responseFormat = String(req.query?.format || req.query?.response_format || '').toLowerCase();
   if (!['text', 'plain', 'message'].includes(responseFormat)) return payload;
   try {
@@ -13243,14 +14081,31 @@ fastify.route({
     try {
       const requestBody = req.body || {};
       const nestedQuery = requestBody && typeof requestBody.query === 'object' ? requestBody.query : {};
-      const payload = { ...(req.query || {}), ...nestedQuery, ...requestBody };
+      const rawPayload = { ...(req.query || {}), ...nestedQuery, ...requestBody };
+      const evolutionPayload = normalizeEvolutionWebhookPayload(rawPayload);
+      const payload = { ...rawPayload, ...(evolutionPayload || {}) };
       const sender = String(payload.sender || payload.from || payload.phone || payload.number || payload.contact || '').trim();
       const message = String(payload.message || payload.text || payload.query || payload.body || payload.received_message || '').trim();
       const isGroup = payload.isGroup === true || String(payload.isGroup || '').toLowerCase() === 'true';
       const senderKey = normalizeAutoresponderSender(sender) || sender || 'unknown';
+      req.autoresponderWebhookSource = payload.source || '';
+      req.autoresponderSender = senderKey;
+      req.autoresponderMessageId = payload.messageId || '';
+      if (payload.source === 'evolution' && normalizeAutoresponderSender(sender)) {
+        await mergeAutoresponderConversationAliases(getAutoresponderConversationAliasCandidates(payload), senderKey);
+      }
+      if (payload.source === 'evolution' && payload.event && payload.event !== 'MESSAGES_UPSERT') {
+        return { replies: [] };
+      }
+      if (payload.source === 'evolution' && !normalizeAutoresponderSender(sender)) {
+        return { replies: [] };
+      }
+      if (payload.source === 'evolution' && consumeAutoresponderEvolutionWebhookEvent(payload.messageId)) {
+        return { replies: [], duplicate: true };
+      }
       const detectedIntent = detectAutoresponderIntent(message);
       let shouldPrefixGreeting = detectedIntent.greeting;
-      const contactFirstName = getAutoresponderContactFirstName(payload);
+      let contactFirstName = getAutoresponderContactFirstName(payload);
 
       const [settingsRows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
       const settings = settingsRows[0];
@@ -13262,6 +14117,22 @@ fastify.route({
         return { replies: [] };
       }
 
+      if (payload.fromMe === true) {
+        if (consumeAutoresponderEvolutionBotReplyGuard(senderKey, message)) {
+          return { replies: [] };
+        }
+        if (
+          payload.source === 'evolution'
+          && normalizeAutoresponderSender(sender)
+          && isAutoresponderHumanOutboundEvolutionSource(payload.evolutionMessageSource)
+        ) {
+          const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 240;
+          await pauseAutoresponderConversationForHumanHandoff(senderKey, pauseMinutes);
+          return { replies: [], paused: true, pause_reason: 'human_handoff' };
+        }
+        return { replies: [] };
+      }
+
       if (isGroup) {
         return { replies: [] };
       }
@@ -13270,6 +14141,10 @@ fastify.route({
       if (!message && !isAudioPayload) {
         await touchAutoresponderConversation(senderKey);
         return { replies: [] };
+      }
+
+      if (!isGroup && senderKey && senderKey !== 'unknown') {
+        contactFirstName = await resolveAutoresponderContactFirstName(senderKey, contactFirstName);
       }
 
       if (isAudioPayload) {
@@ -13309,6 +14184,14 @@ fastify.route({
       const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: senderKey });
       shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
 
+      const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({
+        message,
+        sender: senderKey,
+        settings,
+        shouldPrefixGreeting: false,
+      });
+      if (phoneListOptInReply) return phoneListOptInReply;
+
       const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
         message,
         contactFirstName,
@@ -13337,14 +14220,6 @@ fastify.route({
         });
         return { replies: formatAutoresponderProReplies(priorityProductReply.replyMessages) };
       }
-
-      const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({
-        sender: senderKey,
-        message,
-        settings,
-        shouldPrefixGreeting: false,
-      });
-      if (phoneListOptInReply) return phoneListOptInReply;
 
       const replyLimit = Number(settings.max_replies_per_conversation) > 0
         ? Number(settings.max_replies_per_conversation)
@@ -21345,6 +22220,11 @@ async function runMigrations() {
   await addColumnIfMissing('products', 'meta_description', "TEXT NULL");
   await addColumnIfMissing('products', 'keywords', "TEXT NULL");
   await addColumnIfMissing('products', 'view_count', "INT DEFAULT 0");
+  await addColumnIfMissing('sales', 'subtotal', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'discount_total', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'cost_total', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'profit', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sale_items', 'unit_cost', 'INT NOT NULL DEFAULT 0');
 
   // Linkage pai/filho (Bling) - permite combos/kits referenciarem produtos pai (agregados)
   await addColumnIfMissing('products', 'parent_id',       'CHAR(36) DEFAULT NULL');
@@ -21474,7 +22354,6 @@ async function runMigrations() {
       INDEX idx_ai_training_type (training_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
-  await addColumnIfMissing('autoresponder_ai_training', 'keywords', 'TEXT NULL');
 
   await pool.query(`
     INSERT IGNORE INTO autoresponder_settings (
@@ -21544,6 +22423,7 @@ async function runMigrations() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await addColumnIfMissing('autoresponder_ai_training', 'keywords', 'TEXT NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_attendants (
@@ -21629,6 +22509,7 @@ async function runMigrations() {
   `);
 
   await addColumnIfMissing('products', 'tag_ids', 'JSON NULL');
+  await addColumnIfMissing('autoresponder_conversations', 'contact_name', 'VARCHAR(120) NULL');
   await addColumnIfMissing('autoresponder_conversations', 'contact_name_status', 'VARCHAR(40) NULL');
   await addColumnIfMissing('autoresponder_conversations', 'contact_name_suggestion', 'VARCHAR(120) NULL');
   await addColumnIfMissing('autoresponder_conversations', 'contact_name_confirmed', 'VARCHAR(120) NULL');
@@ -22244,6 +23125,7 @@ async function runMigrations() {
       checkout_url TEXT DEFAULT NULL,
       qr_code TEXT DEFAULT NULL,
       qr_code_base64 LONGTEXT DEFAULT NULL,
+      allocations_json JSON DEFAULT NULL,
       raw_response JSON DEFAULT NULL,
       expires_at DATETIME DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -22253,6 +23135,7 @@ async function runMigrations() {
       INDEX idx_debt_payment_intents_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await addColumnIfMissing('customer_debt_payment_intents', 'allocations_json', 'JSON DEFAULT NULL');
   console.log('[migration] customer_debt_payment_intents table: OK');
 
   await ensureDefaultAdminAccount();
@@ -22710,26 +23593,88 @@ fastify.delete('/financial/customer-debt-payments/:id', { preHandler: requireSyn
   }
 });
 
+async function normalizeCustomerDebtPaymentAllocations({ debt_id, valor_liquido, allocations, access }) {
+  const requested = Array.isArray(allocations) && allocations.length > 0
+    ? allocations
+    : [{ debt_id, valor_liquido }];
+
+  const normalized = [];
+  let customerId = null;
+  for (const item of requested) {
+    const itemDebtId = String(item?.debt_id || '').trim();
+    const itemValue = Math.round(Number(item?.valor_liquido || 0));
+    if (!itemDebtId || itemValue <= 0) {
+      const error = new Error('allocations invalidas');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const [debts] = await pool.query('SELECT * FROM customer_debts WHERE id = ? LIMIT 1', [itemDebtId]);
+    const debt = debts?.[0];
+    if (!debt) {
+      const error = new Error('Debito nao encontrado');
+      error.statusCode = 404;
+      throw error;
+    }
+    if (!access.isSync && !access.isAdmin && String(debt.customer_id) !== String(access.customerId)) {
+      const error = new Error('Forbidden');
+      error.statusCode = 403;
+      throw error;
+    }
+    if (!['pending', 'partial'].includes(String(debt.status))) {
+      const error = new Error('Debito nao esta em aberto');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (itemValue > Number(debt.saldo_devedor || 0)) {
+      const error = new Error('valor_liquido excede saldo_devedor');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (customerId && String(customerId) !== String(debt.customer_id)) {
+      const error = new Error('Todos os debitos devem pertencer ao mesmo cliente');
+      error.statusCode = 400;
+      throw error;
+    }
+    customerId = debt.customer_id;
+    normalized.push({
+      debt_id: itemDebtId,
+      valor_liquido: itemValue,
+      descricao: debt.descricao || itemDebtId,
+    });
+  }
+
+  const total = normalized.reduce((sum, item) => sum + item.valor_liquido, 0);
+  const requestedTotal = Math.round(Number(valor_liquido || 0));
+  if (total <= 0 || total !== requestedTotal) {
+    const error = new Error('valor_liquido deve ser igual a soma das allocations');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return normalized;
+}
+
 fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
-  const { debt_id, valor_liquido, metodo } = body;
+  const { debt_id, valor_liquido, metodo, allocations } = body;
 
-  if (!debt_id) {
+  if (!debt_id && (!Array.isArray(allocations) || allocations.length === 0)) {
     return reply.code(400).send({
-      error: 'debt_id obrigatorio',
-      debug: buildCustomerDebtDebug('validate mercado pago intent payload', { debt_id, valor_liquido, metodo }),
+      error: 'debt_id ou allocations obrigatorio',
+      debug: buildCustomerDebtDebug('validate mercado pago intent payload', { debt_id, valor_liquido, metodo, allocations }),
     });
   }
   if (!valor_liquido || isNaN(Number(valor_liquido)) || Number(valor_liquido) <= 0) {
     return reply.code(400).send({
       error: 'valor_liquido invalido',
-      debug: buildCustomerDebtDebug('validate mercado pago intent payload', { debt_id, valor_liquido, metodo }),
+      debug: buildCustomerDebtDebug('validate mercado pago intent payload', { debt_id, valor_liquido, metodo, allocations }),
     });
   }
   if (!['pix', 'card'].includes(String(metodo))) {
     return reply.code(400).send({
       error: 'metodo deve ser pix ou card',
-      debug: buildCustomerDebtDebug('validate mercado pago intent payload', { debt_id, valor_liquido, metodo }),
+      debug: buildCustomerDebtDebug('validate mercado pago intent payload', { debt_id, valor_liquido, metodo, allocations }),
     });
   }
 
@@ -22737,15 +23682,14 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
   const taxa = String(metodo) === 'pix' ? MP_PIX_FEE_PCT : MP_CARD_FEE_PCT;
   const valorCobrado = Math.ceil(valorLiquido / (1 - taxa));
   const intentId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
-  const external_reference = `customer_debt:${debt_id}`;
-  const metadata = {
-    flow: 'customer_debt',
-    debt_id,
-    valor_liquido_centavos: valorLiquido
-  };
+  let normalizedAllocations = [];
+  let primaryDebtId = debt_id;
 
   try {
-    const [debts] = await pool.query('SELECT * FROM customer_debts WHERE id = ? LIMIT 1', [debt_id]);
+    const access = req.customerAccess || {};
+    normalizedAllocations = await normalizeCustomerDebtPaymentAllocations({ debt_id, valor_liquido, allocations, access });
+    primaryDebtId = normalizedAllocations[0]?.debt_id || debt_id;
+    const [debts] = await pool.query('SELECT * FROM customer_debts WHERE id = ? LIMIT 1', [primaryDebtId]);
     if (debts.length === 0) {
       return reply.code(404).send({
         error: 'Debito nao encontrado',
@@ -22754,27 +23698,14 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
     }
 
     const debt = debts[0];
-    const access = req.customerAccess || {};
-    if (!access.isSync && !access.isAdmin && String(debt.customer_id) !== String(access.customerId)) {
-      return reply.code(403).send({ error: 'Forbidden' });
-    }
-    if (!['pending', 'partial'].includes(String(debt.status))) {
-      return reply.code(400).send({
-        error: 'Debito nao esta em aberto',
-        debug: buildCustomerDebtDebug('mercado pago intent debt not open', { debt_id, metodo, status: debt.status }),
-      });
-    }
-    if (valorLiquido > Number(debt.saldo_devedor || 0)) {
-      return reply.code(400).send({
-        error: 'valor_liquido excede saldo_devedor',
-        debug: buildCustomerDebtDebug('mercado pago intent amount exceeds debt balance', {
-          debt_id,
-          metodo,
-          valor_liquido,
-          saldo_devedor: debt.saldo_devedor,
-        }),
-      });
-    }
+    const isMultiDebtIntent = normalizedAllocations.length > 1;
+    const external_reference = isMultiDebtIntent ? 'customer_debt:multi' : `customer_debt:${primaryDebtId}`;
+    const metadata = {
+      flow: 'customer_debt',
+      debt_id: primaryDebtId,
+      valor_liquido_centavos: valorLiquido,
+      allocations: normalizedAllocations.map(item => ({ debt_id: item.debt_id, valor_liquido: item.valor_liquido }))
+    };
 
     const [integrations] = await pool.query(
       "SELECT access_token, environment FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 LIMIT 1"
@@ -22801,7 +23732,7 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
     if (String(metodo) === 'pix') {
       const payload = {
         transaction_amount: amountReais,
-        description: `Crediario Mercado do Vale - ${String(debt.descricao || debt.id).slice(0, 80)}`,
+        description: `Crediario Mercado do Vale - ${isMultiDebtIntent ? 'multiplos debitos' : String(debt.descricao || debt.id).slice(0, 80)}`,
         payment_method_id: 'pix',
         external_reference,
         metadata,
@@ -22838,7 +23769,7 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
           `INSERT INTO customer_debt_payment_intents
             (id, debt_id, metodo, valor_liquido, valor_cobrado, taxa_pct, status, raw_response, expires_at)
            VALUES (?, ?, ?, ?, ?, ?, 'failed', ?, ?)`,
-          [intentId, debt_id, metodo, valorLiquido, valorCobrado, taxa, JSON.stringify(mpResponse), expiresAt]
+          [intentId, primaryDebtId, metodo, valorLiquido, valorCobrado, taxa, JSON.stringify(mpResponse), expiresAt]
         );
         return reply.code(502).send({
           error: 'Falha ao criar cobranca Mercado Pago',
@@ -22860,7 +23791,7 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
         items: [{
           id: debt_id,
           title: `Crediario Mercado do Vale`,
-          description: String(debt.descricao || debt.id).slice(0, 250),
+          description: isMultiDebtIntent ? 'Pagamento de multiplos debitos do crediario' : String(debt.descricao || debt.id).slice(0, 250),
           quantity: 1,
           currency_id: 'BRL',
           unit_price: amountReais
@@ -22901,7 +23832,7 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
           `INSERT INTO customer_debt_payment_intents
             (id, debt_id, metodo, valor_liquido, valor_cobrado, taxa_pct, status, raw_response, expires_at)
            VALUES (?, ?, ?, ?, ?, ?, 'failed', ?, ?)`,
-          [intentId, debt_id, metodo, valorLiquido, valorCobrado, taxa, JSON.stringify(mpResponse), expiresAt]
+          [intentId, primaryDebtId, metodo, valorLiquido, valorCobrado, taxa, JSON.stringify(mpResponse), expiresAt]
         );
         return reply.code(502).send({
           error: 'Falha ao criar checkout Mercado Pago',
@@ -22921,11 +23852,11 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
 
     await pool.query(
       `INSERT INTO customer_debt_payment_intents
-        (id, debt_id, provider_intent_id, metodo, valor_liquido, valor_cobrado, taxa_pct, status, checkout_url, qr_code, qr_code_base64, raw_response, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?, ?)`,
+        (id, debt_id, provider_intent_id, metodo, valor_liquido, valor_cobrado, taxa_pct, status, checkout_url, qr_code, qr_code_base64, allocations_json, raw_response, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?, ?, ?)`,
       [
         intentId,
-        debt_id,
+        primaryDebtId,
         providerIntentId,
         metodo,
         valorLiquido,
@@ -22934,6 +23865,7 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
         checkoutUrl,
         qrCode,
         qrCodeBase64,
+        JSON.stringify(normalizedAllocations),
         JSON.stringify(mpResponse),
         expiresAt
       ]
@@ -22941,7 +23873,7 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
 
     return reply.code(201).send({
       id: intentId,
-      debt_id,
+      debt_id: primaryDebtId,
       provider: 'mercado_pago',
       provider_intent_id: providerIntentId,
       metodo,
@@ -22959,6 +23891,12 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
       expires_at: expiresAt.toISOString()
     });
   } catch (err) {
+    if (err?.statusCode) {
+      return reply.code(err.statusCode).send({
+        error: err.message,
+        debug: buildCustomerDebtDebug('validate mercado pago intent allocations', { debt_id, metodo, valor_liquido }),
+      });
+    }
     req.log.error({
       debug: buildCustomerDebtDebug('mercado pago intent failed', {
         debt_id,

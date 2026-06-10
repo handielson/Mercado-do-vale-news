@@ -29,7 +29,7 @@ const AUTORESPONDER_PRODUCT_PAGE_SIZE = 5;
 const AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES = 10;
 const AUTORESPONDER_REPLY_DELAY_SCHEDULE_SECONDS = [4, 9, 16, 24, 33, 43, 54, 66, 79, 93];
 const AUTORESPONDER_PRODUCT_RESPONSE_LIMIT = AUTORESPONDER_PRODUCT_PAGE_SIZE * AUTORESPONDER_MAX_PRODUCT_REPLY_MESSAGES;
-const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 500;
+const AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT = 20;
 const AUTORESPONDER_RULE_TEMPLATES = [
   { name: 'Saudacao manha', pattern: 'bom dia, oi bom dia, dia' },
   { name: 'Saudacao tarde', pattern: 'boa tarde, tarde' },
@@ -7076,18 +7076,28 @@ function findAutoresponderCatalogCategoryForMessage(message, categories) {
   const safeCategories = Array.isArray(categories) ? categories : [];
   if (!text || safeCategories.length === 0) return null;
 
-  const directMatch = safeCategories.find((category) => {
-    const name = normalizeAutoresponderText(category?.name || '').trim();
-    return name && (text.includes(name) || name.includes(text));
-  });
-  if (directMatch) return directMatch;
-
   const phoneCategoryHints = [
     'celular', 'celulares', 'smartphone', 'smartphones', 'aparelho', 'aparelhos',
     'telefone', 'telefones', 'phone', 'phones', 'iphone', 'xiaomi', 'samsung',
     'tablet', 'tablets', 'tablte', 'tabltes', 'receptor', 'receptores',
   ];
   const asksForPhone = phoneCategoryHints.some((keyword) => text.includes(keyword));
+  const preferredPhoneCategoryNames = ['smartphones', 'smartphone', 'celulares', 'celular'];
+  if (asksForPhone) {
+    const preferredCategory = preferredPhoneCategoryNames
+      .map((preferredName) => safeCategories.find((category) => (
+        normalizeAutoresponderText(category?.name || '').trim() === preferredName
+      )))
+      .find(Boolean);
+    if (preferredCategory) return preferredCategory;
+  }
+
+  const directMatch = safeCategories.find((category) => {
+    const name = normalizeAutoresponderText(category?.name || '').trim();
+    return name && (text.includes(name) || name.includes(text));
+  });
+  if (directMatch) return directMatch;
+
   if (!asksForPhone) return null;
 
   return safeCategories.find((category) => {
@@ -9339,26 +9349,12 @@ function formatAutoresponderPaginationSummary({ offset = 0, limit = AUTORESPONDE
   return '';
 }
 
-const AUTORESPONDER_COMPLETE_PRODUCT_LIST_WORDS = new Set([
-  'celular',
-  'celulares',
-  'smartphone',
-  'smartphones',
-  'tablet',
-  'tablets',
-  'tablte',
-  'tabltes',
-  'receptor',
-  'receptores',
-]);
-
 function isAutoresponderCompleteProductListKeyword(keyword) {
-  const tokens = normalizeAutoresponderText(keyword)
+  const text = normalizeAutoresponderText(keyword)
     .replace(/[^a-z0-9\s-]/g, ' ')
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter(Boolean);
-  return tokens.some((token) => AUTORESPONDER_COMPLETE_PRODUCT_LIST_WORDS.has(token));
+    .replace(/\s+/g, ' ')
+    .trim();
+  return /\b(lista completa|catalogo completo|todos os modelos|todas as opcoes|ver tudo|mostrar tudo)\b/.test(text);
 }
 
 function getAutoresponderProductQueryLimit(limit) {
@@ -10247,7 +10243,7 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   }
 
   const categories = await findAutoresponderAvailableCategories(20);
-  const selectedCategory = findAutoresponderCatalogCategoryForMessage('celulares', categories);
+  const selectedCategory = findAutoresponderCatalogCategoryForMessage('smartphones', categories);
   if (!selectedCategory?.id) return null;
 
   const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
