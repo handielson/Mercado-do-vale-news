@@ -27,6 +27,7 @@ for (const serverPath of serverPaths) {
   assert(source.includes('if (option) return { ...option, option_number: choiceNumber };'), `${filename} out-of-range numbered choices must fall back to model-name matching`);
   assert(source.includes('ignoredSelectionTokens'), `${filename} model-name matching must ignore selection filler words like "quero esse"`);
   assert(source.includes("if (tokens.length < 1) return null;"), `${filename} model-name matching must allow a single useful token like "15"`);
+  assert(source.includes('return sortAutoresponderProductGroupsByBrand(groupAutoresponderProductsByModel'), `${filename} saved product options must use the same brand ordering shown in the list`);
   assert(source.includes('moreRequest: isAutoresponderMoreRequest(message)'), `${filename} intent helper must expose moreRequest`);
   assert(source.includes('const detectedIntent = detectAutoresponderIntent(message)'), `${filename} webhook must use detectedIntent`);
   assert(source.includes('detectedIntent.greetingOnly'), `${filename} webhook must use detected greetingOnly`);

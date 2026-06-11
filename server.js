@@ -9273,7 +9273,7 @@ function groupAutoresponderProductsByModel(products) {
 }
 
 function buildAutoresponderProductOptions(products) {
-  return groupAutoresponderProductsByModel(filterAutoresponderAvailableProducts(products)).map((group) => {
+  return sortAutoresponderProductGroupsByBrand(groupAutoresponderProductsByModel(filterAutoresponderAvailableProducts(products))).map((group) => {
     const product = group.representative;
     return {
       id: product.id,
