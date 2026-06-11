@@ -9670,7 +9670,10 @@ function formatAutoresponderProductListReply(products, keyword) {
 }
 
 function getAutoresponderNumberedChoice(message) {
-  const match = String(message || '').trim().match(/^(\d{1,2})$/);
+  const text = normalizeAutoresponderText(message).trim();
+  const match = text.match(/^(\d{1,2})$/)
+    || text.match(/\b(?:opcao|opcoes|numero|item)\s*(\d{1,2})\b/)
+    || text.match(/\b(?:quero|queria|vou querer|escolho|separa|manda|pega|pode ser|fecha|fechar)\s+(?:esse|este|essa|esta|o|a)\s*(\d{1,2})\b/);
   if (!match) return null;
   const choice = Number(match[1]);
   return Number.isInteger(choice) && choice > 0 ? choice : null;

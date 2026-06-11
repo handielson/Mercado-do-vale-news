@@ -10709,7 +10709,10 @@ function formatAutoresponderProductListReply(products, keyword) {
 }
 
 function getAutoresponderNumberedChoice(message) {
-  const match = String(message || '').trim().match(/^(\d{1,2})$/);
+  const text = normalizeAutoresponderText(message).trim();
+  const match = text.match(/^(\d{1,2})$/)
+    || text.match(/\b(?:opcao|opcoes|numero|item)\s*(\d{1,2})\b/)
+    || text.match(/\b(?:quero|queria|vou querer|escolho|separa|manda|pega|pode ser|fecha|fechar)\s+(?:esse|este|essa|esta|o|a)\s*(\d{1,2})\b/);
   if (!match) return null;
   const choice = Number(match[1]);
   return Number.isInteger(choice) && choice > 0 ? choice : null;
@@ -13676,33 +13679,6 @@ fastify.route({
 
       const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
       const hasActivePurchaseFlow = hasAutoresponderCartItems(purchaseFlow);
-      if (!hasActivePurchaseFlow && message) {
-        const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: senderKey });
-        if (aiFirst?.text) {
-          const replyText = formatAutoresponderReply(aiFirst.text, settings, shouldPrefixGreeting);
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'ai_first',
-            replyText,
-            matchedCount: 0,
-            aiMeta: aiFirst.aiMeta,
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'ai_no_reply',
-          replyText: null,
-          matchedCount: 0,
-        });
-        await touchAutoresponderConversation(senderKey);
-        return { replies: [] };
-      }
-
       const numberedChoice = detectedIntent.numberedChoice;
       if (!hasActivePurchaseFlow && Number(settings.use_numbered_lists) === 1) {
         const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
@@ -13735,6 +13711,33 @@ fastify.route({
 
           return { replies: [{ message: replyText }] };
         }
+      }
+
+      if (!hasActivePurchaseFlow && message) {
+        const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: senderKey });
+        if (aiFirst?.text) {
+          const replyText = formatAutoresponderReply(aiFirst.text, settings, shouldPrefixGreeting);
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'ai_first',
+            replyText,
+            matchedCount: 0,
+            aiMeta: aiFirst.aiMeta,
+          });
+          await upsertAutoresponderSuccessConversation(senderKey);
+          return { replies: [{ message: replyText }] };
+        }
+
+        await logAutoresponderReply({
+          sender: senderKey,
+          message,
+          intent: 'ai_no_reply',
+          replyText: null,
+          matchedCount: 0,
+        });
+        await touchAutoresponderConversation(senderKey);
+        return { replies: [] };
       }
 
       const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: senderKey });
