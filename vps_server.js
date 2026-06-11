@@ -7813,6 +7813,36 @@ async function buildAutoresponderAiOfficialContextReply({
   });
 }
 
+async function buildAutoresponderAiToolDecision({ message, contactFirstName = '', settings = null, sender = null } = {}) {
+  const name = String(contactFirstName || '').trim();
+  const aiDecision = await callAutoresponderOpenAi({
+    input: [
+      'Voce decide se precisa usar uma ferramenta antes de responder ao cliente.',
+      `Mensagem do cliente: ${String(message || '').trim() || '(vazia)'}`,
+      name ? `Nome do cliente: ${name}` : '',
+      'Ferramentas disponiveis:',
+      '- catalog_search: consulta o catalogo/estoque oficial por produto, modelo, marca, categoria ou caracteristica.',
+      'Use catalog_search quando o cliente perguntar se tem produto, pedir preco, estoque, opcoes, modelos, lista, celulares, acessorios ou mencionar um modelo como "note 15".',
+      'Se usar catalog_search, escolha uma query curta com o que deve ser buscado. Ex: "note 15", "smartphones", "redmi 15".',
+      'Nao responda ao cliente aqui. Responda SOMENTE JSON valido, sem markdown.',
+      'Formato: {"tool":"catalog_search","query":"texto"} ou {"tool":"none"}.',
+    ].filter(Boolean).join('\n'),
+    maxOutputTokens: 120,
+    settings,
+    sender,
+  });
+  const parsed = parseAutoresponderAiJsonObject(aiDecision?.text);
+  if (!parsed || typeof parsed !== 'object') return null;
+  const tool = String(parsed.tool || '').trim();
+  const query = String(parsed.query || '').trim();
+  if (tool !== 'catalog_search' || !query) return { tool: 'none', aiMeta: aiDecision.aiMeta };
+  return {
+    tool: 'catalog_search',
+    query: limitText(query, 120),
+    aiMeta: aiDecision.aiMeta,
+  };
+}
+
 function parseAutoresponderAiJsonObject(text) {
   const raw = String(text || '').trim();
   if (!raw) return null;
@@ -11578,6 +11608,102 @@ async function buildAutoresponderPriorityProductSearchReplyData({ message, conta
   };
 }
 
+async function buildAutoresponderCatalogToolSearchData({ query, message = '', contactFirstName = '', settings = null, shouldPrefixGreeting = false } = {}) {
+  const safeQuery = String(query || '').trim();
+  if (!safeQuery || normalizeAutoresponderCep(safeQuery)) return null;
+
+  const categories = await findAutoresponderAvailableCategories(100);
+  const selectedCategory = await resolveAutoresponderCatalogCategoryForMessage(safeQuery, categories);
+  if (selectedCategory?.id && !isAutoresponderLikelyProductModelRequest(safeQuery)) {
+    const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
+    const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
+    const products = rows.slice(0, pageSize);
+    const hasMore = rows.length > pageSize;
+    const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+    const productOptions = buildAutoresponderProductOptions(products);
+    const productReplyMessages = appendAutoresponderReplyFooter(
+      await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, {
+        offset: 0,
+        limit: pageSize,
+        total,
+        completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name),
+      }),
+      formatAutoresponderProductReplyInstructions(hasMore)
+    );
+    const replyMessages = buildAutoresponderReplyMessagesWithSeparateGreeting(productReplyMessages, {
+      message,
+      contactFirstName,
+      settings,
+      shouldIncludeGreeting: shouldPrefixGreeting || isAutoresponderGreeting(message),
+    });
+    return {
+      source: 'category',
+      query: safeQuery,
+      searchKeyword: selectedCategory.name,
+      categoryId: selectedCategory.id,
+      products,
+      productOptions,
+      pageSize,
+      hasMore,
+      total,
+      replyMessages,
+    };
+  }
+
+  const productSearchTokens = extractAutoresponderProductSearchTokens(safeQuery);
+  if (productSearchTokens.length === 0) return null;
+  const searchKeyword = productSearchTokens.join(' ');
+  const pageSize = Math.max(getAutoresponderInitialProductPageSize(searchKeyword), 10);
+  let rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
+  let products = rows.slice(0, pageSize);
+  let usedBroadCandidateSearch = false;
+  if (products.length === 0 && productSearchTokens.length > 1) {
+    const candidatesById = new Map();
+    for (const token of productSearchTokens) {
+      const tokenRows = await findAutoresponderProductsByTokens([token], pageSize + 1);
+      for (const row of tokenRows) {
+        if (row?.id && !candidatesById.has(row.id)) candidatesById.set(row.id, row);
+      }
+    }
+    rows = [...candidatesById.values()];
+    products = rows.slice(0, pageSize);
+    usedBroadCandidateSearch = products.length > 0;
+  }
+  if (products.length === 0) return null;
+
+  const hasMore = rows.length > pageSize;
+  const total = usedBroadCandidateSearch ? rows.length : await countAutoresponderProductsByTokens(productSearchTokens);
+  const productOptions = buildAutoresponderProductOptions(products);
+  const productReplyMessages = appendAutoresponderReplyFooter(
+    await formatAutoresponderProductSearchReplies(products, searchKeyword, settings, {
+      offset: 0,
+      limit: pageSize,
+      total,
+      completeList: isAutoresponderCompleteProductListKeyword(searchKeyword),
+    }),
+    formatAutoresponderProductReplyInstructions(hasMore)
+  );
+  const replyMessages = buildAutoresponderReplyMessagesWithSeparateGreeting(productReplyMessages, {
+    message,
+    contactFirstName,
+    settings,
+    shouldIncludeGreeting: shouldPrefixGreeting || isAutoresponderGreeting(message),
+  });
+
+  return {
+    source: 'search',
+    query: safeQuery,
+    productSearchTokens,
+    searchKeyword,
+    pageSize,
+    products,
+    productOptions,
+    hasMore,
+    total,
+    replyMessages,
+  };
+}
+
 async function applyAutoresponderRuleConversationTag(sender, tagId) {
   const numericTagId = Number(tagId);
   if (!Number.isFinite(numericTagId) || numericTagId <= 0) return;
@@ -13871,6 +13997,71 @@ fastify.route({
       }
 
       if (!hasActivePurchaseFlow && message) {
+        const aiToolDecision = await buildAutoresponderAiToolDecision({
+          message,
+          contactFirstName,
+          settings,
+          sender: senderKey,
+        });
+        if (aiToolDecision?.tool === 'catalog_search') {
+          const catalogToolData = await buildAutoresponderCatalogToolSearchData({
+            query: aiToolDecision.query,
+            message,
+            contactFirstName,
+            settings,
+            shouldPrefixGreeting,
+          });
+          if (catalogToolData) {
+            const officialContextText = catalogToolData.replyMessages.join('\n\n');
+            console.log('[autoresponder-ai-context] catalog_search tool context found', {
+              sender: senderKey,
+              message,
+              query: aiToolDecision.query,
+              searchKeyword: catalogToolData.searchKeyword,
+              matchedCount: catalogToolData.products.length,
+            });
+            const aiProductReply = await buildAutoresponderAiOfficialContextReply({
+              message,
+              contactFirstName,
+              settings,
+              sender: senderKey,
+              contextTitle: `Resultado oficial da ferramenta catalog_search para "${aiToolDecision.query}"`,
+              contextText: officialContextText,
+            });
+            if (aiProductReply?.text) {
+              const replyText = formatAutoresponderReply(aiProductReply.text, settings, shouldPrefixGreeting);
+              await logAutoresponderReply({
+                sender: senderKey,
+                message,
+                intent: 'ai_tool_catalog_search',
+                replyText,
+                matchedCount: catalogToolData.products.length,
+                matchedProducts: catalogToolData.productOptions,
+                aiMeta: aiProductReply.aiMeta,
+              });
+              await upsertAutoresponderOptionsConversation(senderKey, catalogToolData.productOptions, {
+                source: catalogToolData.source || 'search',
+                categoryId: catalogToolData.categoryId || null,
+                tokens: catalogToolData.productSearchTokens || null,
+                query: aiToolDecision.query,
+                offset: 0,
+                limit: catalogToolData.pageSize,
+                total: catalogToolData.total,
+                hasMore: catalogToolData.hasMore,
+                completeList: isAutoresponderCompleteProductListKeyword(catalogToolData.searchKeyword),
+              });
+              return { replies: [{ message: replyText }] };
+            }
+            console.warn('[autoresponder-ai-context] catalog_search tool AI returned no text', {
+              sender: senderKey,
+              message,
+              query: aiToolDecision.query,
+              searchKeyword: catalogToolData.searchKeyword,
+              matchedCount: catalogToolData.products.length,
+            });
+          }
+        }
+
         const priorityProductContext = await buildAutoresponderPriorityProductSearchReplyData({
           message,
           contactFirstName,
