@@ -59,6 +59,7 @@ const AUTORESPONDER_AI_SYSTEM_PROMPT = [
   'LISTAS NUMERADAS DE CELULAR: quando o sistema enviar uma lista numerada, o cliente pode escolher pelo numero da lista ou pelo nome/modelo. Se o cliente mandar um numero como "15", isso pode ser a opcao 15 da lista ou parte do nome de modelos como Redmi 15, Redmi 15C ou Redmi Note 15. Se houver ambiguidade, filtre somente os itens da lista recente que combinam com esse numero/nome e pergunte qual deles o cliente quer. Nao escolha sozinho enquanto houver mais de uma possibilidade.',
   'Se o cliente enviar apenas um nome fora de um fluxo em que o sistema pediu nome, trate como continuidade natural da conversa. Nao diga que salvou cadastro ou atendimento sem confirmacao do sistema; prossiga perguntando qual necessidade do cliente.',
   'Nunca retorne resposta vazia para uma mensagem de cliente. Se nao souber exatamente a intencao, responda de forma curta reconhecendo a mensagem e faca uma pergunta objetiva para continuar.',
+  'Nunca use "Cliente" como vocativo. Se nao souber o nome real, cumprimente sem nome.',
   'Nunca invente informacoes. Nunca diga que tem um produto sem ele aparecer no contexto oficial.',
   'Responda em portugues do Brasil, com tom educado, direto e vendedor.',
 ].join('\n');
@@ -11556,9 +11557,21 @@ function sortAutoresponderProductsForAiCatalogTool(products, query = '') {
   const safeProducts = Array.isArray(products) ? products : [];
   const isAccessoryQuery = isAutoresponderAccessorySearchKeyword(query);
   if (isAccessoryQuery) return safeProducts;
+  const normalizedQuery = normalizeAutoresponderText(query).trim();
+  const queryTokens = extractAutoresponderProductSearchTokens(query);
+  const nameScore = (product) => {
+    const name = normalizeAutoresponderText(product?.name || '').trim();
+    if (!name) return 0;
+    if (normalizedQuery && name.includes(normalizedQuery)) return 1000;
+    const matches = queryTokens.filter((token) => name.includes(token)).length;
+    const allTokensMatch = queryTokens.length > 0 && matches === queryTokens.length;
+    return (allTokensMatch ? 500 : 0) + matches * 50;
+  };
   return [...safeProducts].sort((a, b) => {
     const accessoryDelta = Number(isAutoresponderAccessoryProduct(a)) - Number(isAutoresponderAccessoryProduct(b));
     if (accessoryDelta !== 0) return accessoryDelta;
+    const scoreDelta = nameScore(b) - nameScore(a);
+    if (scoreDelta !== 0) return scoreDelta;
     const stockDelta = Number(b?.stock_quantity || 0) - Number(a?.stock_quantity || 0);
     if (stockDelta !== 0) return stockDelta;
     return String(a?.name || '').localeCompare(String(b?.name || ''), 'pt-BR');
