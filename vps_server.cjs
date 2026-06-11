@@ -7808,6 +7808,7 @@ async function buildAutoresponderAiOfficialContextReply({
       'Nao diga que vai verificar se os dados oficiais ja foram fornecidos acima.',
       'Nao invente produto, preco, cor, memoria, estoque, link, garantia ou condicao fora do contexto oficial.',
       'Se o cliente pediu opcoes, mostre as opcoes oficiais relevantes. Se houver ambiguidade, filtre e pergunte objetivamente qual opcao ele quer.',
+      'Se o contexto oficial trouxer muitos tipos de item para uma marca ampla, nao despeje tudo. Agrupe por tipo e pergunte qual tipo o cliente deseja, citando exemplos encontrados como celulares, capinhas, fones, carregadores ou acessorios.',
     ].filter(Boolean).join('\n'),
     maxOutputTokens: 1200,
     settings,
@@ -7829,6 +7830,7 @@ async function buildAutoresponderAiToolDecision({ message, contactFirstName = ''
       'REGRA OBRIGATORIA: se a mensagem tiver "tem", "teria", "voces tem", "quais", "valor", "preco", "quero" ou "procuro" junto com possivel produto/modelo, use catalog_search antes de qualquer resposta.',
       'Nao faca pergunta de esclarecimento antes de usar catalog_search. Se estiver ambiguo, busque a expressao do cliente primeiro e deixe a resposta final filtrar ou perguntar com base nos resultados.',
       'No Mercado do Vale, termos como "note 15" normalmente se referem a smartphones Redmi Note, nao a notebook. Para "tem note 15?", use catalog_search com query "note 15".',
+      'Se o cliente perguntar somente por uma marca ampla, como "Xiaomi", "Samsung", "Motorola", "Realme" ou "Apple", use catalog_search com a marca. A resposta final deve organizar os tipos encontrados, como celulares, capinhas, fones, carregadores ou acessorios, e perguntar qual tipo ele deseja antes de despejar muitos itens.',
       'Se usar catalog_search, escolha uma query curta com o que deve ser buscado. Ex: "note 15", "smartphones", "redmi 15".',
       'Nao responda ao cliente aqui. Responda SOMENTE JSON valido, sem markdown.',
       'Formato: {"tool":"catalog_search","query":"texto"} ou {"tool":"none"}.',
@@ -8288,20 +8290,27 @@ async function buildAutoresponderAmbiguousSelectionReply(options, keyword = '') 
   return lines.join('\n');
 }
 
-async function handleAutoresponderAmbiguousSelection({ senderKey, message, settings, selectedOption }) {
+async function handleAutoresponderAmbiguousSelection({ senderKey, message, settings, selectedOption, contactFirstName = '' }) {
   if (!Array.isArray(selectedOption?.ambiguous_options) || selectedOption.ambiguous_options.length <= 1) return null;
-  const replyText = formatAutoresponderReply(
-    await buildAutoresponderAmbiguousSelectionReply(selectedOption.ambiguous_options, selectedOption.ambiguous_keyword),
+  const contextText = await buildAutoresponderAmbiguousSelectionReply(selectedOption.ambiguous_options, selectedOption.ambiguous_keyword);
+  const aiReply = await buildAutoresponderAiOfficialContextReply({
+    message,
+    contactFirstName,
     settings,
-    false
-  );
+    sender: senderKey,
+    contextTitle: 'Opcoes oficiais encontradas na lista recente do cliente',
+    contextText,
+  });
+  const replyText = aiReply?.text ? formatAutoresponderReply(aiReply.text, settings, false) : '';
+  if (!replyText) return null;
   await logAutoresponderReply({
     sender: senderKey,
     message,
-    intent: 'product_selection_refinement',
+    intent: 'ai_selection_refinement',
     replyText,
     matchedCount: selectedOption.ambiguous_options.length,
     matchedProducts: selectedOption.ambiguous_options,
+    aiMeta: aiReply.aiMeta,
   });
   await upsertAutoresponderOptionsConversation(senderKey, selectedOption.ambiguous_options, {
     source: 'selection_refinement',
@@ -13972,7 +13981,7 @@ fastify.route({
       if (!hasActivePurchaseFlow && Number(settings.use_numbered_lists) === 1) {
         const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
         const selectedOption = findAutoresponderSelectedOptionFromMessage(message, options, numberedChoice);
-        const ambiguousSelectionReply = await handleAutoresponderAmbiguousSelection({ senderKey, message, settings, selectedOption });
+        const ambiguousSelectionReply = await handleAutoresponderAmbiguousSelection({ senderKey, message, settings, selectedOption, contactFirstName });
         if (ambiguousSelectionReply) return ambiguousSelectionReply;
         if (selectedOption?.id) {
           const product = await findAutoresponderProductById(selectedOption.id);
@@ -15287,7 +15296,7 @@ fastify.route({
       if (Number(settings.use_numbered_lists) === 1) {
         const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
         const selectedOption = findAutoresponderSelectedOptionFromMessage(message, options, numberedChoice);
-        const ambiguousSelectionReply = await handleAutoresponderAmbiguousSelection({ senderKey, message, settings, selectedOption });
+        const ambiguousSelectionReply = await handleAutoresponderAmbiguousSelection({ senderKey, message, settings, selectedOption, contactFirstName });
         if (ambiguousSelectionReply) return ambiguousSelectionReply;
         if (selectedOption?.id) {
           const product = await findAutoresponderProductById(selectedOption.id);
