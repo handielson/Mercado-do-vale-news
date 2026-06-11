@@ -11530,12 +11530,25 @@ async function buildAutoresponderPriorityProductSearchReplyData({ message, conta
 
   const searchKeyword = productSearchTokens.join(' ');
   const pageSize = getAutoresponderInitialProductPageSize(searchKeyword);
-  const rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
-  const products = rows.slice(0, pageSize);
+  let rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
+  let products = rows.slice(0, pageSize);
+  let usedBroadCandidateSearch = false;
+  if (products.length === 0 && productSearchTokens.length > 1) {
+    const candidatesById = new Map();
+    for (const token of productSearchTokens) {
+      const tokenRows = await findAutoresponderProductsByTokens([token], pageSize + 1);
+      for (const row of tokenRows) {
+        if (row?.id && !candidatesById.has(row.id)) candidatesById.set(row.id, row);
+      }
+    }
+    rows = [...candidatesById.values()];
+    products = rows.slice(0, pageSize);
+    usedBroadCandidateSearch = products.length > 0;
+  }
   if (products.length === 0) return null;
 
   const hasMore = rows.length > pageSize;
-  const total = await countAutoresponderProductsByTokens(productSearchTokens);
+  const total = usedBroadCandidateSearch ? rows.length : await countAutoresponderProductsByTokens(productSearchTokens);
   const productOptions = buildAutoresponderProductOptions(products);
   const productReplyMessages = appendAutoresponderReplyFooter(
     await formatAutoresponderProductSearchReplies(products, searchKeyword, settings, {
