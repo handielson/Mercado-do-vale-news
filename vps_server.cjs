@@ -13846,7 +13846,7 @@ fastify.route({
         }
       }
 
-      if (!hasActivePurchaseFlow && isAutoresponderGenericPhoneCatalogRequest(message)) {
+      if (!hasActivePurchaseFlow && !isAutoresponderLikelyProductModelRequest(message) && isAutoresponderGenericPhoneCatalogRequest(message)) {
         const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
         if (catalogData) {
           const replyText = catalogData.replyMessages.join('\n\n');
