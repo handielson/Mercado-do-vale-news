@@ -7809,6 +7809,7 @@ async function buildAutoresponderAiOfficialContextReply({
       'Nao invente produto, preco, cor, memoria, estoque, link, garantia ou condicao fora do contexto oficial.',
       'Se o cliente pediu opcoes, mostre as opcoes oficiais relevantes. Se houver ambiguidade, filtre e pergunte objetivamente qual opcao ele quer.',
       'Se o contexto oficial trouxer muitos tipos de item para uma marca ampla, nao despeje tudo e nao enumere produtos nessa primeira resposta. Agrupe por tipo e pergunte qual tipo o cliente deseja, citando exemplos encontrados como celulares, capinhas, fones, carregadores ou acessorios.',
+      'Quando a marca ampla for Xiaomi, Redmi ou Poco, trate a familia como uma marca de aparelhos e acessorios. Mesmo que os primeiros resultados tragam capinhas, ofereca a escolha por tipo de item de forma neutra, por exemplo aparelhos/celulares, capinhas ou acessorios, sem dizer que so tem capinhas.',
     ].filter(Boolean).join('\n'),
     maxOutputTokens: 1200,
     settings,
