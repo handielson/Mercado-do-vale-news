@@ -7664,7 +7664,7 @@ function normalizeAutoresponderOpenAiUsage(responseJson, model, settings = null)
   };
 }
 
-async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings = null, sender = null }) {
+async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings = null, sender = null, reasoningEffort = null }) {
   if (!isAutoresponderAiEnabled(settings)) return null;
   if (await isAutoresponderAiLimitReached(settings)) return null;
   const aiConfig = getAutoresponderAiConfig(settings);
@@ -7692,7 +7692,7 @@ async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings 
         instructions,
         input,
         max_output_tokens: outputTokenBudget,
-        reasoning: { effort: aiConfig.reasoningEffort },
+        reasoning: { effort: normalizeAutoresponderAiReasoningEffort(reasoningEffort || aiConfig.reasoningEffort) },
         text: { verbosity: 'low' },
       }),
       signal: AbortSignal.timeout(Number(process.env.AUTORESPONDER_AI_TIMEOUT_MS || 15000)),
@@ -7793,7 +7793,7 @@ async function buildAutoresponderAiOfficialContextReply({
   contextText = '',
 } = {}) {
   const name = String(contactFirstName || '').trim();
-  const safeContext = limitText(String(contextText || '').trim(), 12000);
+  const safeContext = limitText(String(contextText || '').trim(), 6500);
   if (!safeContext) return null;
   return callAutoresponderOpenAi({
     input: [
@@ -7807,9 +7807,10 @@ async function buildAutoresponderAiOfficialContextReply({
       'Nao invente produto, preco, cor, memoria, estoque, link, garantia ou condicao fora do contexto oficial.',
       'Se o cliente pediu opcoes, mostre as opcoes oficiais relevantes. Se houver ambiguidade, filtre e pergunte objetivamente qual opcao ele quer.',
     ].filter(Boolean).join('\n'),
-    maxOutputTokens: 2200,
+    maxOutputTokens: 1200,
     settings,
     sender,
+    reasoningEffort: 'low',
   });
 }
 
@@ -7833,6 +7834,7 @@ async function buildAutoresponderAiToolDecision({ message, contactFirstName = ''
     maxOutputTokens: 120,
     settings,
     sender,
+    reasoningEffort: 'low',
   });
   const parsed = parseAutoresponderAiJsonObject(aiDecision?.text);
   if (!parsed || typeof parsed !== 'object') return null;
