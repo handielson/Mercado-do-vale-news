@@ -7807,7 +7807,7 @@ async function buildAutoresponderAiOfficialContextReply({
       'Nao invente produto, preco, cor, memoria, estoque, link, garantia ou condicao fora do contexto oficial.',
       'Se o cliente pediu opcoes, mostre as opcoes oficiais relevantes. Se houver ambiguidade, filtre e pergunte objetivamente qual opcao ele quer.',
     ].filter(Boolean).join('\n'),
-    maxOutputTokens: 700,
+    maxOutputTokens: 2200,
     settings,
     sender,
   });
