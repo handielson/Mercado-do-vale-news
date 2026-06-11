@@ -7784,6 +7784,35 @@ async function buildAutoresponderAiFirstReply({ message, contactFirstName = '', 
   });
 }
 
+async function buildAutoresponderAiOfficialContextReply({
+  message,
+  contactFirstName = '',
+  settings = null,
+  sender = null,
+  contextTitle = 'Contexto oficial do sistema',
+  contextText = '',
+} = {}) {
+  const name = String(contactFirstName || '').trim();
+  const safeContext = limitText(String(contextText || '').trim(), 12000);
+  if (!safeContext) return null;
+  return callAutoresponderOpenAi({
+    input: [
+      'O sistema consultou dados oficiais antes da resposta.',
+      `Mensagem do cliente: ${String(message || '').trim() || '(vazia)'}`,
+      name ? `Nome do cliente: ${name}` : '',
+      `${contextTitle}:`,
+      safeContext,
+      'Responda ao cliente usando esse contexto oficial. A resposta final deve ser escrita pela IA, em linguagem natural.',
+      'Nao diga que vai verificar se os dados oficiais ja foram fornecidos acima.',
+      'Nao invente produto, preco, cor, memoria, estoque, link, garantia ou condicao fora do contexto oficial.',
+      'Se o cliente pediu opcoes, mostre as opcoes oficiais relevantes. Se houver ambiguidade, filtre e pergunte objetivamente qual opcao ele quer.',
+    ].filter(Boolean).join('\n'),
+    maxOutputTokens: 700,
+    settings,
+    sender,
+  });
+}
+
 function parseAutoresponderAiJsonObject(text) {
   const raw = String(text || '').trim();
   if (!raw) return null;
@@ -13829,6 +13858,46 @@ fastify.route({
       }
 
       if (!hasActivePurchaseFlow && message) {
+        const priorityProductContext = await buildAutoresponderPriorityProductSearchReplyData({
+          message,
+          contactFirstName,
+          settings,
+          shouldPrefixGreeting,
+        });
+        if (priorityProductContext) {
+          const officialContextText = priorityProductContext.replyMessages.join('\n\n');
+          const aiProductReply = await buildAutoresponderAiOfficialContextReply({
+            message,
+            contactFirstName,
+            settings,
+            sender: senderKey,
+            contextTitle: `Produtos oficiais encontrados para "${priorityProductContext.searchKeyword}"`,
+            contextText: officialContextText,
+          });
+          if (aiProductReply?.text) {
+            const replyText = formatAutoresponderReply(aiProductReply.text, settings, shouldPrefixGreeting);
+            await logAutoresponderReply({
+              sender: senderKey,
+              message,
+              intent: 'ai_product_context',
+              replyText,
+              matchedCount: priorityProductContext.products.length,
+              matchedProducts: priorityProductContext.productOptions,
+              aiMeta: aiProductReply.aiMeta,
+            });
+            await upsertAutoresponderOptionsConversation(senderKey, priorityProductContext.productOptions, {
+              source: 'search',
+              tokens: priorityProductContext.productSearchTokens,
+              offset: 0,
+              limit: priorityProductContext.pageSize,
+              total: priorityProductContext.total,
+              hasMore: priorityProductContext.hasMore,
+              completeList: isAutoresponderCompleteProductListKeyword(priorityProductContext.searchKeyword),
+            });
+            return { replies: [{ message: replyText }] };
+          }
+        }
+
         const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: senderKey });
         if (aiFirst?.text) {
           const replyText = formatAutoresponderReply(aiFirst.text, settings, shouldPrefixGreeting);

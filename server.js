@@ -7003,6 +7003,35 @@ async function buildAutoresponderAiFallbackReply({ message, contactFirstName = '
   });
 }
 
+async function buildAutoresponderAiOfficialContextReply({
+  message,
+  contactFirstName = '',
+  settings = null,
+  sender = null,
+  contextTitle = 'Contexto oficial do sistema',
+  contextText = '',
+} = {}) {
+  const name = String(contactFirstName || '').trim();
+  const safeContext = limitText(String(contextText || '').trim(), 12000);
+  if (!safeContext) return null;
+  return callAutoresponderOpenAi({
+    input: [
+      'O sistema consultou dados oficiais antes da resposta.',
+      `Mensagem do cliente: ${String(message || '').trim() || '(vazia)'}`,
+      name ? `Nome do cliente: ${name}` : '',
+      `${contextTitle}:`,
+      safeContext,
+      'Responda ao cliente usando esse contexto oficial. A resposta final deve ser escrita pela IA, em linguagem natural.',
+      'Nao diga que vai verificar se os dados oficiais ja foram fornecidos acima.',
+      'Nao invente produto, preco, cor, memoria, estoque, link, garantia ou condicao fora do contexto oficial.',
+      'Se o cliente pediu opcoes, mostre as opcoes oficiais relevantes. Se houver ambiguidade, filtre e pergunte objetivamente qual opcao ele quer.',
+    ].filter(Boolean).join('\n'),
+    maxOutputTokens: 700,
+    settings,
+    sender,
+  });
+}
+
 const AUTORESPONDER_GENERIC_PHONE_CATALOG_WORDS = new Set([
   'celular', 'celulares', 'smartphone', 'smartphones', 'aparelho', 'aparelhos',
   'telefone', 'telefones', 'phone', 'phones',
