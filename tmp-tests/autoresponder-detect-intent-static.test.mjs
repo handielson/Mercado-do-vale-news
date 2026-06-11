@@ -24,6 +24,9 @@ for (const serverPath of serverPaths) {
   assert(source.includes('normalizeAutoresponderText(message).trim()'), `${filename} numbered choice must normalize text phrases`);
   assert(source.includes('quero|queria|vou querer|escolho|separa|manda|pega|pode ser|fecha|fechar'), `${filename} numbered choice must detect purchase phrases like "quero esse 15"`);
   assert(source.includes('(?:esse|este|essa|esta|o|a)'), `${filename} numbered choice must require a demonstrative/article before phrase numbers to avoid model names like Redmi Note 15`);
+  assert(source.includes('if (option) return { ...option, option_number: choiceNumber };'), `${filename} out-of-range numbered choices must fall back to model-name matching`);
+  assert(source.includes('ignoredSelectionTokens'), `${filename} model-name matching must ignore selection filler words like "quero esse"`);
+  assert(source.includes("if (tokens.length < 1) return null;"), `${filename} model-name matching must allow a single useful token like "15"`);
   assert(source.includes('moreRequest: isAutoresponderMoreRequest(message)'), `${filename} intent helper must expose moreRequest`);
   assert(source.includes('const detectedIntent = detectAutoresponderIntent(message)'), `${filename} webhook must use detectedIntent`);
   assert(source.includes('detectedIntent.greetingOnly'), `${filename} webhook must use detected greetingOnly`);

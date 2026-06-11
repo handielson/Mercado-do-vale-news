@@ -7256,13 +7256,19 @@ function findAutoresponderSelectedOptionFromMessage(message, options, numberedCh
   const choiceNumber = Number(numberedChoice || 0);
   if (choiceNumber > 0) {
     const option = safeOptions[choiceNumber - 1] || null;
-    return option ? { ...option, option_number: choiceNumber } : null;
+    if (option) return { ...option, option_number: choiceNumber };
   }
 
   const text = normalizeAutoresponderText(message).trim();
   if (text.length < 4) return null;
-  const tokens = text.split(/\s+/).filter((token) => token.length >= 2);
-  if (tokens.length < 2) return null;
+  const ignoredSelectionTokens = new Set([
+    'quero', 'queria', 'vou', 'querer', 'esse', 'este', 'essa', 'esta',
+    'o', 'a', 'um', 'uma', 'modelo', 'produto', 'item', 'opcao', 'numero',
+  ]);
+  const tokens = text
+    .split(/\s+/)
+    .filter((token) => token.length >= 2 && !ignoredSelectionTokens.has(token));
+  if (tokens.length < 1) return null;
 
   const selectedIndex = safeOptions.findIndex((option) => {
     const name = normalizeAutoresponderText(option?.name || '');
