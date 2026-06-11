@@ -6944,7 +6944,7 @@ async function callAutoresponderOpenAi({ input, maxOutputTokens = 120, settings 
         reasoning: { effort: aiConfig.reasoningEffort },
         text: { verbosity: 'low' },
       }),
-      signal: AbortSignal.timeout(Number(process.env.AUTORESPONDER_AI_TIMEOUT_MS || 5000)),
+      signal: AbortSignal.timeout(Number(process.env.AUTORESPONDER_AI_TIMEOUT_MS || 15000)),
     });
     if (!response.ok) {
       console.warn('[autoresponder-ai] OpenAI response failed:', response.status, await response.text());
