@@ -13713,6 +13713,30 @@ fastify.route({
         }
       }
 
+      if (!hasActivePurchaseFlow && isAutoresponderGenericPhoneCatalogRequest(message)) {
+        const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
+        if (catalogData) {
+          const replyText = catalogData.replyMessages.join('\n\n');
+          await logAutoresponderReply({
+            sender: senderKey,
+            message,
+            intent: 'catalog_category',
+            replyText,
+            matchedCount: catalogData.products.length,
+            matchedProducts: catalogData.productOptions,
+          });
+          await upsertAutoresponderOptionsConversation(senderKey, catalogData.productOptions, {
+            source: 'category',
+            categoryId: catalogData.selectedCategory.id,
+            offset: 0,
+            limit: catalogData.pageSize,
+            total: catalogData.total,
+            hasMore: catalogData.hasMore,
+          });
+          return { replies: formatAutoresponderProReplies(catalogData.replyMessages) };
+        }
+      }
+
       if (!hasActivePurchaseFlow && message) {
         const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: senderKey });
         if (aiFirst?.text) {
@@ -13742,31 +13766,6 @@ fastify.route({
 
       const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: senderKey });
       shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
-
-      if (isAutoresponderGenericPhoneCatalogRequest(message)) {
-        const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
-        if (catalogData) {
-          const replyText = catalogData.replyMessages.join('\n\n');
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'catalog_category',
-            replyText,
-            matchedCount: catalogData.products.length,
-            matchedProducts: catalogData.productOptions,
-            aiMeta: aiIntentPlan?.aiMeta || null,
-          });
-          await upsertAutoresponderOptionsConversation(senderKey, catalogData.productOptions, {
-            source: 'category',
-            categoryId: catalogData.selectedCategory.id,
-            offset: 0,
-            limit: catalogData.pageSize,
-            total: catalogData.total,
-            hasMore: catalogData.hasMore,
-          });
-          return { replies: formatAutoresponderProReplies(catalogData.replyMessages) };
-        }
-      }
 
       const priorityProductReply = await buildAutoresponderPriorityProductSearchReplyData({
         message,
