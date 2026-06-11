@@ -7830,7 +7830,7 @@ async function buildAutoresponderAiToolDecision({ message, contactFirstName = ''
       'REGRA OBRIGATORIA: se a mensagem tiver "tem", "teria", "voces tem", "quais", "valor", "preco", "quero" ou "procuro" junto com possivel produto/modelo, use catalog_search antes de qualquer resposta.',
       'Nao faca pergunta de esclarecimento antes de usar catalog_search. Se estiver ambiguo, busque a expressao do cliente primeiro e deixe a resposta final filtrar ou perguntar com base nos resultados.',
       'No Mercado do Vale, termos como "note 15" normalmente se referem a smartphones Redmi Note, nao a notebook. Para "tem note 15?", use catalog_search com query "note 15".',
-      'Se o cliente perguntar somente por uma marca ampla, como "Xiaomi", "Samsung", "Motorola", "Realme" ou "Apple", use catalog_search com a marca. A resposta final deve organizar os tipos encontrados, como celulares, capinhas, fones, carregadores ou acessorios, e perguntar qual tipo ele deseja antes de despejar muitos itens.',
+      'Se o cliente perguntar somente por uma marca ampla, como "Xiaomi", "Samsung", "Motorola", "Realme" ou "Apple", use catalog_search com a marca. Para Xiaomi, pesquise a familia "Xiaomi Redmi Poco" porque celulares podem estar cadastrados como Redmi ou Poco. A resposta final deve organizar os tipos encontrados, como celulares, capinhas, fones, carregadores ou acessorios, e perguntar qual tipo ele deseja antes de despejar muitos itens.',
       'Se usar catalog_search, escolha uma query curta com o que deve ser buscado. Ex: "note 15", "smartphones", "redmi 15".',
       'Nao responda ao cliente aqui. Responda SOMENTE JSON valido, sem markdown.',
       'Formato: {"tool":"catalog_search","query":"texto"} ou {"tool":"none"}.',
