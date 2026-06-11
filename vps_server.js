@@ -13879,6 +13879,12 @@ fastify.route({
         });
         if (priorityProductContext) {
           const officialContextText = priorityProductContext.replyMessages.join('\n\n');
+          console.log('[autoresponder-ai-context] product context found', {
+            sender: senderKey,
+            message,
+            searchKeyword: priorityProductContext.searchKeyword,
+            matchedCount: priorityProductContext.products.length,
+          });
           const aiProductReply = await buildAutoresponderAiOfficialContextReply({
             message,
             contactFirstName,
@@ -13909,6 +13915,12 @@ fastify.route({
             });
             return { replies: [{ message: replyText }] };
           }
+          console.warn('[autoresponder-ai-context] product context AI returned no text', {
+            sender: senderKey,
+            message,
+            searchKeyword: priorityProductContext.searchKeyword,
+            matchedCount: priorityProductContext.products.length,
+          });
         }
 
         const aiFirst = await buildAutoresponderAiFirstReply({ message, contactFirstName, settings, sender: senderKey });
