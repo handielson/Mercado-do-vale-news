@@ -7803,6 +7803,7 @@ async function buildAutoresponderAiOfficialContextReply({
       `${contextTitle}:`,
       safeContext,
       'Responda ao cliente usando esse contexto oficial. A resposta final deve ser escrita pela IA, em linguagem natural.',
+      'Se nao houver nome real do cliente, nao chame o cliente de "Cliente"; cumprimente de forma neutra.',
       'Nao diga que vai verificar se os dados oficiais ja foram fornecidos acima.',
       'Nao invente produto, preco, cor, memoria, estoque, link, garantia ou condicao fora do contexto oficial.',
       'Se o cliente pediu opcoes, mostre as opcoes oficiais relevantes. Se houver ambiguidade, filtre e pergunte objetivamente qual opcao ele quer.',
@@ -11551,6 +11552,19 @@ function buildAutoresponderReplyMessagesWithSeparateGreeting(replyMessages, { me
   return formatAutoresponderReplies([greetingText, ...messages], settings, false);
 }
 
+function sortAutoresponderProductsForAiCatalogTool(products, query = '') {
+  const safeProducts = Array.isArray(products) ? products : [];
+  const isAccessoryQuery = isAutoresponderAccessorySearchKeyword(query);
+  if (isAccessoryQuery) return safeProducts;
+  return [...safeProducts].sort((a, b) => {
+    const accessoryDelta = Number(isAutoresponderAccessoryProduct(a)) - Number(isAutoresponderAccessoryProduct(b));
+    if (accessoryDelta !== 0) return accessoryDelta;
+    const stockDelta = Number(b?.stock_quantity || 0) - Number(a?.stock_quantity || 0);
+    if (stockDelta !== 0) return stockDelta;
+    return String(a?.name || '').localeCompare(String(b?.name || ''), 'pt-BR');
+  });
+}
+
 async function buildAutoresponderPriorityProductSearchReplyData({ message, contactFirstName = '', settings = null, shouldPrefixGreeting = false } = {}) {
   if (normalizeAutoresponderCep(message)) return null;
   if (isAutoresponderGenericPhoneCatalogRequest(message)) return null;
@@ -11565,18 +11579,18 @@ async function buildAutoresponderPriorityProductSearchReplyData({ message, conta
 
   const searchKeyword = productSearchTokens.join(' ');
   const pageSize = getAutoresponderInitialProductPageSize(searchKeyword);
-  let rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
-  let products = rows.slice(0, pageSize);
+  let rows = await findAutoresponderProductsByTokens(productSearchTokens, Math.max(pageSize * 3, 30));
+  let products = sortAutoresponderProductsForAiCatalogTool(rows, searchKeyword).slice(0, pageSize);
   let usedBroadCandidateSearch = false;
   if (products.length === 0 && productSearchTokens.length > 1) {
     const candidatesById = new Map();
     for (const token of productSearchTokens) {
-      const tokenRows = await findAutoresponderProductsByTokens([token], pageSize + 1);
+      const tokenRows = await findAutoresponderProductsByTokens([token], Math.max(pageSize * 3, 30));
       for (const row of tokenRows) {
         if (row?.id && !candidatesById.has(row.id)) candidatesById.set(row.id, row);
       }
     }
-    rows = [...candidatesById.values()];
+    rows = sortAutoresponderProductsForAiCatalogTool([...candidatesById.values()], searchKeyword);
     products = rows.slice(0, pageSize);
     usedBroadCandidateSearch = products.length > 0;
   }
@@ -11659,18 +11673,18 @@ async function buildAutoresponderCatalogToolSearchData({ query, message = '', co
   if (productSearchTokens.length === 0) return null;
   const searchKeyword = productSearchTokens.join(' ');
   const pageSize = Math.max(getAutoresponderInitialProductPageSize(searchKeyword), 10);
-  let rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
-  let products = rows.slice(0, pageSize);
+  let rows = await findAutoresponderProductsByTokens(productSearchTokens, Math.max(pageSize * 3, 30));
+  let products = sortAutoresponderProductsForAiCatalogTool(rows, searchKeyword).slice(0, pageSize);
   let usedBroadCandidateSearch = false;
   if (products.length === 0 && productSearchTokens.length > 1) {
     const candidatesById = new Map();
     for (const token of productSearchTokens) {
-      const tokenRows = await findAutoresponderProductsByTokens([token], pageSize + 1);
+      const tokenRows = await findAutoresponderProductsByTokens([token], Math.max(pageSize * 3, 30));
       for (const row of tokenRows) {
         if (row?.id && !candidatesById.has(row.id)) candidatesById.set(row.id, row);
       }
     }
-    rows = [...candidatesById.values()];
+    rows = sortAutoresponderProductsForAiCatalogTool([...candidatesById.values()], searchKeyword);
     products = rows.slice(0, pageSize);
     usedBroadCandidateSearch = products.length > 0;
   }
