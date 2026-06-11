@@ -21,6 +21,7 @@ const AUTORESPONDER_AI_SYSTEM_PROMPT = [
   'Voce e o atendente virtual do Mercado do Vale.',
   'PROIBIDO responder produtos, precos, estoque, prazos, garantias, promocoes ou condicoes que nao estejam no contexto enviado pelo sistema.',
   'Se o sistema nao enviar produtos ou dados suficientes, faca apenas uma pergunta curta para entender o que o cliente procura.',
+  'LISTAS NUMERADAS DE CELULAR: quando o sistema enviar uma lista numerada, o cliente pode escolher pelo numero da lista ou pelo nome/modelo. Se o cliente mandar um numero como "15", isso pode ser a opcao 15 da lista ou parte do nome de modelos como Redmi 15, Redmi 15C ou Redmi Note 15. Se houver ambiguidade, filtre somente os itens da lista recente que combinam com esse numero/nome e pergunte qual deles o cliente quer. Nao escolha sozinho enquanto houver mais de uma possibilidade.',
   'Nunca invente informacoes. Nunca diga que tem um produto sem ele aparecer no contexto oficial.',
   'Responda em portugues do Brasil, com tom educado, direto e vendedor.',
 ].join('\n');
@@ -7277,9 +7278,79 @@ function findAutoresponderSelectedOptionFromMessage(message, options, numberedCh
     if (!name) return false;
     return tokens.every((token) => name.includes(token));
   });
+  const matchingOptions = safeOptions
+    .map((option, index) => ({ option, index }))
+    .filter(({ option }) => {
+      const name = normalizeAutoresponderText(option?.name || '');
+      const sku = normalizeAutoresponderText(option?.sku || '');
+      if (sku && sku === text) return true;
+      if (!name) return false;
+      return tokens.every((token) => name.includes(token));
+    });
+  if (matchingOptions.length > 1) {
+    return {
+      ambiguous_options: matchingOptions.map(({ option }) => option),
+      ambiguous_keyword: tokens.join(' '),
+    };
+  }
+  if (matchingOptions.length === 1) {
+    const match = matchingOptions[0];
+    return { ...match.option, option_number: match.index + 1 };
+  }
   return selectedIndex >= 0
     ? { ...safeOptions[selectedIndex], option_number: selectedIndex + 1 }
     : null;
+}
+
+async function buildAutoresponderAmbiguousSelectionReply(options, keyword = '') {
+  const safeOptions = Array.isArray(options) ? options.slice(0, AUTORESPONDER_PRODUCT_PAGE_SIZE) : [];
+  const lines = [
+    keyword
+      ? `Encontrei mais de uma opcao com "${keyword}" na lista:`
+      : 'Encontrei mais de uma opcao parecida na lista:',
+    '',
+  ];
+  for (const [index, option] of safeOptions.entries()) {
+    const product = option?.id ? await findAutoresponderProductById(option.id) : null;
+    const selectedProduct = product || option || {};
+    lines.push(await formatAutoresponderProductCardLine({
+      name: selectedProduct?.name || option?.name || 'Produto',
+      representative: selectedProduct,
+      products: [selectedProduct],
+      priceRange: product ? null : undefined,
+      colors: getAutoresponderAvailableColors([selectedProduct]),
+    }, index + 1));
+  }
+  lines.push('');
+  lines.push('Me diga o numero dessa lista filtrada ou o nome completo do modelo.');
+  return lines.join('\n');
+}
+
+async function handleAutoresponderAmbiguousSelection({ senderKey, message, settings, selectedOption }) {
+  if (!Array.isArray(selectedOption?.ambiguous_options) || selectedOption.ambiguous_options.length <= 1) return null;
+  const replyText = formatAutoresponderReply(
+    await buildAutoresponderAmbiguousSelectionReply(selectedOption.ambiguous_options, selectedOption.ambiguous_keyword),
+    settings,
+    false
+  );
+  await logAutoresponderReply({
+    sender: senderKey,
+    message,
+    intent: 'product_selection_refinement',
+    replyText,
+    matchedCount: selectedOption.ambiguous_options.length,
+    matchedProducts: selectedOption.ambiguous_options,
+  });
+  await upsertAutoresponderOptionsConversation(senderKey, selectedOption.ambiguous_options, {
+    source: 'selection_refinement',
+    keyword: selectedOption.ambiguous_keyword || normalizeAutoresponderText(message),
+    offset: 0,
+    limit: selectedOption.ambiguous_options.length,
+    total: selectedOption.ambiguous_options.length,
+    hasMore: false,
+  });
+  await upsertAutoresponderSuccessConversation(senderKey);
+  return { replies: [{ message: replyText }] };
 }
 
 async function buildAutoresponderPurchaseActionPrompt(product, selectedOption) {
@@ -12915,6 +12986,8 @@ fastify.route({
       if (Number(settings.use_numbered_lists) === 1) {
         const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
         const selectedOption = findAutoresponderSelectedOptionFromMessage(message, options, numberedChoice);
+        const ambiguousSelectionReply = await handleAutoresponderAmbiguousSelection({ senderKey, message, settings, selectedOption });
+        if (ambiguousSelectionReply) return ambiguousSelectionReply;
         if (selectedOption?.id) {
           const product = await findAutoresponderProductById(selectedOption.id);
           const replyText = formatAutoresponderReply(await buildAutoresponderPurchaseActionPrompt(product, selectedOption), settings, false);
