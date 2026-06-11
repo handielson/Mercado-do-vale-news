@@ -7808,7 +7808,7 @@ async function buildAutoresponderAiOfficialContextReply({
       'Nao diga que vai verificar se os dados oficiais ja foram fornecidos acima.',
       'Nao invente produto, preco, cor, memoria, estoque, link, garantia ou condicao fora do contexto oficial.',
       'Se o cliente pediu opcoes, mostre as opcoes oficiais relevantes. Se houver ambiguidade, filtre e pergunte objetivamente qual opcao ele quer.',
-      'Se o contexto oficial trouxer muitos tipos de item para uma marca ampla, nao despeje tudo. Agrupe por tipo e pergunte qual tipo o cliente deseja, citando exemplos encontrados como celulares, capinhas, fones, carregadores ou acessorios.',
+      'Se o contexto oficial trouxer muitos tipos de item para uma marca ampla, nao despeje tudo e nao enumere produtos nessa primeira resposta. Agrupe por tipo e pergunte qual tipo o cliente deseja, citando exemplos encontrados como celulares, capinhas, fones, carregadores ou acessorios.',
     ].filter(Boolean).join('\n'),
     maxOutputTokens: 1200,
     settings,
@@ -11587,6 +11587,22 @@ function sortAutoresponderProductsForAiCatalogTool(products, query = '') {
   });
 }
 
+function isAutoresponderBroadBrandFamilySearchKeyword(query = '') {
+  const text = normalizeAutoresponderText(query).replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+  const tokens = text.split(' ').filter(Boolean);
+  const brandFamilyTokens = new Set([
+    'xiaomi', 'redmi', 'poco',
+    'samsung', 'galaxy',
+    'motorola', 'moto',
+    'realme', 'apple', 'iphone',
+  ]);
+  const modelLikeTokens = tokens.filter((token) => /[0-9]/.test(token) || ['pro', 'plus', 'ultra', 'max', 'mini', 'c', 'a', 'note'].includes(token));
+  return tokens.length > 0
+    && tokens.every((token) => brandFamilyTokens.has(token))
+    && modelLikeTokens.length === 0;
+}
+
 async function buildAutoresponderPriorityProductSearchReplyData({ message, contactFirstName = '', settings = null, shouldPrefixGreeting = false } = {}) {
   if (normalizeAutoresponderCep(message)) return null;
   if (isAutoresponderGenericPhoneCatalogRequest(message)) return null;
@@ -11604,8 +11620,11 @@ async function buildAutoresponderPriorityProductSearchReplyData({ message, conta
   let rows = await findAutoresponderProductsByTokens(productSearchTokens, Math.max(pageSize * 3, 30));
   let products = sortAutoresponderProductsForAiCatalogTool(rows, searchKeyword).slice(0, pageSize);
   let usedBroadCandidateSearch = false;
-  if (products.length === 0 && productSearchTokens.length > 1) {
+  if ((products.length === 0 && productSearchTokens.length > 1) || isAutoresponderBroadBrandFamilySearchKeyword(searchKeyword)) {
     const candidatesById = new Map();
+    for (const row of rows) {
+      if (row?.id && !candidatesById.has(row.id)) candidatesById.set(row.id, row);
+    }
     for (const token of productSearchTokens) {
       const tokenRows = await findAutoresponderProductsByTokens([token], Math.max(pageSize * 3, 30));
       for (const row of tokenRows) {
