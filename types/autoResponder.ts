@@ -188,6 +188,22 @@ export interface AutoResponderUnansweredQuestion {
     last_seen_at: string;
 }
 
+export interface AutoResponderContactNameCurationItem {
+    id: number;
+    source_type: 'invalid_contact_name';
+    sender: string;
+    contact_name?: string | null;
+    message: string;
+    reason: string;
+    occurrences: number;
+    status: 'open' | 'resolved' | 'ignored';
+    last_seen_at: string;
+    created_at?: string;
+    updated_at?: string;
+    resolved_name?: string | null;
+    resolved_at?: string | null;
+}
+
 export interface AutoResponderAiTraining {
     id: number;
     title: string;
@@ -371,6 +387,11 @@ export interface AutoResponderConversationLogFilters {
 
 export interface AutoResponderUnansweredFilters {
     limit?: number;
+}
+
+export interface AutoResponderContactNameCurationFilters {
+    limit?: number;
+    status?: 'open' | 'resolved' | 'ignored';
 }
 
 export interface AutoResponderAiTrainingFilters {

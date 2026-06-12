@@ -79,6 +79,7 @@ const WhatsAppAiMemoryPage = lazy(() => import('../pages/admin/whatsapp/AiMemory
 const PaymentIntegrationsPage = lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
 const DisplaysPage = lazy(() => import('../pages/admin/settings/DisplaysPage'));
 const DisplayPage = lazy(() => import('../pages/display/DisplayPage'));
+const DeliveryOperationPage = lazy(() => import('../pages/delivery/DeliveryOperationPage'));
 const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
 const CatalogPage = lazy(() => import('../pages/catalog/index'));
 const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
@@ -225,6 +226,10 @@ export const router = createBrowserRouter([
   {
     path: "/display",
     element: <DisplayPage />
+  },
+  {
+    path: "/delivery/:token",
+    element: <DeliveryOperationPage />
   },
   {
     path: "/admin",

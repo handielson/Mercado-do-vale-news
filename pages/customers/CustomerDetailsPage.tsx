@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Edit, Eye, Trash2, User, Mail, Phone, MapPin, FileText, Calendar, CheckCircle, XCircle, Printer, ShoppingBag, RefreshCw, Receipt, DollarSign } from 'lucide-react';
+import { ArrowLeft, Edit, Eye, Trash2, User, Mail, Phone, MapPin, FileText, Calendar, CheckCircle, XCircle, Printer, ShoppingBag, RefreshCw, Receipt, DollarSign, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { Customer } from '../../types/customer';
@@ -17,10 +17,11 @@ import { generateLegacySalePdf } from '../../utils/legacySalePdfGenerator';
 import { vpsApiService } from '../../services/vpsApiService';
 import { warrantyTemplateService } from '../../services/warrantyTemplates';
 import { getCustomerFinancialSummary, type CustomerFinancialSummary } from '../../services/customerFinancialSummaryService';
+import { DeliveryWorkerTab } from '../../components/customer/profile/DeliveryWorkerTab';
 
 /**
  * Customer Details Page
- * 
+ *
  * ANTIGRAVITY PROTOCOL:
  * - Database-First Architecture
  * - Read-only view with actions
@@ -43,7 +44,7 @@ export default function CustomerDetailsPage() {
     const [printingSaleId, setPrintingSaleId] = useState<string | null>(null);
     const [printingReceiptId, setPrintingReceiptId] = useState<string | null>(null);
     const [printingComprovanteId, setPrintingComprovanteId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'info' | 'compras' | 'beneficios'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'compras' | 'entregas' | 'beneficios'>('info');
     // Map: product_id -> specs (for IMEI display in purchase history)
     const [saleProductSpecs, setSaleProductSpecs] = useState<Record<string, Record<string, string>>>();
 
@@ -146,27 +147,71 @@ export default function CustomerDetailsPage() {
             const settings = await companySettingsService.get();
             if (!settings?.warranty_template) { toast.error('Template de garantia não configurado'); return; }
 
+            const { productService } = await import('../../services/products');
+            const { categoryService } = await import('../../services/categories');
+
+            // Filtragem das categorias relacionadas a celulares e tablets
+            const filteredItems: any[] = [];
+            for (const item of sale.items) {
+                if (!item.product_id) continue;
+                try {
+                    const product = await productService.getById(item.product_id);
+                    if (product?.category_id) {
+                        const cat = await categoryService.getById(product.category_id);
+                        if (cat) {
+                            const catName = (cat.name || '').toLowerCase();
+                            const catSlug = (cat.slug || '').toLowerCase();
+                            const isCellOrTablet =
+                                catName.includes('celular') ||
+                                catName.includes('smartphone') ||
+                                catName.includes('tablet') ||
+                                catName.includes('iphone') ||
+                                catSlug.includes('celular') ||
+                                catSlug.includes('smartphone') ||
+                                catSlug.includes('tablet') ||
+                                catSlug.includes('iphone');
+                            if (isCellOrTablet) {
+                                filteredItems.push(item);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Erro ao obter categoria do produto', err);
+                }
+            }
+
+            if (filteredItems.length === 0) {
+                toast.error('Esta venda não contém celulares ou tablets elegíveis para termo de garantia.');
+                return;
+            }
+
             const { warrantyDocumentService } = await import('../../services/warrantyDocumentService');
             const sections: string[] = [];
 
-            // 1) Tenta usar docs já salvos
+            // 1) Tenta usar docs já salvos (filtra os válidos correspondentes aos itens válidos)
             const savedDocs = await warrantyDocumentService.listBySaleId(sale.id);
             if (savedDocs.length > 0) {
-                for (const doc of savedDocs) {
-                    const copy1 = doc.warranty_content;
-                    const copy2 = doc.warranty_content.replace(/Assinatura do Cliente/gi, 'Assinatura da Empresa');
-                    sections.push(`<div class="warranty-copy">${copy1}</div>`);
-                    sections.push(`<div class="warranty-copy">${copy2}</div>`);
+                // Monta um set dos serialized_unit_id dos itens filtrados
+                const validUnitIds = new Set(filteredItems.map(i => i.serialized_unit_id).filter(Boolean));
+                const validDocs = savedDocs.filter(doc => doc.serialized_unit_id && validUnitIds.has(doc.serialized_unit_id));
+
+                if (validDocs.length > 0) {
+                    for (const doc of validDocs) {
+                        const copy1 = doc.warranty_content;
+                        const copy2 = doc.warranty_content.replace(/Assinatura do Cliente/gi, 'Assinatura da Empresa');
+                        sections.push(`<div class="warranty-copy">${copy1}</div>`);
+                        sections.push(`<div class="warranty-copy">${copy2}</div>`);
+                    }
                 }
-            } else {
-                // 2) Fallback: regenera (cobre vendas migradas com IMEI no SKU e
-                //    vendas novas onde usuário não clicou Salvar Termo).
-                const serializedItems = sale.items.filter((i: any) => i.serialized_unit_id);
+            }
+
+            // Se não conseguimos usar savedDocs (vendas legadas ou sem docs associados), regeneramos
+            if (sections.length === 0) {
+                const serializedItems = filteredItems.filter((i: any) => i.serialized_unit_id);
                 const isLegacy = serializedItems.length === 0;
 
                 const { vpsApiService } = await import('../../services/vpsApiService');
                 const { brandService } = await import('../../services/brands');
-                const { categoryService } = await import('../../services/categories');
                 const units = isLegacy ? [] : (await vpsApiService.getUnitsBySale(sale.id) || []);
                 const unitById = new Map<string, any>();
                 units.forEach((u: any) => unitById.set(u.id, u));
@@ -180,18 +225,18 @@ export default function CustomerDetailsPage() {
                         ? 'delivery' : 'store_pickup'
                 );
 
-                const itemsToRender = isLegacy ? sale.items.slice(0, 1) : serializedItems;
+                const itemsToRender = isLegacy ? filteredItems.slice(0, 1) : serializedItems;
 
                 for (const item of itemsToRender) {
                     let specs: Record<string, any> = (item as any).product_specs || {};
                     let brand = (item as any).product_brand || '';
-                    let model = (item as any).product_model || '';
+                    let model = (item as any).product_model || item.product_name || '';
                     let categoryId: string | null | undefined = null;
                     let warrantyType: string | undefined;
                     let warrantyTemplateId: string | undefined;
 
                     if (item.product_id) {
-                        const prod = await vpsApiService.getProductById(item.product_id);
+                        const prod = await productService.getById(item.product_id);
                         if (prod) {
                             specs = prod.specs || specs;
                             brand = prod.brand || brand;
@@ -502,6 +547,7 @@ export default function CustomerDetailsPage() {
                 {[
                     { key: 'info', label: 'Informações', icon: <User className="w-4 h-4" /> },
                     { key: 'compras', label: `Compras (${salesHistory.length})`, icon: <ShoppingBag className="w-4 h-4" /> },
+                    ...(customer.is_delivery_worker ? [{ key: 'entregas', label: 'Entregas', icon: <Truck className="w-4 h-4" /> }] : []),
                     { key: 'beneficios', label: `Benefícios (${benefits.length})`, icon: <CheckCircle className="w-4 h-4" /> },
                 ].map(tab => (
                     <button
@@ -637,7 +683,7 @@ export default function CustomerDetailsPage() {
                     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
                         <div className="flex items-center gap-2 mb-4">
                             <Calendar className="w-5 h-5 text-slate-600" />
-                            <h2 className="text-lg font-semibold text-slate-900">Informações do Sistema</h2>
+                            <h2 className="text-lg font-semibold text-slate-900">Informações do System</h2>
                         </div>
                         <div className="grid grid-cols-2 gap-6">
                             <div>
@@ -743,7 +789,7 @@ export default function CustomerDetailsPage() {
                                                         <div>
                                                             <div className="text-sm font-medium text-slate-800">
                                                                 {item.quantity > 1 && <span className="mr-1.5 text-slate-500">{item.quantity}x</span>}
-                                                                {item.product_name}
+                                                                 {item.product_name}
                                                                 {item.is_gift && <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded">BRINDE</span>}
                                                             </div>
                                                             {identifier && <div className="text-xs text-slate-400 mt-0.5">{identifier}</div>}
@@ -794,6 +840,14 @@ export default function CustomerDetailsPage() {
                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* Observações da Venda (Notes) */}
+                                    {sale.notes && (
+                                        <div className="bg-orange-50/50 border border-orange-100 rounded-lg p-3 text-sm">
+                                            <h4 className="text-xs font-bold uppercase tracking-wider text-orange-800 mb-1">Observações do Cliente</h4>
+                                            <p className="text-slate-600 italic">"{sale.notes}"</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         );
@@ -801,6 +855,10 @@ export default function CustomerDetailsPage() {
                 </div>
             )}
 
+
+            {activeTab === 'entregas' && customer.is_delivery_worker && (
+                <DeliveryWorkerTab customer={customer} mode="admin" />
+            )}
 
             {/* Tab: Benefícios */}
             {activeTab === 'beneficios' && (

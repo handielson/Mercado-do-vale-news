@@ -17,9 +17,9 @@ conn.on('ready', () => {
         database: process.env.DB_NAME,
       });
       try {
-        const [cols] = await pool.query("SHOW COLUMNS FROM products");
-        console.log("Colunas da VPS:");
-        cols.forEach(c => console.log('- ' + c.Field));
+        const [cols] = await pool.query("SHOW COLUMNS FROM sales");
+        console.log("Colunas da VPS (sales):");
+        cols.forEach(c => console.log('- ' + c.Field + ' (' + c.Type + ')'));
       } catch (err) {
         console.error('❌ Erro no DB da VPS:', err.message);
       } finally {

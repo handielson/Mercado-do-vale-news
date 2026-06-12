@@ -99,7 +99,7 @@ const PRODUCT_LEVEL_FIELDS = [
  * Model-level fields (battery_mah, display, etc.) are excluded.
  */
 export const shouldRenderField = (key: string, requirement: FieldRequirement | undefined): boolean => {
-    if (!requirement || requirement === 'off') return false;
+    if (!requirement || requirement === 'off' || requirement === 'hidden') return false;
     if (!FIELD_METADATA[key]) return false;
     if (!PRODUCT_LEVEL_FIELDS.includes(key)) return false;
     return true;

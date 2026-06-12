@@ -5,6 +5,10 @@ for (const file of ['vps_server.cjs', 'vps_server.js']) {
   const source = fs.readFileSync(file, 'utf8');
 
   assert.match(source, /function isAutoresponderInvalidContactNameReply/, `${file} must reject ambiguous replies as contact names`);
+  assert.match(source, /looksLikeCommercialQuestion/, `${file} must reject commercial questions while waiting for contact name`);
+  assert.match(source, /vende\|vender\|tem/, `${file} must reject product-intent verbs as contact names`);
+  assert.match(source, /tablet\|capa\|capinha/, `${file} must reject product words as contact names`);
+  assert.match(source, /raw\.includes\('\?'\)/, `${file} must reject question-like text as contact names`);
   assert.match(
     source,
     /isAutoresponderInvalidContactNameReply\(message\) \|\| typedName\.length < 2/,

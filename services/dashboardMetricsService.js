@@ -50,23 +50,55 @@ function resolveReferenceDate(sales, now = new Date()) {
   };
 }
 
-export function buildDailyDashboardMetrics({ sales, now = new Date() }) {
+function toFiniteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+export function buildProductCostLookup(products = []) {
+  const lookup = new Map();
+  for (const product of Array.isArray(products) ? products : []) {
+    const id = product?.id == null ? '' : String(product.id);
+    if (!id) continue;
+    lookup.set(id, toFiniteNumber(product?.price_cost));
+  }
+  return lookup;
+}
+
+function getItemCostCents(item, productCostById = new Map()) {
+  const directCost = toFiniteNumber(item?.unit_cost ?? item?.cost_price);
+  if (directCost > 0) return directCost;
+
+  const productId = item?.product_id == null ? '' : String(item.product_id);
+  return toFiniteNumber(productCostById.get(productId));
+}
+
+export function calculateSaleProfitCents(sale, productCostById = new Map()) {
+  const rowProfit = Number(sale?.profit);
+  if (Number.isFinite(rowProfit) && rowProfit !== 0) return rowProfit;
+
+  const items = Array.isArray(sale?.items) ? sale.items : [];
+  const itemsProfit = items.reduce((profitAcc, item) => {
+    const quantity = toFiniteNumber(item?.quantity);
+    const itemTotal = item?.total == null
+      ? toFiniteNumber(item?.unit_price) * quantity
+      : toFiniteNumber(item.total);
+    const costTotal = getItemCostCents(item, productCostById) * quantity;
+    return profitAcc + itemTotal - costTotal;
+  }, 0);
+
+  if (items.length > 0 && itemsProfit !== 0) return itemsProfit;
+  return Number.isFinite(rowProfit) ? rowProfit : 0;
+}
+
+export function buildDailyDashboardMetrics({ sales, now = new Date(), productCostById = new Map() }) {
   const { referenceDate, periodMode } = resolveReferenceDate(sales, now);
 
   const base = (Array.isArray(sales) ? sales : []).reduce((acc, sale) => {
     if (formatLocalDateKey(sale?.created_at) !== referenceDate) return acc;
 
     const saleRevenue = Number(sale?.total ?? sale?.total_amount) || 0;
-    const saleProfitFromRow = Number(sale?.profit);
-
-    const saleProfit = Number.isFinite(saleProfitFromRow)
-      ? saleProfitFromRow
-      : (Array.isArray(sale?.items) ? sale.items : []).reduce((profitAcc, item) => {
-          const quantity = Number(item?.quantity) || 0;
-          const unitPrice = Number(item?.unit_price ?? item?.total) || 0;
-          const costPrice = Number(item?.cost_price ?? item?.unit_cost) || 0;
-          return profitAcc + ((unitPrice - costPrice) * quantity);
-        }, 0);
+    const saleProfit = calculateSaleProfitCents(sale, productCostById);
 
     return {
       revenueCents: acc.revenueCents + saleRevenue,
@@ -88,6 +120,7 @@ export function buildDailyDashboardMetrics({ sales, now = new Date() }) {
 
 export async function getDashboardDailyMetrics(now = new Date()) {
   const { getSales } = await import('./saleService');
+  const { vpsApiService } = await import('./vpsApiService');
   const rangeStart = new Date(now);
   rangeStart.setDate(rangeStart.getDate() - 14);
   rangeStart.setHours(0, 0, 0, 0);
@@ -97,9 +130,27 @@ export async function getDashboardDailyMetrics(now = new Date()) {
     start_date: rangeStart.toISOString(),
     end_date: now.toISOString(),
   });
+  const productIds = Array.from(new Set(
+    sales.flatMap((sale) => (Array.isArray(sale?.items) ? sale.items : [])
+      .map((item) => item?.product_id)
+      .filter(Boolean)
+      .map(String))
+  ));
+  const products = productIds.length > 0
+    ? (await vpsApiService.getProductsByIds(productIds).catch(() => null)) || []
+    : [];
 
   return buildDailyDashboardMetrics({
     sales,
     now,
+    productCostById: buildProductCostLookup(products),
+  });
+}
+
+export async function unlockDashboardProfit({ password, referenceDate }) {
+  const { vpsClient } = await import('./vpsClient');
+  return vpsClient.post('/admin/dashboard/profit', {
+    password,
+    referenceDate,
   });
 }

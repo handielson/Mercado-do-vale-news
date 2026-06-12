@@ -23,6 +23,7 @@ const autoresponderEngineFiles = [
 ];
 const adminEmail = process.env.MDV_ADMIN_EMAIL || process.env.ADMIN_EMAIL || process.env.VPS_ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL;
 const adminPassword = process.env.MDV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || process.env.VPS_ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD;
+const dashboardProfitPassword = process.env.DASHBOARD_PROFIT_PASSWORD || process.env.MDV_DASHBOARD_PROFIT_PASSWORD || '';
 
 if (!host || !username || (!password && !privateKey)) {
   throw new Error('Missing VPS SSH env vars');
@@ -126,8 +127,8 @@ function upsertEnv(content, entries) {
 }
 
 async function ensureRemoteAdminEnv(appDir) {
-  if (!adminEmail || !adminPassword) {
-    console.warn('Skipping remote admin env sync: MDV_ADMIN_EMAIL and MDV_ADMIN_PASSWORD are not both set locally.');
+  if (!adminEmail || !adminPassword || !dashboardProfitPassword) {
+    console.warn('Skipping remote env sync: MDV_ADMIN_EMAIL, MDV_ADMIN_PASSWORD or DASHBOARD_PROFIT_PASSWORD are not all set locally.');
     return;
   }
 
@@ -137,6 +138,7 @@ async function ensureRemoteAdminEnv(appDir) {
     const next = upsertEnv(current, {
       MDV_ADMIN_EMAIL: adminEmail,
       MDV_ADMIN_PASSWORD: adminPassword,
+      DASHBOARD_PROFIT_PASSWORD: dashboardProfitPassword,
     });
     await writeRemoteText(sftp, remoteEnv, next);
   });

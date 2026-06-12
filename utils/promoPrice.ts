@@ -1,4 +1,5 @@
 import type { Product } from '../types/product';
+import { moneyToCents } from './money';
 
 type CustomerPriceType = 'retail' | 'resale' | 'wholesale' | 'ADMIN';
 
@@ -8,12 +9,7 @@ type CustomerPricingContext = {
 } | null | undefined;
 
 export function normalizeCentValue(value: unknown): number {
-    const numeric = typeof value === 'number'
-        ? value
-        : Number(String(value ?? 0).replace(',', '.'));
-
-    if (!Number.isFinite(numeric)) return 0;
-    return Math.round(numeric);
+    return moneyToCents(value);
 }
 
 /**

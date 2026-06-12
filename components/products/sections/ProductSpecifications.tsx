@@ -28,6 +28,14 @@ interface ProductSpecificationsProps {
 // Fields that must be unique per product
 const DB_UNIQUE_FIELDS = ['serial', 'imei1', 'imei2'];
 
+const isDisabledRequirement = (requirement: FieldRequirement | undefined): boolean =>
+    requirement === 'off' || requirement === 'hidden';
+
+const getEffectiveVersionRequirement = (categoryConfig: CategoryConfig): FieldRequirement | undefined => {
+    if (isDisabledRequirement(categoryConfig.versao)) return 'off';
+    return categoryConfig.version || categoryConfig.versao;
+};
+
 export function ProductSpecifications({
     categoryConfig,
     watch,
@@ -69,8 +77,18 @@ export function ProductSpecifications({
 
     if (!categoryConfig) return null;
 
+    const shouldShowStorageField = shouldRenderField('storage', categoryConfig.storage);
+    const shouldShowRamField = shouldRenderField('ram', categoryConfig.ram);
+    const versionRequirement = getEffectiveVersionRequirement(categoryConfig);
+    const shouldShowVersionField = shouldRenderField('version', versionRequirement) && !templateValues?.['version'] && !templateValues?.['versao'];
     const storageRequirement: FieldRequirement = categoryConfig.storage === 'required' ? 'required' : 'optional';
     const ramRequirement: FieldRequirement = categoryConfig.ram === 'required' ? 'required' : 'optional';
+    const focusImei1Field = () => {
+        window.setTimeout(() => {
+            const imei1Field = document.getElementById('field-imei1') as HTMLInputElement | null;
+            imei1Field?.focus();
+        }, 0);
+    };
 
     // Helper para Labels com Asterisco
     const FieldLabel = ({ label, required }: { label: string, required: boolean }) => (
@@ -127,6 +145,7 @@ export function ProductSpecifications({
                                         setValue(fieldKey, val, { shouldValidate: true });
                                         onAddToBatchList?.({ [key]: val });
                                         setUniqueErrors(prev => ({ ...prev, [key]: '' }));
+                                        if (key === 'serial') focusImei1Field();
                                         return;
                                     }
                                     const form = e.currentTarget.form;
@@ -195,7 +214,10 @@ export function ProductSpecifications({
                     {onAddToBatchList && (
                         <button
                             type="button"
-                            onClick={() => onAddToBatchList()}
+                            onClick={() => {
+                                onAddToBatchList();
+                                focusImei1Field();
+                            }}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
                         >
                             <CheckCircle2 size={14} />
@@ -223,6 +245,7 @@ export function ProductSpecifications({
                 {categoryConfig.imei1 && categoryConfig.imei1 !== 'off' && (
                     <div className="space-y-1 min-w-0">
                         <IMEIInput
+                            id="field-imei1"
                             label="IMEI 1"
                             technicalName="specs.imei1"
                             value={watch('specs.imei1') || ''}
@@ -303,21 +326,24 @@ export function ProductSpecifications({
                 )}
 
                 {/* ARMAZENAMENTO */}
-                <div className="space-y-1 min-w-0">
-                    <CapacitySelect
-                        value={watch('specs.storage') || ''}
-                        onChange={(val) => setValue('specs.storage', val)}
-                        label="Armazenamento"
-                        technicalName="specs.storage"
-                        placeholder="Selecione o armazenamento"
-                    />
-                    {storageRequirement === 'required' && errors?.specs?.storage && (
-                        <p className="text-xs text-red-600 mt-1">{(errors.specs.storage as any)?.message}</p>
-                    )}
-                </div>
+                {shouldShowStorageField && (
+                    <div className="space-y-1 min-w-0">
+                        <CapacitySelect
+                            value={watch('specs.storage') || ''}
+                            onChange={(val) => setValue('specs.storage', val)}
+                            label="Armazenamento"
+                            technicalName="specs.storage"
+                            placeholder="Selecione o armazenamento"
+                        />
+                        {storageRequirement === 'required' && errors?.specs?.storage && (
+                            <p className="text-xs text-red-600 mt-1">{(errors.specs.storage as any)?.message}</p>
+                        )}
+                    </div>
+                )}
 
                 {/* RAM */}
-                <div className="space-y-1 min-w-0">
+                {shouldShowRamField && (
+                    <div className="space-y-1 min-w-0">
                         <CapacitySelect
                             value={watch('specs.ram') || ''}
                             onChange={(val) => setValue('specs.ram', val)}
@@ -329,20 +355,21 @@ export function ProductSpecifications({
                         {ramRequirement === 'required' && errors?.specs?.ram && (
                             <p className="text-xs text-red-600 mt-1">{(errors.specs.ram as any)?.message}</p>
                         )}
-                </div>
+                    </div>
+                )}
 
                 {/* VERSÃO */}
-                {categoryConfig.version && categoryConfig.version !== 'off' && !templateValues?.['version'] && (
+                {shouldShowVersionField && (
                     <div className="space-y-1 min-w-0">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Versão {categoryConfig.version === 'required' && <span className="text-red-500">*</span>}
+                            Versão {versionRequirement === 'required' && <span className="text-red-500">*</span>}
                             <span className="ml-2 text-xs text-slate-400 font-mono">specs.version</span>
                         </label>
                         <VersionSelect
                             value={watch('specs.version') || ''}
                             onChange={(val) => setValue('specs.version', val)}
                         />
-                        {categoryConfig.version === 'required' && errors?.specs?.version && (
+                        {versionRequirement === 'required' && errors?.specs?.version && (
                             <p className="text-xs text-red-600 mt-1">{(errors.specs.version as any)?.message}</p>
                         )}
                     </div>

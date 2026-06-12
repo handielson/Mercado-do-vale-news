@@ -15,6 +15,8 @@ import type {
     AutoResponderConversationFilters,
     AutoResponderConversationLog,
     AutoResponderConversationLogFilters,
+    AutoResponderContactNameCurationFilters,
+    AutoResponderContactNameCurationItem,
     AutoResponderManualMessageInput,
     AutoResponderManualMessageResult,
     AutoResponderOk,
@@ -290,6 +292,18 @@ export const autoResponderService = {
         return vpsClient.delete<AutoResponderOk>(withQuery('/autoresponder/unanswered', { question }));
     },
 
+    listContactNameCuration: (filters: AutoResponderContactNameCurationFilters = {}): Promise<AutoResponderContactNameCurationItem[]> => {
+        return vpsClient.get<AutoResponderContactNameCurationItem[]>(withQuery('/autoresponder/contact-name-curation', filters));
+    },
+
+    ignoreContactNameCuration: (id: number): Promise<AutoResponderOk> => {
+        return vpsClient.post<AutoResponderOk>(`/autoresponder/contact-name-curation/${id}/ignore`, {});
+    },
+
+    resolveContactNameCuration: (id: number, name: string): Promise<AutoResponderOk & { sender?: string; name?: string }> => {
+        return vpsClient.post<AutoResponderOk & { sender?: string; name?: string }>(`/autoresponder/contact-name-curation/${id}/resolve`, { name });
+    },
+
     getStats: (filters: { source?: 'mysql' | 'synology'; from?: string } = {}): Promise<AutoResponderStats> => {
         return vpsClient.get<AutoResponderStats>(withQuery('/autoresponder/stats', filters));
     },
@@ -340,6 +354,10 @@ export const autoResponderService = {
 
     connectWhatsApp: (): Promise<{ base64?: string; pairingCode?: string; instance?: { state: string } }> => {
         return vpsClient.get<{ base64?: string; pairingCode?: string; instance?: { state: string } }>('/autoresponder/whatsapp/connect');
+    },
+
+    syncWhatsAppWebhook: (): Promise<{ ok: boolean; webhook?: unknown }> => {
+        return vpsClient.post<{ ok: boolean; webhook?: unknown }>('/autoresponder/whatsapp/sync-webhook', {});
     },
 
     disconnectWhatsApp: (): Promise<any> => {

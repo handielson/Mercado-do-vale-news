@@ -62,8 +62,39 @@ type ProductSaveResult = Product & {
 
 const DEFAULT_PRODUCT_VERSION = 'Global';
 const DEFAULT_BATTERY_HEALTH = '100';
+const CATEGORY_CONFIG_NON_SPEC_KEYS = new Set([
+    'custom_fields',
+    'ean_autofill_config',
+    'auto_name_enabled',
+    'auto_name_template',
+    'auto_name_fields',
+    'auto_name_separator',
+    'unique_fields',
+]);
+
+function removeDisabledCategorySpecs(specs: Record<string, any> | undefined, config: CategoryConfig | null): Record<string, any> {
+    const cleanedSpecs = { ...(specs || {}) };
+    if (!config) return cleanedSpecs;
+
+    for (const [key, requirement] of Object.entries(config)) {
+        if (CATEGORY_CONFIG_NON_SPEC_KEYS.has(key)) continue;
+        if (requirement === 'off' || requirement === 'hidden') {
+            delete cleanedSpecs[key];
+        }
+    }
+
+    for (const customField of config.custom_fields || []) {
+        const key = customField.key || customField.name;
+        if (key && (customField.requirement === 'off' || customField.requirement === 'hidden')) {
+            delete cleanedSpecs[key];
+        }
+    }
+
+    return cleanedSpecs;
+}
 
 export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, isLoading }: ProductFormProps) {
+    const isEditingExistingProduct = Boolean(initialData?.id);
     const [imagePreviews, setImagePreviews] = useState<string[]>(initialData?.images || []);
     const [isCompressing, setIsCompressing] = useState(false);
     const [blingId, setBlingId] = useState<number | undefined>(initialData?.bling_id);
@@ -236,6 +267,28 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         }
     }, [initialData, reset]);
 
+    useEffect(() => {
+        if (!initialData?.model_id) return;
+
+        const loadInitialModelById = async () => {
+            try {
+                const model = await modelService.getById(initialData.model_id);
+                if (!model) return;
+
+                setSelectedModel(model);
+                setValue('model_id', model.id, { shouldDirty: false, shouldValidate: true });
+                setValue('model', model.name, { shouldDirty: false, shouldValidate: true });
+                if (model.category_id && !initialData.category_id) {
+                    setValue('category_id', model.category_id, { shouldDirty: false, shouldValidate: true });
+                }
+            } catch {
+                // quietly keep the product editable even if the model lookup fails
+            }
+        };
+
+        loadInitialModelById();
+    }, [initialData?.category_id, initialData?.model_id, setValue]);
+
     // EAN auto-fill hook (DEPOIS do useForm)
     const {
         isSearchingEAN,
@@ -249,7 +302,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const selectedBrand = watch('brand');
     const [selectedBrandId, setSelectedBrandId] = useState<string>('');
     const currentSerializedIdentity = hasSerializedIdentity(watch('specs') || {});
-    const isSerializedStockCalculated = serialList.length > 0 || (currentSerializedIdentity && !initialData);
+    const isSerializedStockCalculated = serialList.length > 0 || (currentSerializedIdentity && !isEditingExistingProduct);
     const blocksSubmitForDuplicateEAN = isDuplicateEAN && !isSerializedStockCalculated;
 
     useEffect(() => {
@@ -258,10 +311,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             return;
         }
 
-        if (currentSerializedIdentity && !initialData) {
+        if (currentSerializedIdentity && !isEditingExistingProduct) {
             setValue('stock_quantity', 1, { shouldValidate: true });
         }
-    }, [serialList.length, currentSerializedIdentity, initialData, setValue]);
+    }, [serialList.length, currentSerializedIdentity, isEditingExistingProduct, setValue]);
 
     // Warranty states
     const [brandWarrantyDays, setBrandWarrantyDays] = useState<number | null>(null);
@@ -324,7 +377,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             // - No model or color selected
             // - User wants custom images
             // - Already has images (editing existing product)
-            if (!selectedModel?.id || !selectedColor || useCustomImages || initialData) {
+            if (!selectedModel?.id || !selectedColor || useCustomImages || isEditingExistingProduct) {
                 return;
             }
 
@@ -357,7 +410,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         };
 
         loadDefaultImages();
-    }, [selectedModel?.id, selectedColor, useCustomImages, initialData]);
+    }, [selectedModel?.id, selectedColor, useCustomImages, isEditingExistingProduct]);
 
     // 1. Função para carregar as regras da categoria
     const loadCategoryConfig = async () => {
@@ -384,7 +437,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     }, [selectedCategoryId]);
 
     useEffect(() => {
-        if (initialData || !categoryConfig) return;
+        if (isEditingExistingProduct || !categoryConfig) return;
 
         const defaultSetOptions = {
             shouldDirty: false,
@@ -399,7 +452,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         if (categoryConfig.battery_health && categoryConfig.battery_health !== 'off' && !getValues('specs.battery_health')) {
             setValue('specs.battery_health', DEFAULT_BATTERY_HEALTH, defaultSetOptions);
         }
-    }, [categoryConfig, getValues, initialData, setValue]);
+    }, [categoryConfig, getValues, isEditingExistingProduct, setValue]);
 
     // Auto-generate product name based on category configuration
     useEffect(() => {
@@ -925,6 +978,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 console.log('✅ Cleared stock_quantity (inventory tracking disabled)');
             }
 
+            mergedData.specs = removeDisabledCategorySpecs(mergedData.specs, categoryConfig);
+
             // Inject external integration IDs
             const automaticBlingLink = !blingId
                 ? await resolveAutomaticBlingLink(mergedData.sku)
@@ -1082,14 +1137,14 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 const savedProduct = await onSubmit(mergedData);
                 showVariationPriceAdjustmentToast(savedProduct);
                 setSaveProgress({ current: 1, total: 1, message: 'Produto salvo.' });
-                if (!initialData) {
+                if (!isEditingExistingProduct) {
                     toast.success('Produto cadastrado com sucesso!');
                 }
                 onBatchComplete?.();
             }
 
             // 2. Calcular preço médio se for novo produto com variação
-            if (false && !initialData && selectedBrandId && mergedData.specs?.ram && mergedData.specs?.storage) {
+            if (false && !isEditingExistingProduct && selectedBrandId && mergedData.specs?.ram && mergedData.specs?.storage) {
                 try {
                     console.log('📊 Calculating average prices...');
                     const result = await averagePriceService.updateAveragePrices({
@@ -1254,13 +1309,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 setValue={setValue}
                 errors={errors}
                 onRefresh={loadCategoryConfig}
-                onAddToBatchList={!initialData ? handleAddToBatchList : undefined}
+                onAddToBatchList={!isEditingExistingProduct ? handleAddToBatchList : undefined}
                 templateValues={selectedModel?.template_values}
                 currentProductId={initialData?.id}
             />
 
             {/* BOTÃO ADICIONAR À LISTA + LISTA DE CADASTRO EM MASSA */}
-            {!initialData && (
+            {!isEditingExistingProduct && (
                 <div className="bg-white p-6 rounded-xl border border-blue-200 shadow-sm space-y-3">
                     <h3 className="font-semibold text-slate-800 flex items-center gap-2">
                         <ListOrdered size={18} className="text-blue-600" />

@@ -280,6 +280,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const shopeeModalProduct = mapProductToShopeeLocalProduct(shopeeModalProductSource as Product & Record<string, any>) as LocalProduct;
     const emptyShopeeHistory: ShopeeProduct[] = [];
     const currentStockQuantity = Math.max(0, Number(currentStock || 0));
+    const hasSerializedIdentity = Boolean(
+        product.specs?.imei1 ||
+        product.specs?.imei_1 ||
+        product.specs?.imei2 ||
+        product.specs?.imei_2 ||
+        product.specs?.serial ||
+        product.specs?.serial_number
+    );
+    const isSerializedSoldOut = hasSerializedIdentity && product.track_inventory !== false && currentStockQuantity <= 0;
     const displayStockLocationRows = stockLocationRows.length > 0
         ? stockLocationRows.map((item) => ({
             id: item.id,
@@ -886,6 +895,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         }
     };
 
+    const displayStatusColor = isSerializedSoldOut
+        ? 'bg-red-100 text-red-800 border-red-200'
+        : getStatusColor(currentStatus);
+    const displayStatusLabel = isSerializedSoldOut
+        ? 'Vendido'
+        : getStatusLabel(currentStatus);
+
     const isParentProduct = Number(product.is_parent) === 1;
 
     return (
@@ -1491,9 +1507,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 <div className="flex flex-wrap items-center gap-1.5">
                     <span className={cn(
                         'inline-block px-2 py-1 text-xs font-medium rounded-md border',
-                        getStatusColor(currentStatus)
+                        displayStatusColor
                     )}>
-                        {getStatusLabel(currentStatus)}
+                        {displayStatusLabel}
                     </span>
                     {(product.production_days != null && product.production_days > 0) && (
                         <span className="inline-block px-2 py-1 text-xs font-medium rounded-md border bg-amber-50 text-amber-700 border-amber-200">

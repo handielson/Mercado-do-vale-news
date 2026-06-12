@@ -26,11 +26,11 @@ async function run() {
   // 1. Busca todos os produtos (incluindo inativos)
   console.log('Baixando todos os produtos da VPS...');
   let allProducts = [];
-  let page = 1;
+  let offset = 0;
   const limit = 200;
 
   while (true) {
-    const res = await fetch(`${vpsUrl}/products?status=all&limit=${limit}&page=${page}`);
+    const res = await fetch(`${vpsUrl}/products?status=all&limit=${limit}&offset=${offset}&noCache=true`);
     if (!res.ok) {
       console.error(`Erro ao buscar página ${page}:`, await res.text());
       break;
@@ -40,7 +40,7 @@ async function run() {
     allProducts = allProducts.concat(data);
     console.log(`  Página ${page}: ${data.length} produtos (total: ${allProducts.length})`);
     if (data.length < limit) break;
-    page++;
+    offset += limit;
   }
 
   console.log(`\nTotal de produtos encontrados: ${allProducts.length}`);

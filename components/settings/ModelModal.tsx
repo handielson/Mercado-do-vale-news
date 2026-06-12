@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, FileText, Settings, Search, ExternalLink, Tags, Braces } from 'lucide-react';
+import { X, FileText, Settings, Search, ExternalLink, Tags, Braces, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Model, type ModelInput } from '../../types/model';
 import { type Brand } from '../../types/brand';
@@ -15,7 +15,13 @@ import { CurrencyInput } from '../ui/CurrencyInput';
 import { tableDataService, type TableOption } from '../../services/table-data';
 import { CategorySelect } from '../products/CategorySelect';
 import { ColorImageManager } from './ColorImageManager';
-import { buildModelImportPrompt, normalizeModelImportPayload, parseModelImportJson } from './modelJsonImport.js';
+import {
+    buildModelImportPrompt,
+    isModelImportUnitOnlyFieldKey,
+    normalizeModelImportPayload,
+    parseModelImportJson,
+} from './modelJsonImport.js';
+import { generateModelJsonWithAi } from '../../services/modelAiService';
 
 interface ModelModalProps {
     isOpen: boolean;
@@ -280,6 +286,10 @@ interface TemplateFieldInputProps {
 const TemplateFieldInput: React.FC<TemplateFieldInputProps> = ({ field, value, onChange }) => {
     const [options, setOptions] = useState<TableOption[]>([]);
     const [loading, setLoading] = useState(false);
+    const currentValue = value == null ? '' : String(value);
+    const hasImportedValue = currentValue.trim() !== '';
+    const hasTableOption = options.some((opt) => String(opt.value) === currentValue);
+    const hasManualOption = (field.options || []).some((opt) => String(opt) === currentValue);
 
 
     useEffect(() => {
@@ -321,6 +331,9 @@ const TemplateFieldInput: React.FC<TemplateFieldInputProps> = ({ field, value, o
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 >
                     <option value="">Selecione...</option>
+                    {hasImportedValue && !loading && !hasTableOption ? (
+                        <option value={currentValue}>Valor importado nao cadastrado: {currentValue}</option>
+                    ) : null}
                     {options.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                             {opt.label}
@@ -335,6 +348,9 @@ const TemplateFieldInput: React.FC<TemplateFieldInputProps> = ({ field, value, o
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                     <option value="">Selecione...</option>
+                    {hasImportedValue && !hasManualOption ? (
+                        <option value={currentValue}>Valor importado nao cadastrado: {currentValue}</option>
+                    ) : null}
                     {field.options.map((opt) => (
                         <option key={opt} value={opt}>
                             {opt}
@@ -402,6 +418,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [modelJsonInput, setModelJsonInput] = useState('');
     const [modelPromptCopied, setModelPromptCopied] = useState(false);
     const [showModelPrompt, setShowModelPrompt] = useState(false);
+    const [generatingModelJson, setGeneratingModelJson] = useState(false);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Update AI Prompt automatically when model data changes
@@ -535,7 +552,8 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         .filter(f => f.category === 'spec')
         .filter(isFieldEnabledForCategory)
         .filter(field => !isFieldBlockedForCategory(field))
-        .filter(field => !isDuplicateTemplateField(field));
+        .filter(field => !isDuplicateTemplateField(field))
+        .filter(field => !isModelImportUnitOnlyFieldKey(field.key));
     const hiddenSpecFields = templateFields
         .filter(f => f.category === 'spec')
         .filter(field => !isFieldEnabledForCategory(field) || isFieldBlockedForCategory(field) || isDuplicateTemplateField(field));
@@ -544,7 +562,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         return normalizeFieldAlias(alias) === normalizeFieldAlias(key);
     });
     const getSanitizedTemplateValues = (values: Record<string, any>) => Object.fromEntries(
-        Object.entries(values).filter(([key]) => !isHiddenSpecKey(key))
+        Object.entries(values).filter(([key]) => !isHiddenSpecKey(key) && !isModelImportUnitOnlyFieldKey(key))
     );
     const modelImportPrompt = buildModelImportPrompt({
         name,
@@ -681,6 +699,38 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         } catch (err) {
             console.error('Erro no parser do JSON do modelo', err);
             toast.error(err instanceof Error ? err.message : 'O formato JSON Ã© invÃ¡lido.');
+        }
+    };
+
+    const handleGenerateModelJson = async () => {
+        if (loading) {
+            toast.error('Aguarde marcas, categorias e campos carregarem antes de gerar o JSON.');
+            return;
+        }
+        setGeneratingModelJson(true);
+        try {
+            const result = await generateModelJsonWithAi({
+                prompt: modelImportPrompt,
+                name,
+                brand: brandObj?.name || '',
+                category: categoryObj?.name || 'Smartphones',
+            });
+            setModelJsonInput(result.text);
+            const data = parseModelImportJson(result.text);
+            const normalized = normalizeModelImportPayload(data, {
+                brands,
+                categories,
+                customFields: visibleSpecFields,
+                choiceOptions: fieldChoiceOptions,
+            });
+            const appliedFields = applyNormalizedModelPayload(normalized);
+            warnUnresolvedModelPayload(data, normalized);
+            toast.success(appliedFields.length > 0 ? 'Modelo preenchido pela IA.' : 'JSON gerado pela IA. Revise antes de salvar.');
+        } catch (err) {
+            console.error('Erro ao gerar JSON do modelo com IA', err);
+            toast.error(err instanceof Error ? err.message : 'Nao foi possivel gerar o JSON com IA.');
+        } finally {
+            setGeneratingModelJson(false);
         }
     };
 
@@ -1256,6 +1306,14 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg bg-slate-50 text-slate-700 resize-none"
                                     />
                                     <div className="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleGenerateModelJson}
+                                            disabled={generatingModelJson || loading}
+                                            className="inline-flex items-center gap-2 px-3 py-2 bg-slate-950 text-white rounded-lg hover:bg-slate-800 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <Sparkles size={15} /> {generatingModelJson ? 'Gerando...' : 'Gerar no sistema'}
+                                        </button>
                                         <a href="https://gemini.google.com/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">
                                             <ExternalLink size={15} /> Gemini
                                         </a>

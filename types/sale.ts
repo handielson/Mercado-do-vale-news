@@ -13,7 +13,9 @@ export interface PaymentMethod {
     amount: number; // Valor BASE em centavos (sem taxa)
     installments?: number; // Número de parcelas (apenas para credit)
     fee_percentage?: number; // Taxa aplicada (%)
-    fee_amount?: number; // Valor da taxa em centavos
+    fee_amount?: number; // Acrescimo cobrado do cliente em centavos
+    operator_fee_percentage?: number; // Taxa real cobrada pela maquina (%)
+    operator_fee_amount?: number; // Custo real da maquina em centavos
     total_with_fee: number; // Valor total (amount + fee_amount)
     due_date?: string; // Data de vencimento se for a_prazo (YYYY-MM-DD)
     pix_payment_id?: string;
@@ -97,15 +99,22 @@ export interface Sale {
     // Delivery fields
     delivery_type?: DeliveryType;
     delivery_person_id?: string;
+    delivery_person_customer_id?: string | null;
     delivery_cost_store?: number; // em centavos
     delivery_cost_customer?: number; // em centavos
     delivery_total?: number; // em centavos
 
     // Discount fields
     promotional_discount?: number; // em centavos
+    coupon_code?: string;
+    coupon_id?: string;
+    final_adjustment_discount?: number; // em centavos
 
     // Indicação (Referral)
     referral_code?: string;
+
+    // Observação interna
+    internal_notes?: string;
 
     // Importação legada (MV-Gestao)
     legacy_sale_id?: string;
@@ -128,12 +137,16 @@ export interface SaleInput {
     // Delivery fields
     delivery_type?: DeliveryType;
     delivery_person_id?: string;
+    delivery_person_customer_id?: string | null;
     delivery_cost_store?: number; // em centavos
     delivery_cost_customer?: number; // em centavos
     delivery_total?: number; // em centavos
 
     // Discount fields
     promotional_discount?: number; // em centavos
+    coupon_code?: string;
+    coupon_id?: string;
+    final_adjustment_discount?: number; // em centavos
 
     // Indicação (Referral)
     referral_code?: string;

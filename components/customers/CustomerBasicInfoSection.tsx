@@ -175,6 +175,23 @@ export default function CustomerBasicInfoSection({
                         <option value="inactive">Inativo</option>
                     </select>
                 </div>
+
+                <div className="md:col-span-2 rounded-lg border border-blue-100 bg-blue-50 p-4">
+                    <label className="flex items-start gap-3">
+                        <input
+                            type="checkbox"
+                            checked={formData.is_delivery_worker === true}
+                            onChange={(e) => onFieldUpdate('is_delivery_worker', e.target.checked)}
+                            className="mt-1 h-4 w-4 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>
+                            <span className="block text-sm font-semibold text-slate-900">Este cliente tambem faz entregas</span>
+                            <span className="mt-1 block text-sm text-slate-600">
+                                Quando marcado, o cliente aparece no PDV como entregador e pode receber saldo de entregas.
+                            </span>
+                        </span>
+                    </label>
+                </div>
             </div>
         </div>
     );

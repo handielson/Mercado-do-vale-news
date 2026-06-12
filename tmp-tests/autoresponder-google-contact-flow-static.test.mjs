@@ -53,6 +53,84 @@ assert.match(
 
 assert.match(
   sourceText,
+  /async function findGoogleContactByPhone\(sender\)/,
+  `${label} autoresponder must search existing Google Contacts by phone`,
+);
+
+assert.match(
+  sourceText,
+  /endpoint: 'people:searchContacts'/,
+  `${label} Google Contacts integration must call People API searchContacts`,
+);
+
+assert.match(
+  sourceText,
+  /https:\/\/people\.googleapis\.com\/v1\/\$\{endpoint\}/,
+  `${label} Google Contacts lookup must use a shared People API search helper`,
+);
+
+assert.match(
+  sourceText,
+  /endpoint: 'otherContacts:search'/,
+  `${label} Google Contacts lookup must fall back to Other Contacts search`,
+);
+
+assert.match(
+  sourceText,
+  /async function listGoogleConnectionsByPhone\(\{ accessToken, sender \}\)/,
+  `${label} Google Contacts lookup must fall back to listing connections by phone`,
+);
+
+assert.match(
+  sourceText,
+  /https:\/\/people\.googleapis\.com\/v1\/people\/me\/connections/,
+  `${label} Google Contacts connection fallback must call People API connections list`,
+);
+
+assert.match(
+  sourceText,
+  /allowForbidden: true/,
+  `${label} Other Contacts lookup must not break the responder when its OAuth scope is missing`,
+);
+
+assert.match(
+  sourceText,
+  /googleContactPhoneMatches/,
+  `${label} Google Contacts lookup must verify phone digits before trusting a match`,
+);
+
+assert.match(
+  sourceText,
+  /function getAutoresponderPhoneMatchKeys\(value\)/,
+  `${label} Google Contacts lookup must compare BR phone numbers with and without the ninth digit`,
+);
+
+assert.match(
+  sourceText,
+  /digits\.length === 12[\s\S]*?digits\.slice\(0, 4\)}9/,
+  `${label} Google Contacts lookup must add the Brazilian mobile ninth digit for matching`,
+);
+
+assert.match(
+  sourceText,
+  /async function resolveAutoresponderContactFirstName\(sender, payloadContactFirstName = ''\)/,
+  `${label} webhook must resolve existing Google contact names before replying`,
+);
+
+assert.match(
+  sourceText,
+  /contact_name_status = 'google_synced'/,
+  `${label} existing Google Contacts must be persisted as synced conversation names`,
+);
+
+assert.match(
+  sourceText,
+  /await mergeAutoresponderConversationAliases\(aliasCandidates, sender\)/,
+  `${label} Google Contacts lookup must merge old name-based conversations into the phone conversation`,
+);
+
+assert.match(
+  sourceText,
   /const contactFlowReply = await handleAutoresponderContactNameFlow\(\{ sender: senderKey, message, contactFirstName \}\)/,
   `${label} webhook must check the contact name flow before product search`,
 );

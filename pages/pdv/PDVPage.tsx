@@ -31,6 +31,7 @@ import { categoryService } from '../../services/categories';
 import { productService } from '../../services/products';
 import { warrantyTemplateService } from '../../services/warrantyTemplates';
 import { teamService } from '../../services/team';
+import { customerService } from '../../services/customers';
 import { getEffectiveCustomerPrice, normalizeCentValue } from '../../utils/promoPrice';
 import { buildPdvProductName } from '../../utils/pdvProductDisplay';
 import type { PdvDisplay, PdvPixPayment } from '../../types/pdvDisplay';
@@ -107,6 +108,7 @@ interface Customer {
     phone?: string;
     customer_type?: 'wholesale' | 'resale' | 'retail' | 'ADMIN';
     admin_preview_type?: 'retail' | 'resale' | 'wholesale';
+    is_walk_in_customer?: boolean;
 }
 
 const WARRANTY_TERM_CATEGORY_KEYS = new Set([
@@ -151,6 +153,7 @@ export default function PDVPage() {
 
     // Estado do cliente
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>();
+    const [isSelectingWalkInCustomer, setIsSelectingWalkInCustomer] = useState(false);
 
     // Estado dos pagamentos
     const [payments, setPayments] = useState<PaymentMethod[]>([]);
@@ -165,6 +168,7 @@ export default function PDVPage() {
     // Estado da entrega
     const [deliveryType, setDeliveryType] = useState<DeliveryType | undefined>();
     const [deliveryPersonId, setDeliveryPersonId] = useState<string | undefined>();
+    const [deliveryPersonCustomerId, setDeliveryPersonCustomerId] = useState<string>('');
     const [deliveryCostStore, setDeliveryCostStore] = useState(0);
     const [deliveryCostCustomer, setDeliveryCostCustomer] = useState(0);
 
@@ -181,6 +185,7 @@ export default function PDVPage() {
 
     // Estado da Indicação (Moedas do Vale)
     const [referralCode, setReferralCode] = useState('');
+    const [saleNotes, setSaleNotes] = useState('');
 
     // Estado do termo de garantia — N termos (1 por aparelho serializado)
     const [showWarrantyModal, setShowWarrantyModal] = useState(false);
@@ -194,11 +199,22 @@ export default function PDVPage() {
     const [warrantyDocsMeta, setWarrantyDocsMeta] = useState<Array<{ id: string; serialized_unit_id: string }>>([]);
 
     // Entregadores reais do VPS (role = 'delivery')
-    const [deliveryPersons, setDeliveryPersons] = React.useState<{ id: string; name: string }[]>([]);
+    const [deliveryPersons, setDeliveryPersons] = React.useState<{ id: string; name: string; customer_id?: string }[]>([]);
 
     const loadDeliveryPersons = React.useCallback(() => {
-        teamService.list({ role: 'delivery', is_active: true })
-            .then(members => setDeliveryPersons(members.map(m => ({ id: m.id, name: m.name }))))
+        Promise.all([
+            teamService.list({ role: 'delivery', is_active: true }),
+            customerService.list({ is_active: true, is_delivery_worker: true }),
+        ])
+            .then(([members, customers]) => {
+                const teamOptions = members.map(m => ({ id: m.id, name: m.name }));
+                const customerOptions = customers.map(customer => ({
+                    id: `customer:${customer.id}`,
+                    name: `${customer.name} (cliente)`,
+                    customer_id: customer.id,
+                }));
+                setDeliveryPersons([...teamOptions, ...customerOptions]);
+            })
             .catch(() => { /* falha silenciosa — seção de entrega fica sem entregadores */ });
     }, []);
 
@@ -212,6 +228,7 @@ export default function PDVPage() {
             return [person, ...current];
         });
         setDeliveryPersonId(person.id);
+        setDeliveryPersonCustomerId('');
     };
 
 
@@ -477,23 +494,53 @@ export default function PDVPage() {
         type: DeliveryType | undefined,
         personId: string | undefined,
         costStore: number,
-        costCustomer: number
+        costCustomer: number,
+        customerId?: string
     ) => {
         setDeliveryType(type);
         setDeliveryPersonId(personId);
+        setDeliveryPersonCustomerId(customerId || '');
         setDeliveryCostStore(costStore);
         setDeliveryCostCustomer(costCustomer);
     };
 
+    const isWalkInCustomer = (customer?: Customer): boolean => customer?.is_walk_in_customer === true;
+
+    const handleSelectWalkInCustomer = async () => {
+        try {
+            setIsSelectingWalkInCustomer(true);
+            const customer = await customerService.getOrCreateWalkInCustomer();
+            setSelectedCustomer(customer);
+            handleDeliveryChange('store_pickup', undefined, 0, 0);
+            toast.success('Venda rápida selecionada', {
+                description: 'Cliente Balcão com retirada na loja.'
+            });
+        } catch (error: any) {
+            console.error('Erro ao selecionar Cliente Balcão:', error);
+            toast.error(error?.message || 'Erro ao selecionar Cliente Balcão');
+        } finally {
+            setIsSelectingWalkInCustomer(false);
+        }
+    };
+
     // Handler de seleção de parcela
-    const handleSelectInstallment = (installments: number, amount: number, feeAmount: number) => {
+    const handleSelectInstallment = (
+        installments: number,
+        amount: number,
+        feeAmount: number,
+        operatorFeeAmount: number = 0,
+        operatorFeePercentage: number = 0,
+        appliedFeePercentage?: number
+    ) => {
         const totalWithFee = amount + feeAmount;
         const newPayment: PaymentMethod = {
             method: 'credit',
-            amount: totalWithFee, // Valor total que o cliente vai pagar (COM juros)
+            amount, // Valor base da venda antes do acrescimo cobrado do cliente
             installments: installments,
-            fee_percentage: (feeAmount / amount) * 100,
+            fee_percentage: appliedFeePercentage ?? ((feeAmount / amount) * 100),
             fee_amount: feeAmount,
+            operator_fee_percentage: operatorFeePercentage,
+            operator_fee_amount: operatorFeeAmount,
             total_with_fee: totalWithFee
         };
         setFinalAdjustmentDiscount(0);
@@ -756,13 +803,17 @@ export default function PDVPage() {
             // seller_id: TODO - pegar do usuário logado
             items: cartItems,
             payment_methods: payments,
-            notes: undefined,
+            notes: saleNotes.trim() || undefined,
             delivery_type: deliveryType,
             delivery_person_id: deliveryPersonId,
+            delivery_person_customer_id: deliveryPersonCustomerId || undefined,
             delivery_cost_store: deliveryCostStore,
             delivery_cost_customer: deliveryCostCustomer,
             delivery_total: deliveryTotal,
             promotional_discount: promotionalDiscount + appliedFinalAdjustmentDiscount,
+            coupon_code: appliedCoupon?.code || undefined,
+            coupon_id: appliedCoupon?.id || undefined,
+            final_adjustment_discount: appliedFinalAdjustmentDiscount || undefined,
             referral_code: referralCode.trim() || undefined
         };
 
@@ -780,6 +831,7 @@ export default function PDVPage() {
             }
 
             // Creditar Moedas do Vale pelo valor final pago
+            if (!isWalkInCustomer(selectedCustomer)) {
             try {
                 const totals = calculateSaleTotals(cartItems);
                 const couponDiscount = appliedCoupon
@@ -795,6 +847,7 @@ export default function PDVPage() {
                 }
             } catch {
                 // Erro nas moedas não bloqueia a venda
+            }
             }
 
             toast.success('Venda finalizada com sucesso!', {
@@ -874,11 +927,13 @@ export default function PDVPage() {
             setPdvPixPayment(null);
             setDeliveryType(undefined);
             setDeliveryPersonId(undefined);
+            setDeliveryPersonCustomerId('');
             setDeliveryCostStore(0);
             setDeliveryCostCustomer(0);
             setPromotionalDiscount(0);
             setFinalAdjustmentDiscount(0);
             setReferralCode('');
+            setSaleNotes('');
             handleClearCoupon();
         } catch (error) {
             console.error('Erro ao finalizar venda:', error);
@@ -1176,6 +1231,8 @@ export default function PDVPage() {
                         <CustomerSection
                             selectedCustomer={selectedCustomer}
                             onSelectCustomer={setSelectedCustomer}
+                            onSelectWalkInCustomer={handleSelectWalkInCustomer}
+                            isSelectingWalkInCustomer={isSelectingWalkInCustomer}
                         />
 
                         <ProductSearchSection
@@ -1255,6 +1312,21 @@ export default function PDVPage() {
                                 className="w-full px-3 py-2 border-2 border-purple-200 rounded-lg focus:border-purple-500 focus:outline-none font-mono uppercase text-sm bg-white"
                             />
                             <p className="text-xs text-purple-600/80">Recompensa o divulgador que indicou esta venda.</p>
+                        </div>
+
+                        {/* Observações da Venda */}
+                        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+                            <div className="flex items-center gap-2 mb-1">
+                                <span className="text-lg">📝</span>
+                                <span className="text-sm font-semibold text-slate-700">Observações da Venda (Comprovante/Cliente)</span>
+                            </div>
+                            <textarea
+                                value={saleNotes}
+                                onChange={e => setSaleNotes(e.target.value)}
+                                placeholder="Digite observações sobre a venda que aparecerão no comprovante e histórico do cliente..."
+                                rows={2}
+                                className="w-full px-3 py-2 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:outline-none text-sm resize-none"
+                            />
                         </div>
 
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ExternalLink, FileText, Loader2, MapPin, Pencil, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ExternalLink, FileText, Loader2, MapPin, Pencil, Plus, RefreshCw } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { modelService } from '../../../services/models';
@@ -372,6 +372,15 @@ const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => voi
             >
                 <Pencil className="h-3.5 w-3.5" />
                 Cadastro
+            </button>
+            <button
+                type="button"
+                onClick={() => onNavigate(product.cloneUrl || `/admin/products/new?clone_from=${encodeURIComponent(product.products?.[0]?.id || product.id || '')}`)}
+                className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                title={`Cadastrar outro item igual ao SKU ${product.sku || 'produto'}, sem copiar IMEI/Serial`}
+            >
+                <Plus className="h-3.5 w-3.5" />
+                Cadastrar +
             </button>
             <button
                 type="button"

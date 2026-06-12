@@ -79,10 +79,10 @@ const choiceOptions = {
   assert.equal(normalized.categoryId, 'cat-smartphones');
   assert.equal(normalized.description, 'Descricao do modelo');
   assert.deepEqual(normalized.templateValues.keywords, ['redmi a7 pro', 'xiaomi']);
-  assert.equal(normalized.templateValues.ram, '4GB');
-  assert.equal(normalized.templateValues.storage, '128GB');
-  assert.equal(normalized.templateValues.version, 'version-global-id');
-  assert.equal(normalized.templateValues.water_resistance, undefined);
+  assert.equal(normalized.templateValues.ram, undefined);
+  assert.equal(normalized.templateValues.storage, undefined);
+  assert.equal(normalized.templateValues.version, undefined);
+  assert.equal(normalized.templateValues.water_resistance, 'IP70');
   assert.deepEqual(normalized.missingChoices, [{
     fieldKey: 'water_resistance',
     fieldLabel: 'Protecao',
@@ -126,9 +126,11 @@ const choiceOptions = {
   });
 
   assert.match(prompt, /template_values/);
-  assert.match(prompt, /ram/);
-  assert.match(prompt, /Opcoes validas: 4GB, 6GB/);
-  assert.match(prompt, /Opcoes validas: Global, Nacional/);
+  assert.doesNotMatch(prompt, /"ram"/);
+  assert.doesNotMatch(prompt, /"storage"/);
+  assert.doesNotMatch(prompt, /"version"/);
+  assert.doesNotMatch(prompt, /Opcoes validas: 4GB, 6GB/);
+  assert.doesNotMatch(prompt, /Opcoes validas: Global, Nacional/);
   assert.match(prompt, /Use apenas dados reais do produto/);
   assert.match(prompt, /Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real/);
   assert.match(prompt, /screen_size/);

@@ -425,7 +425,10 @@ async function syncOrderItemsStockToBling(items: any[] | null | undefined, notes
             item.product_id,
             Number(item.quantity),
             notes,
-            { comboSelections: item.combo_selections || item.comboSelections }
+            {
+                comboSelections: item.combo_selections || item.comboSelections,
+                unitPriceCents: Number(item.unit_price) || undefined,
+            }
         );
     }
 }

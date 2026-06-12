@@ -1,6 +1,7 @@
 import React from 'react';
 import { RefreshCw, ShoppingBag } from 'lucide-react';
 import { getDashboardSalesDigest } from '../../../services/dashboardSalesDigestService';
+import { useDashboardSensitiveAccess } from './DashboardSensitiveAccess';
 
 type DigestState = Awaited<ReturnType<typeof getDashboardSalesDigest>>;
 
@@ -9,6 +10,10 @@ function formatCurrency(cents: number) {
     style: 'currency',
     currency: 'BRL',
   }).format((Number(cents) || 0) / 100);
+}
+
+function formatProtectedCurrency(cents: number, unlocked: boolean) {
+  return unlocked ? formatCurrency(cents) : 'R$ ••••••';
 }
 
 const emptyDigest: DigestState = {
@@ -25,6 +30,7 @@ const emptyDigest: DigestState = {
 };
 
 export const DashboardSalesDigest: React.FC = () => {
+  const { unlocked: sensitiveUnlocked } = useDashboardSensitiveAccess();
   const requestRef = React.useRef(0);
   const [state, setState] = React.useState<{
     data: DigestState;
@@ -166,7 +172,7 @@ export const DashboardSalesDigest: React.FC = () => {
                       <td className="px-4 py-3 font-mono text-xs text-slate-500">{row.sku || '—'}</td>
                       <td className="px-4 py-3 text-right font-semibold text-slate-800">{row.quantity}</td>
                       <td className="px-4 py-3 text-right text-slate-700">{row.currentStock}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.lastPurchasePriceCents)}</td>
+                      <td className="px-4 py-3 text-right text-slate-700">{formatProtectedCurrency(row.lastPurchasePriceCents, sensitiveUnlocked)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-blue-700">{formatCurrency(row.lastSalePriceCents)}</td>
                     </tr>
                   ))
@@ -215,7 +221,7 @@ export const DashboardSalesDigest: React.FC = () => {
                     <td className="px-4 py-3 text-slate-600">{row.channels}</td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-800">{row.totalQuantity}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{row.currentStock}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.lastPurchasePriceCents)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">{formatProtectedCurrency(row.lastPurchasePriceCents, sensitiveUnlocked)}</td>
                     <td className="px-4 py-3 text-right font-semibold text-blue-700">{formatCurrency(row.lastSalePriceCents)}</td>
                   </tr>
                 ))

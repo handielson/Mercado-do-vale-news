@@ -23,16 +23,42 @@ export const ProductFormPage: React.FC = () => {
 
     // Get EAN from navigation state if provided
     const eanFromState = (location.state as any)?.ean;
+    const cloneFromId = new URLSearchParams(location.search).get('clone_from');
+
+    const buildCloneInitialData = (source: Product): Product => {
+        const specs = { ...(source.specs || {}) };
+        delete (specs as any).imei1;
+        delete (specs as any).imei_1;
+        delete (specs as any).imei2;
+        delete (specs as any).imei_2;
+        delete (specs as any).serial;
+        delete (specs as any).serial_number;
+
+        const clone = {
+            ...source,
+            specs,
+            stock_quantity: 0,
+        } as any;
+
+        delete clone.id;
+        delete clone.slug;
+        delete clone.created;
+        delete clone.updated;
+
+        return clone as Product;
+    };
 
     // Fetch product data if editing
     useEffect(() => {
         if (isEditMode) {
             fetchProduct();
+        } else if (cloneFromId) {
+            fetchCloneProduct(cloneFromId);
         } else if (eanFromState) {
             // Pre-fill EAN for new product
             setProduct({ ean: eanFromState } as unknown as Product);
         }
-    }, [id, eanFromState]);
+    }, [id, eanFromState, cloneFromId]);
 
     // Update document title
     useEffect(() => {
@@ -59,6 +85,21 @@ export const ProductFormPage: React.FC = () => {
         } catch (error) {
             console.error('Error fetching product:', error);
             toast.error('Erro ao carregar produto');
+            navigate('/admin/products');
+        } finally {
+            setIsFetching(false);
+        }
+    };
+
+    const fetchCloneProduct = async (sourceId: string) => {
+        try {
+            setIsFetching(true);
+            const data = await productService.getById(sourceId);
+            setProduct(buildCloneInitialData(data));
+            toast.success('Dados do produto copiados. Preencha IMEI 1, IMEI 2 e Serial.');
+        } catch (error) {
+            console.error('Error fetching clone product:', error);
+            toast.error('Erro ao copiar dados do produto');
             navigate('/admin/products');
         } finally {
             setIsFetching(false);

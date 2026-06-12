@@ -68,12 +68,16 @@ function parseJsonField<T>(value: unknown, fallback: T): T {
 
 function normalizeCustomer(row: Customer): Customer {
     const active = row.is_active as unknown;
+    const deliveryWorker = row.is_delivery_worker as unknown;
+    const walkInCustomer = row.is_walk_in_customer as unknown;
     return {
         ...row,
         address: parseJsonField(row.address, undefined as any),
         custom_data: parseJsonField(row.custom_data, undefined as any),
         customer_type: fromVpsCustomerType(row.customer_type),
         is_active: active === true || active === 1 || active === '1',
+        is_delivery_worker: deliveryWorker === true || deliveryWorker === 1 || deliveryWorker === '1',
+        is_walk_in_customer: walkInCustomer === true || walkInCustomer === 1 || walkInCustomer === '1',
     };
 }
 
@@ -102,6 +106,36 @@ function byCreatedAtDesc(a: Customer, b: Customer): number {
     return String(b.created_at || '').localeCompare(String(a.created_at || ''));
 }
 
+function normalizeCustomerName(value: unknown): string {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function isWalkInCustomerCandidate(customer: Customer, companyId: string): boolean {
+    return customer.company_id === companyId &&
+        (customer.is_walk_in_customer === true || normalizeCustomerName(customer.name) === 'cliente balcao');
+}
+
+function pickWalkInCustomer(customers: Customer[], companyId: string): Customer | undefined {
+    const walkInCustomers = customers
+        .filter(customer => isWalkInCustomerCandidate(customer, companyId))
+        .sort((a, b) => {
+            const flagDiff = Number(b.is_walk_in_customer === true) - Number(a.is_walk_in_customer === true);
+            if (flagDiff !== 0) return flagDiff;
+
+            const activeDiff = Number(b.is_active === true) - Number(a.is_active === true);
+            if (activeDiff !== 0) return activeDiff;
+
+            return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+        });
+
+    return walkInCustomers[0];
+}
+
 class CustomerService {
     private cache: Customer[] | null = null;
     private cacheTimestamp: number = 0;
@@ -119,8 +153,8 @@ class CustomerService {
             (Date.now() - this.cacheTimestamp) < this.CACHE_DURATION;
     }
 
-    private async loadAllCustomers(): Promise<Customer[]> {
-        if (this.isCacheValid()) return this.cache!;
+    private async loadAllCustomers(options: { force?: boolean } = {}): Promise<Customer[]> {
+        if (!options.force && this.isCacheValid()) return this.cache!;
 
         const rows: Customer[] = [];
         const pageSize = 200;
@@ -154,6 +188,8 @@ class CustomerService {
                 return textMatch || digitMatch;
             })
             .filter(customer => filters?.is_active === undefined || customer.is_active === filters.is_active)
+            .filter(customer => filters?.is_delivery_worker === undefined || customer.is_delivery_worker === filters.is_delivery_worker)
+            .filter(customer => filters?.is_walk_in_customer === undefined || customer.is_walk_in_customer === filters.is_walk_in_customer)
             .filter(customer => !filters?.created_after || String(customer.created_at || '') >= filters.created_after!)
             .filter(customer => !filters?.created_before || String(customer.created_at || '') <= filters.created_before!)
             .sort(byCreatedAtDesc);
@@ -201,6 +237,57 @@ class CustomerService {
             customer.company_id === companyId &&
             onlyDigits(customer.cpf_cnpj) === onlyDigits(cpfCnpj)
         ) || null;
+    }
+
+    async getOrCreateWalkInCustomer(): Promise<Customer> {
+        const companyId = await this.getCompanyId();
+        const existing = pickWalkInCustomer(await this.loadAllCustomers({ force: true }), companyId);
+
+        if (existing) {
+            if (!existing.is_walk_in_customer) {
+                return this.update(existing.id, {
+                    is_walk_in_customer: true,
+                    is_active: true,
+                    custom_data: {
+                        ...(existing.custom_data || {}),
+                        walk_in_customer: true,
+                        no_benefits: true,
+                        no_coins: true,
+                    },
+                });
+            }
+            return existing;
+        }
+
+        this.clearCache();
+        const freshExisting = pickWalkInCustomer(await this.loadAllCustomers({ force: true }), companyId);
+        if (freshExisting) {
+            if (!freshExisting.is_walk_in_customer) {
+                return this.update(freshExisting.id, {
+                    is_walk_in_customer: true,
+                    is_active: true,
+                    custom_data: {
+                        ...(freshExisting.custom_data || {}),
+                        walk_in_customer: true,
+                        no_benefits: true,
+                        no_coins: true,
+                    },
+                });
+            }
+            return freshExisting;
+        }
+
+        return this.create({
+            name: 'Cliente Balcão',
+            customer_type: 'retail',
+            is_active: true,
+            is_walk_in_customer: true,
+            custom_data: {
+                walk_in_customer: true,
+                no_benefits: true,
+                no_coins: true,
+            },
+        });
     }
 
     /**

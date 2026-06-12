@@ -1089,6 +1089,7 @@ Objetivo: separar operação diária da configuração do robô.
 - [ ] Criar botão **Pausar bot**.
 - [ ] Criar botão **Retomar bot**.
 - [ ] Criar controle operacional para **desligar o bot por completo** e **ligar novamente**, usando `autoresponder_settings.enabled`.
+- [ ] Remover dependencia operacional do AutoResponder WA: entrada e saida oficiais devem passar pela Evolution conectada na VPS.
 - [ ] Mostrar histórico de mensagens da conversa.
 - [ ] Criar campo para resposta manual quando houver integração de envio disponível.
 - [ ] Criar WhatsApp interno/laboratorio do bot para testar conversas completas sem envio real, sem limite curto de mensagens e com estado preservado por sender de teste.

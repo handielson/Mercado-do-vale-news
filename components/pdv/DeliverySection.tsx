@@ -10,6 +10,7 @@ import { capitalizeName } from '../../utils/customerFormUtils';
 interface DeliveryPerson {
     id: string;
     name: string;
+    customer_id?: string;
 }
 
 interface DeliverySectionProps {
@@ -22,7 +23,8 @@ interface DeliverySectionProps {
         type: DeliveryType | undefined,
         personId: string | undefined,
         costStore: number,
-        costCustomer: number
+        costCustomer: number,
+        customerId?: string
     ) => void;
     onDeliveryPersonCreated?: (person: DeliveryPerson) => void;
 }
@@ -76,15 +78,17 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
             onDeliveryChange(selectedType, undefined, 0, 0);
         } else if (selectedType === 'store_delivery') {
             // Entrega loja: R$ 30 loja, R$ 0 cliente
-            onDeliveryChange(selectedType, selectedPerson, DELIVERY_COST_DEFAULT, 0);
+            const currentPerson = deliveryPersons.find(person => person.id === selectedPerson);
+            onDeliveryChange(selectedType, currentPerson?.customer_id ? undefined : selectedPerson, DELIVERY_COST_DEFAULT, 0, currentPerson?.customer_id);
         } else if (selectedType === 'hybrid_delivery') {
             // Híbrida: valores customizados
-            onDeliveryChange(selectedType, selectedPerson, costStore, costCustomer);
+            const currentPerson = deliveryPersons.find(person => person.id === selectedPerson);
+            onDeliveryChange(selectedType, currentPerson?.customer_id ? undefined : selectedPerson, costStore, costCustomer, currentPerson?.customer_id);
         } else {
             // Nenhum tipo selecionado
             onDeliveryChange(undefined, undefined, 0, 0);
         }
-    }, [selectedType, selectedPerson, costStore, costCustomer]);
+    }, [selectedType, selectedPerson, costStore, costCustomer, deliveryPersons]);
 
     const handleTypeChange = (type: DeliveryType) => {
         setSelectedType(type);

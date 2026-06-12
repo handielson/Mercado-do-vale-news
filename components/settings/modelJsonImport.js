@@ -24,6 +24,19 @@ const REQUIRED_SMARTPHONE_FIELD_KEYS = new Set([
     'resistencia',
     'tipo_de_display',
 ]);
+export const MODEL_IMPORT_UNIT_ONLY_FIELD_KEYS = new Set([
+    'imei1',
+    'imei2',
+    'serial',
+    'color',
+    'storage',
+    'ram',
+    'version',
+    'versao',
+    'battery_health',
+]);
+
+export const isModelImportUnitOnlyFieldKey = (key) => MODEL_IMPORT_UNIT_ONLY_FIELD_KEYS.has(normalizeText(key).replace(/\s+/g, '_'));
 
 export function parseModelImportJson(input) {
     if (!input || !String(input).trim()) {
@@ -123,6 +136,7 @@ const mergeTemplateObject = (target, source, resolveFieldKey, emptyFields = [], 
 
     Object.entries(source).forEach(([key, value]) => {
         const fieldKey = resolveFieldKey(key);
+        if (isModelImportUnitOnlyFieldKey(fieldKey)) return;
         if (value === undefined || value === null || value === '') {
             const field = fieldByKey.get(fieldKey);
             if (field) {
@@ -197,6 +211,7 @@ export function normalizeModelImportPayload(data, context = {}) {
     if (depth !== undefined) templateValues['dimensions.depth_cm'] = numberOrValue(depth);
 
     customFields.forEach((field) => {
+        if (isModelImportUnitOnlyFieldKey(field.key)) return;
         const directValue = payload[field.key];
         const labelValue = payload[field.label];
         const value = directValue ?? labelValue;
@@ -235,7 +250,7 @@ export function normalizeModelImportPayload(data, context = {}) {
                     value: String(value),
                     options: choices.map((choice) => choice.label || choice.value),
                 });
-                delete templateValues[key];
+                templateValues[key] = value;
             } else {
                 templateValues[key] = normalizeChoice(value, choices);
             }
@@ -281,6 +296,7 @@ const describeChoices = (field, choices = []) => {
 
 export function buildModelImportPrompt({ name, brand, category, customFields = [], choiceOptions = {} }) {
     const fieldLines = customFields
+        .filter((field) => !isModelImportUnitOnlyFieldKey(field.key))
         .map((field) => {
             const type = field.field_type ? `, tipo ${field.field_type}` : '';
             return `- "${field.key}" (${field.label || field.key})${type}.${describeChoices(field, choiceOptions[field.key])}`;
@@ -293,7 +309,7 @@ Regras:
 1. Retorne APENAS um objeto JSON valido. Sem markdown, sem explicacoes.
 2. Use "template_values" para todos os campos tecnicos atuais e futuros.
 3. Use apenas dados reais do produto, de ficha tecnica/fabricante/anuncio confiavel. Nao invente especificacoes.
-4. Nao inclua IMEI, serial, cor unica de aparelho ou quantidade de estoque. Esses dados pertencem ao produto, nao ao modelo.
+4. Nao inclua IMEI, serial, cor unica do aparelho, armazenamento, memoria RAM, versao, saude de bateria ou quantidade de estoque. Esses dados pertencem a entrada de estoque/produto individual, nao ao modelo.
 5. Em textos, evite aspas duplas internas; use aspas simples se precisar.
 6. Preencha todas as informacoes basicas reais do smartphone quando existirem em fonte confiavel, especialmente slot para cartao/microSD/SIM, entrada de fone, biometria, rede, NFC, resistencia, tela, chipset, bateria e carregamento.
 7. Se nao tiver certeza sobre um dado tecnico, deixe o campo ausente ou null para o painel avisar que faltou dado real. Nao crie nada.
@@ -329,14 +345,13 @@ Formato esperado:
     }
   },
   "template_values": {
-    "ram": "4GB",
-    "storage": "128GB",
-    "version": "Global",
-    "battery_health": "100%",
-    "screen_size": "6.88 polegadas",
-    "processor": "Octa-core",
-    "camera": "50MP",
-    "battery": "5160mAh"
+    "battery_mah": 5160,
+    "display": "6.88",
+    "tipo_de_display": "IPS LCD",
+    "processador": "Octa-core",
+    "cam_principal_mpx": "50MP",
+    "cam_selfie_mpx": "8MP",
+    "nfc": "Nao"
   }
 }`;
 }

@@ -148,7 +148,12 @@ function formatCurrency(cents) {
   }).format(toInteger(cents) / 100);
 }
 
-export function buildPurchaseQueueClipboardText(items = []) {
+function formatProtectedCurrency(cents, masked = false) {
+  return masked ? 'R$ ••••••' : formatCurrency(cents);
+}
+
+export function buildPurchaseQueueClipboardText(items = [], options = {}) {
+  const masked = Boolean(options?.masked);
   const rows = Array.isArray(items) ? items : [];
   const lines = [
     'LISTA DE COMPRA',
@@ -164,7 +169,7 @@ export function buildPurchaseQueueClipboardText(items = []) {
     lines.push(
       `${index + 1}. ${normalizeText(item.model, 'Produto')} | ${normalizeSku(item.sku) || 'SEM-SKU'}`,
       `Estoque atual: ${toInteger(item.current_stock)} | Qtde acumulada: ${toInteger(item.accumulated_quantity)}`,
-      `Ult. compra: ${formatCurrency(item.last_purchase_price_cents)} | Ult. venda: ${formatCurrency(item.last_sale_price_cents)}`,
+      `Ult. compra: ${formatProtectedCurrency(item.last_purchase_price_cents, masked)} | Ult. venda: ${formatCurrency(item.last_sale_price_cents)}`,
       `Origens: ${normalizeChannels(item.origin_channels).join(', ') || 'Nao informado'} | Status: ${normalizeText(item.status, 'pending')}`,
       `Motivo: ${normalizeText(item.reason, '-')}`,
       '',

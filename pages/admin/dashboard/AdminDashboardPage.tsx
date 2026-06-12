@@ -7,6 +7,7 @@ import { DashboardKpiCards } from '../../../components/admin/dashboard/Dashboard
 import { DashboardShopeePanel } from '../../../components/admin/dashboard/DashboardShopeePanel';
 import { DashboardSalesDigest } from '../../../components/admin/dashboard/DashboardSalesDigest';
 import { DashboardPurchaseQueue } from '../../../components/admin/dashboard/DashboardPurchaseQueue';
+import { DashboardSensitiveAccessProvider } from '../../../components/admin/dashboard/DashboardSensitiveAccess';
 
 export const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -18,27 +19,29 @@ export const AdminDashboardPage: React.FC = () => {
 
   return (
     <div className="animate-in fade-in duration-500 space-y-8">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Visão Geral</h2>
-          <p className="text-slate-500">Gestão operacional do ecossistema.</p>
+      <DashboardSensitiveAccessProvider>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Visão Geral</h2>
+            <p className="text-slate-500">Gestão operacional do ecossistema.</p>
+          </div>
+          <a
+            href="/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-indigo-600 to-blue-700 text-white text-sm font-semibold rounded-xl shadow hover:shadow-md hover:-translate-y-0.5 transition-all whitespace-nowrap"
+          >
+            <span>🛒</span> Ver Loja ↗
+          </a>
         </div>
-        <a
-          href="/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-indigo-600 to-blue-700 text-white text-sm font-semibold rounded-xl shadow hover:shadow-md hover:-translate-y-0.5 transition-all whitespace-nowrap"
-        >
-          <span>🛒</span> Ver Loja ↗
-        </a>
-      </div>
 
-      <AdminUnreadFeedbackAlert unreadFeedbacks={unreadFeedbacks} onClick={() => navigate('/admin/feedbacks')} />
-      <AdminQuickAccessGrid onNavigate={navigate} />
-      <DashboardKpiCards />
-      <DashboardShopeePanel />
-      <DashboardSalesDigest />
-      <DashboardPurchaseQueue />
+        <AdminUnreadFeedbackAlert unreadFeedbacks={unreadFeedbacks} onClick={() => navigate('/admin/feedbacks')} />
+        <AdminQuickAccessGrid onNavigate={navigate} />
+        <DashboardKpiCards />
+        <DashboardShopeePanel />
+        <DashboardSalesDigest />
+        <DashboardPurchaseQueue />
+      </DashboardSensitiveAccessProvider>
     </div>
   );
 };

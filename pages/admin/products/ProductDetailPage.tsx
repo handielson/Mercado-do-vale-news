@@ -251,9 +251,7 @@ export const ProductDetailPage: React.FC = () => {
         navigate('/admin/products');
     };
 
-    const productSlug = product?.slug || (product?.name
-        ? product.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
-        : product?.id);
+    const productSlug = product?.slug || product?.id;
     const publicProductHref = productSlug ? `/produto/${productSlug}` : '/produtos';
     const modelPanelHref = product?.model_id ? `/admin/products/models/${encodeURIComponent(product.model_id)}` : '';
     const locationSearchTerm = encodeURIComponent(product?.sku || product?.name || '');

@@ -32,6 +32,7 @@ function productLinks(product) {
   const searchTerm = product.sku || product.name || product.id;
   return {
     editUrl: `/admin/products/${encodeURIComponent(product.id)}/${slug}`,
+    cloneUrl: `/admin/products/new?clone_from=${encodeURIComponent(product.id)}`,
     publicUrl: `/produto/${slug}`,
     modelPanelUrl: `/admin/products/models/${encodeURIComponent(product.model_id || '')}`,
     stockLocationUrl: `/admin/inventory/locations?search=${encodeURIComponent(searchTerm)}`,
@@ -191,6 +192,7 @@ function buildSkuGroups(colorGroup) {
         identifiers: [],
         availableCount: 0,
         editUrl: product.editUrl,
+        cloneUrl: product.cloneUrl,
         publicUrl: product.publicUrl,
         stockLocationUrl: product.stockLocationUrl,
       };

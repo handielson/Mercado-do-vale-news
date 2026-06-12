@@ -8,6 +8,7 @@ import {
   syncPurchaseQueueFromSummary,
   updatePurchaseQueueItemStatus,
 } from '../../../services/purchaseQueueService.js';
+import { useDashboardSensitiveAccess } from './DashboardSensitiveAccess';
 
 type QueueItem = Awaited<ReturnType<typeof getPurchaseQueueItems>>[number];
 
@@ -42,6 +43,7 @@ function statusLabel(status: string) {
 }
 
 export const DashboardPurchaseQueue: React.FC = () => {
+  const { unlocked: sensitiveUnlocked } = useDashboardSensitiveAccess();
   const requestRef = React.useRef(0);
   const [state, setState] = React.useState<{
     items: QueueItem[];
@@ -158,17 +160,21 @@ export const DashboardPurchaseQueue: React.FC = () => {
   }, []);
 
   const handleCopy = React.useCallback(async () => {
-    const text = buildPurchaseQueueClipboardText(state.items.filter((item) => item.status === 'pending'));
+    const text = buildPurchaseQueueClipboardText(state.items.filter((item) => item.status === 'pending'), {
+      masked: !sensitiveUnlocked,
+    });
     try {
       await navigator.clipboard.writeText(text);
       window.alert('Lista de compra copiada para a area de transferencia.');
     } catch {
       window.alert(text);
     }
-  }, [state.items]);
+  }, [state.items, sensitiveUnlocked]);
 
   const handlePrint = React.useCallback(() => {
-    const text = buildPurchaseQueueClipboardText(state.items.filter((item) => item.status === 'pending'));
+    const text = buildPurchaseQueueClipboardText(state.items.filter((item) => item.status === 'pending'), {
+      masked: !sensitiveUnlocked,
+    });
     const printWindow = window.open('', '_blank', 'width=900,height=700');
     if (!printWindow) return;
 
@@ -189,7 +195,7 @@ export const DashboardPurchaseQueue: React.FC = () => {
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
-  }, [state.items]);
+  }, [state.items, sensitiveUnlocked]);
 
   const totals = React.useMemo(() => state.items.reduce((acc, item) => {
     acc.total += 1;
@@ -309,7 +315,7 @@ export const DashboardPurchaseQueue: React.FC = () => {
                         <td className="px-4 py-3 font-medium text-slate-900">{item.model}</td>
                         <td className="px-4 py-3 font-mono text-xs text-slate-500">{item.sku || '—'}</td>
                         <td className="px-4 py-3 text-right text-slate-700">{item.current_stock}</td>
-                        <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(item.last_purchase_price_cents)}</td>
+                        <td className="px-4 py-3 text-right text-slate-700">{sensitiveUnlocked ? formatCurrency(item.last_purchase_price_cents) : 'R$ ••••••'}</td>
                         <td className="px-4 py-3 text-right font-semibold text-blue-700">{formatCurrency(item.last_sale_price_cents)}</td>
                         <td className="px-4 py-3 text-right font-semibold text-slate-900">{item.accumulated_quantity}</td>
                         <td className="px-4 py-3 text-slate-600">{Array.isArray(item.origin_channels) ? item.origin_channels.join(', ') : '-'}</td>

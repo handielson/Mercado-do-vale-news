@@ -1,15 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, X, Calendar, User, UserCheck, Package, DollarSign, CreditCard, Banknote, Truck, AlertCircle, RefreshCw, FileText, Receipt } from 'lucide-react';
+import { ShoppingBag, X, Calendar, User, UserCheck, Package, DollarSign, CreditCard, Banknote, Truck, AlertCircle, RefreshCw, FileText, Receipt, ExternalLink } from 'lucide-react';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
 import { SaleWithItems } from '../../../types/sale';
-import { cancelSale, refundSale, deleteSale } from '../../../services/saleService';
-import toast from 'react-hot-toast';
+import { cancelSale, refundSale, deleteSale, patchSale } from '../../../services/saleService';
+import { toast } from 'sonner';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { replaceWarrantyTags, applyWarrantyDisplayFlags, renderWarrantyBothCopies, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../../utils/warrantyTagReplacement';
 import { getCoinBalance, getCoinsEarnedForReference } from '../../../services/cashbackService';
 import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
+import { vpsClient } from '../../../services/vpsClient';
 import { warrantyTemplateService } from '../../../services/warrantyTemplates';
+import {
+    buildPaymentPresentation,
+    buildSaleItemPresentation,
+    formatCurrencyCents,
+    getSaleCollectedTotal,
+    getSaleCostTotal,
+    getSaleRealProfit,
+    SaleProfitData
+} from '../../../utils/salePresentation';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -29,6 +39,45 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     // Map keyed por product_id (specs gerais) e por sale_item.id (IMEI da unit serializada).
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
 
+    const [adminNotes, setAdminNotes] = useState('');
+    const [isSavingNotes, setIsSavingNotes] = useState(false);
+    const [realProfit, setRealProfit] = useState<SaleProfitData>(null);
+    const [isLoadingProfit, setIsLoadingProfit] = useState(false);
+
+    useEffect(() => {
+        if (sale) {
+            setAdminNotes(sale.internal_notes || '');
+        }
+    }, [sale]);
+
+    // Busca lucro real via endpoint dedicado (JOIN com price_cost dos produtos)
+    useEffect(() => {
+        if (!isOpen || !sale?.id) return;
+        let cancelled = false;
+        setIsLoadingProfit(true);
+        setRealProfit(null);
+        vpsClient.get<any>(`/sales/${sale.id}/profit`)
+            .then(data => { if (!cancelled) setRealProfit(data); })
+            .catch((err) => { console.error('[profit] endpoint falhou:', err?.message || err); })
+            .finally(() => { if (!cancelled) setIsLoadingProfit(false); });
+        return () => { cancelled = true; };
+    }, [isOpen, sale?.id]);
+
+    const handleSaveNotes = async () => {
+        if (!sale) return;
+        setIsSavingNotes(true);
+        try {
+            await patchSale(sale.id, { internal_notes: adminNotes });
+            toast.success('Observações internas salvas com sucesso!');
+            sale.internal_notes = adminNotes;
+        } catch (err: any) {
+            console.error(err);
+            toast.error('Erro ao salvar observações');
+        } finally {
+            setIsSavingNotes(false);
+        }
+    };
+
     useEffect(() => {
         if (!isOpen || !sale?.items?.length) return;
         let cancelled = false;
@@ -39,17 +88,25 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
             const productIds = sale.items.map(i => (i as any).product_id).filter(Boolean);
             if (productIds.length) {
                 const data = await vpsApiService.getProductsByIds([...new Set(productIds)]);
-                (data || []).forEach((p: any) => { map[p.id] = p.specs || {}; });
+                (data || []).forEach((p: any) => { map[p.id] = { ...p.specs || {}, sku: p.sku || null }; });
             }
 
             // IMEIs por sale_item.id — busca units da VPS pela sale_id
             const units = await vpsApiService.getUnitsBySale(sale.id);
             const itemsBySerializedUnit = new Map<string, string>();
+            const remainingItemsByProduct = new Map<string, any[]>();
             sale.items.forEach((item: any) => {
                 if (item.serialized_unit_id) itemsBySerializedUnit.set(item.serialized_unit_id, item.id);
+                const productId = String(item.product_id || '');
+                if (productId) {
+                    const list = remainingItemsByProduct.get(productId) || [];
+                    list.push(item);
+                    remainingItemsByProduct.set(productId, list);
+                }
             });
             (units || []).forEach((u: any) => {
-                const itemId = itemsBySerializedUnit.get(u.id);
+                const fallbackItem = (remainingItemsByProduct.get(String(u.product_id || '')) || []).shift();
+                const itemId = itemsBySerializedUnit.get(u.id) || fallbackItem?.id;
                 if (!itemId) return;
                 map[itemId] = {
                     ...(map[itemId] || {}),
@@ -74,14 +131,103 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                 return;
             }
 
+            const { productService } = await import('../../../services/products');
+            const { categoryService } = await import('../../../services/categories');
+
+            // Filtragem das categorias relacionadas a celulares e tablets
+            const filteredItems: any[] = [];
+            for (const item of sale.items) {
+                if (!item.product_id) continue;
+                try {
+                    const product = await productService.getById(item.product_id);
+                    if (product?.category_id) {
+                        const cat = await categoryService.getById(product.category_id);
+                        if (cat) {
+                            const catName = (cat.name || '').toLowerCase();
+                            const catSlug = (cat.slug || '').toLowerCase();
+                            const isCellOrTablet =
+                                catName.includes('celular') ||
+                                catName.includes('smartphone') ||
+                                catName.includes('tablet') ||
+                                catName.includes('iphone') ||
+                                catSlug.includes('celular') ||
+                                catSlug.includes('smartphone') ||
+                                catSlug.includes('tablet') ||
+                                catSlug.includes('iphone');
+                            if (isCellOrTablet) {
+                                filteredItems.push(item);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Erro ao obter categoria do produto', err);
+                }
+            }
+
+            if (filteredItems.length === 0) {
+                toast.error('Nenhum item celular/tablet encontrado para a garantia.');
+                return;
+            }
+
+            const units = await vpsApiService.getUnitsBySale(sale.id) || [];
+            const unitsByProductId = new Map<string, any[]>();
+            units.forEach((unit: any) => {
+                const productId = String(unit.product_id || '');
+                if (!productId) return;
+                const list = unitsByProductId.get(productId) || [];
+                list.push(unit);
+                unitsByProductId.set(productId, list);
+            });
+
+            const itemUnitPairs = filteredItems.map((item: any) => {
+                const explicitUnit = item.serialized_unit_id
+                    ? units.find((unit: any) => String(unit.id) === String(item.serialized_unit_id))
+                    : null;
+                const productUnits = unitsByProductId.get(String(item.product_id || '')) || [];
+                if (explicitUnit) {
+                    const explicitIndex = productUnits.findIndex((unit: any) => String(unit.id) === String(explicitUnit.id));
+                    if (explicitIndex >= 0) productUnits.splice(explicitIndex, 1);
+                }
+                const matchedUnit = explicitUnit || productUnits.shift() || null;
+                const itemSpecs = productSpecs[item.id] || productSpecs[item.product_id] || item.product_specs || {};
+                const hasSerializedData = Boolean(
+                    item.serialized_unit_id ||
+                    item.serialized_unit?.unitId ||
+                    item.serialized_unit?.imei1 ||
+                    item.serialized_unit?.imei2 ||
+                    item.serialized_unit?.serial ||
+                    matchedUnit?.id ||
+                    itemSpecs.imei1 ||
+                    itemSpecs.imei2 ||
+                    itemSpecs.serial
+                );
+                return { item, unit: matchedUnit, itemSpecs, hasSerializedData };
+            });
+
+            const serializedPairs = itemUnitPairs.filter(pair => pair.hasSerializedData);
+            const cellTabletUnitIds = new Set(
+                serializedPairs
+                    .map(pair => pair.unit?.id || pair.item.serialized_unit_id || pair.item.serialized_unit?.unitId)
+                    .filter(Boolean)
+                    .map(String)
+            );
+
             const { warrantyDocumentService } = await import('../../../services/warrantyDocumentService');
             const sections: string[] = [];
 
             // 1) Tenta usar docs já salvos (numero_documento estável). Inclui o que
             //    foi assinado no momento da venda.
             const savedDocs = await warrantyDocumentService.listBySaleId(sale.id);
+            const filteredSavedDocs = savedDocs.filter(doc =>
+                !doc.serialized_unit_id || cellTabletUnitIds.size === 0 || cellTabletUnitIds.has(String(doc.serialized_unit_id))
+            );
+
             if (savedDocs.length > 0) {
-                for (const doc of savedDocs) {
+                if (filteredSavedDocs.length === 0) {
+                    toast.error('Nenhum termo de garantia de celular/tablet disponível.');
+                    return;
+                }
+                for (const doc of filteredSavedDocs) {
                     const copy1 = doc.warranty_content;
                     const copy2 = doc.warranty_content.replace(/Assinatura do Cliente/gi, 'Assinatura da Empresa');
                     sections.push(`<div class="warranty-copy">${copy1}</div>`);
@@ -90,19 +236,12 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
             } else {
                 // 2) Fallback: nenhum doc salvo (vendas migradas ou usuário fechou
                 //    modal sem salvar). Regenera dos sale_items serializados.
-                const serializedItems = sale.items.filter((i: any) => i.serialized_unit_id);
-                if (serializedItems.length === 0) {
+                if (serializedPairs.length === 0) {
                     toast.error('Nenhum item serializado nesta venda — sem termo a imprimir');
                     return;
                 }
 
-                const units = await vpsApiService.getUnitsBySale(sale.id);
-                const unitById = new Map<string, any>();
-                (units || []).forEach((u: any) => unitById.set(u.id, u));
-
                 const { brandService } = await import('../../../services/brands');
-                const { categoryService } = await import('../../../services/categories');
-                const { productService } = await import('../../../services/products');
                 const brands = await brandService.list();
                 const brandsByName = new Map<string, { warranty_days?: number }>();
                 brands.forEach(b => brandsByName.set(b.name.toLowerCase(), b));
@@ -113,9 +252,10 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                         ? 'delivery' : 'store_pickup'
                 );
 
-                for (const item of serializedItems) {
+                for (const { item, unit, itemSpecs } of serializedPairs) {
                     const product = item.product_id ? await productService.getById(item.product_id) : null;
                     const productSpecs = product?.specs || {};
+                    const mergedSpecs = { ...productSpecs, ...itemSpecs };
                     const brand = product?.brand || (item as any).product_brand || '';
                     const model = product?.model || product?.name || item.product_name;
 
@@ -132,7 +272,6 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                         }
                     }
 
-                    const unit = unitById.get((item as any).serialized_unit_id) || {};
                     const fallbackDocId = crypto.randomUUID();
                     const tagData = {
                         nome_loja: settings.company_name || '',
@@ -151,11 +290,12 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                         produto: item.product_name,
                         marca: brand,
                         modelo: model,
-                        cor: productSpecs.color || '',
-                        ram: productSpecs.ram || '',
-                        memoria: productSpecs.storage || '',
-                        imei1: unit.imei_1 || '',
-                        imei2: unit.imei_2 || '',
+                        cor: mergedSpecs.color || '',
+                        ram: mergedSpecs.ram || '',
+                        memoria: mergedSpecs.storage || '',
+                        imei1: unit?.imei_1 || item.serialized_unit?.imei1 || mergedSpecs.imei1 || '',
+                        imei2: unit?.imei_2 || item.serialized_unit?.imei2 || mergedSpecs.imei2 || '',
+                        serial: unit?.serial || item.serialized_unit?.serial || mergedSpecs.serial || '',
                         dias_garantia: String(days),
                         tipo_garantia: 'Garantia Legal',
                         declaracao_recebimento: declaracao,
@@ -199,7 +339,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                 coinsEarnedThisSale: coinsThisSale,
                 benefitStatuses,
             };
-            printSaleReceipt(sale, settings, productSpecs, benefits);
+            printSaleReceipt(sale, settings, productSpecs, benefits, realProfit);
         } catch (e) {
             console.error(e);
             toast.error('Erro ao gerar o recibo');
@@ -221,12 +361,25 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
 
     if (!isOpen || !sale) return null;
 
-    const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('pt-BR', {
-            style: 'currency',
-            currency: 'BRL'
-        }).format(value / 100);
-    };
+    const formatCurrency = formatCurrencyCents;
+    const hasDetailedPaymentMethods = Array.isArray(sale.payment_methods)
+        && sale.payment_methods.some((payment: any) => Boolean(
+            payment?.installments ||
+            payment?.fee_amount ||
+            payment?.fee_cents ||
+            payment?.operator_fee_amount ||
+            payment?.operator_fee_cents ||
+            payment?.fee_percentage ||
+            payment?.operator_fee_percentage ||
+            payment?.total_with_fee ||
+            payment?.total_with_fee_cents ||
+            payment?.pix_payment_id ||
+            payment?.mercado_pago_payment_id ||
+            payment?.due_date
+        ));
+    const cardPaymentCount = (sale.payment_methods || []).filter((payment: any) => (
+        payment?.method === 'credit' || payment?.method === 'debit'
+    )).length;
 
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleString('pt-BR', {
@@ -314,16 +467,6 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
         }
     };
 
-    const getPaymentLabel = (method: string) => {
-        switch (method) {
-            case 'pix': return 'PIX';
-            case 'money': return 'Dinheiro';
-            case 'credit': return 'Crédito';
-            case 'debit': return 'Débito';
-            default: return method;
-        }
-    };
-
     return (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-slate-50 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-xl">
@@ -376,7 +519,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                             <User size={16} className="text-slate-400" />
                             Dados do Cliente
                         </h3>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
                                 <p className="text-xs text-slate-500 uppercase font-medium">Nome</p>
                                 <p className="text-sm font-medium text-slate-800">{sale.customer?.name || 'Cliente Avulso'}</p>
@@ -384,6 +527,48 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                             <div>
                                 <p className="text-xs text-slate-500 uppercase font-medium">CPF/CNPJ</p>
                                 <p className="text-sm text-slate-600">{sale.customer?.cpf_cnpj || 'Não informado'}</p>
+                            </div>
+                            <div className="flex items-end sm:justify-end">
+                                {sale.customer_id ? (
+                                    <a
+                                        href={`/admin/customers/${encodeURIComponent(sale.customer_id)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-700 hover:text-blue-800 hover:underline underline-offset-2"
+                                        title="Abrir cadastro do cliente"
+                                    >
+                                        Cadastro do cliente
+                                        <ExternalLink size={14} />
+                                    </a>
+                                ) : (
+                                    <span className="text-xs text-slate-400">Sem cadastro vinculado</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Admin Internal Notes */}
+                    <div className="bg-white p-5 rounded-xl border border-slate-200">
+                        <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                            <FileText size={16} className="text-slate-400" />
+                            Observações Internas (Restrito)
+                        </h3>
+                        <div className="space-y-3">
+                            <textarea
+                                value={adminNotes}
+                                onChange={(e) => setAdminNotes(e.target.value)}
+                                placeholder="Adicione observações internas sobre esta venda..."
+                                className="w-full min-h-[80px] p-3 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                            />
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleSaveNotes}
+                                    disabled={isSavingNotes || adminNotes === (sale.internal_notes || '')}
+                                    className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {isSavingNotes ? <RefreshCw size={12} className="animate-spin" /> : null}
+                                    Salvar Observações
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -395,46 +580,54 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                             Itens do Pedido ({sale.items.length})
                         </h3>
                         <div className="space-y-3">
-                            {sale.items.map((item, index) => (
-                                <div key={index} className="flex justify-between items-start py-3 border-b border-slate-100 last:border-0 last:pb-0">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-slate-800">{item.product_name}</p>
-                                            {item.is_gift && (
-                                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded">
-                                                    BRINDE
-                                                </span>
-                                            )}
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            {(() => {
-                                                const itemSpecs = productSpecs[(item as any).id] || {};
-                                                const productLevel = productSpecs[(item as any).product_id] || {};
-                                                const specs = { ...productLevel, ...itemSpecs };
-                                                const parts: string[] = [];
-                                                if (specs.imei1) parts.push(`IMEI 1: ${specs.imei1}`);
-                                                if (specs.imei2) parts.push(`IMEI 2: ${specs.imei2}`);
-                                                if (specs.serial) parts.push(`Serial: ${specs.serial}`);
-                                                const idLine = parts.length > 0
-                                                    ? parts.join(' | ')
-                                                    : `SKU: ${item.product_sku || 'N/A'}`;
-                                                return `${idLine} • Qtd: ${item.quantity}`;
-                                            })()}
-                                            {item.discount > 0 ? ` • Desc: ${formatCurrency(item.discount)}/un` : ''}
-                                        </p>
-                                    </div>
-                                    <div className="text-right">
-                                        {item.discount > 0 && (
-                                            <p className="text-xs text-slate-400 line-through">
-                                                {formatCurrency(item.unit_price * item.quantity)}
+                            {sale.items.map((item, index) => {
+                                const itemView = buildSaleItemPresentation(item, productSpecs, realProfit);
+                                return (
+                                    <div key={index} className="grid grid-cols-[1fr_auto] gap-4 py-3 border-b border-slate-100 last:border-0 last:pb-0">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                {item.product_id ? (
+                                                    <a
+                                                        href={`/produto/${encodeURIComponent(item.product_id)}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-sm font-medium text-slate-800 hover:text-blue-700 hover:underline underline-offset-2"
+                                                        title="Abrir pagina do produto"
+                                                    >
+                                                        {item.product_name}
+                                                    </a>
+                                                ) : (
+                                                    <p className="text-sm font-medium text-slate-800">{item.product_name}</p>
+                                                )}
+                                                {item.is_gift && (
+                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded">
+                                                        BRINDE
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                {itemView.identifierLine} • Qtd: {item.quantity}
+                                                {item.discount > 0 ? ` • Desc: ${formatCurrency(item.discount)}/un` : ''}
                                             </p>
-                                        )}
-                                        <p className="text-sm font-bold text-slate-800">
-                                            {formatCurrency(item.total)}
-                                        </p>
+                                            <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-slate-500">
+                                                <span>Custo un.: <strong className="text-slate-700">{formatCurrency(itemView.unitCost)}</strong></span>
+                                                <span>Custo item: <strong className="text-slate-700">{formatCurrency(itemView.itemCost)}</strong></span>
+                                                <span>Lucro item: <strong className={itemView.itemProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}>{formatCurrency(itemView.itemProfit)}</strong></span>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            {item.discount > 0 && (
+                                                <p className="text-xs text-slate-400 line-through">
+                                                    {formatCurrency(item.unit_price * item.quantity)}
+                                                </p>
+                                            )}
+                                            <p className="text-sm font-bold text-slate-800">
+                                                {formatCurrency(item.total)}
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
 
@@ -467,14 +660,36 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                     </div>
                                 ) : null}
 
+                                <div className="flex justify-between text-slate-600">
+                                    <span>Preço de Custo</span>
+                                    <span>{formatCurrency(getSaleCostTotal(sale, realProfit))}</span>
+                                </div>
+                                {realProfit?.payment_operator_fee_cents ? (
+                                    <div className="flex justify-between text-slate-600">
+                                        <span>Custo da Máquina</span>
+                                        <span>{formatCurrency(realProfit.payment_operator_fee_cents)}</span>
+                                    </div>
+                                ) : null}
+                                {(realProfit?.delivery_payout_cents || sale.delivery_total) ? (
+                                    <div className="flex justify-between text-slate-600">
+                                        <span>Custo da Entrega</span>
+                                        <span>{formatCurrency(realProfit?.delivery_payout_cents || sale.delivery_total || 0)}</span>
+                                    </div>
+                                ) : null}
+
                                 <div className="pt-3 mt-3 border-t border-slate-100 flex justify-between font-bold text-lg text-slate-800">
                                     <span>Total Pago</span>
-                                    <span>{formatCurrency(sale.total)}</span>
+                                    <span>{formatCurrency(getSaleCollectedTotal(sale, realProfit))}</span>
                                 </div>
 
                                 <div className="pt-3 mt-3 border-t border-slate-100 flex justify-between text-sm font-medium">
-                                    <span className="text-emerald-600">Lucro Estimado</span>
-                                    <span className="text-emerald-700">{formatCurrency(sale.profit)}</span>
+                                    <span className="text-emerald-600">Lucro Real</span>
+                                    <span className="text-emerald-700">
+                                        {isLoadingProfit
+                                            ? <span className="text-slate-400 text-xs">Calculando...</span>
+                                            : formatCurrency(getSaleRealProfit(sale, realProfit))
+                                        }
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -486,28 +701,48 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 Formas de Pagamento
                             </h3>
                             <div className="space-y-3">
-                                {sale.payment_methods.map((payment, index) => (
-                                    <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                        <div className="flex items-center gap-3">
-                                            {getPaymentIcon(payment.method)}
-                                            <div>
-                                                <p className="text-sm font-medium text-slate-800">
-                                                    {getPaymentLabel(payment.method)}
-                                                    {payment.installments ? ` (${payment.installments}x)` : ''}
-                                                </p>
-                                                {payment.fee_amount ? (
-                                                    <p className="text-xs text-slate-500">
-                                                        Inclui {formatCurrency(payment.fee_amount)} de juros maq.
+                                {sale.payment_methods.map((payment, index) => {
+                                    const paymentView = buildPaymentPresentation(payment);
+                                    const recoveredOperatorFee = (
+                                        paymentView.operatorFeeAmount <= 0
+                                        && cardPaymentCount === 1
+                                        && (payment.method === 'credit' || payment.method === 'debit')
+                                        && realProfit?.payment_operator_fee_cents
+                                    ) ? realProfit.payment_operator_fee_cents : 0;
+                                    return (
+                                        <div key={index} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    {getPaymentIcon(payment.method)}
+                                                    <p className="text-sm font-medium text-slate-800">
+                                                        {paymentView.labelWithInstallments}
                                                     </p>
-                                                ) : null}
+                                                </div>
+                                            <p className="text-sm font-bold text-slate-800">
+                                                {formatCurrency(paymentView.totalWithFee)}
+                                            </p>
+                                        </div>
+                                            <div className="text-xs text-slate-500 mt-1 ml-7 space-y-0.5">
+                                                <p>Valor base: {formatCurrency(paymentView.amount)}</p>
+                                                {paymentView.totalWithFee !== paymentView.amount && (
+                                                    <p>Total cobrado: {formatCurrency(paymentView.totalWithFee)}</p>
+                                                )}
+                                                {paymentView.details.map((detail, detailIndex) => (
+                                                    <p key={detailIndex}>{detail}</p>
+                                                ))}
+                                                {recoveredOperatorFee > 0 && (
+                                                    <p>Custo da maquina calculado: {formatCurrency(recoveredOperatorFee)}</p>
+                                                )}
                                             </div>
                                         </div>
-                                        <p className="text-sm font-bold text-slate-800">
-                                            {formatCurrency(payment.total_with_fee)}
-                                        </p>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
+                            {!hasDetailedPaymentMethods && (
+                                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                    Detalhes do pagamento nao registrados nesta venda. O sistema encontrou apenas a forma resumida salva no historico antigo.
+                                </p>
+                            )}
                         </div>
 
                     </div>
@@ -599,7 +834,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 {isPrintingWarranty
                                     ? <RefreshCw size={16} className="animate-spin" />
                                     : <FileText size={16} />}
-                                <span className="text-sm">Garantia</span>
+                                <span className="text-sm">Termo Garantia</span>
                             </button>
                             <button
                                 onClick={handlePrintReceipt}

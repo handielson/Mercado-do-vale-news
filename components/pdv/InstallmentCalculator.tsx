@@ -6,7 +6,14 @@ import { formatCurrency } from '../../utils/saleCalculations';
 interface InstallmentCalculatorProps {
     remainingBalance: number; // Saldo restante em centavos
     paymentFees: PaymentFee[]; // Tabela de taxas
-    onSelectInstallment: (installments: number, amount: number, feeAmount: number) => void;
+    onSelectInstallment: (
+        installments: number,
+        amount: number,
+        feeAmount: number,
+        operatorFeeAmount: number,
+        operatorFeePercentage: number,
+        appliedFeePercentage: number
+    ) => void;
 }
 
 export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
@@ -27,6 +34,7 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
     // Calcular opções de parcelamento
     const installmentOptions = creditFees.map(fee => {
         const feeAmount = Math.round(remainingBalance * (fee.applied_fee / 100));
+        const operatorFeeAmount = Math.round(remainingBalance * (fee.operator_fee / 100));
         const totalWithFee = remainingBalance + feeAmount;
         const monthlyPayment = Math.round(totalWithFee / fee.installments);
 
@@ -36,6 +44,8 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
             installments: fee.installments,
             feePercentage: fee.applied_fee,
             feeAmount,
+            operatorFeePercentage: fee.operator_fee,
+            operatorFeeAmount,
             totalWithFee,
             monthlyPayment
         };
@@ -71,7 +81,10 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
                             onClick={() => onSelectInstallment(
                                 option.installments,
                                 remainingBalance,
-                                option.feeAmount
+                                option.feeAmount,
+                                option.operatorFeeAmount,
+                                option.operatorFeePercentage,
+                                option.feePercentage
                             )}
                             className="flex flex-col items-center p-3 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >

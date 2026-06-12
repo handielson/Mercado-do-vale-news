@@ -8,7 +8,11 @@ const CLIENT_ID = process.env.GOOGLE_CONTACTS_CLIENT_ID || process.env.GOOGLE_CL
 const CLIENT_SECRET = process.env.GOOGLE_CONTACTS_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '';
 const PORT = Number(process.env.GOOGLE_CONTACTS_OAUTH_PORT || 8765);
 const REDIRECT_URI = `http://127.0.0.1:${PORT}/oauth2callback`;
-const SCOPE = 'https://www.googleapis.com/auth/contacts';
+const SCOPES = [
+  'https://www.googleapis.com/auth/contacts',
+  'https://www.googleapis.com/auth/contacts.other.readonly',
+];
+const SCOPE = SCOPES.join(' ');
 
 function fail(message) {
   console.error(`\n[google-contacts-oauth] ${message}`);

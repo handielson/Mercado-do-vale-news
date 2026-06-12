@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const source = readFileSync('tools/google-contacts-oauth.cjs', 'utf8');
 
 assert.match(source, /https:\/\/www\.googleapis\.com\/auth\/contacts/, 'OAuth script must request Google Contacts scope');
+assert.match(source, /https:\/\/www\.googleapis\.com\/auth\/contacts\.other\.readonly/, 'OAuth script must request Other Contacts read scope');
 assert.match(source, /access_type', 'offline'/, 'OAuth script must request offline access');
 assert.match(source, /prompt', 'consent'/, 'OAuth script must force consent so a refresh token is returned');
 assert.match(source, /code_challenge_method', 'S256'/, 'OAuth script must use PKCE S256');

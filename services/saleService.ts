@@ -23,6 +23,7 @@ import { stockLocationService } from './stockLocationService';
 import { vpsApiService } from './vpsApiService';
 import { vpsClient } from './vpsClient';
 import { deliveryCreditService } from './deliveryCreditService';
+import { moneyToCents } from '../utils/money';
 
 const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Promise<void> => {
     if (!item.product_id) return;
@@ -109,17 +110,15 @@ function paymentMethodFromSalesTable(value: unknown, amount: number): PaymentMet
 }
 
 function serializeSaleRowForTable<T extends Record<string, unknown>>(row: T): Record<string, unknown> {
-    return {
-        id: row.id,
-        customer_id: row.customer_id || null,
-        seller_id: row.seller_id || null,
-        total: row.total || 0,
-        discount: row.discount || 0,
-        payment_method: row.payment_method || null,
-        payment_methods: row.payment_methods ? serializeJsonValue(row.payment_methods) : null,
-        payment_status: row.payment_status || 'paid',
-        notes: row.notes || null,
-    };
+    const data = { ...row };
+    if (data.payment_methods) {
+        data.payment_methods = serializeJsonValue(data.payment_methods);
+    }
+    delete data.items;
+    delete data.customer;
+    delete data.seller;
+    delete data.status;
+    return data;
 }
 
 function serializeSaleItemRowForTable(item: SaleItem, saleId: string): Record<string, unknown> {
@@ -127,40 +126,29 @@ function serializeSaleItemRowForTable(item: SaleItem, saleId: string): Record<st
         sale_id: saleId,
         product_id: item.product_id || null,
         product_name: item.product_name || null,
+        product_sku: item.product_sku || null,
         quantity: item.quantity || 1,
         unit_price: item.unit_price || 0,
         total: item.total || 0,
         warranty_months: item.warranty_months || 0,
         imei: item.serialized_unit?.imei1 || item.serialized_unit?.serial || null,
         serialized_unit_id: item.serialized_unit?.unitId || null,
+        unit_cost: item.unit_cost || 0,
     };
 }
 
-function toNumber(value: unknown): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : 0;
-}
 
-function hasDecimalMoney(value: unknown): boolean {
-    const n = Number(value);
-    return Number.isFinite(n) && Math.abs(n - Math.round(n)) > 0.001;
-}
-
-function looksLikeCentStoredMoney(value: unknown): boolean {
-    const n = Math.abs(Number(value));
-    return Number.isFinite(n) && Math.abs(n - Math.round(n)) <= 0.001 && n >= 1000;
-}
-
-function scaleMoneyValue(value: unknown, moneyScale: number): number {
-    return Math.round(toNumber(value) * moneyScale);
-}
-
-function normalizePaymentMethods(paymentMethods: PaymentMethod[], moneyScale: number): PaymentMethod[] {
+function normalizePaymentMethods(paymentMethods: PaymentMethod[]): PaymentMethod[] {
     return paymentMethods.map((payment) => ({
         ...payment,
-        amount: scaleMoneyValue(payment.amount, moneyScale),
-        fee_amount: payment.fee_amount == null ? payment.fee_amount : scaleMoneyValue(payment.fee_amount, moneyScale),
-        total_with_fee: scaleMoneyValue(payment.total_with_fee ?? payment.amount, moneyScale),
+        amount: moneyToCents(payment.amount),
+        fee_amount: (payment as any).fee_amount == null && (payment as any).fee_cents == null
+            ? payment.fee_amount
+            : moneyToCents((payment as any).fee_amount ?? (payment as any).fee_cents),
+        operator_fee_amount: (payment as any).operator_fee_amount == null && (payment as any).operator_fee_cents == null
+            ? payment.operator_fee_amount
+            : moneyToCents((payment as any).operator_fee_amount ?? (payment as any).operator_fee_cents),
+        total_with_fee: moneyToCents((payment as any).total_with_fee ?? (payment as any).total_with_fee_cents ?? payment.amount),
     }));
 }
 
@@ -188,75 +176,43 @@ async function createCustomerDebtForAPrazoSale(saleInput: SaleInput, sale: Sale)
     });
 }
 
-function shouldScaleSaleMoneyFromReais(sale: any, saleItems: any[] = []): boolean {
-    const saleMoneyValues = [
-        sale.total,
-        sale.discount,
-        sale.discount_total,
-        sale.subtotal,
-        sale.delivery_total,
-        sale.delivery_cost_store,
-        sale.delivery_cost_customer,
-    ];
-    const itemMoneyValues = saleItems.flatMap(item => [
-        item.unit_price,
-        item.total,
-        item.subtotal,
-        item.discount,
-        item.warranty_price,
-    ]);
-    const moneyValues = [
-        ...saleMoneyValues,
-        ...saleItems.flatMap(item => [
-            item.unit_price,
-            item.total,
-            item.subtotal,
-            item.discount,
-            item.warranty_price,
-        ]),
-    ];
-
-    if (itemMoneyValues.some(looksLikeCentStoredMoney)) return false;
-
-    return moneyValues.some(hasDecimalMoney);
-}
-
-function normalizeSaleRow(row: any, moneyScale = 1): Sale {
-    const rawTotal = toNumber(row.total);
-    const discountTotal = scaleMoneyValue(row.discount_total ?? row.discount, moneyScale);
-    const total = scaleMoneyValue(rawTotal, moneyScale);
+function normalizeSaleRow(row: any): Sale {
+    const rawTotal = moneyToCents(row.total);
+    const discountTotal = moneyToCents(row.discount_total ?? row.discount);
+    const total = rawTotal;
     const paymentMethods = Array.isArray(row.payment_methods)
         ? row.payment_methods
         : parseJsonField(row.payment_methods, paymentMethodFromSalesTable(row.payment_method, rawTotal));
 
     return {
         ...row,
-        subtotal: row.subtotal == null ? total + discountTotal : scaleMoneyValue(row.subtotal, moneyScale),
+        subtotal: !row.subtotal ? total + discountTotal : moneyToCents(row.subtotal),
         discount_total: discountTotal,
         total,
-        cost_total: scaleMoneyValue(row.cost_total, moneyScale),
-        profit: scaleMoneyValue(row.profit, moneyScale),
-        delivery_cost_store: scaleMoneyValue(row.delivery_cost_store, moneyScale),
-        delivery_cost_customer: scaleMoneyValue(row.delivery_cost_customer, moneyScale),
-        delivery_total: scaleMoneyValue(row.delivery_total, moneyScale),
-        promotional_discount: scaleMoneyValue(row.promotional_discount, moneyScale),
-        payment_methods: normalizePaymentMethods(paymentMethods, moneyScale),
+        cost_total: moneyToCents(row.cost_total),
+        profit: moneyToCents(row.profit),
+        delivery_cost_store: moneyToCents(row.delivery_cost_store),
+        delivery_cost_customer: moneyToCents(row.delivery_cost_customer),
+        delivery_total: moneyToCents(row.delivery_total),
+        promotional_discount: moneyToCents(row.promotional_discount),
+        final_adjustment_discount: moneyToCents(row.final_adjustment_discount),
+        payment_methods: normalizePaymentMethods(paymentMethods),
         status: row.status || (row.payment_status === 'cancelled' ? 'cancelled' : 'completed'),
     } as Sale;
 }
 
-function normalizeSaleItemRow(row: any, moneyScale = 1): SaleItem {
+function normalizeSaleItemRow(row: any): SaleItem {
     const quantity = Number(row.quantity) || 0;
-    const unitPrice = scaleMoneyValue(row.unit_price, moneyScale);
-    const total = row.total == null ? unitPrice * quantity : scaleMoneyValue(row.total, moneyScale);
+    const unitPrice = moneyToCents(row.unit_price);
+    const total = row.total == null ? unitPrice * quantity : moneyToCents(row.total);
 
     return {
         ...row,
         quantity,
         unit_price: unitPrice,
-        unit_cost: scaleMoneyValue(row.unit_cost, moneyScale),
-        discount: scaleMoneyValue(row.discount, moneyScale),
-        subtotal: row.subtotal == null ? total : scaleMoneyValue(row.subtotal, moneyScale),
+        unit_cost: moneyToCents(row.unit_cost),
+        discount: moneyToCents(row.discount),
+        subtotal: row.subtotal == null ? total : moneyToCents(row.subtotal),
         total,
         is_gift: row.is_gift === true || row.is_gift === 1,
     } as SaleItem;
@@ -285,11 +241,8 @@ async function loadSaleRows(): Promise<Sale[]> {
 
 async function loadSaleItemsBySaleId(saleId: string): Promise<SaleItem[]> {
     const rows = await loadTableRows<any>('sale_items');
-    const saleRows = await loadTableRows<any>('sales');
-    const sale = saleRows.find(row => String(row.id) === String(saleId));
     const saleItems = rows.filter(row => String(row.sale_id || '') === String(saleId));
-    const moneyScale = shouldScaleSaleMoneyFromReais(sale || {}, saleItems) ? 100 : 1;
-    return saleItems.map(row => normalizeSaleItemRow(row, moneyScale));
+    return saleItems.map(row => normalizeSaleItemRow(row));
 }
 
 async function loadSaleWithItemsById(saleId: string): Promise<SaleWithItems | null> {
@@ -303,9 +256,8 @@ async function loadSaleWithItemsById(saleId: string): Promise<SaleWithItems | nu
     if (!saleRow) return null;
 
     const saleItemRows = itemRows.filter(row => String(row.sale_id || '') === String(saleId));
-    const moneyScale = shouldScaleSaleMoneyFromReais(saleRow, saleItemRows) ? 100 : 1;
-    const sale = normalizeSaleRow(saleRow, moneyScale);
-    const items = saleItemRows.map(row => normalizeSaleItemRow(row, moneyScale));
+    const sale = normalizeSaleRow(saleRow);
+    const items = saleItemRows.map(row => normalizeSaleItemRow(row));
 
     const customer = customers.find(row => String(row.id || '') === String(sale.customer_id));
     const seller = teamMembers.find(row => String(row.id || '') === String(sale.seller_id || ''));
@@ -333,6 +285,27 @@ async function loadCustomerNameById(customerId?: string | null): Promise<string>
     return String(customer?.name || 'Cliente');
 }
 
+function normalizeCustomerName(value: unknown): string {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function isWalkInCustomerRow(row: any): boolean {
+    const value = row?.is_walk_in_customer;
+    return value === true || value === 1 || value === '1' || normalizeCustomerName(row?.name) === 'cliente balcao';
+}
+
+async function isWalkInCustomerId(customerId?: string | null): Promise<boolean> {
+    if (!customerId) return false;
+    const customers = await loadTableRows<any>('customers');
+    const customer = customers.find(row => String(row.id || '') === String(customerId));
+    return isWalkInCustomerRow(customer);
+}
+
 function saleMatchesFilters(sale: Sale, filters?: SaleFilters): boolean {
     if (filters?.customer_id && String(sale.customer_id || '') !== String(filters.customer_id)) return false;
     if (filters?.seller_id && String(sale.seller_id || '') !== String(filters.seller_id)) return false;
@@ -344,7 +317,7 @@ function saleMatchesFilters(sale: Sale, filters?: SaleFilters): boolean {
     return true;
 }
 
-async function patchSale(id: string, patch: Partial<Sale>): Promise<Sale> {
+export async function patchSale(id: string, patch: Partial<Sale>): Promise<Sale> {
     const tablePatch: Record<string, unknown> = { ...patch };
     if (Object.prototype.hasOwnProperty.call(tablePatch, 'status')) {
         tablePatch.payment_status = tablePatch.status === 'cancelled' || tablePatch.status === 'refunded'
@@ -356,13 +329,13 @@ async function patchSale(id: string, patch: Partial<Sale>): Promise<Sale> {
     delete tablePatch.discount_total;
     delete tablePatch.cost_total;
     delete tablePatch.profit;
-    delete tablePatch.payment_methods;
-    delete tablePatch.delivery_type;
-    delete tablePatch.delivery_person_id;
-    delete tablePatch.delivery_cost_store;
-    delete tablePatch.delivery_cost_customer;
-    delete tablePatch.delivery_total;
-    delete tablePatch.promotional_discount;
+    delete tablePatch.items;
+    delete tablePatch.customer;
+    delete tablePatch.seller;
+
+    if (tablePatch.payment_methods) {
+        tablePatch.payment_methods = serializeJsonValue(tablePatch.payment_methods);
+    }
 
     return normalizeSaleRow(await vpsClient.patch<any>(
         `/table-data/sales/${encodeURIComponent(id)}?pk=id`,
@@ -384,7 +357,18 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
 
         const promotionalDiscount = Math.max(0, saleInput.promotional_discount || 0);
         const discountTotal = totals.discount_total + (saleInput.delivery_cost_store || 0) + promotionalDiscount;
-        const saleTotal = Math.max(0, totals.total + (saleInput.delivery_cost_customer || 0) - promotionalDiscount);
+        const paymentCollectedTotal = (saleInput.payment_methods || []).reduce((sum, payment) => {
+            return sum + moneyToCents(payment.total_with_fee ?? payment.amount ?? 0);
+        }, 0);
+        const customerFeeTotal = (saleInput.payment_methods || []).reduce((sum, payment) => {
+            return sum + moneyToCents(payment.fee_amount || 0);
+        }, 0);
+        const paymentOperatorFeeTotal = (saleInput.payment_methods || []).reduce((sum, payment) => {
+            return sum + moneyToCents(payment.operator_fee_amount || 0);
+        }, 0);
+        const computedSaleTotal = Math.max(0, totals.total + (saleInput.delivery_cost_customer || 0) + customerFeeTotal - promotionalDiscount);
+        const saleTotal = paymentCollectedTotal > 0 ? paymentCollectedTotal : computedSaleTotal;
+        const realProfit = saleTotal - totals.cost_total - paymentOperatorFeeTotal - (saleInput.delivery_total || 0);
 
         const saleId = createLocalId();
         const saleData = {
@@ -396,6 +380,22 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             payment_method: summarizePaymentMethodForSalesTable(saleInput.payment_methods),
             payment_status: 'paid',
             notes: saleInput.notes,
+            payment_methods: saleInput.payment_methods,
+            subtotal: totals.subtotal,
+            discount_total: discountTotal,
+            cost_total: totals.cost_total,
+            profit: realProfit,
+            delivery_type: saleInput.delivery_type || null,
+            delivery_person_id: saleInput.delivery_person_id || null,
+            delivery_person_customer_id: saleInput.delivery_person_customer_id || null,
+            delivery_cost_store: saleInput.delivery_cost_store || 0,
+            delivery_cost_customer: saleInput.delivery_cost_customer || 0,
+            delivery_total: saleInput.delivery_total || 0,
+            promotional_discount: promotionalDiscount,
+            coupon_code: saleInput.coupon_code || null,
+            coupon_id: saleInput.coupon_id || null,
+            final_adjustment_discount: saleInput.final_adjustment_discount || 0,
+            referral_code: saleInput.referral_code || null,
         };
 
         // Insert sale
@@ -410,10 +410,37 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
 
         try {
             await vpsClient.post('/table-data/sale_items/bulk', saleItems);
+            if (saleInput.delivery_person_customer_id && saleInput.delivery_total && saleInput.delivery_total > 0) {
+                await vpsClient.post('/delivery/jobs/from-sale', { sale_id: sale.id });
+            }
         } catch (itemsError) {
             // Rollback: delete sale if items insertion fails
             await deleteSaleRow(sale.id);
             throw itemsError;
+        }
+
+        const serializedItems = saleInput.items.filter(i => (i as any).serialized_unit?.unitId);
+        const markedUnitIds: string[] = [];
+        try {
+            for (const item of serializedItems) {
+                const unitId = (item as any).serialized_unit.unitId;
+                await unitService.markAsSold(unitId, undefined, sale.id);
+                markedUnitIds.push(unitId);
+            }
+        } catch (err) {
+            for (const unitId of markedUnitIds) {
+                try {
+                    await unitService.release(unitId);
+                } catch (releaseError) {
+                    console.error(`[saleService] Falha ao liberar unit ${unitId} apos erro na venda ${sale.id}:`, releaseError);
+                }
+            }
+            try {
+                await deleteSaleRow(sale.id);
+            } catch (rollbackError) {
+                console.error(`[saleService] Falha ao desfazer venda ${sale.id} apos erro na baixa serializada:`, rollbackError);
+            }
+            throw err;
         }
 
         try {
@@ -429,8 +456,8 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
 
         // Marca units serializadas como vendidas (VPS) — markAsSold dispara
         // syncProductStock que decrementa products.stock_quantity automaticamente.
-        const serializedItems = saleInput.items.filter(i => (i as any).serialized_unit?.unitId);
-        for (const item of serializedItems) {
+        const alreadyMarkedSerializedItems: typeof serializedItems = [];
+        for (const item of alreadyMarkedSerializedItems) {
             try {
                 await unitService.markAsSold((item as any).serialized_unit.unitId, undefined, sale.id);
             } catch (err) {
@@ -455,7 +482,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
                 item.product_id!,
                 item.quantity,
                 `Venda #${sale.id} — PDV Mercado do Vale`,
-                { comboSelections: item.comboSelections }
+                { comboSelections: item.comboSelections, unitPriceCents: item.unit_price }
             ).catch(() => { /* já logado internamente */ });
         }
 
@@ -480,7 +507,8 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         // Apply Promotions
         try {
             const promoStatus = await promotionService.getPromotionStatus('one_year_screen_protector');
-            if (promoStatus.isActive && saleInput.customer_id) {
+            const walkInCustomer = await isWalkInCustomerId(saleInput.customer_id);
+            if (promoStatus.isActive && saleInput.customer_id && !walkInCustomer) {
                 const productIds = saleInput.items.map(item => item.product_id);
                 // Verify if any product is a phone (celulares)
                 const productsInSale = await vpsApiService.getProductsByIds(productIds);
@@ -559,13 +587,12 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
         return saleRows
             .map((saleRow) => {
                 const rawItems = saleItems.filter(row => String(row.sale_id || '') === String(saleRow.id));
-                const moneyScale = shouldScaleSaleMoneyFromReais(saleRow, rawItems) ? 100 : 1;
-                const sale = normalizeSaleRow(saleRow, moneyScale);
-                return { sale, rawItems, moneyScale };
+                const sale = normalizeSaleRow(saleRow);
+                return { sale, rawItems };
             })
-            .map(({ sale, rawItems, moneyScale }) => ({
+            .map(({ sale, rawItems }) => ({
                 sale,
-                items: rawItems.map(row => normalizeSaleItemRow(row, moneyScale)),
+                items: rawItems.map(row => normalizeSaleItemRow(row)),
             }))
             .filter(({ sale }) => saleMatchesFilters(sale, filters))
             .sort((a, b) => String(b.sale.created_at || '').localeCompare(String(a.sale.created_at || '')))

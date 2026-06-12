@@ -7,7 +7,7 @@ const items: Array<{ label: string; status: MigrationStatus; description: string
   {
     label: 'Conexao',
     status: 'testing',
-    description: 'Status, QR Code, pairing code, desconexao e debug da Evolution.',
+    description: 'Entrada e saida oficiais pela Evolution, sem depender do AutoResponder WA.',
   },
   {
     label: 'Atendimento',

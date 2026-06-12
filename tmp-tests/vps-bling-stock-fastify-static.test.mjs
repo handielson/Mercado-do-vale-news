@@ -11,10 +11,12 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/estoques\/saldos\?pagina=\$\{page\}&limite=100/, `${file} must preserve the Bling stock balance endpoint`);
   assert.match(source, /if\s*\(stockResponse\.status === 400\)[\s\S]*\{ data: \[\] \}/, `${file} must normalize Bling stock 400 responses to an empty data array`);
   assert.match(source, /blingId and quantity required/, `${file} must validate stock-sync payload`);
-  assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/depositos\?pagina=1&limite=1/, `${file} must fetch a Bling deposit before stock-sync`);
+  assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/depositos\?pagina=1&limite=100/, `${file} must fetch Bling deposits before stock-sync`);
   assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/estoques['"`]/, `${file} must post stock movements to Bling`);
   assert.match(source, /operacao:\s*'S'/, `${file} must preserve stock-sync outgoing operation`);
   assert.match(source, /observacoes:\s*notes \|\| 'Venda PDV Mercado do Vale'/, `${file} must preserve stock-sync default notes`);
+  assert.match(source, /rawUnitPrice = unitPrice \?\? price \?\? valor \?\? preco/, `${file} must accept sale price in stock-sync payload`);
+  assert.match(source, /stockMovementPayload\.preco = Number\(normalizedUnitPrice\.toFixed\(2\)\)/, `${file} must forward sale price to Bling stock movements`);
   assert.match(source, /buildCopyableDebug\('bling-stock'/, `${file} must return copyable debug details for stock failures`);
   assert.match(source, /buildCopyableDebug\('bling-stock-sync'/, `${file} must return copyable debug details for stock-sync failures`);
 

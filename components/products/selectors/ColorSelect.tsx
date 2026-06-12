@@ -48,35 +48,49 @@ export const ColorSelect: React.FC<ColorSelectProps> = ({
         return colorService.getColorHex(colorName);
     };
 
+    const selectedColor = colors.find((color) =>
+        color.name === value || color.id === value || color.slug === value
+    );
+    const selectedValue = selectedColor?.name || value;
+    const selectedColorHex = selectedColor?.hex_code || getColorHex(selectedValue);
+    const hasPersistedColorOutsideList = Boolean(selectedValue) && !selectedColor;
+
     return (
         <div className="space-y-2">
             <div className="flex items-center gap-2 min-w-0">
-                <div className="min-w-0 flex-1 relative">
+                <div className="min-w-0 flex-1">
                     <select
-                        value={value}
+                        value={selectedValue}
                         onChange={(e) => onChange(e.target.value)}
                         disabled={isLoading}
                         className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
                     >
                         <option value="">Selecione uma cor</option>
+                        {hasPersistedColorOutsideList && (
+                            <option value={selectedValue}>
+                                {selectedValue}
+                            </option>
+                        )}
                         {colors.map((color) => (
                             <option key={color.id} value={color.name}>
                                 {color.name}
                             </option>
                         ))}
                     </select>
-
-                    {/* Color preview dot */}
-                    {value && getColorHex(value) && (
-                        <div className="absolute right-10 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                            <div
-                                className="w-4 h-4 rounded-full border border-slate-300"
-                                style={{ backgroundColor: getColorHex(value) }}
-                                title={value}
-                            />
-                        </div>
-                    )}
                 </div>
+
+                {/* Color preview dot */}
+                {selectedValue && selectedColorHex && (
+                    <span
+                        className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 bg-white"
+                        title={selectedValue}
+                    >
+                        <span
+                            className="h-4 w-4 rounded-full border border-slate-300"
+                            style={{ backgroundColor: selectedColorHex }}
+                        />
+                    </span>
+                )}
 
                 <button
                     type="button"

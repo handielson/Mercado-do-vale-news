@@ -11,6 +11,11 @@ interface ProductSearchSectionProps {
 
 type SearchMode = 'product' | 'imei';
 
+const hasSerializedIdentity = (product: Product): boolean => {
+    const specs = (product as any).specs || {};
+    return Boolean(specs.imei1 || specs.imei_1 || specs.imei2 || specs.imei_2 || specs.serial || specs.serial_number);
+};
+
 export default function ProductSearchSection({ onAddToCart }: ProductSearchSectionProps) {
     const [mode, setMode] = useState<SearchMode>('product');
 
@@ -80,6 +85,12 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
             if (availableProducts.length === 1) {
                 const singleProduct = availableProducts[0];
                 const quantity = quantities[singleProduct.id] || 1;
+                if (hasSerializedIdentity(singleProduct)) {
+                    toast.info('Produto com IMEI/Serial deve ser bipado pela aba IMEI / Serial');
+                    setMode('imei');
+                    setTimeout(() => imeiInputRef.current?.focus(), 50);
+                    return;
+                }
                 if (singleProduct.track_inventory && singleProduct.stock_quantity !== undefined) {
                     if (singleProduct.stock_quantity < quantity) {
                         return;
@@ -104,6 +115,13 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
 
     const handleAddToCart = (product: Product) => {
         const quantity = quantities[product.id] || 1;
+        if (hasSerializedIdentity(product)) {
+            toast.info('Produto com IMEI/Serial deve ser bipado pela aba IMEI / Serial');
+            setMode('imei');
+            setImeiQuery('');
+            setTimeout(() => imeiInputRef.current?.focus(), 50);
+            return;
+        }
         if (product.track_inventory && product.stock_quantity !== undefined) {
             if (product.stock_quantity < quantity) {
                 toast.error(`Estoque insuficiente. Disponível: ${product.stock_quantity}`);

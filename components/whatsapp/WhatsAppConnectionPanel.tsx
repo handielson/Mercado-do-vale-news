@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { autoResponderService } from '../../services/autoResponderService';
 
 type WhatsAppState = 'loading' | 'open' | 'connecting' | 'close' | 'error';
+type SyncStatus = { type: 'idle' | 'syncing' | 'success' | 'error'; message: string };
 
 function formatDebugValue(value: unknown): string {
   if (!value) return '';
@@ -45,6 +46,10 @@ export function WhatsAppConnectionPanel() {
   const [pairingCode, setPairingCode] = React.useState<string | null>(null);
   const [debug, setDebug] = React.useState<any | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = React.useState<SyncStatus>({
+    type: 'idle',
+    message: 'Aguardando sincronizacao do webhook.',
+  });
   const [busy, setBusy] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
 
@@ -119,6 +124,24 @@ export function WhatsAppConnectionPanel() {
     }
   }
 
+  async function handleSyncWebhook() {
+    setBusy(true);
+    setError(null);
+    setSyncStatus({ type: 'syncing', message: 'Sincronizando webhook da Evolution...' });
+    try {
+      await autoResponderService.syncWhatsAppWebhook();
+      await loadDebug();
+      setSyncStatus({ type: 'success', message: 'Webhook sincronizado com sucesso.' });
+      toast.success('Webhook da Evolution sincronizado');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao sincronizar webhook da Evolution.';
+      setSyncStatus({ type: 'error', message: `Falha ao sincronizar webhook: ${message}` });
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleDisconnect() {
     if (!window.confirm('Tem certeza de que deseja desconectar o WhatsApp?')) return;
     setBusy(true);
@@ -139,6 +162,23 @@ export function WhatsAppConnectionPanel() {
 
   const debugSummary = summarizeDebug(debug);
   const isConnected = state === 'open';
+  const stateLabel = state === 'loading'
+    ? 'Verificando'
+    : isConnected
+      ? 'Conectado'
+      : state === 'connecting'
+        ? 'Conectando'
+        : 'Desconectado';
+  const statePillClass = isConnected
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : state === 'loading' || state === 'connecting'
+      ? 'border-blue-200 bg-blue-50 text-blue-700'
+      : 'border-red-200 bg-red-50 text-red-700';
+  const syncClass = syncStatus.type === 'success'
+    ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+    : syncStatus.type === 'error'
+      ? 'border-red-100 bg-red-50 text-red-700'
+      : 'border-slate-200 bg-white text-slate-600';
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white">
@@ -164,15 +204,26 @@ export function WhatsAppConnectionPanel() {
             {refreshing ? 'Atualizando...' : 'Atualizar'}
           </button>
           {isConnected ? (
-            <button
-              type="button"
-              onClick={handleDisconnect}
-              disabled={busy}
-              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-            >
-              <Power size={16} />
-              Desconectar WhatsApp
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={handleSyncWebhook}
+                disabled={busy}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+              >
+                <RefreshCw size={16} />
+                Sincronizar Evolution
+              </button>
+              <button
+                type="button"
+                onClick={handleDisconnect}
+                disabled={busy}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                <Power size={16} />
+                Desconectar WhatsApp
+              </button>
+            </>
           ) : (
             <button
               type="button"
@@ -189,6 +240,23 @@ export function WhatsAppConnectionPanel() {
 
       <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[1fr_320px]">
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+          <div className="mb-4 grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <p className="text-xs font-semibold uppercase text-slate-400">Estado atual</p>
+              <div className={`mt-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm font-semibold ${statePillClass}`}>
+                {isConnected ? <CheckCircle2 size={15} /> : <WifiOff size={15} />}
+                {stateLabel}
+              </div>
+            </div>
+            <div className={`rounded-lg border p-3 ${syncClass}`}>
+              <p className="text-xs font-semibold uppercase opacity-70">Sincronizacao</p>
+              <div className="mt-2 flex items-start gap-2 text-sm font-semibold">
+                <RefreshCw className={syncStatus.type === 'syncing' ? 'mt-0.5 animate-spin' : 'mt-0.5'} size={15} />
+                <span>{syncStatus.message}</span>
+              </div>
+            </div>
+          </div>
+
           {state === 'loading' && (
             <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-slate-500">
               <RefreshCw className="animate-spin" size={28} />

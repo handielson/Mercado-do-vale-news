@@ -2,20 +2,27 @@ import { SaleWithItems } from '../types/sale';
 import { CompanySettings } from '../types/companySettings';
 import { companySettingsService } from '../services/companySettingsService';
 import { CoinBalance } from '../types/cashback';
+import {
+    buildPaymentPresentation,
+    buildSaleItemPresentation,
+    buildSaleReceiptDynamicRows,
+    getSaleCollectedTotal,
+    ProductSpecsMap,
+    SaleProfitData
+} from './salePresentation';
 
 
 import { buildGlobalHeader, getHeaderTemplate } from './headerBuilder';
 
 const fmt = (v: number) => `R$ ${(v / 100).toFixed(2).replace('.', ',')}`;
 
-const paymentLabel = (method: string, installments?: number) => {
-    const labels: Record<string, string> = {
-        money: 'Dinheiro', pix: 'PIX', credit: 'Crédito', debit: 'Débito',
-    };
-    const base = labels[method] || method;
-    return method === 'credit' && installments && installments > 1
-        ? `${base} ${installments}x`
-        : base;
+const escapeHtml = (value: unknown): string => {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 };
 
 const deliveryLabel = (type: string) => {
@@ -93,38 +100,29 @@ function resolveExtraPageTags(
 export function printSaleReceipt(
     sale: SaleWithItems,
     settings: CompanySettings,
-    productSpecs?: Record<string, Record<string, string>>,
-    benefits?: PrintReceiptBenefits
+    productSpecs?: ProductSpecsMap,
+    benefits?: PrintReceiptBenefits,
+    profitData?: SaleProfitData
 ) {
     const logo = (settings as any).logo || settings.receipt_logo_url || '';
     const companyName = settings.company_name || 'Mercado do Vale';
     const saleDate = new Date(sale.created_at);
     const payments: any[] = (sale as any).payment_methods || [];
-    const discountTotal = sale.discount_total || 0;
-    const deliveryTotal = (sale as any).delivery_total || 0;
-
     const logoHtml = logo
         ? `<img src="${logo}" alt="Logo" style="max-height:60px;max-width:140px;object-fit:contain;" />`
         : '';
 
     const itemsHtml = sale.items.map(item => {
-        // Lookup priority: por sale_item.id (IMEI da unit serializada) → por product_id (specs gerais).
-        const itemSpecs = productSpecs?.[(item as any).id] || {};
-        const productLevelSpecs = productSpecs?.[(item as any).product_id] || {};
-        const specs = { ...productLevelSpecs, ...itemSpecs };
-        const idParts: string[] = [];
-        if (specs.imei1) idParts.push(`IMEI 1: ${specs.imei1}`);
-        if (specs.imei2) idParts.push(`IMEI 2: ${specs.imei2}`);
-        if (specs.serial) idParts.push(`Serial: ${specs.serial}`);
-        const identifier = idParts.length > 0 ? idParts.join(' | ') : ((item as any).product_sku ? `SKU: ${(item as any).product_sku}` : '');
+        const itemView = buildSaleItemPresentation(item, productSpecs, profitData);
+        const identifier = itemView.identifierLine === 'SKU: N/A' ? '' : itemView.identifierLine;
 
         return `
         <tr>
             <td style="padding:4px 0;font-size:13px;color:#374151;">
                 ${item.quantity > 1 ? `<span style="color:#6b7280">${item.quantity}x </span>` : ''}
-                ${item.product_name}
+                ${escapeHtml(item.product_name)}
                 ${item.is_gift ? '<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:4px;margin-left:4px;">BRINDE</span>' : ''}
-                ${identifier ? `<br><span style="font-size:11px;color:#9ca3af;">${identifier}</span>` : ''}
+                ${identifier ? `<br><span style="font-size:11px;color:#9ca3af;">${escapeHtml(identifier)}</span>` : ''}
             </td>
             <td style="padding:4px 0;text-align:right;font-size:13px;font-family:monospace;white-space:nowrap;">
                 ${item.is_gift ? '<span style="color:#059669">Grátis</span>' : fmt(item.total)}
@@ -132,17 +130,30 @@ export function printSaleReceipt(
         </tr>`;
     }).join('');
 
-    const paymentsHtml = payments.map(p => `
+    const paymentsHtml = payments.map(p => {
+        const paymentView = buildPaymentPresentation(p);
+        const detailHtml = paymentView.details.length > 0
+            ? `<br><span style="font-size:11px;color:#6b7280;">${paymentView.details.map(escapeHtml).join('<br>')}</span>`
+            : '';
+        return `
         <tr>
-            <td style="padding:3px 0;font-size:13px;color:#374151;">${paymentLabel(p.method, p.installments)}</td>
-            <td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;">${fmt(p.total_with_fee || p.amount)}</td>
-        </tr>`).join('');
+            <td style="padding:4px 0;font-size:13px;color:#374151;">${escapeHtml(paymentView.labelWithInstallments)}${detailHtml}</td>
+            <td style="padding:4px 0;text-align:right;font-size:13px;font-family:monospace;vertical-align:top;">${fmt(paymentView.totalWithFee)}</td>
+        </tr>`;
+    }).join('');
+
+    const dynamicRowsHtml = buildSaleReceiptDynamicRows(sale, benefits).map(row => `
+        <tr>
+            <td style="padding:3px 0;font-size:13px;color:#374151;">${escapeHtml(row.label)}</td>
+            <td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;">${escapeHtml(row.value)}</td>
+        </tr>
+    `).join('');
 
     const customerSection = sale.customer ? `
         <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px dashed #d1d5db;">
             <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin:0 0 6px;">Cliente</p>
-            <p style="margin:0;font-size:13px;font-weight:600;color:#111827;">${sale.customer.name}</p>
-            ${sale.customer.cpf_cnpj ? `<p style="margin:2px 0 0;font-size:12px;color:#6b7280;">CPF/CNPJ: ${sale.customer.cpf_cnpj}</p>` : ''}
+            <p style="margin:0;font-size:13px;font-weight:600;color:#111827;">${escapeHtml(sale.customer.name)}</p>
+            ${sale.customer.cpf_cnpj ? `<p style="margin:2px 0 0;font-size:12px;color:#6b7280;">CPF/CNPJ: ${escapeHtml(sale.customer.cpf_cnpj)}</p>` : ''}
         </div>` : '';
 
     // — Folha Extra —
@@ -251,9 +262,8 @@ export function printSaleReceipt(
     <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px dashed #d1d5db;">
         <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin:0 0 8px;">Resumo</p>
         <table>
-            ${discountTotal > 0 ? `<tr><td style="padding:3px 0;font-size:13px;color:#374151;">Descontos</td><td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;color:#dc2626;">- ${fmt(discountTotal)}</td></tr>` : ''}
-            ${deliveryTotal > 0 ? `<tr><td style="padding:3px 0;font-size:13px;color:#374151;">Entrega (${deliveryLabel(sale.delivery_type || '')})</td><td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;">+ ${fmt(deliveryTotal)}</td></tr>` : ''}
-            <tr class="total-row"><td>TOTAL</td><td style="text-align:right;font-family:monospace;">${fmt(sale.total)}</td></tr>
+            ${dynamicRowsHtml}
+            <tr class="total-row"><td>TOTAL</td><td style="text-align:right;font-family:monospace;">${fmt(getSaleCollectedTotal(sale, profitData))}</td></tr>
         </table>
     </div>
 
@@ -262,6 +272,11 @@ export function printSaleReceipt(
         <table>${paymentsHtml}</table>
     </div>
 
+    ${sale.notes ? `
+    <div style="margin-bottom:16px;padding-bottom:14px;border-top:1px dashed #d1d5db;padding-top:10px;">
+        <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin:0 0 4px;">Observações</p>
+        <p style="margin:0;font-size:12px;color:#374151;line-height:1.4;">${escapeHtml(sale.notes)}</p>
+    </div>` : ''}
     <div class="footer">
         <p>Obrigado pela preferência! 💙</p>
         <p style="margin-top:4px;">${companyName}</p>
