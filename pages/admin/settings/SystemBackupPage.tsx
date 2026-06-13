@@ -63,6 +63,10 @@ function eventTone(state: string): string {
   return 'bg-blue-500';
 }
 
+function latestSignalAt(snapshot: SystemBackupSnapshot | null, events: ReturnType<typeof backupEvents>): string | null {
+  return snapshot?.status.updatedAt || events[events.length - 1]?.at || snapshot?.status.startedAt || null;
+}
+
 const fallbackCoverage = [
   'Site publicado e releases',
   'API da VPS',
@@ -101,17 +105,19 @@ export const SystemBackupPage: React.FC = () => {
   }, [load]);
 
   useEffect(() => {
-    if (snapshot?.status.state !== 'running') return undefined;
+    if (snapshot?.status.state !== 'running' && !mirroring) return undefined;
     const timer = window.setInterval(() => {
       load();
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [load, snapshot?.status.state]);
+  }, [load, mirroring, snapshot?.status.state]);
 
   const coverage = useMemo(() => snapshot?.coverage?.length ? snapshot.coverage : fallbackCoverage, [snapshot]);
   const progress = backupProgress(snapshot);
   const events = useMemo(() => backupEvents(snapshot), [snapshot]);
   const isBackupRunning = snapshot?.status.state === 'running';
+  const isLiveOperation = isBackupRunning || running || mirroring || refreshing;
+  const signalAt = latestSignalAt(snapshot, events);
   const isSynologyPending = snapshot?.status.state === 'partial';
   const synologyPendingDetail = snapshot?.status.synologyMirror?.error || snapshot?.status.error || 'O pacote ja esta salvo na VPS. Esse aviso fica ate o envio ao Synology funcionar, voce tentar enviar novamente, ou um proximo backup concluir com espelho OK.';
 
@@ -156,6 +162,26 @@ export const SystemBackupPage: React.FC = () => {
   async function handleRetrySynology() {
     setMirroring(true);
     setError(null);
+    setSnapshot((current) => current ? {
+      ...current,
+      status: {
+        ...current.status,
+        state: 'running',
+        message: 'Solicitando reenvio ao Synology',
+        step: 'Reenviando para Synology',
+        updatedAt: new Date().toISOString(),
+        events: [
+          ...(current.status.events || []),
+          {
+            at: new Date().toISOString(),
+            progress: 90,
+            step: 'Reenviando para Synology',
+            state: 'running',
+            detail: current.status.vpsPackage || null,
+          },
+        ],
+      },
+    } : current);
     try {
       const data = await retrySystemBackupSynologyMirror();
       setSnapshot(data);
@@ -210,6 +236,28 @@ export const SystemBackupPage: React.FC = () => {
           <span>{error}</span>
         </div>
       )}
+
+      <section className={`rounded-lg border px-5 py-4 shadow-sm ${isLiveOperation ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white'}`}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-3">
+            {isLiveOperation ? <Loader2 className="mt-0.5 animate-spin text-blue-600" size={20} /> : <CheckCircle2 className="mt-0.5 text-slate-400" size={20} />}
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Acompanhamento ao vivo</h2>
+              <p className="text-sm text-slate-600">{snapshot?.status.step || snapshot?.status.message || 'Nenhuma operacao em andamento.'}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm md:min-w-[340px]">
+            <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-2">
+              <p className="text-xs font-bold uppercase text-slate-400">Progresso</p>
+              <p className="font-bold text-blue-700">{progress}%</p>
+            </div>
+            <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-2">
+              <p className="text-xs font-bold uppercase text-slate-400">Ultimo sinal</p>
+              <p className="font-semibold text-slate-700">{formatDateTime(signalAt)}</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6">
         <section className="bg-white border border-slate-200 rounded-lg shadow-sm">

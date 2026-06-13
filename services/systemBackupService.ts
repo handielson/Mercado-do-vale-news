@@ -14,6 +14,7 @@ export interface SystemBackupStatus {
   trigger?: string | null;
   message?: string | null;
   error?: string | null;
+  updatedAt?: string | null;
   progress?: number | null;
   step?: string | null;
   vpsPackage?: string | null;

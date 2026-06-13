@@ -35,6 +35,10 @@ assert.match(page, /refreshing/, 'page must expose a visible refresh-in-progress
 assert.match(page, /Atualizando\.\.\./, 'refresh button must communicate that it is working');
 assert.match(page, /Tentar enviar para Synology/, 'partial backups must expose a retry action for Synology mirror');
 assert.match(page, /Lista de detalhes do backup/, 'page must render a detailed backup step list after backup starts or finishes');
+assert.match(page, /Acompanhamento ao vivo/, 'page must show a live tracking panel');
+assert.match(page, /Ultimo sinal/, 'page must show the latest backend heartbeat timestamp');
+assert.match(page, /mirroring/, 'page must keep visible progress while Synology retry request is in flight');
+assert.match(page, /snapshot\?\.status\.state !== 'running' && !mirroring/, 'page must keep polling while retrying Synology');
 assert.match(page, /backup-mercadodovale\/db|\/var\/backups\/mdv-system/, 'page must show backup locations');
 assert.match(page, /vendas, clientes, aparelhos e produtos|Pagamentos, entregas e retiradas/, 'page must disclose operational data coverage');
 assert.match(page, /role="progressbar"/, 'page must show an online progress bar while backup is running');
@@ -46,6 +50,7 @@ assert.match(service, /\/admin\/system-backup\/synology-retry/, 'service must ca
 assert.match(service, /scheduleTime/, 'service must expose scheduleTime');
 assert.match(service, /progress\?: number/, 'service status must expose backup progress');
 assert.match(service, /step\?: string/, 'service status must expose backup step');
+assert.match(service, /updatedAt\?: string/, 'service status must expose the latest backend heartbeat');
 assert.match(service, /events\?: SystemBackupEvent/, 'service status must expose backup detail events');
 
 assert.match(deploy, /vps_server\.cjs/, 'API deploy must upload vps_server.cjs because PM2 may execute that entrypoint');
@@ -73,6 +78,10 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   assert.match(source, /fastify\.post\('\/admin\/system-backup\/synology-retry'/, `${name} must expose Synology mirror retry endpoint`);
   assert.match(source, /events: \[/, `${name} backup status must keep a detail event list`);
   assert.match(source, /appendSystemBackupEvent/, `${name} must append detailed backup events`);
+  assert.match(source, /touchSystemBackupStatus/, `${name} must refresh heartbeat while long steps are still running`);
+  assert.match(source, /systemBackupHeartbeat/, `${name} must keep a heartbeat timer for long-running backup steps`);
+  assert.match(source, /updateSystemBackupProgress\(92, 'Enviando pacote para Synology'\)/, `${name} must report package upload to Synology`);
+  assert.match(source, /updateSystemBackupProgress\(96, 'Enviando hash para Synology'\)/, `${name} must report checksum upload to Synology`);
   assert.match(source, /\.sha256/, `${name} must create and mirror checksum files`);
   assert.match(source, /headers\.authorization = incomingAuthorization/, `${name} vps proxy must forward admin bearer auth`);
   assert.match(source, /__MDV_PROGRESS__/, `${name} backup shell must emit progress markers`);

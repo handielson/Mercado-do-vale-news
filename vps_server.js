@@ -21190,12 +21190,14 @@ let systemBackupStatus = {
   trigger: null,
   message: null,
   error: null,
+  updatedAt: null,
   progress: null,
   step: null,
   vpsPackage: null,
   synologyMirror: null,
   events: [],
 };
+let systemBackupHeartbeat = null;
 
 function isValidSystemBackupTime(value) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
@@ -21338,6 +21340,7 @@ function updateSystemBackupProgress(progress, step) {
     progress: safeProgress,
     step: String(step || systemBackupStatus.step || 'Backup em andamento'),
     message: String(step || systemBackupStatus.message || 'Backup em andamento'),
+    updatedAt: new Date().toISOString(),
   };
   appendSystemBackupEvent(step, safeProgress, 'running');
   writeSystemBackupState({ status: systemBackupStatus });
@@ -21351,6 +21354,7 @@ function appendSystemBackupEvent(step, progress, state = 'running', detail = nul
   if (last && last.step === safeStep && last.progress === safeProgress && last.state === state) return;
   systemBackupStatus = {
     ...systemBackupStatus,
+    updatedAt: new Date().toISOString(),
     events: [
       ...events,
       {
@@ -21362,6 +21366,30 @@ function appendSystemBackupEvent(step, progress, state = 'running', detail = nul
       },
     ].slice(-30),
   };
+}
+
+function touchSystemBackupStatus(detail = null) {
+  if (systemBackupStatus.state !== 'running') return;
+  systemBackupStatus = {
+    ...systemBackupStatus,
+    updatedAt: new Date().toISOString(),
+    message: detail || systemBackupStatus.message || systemBackupStatus.step || 'Backup em andamento',
+  };
+  writeSystemBackupState({ status: systemBackupStatus });
+}
+
+function startSystemBackupHeartbeat() {
+  if (systemBackupHeartbeat) clearInterval(systemBackupHeartbeat);
+  systemBackupHeartbeat = setInterval(() => {
+    touchSystemBackupStatus(`Ainda trabalhando em: ${systemBackupStatus.step || 'backup em andamento'}`);
+  }, 10000);
+  if (typeof systemBackupHeartbeat.unref === 'function') systemBackupHeartbeat.unref();
+}
+
+function stopSystemBackupHeartbeat() {
+  if (!systemBackupHeartbeat) return;
+  clearInterval(systemBackupHeartbeat);
+  systemBackupHeartbeat = null;
 }
 
 async function uploadSystemBackupToSynology(filePath, fileName) {
@@ -21429,9 +21457,11 @@ async function uploadSystemBackupToSynology(filePath, fileName) {
 }
 
 async function uploadSystemBackupArtifactsToSynology(backupTar) {
+  updateSystemBackupProgress(92, 'Enviando pacote para Synology');
   const packageUpload = await uploadSystemBackupToSynology(backupTar, path.basename(backupTar));
   const hashPath = `${backupTar}.sha256`;
   if (!fs.existsSync(hashPath)) return packageUpload;
+  updateSystemBackupProgress(96, 'Enviando hash para Synology');
   const hashUpload = await uploadSystemBackupToSynology(hashPath, path.basename(hashPath));
   return {
     ok: Boolean(packageUpload.ok && hashUpload.ok),
@@ -21498,6 +21528,7 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
     trigger,
     message: 'Backup iniciado na VPS',
     error: null,
+    updatedAt: new Date().toISOString(),
     progress: 5,
     step: 'Preparando backup',
     vpsPackage: backupTar,
@@ -21511,6 +21542,7 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
     }],
   };
   writeSystemBackupState({ status: systemBackupStatus });
+  startSystemBackupHeartbeat();
 
   const child = spawn('bash', ['-lc', script], {
     cwd: __dirname,
@@ -21530,12 +21562,14 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
   });
   child.stderr.on('data', chunk => { stderr += chunk.toString(); });
   child.on('error', (err) => {
+    stopSystemBackupHeartbeat();
     systemBackupStatus = {
       ...systemBackupStatus,
       state: 'failed',
       finishedAt: new Date().toISOString(),
       message: 'Falha ao iniciar processo de backup',
       error: err.message,
+      updatedAt: new Date().toISOString(),
       step: 'Falha ao iniciar',
     };
     appendSystemBackupEvent('Falha ao iniciar', systemBackupStatus.progress || 0, 'failed', err.message);
@@ -21543,12 +21577,14 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
   });
   child.on('close', async (code) => {
     if (code !== 0) {
+      stopSystemBackupHeartbeat();
       systemBackupStatus = {
         ...systemBackupStatus,
         state: 'failed',
         finishedAt: new Date().toISOString(),
         message: 'Backup falhou na VPS',
         error: (stderr || `Exit code ${code}`).slice(0, 1000),
+        updatedAt: new Date().toISOString(),
         step: 'Falha na VPS',
       };
       appendSystemBackupEvent('Falha na VPS', systemBackupStatus.progress || 0, 'failed', systemBackupStatus.error);
@@ -21569,6 +21605,7 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
       finishedAt: new Date().toISOString(),
       message: synologyMirror?.ok ? 'Backup concluido e espelhado no Synology' : 'Backup concluido na VPS; espelho Synology pendente',
       error: synologyMirror?.ok ? null : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
+      updatedAt: new Date().toISOString(),
       progress: 100,
       step: synologyMirror?.ok ? 'Concluido' : 'Synology pendente',
       synologyMirror,
@@ -21579,6 +21616,7 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
       synologyMirror?.ok ? 'success' : 'warning',
       synologyMirror?.ok ? synologyMirror.path : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
     );
+    stopSystemBackupHeartbeat();
     writeSystemBackupState({ status: systemBackupStatus });
   });
 
@@ -21604,12 +21642,16 @@ async function retrySystemBackupSynologyMirror() {
 
   systemBackupStatus = {
     ...systemBackupStatus,
+    state: 'running',
     message: 'Tentando reenviar backup ao Synology',
     error: null,
+    updatedAt: new Date().toISOString(),
+    progress: 90,
     step: 'Reenviando para Synology',
   };
-  appendSystemBackupEvent('Reenviando para Synology', 100, 'running', systemBackupStatus.vpsPackage);
+  appendSystemBackupEvent('Reenviando para Synology', 90, 'running', systemBackupStatus.vpsPackage);
   writeSystemBackupState({ status: systemBackupStatus });
+  startSystemBackupHeartbeat();
 
   let synologyMirror = null;
   try {
@@ -21623,6 +21665,7 @@ async function retrySystemBackupSynologyMirror() {
     state: synologyMirror?.ok ? 'success' : 'partial',
     message: synologyMirror?.ok ? 'Backup espelhado no Synology' : 'Backup salvo na VPS; Synology continua pendente',
     error: synologyMirror?.ok ? null : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
+    updatedAt: new Date().toISOString(),
     progress: 100,
     step: synologyMirror?.ok ? 'Concluido' : 'Synology pendente',
     synologyMirror,
@@ -21633,6 +21676,7 @@ async function retrySystemBackupSynologyMirror() {
     synologyMirror?.ok ? 'success' : 'warning',
     synologyMirror?.ok ? synologyMirror.path : systemBackupStatus.error,
   );
+  stopSystemBackupHeartbeat();
   writeSystemBackupState({ status: systemBackupStatus });
   return { retried: true, status: systemBackupStatus };
 }
