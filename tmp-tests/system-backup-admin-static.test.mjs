@@ -11,6 +11,7 @@ const page = read('pages/admin/settings/SystemBackupPage.tsx');
 const service = read('services/systemBackupService.ts');
 const server = read('vps_server.js');
 const serverCjs = read('vps_server.cjs');
+const deploy = read('deploy-vps-server-only.cjs');
 const pkg = JSON.parse(read('package.json'));
 
 assert.equal(
@@ -46,6 +47,9 @@ assert.match(service, /scheduleTime/, 'service must expose scheduleTime');
 assert.match(service, /progress\?: number/, 'service status must expose backup progress');
 assert.match(service, /step\?: string/, 'service status must expose backup step');
 assert.match(service, /events\?: SystemBackupEvent/, 'service status must expose backup detail events');
+
+assert.match(deploy, /vps_server\.cjs/, 'API deploy must upload vps_server.cjs because PM2 may execute that entrypoint');
+assert.match(deploy, /remoteName: 'vps_server\.cjs'|`\$\{appDir\}\/vps_server\.cjs`/, 'API deploy must write the CJS server file remotely');
 
 for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serverCjs]]) {
   assert.match(source, /fastify\.get\('\/admin\/system-backup'/, `${name} must expose backup snapshot endpoint`);

@@ -11,6 +11,7 @@ const password = process.env.VPS_SITE_PASSWORD || process.env.VPS_ROOT_PASSWORD 
 const privateKeyPath = process.env.VPS_SITE_PRIVATE_KEY || process.env.VPS_PRIVATE_KEY;
 const privateKey = privateKeyPath ? fs.readFileSync(privateKeyPath) : undefined;
 const localServer = path.join(__dirname, 'vps_server.js');
+const localServerCjs = path.join(__dirname, 'vps_server.cjs');
 const autoresponderEngineFiles = [
   'services/autoresponder/engine/types.js',
   'services/autoresponder/engine/state.js',
@@ -162,6 +163,7 @@ async function main() {
   const appDir = apiProc.pm2_env.pm_cwd;
   console.log(`Uploading server to ${appDir}`);
   await upload(localServer, `${appDir}/vps_server.js`);
+  await upload(localServerCjs, `${appDir}/vps_server.cjs`);
   await upload(localServer, `${appDir}/server.js`);
   await uploadAutoresponderEngineFiles(appDir);
   await ensureRemoteAdminEnv(appDir);
