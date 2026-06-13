@@ -3,6 +3,7 @@ const fastify = require('fastify')({ logger: false, bodyLimit: 500 * 1024 * 1024
 const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const zlib = require('zlib');
 const { spawn } = require('child_process');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
@@ -21183,6 +21184,8 @@ const SYSTEM_BACKUP_ROOT = process.env.MDV_SYSTEM_BACKUP_ROOT || '/var/backups/m
 const SYSTEM_BACKUP_STATE_FILE = process.env.MDV_SYSTEM_BACKUP_STATE_FILE || path.join(__dirname, 'system-backup-state.json');
 const SYSTEM_BACKUP_RETENTION_DAYS = Math.max(1, Number(process.env.MDV_SYSTEM_BACKUP_RETENTION_DAYS || 14));
 const SYSTEM_BACKUP_HISTORY_LIMIT = Math.max(5, Number(process.env.MDV_SYSTEM_BACKUP_HISTORY_LIMIT || 20));
+const SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB = Math.max(8, Number(process.env.MDV_SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB || 48));
+const SYSTEM_BACKUP_SYNOLOGY_DIRECT_UPLOAD_LIMIT = SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB * 1024 * 1024;
 
 function normalizeSystemBackupSynologyFolder(value) {
   const raw = String(value || '').trim().replace(/^"|"$/g, '').replace(/\/+$/, '');
@@ -21540,7 +21543,9 @@ async function uploadSystemBackupToSynology(filePath, fileName) {
       res.on('data', chunk => { data += chunk; });
       res.on('end', () => {
         try { resolve(JSON.parse(data)); }
-        catch (err) { reject(err); }
+        catch (err) {
+          reject(new Error(`Synology retornou resposta nao JSON no upload (${res.statusCode}, ${res.headers['content-type'] || 'sem content-type'}): ${data.slice(0, 160)}`));
+        }
       });
     });
     request.on('error', reject);
@@ -21562,16 +21567,97 @@ async function uploadSystemBackupToSynology(filePath, fileName) {
   return { ok: true, path: `${folderPath}/${fileName}` };
 }
 
+function runSystemBackupCommand(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} saiu com codigo ${code}: ${stderr.slice(0, 1000)}`));
+    });
+  });
+}
+
+async function splitSystemBackupPackage(backupTar) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-system-backup-parts-'));
+  const baseName = path.basename(backupTar);
+  const prefix = path.join(tempDir, `${baseName}.part-`);
+  await runSystemBackupCommand('split', ['-b', `${SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB}M`, '-d', '-a', '3', backupTar, prefix]);
+  const parts = fs.readdirSync(tempDir)
+    .filter((file) => file.startsWith(`${baseName}.part-`))
+    .sort()
+    .map((file, index) => {
+      const filePath = path.join(tempDir, file);
+      return {
+        index: index + 1,
+        file,
+        size: fs.statSync(filePath).size,
+        path: filePath,
+      };
+    });
+  if (!parts.length) {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    throw new Error('Nao foi possivel dividir o pacote para envio ao Synology.');
+  }
+  return { tempDir, parts };
+}
+
 async function uploadSystemBackupArtifactsToSynology(backupTar) {
-  updateSystemBackupProgress(92, 'Enviando pacote para Synology');
-  const packageUpload = await uploadSystemBackupToSynology(backupTar, path.basename(backupTar));
+  const stat = fs.statSync(backupTar);
+  let packageUpload = null;
+  if (stat.size <= SYSTEM_BACKUP_SYNOLOGY_DIRECT_UPLOAD_LIMIT) {
+    updateSystemBackupProgress(92, 'Enviando pacote para Synology');
+    packageUpload = await uploadSystemBackupToSynology(backupTar, path.basename(backupTar));
+  } else {
+    updateSystemBackupProgress(91, 'Dividindo pacote grande para Synology');
+    const splitResult = await splitSystemBackupPackage(backupTar);
+    try {
+      const uploadedParts = [];
+      for (const part of splitResult.parts) {
+        const progress = Math.min(97, 92 + Math.floor((part.index / splitResult.parts.length) * 5));
+        updateSystemBackupProgress(progress, `Enviando parte ${part.index}/${splitResult.parts.length} para Synology`);
+        const upload = await uploadSystemBackupToSynology(part.path, part.file);
+        if (!upload.ok) {
+          packageUpload = upload;
+          break;
+        }
+        uploadedParts.push({ file: part.file, size: part.size, path: upload.path });
+      }
+      if (!packageUpload) {
+        const manifestPath = path.join(splitResult.tempDir, `${path.basename(backupTar)}.parts.json`);
+        fs.writeFileSync(manifestPath, JSON.stringify({
+          originalFile: path.basename(backupTar),
+          originalSize: stat.size,
+          chunkSizeMb: SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB,
+          sha256File: `${path.basename(backupTar)}.sha256`,
+          restore: `cat ${path.basename(backupTar)}.part-* > ${path.basename(backupTar)}`,
+          parts: uploadedParts,
+        }, null, 2), 'utf8');
+        updateSystemBackupProgress(98, 'Enviando manifesto das partes para Synology');
+        const manifestUpload = await uploadSystemBackupToSynology(manifestPath, path.basename(manifestPath));
+        packageUpload = {
+          ok: Boolean(manifestUpload.ok),
+          path: `${SYNO_FOLDERS.backups}/${path.basename(backupTar)}.part-*`,
+          manifestPath: manifestUpload.path,
+          parts: uploadedParts.length,
+          error: manifestUpload.error || null,
+        };
+      }
+    } finally {
+      fs.rmSync(splitResult.tempDir, { recursive: true, force: true });
+    }
+  }
   const hashPath = `${backupTar}.sha256`;
   if (!fs.existsSync(hashPath)) return packageUpload;
-  updateSystemBackupProgress(96, 'Enviando hash para Synology');
+  updateSystemBackupProgress(99, 'Enviando hash para Synology');
   const hashUpload = await uploadSystemBackupToSynology(hashPath, path.basename(hashPath));
   return {
     ok: Boolean(packageUpload.ok && hashUpload.ok),
     path: packageUpload.path,
+    manifestPath: packageUpload.manifestPath || null,
+    parts: packageUpload.parts || null,
     hashPath: hashUpload.path,
     error: packageUpload.error || hashUpload.error || null,
   };

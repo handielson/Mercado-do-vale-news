@@ -42,6 +42,8 @@ assert.match(page, /Lista de detalhes do backup/, 'page must render a detailed b
 assert.match(page, /Backups realizados na VPS/, 'page must render a persistent VPS backup history list');
 assert.match(page, /Pacote salvo na VPS/, 'page history must show where the VPS package was stored');
 assert.match(page, /SHA256:/, 'page history must show the checksum for each VPS backup when available');
+assert.match(page, /Manifesto das partes/, 'page history must show the Synology parts manifest when package is chunked');
+assert.match(page, /Pacote dividido em/, 'page history must show the number of Synology package parts when chunked');
 assert.match(page, /formatBytes/, 'page history must show package size in a readable format');
 assert.match(page, /Acompanhamento ao vivo/, 'page must show a live tracking panel');
 assert.match(page, /Ultimo sinal/, 'page must show the latest backend heartbeat timestamp');
@@ -96,6 +98,10 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   assert.match(source, /history: mergeSystemBackupHistory/, `${name} snapshot must return the VPS backup history`);
   assert.match(source, /vpsPackageSize/, `${name} history records must include package size`);
   assert.match(source, /vpsSha256/, `${name} history records must include package checksum`);
+  assert.match(source, /SYSTEM_BACKUP_SYNOLOGY_CHUNK_MB/, `${name} must define a safe chunk size for large Synology uploads`);
+  assert.match(source, /splitSystemBackupPackage/, `${name} must split large backup packages before Synology upload`);
+  assert.match(source, /\.parts\.json/, `${name} must upload a manifest for chunked Synology backups`);
+  assert.match(source, /Synology retornou resposta nao JSON no upload/, `${name} must preserve useful diagnostics when Synology returns HTML`);
   assert.match(source, /-mtime \+\$\{SYSTEM_BACKUP_RETENTION_DAYS\}/, `${name} must clean old backup files`);
   assert.match(source, /normalizeSystemBackupSynologyFolder\(process\.env\.SYNOLOGY_BACKUP_FOLDER\)/, `${name} must resolve the configured Synology backup channel through FileStation-safe normalization`);
   assert.match(source, /uploadSystemBackupArtifactsToSynology/, `${name} must mirror package and checksum to Synology`);
@@ -110,7 +116,7 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   assert.match(source, /touchSystemBackupStatus/, `${name} must refresh heartbeat while long steps are still running`);
   assert.match(source, /systemBackupHeartbeat/, `${name} must keep a heartbeat timer for long-running backup steps`);
   assert.match(source, /updateSystemBackupProgress\(92, 'Enviando pacote para Synology'\)/, `${name} must report package upload to Synology`);
-  assert.match(source, /updateSystemBackupProgress\(96, 'Enviando hash para Synology'\)/, `${name} must report checksum upload to Synology`);
+  assert.match(source, /updateSystemBackupProgress\(99, 'Enviando hash para Synology'\)/, `${name} must report checksum upload to Synology`);
   assert.match(source, /path: `\/webapi\/entry\.cgi\?_sid=\$\{encodeURIComponent\(sid\)\}`/, `${name} backup upload must pass sid in the upload URL like the working Synology uploader`);
   assert.match(source, /\.sha256/, `${name} must create and mirror checksum files`);
   assert.match(source, /headers\.authorization = incomingAuthorization/, `${name} vps proxy must forward admin bearer auth`);

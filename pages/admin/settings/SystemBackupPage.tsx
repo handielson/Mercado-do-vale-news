@@ -578,6 +578,12 @@ export const SystemBackupPage: React.FC = () => {
                     <div className={`rounded-lg border px-3 py-2 ${synologyOk ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
                       <p className={`text-xs font-bold uppercase ${synologyOk ? 'text-emerald-600' : 'text-amber-600'}`}>Synology</p>
                       <p className={`mt-1 break-all text-xs font-semibold ${synologyOk ? 'text-emerald-700' : 'text-amber-700'}`}>{synologyDetail}</p>
+                      {record.synologyMirror?.parts && (
+                        <p className="mt-1 break-all text-xs text-emerald-700">Pacote dividido em {record.synologyMirror.parts} partes.</p>
+                      )}
+                      {record.synologyMirror?.manifestPath && (
+                        <p className="mt-1 break-all text-xs text-emerald-700">Manifesto das partes: {record.synologyMirror.manifestPath}</p>
+                      )}
                       {record.synologyMirror?.hashPath && (
                         <p className="mt-1 break-all text-xs text-emerald-700">Hash no Synology: {record.synologyMirror.hashPath}</p>
                       )}

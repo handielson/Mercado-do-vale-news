@@ -21,6 +21,9 @@ export interface SystemBackupStatus {
   synologyMirror?: {
     ok: boolean;
     path?: string | null;
+    hashPath?: string | null;
+    manifestPath?: string | null;
+    parts?: number | null;
     error?: string | null;
   } | null;
   events?: SystemBackupEvent[];
