@@ -34,10 +34,32 @@ export interface SystemBackupEvent {
   detail?: string | null;
 }
 
+export interface SystemBackupHistoryRecord {
+  name: string;
+  state: 'idle' | 'running' | 'success' | 'partial' | 'failed' | 'vps_saved';
+  trigger?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  updatedAt?: string | null;
+  message?: string | null;
+  error?: string | null;
+  vpsPackage?: string | null;
+  vpsPackageSize?: number | null;
+  vpsSha256?: string | null;
+  synologyMirror?: {
+    ok: boolean;
+    path?: string | null;
+    hashPath?: string | null;
+    error?: string | null;
+  } | null;
+  events?: SystemBackupEvent[];
+}
+
 export interface SystemBackupSnapshot {
   ok: boolean;
   config: SystemBackupConfig;
   status: SystemBackupStatus;
+  history?: SystemBackupHistoryRecord[];
   nextRunAt: string | null;
   locations: {
     vps: string;

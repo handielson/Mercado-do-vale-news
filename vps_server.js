@@ -21169,7 +21169,7 @@ const SYNO_FOLDERS = {
   imagens:  '/web/imagens',
   videos:   '/web/videos',
   arquivos: '/web/arquivos',
-  backups:  process.env.SYNOLOGY_BACKUP_FOLDER || '/backup-mercadodovale/db',
+  backups:  normalizeSystemBackupSynologyFolder(process.env.SYNOLOGY_BACKUP_FOLDER),
 };
 const SYNO_CDN = {
   imagens:  'https://imagens.xiaomipetrolina.com.br',
@@ -21182,6 +21182,14 @@ const SYSTEM_BACKUP_TIMEZONE = 'America/Sao_Paulo';
 const SYSTEM_BACKUP_ROOT = process.env.MDV_SYSTEM_BACKUP_ROOT || '/var/backups/mdv-system';
 const SYSTEM_BACKUP_STATE_FILE = process.env.MDV_SYSTEM_BACKUP_STATE_FILE || path.join(__dirname, 'system-backup-state.json');
 const SYSTEM_BACKUP_RETENTION_DAYS = Math.max(1, Number(process.env.MDV_SYSTEM_BACKUP_RETENTION_DAYS || 14));
+const SYSTEM_BACKUP_HISTORY_LIMIT = Math.max(5, Number(process.env.MDV_SYSTEM_BACKUP_HISTORY_LIMIT || 20));
+
+function normalizeSystemBackupSynologyFolder(value) {
+  const raw = String(value || '').trim().replace(/^"|"$/g, '').replace(/\/+$/, '');
+  if (!raw || raw === '/backup-mercadodovale/db') return '/home/SynologyDrive/backup-mercadodovale/db';
+  if (raw === '/backup-mercadodovale') return '/home/SynologyDrive/backup-mercadodovale';
+  return raw;
+}
 let systemBackupTimer = null;
 let systemBackupStatus = {
   state: 'idle',
@@ -21302,6 +21310,100 @@ function systemBackupCoverage() {
   ];
 }
 
+function readSystemBackupSha256(filePath) {
+  try {
+    const hashPath = `${filePath}.sha256`;
+    if (!fs.existsSync(hashPath)) return null;
+    const text = fs.readFileSync(hashPath, 'utf8').trim();
+    return text.split(/\s+/)[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildSystemBackupHistoryRecord(status) {
+  if (!status?.name && !status?.vpsPackage) return null;
+  const vpsPackage = status.vpsPackage || `${SYSTEM_BACKUP_ROOT}/${status.name}.tar.gz`;
+  let packageSize = null;
+  let packageMtime = null;
+  try {
+    const stat = fs.existsSync(vpsPackage) ? fs.statSync(vpsPackage) : null;
+    packageSize = stat?.size || null;
+    packageMtime = stat?.mtime?.toISOString?.() || null;
+  } catch {
+    packageSize = null;
+  }
+  return {
+    name: status.name || path.basename(vpsPackage, '.tar.gz'),
+    state: status.state || 'vps_saved',
+    trigger: status.trigger || null,
+    startedAt: status.startedAt || null,
+    finishedAt: status.finishedAt || packageMtime || status.updatedAt || null,
+    updatedAt: status.updatedAt || packageMtime || null,
+    message: status.message || null,
+    error: status.error || null,
+    vpsPackage,
+    vpsPackageSize: packageSize,
+    vpsSha256: readSystemBackupSha256(vpsPackage),
+    synologyMirror: status.synologyMirror || null,
+    events: Array.isArray(status.events) ? status.events.slice(-12) : [],
+  };
+}
+
+function discoverSystemBackupHistoryFiles() {
+  try {
+    if (!fs.existsSync(SYSTEM_BACKUP_ROOT)) return [];
+    return fs.readdirSync(SYSTEM_BACKUP_ROOT)
+      .filter((file) => /^mdv-system-.+\.tar\.gz$/.test(file))
+      .map((file) => {
+        const fullPath = path.join(SYSTEM_BACKUP_ROOT, file);
+        const stat = fs.statSync(fullPath);
+        return {
+          name: file.replace(/\.tar\.gz$/, ''),
+          state: 'vps_saved',
+          trigger: null,
+          startedAt: null,
+          finishedAt: stat.mtime.toISOString(),
+          updatedAt: stat.mtime.toISOString(),
+          message: 'Pacote encontrado na VPS',
+          error: null,
+          vpsPackage: fullPath,
+          vpsPackageSize: stat.size,
+          vpsSha256: readSystemBackupSha256(fullPath),
+          synologyMirror: null,
+          events: [],
+        };
+      });
+  } catch (err) {
+    console.warn('[system-backup] failed to discover history files:', err.message);
+    return [];
+  }
+}
+
+function mergeSystemBackupHistory(state, currentStatus = systemBackupStatus) {
+  const byName = new Map();
+  const add = (record) => {
+    if (!record) return;
+    const key = record.name || record.vpsPackage;
+    const previous = byName.get(key) || {};
+    byName.set(key, { ...previous, ...record });
+  };
+  discoverSystemBackupHistoryFiles().forEach(add);
+  (Array.isArray(state?.history) ? state.history : []).forEach(add);
+  add(buildSystemBackupHistoryRecord(currentStatus));
+  return [...byName.values()]
+    .sort((a, b) => new Date(b.finishedAt || b.updatedAt || b.startedAt || 0).getTime() - new Date(a.finishedAt || a.updatedAt || a.startedAt || 0).getTime())
+    .slice(0, SYSTEM_BACKUP_HISTORY_LIMIT);
+}
+
+function writeSystemBackupStatusWithHistory() {
+  const state = readSystemBackupState();
+  writeSystemBackupState({
+    status: systemBackupStatus,
+    history: mergeSystemBackupHistory(state, systemBackupStatus),
+  });
+}
+
 function getSystemBackupSnapshot() {
   const state = readSystemBackupState();
   const config = getSystemBackupConfig();
@@ -21325,6 +21427,7 @@ function getSystemBackupSnapshot() {
     ok: true,
     config,
     status: systemBackupStatus,
+    history: mergeSystemBackupHistory(state, systemBackupStatus),
     nextRunAt: config.enabled ? nextSystemBackupRunAt(config.scheduleTime).toISOString() : null,
     locations: systemBackupLocations(),
     coverage: systemBackupCoverage(),
@@ -21425,7 +21528,7 @@ async function uploadSystemBackupToSynology(filePath, fileName) {
     const request = https.request({
       hostname: urlObj.hostname,
       port: getSynologyRequestPort(urlObj),
-      path: '/webapi/entry.cgi',
+      path: `/webapi/entry.cgi?_sid=${encodeURIComponent(sid)}`,
       method: 'POST',
       rejectUnauthorized: false,
       headers: {
@@ -21575,8 +21678,8 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
       updatedAt: new Date().toISOString(),
       step: 'Falha ao iniciar',
     };
-    appendSystemBackupEvent('Falha ao iniciar', systemBackupStatus.progress || 0, 'failed', err.message);
-    writeSystemBackupState({ status: systemBackupStatus });
+      appendSystemBackupEvent('Falha ao iniciar', systemBackupStatus.progress || 0, 'failed', err.message);
+    writeSystemBackupStatusWithHistory();
   });
   child.on('close', async (code) => {
     if (code !== 0) {
@@ -21591,7 +21694,7 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
         step: 'Falha na VPS',
       };
       appendSystemBackupEvent('Falha na VPS', systemBackupStatus.progress || 0, 'failed', systemBackupStatus.error);
-      writeSystemBackupState({ status: systemBackupStatus });
+      writeSystemBackupStatusWithHistory();
       return;
     }
 
@@ -21620,7 +21723,7 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
       synologyMirror?.ok ? synologyMirror.path : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
     );
     stopSystemBackupHeartbeat();
-    writeSystemBackupState({ status: systemBackupStatus });
+    writeSystemBackupStatusWithHistory();
   });
 
   return { started: true, status: systemBackupStatus };
@@ -21647,7 +21750,7 @@ async function retrySystemBackupSynologyMirror() {
       step: 'Pacote VPS indisponivel',
     };
     appendSystemBackupEvent('Pacote VPS indisponivel', systemBackupStatus.progress || 100, 'failed', systemBackupStatus.error);
-    writeSystemBackupState({ status: systemBackupStatus });
+    writeSystemBackupStatusWithHistory();
     return { retried: false, status: systemBackupStatus, reason: systemBackupStatus.error };
   }
 
@@ -21691,7 +21794,7 @@ async function retrySystemBackupSynologyMirror() {
     synologyMirror?.ok ? synologyMirror.path : systemBackupStatus.error,
   );
   stopSystemBackupHeartbeat();
-  writeSystemBackupState({ status: systemBackupStatus });
+  writeSystemBackupStatusWithHistory();
   return { retried: true, status: systemBackupStatus };
 }
 

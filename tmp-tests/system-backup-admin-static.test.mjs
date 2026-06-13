@@ -39,6 +39,10 @@ assert.match(page, /showSynologyRetryPanel/, 'page must keep the retry panel vis
 assert.match(page, /disabled=\{!isSynologyPending \|\| isSynologyRetryActive\}/, 'retry button must be disabled while another Synology retry is running');
 assert.match(page, /Ja existe uma tentativa em andamento/, 'page must explain when duplicate retries are blocked');
 assert.match(page, /Lista de detalhes do backup/, 'page must render a detailed backup step list after backup starts or finishes');
+assert.match(page, /Backups realizados na VPS/, 'page must render a persistent VPS backup history list');
+assert.match(page, /Pacote salvo na VPS/, 'page history must show where the VPS package was stored');
+assert.match(page, /SHA256:/, 'page history must show the checksum for each VPS backup when available');
+assert.match(page, /formatBytes/, 'page history must show package size in a readable format');
 assert.match(page, /Acompanhamento ao vivo/, 'page must show a live tracking panel');
 assert.match(page, /Ultimo sinal/, 'page must show the latest backend heartbeat timestamp');
 assert.match(page, /VPS OK \/ Synology pendente/, 'page must not show partial Synology backups as a plain 100 percent success');
@@ -59,6 +63,8 @@ assert.match(service, /progress\?: number/, 'service status must expose backup p
 assert.match(service, /step\?: string/, 'service status must expose backup step');
 assert.match(service, /updatedAt\?: string/, 'service status must expose the latest backend heartbeat');
 assert.match(service, /events\?: SystemBackupEvent/, 'service status must expose backup detail events');
+assert.match(service, /SystemBackupHistoryRecord/, 'service snapshot must expose backup history records');
+assert.match(service, /history\?: SystemBackupHistoryRecord/, 'service snapshot must include the VPS backup history list');
 
 assert.match(deploy, /vps_server\.cjs/, 'API deploy must upload vps_server.cjs because PM2 may execute that entrypoint');
 assert.match(deploy, /remoteName: 'vps_server\.cjs'|`\$\{appDir\}\/vps_server\.cjs`/, 'API deploy must write the CJS server file remotely');
@@ -75,13 +81,23 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   );
   assert.match(source, /SYNOLOGY_BACKUP_FOLDER_URL/, `${name} must expose a configurable Synology backup folder URL`);
   assert.match(source, /synologyFolderUrl/, `${name} snapshot must include a link to inspect the Synology backup folder`);
+  assert.match(source, /normalizeSystemBackupSynologyFolder/, `${name} must normalize the legacy Synology backup path used by Synology Drive`);
+  assert.match(source, /\/home\/SynologyDrive\/backup-mercadodovale\/db/, `${name} must default to the real FileStation backup folder`);
   assert.match(source, /scheduleNextSystemBackup/, `${name} must schedule automatic backups`);
   assert.match(source, /SYSTEM_BACKUP_DEFAULT_TIME = '00:00'/, `${name} must default to midnight`);
   assert.match(source, /Estado running antigo foi invalidado/, `${name} must invalidate stale running backups after restart`);
   assert.match(source, /state: synologyMirror\?\.ok \? 'success' : 'partial'/, `${name} must not mark Synology mirror failures as full success`);
   assert.match(source, /SYSTEM_BACKUP_RETENTION_DAYS/, `${name} must define backup retention`);
+  assert.match(source, /SYSTEM_BACKUP_HISTORY_LIMIT/, `${name} must cap the backup history list`);
+  assert.match(source, /discoverSystemBackupHistoryFiles/, `${name} must discover backup packages already stored on the VPS`);
+  assert.match(source, /mergeSystemBackupHistory/, `${name} must merge persisted history with discovered VPS packages`);
+  assert.match(source, /writeSystemBackupStatusWithHistory/, `${name} must persist finished backup history`);
+  assert.match(source, /readSystemBackupSha256/, `${name} must expose checksums in backup history`);
+  assert.match(source, /history: mergeSystemBackupHistory/, `${name} snapshot must return the VPS backup history`);
+  assert.match(source, /vpsPackageSize/, `${name} history records must include package size`);
+  assert.match(source, /vpsSha256/, `${name} history records must include package checksum`);
   assert.match(source, /-mtime \+\$\{SYSTEM_BACKUP_RETENTION_DAYS\}/, `${name} must clean old backup files`);
-  assert.match(source, /SYNOLOGY_BACKUP_FOLDER \|\| '\/backup-mercadodovale\/db'/, `${name} must reuse the existing Synology backup channel`);
+  assert.match(source, /normalizeSystemBackupSynologyFolder\(process\.env\.SYNOLOGY_BACKUP_FOLDER\)/, `${name} must resolve the configured Synology backup channel through FileStation-safe normalization`);
   assert.match(source, /uploadSystemBackupArtifactsToSynology/, `${name} must mirror package and checksum to Synology`);
   assert.match(source, /retrySystemBackupSynologyMirror/, `${name} must allow retrying a partial Synology mirror`);
   assert.match(source, /fastify\.post\('\/admin\/system-backup\/synology-retry'/, `${name} must expose Synology mirror retry endpoint`);
@@ -95,6 +111,7 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   assert.match(source, /systemBackupHeartbeat/, `${name} must keep a heartbeat timer for long-running backup steps`);
   assert.match(source, /updateSystemBackupProgress\(92, 'Enviando pacote para Synology'\)/, `${name} must report package upload to Synology`);
   assert.match(source, /updateSystemBackupProgress\(96, 'Enviando hash para Synology'\)/, `${name} must report checksum upload to Synology`);
+  assert.match(source, /path: `\/webapi\/entry\.cgi\?_sid=\$\{encodeURIComponent\(sid\)\}`/, `${name} backup upload must pass sid in the upload URL like the working Synology uploader`);
   assert.match(source, /\.sha256/, `${name} must create and mirror checksum files`);
   assert.match(source, /headers\.authorization = incomingAuthorization/, `${name} vps proxy must forward admin bearer auth`);
   assert.match(source, /__MDV_PROGRESS__/, `${name} backup shell must emit progress markers`);
