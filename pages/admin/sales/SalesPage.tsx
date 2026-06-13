@@ -53,6 +53,12 @@ export default function SalesPage() {
             if (statusFilter !== 'all') {
                 activeFilters.status = statusFilter;
             }
+            if (dateFrom) {
+                activeFilters.start_date = `${dateFrom}T00:00:00`;
+            }
+            if (dateTo) {
+                activeFilters.end_date = `${dateTo}T23:59:59`;
+            }
 
             const [salesData, summaryData] = await Promise.all([
                 getSales(activeFilters),
@@ -71,7 +77,7 @@ export default function SalesPage() {
 
     useEffect(() => {
         loadData();
-    }, [filters, statusFilter]);
+    }, [filters, statusFilter, dateFrom, dateTo]);
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('pt-BR', {
