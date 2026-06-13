@@ -32,10 +32,14 @@ assert.match(page, /saveSystemBackupSchedule/, 'page must save the editable sche
 assert.match(page, /runSystemBackupNow/, 'page must call manual backup action');
 assert.match(page, /backup-mercadodovale\/db|\/var\/backups\/mdv-system/, 'page must show backup locations');
 assert.match(page, /vendas, clientes, aparelhos e produtos|Pagamentos, entregas e retiradas/, 'page must disclose operational data coverage');
+assert.match(page, /role="progressbar"/, 'page must show an online progress bar while backup is running');
+assert.match(page, /setInterval\(\(\) => \{[\s\S]*load\(\)/, 'page must keep polling status while backup is running');
 
 assert.match(service, /\/admin\/system-backup/, 'service must call backend snapshot endpoint');
 assert.match(service, /\/admin\/system-backup\/run/, 'service must call backend manual run endpoint');
 assert.match(service, /scheduleTime/, 'service must expose scheduleTime');
+assert.match(service, /progress\?: number/, 'service status must expose backup progress');
+assert.match(service, /step\?: string/, 'service status must expose backup step');
 
 for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serverCjs]]) {
   assert.match(source, /fastify\.get\('\/admin\/system-backup'/, `${name} must expose backup snapshot endpoint`);
@@ -56,6 +60,10 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   assert.match(source, /SYNOLOGY_BACKUP_FOLDER \|\| '\/backup-mercadodovale\/db'/, `${name} must reuse the existing Synology backup channel`);
   assert.match(source, /uploadSystemBackupArtifactsToSynology/, `${name} must mirror package and checksum to Synology`);
   assert.match(source, /\.sha256/, `${name} must create and mirror checksum files`);
+  assert.match(source, /headers\.authorization = incomingAuthorization/, `${name} vps proxy must forward admin bearer auth`);
+  assert.match(source, /__MDV_PROGRESS__/, `${name} backup shell must emit progress markers`);
+  assert.match(source, /progress: 100/, `${name} backup status must reach 100 percent`);
+  assert.match(source, /updateSystemBackupProgress\(90, 'Enviando para Synology'\)/, `${name} backup status must report Synology upload step`);
   assert.match(source, /mysqldump|mariadb-dump/, `${name} must backup MySQL data`);
   assert.match(source, /mdv-site\.tar\.gz/, `${name} must backup published site`);
   assert.match(source, /mdv-api\.tar\.gz/, `${name} must backup API directory`);

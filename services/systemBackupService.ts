@@ -14,6 +14,8 @@ export interface SystemBackupStatus {
   trigger?: string | null;
   message?: string | null;
   error?: string | null;
+  progress?: number | null;
+  step?: string | null;
   vpsPackage?: string | null;
   synologyMirror?: {
     ok: boolean;

@@ -36,6 +36,12 @@ function statusLabel(state: string): string {
   }
 }
 
+function backupProgress(snapshot: SystemBackupSnapshot | null): number {
+  const value = snapshot?.status.progress;
+  if (typeof value !== 'number' || Number.isNaN(value)) return snapshot?.status.state === 'running' ? 5 : 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
 const fallbackCoverage = [
   'Site publicado e releases',
   'API da VPS',
@@ -71,7 +77,17 @@ export const SystemBackupPage: React.FC = () => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (snapshot?.status.state !== 'running') return undefined;
+    const timer = window.setInterval(() => {
+      load();
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [load, snapshot?.status.state]);
+
   const coverage = useMemo(() => snapshot?.coverage?.length ? snapshot.coverage : fallbackCoverage, [snapshot]);
+  const progress = backupProgress(snapshot);
+  const isBackupRunning = snapshot?.status.state === 'running';
 
   async function handleSave() {
     setSaving(true);
@@ -131,7 +147,7 @@ export const SystemBackupPage: React.FC = () => {
           <button
             type="button"
             onClick={handleRunNow}
-            disabled={running || snapshot?.status.state === 'running'}
+            disabled={running || isBackupRunning}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60"
           >
             {running ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
@@ -210,6 +226,27 @@ export const SystemBackupPage: React.FC = () => {
             <p className="text-sm font-bold">{statusLabel(snapshot?.status.state || 'idle')}</p>
             <p className="text-xs mt-1">{snapshot?.status.message || snapshot?.status.error || 'Nenhuma execucao registrada ainda.'}</p>
           </div>
+
+          {(isBackupRunning || progress > 0) && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-800">{snapshot?.status.step || 'Preparando backup'}</p>
+                <p className="text-sm font-bold text-blue-700">{progress}%</p>
+              </div>
+              <div
+                className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+              >
+                <div
+                  className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="space-y-3 text-sm">
             <div>

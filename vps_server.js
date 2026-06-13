@@ -6578,6 +6578,8 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
   };
   const contentType = request.headers['content-type'];
   if (contentType) headers['content-type'] = String(contentType);
+  const incomingAuthorization = request.headers.authorization ? String(request.headers.authorization) : '';
+  if (incomingAuthorization) headers.authorization = incomingAuthorization;
   if (needsInternalSyncKey) headers['x-sync-key'] = process.env.SYNC_SECRET;
 
   const response = await fastify.inject({
@@ -21188,6 +21190,8 @@ let systemBackupStatus = {
   trigger: null,
   message: null,
   error: null,
+  progress: null,
+  step: null,
   vpsPackage: null,
   synologyMirror: null,
 };
@@ -21325,6 +21329,18 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
+function updateSystemBackupProgress(progress, step) {
+  if (systemBackupStatus.state !== 'running') return;
+  const safeProgress = Math.max(0, Math.min(100, Number(progress) || 0));
+  systemBackupStatus = {
+    ...systemBackupStatus,
+    progress: safeProgress,
+    step: String(step || systemBackupStatus.step || 'Backup em andamento'),
+    message: String(step || systemBackupStatus.message || 'Backup em andamento'),
+  };
+  writeSystemBackupState({ status: systemBackupStatus });
+}
+
 async function uploadSystemBackupToSynology(filePath, fileName) {
   if (!SYNO_USER || !SYNO_PASS) {
     return { ok: false, path: SYNO_FOLDERS.backups, error: 'Credenciais Synology nao configuradas' };
@@ -21411,10 +21427,14 @@ function createSystemBackupShell(name) {
   return `
 set -euo pipefail
 mkdir -p ${shellQuote(backupDir)}
+echo "__MDV_PROGRESS__:10:Preparando arquivos"
 readlink /var/www/mdv-site/current > ${shellQuote(`${backupDir}/site-current.txt`)} 2>/dev/null || true
 ls -la /var/www/mdv-site/releases > ${shellQuote(`${backupDir}/site-releases.txt`)} 2>/dev/null || true
+echo "__MDV_PROGRESS__:25:Empacotando site publicado"
 tar -C /var/www/mdv-site -czf ${shellQuote(`${backupDir}/mdv-site.tar.gz`)} current previous releases 2>/tmp/mdv-system-site-tar.err || tar -C /var/www/mdv-site -czf ${shellQuote(`${backupDir}/mdv-site.tar.gz`)} current
+echo "__MDV_PROGRESS__:45:Empacotando API da VPS"
 tar -C /var/www --exclude='mdv-api/node_modules' --exclude='mdv-api/.git' --exclude='mdv-api/system-backup-state.json' -czf ${shellQuote(`${backupDir}/mdv-api.tar.gz`)} mdv-api
+echo "__MDV_PROGRESS__:60:Exportando banco MySQL"
 if command -v mysqldump >/dev/null 2>&1; then
   MYSQL_PWD="$DB_PASS" mysqldump --single-transaction --routines --triggers --events -h ${shellQuote(dbHost)} -u ${shellQuote(dbUser)} ${shellQuote(dbName)} > ${shellQuote(`${backupDir}/mysql.sql`)}
 elif command -v mariadb-dump >/dev/null 2>&1; then
@@ -21423,10 +21443,12 @@ else
   echo "mysqldump/mariadb-dump not found" >&2
   exit 9
 fi
+echo "__MDV_PROGRESS__:75:Gerando manifesto e hash"
 cat > ${shellQuote(`${backupDir}/manifest.json`)} <<'JSON'
 {"name":"${name}","createdAt":"${new Date().toISOString()}","coverage":["site","api","mysql","sales","customers","devices","products","payments","delivery"],"synologyTarget":"${SYNO_FOLDERS.backups}"}
 JSON
 sha256sum ${shellQuote(`${backupDir}`)}/* > ${shellQuote(`${backupDir}/SHA256SUMS`)}
+echo "__MDV_PROGRESS__:85:Compactando pacote final"
 tar -C ${shellQuote(SYSTEM_BACKUP_ROOT)} -czf ${shellQuote(backupTar)} ${shellQuote(name)}
 sha256sum ${shellQuote(backupTar)} > ${shellQuote(`${backupTar}.sha256`)}
 find ${shellQuote(SYSTEM_BACKUP_ROOT)} -maxdepth 1 -type f -name 'mdv-system-*.tar.gz' -mtime +${SYSTEM_BACKUP_RETENTION_DAYS} -delete
@@ -21453,6 +21475,8 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
     trigger,
     message: 'Backup iniciado na VPS',
     error: null,
+    progress: 5,
+    step: 'Preparando backup',
     vpsPackage: backupTar,
     synologyMirror: null,
   };
@@ -21467,6 +21491,13 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stderr = '';
+  child.stdout.on('data', chunk => {
+    const text = chunk.toString();
+    for (const line of text.split(/\r?\n/)) {
+      const match = line.match(/__MDV_PROGRESS__:(\d+):(.+)/);
+      if (match) updateSystemBackupProgress(Number(match[1]), match[2].trim());
+    }
+  });
   child.stderr.on('data', chunk => { stderr += chunk.toString(); });
   child.on('error', (err) => {
     systemBackupStatus = {
@@ -21475,6 +21506,7 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
       finishedAt: new Date().toISOString(),
       message: 'Falha ao iniciar processo de backup',
       error: err.message,
+      step: 'Falha ao iniciar',
     };
     writeSystemBackupState({ status: systemBackupStatus });
   });
@@ -21486,11 +21518,13 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
         finishedAt: new Date().toISOString(),
         message: 'Backup falhou na VPS',
         error: (stderr || `Exit code ${code}`).slice(0, 1000),
+        step: 'Falha na VPS',
       };
       writeSystemBackupState({ status: systemBackupStatus });
       return;
     }
 
+    updateSystemBackupProgress(90, 'Enviando para Synology');
     let synologyMirror = null;
     try {
       synologyMirror = await uploadSystemBackupArtifactsToSynology(backupTar);
@@ -21503,6 +21537,8 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
       finishedAt: new Date().toISOString(),
       message: synologyMirror?.ok ? 'Backup concluido e espelhado no Synology' : 'Backup concluido na VPS; espelho Synology pendente',
       error: synologyMirror?.ok ? null : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
+      progress: 100,
+      step: synologyMirror?.ok ? 'Concluido' : 'Synology pendente',
       synologyMirror,
     };
     writeSystemBackupState({ status: systemBackupStatus });
