@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Clock, DatabaseBackup, HardDrive, Loader2,
 import { toast } from 'sonner';
 import {
   getSystemBackupSnapshot,
+  retrySystemBackupSynologyMirror,
   runSystemBackupNow,
   saveSystemBackupSchedule,
   type SystemBackupSnapshot,
@@ -42,6 +43,26 @@ function backupProgress(snapshot: SystemBackupSnapshot | null): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function backupEvents(snapshot: SystemBackupSnapshot | null) {
+  const events = snapshot?.status.events || [];
+  if (events.length) return events;
+  if (!snapshot?.status.startedAt) return [];
+  return [{
+    at: snapshot.status.startedAt,
+    progress: backupProgress(snapshot),
+    step: snapshot.status.step || snapshot.status.message || 'Backup registrado',
+    state: snapshot.status.state === 'failed' ? 'failed' : snapshot.status.state === 'partial' ? 'warning' : snapshot.status.state === 'success' ? 'success' : 'running',
+    detail: snapshot.status.error || snapshot.status.vpsPackage || null,
+  }];
+}
+
+function eventTone(state: string): string {
+  if (state === 'success') return 'bg-emerald-500';
+  if (state === 'warning') return 'bg-amber-500';
+  if (state === 'failed') return 'bg-red-500';
+  return 'bg-blue-500';
+}
+
 const fallbackCoverage = [
   'Site publicado e releases',
   'API da VPS',
@@ -55,8 +76,10 @@ export const SystemBackupPage: React.FC = () => {
   const [scheduleTime, setScheduleTime] = useState('00:00');
   const [enabled, setEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
+  const [mirroring, setMirroring] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -87,7 +110,16 @@ export const SystemBackupPage: React.FC = () => {
 
   const coverage = useMemo(() => snapshot?.coverage?.length ? snapshot.coverage : fallbackCoverage, [snapshot]);
   const progress = backupProgress(snapshot);
+  const events = useMemo(() => backupEvents(snapshot), [snapshot]);
   const isBackupRunning = snapshot?.status.state === 'running';
+  const isSynologyPending = snapshot?.status.state === 'partial';
+  const synologyPendingDetail = snapshot?.status.synologyMirror?.error || snapshot?.status.error || 'O pacote ja esta salvo na VPS. Esse aviso fica ate o envio ao Synology funcionar, voce tentar enviar novamente, ou um proximo backup concluir com espelho OK.';
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -121,6 +153,22 @@ export const SystemBackupPage: React.FC = () => {
     }
   }
 
+  async function handleRetrySynology() {
+    setMirroring(true);
+    setError(null);
+    try {
+      const data = await retrySystemBackupSynologyMirror();
+      setSnapshot(data);
+      toast.success(data.status.state === 'success' ? 'Backup enviado ao Synology' : 'Tentativa registrada');
+    } catch (err: any) {
+      const message = err?.message || 'Falha ao tentar enviar para Synology';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setMirroring(false);
+    }
+  }
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -137,12 +185,12 @@ export const SystemBackupPage: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={load}
-            disabled={loading}
+            onClick={handleRefresh}
+            disabled={loading || refreshing}
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
           >
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            Atualizar
+            <RefreshCw size={16} className={loading || refreshing ? 'animate-spin' : ''} />
+            {loading || refreshing ? 'Atualizando...' : 'Atualizar'}
           </button>
           <button
             type="button"
@@ -227,6 +275,22 @@ export const SystemBackupPage: React.FC = () => {
             <p className="text-xs mt-1">{snapshot?.status.message || snapshot?.status.error || 'Nenhuma execucao registrada ainda.'}</p>
           </div>
 
+          {isSynologyPending && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-sm font-bold text-amber-800">Synology pendente</p>
+              <p className="mt-1 text-xs leading-relaxed text-amber-700">{synologyPendingDetail}</p>
+              <button
+                type="button"
+                onClick={handleRetrySynology}
+                disabled={mirroring}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-60"
+              >
+                {mirroring ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                Tentar enviar para Synology
+              </button>
+            </div>
+          )}
+
           {(isBackupRunning || progress > 0) && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
@@ -264,6 +328,34 @@ export const SystemBackupPage: React.FC = () => {
           </div>
         </aside>
       </div>
+
+      {events.length > 0 && (
+        <section className="bg-white border border-slate-200 rounded-lg shadow-sm p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Lista de detalhes do backup</h2>
+              <p className="text-sm text-slate-500">Etapas registradas pela VPS durante a execucao e o espelhamento.</p>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-500">
+              {events.length} etapa{events.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="mt-4 divide-y divide-slate-100">
+            {events.map((event, index) => (
+              <div key={`${event.at}-${event.step}-${index}`} className="flex items-start gap-3 py-3">
+                <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${eventTone(event.state)}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm font-semibold text-slate-800">{event.step}</p>
+                    <p className="text-xs font-semibold text-slate-400">{formatDateTime(event.at)} - {Math.round(event.progress)}%</p>
+                  </div>
+                  {event.detail && <p className="mt-1 break-all text-xs text-slate-500">{event.detail}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bg-white border border-slate-200 rounded-lg p-5">

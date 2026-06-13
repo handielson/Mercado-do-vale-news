@@ -21194,6 +21194,7 @@ let systemBackupStatus = {
   step: null,
   vpsPackage: null,
   synologyMirror: null,
+  events: [],
 };
 
 function isValidSystemBackupTime(value) {
@@ -21338,7 +21339,29 @@ function updateSystemBackupProgress(progress, step) {
     step: String(step || systemBackupStatus.step || 'Backup em andamento'),
     message: String(step || systemBackupStatus.message || 'Backup em andamento'),
   };
+  appendSystemBackupEvent(step, safeProgress, 'running');
   writeSystemBackupState({ status: systemBackupStatus });
+}
+
+function appendSystemBackupEvent(step, progress, state = 'running', detail = null) {
+  const events = Array.isArray(systemBackupStatus.events) ? systemBackupStatus.events : [];
+  const last = events[events.length - 1];
+  const safeProgress = Math.max(0, Math.min(100, Number(progress) || 0));
+  const safeStep = String(step || systemBackupStatus.step || 'Backup em andamento');
+  if (last && last.step === safeStep && last.progress === safeProgress && last.state === state) return;
+  systemBackupStatus = {
+    ...systemBackupStatus,
+    events: [
+      ...events,
+      {
+        at: new Date().toISOString(),
+        progress: safeProgress,
+        step: safeStep,
+        state,
+        detail,
+      },
+    ].slice(-30),
+  };
 }
 
 async function uploadSystemBackupToSynology(filePath, fileName) {
@@ -21479,6 +21502,13 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
     step: 'Preparando backup',
     vpsPackage: backupTar,
     synologyMirror: null,
+    events: [{
+      at: new Date().toISOString(),
+      progress: 5,
+      step: 'Backup iniciado na VPS',
+      state: 'running',
+      detail: backupTar,
+    }],
   };
   writeSystemBackupState({ status: systemBackupStatus });
 
@@ -21508,6 +21538,7 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
       error: err.message,
       step: 'Falha ao iniciar',
     };
+    appendSystemBackupEvent('Falha ao iniciar', systemBackupStatus.progress || 0, 'failed', err.message);
     writeSystemBackupState({ status: systemBackupStatus });
   });
   child.on('close', async (code) => {
@@ -21520,6 +21551,7 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
         error: (stderr || `Exit code ${code}`).slice(0, 1000),
         step: 'Falha na VPS',
       };
+      appendSystemBackupEvent('Falha na VPS', systemBackupStatus.progress || 0, 'failed', systemBackupStatus.error);
       writeSystemBackupState({ status: systemBackupStatus });
       return;
     }
@@ -21541,10 +21573,68 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
       step: synologyMirror?.ok ? 'Concluido' : 'Synology pendente',
       synologyMirror,
     };
+    appendSystemBackupEvent(
+      synologyMirror?.ok ? 'Espelho Synology concluido' : 'Synology pendente',
+      100,
+      synologyMirror?.ok ? 'success' : 'warning',
+      synologyMirror?.ok ? synologyMirror.path : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
+    );
     writeSystemBackupState({ status: systemBackupStatus });
   });
 
   return { started: true, status: systemBackupStatus };
+}
+
+async function retrySystemBackupSynologyMirror() {
+  getSystemBackupSnapshot();
+  if (systemBackupStatus.state !== 'partial') {
+    return { retried: false, status: systemBackupStatus, reason: 'Backup nao esta com Synology pendente.' };
+  }
+  if (!systemBackupStatus.vpsPackage || !fs.existsSync(systemBackupStatus.vpsPackage)) {
+    systemBackupStatus = {
+      ...systemBackupStatus,
+      state: 'failed',
+      error: 'Pacote VPS nao encontrado para reenviar ao Synology.',
+      step: 'Pacote VPS indisponivel',
+    };
+    appendSystemBackupEvent('Pacote VPS indisponivel', systemBackupStatus.progress || 100, 'failed', systemBackupStatus.error);
+    writeSystemBackupState({ status: systemBackupStatus });
+    return { retried: false, status: systemBackupStatus, reason: systemBackupStatus.error };
+  }
+
+  systemBackupStatus = {
+    ...systemBackupStatus,
+    message: 'Tentando reenviar backup ao Synology',
+    error: null,
+    step: 'Reenviando para Synology',
+  };
+  appendSystemBackupEvent('Reenviando para Synology', 100, 'running', systemBackupStatus.vpsPackage);
+  writeSystemBackupState({ status: systemBackupStatus });
+
+  let synologyMirror = null;
+  try {
+    synologyMirror = await uploadSystemBackupArtifactsToSynology(systemBackupStatus.vpsPackage);
+  } catch (err) {
+    synologyMirror = { ok: false, path: SYNO_FOLDERS.backups, error: err.message };
+  }
+
+  systemBackupStatus = {
+    ...systemBackupStatus,
+    state: synologyMirror?.ok ? 'success' : 'partial',
+    message: synologyMirror?.ok ? 'Backup espelhado no Synology' : 'Backup salvo na VPS; Synology continua pendente',
+    error: synologyMirror?.ok ? null : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
+    progress: 100,
+    step: synologyMirror?.ok ? 'Concluido' : 'Synology pendente',
+    synologyMirror,
+  };
+  appendSystemBackupEvent(
+    synologyMirror?.ok ? 'Espelho Synology concluido' : 'Synology ainda pendente',
+    100,
+    synologyMirror?.ok ? 'success' : 'warning',
+    synologyMirror?.ok ? synologyMirror.path : systemBackupStatus.error,
+  );
+  writeSystemBackupState({ status: systemBackupStatus });
+  return { retried: true, status: systemBackupStatus };
 }
 
 function scheduleNextSystemBackup() {
@@ -21585,6 +21675,17 @@ fastify.post('/admin/system-backup/run', { preHandler: requireAdminBearerToken }
   if (!result.started) {
     return reply.code(409).send({
       error: 'Ja existe um backup em andamento.',
+      ...getSystemBackupSnapshot(),
+    });
+  }
+  return getSystemBackupSnapshot();
+});
+
+fastify.post('/admin/system-backup/synology-retry', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const result = await retrySystemBackupSynologyMirror();
+  if (!result.retried && systemBackupStatus.state === 'failed') {
+    return reply.code(409).send({
+      error: result.reason || 'Nao foi possivel reenviar ao Synology.',
       ...getSystemBackupSnapshot(),
     });
   }

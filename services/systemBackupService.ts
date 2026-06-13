@@ -22,6 +22,15 @@ export interface SystemBackupStatus {
     path?: string | null;
     error?: string | null;
   } | null;
+  events?: SystemBackupEvent[];
+}
+
+export interface SystemBackupEvent {
+  at: string;
+  progress: number;
+  step: string;
+  state: 'pending' | 'running' | 'success' | 'warning' | 'failed';
+  detail?: string | null;
 }
 
 export interface SystemBackupSnapshot {
@@ -47,4 +56,8 @@ export async function saveSystemBackupSchedule(scheduleTime: string, enabled: bo
 
 export async function runSystemBackupNow(): Promise<SystemBackupSnapshot> {
   return vpsClient.post<SystemBackupSnapshot>('/admin/system-backup/run', {});
+}
+
+export async function retrySystemBackupSynologyMirror(): Promise<SystemBackupSnapshot> {
+  return vpsClient.post<SystemBackupSnapshot>('/admin/system-backup/synology-retry', {});
 }

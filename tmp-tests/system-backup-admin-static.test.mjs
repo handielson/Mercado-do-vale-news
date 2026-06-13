@@ -30,6 +30,10 @@ assert.match(page, /type="time"/, 'page must keep editable time input');
 assert.match(page, /partial/, 'page must show a non-success state when Synology mirror is pending');
 assert.match(page, /saveSystemBackupSchedule/, 'page must save the editable schedule');
 assert.match(page, /runSystemBackupNow/, 'page must call manual backup action');
+assert.match(page, /refreshing/, 'page must expose a visible refresh-in-progress state');
+assert.match(page, /Atualizando\.\.\./, 'refresh button must communicate that it is working');
+assert.match(page, /Tentar enviar para Synology/, 'partial backups must expose a retry action for Synology mirror');
+assert.match(page, /Lista de detalhes do backup/, 'page must render a detailed backup step list after backup starts or finishes');
 assert.match(page, /backup-mercadodovale\/db|\/var\/backups\/mdv-system/, 'page must show backup locations');
 assert.match(page, /vendas, clientes, aparelhos e produtos|Pagamentos, entregas e retiradas/, 'page must disclose operational data coverage');
 assert.match(page, /role="progressbar"/, 'page must show an online progress bar while backup is running');
@@ -37,9 +41,11 @@ assert.match(page, /setInterval\(\(\) => \{[\s\S]*load\(\)/, 'page must keep pol
 
 assert.match(service, /\/admin\/system-backup/, 'service must call backend snapshot endpoint');
 assert.match(service, /\/admin\/system-backup\/run/, 'service must call backend manual run endpoint');
+assert.match(service, /\/admin\/system-backup\/synology-retry/, 'service must call backend Synology retry endpoint');
 assert.match(service, /scheduleTime/, 'service must expose scheduleTime');
 assert.match(service, /progress\?: number/, 'service status must expose backup progress');
 assert.match(service, /step\?: string/, 'service status must expose backup step');
+assert.match(service, /events\?: SystemBackupEvent/, 'service status must expose backup detail events');
 
 for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serverCjs]]) {
   assert.match(source, /fastify\.get\('\/admin\/system-backup'/, `${name} must expose backup snapshot endpoint`);
@@ -59,6 +65,10 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   assert.match(source, /-mtime \+\$\{SYSTEM_BACKUP_RETENTION_DAYS\}/, `${name} must clean old backup files`);
   assert.match(source, /SYNOLOGY_BACKUP_FOLDER \|\| '\/backup-mercadodovale\/db'/, `${name} must reuse the existing Synology backup channel`);
   assert.match(source, /uploadSystemBackupArtifactsToSynology/, `${name} must mirror package and checksum to Synology`);
+  assert.match(source, /retrySystemBackupSynologyMirror/, `${name} must allow retrying a partial Synology mirror`);
+  assert.match(source, /fastify\.post\('\/admin\/system-backup\/synology-retry'/, `${name} must expose Synology mirror retry endpoint`);
+  assert.match(source, /events: \[/, `${name} backup status must keep a detail event list`);
+  assert.match(source, /appendSystemBackupEvent/, `${name} must append detailed backup events`);
   assert.match(source, /\.sha256/, `${name} must create and mirror checksum files`);
   assert.match(source, /headers\.authorization = incomingAuthorization/, `${name} vps proxy must forward admin bearer auth`);
   assert.match(source, /__MDV_PROGRESS__/, `${name} backup shell must emit progress markers`);
