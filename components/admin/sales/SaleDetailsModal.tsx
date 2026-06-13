@@ -583,7 +583,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 </div>
 
                                 <div className="pt-3 mt-3 border-t border-slate-100 flex justify-between text-sm font-medium">
-                                    <span className="text-emerald-600">Lucro Estimado</span>
+                                    <span className="text-emerald-600">Lucro Real</span>
                                     <span className="text-emerald-700">{formatCurrency(sale.profit)}</span>
                                 </div>
                             </div>

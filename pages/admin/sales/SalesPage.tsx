@@ -187,7 +187,7 @@ export default function SalesPage() {
                         </span>
                     </div>
                     <div>
-                        <p className="text-sm font-medium text-slate-500 mb-1">Lucro Estimado</p>
+                        <p className="text-sm font-medium text-slate-500 mb-1">Lucro Real</p>
                         <h3 className="text-2xl font-bold text-slate-800">
                             {summary ? formatCurrency(summary.total_profit) : 'R$ 0,00'}
                         </h3>
