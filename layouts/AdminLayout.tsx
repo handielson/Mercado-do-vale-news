@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart, Barcode, Boxes, Printer, Mail } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup } from 'lucide-react';
 
 import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -101,6 +101,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       title: 'Sistema',
       items: [
         { to: '/admin/settings/vps-status', icon: <Activity size={18} />, label: 'Status VPS', keywords: 'servidor hostinger uptime' },
+        { to: '/admin/settings/system-backup', icon: <DatabaseBackup size={18} />, label: 'Backup Sistema', keywords: 'backup restore restaurar synology vps banco agendamento' },
         { to: '/admin/settings/mysql', icon: <Database size={18} />, label: 'MySQL Explorer', keywords: 'banco dados query sql tables' },
         { to: '/admin/settings/synology-cdn', icon: <Server size={18} />, label: 'CDN Synology', keywords: 'arquivos imagens videos upload nas' },
         { to: '/admin/settings/synology-config', icon: <Shield size={18} />, label: 'Config Synology', keywords: 'tunel cloudflare runbook restaurar diagnostico' },

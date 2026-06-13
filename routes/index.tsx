@@ -102,6 +102,7 @@ const SEOBlacklistPage = lazy(() => import('../pages/admin/settings/SEOBlacklist
 const ReviewsPage = lazy(() => import('../pages/admin/catalog/ReviewsPage').then(module => ({ default: module.ReviewsPage })));
 const RoadmapPage = lazy(() => import('../pages/admin/settings/RoadmapPage'));
 const VpsStatusPage = lazy(() => import('../pages/admin/settings/VpsStatusPage').then(module => ({ default: module.VpsStatusPage })));
+const SystemBackupPage = lazy(() => import('../pages/admin/settings/SystemBackupPage').then(module => ({ default: module.SystemBackupPage })));
 const SynologyFilesPage = lazy(() => import('../pages/admin/settings/SynologyFilesPage').then(module => ({ default: module.SynologyFilesPage })));
 const SynologyConfigPage = lazy(() => import('../pages/admin/settings/SynologyConfigPage'));
 const FavoritesRankingReport = lazy(() => import('../pages/admin/reports/FavoritesRankingReport'));
@@ -657,6 +658,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><VpsStatusPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/system-backup",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SystemBackupPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

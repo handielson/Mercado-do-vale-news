@@ -4,6 +4,7 @@ const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const { spawn } = require('child_process');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
 const crypto = require('crypto');
 
@@ -747,6 +748,11 @@ async function requireSyncKeyOrAdmin(request, reply) {
   if (key && key === process.env.SYNC_SECRET) return;
   if (await isAdminBearerToken(request)) return;
   return reply.code(401).send({ error: 'Unauthorized' });
+}
+
+async function requireAdminBearerToken(request, reply) {
+  if (await isAdminBearerToken(request)) return;
+  return reply.code(401).send({ error: 'Admin bearer token required' });
 }
 
 async function requireSyncKeyOrCustomer(request, reply) {
@@ -21160,12 +21166,394 @@ const SYNO_FOLDERS = {
   imagens:  '/web/imagens',
   videos:   '/web/videos',
   arquivos: '/web/arquivos',
+  backups:  process.env.SYNOLOGY_BACKUP_FOLDER || '/backup-mercadodovale/db',
 };
 const SYNO_CDN = {
   imagens:  'https://imagens.xiaomipetrolina.com.br',
   videos:   'https://videos.mercadodovale.com.br',
   arquivos: 'https://arquivos.xiaomipetrolina.com.br',
 };
+
+const SYSTEM_BACKUP_DEFAULT_TIME = '00:00';
+const SYSTEM_BACKUP_TIMEZONE = 'America/Sao_Paulo';
+const SYSTEM_BACKUP_ROOT = process.env.MDV_SYSTEM_BACKUP_ROOT || '/var/backups/mdv-system';
+const SYSTEM_BACKUP_STATE_FILE = process.env.MDV_SYSTEM_BACKUP_STATE_FILE || path.join(__dirname, 'system-backup-state.json');
+const SYSTEM_BACKUP_RETENTION_DAYS = Math.max(1, Number(process.env.MDV_SYSTEM_BACKUP_RETENTION_DAYS || 14));
+let systemBackupTimer = null;
+let systemBackupStatus = {
+  state: 'idle',
+  startedAt: null,
+  finishedAt: null,
+  name: null,
+  trigger: null,
+  message: null,
+  error: null,
+  vpsPackage: null,
+  synologyMirror: null,
+};
+
+function isValidSystemBackupTime(value) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
+}
+
+function readSystemBackupState() {
+  try {
+    if (!fs.existsSync(SYSTEM_BACKUP_STATE_FILE)) return {};
+    return JSON.parse(fs.readFileSync(SYSTEM_BACKUP_STATE_FILE, 'utf8'));
+  } catch (err) {
+    console.warn('[system-backup] failed to read state:', err.message);
+    return {};
+  }
+}
+
+function writeSystemBackupState(patch) {
+  const current = readSystemBackupState();
+  const next = {
+    ...current,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+  fs.writeFileSync(SYSTEM_BACKUP_STATE_FILE, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+  return next;
+}
+
+function getSystemBackupConfig() {
+  const state = readSystemBackupState();
+  const config = state.config || {};
+  return {
+    enabled: config.enabled !== false,
+    scheduleTime: isValidSystemBackupTime(config.scheduleTime) ? config.scheduleTime : SYSTEM_BACKUP_DEFAULT_TIME,
+    timezone: SYSTEM_BACKUP_TIMEZONE,
+  };
+}
+
+function setSystemBackupConfig(config) {
+  const nextConfig = {
+    enabled: config.enabled !== false,
+    scheduleTime: isValidSystemBackupTime(config.scheduleTime) ? config.scheduleTime : SYSTEM_BACKUP_DEFAULT_TIME,
+    timezone: SYSTEM_BACKUP_TIMEZONE,
+  };
+  writeSystemBackupState({ config: nextConfig, status: systemBackupStatus });
+  scheduleNextSystemBackup();
+  return nextConfig;
+}
+
+function getSaoPauloParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: SYSTEM_BACKUP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date).reduce((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+  };
+}
+
+function nextSystemBackupRunAt(scheduleTime, now = new Date()) {
+  const [hour, minute] = String(scheduleTime || SYSTEM_BACKUP_DEFAULT_TIME).split(':').map(Number);
+  const parts = getSaoPauloParts(now);
+  const nextUtc = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, hour + 3, minute, 0));
+  const nowPartsMinutes = parts.hour * 60 + parts.minute;
+  const targetMinutes = hour * 60 + minute;
+  if (nowPartsMinutes > targetMinutes || (nowPartsMinutes === targetMinutes && parts.second > 0)) {
+    nextUtc.setUTCDate(nextUtc.getUTCDate() + 1);
+  }
+  return nextUtc;
+}
+
+function systemBackupLocations() {
+  return {
+    vps: SYSTEM_BACKUP_ROOT,
+    synology: SYNO_FOLDERS.backups,
+    localManifest: '.system-backups',
+  };
+}
+
+function systemBackupCoverage() {
+  return [
+    'Site publicado e releases',
+    'API da VPS',
+    'Banco MySQL com vendas, clientes, aparelhos e produtos',
+    'Pagamentos, entregas e retiradas',
+    'Manifesto e hash SHA256',
+  ];
+}
+
+function getSystemBackupSnapshot() {
+  const state = readSystemBackupState();
+  const config = getSystemBackupConfig();
+  const persistedStatus = state.status || {};
+  if (systemBackupStatus.state === 'idle' && persistedStatus.state) {
+    if (persistedStatus.state === 'running') {
+      systemBackupStatus = {
+        ...systemBackupStatus,
+        ...persistedStatus,
+        state: 'failed',
+        finishedAt: new Date().toISOString(),
+        message: 'Backup anterior ficou incompleto apos reinicio da API',
+        error: 'Estado running antigo foi invalidado no boot para liberar novo backup.',
+      };
+      writeSystemBackupState({ status: systemBackupStatus });
+    } else {
+      systemBackupStatus = { ...systemBackupStatus, ...persistedStatus };
+    }
+  }
+  return {
+    ok: true,
+    config,
+    status: systemBackupStatus,
+    nextRunAt: config.enabled ? nextSystemBackupRunAt(config.scheduleTime).toISOString() : null,
+    locations: systemBackupLocations(),
+    coverage: systemBackupCoverage(),
+  };
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+async function uploadSystemBackupToSynology(filePath, fileName) {
+  if (!SYNO_USER || !SYNO_PASS) {
+    return { ok: false, path: SYNO_FOLDERS.backups, error: 'Credenciais Synology nao configuradas' };
+  }
+  if (!fs.existsSync(filePath)) {
+    return { ok: false, path: SYNO_FOLDERS.backups, error: 'Pacote local do backup nao encontrado' };
+  }
+
+  const sid = await synoLogin(30000);
+  const boundary = `MDVSystemBackupBoundary${Date.now()}`;
+  const folderPath = SYNO_FOLDERS.backups;
+  const stat = fs.statSync(filePath);
+  const textFields = [
+    ['api', 'SYNO.FileStation.Upload'],
+    ['version', '2'],
+    ['method', 'upload'],
+    ['path', folderPath],
+    ['create_parents', 'true'],
+    ['overwrite', 'true'],
+    ['_sid', sid],
+  ].map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join('');
+  const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/gzip\r\n\r\n`;
+  const closing = `\r\n--${boundary}--\r\n`;
+  const https = require('https');
+  const urlObj = new URL(SYNO_URL);
+
+  const result = await new Promise((resolve, reject) => {
+    const request = https.request({
+      hostname: urlObj.hostname,
+      port: getSynologyRequestPort(urlObj),
+      path: '/webapi/entry.cgi',
+      method: 'POST',
+      rejectUnauthorized: false,
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': Buffer.byteLength(textFields) + Buffer.byteLength(fileHeader) + stat.size + Buffer.byteLength(closing),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (err) { reject(err); }
+      });
+    });
+    request.on('error', reject);
+    request.setTimeout(120000, () => request.destroy(new Error('Synology backup upload timeout')));
+    request.write(textFields);
+    request.write(fileHeader);
+    fs.createReadStream(filePath)
+      .on('error', reject)
+      .on('end', () => {
+        request.write(closing);
+        request.end();
+      })
+      .pipe(request, { end: false });
+  });
+
+  if (!result.success) {
+    return { ok: false, path: folderPath, error: JSON.stringify(result.error || result) };
+  }
+  return { ok: true, path: `${folderPath}/${fileName}` };
+}
+
+async function uploadSystemBackupArtifactsToSynology(backupTar) {
+  const packageUpload = await uploadSystemBackupToSynology(backupTar, path.basename(backupTar));
+  const hashPath = `${backupTar}.sha256`;
+  if (!fs.existsSync(hashPath)) return packageUpload;
+  const hashUpload = await uploadSystemBackupToSynology(hashPath, path.basename(hashPath));
+  return {
+    ok: Boolean(packageUpload.ok && hashUpload.ok),
+    path: packageUpload.path,
+    hashPath: hashUpload.path,
+    error: packageUpload.error || hashUpload.error || null,
+  };
+}
+
+function createSystemBackupShell(name) {
+  const backupDir = `${SYSTEM_BACKUP_ROOT}/${name}`;
+  const backupTar = `${SYSTEM_BACKUP_ROOT}/${name}.tar.gz`;
+  const dbHost = process.env.DB_HOST || '127.0.0.1';
+  const dbUser = process.env.DB_USER || 'root';
+  const dbName = process.env.DB_NAME || process.env.MYSQL_DATABASE || 'mercado_do_vale';
+  return `
+set -euo pipefail
+mkdir -p ${shellQuote(backupDir)}
+readlink /var/www/mdv-site/current > ${shellQuote(`${backupDir}/site-current.txt`)} 2>/dev/null || true
+ls -la /var/www/mdv-site/releases > ${shellQuote(`${backupDir}/site-releases.txt`)} 2>/dev/null || true
+tar -C /var/www/mdv-site -czf ${shellQuote(`${backupDir}/mdv-site.tar.gz`)} current previous releases 2>/tmp/mdv-system-site-tar.err || tar -C /var/www/mdv-site -czf ${shellQuote(`${backupDir}/mdv-site.tar.gz`)} current
+tar -C /var/www --exclude='mdv-api/node_modules' --exclude='mdv-api/.git' --exclude='mdv-api/system-backup-state.json' -czf ${shellQuote(`${backupDir}/mdv-api.tar.gz`)} mdv-api
+if command -v mysqldump >/dev/null 2>&1; then
+  MYSQL_PWD="$DB_PASS" mysqldump --single-transaction --routines --triggers --events -h ${shellQuote(dbHost)} -u ${shellQuote(dbUser)} ${shellQuote(dbName)} > ${shellQuote(`${backupDir}/mysql.sql`)}
+elif command -v mariadb-dump >/dev/null 2>&1; then
+  MYSQL_PWD="$DB_PASS" mariadb-dump --single-transaction --routines --triggers --events -h ${shellQuote(dbHost)} -u ${shellQuote(dbUser)} ${shellQuote(dbName)} > ${shellQuote(`${backupDir}/mysql.sql`)}
+else
+  echo "mysqldump/mariadb-dump not found" >&2
+  exit 9
+fi
+cat > ${shellQuote(`${backupDir}/manifest.json`)} <<'JSON'
+{"name":"${name}","createdAt":"${new Date().toISOString()}","coverage":["site","api","mysql","sales","customers","devices","products","payments","delivery"],"synologyTarget":"${SYNO_FOLDERS.backups}"}
+JSON
+sha256sum ${shellQuote(`${backupDir}`)}/* > ${shellQuote(`${backupDir}/SHA256SUMS`)}
+tar -C ${shellQuote(SYSTEM_BACKUP_ROOT)} -czf ${shellQuote(backupTar)} ${shellQuote(name)}
+sha256sum ${shellQuote(backupTar)} > ${shellQuote(`${backupTar}.sha256`)}
+find ${shellQuote(SYSTEM_BACKUP_ROOT)} -maxdepth 1 -type f -name 'mdv-system-*.tar.gz' -mtime +${SYSTEM_BACKUP_RETENTION_DAYS} -delete
+find ${shellQuote(SYSTEM_BACKUP_ROOT)} -maxdepth 1 -type f -name 'mdv-system-*.tar.gz.sha256' -mtime +${SYSTEM_BACKUP_RETENTION_DAYS} -delete
+find ${shellQuote(SYSTEM_BACKUP_ROOT)} -maxdepth 1 -type d -name 'mdv-system-*' -mtime +${SYSTEM_BACKUP_RETENTION_DAYS} -exec rm -rf {} +
+`;
+}
+
+function startSystemBackup({ trigger = 'manual' } = {}) {
+  if (systemBackupStatus.state === 'running') {
+    return { started: false, status: systemBackupStatus };
+  }
+  fs.mkdirSync(SYSTEM_BACKUP_ROOT, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
+  const name = `mdv-system-v1.0.0-${stamp}`;
+  const backupTar = `${SYSTEM_BACKUP_ROOT}/${name}.tar.gz`;
+  const script = createSystemBackupShell(name);
+
+  systemBackupStatus = {
+    state: 'running',
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    name,
+    trigger,
+    message: 'Backup iniciado na VPS',
+    error: null,
+    vpsPackage: backupTar,
+    synologyMirror: null,
+  };
+  writeSystemBackupState({ status: systemBackupStatus });
+
+  const child = spawn('bash', ['-lc', script], {
+    cwd: __dirname,
+    env: {
+      ...process.env,
+      DB_PASS: process.env.DB_PASS || process.env.MYSQL_PASSWORD || '',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stderr = '';
+  child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+  child.on('error', (err) => {
+    systemBackupStatus = {
+      ...systemBackupStatus,
+      state: 'failed',
+      finishedAt: new Date().toISOString(),
+      message: 'Falha ao iniciar processo de backup',
+      error: err.message,
+    };
+    writeSystemBackupState({ status: systemBackupStatus });
+  });
+  child.on('close', async (code) => {
+    if (code !== 0) {
+      systemBackupStatus = {
+        ...systemBackupStatus,
+        state: 'failed',
+        finishedAt: new Date().toISOString(),
+        message: 'Backup falhou na VPS',
+        error: (stderr || `Exit code ${code}`).slice(0, 1000),
+      };
+      writeSystemBackupState({ status: systemBackupStatus });
+      return;
+    }
+
+    let synologyMirror = null;
+    try {
+      synologyMirror = await uploadSystemBackupArtifactsToSynology(backupTar);
+    } catch (err) {
+      synologyMirror = { ok: false, path: SYNO_FOLDERS.backups, error: err.message };
+    }
+    systemBackupStatus = {
+      ...systemBackupStatus,
+      state: synologyMirror?.ok ? 'success' : 'partial',
+      finishedAt: new Date().toISOString(),
+      message: synologyMirror?.ok ? 'Backup concluido e espelhado no Synology' : 'Backup concluido na VPS; espelho Synology pendente',
+      error: synologyMirror?.ok ? null : (synologyMirror?.error || 'Falha ao espelhar backup no Synology'),
+      synologyMirror,
+    };
+    writeSystemBackupState({ status: systemBackupStatus });
+  });
+
+  return { started: true, status: systemBackupStatus };
+}
+
+function scheduleNextSystemBackup() {
+  if (systemBackupTimer) {
+    clearTimeout(systemBackupTimer);
+    systemBackupTimer = null;
+  }
+  const config = getSystemBackupConfig();
+  if (!config.enabled) return;
+  const nextRun = nextSystemBackupRunAt(config.scheduleTime);
+  const delayMs = Math.max(1000, nextRun.getTime() - Date.now());
+  systemBackupTimer = setTimeout(() => {
+    startSystemBackup({ trigger: 'scheduled' });
+    scheduleNextSystemBackup();
+  }, delayMs);
+  if (typeof systemBackupTimer.unref === 'function') systemBackupTimer.unref();
+}
+
+fastify.get('/admin/system-backup', { preHandler: requireAdminBearerToken }, async () => {
+  return getSystemBackupSnapshot();
+});
+
+fastify.patch('/admin/system-backup', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const body = req.body || {};
+  const scheduleTime = String(body.scheduleTime || '').trim();
+  if (!isValidSystemBackupTime(scheduleTime)) {
+    return reply.code(400).send({ error: 'Horario invalido. Use HH:MM.' });
+  }
+  setSystemBackupConfig({
+    scheduleTime,
+    enabled: body.enabled !== false,
+  });
+  return getSystemBackupSnapshot();
+});
+
+fastify.post('/admin/system-backup/run', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const result = startSystemBackup({ trigger: 'manual' });
+  if (!result.started) {
+    return reply.code(409).send({
+      error: 'Ja existe um backup em andamento.',
+      ...getSystemBackupSnapshot(),
+    });
+  }
+  return getSystemBackupSnapshot();
+});
 
 function describeSynologyErrorCode(code) {
   const descriptions = {
@@ -23989,6 +24377,8 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 });
 
 // Start
+scheduleNextSystemBackup();
+
 runMigrations().then(() => {
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
