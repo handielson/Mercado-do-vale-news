@@ -42,6 +42,7 @@ export interface SystemBackupSnapshot {
   locations: {
     vps: string;
     synology: string;
+    synologyFolderUrl?: string | null;
     localManifest: string;
   };
   coverage: string[];

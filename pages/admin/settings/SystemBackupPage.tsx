@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock, DatabaseBackup, HardDrive, Loader2, Play, RefreshCw, Save, Server } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, DatabaseBackup, ExternalLink, HardDrive, Loader2, Play, RefreshCw, Save, Server } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   getSystemBackupSnapshot,
@@ -75,6 +75,28 @@ const fallbackCoverage = [
   'Manifesto e hash SHA256',
 ];
 
+type SynologyRetryResult = {
+  tone: 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  detail: string;
+  at: string;
+};
+
+function retryResultTone(tone: SynologyRetryResult['tone']): string {
+  if (tone === 'success') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (tone === 'warning') return 'border-amber-200 bg-amber-50 text-amber-700';
+  if (tone === 'error') return 'border-red-200 bg-red-50 text-red-700';
+  return 'border-blue-200 bg-blue-50 text-blue-700';
+}
+
+function synologyFolderUrl(snapshot: SystemBackupSnapshot | null): string {
+  return snapshot?.locations.synologyFolderUrl || '/admin/settings/synology-cdn?tab=backups';
+}
+
+function linkTarget(url: string): string | undefined {
+  return /^https?:\/\//i.test(url) ? '_blank' : undefined;
+}
+
 export const SystemBackupPage: React.FC = () => {
   const [snapshot, setSnapshot] = useState<SystemBackupSnapshot | null>(null);
   const [scheduleTime, setScheduleTime] = useState('00:00');
@@ -84,6 +106,7 @@ export const SystemBackupPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [mirroring, setMirroring] = useState(false);
+  const [retryResult, setRetryResult] = useState<SynologyRetryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -119,7 +142,12 @@ export const SystemBackupPage: React.FC = () => {
   const isLiveOperation = isBackupRunning || running || mirroring || refreshing;
   const signalAt = latestSignalAt(snapshot, events);
   const isSynologyPending = snapshot?.status.state === 'partial';
+  const isSynologyRetryActive = mirroring || (snapshot?.status.state === 'running' && snapshot?.status.step === 'Reenviando para Synology');
+  const showSynologyRetryPanel = isSynologyPending || isSynologyRetryActive || Boolean(retryResult);
   const synologyPendingDetail = snapshot?.status.synologyMirror?.error || snapshot?.status.error || 'O pacote ja esta salvo na VPS. Esse aviso fica ate o envio ao Synology funcionar, voce tentar enviar novamente, ou um proximo backup concluir com espelho OK.';
+  const visibleProgress = isSynologyPending ? Math.min(progress, 96) : progress;
+  const progressLabel = isSynologyPending ? 'VPS OK / Synology pendente' : `${progress}%`;
+  const synologyHref = synologyFolderUrl(snapshot);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -160,8 +188,25 @@ export const SystemBackupPage: React.FC = () => {
   }
 
   async function handleRetrySynology() {
+    if (!isSynologyPending || isSynologyRetryActive) {
+      const detail = 'Aguarde a tentativa atual terminar antes de enviar outra para o Synology.';
+      setRetryResult({
+        tone: 'info',
+        title: 'Ja existe uma tentativa em andamento',
+        detail,
+        at: new Date().toISOString(),
+      });
+      toast.info(detail);
+      return;
+    }
     setMirroring(true);
     setError(null);
+    setRetryResult({
+      tone: 'info',
+      title: 'Tentativa em andamento',
+      detail: 'Reenviando o pacote salvo na VPS para o Synology.',
+      at: new Date().toISOString(),
+    });
     setSnapshot((current) => current ? {
       ...current,
       status: {
@@ -185,10 +230,28 @@ export const SystemBackupPage: React.FC = () => {
     try {
       const data = await retrySystemBackupSynologyMirror();
       setSnapshot(data);
-      toast.success(data.status.state === 'success' ? 'Backup enviado ao Synology' : 'Tentativa registrada');
+      const success = data.status.state === 'success';
+      const detail = success
+        ? 'Backup enviado ao Synology com sucesso.'
+        : (data.status.synologyMirror?.error || data.status.error || 'Synology continua pendente apos a tentativa.');
+      setRetryResult({
+        tone: success ? 'success' : 'warning',
+        title: success ? 'Tentativa concluida' : 'Synology continua pendente',
+        detail,
+        at: data.status.updatedAt || new Date().toISOString(),
+      });
+      if (success) toast.success('Backup enviado ao Synology');
+      else toast.warning('Synology continua pendente');
     } catch (err: any) {
       const message = err?.message || 'Falha ao tentar enviar para Synology';
+      const duplicate = message.includes('Ja existe uma tentativa') || message.includes('em andamento');
       setError(message);
+      setRetryResult({
+        tone: duplicate ? 'info' : 'error',
+        title: duplicate ? 'Ja existe uma tentativa em andamento' : 'Tentativa falhou',
+        detail: duplicate ? 'Aguarde a tentativa atual terminar antes de enviar outra para o Synology.' : message,
+        at: new Date().toISOString(),
+      });
       toast.error(message);
     } finally {
       setMirroring(false);
@@ -249,7 +312,7 @@ export const SystemBackupPage: React.FC = () => {
           <div className="grid grid-cols-2 gap-3 text-sm md:min-w-[340px]">
             <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-2">
               <p className="text-xs font-bold uppercase text-slate-400">Progresso</p>
-              <p className="font-bold text-blue-700">{progress}%</p>
+              <p className="font-bold text-blue-700">{progressLabel}</p>
             </div>
             <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-2">
               <p className="text-xs font-bold uppercase text-slate-400">Ultimo sinal</p>
@@ -323,18 +386,40 @@ export const SystemBackupPage: React.FC = () => {
             <p className="text-xs mt-1">{snapshot?.status.message || snapshot?.status.error || 'Nenhuma execucao registrada ainda.'}</p>
           </div>
 
-          {isSynologyPending && (
+          {showSynologyRetryPanel && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-              <p className="text-sm font-bold text-amber-800">Synology pendente</p>
-              <p className="mt-1 text-xs leading-relaxed text-amber-700">{synologyPendingDetail}</p>
+              <p className="text-sm font-bold text-amber-800">
+                {isSynologyRetryActive ? 'Synology em tentativa' : 'Synology pendente'}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-amber-700">
+                {isSynologyRetryActive ? 'Existe uma tentativa em andamento. Aguarde o resultado antes de tentar novamente.' : synologyPendingDetail}
+              </p>
+              {retryResult && (
+                <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${retryResultTone(retryResult.tone)}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-bold">{retryResult.title}</p>
+                    <p className="shrink-0 font-semibold opacity-75">{formatDateTime(retryResult.at)}</p>
+                  </div>
+                  <p className="mt-1 break-all leading-relaxed">{retryResult.detail}</p>
+                </div>
+              )}
+              <a
+                href={synologyHref}
+                target={linkTarget(synologyHref)}
+                rel={linkTarget(synologyHref) ? 'noreferrer' : undefined}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-100"
+              >
+                <ExternalLink size={14} />
+                Abrir pasta do Synology
+              </a>
               <button
                 type="button"
                 onClick={handleRetrySynology}
-                disabled={mirroring}
+                disabled={!isSynologyPending || isSynologyRetryActive}
                 className="mt-3 inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-60"
               >
-                {mirroring ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                Tentar enviar para Synology
+                {isSynologyRetryActive ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                {isSynologyRetryActive ? 'Tentativa em andamento' : 'Tentar enviar para Synology'}
               </button>
             </div>
           )}
@@ -343,18 +428,18 @@ export const SystemBackupPage: React.FC = () => {
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-slate-800">{snapshot?.status.step || 'Preparando backup'}</p>
-                <p className="text-sm font-bold text-blue-700">{progress}%</p>
+                <p className="text-sm font-bold text-blue-700">{progressLabel}</p>
               </div>
               <div
                 className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-200"
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-valuenow={progress}
+                aria-valuenow={visibleProgress}
               >
                 <div
                   className="h-full rounded-full bg-blue-600 transition-all duration-500"
-                  style={{ width: `${progress}%` }}
+                  style={{ width: `${visibleProgress}%` }}
                 />
               </div>
             </div>
@@ -415,6 +500,15 @@ export const SystemBackupPage: React.FC = () => {
           <HardDrive className="text-slate-500 mb-3" size={22} />
           <h3 className="font-bold text-slate-900">Synology</h3>
           <p className="text-sm text-slate-500 mt-1 break-all">{snapshot?.locations.synology || 'backup-mercadodovale/db'}</p>
+          <a
+            href={synologyHref}
+            target={linkTarget(synologyHref)}
+            rel={linkTarget(synologyHref) ? 'noreferrer' : undefined}
+            className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-800"
+          >
+            <ExternalLink size={15} />
+            Abrir pasta do Synology
+          </a>
         </div>
         <div className="bg-white border border-slate-200 rounded-lg p-5">
           <CheckCircle2 className="text-slate-500 mb-3" size={22} />

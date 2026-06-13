@@ -477,7 +477,8 @@ function TunnelRestartWidget() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function SynologyFilesPage() {
-    const [activeTab, setActiveTab] = useState<ActiveSection>('imagens');
+    const initialTab = new URLSearchParams(window.location.search).get('tab') === 'backups' ? 'backups' : 'imagens';
+    const [activeTab, setActiveTab] = useState<ActiveSection>(initialTab);
     const [files, setFiles] = useState<Record<Folder, CDNFile[] | null>>({
         imagens: null, videos: null, arquivos: null,
     });

@@ -21158,6 +21158,7 @@ function normalizeSynologyUrl(rawUrl) {
 const SYNO_URL  = normalizeSynologyUrl(process.env.SYNOLOGY_URL || 'https://dsm-api.xiaomipetrolina.com.br');
 const SYNO_USER = process.env.SYNOLOGY_USER || '';
 const SYNO_PASS = process.env.SYNOLOGY_PASS || '';
+const SYNOLOGY_BACKUP_FOLDER_URL = process.env.SYNOLOGY_BACKUP_FOLDER_URL || '/admin/settings/synology-cdn?tab=backups';
 
 function getSynologyRequestPort(urlObj) {
   if (urlObj.port) return parseInt(urlObj.port, 10);
@@ -21198,6 +21199,7 @@ let systemBackupStatus = {
   events: [],
 };
 let systemBackupHeartbeat = null;
+let systemBackupSynologyRetryInFlight = false;
 
 function isValidSystemBackupTime(value) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''));
@@ -21285,6 +21287,7 @@ function systemBackupLocations() {
   return {
     vps: SYSTEM_BACKUP_ROOT,
     synology: SYNO_FOLDERS.backups,
+    synologyFolderUrl: SYNOLOGY_BACKUP_FOLDER_URL,
     localManifest: '.system-backups',
   };
 }
@@ -21625,6 +21628,14 @@ function startSystemBackup({ trigger = 'manual' } = {}) {
 
 async function retrySystemBackupSynologyMirror() {
   getSystemBackupSnapshot();
+  if (systemBackupSynologyRetryInFlight || systemBackupStatus.state === 'running') {
+    return {
+      retried: false,
+      inProgress: true,
+      status: systemBackupStatus,
+      reason: 'Ja existe uma tentativa de envio ao Synology em andamento.',
+    };
+  }
   if (systemBackupStatus.state !== 'partial') {
     return { retried: false, status: systemBackupStatus, reason: 'Backup nao esta com Synology pendente.' };
   }
@@ -21640,6 +21651,7 @@ async function retrySystemBackupSynologyMirror() {
     return { retried: false, status: systemBackupStatus, reason: systemBackupStatus.error };
   }
 
+  systemBackupSynologyRetryInFlight = true;
   systemBackupStatus = {
     ...systemBackupStatus,
     state: 'running',
@@ -21658,6 +21670,8 @@ async function retrySystemBackupSynologyMirror() {
     synologyMirror = await uploadSystemBackupArtifactsToSynology(systemBackupStatus.vpsPackage);
   } catch (err) {
     synologyMirror = { ok: false, path: SYNO_FOLDERS.backups, error: err.message };
+  } finally {
+    systemBackupSynologyRetryInFlight = false;
   }
 
   systemBackupStatus = {
@@ -21727,6 +21741,12 @@ fastify.post('/admin/system-backup/run', { preHandler: requireAdminBearerToken }
 
 fastify.post('/admin/system-backup/synology-retry', { preHandler: requireAdminBearerToken }, async (req, reply) => {
   const result = await retrySystemBackupSynologyMirror();
+  if (result.inProgress) {
+    return reply.code(409).send({
+      error: result.reason || 'Ja existe uma tentativa de envio ao Synology em andamento.',
+      ...getSystemBackupSnapshot(),
+    });
+  }
   if (!result.retried && systemBackupStatus.state === 'failed') {
     return reply.code(409).send({
       error: result.reason || 'Nao foi possivel reenviar ao Synology.',

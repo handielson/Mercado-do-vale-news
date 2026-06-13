@@ -34,9 +34,16 @@ assert.match(page, /runSystemBackupNow/, 'page must call manual backup action');
 assert.match(page, /refreshing/, 'page must expose a visible refresh-in-progress state');
 assert.match(page, /Atualizando\.\.\./, 'refresh button must communicate that it is working');
 assert.match(page, /Tentar enviar para Synology/, 'partial backups must expose a retry action for Synology mirror');
+assert.match(page, /retryResult/, 'page must show the visible result of the latest Synology retry');
+assert.match(page, /showSynologyRetryPanel/, 'page must keep the retry panel visible while a retry is in progress');
+assert.match(page, /disabled=\{!isSynologyPending \|\| isSynologyRetryActive\}/, 'retry button must be disabled while another Synology retry is running');
+assert.match(page, /Ja existe uma tentativa em andamento/, 'page must explain when duplicate retries are blocked');
 assert.match(page, /Lista de detalhes do backup/, 'page must render a detailed backup step list after backup starts or finishes');
 assert.match(page, /Acompanhamento ao vivo/, 'page must show a live tracking panel');
 assert.match(page, /Ultimo sinal/, 'page must show the latest backend heartbeat timestamp');
+assert.match(page, /VPS OK \/ Synology pendente/, 'page must not show partial Synology backups as a plain 100 percent success');
+assert.match(page, /Abrir pasta do Synology/, 'page must provide a direct link to inspect the Synology backup folder');
+assert.match(page, /synologyFolderUrl/, 'page must use the backend-provided Synology folder URL when available');
 assert.match(page, /mirroring/, 'page must keep visible progress while Synology retry request is in flight');
 assert.match(page, /snapshot\?\.status\.state !== 'running' && !mirroring/, 'page must keep polling while retrying Synology');
 assert.match(page, /backup-mercadodovale\/db|\/var\/backups\/mdv-system/, 'page must show backup locations');
@@ -66,6 +73,8 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
     /fastify\.(get|patch|post)\('\/admin\/system-backup[^']*', \{ preHandler: requireSyncKeyOrAdmin \}/,
     `${name} backup endpoints must not accept sync key auth`,
   );
+  assert.match(source, /SYNOLOGY_BACKUP_FOLDER_URL/, `${name} must expose a configurable Synology backup folder URL`);
+  assert.match(source, /synologyFolderUrl/, `${name} snapshot must include a link to inspect the Synology backup folder`);
   assert.match(source, /scheduleNextSystemBackup/, `${name} must schedule automatic backups`);
   assert.match(source, /SYSTEM_BACKUP_DEFAULT_TIME = '00:00'/, `${name} must default to midnight`);
   assert.match(source, /Estado running antigo foi invalidado/, `${name} must invalidate stale running backups after restart`);
@@ -76,6 +85,10 @@ for (const [name, source] of [['vps_server.js', server], ['vps_server.cjs', serv
   assert.match(source, /uploadSystemBackupArtifactsToSynology/, `${name} must mirror package and checksum to Synology`);
   assert.match(source, /retrySystemBackupSynologyMirror/, `${name} must allow retrying a partial Synology mirror`);
   assert.match(source, /fastify\.post\('\/admin\/system-backup\/synology-retry'/, `${name} must expose Synology mirror retry endpoint`);
+  assert.match(source, /let systemBackupSynologyRetryInFlight = false/, `${name} must track an in-flight Synology retry`);
+  assert.match(source, /if \(systemBackupSynologyRetryInFlight \|\| systemBackupStatus\.state === 'running'\)/, `${name} must block duplicate Synology retries`);
+  assert.match(source, /Ja existe uma tentativa de envio ao Synology em andamento/, `${name} must return a clear duplicate retry message`);
+  assert.match(source, /result\.inProgress/, `${name} retry route must return conflict while a retry is already running`);
   assert.match(source, /events: \[/, `${name} backup status must keep a detail event list`);
   assert.match(source, /appendSystemBackupEvent/, `${name} must append detailed backup events`);
   assert.match(source, /touchSystemBackupStatus/, `${name} must refresh heartbeat while long steps are still running`);
