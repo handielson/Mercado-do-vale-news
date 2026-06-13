@@ -26,7 +26,7 @@ const paymentInstallmentDetail = (payment: any) => {
 
     const total = paymentTotal(payment);
     const installmentValue = Math.round(total / installments);
-    return `<br><span style="font-size:11px;color:#6b7280;">${installments}x de ${fmt(installmentValue)} = ${fmt(total)}</span>`;
+    return `${installments}x de ${fmt(installmentValue)} = ${fmt(total)}`;
 };
 
 const deliveryLabel = (type: string) => {
@@ -112,7 +112,10 @@ export function printSaleReceipt(
     const saleDate = new Date(sale.created_at);
     const payments: any[] = (sale as any).payment_methods || [];
     const discountTotal = sale.discount_total || 0;
-    const deliveryTotal = (sale as any).delivery_total || 0;
+    const deliveryCharge = (sale as any).delivery_cost_customer ?? (sale as any).delivery_total ?? 0;
+    const deliveryType = sale.delivery_type || 'store_pickup';
+    const isPickup = deliveryType === 'store_pickup' || deliveryType === 'pickup';
+    const deliveryPersonName = (sale as any).delivery_person_name || (sale as any).delivery_person?.name || '';
 
     const logoHtml = logo
         ? `<img src="${logo}" alt="Logo" style="max-height:60px;max-width:140px;object-fit:contain;" />`
@@ -143,11 +146,30 @@ export function printSaleReceipt(
         </tr>`;
     }).join('');
 
-    const paymentsHtml = payments.map(p => `
+    const paymentsHtml = payments.map(p => {
+        const paymentDescription = [paymentLabel(p.method, p.installments), paymentInstallmentDetail(p)]
+            .filter(Boolean)
+            .join('<br><span style="font-size:11px;color:#6b7280;">');
+        const closeInstallmentSpan = paymentInstallmentDetail(p) ? '</span>' : '';
+
+        return `
         <tr>
-            <td style="padding:3px 0;font-size:13px;color:#374151;">${paymentLabel(p.method, p.installments)}${paymentInstallmentDetail(p)}</td>
-            <td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;vertical-align:top;">${fmt(paymentTotal(p))}</td>
-        </tr>`).join('');
+            <td style="padding:3px 0;font-size:13px;color:#374151;">${paymentDescription}${closeInstallmentSpan}</td>
+        </tr>`;
+    }).join('');
+
+    const deliveryReceiptHtml = `
+        <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px dashed #d1d5db;">
+            <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin:0 0 8px;">Entrega / Retirada</p>
+            <table>
+                <tr>
+                    <td style="padding:3px 0;font-size:13px;color:#374151;">Forma</td>
+                    <td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;">${deliveryLabel(deliveryType)}</td>
+                </tr>
+                ${!isPickup && deliveryPersonName ? `<tr><td style="padding:3px 0;font-size:13px;color:#374151;">Entregador</td><td style="padding:3px 0;text-align:right;font-size:13px;">${deliveryPersonName}</td></tr>` : ''}
+                ${!isPickup ? `<tr><td style="padding:3px 0;font-size:13px;color:#374151;">Custo da entrega</td><td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;">${fmt(deliveryCharge)}</td></tr>` : ''}
+            </table>
+        </div>`;
 
     const customerSection = sale.customer ? `
         <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px dashed #d1d5db;">
@@ -263,10 +285,12 @@ export function printSaleReceipt(
         <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin:0 0 8px;">Resumo</p>
         <table>
             ${discountTotal > 0 ? `<tr><td style="padding:3px 0;font-size:13px;color:#374151;">Descontos</td><td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;color:#dc2626;">- ${fmt(discountTotal)}</td></tr>` : ''}
-            ${deliveryTotal > 0 ? `<tr><td style="padding:3px 0;font-size:13px;color:#374151;">Entrega (${deliveryLabel(sale.delivery_type || '')})</td><td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;">+ ${fmt(deliveryTotal)}</td></tr>` : ''}
+            ${deliveryCharge > 0 ? `<tr><td style="padding:3px 0;font-size:13px;color:#374151;">Entrega (${deliveryLabel(deliveryType)})</td><td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;">+ ${fmt(deliveryCharge)}</td></tr>` : ''}
             <tr class="total-row"><td>TOTAL</td><td style="text-align:right;font-family:monospace;">${fmt(sale.total)}</td></tr>
         </table>
     </div>
+
+    ${deliveryReceiptHtml}
 
     <div style="margin-bottom:16px;">
         <p style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin:0 0 8px;">Pagamento</p>

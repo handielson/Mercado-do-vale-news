@@ -10,6 +10,7 @@ import { getCoinBalance, getCoinsEarnedForReference } from '../../../services/ca
 import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { warrantyTemplateService } from '../../../services/warrantyTemplates';
+import { teamService } from '../../../services/team';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -28,6 +29,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     const [isPrintingAll, setIsPrintingAll] = useState(false);
     // Map keyed por product_id (specs gerais) e por sale_item.id (IMEI da unit serializada).
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
+    const [deliveryPersonName, setDeliveryPersonName] = useState('');
 
     useEffect(() => {
         if (!isOpen || !sale?.items?.length) return;
@@ -63,6 +65,26 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
         })();
         return () => { cancelled = true; };
     }, [isOpen, sale?.id]);
+
+    useEffect(() => {
+        if (!isOpen || !sale?.delivery_person_id) {
+            setDeliveryPersonName('');
+            return;
+        }
+
+        let cancelled = false;
+        (async () => {
+            try {
+                const deliveryPerson = await teamService.getById(sale.delivery_person_id!);
+                if (!cancelled) setDeliveryPersonName(deliveryPerson?.name || '');
+            } catch (error) {
+                console.warn('Erro ao carregar entregador da venda', error);
+                if (!cancelled) setDeliveryPersonName('');
+            }
+        })();
+
+        return () => { cancelled = true; };
+    }, [isOpen, sale?.delivery_person_id]);
 
     const handleReprintWarranty = async () => {
         if (!sale || sale.items.length === 0) return;
@@ -199,7 +221,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                 coinsEarnedThisSale: coinsThisSale,
                 benefitStatuses,
             };
-            printSaleReceipt(sale, settings, productSpecs, benefits);
+            printSaleReceipt({ ...(sale as any), delivery_person_name: deliveryPersonName } as SaleWithItems, settings, productSpecs, benefits);
         } catch (e) {
             console.error(e);
             toast.error('Erro ao gerar o recibo');
@@ -236,6 +258,94 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
             hour: '2-digit',
             minute: '2-digit'
         });
+    };
+
+    const paymentAmount = (payment: any) => Number(payment.amount ?? 0);
+
+    const paymentTotal = (payment: any) => Number(payment.total_with_fee ?? payment.total_with_fee_cents ?? payment.amount ?? 0);
+
+    const paymentPercent = (payment: any) => {
+        const amount = paymentAmount(payment);
+        const fee = Number(payment.fee_amount ?? Math.max(0, paymentTotal(payment) - amount));
+        return Number(payment.fee_percentage ?? (amount > 0 ? (fee / amount) * 100 : 0));
+    };
+
+    const paymentOperatorPercent = (payment: any) => {
+        return Number(
+            payment.operator_fee_percentage ??
+            payment.operator_fee_percent ??
+            payment.machine_fee_percentage ??
+            payment.machine_fee_percent ??
+            payment.operator_fee ??
+            0
+        );
+    };
+
+    const paymentOperatorFeeAmount = (payment: any) => {
+        const amount = paymentAmount(payment);
+        const operatorPercent = paymentOperatorPercent(payment);
+        return Number(
+            payment.operator_fee_amount ??
+            payment.machine_fee_amount ??
+            (operatorPercent > 0 ? Math.round(amount * (operatorPercent / 100)) : 0)
+        );
+    };
+
+    const paymentDetails = (payment: any) => {
+        const details: string[] = [];
+        const amount = paymentAmount(payment);
+        const total = paymentTotal(payment);
+        const fee = Number(payment.fee_amount ?? Math.max(0, total - amount));
+        const installments = Math.max(1, Number(payment.installments) || 1);
+        const chargedPercent = paymentPercent(payment);
+        const operatorPercent = paymentOperatorPercent(payment);
+        const operatorFee = paymentOperatorFeeAmount(payment);
+        const spread = Math.max(0, fee - operatorFee);
+
+        details.push(`Valor base: ${formatCurrency(amount)}`);
+        if (payment.method === 'credit' && installments > 1) {
+            details.push(`${installments}x de ${formatCurrency(Math.round(total / installments))}`);
+        }
+        if (fee > 0) details.push(`Acrescimo cobrado do cliente: ${formatCurrency(fee)}`);
+        details.push(operatorFee > 0 ? `Custo da maquina: ${formatCurrency(operatorFee)}` : 'Custo da maquina calculado: nao registrado');
+        if (fee > 0 || operatorFee > 0) details.push(`Sobra da taxa: ${formatCurrency(spread)}`);
+        details.push(`Percentual cobrado: ${chargedPercent.toFixed(2).replace('.', ',')}%`);
+        details.push(operatorPercent > 0 ? `Percentual da maquina: ${operatorPercent.toFixed(2).replace('.', ',')}%` : 'Percentual da maquina: nao registrado');
+        if (payment.due_date) details.push(`Vencimento: ${new Date(payment.due_date).toLocaleDateString('pt-BR')}`);
+        if (payment.pix_status) details.push(`Status PIX: ${payment.pix_status}`);
+        if (payment.pix_payment_id) details.push(`PIX ID: ${payment.pix_payment_id}`);
+        if (payment.mercado_pago_payment_id) details.push(`Mercado Pago ID: ${payment.mercado_pago_payment_id}`);
+
+        return details;
+    };
+
+    const deliveryTypeLabel = (type?: string) => {
+        switch (type) {
+            case 'pickup':
+            case 'store_pickup':
+            case undefined:
+                return 'Retirada na Loja';
+            case 'delivery':
+            case 'store_delivery':
+                return 'Entrega pela Loja';
+            case 'hybrid':
+            case 'hybrid_delivery':
+                return 'Entrega Hibrida';
+            default:
+                return type || 'Retirada na Loja';
+        }
+    };
+
+    const deliveryDetails = () => {
+        const type = sale.delivery_type || 'store_pickup';
+        const isPickup = type === 'pickup' || type === 'store_pickup';
+        return [
+            { label: 'Tipo', value: deliveryTypeLabel(type) },
+            { label: 'Entregador', value: isPickup ? 'Retirada na Loja' : (deliveryPersonName || 'Nao informado') },
+            { label: 'Cobrado do Cliente', value: formatCurrency(sale.delivery_cost_customer || 0) },
+            { label: 'Custo da Loja', value: formatCurrency(sale.delivery_cost_store || 0) },
+            { label: 'Total do Entregador', value: formatCurrency(sale.delivery_total || 0) },
+        ];
     };
 
     const handleCancel = async () => {
@@ -487,24 +597,28 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                             </h3>
                             <div className="space-y-3">
                                 {sale.payment_methods.map((payment, index) => (
-                                    <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                        <div className="flex items-center gap-3">
-                                            {getPaymentIcon(payment.method)}
-                                            <div>
-                                                <p className="text-sm font-medium text-slate-800">
-                                                    {getPaymentLabel(payment.method)}
-                                                    {payment.installments ? ` (${payment.installments}x)` : ''}
-                                                </p>
-                                                {payment.fee_amount ? (
-                                                    <p className="text-xs text-slate-500">
-                                                        Inclui {formatCurrency(payment.fee_amount)} de juros maq.
+                                    <div key={index} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="flex items-start gap-3">
+                                                {getPaymentIcon(payment.method)}
+                                                <div>
+                                                    <p className="text-sm font-medium text-slate-800">
+                                                        {getPaymentLabel(payment.method)}
+                                                        {payment.installments ? ` (${payment.installments}x)` : ''}
                                                     </p>
-                                                ) : null}
+                                                    <div className="mt-1 space-y-0.5">
+                                                        {paymentDetails(payment).map((detail) => (
+                                                            <p key={detail} className="text-xs text-slate-500">
+                                                                {detail}
+                                                            </p>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             </div>
+                                            <p className="text-sm font-bold text-slate-800 whitespace-nowrap">
+                                                {formatCurrency(paymentTotal(payment))}
+                                            </p>
                                         </div>
-                                        <p className="text-sm font-bold text-slate-800">
-                                            {formatCurrency(payment.total_with_fee)}
-                                        </p>
                                     </div>
                                 ))}
                             </div>
@@ -512,14 +626,22 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
 
                     </div>
 
-                    {/* Delivery Section (If Applicable) */}
-                    {sale.delivery_type && sale.delivery_type !== 'store_pickup' && sale.delivery_type !== 'pickup' && (
+                    {/* Delivery Section */}
+                    {true && (
                         <div className="bg-blue-50/50 p-5 rounded-xl border border-blue-100">
                             <h3 className="text-sm font-semibold text-blue-800 mb-3 flex items-center gap-2">
                                 <Truck size={16} />
                                 Dados de Logística
                             </h3>
-                            <div className="grid grid-cols-3 gap-4 text-sm">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                                {deliveryDetails().map((detail) => (
+                                    <div key={detail.label}>
+                                        <p className="text-xs text-blue-600 uppercase font-medium">{detail.label}</p>
+                                        <p className="font-medium text-slate-700 mt-1">{detail.value}</p>
+                                    </div>
+                                ))}
+                                {false && (
+                                    <>
                                 <div>
                                     <p className="text-xs text-blue-600 uppercase font-medium">Tipo</p>
                                     <p className="font-medium text-slate-700 mt-1">
@@ -538,6 +660,8 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                         {formatCurrency(sale.delivery_total || 0)}
                                     </p>
                                 </div>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}
