@@ -18,6 +18,17 @@ const paymentLabel = (method: string, installments?: number) => {
         : base;
 };
 
+const paymentTotal = (payment: any) => Number(payment.total_with_fee ?? payment.total_with_fee_cents ?? payment.amount ?? 0);
+
+const paymentInstallmentDetail = (payment: any) => {
+    const installments = Math.max(1, Number(payment.installments) || 1);
+    if (payment.method !== 'credit' || installments <= 1) return '';
+
+    const total = paymentTotal(payment);
+    const installmentValue = Math.round(total / installments);
+    return `<br><span style="font-size:11px;color:#6b7280;">${installments}x de ${fmt(installmentValue)} = ${fmt(total)}</span>`;
+};
+
 const deliveryLabel = (type: string) => {
     if (!type) return '-';
     const labels: Record<string, string> = {
@@ -134,8 +145,8 @@ export function printSaleReceipt(
 
     const paymentsHtml = payments.map(p => `
         <tr>
-            <td style="padding:3px 0;font-size:13px;color:#374151;">${paymentLabel(p.method, p.installments)}</td>
-            <td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;">${fmt(p.total_with_fee || p.amount)}</td>
+            <td style="padding:3px 0;font-size:13px;color:#374151;">${paymentLabel(p.method, p.installments)}${paymentInstallmentDetail(p)}</td>
+            <td style="padding:3px 0;text-align:right;font-size:13px;font-family:monospace;vertical-align:top;">${fmt(paymentTotal(p))}</td>
         </tr>`).join('');
 
     const customerSection = sale.customer ? `

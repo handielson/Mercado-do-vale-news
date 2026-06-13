@@ -21,4 +21,16 @@ assert.match(
   'customer sale receipt should still show the public payment method label',
 );
 
+assert.match(
+  receipt,
+  /paymentInstallmentDetail/,
+  'customer sale receipt must build a public installment detail line',
+);
+
+assert.match(
+  receipt,
+  /\$\{installments\}x de \$\{fmt\(installmentValue\)\} = \$\{fmt\(total\)\}/,
+  'customer sale receipt installment detail must include installments, installment amount and charged total',
+);
+
 console.log('sale receipt internal payment detail checks passed');
