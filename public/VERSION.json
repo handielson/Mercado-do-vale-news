@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.7-organize-admin-menu",
+  "version": "v1.1.8-admin-products-compact-load",
   "date": "2026-06-14",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260614-193000-v117-organize-admin-menu",
+  "release_vps": "/var/www/mdv-site/releases/20260614-201837-v118-admin-products-compact-load",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Menu lateral do admin reorganizado por rotina: atendimento, produtos, financeiro, loja, catalogo tecnico, integracoes e sistema."
+  "summary": "Listagem admin de produtos carrega paginas compactas da VPS para reduzir payload e tempo de abertura."
 }

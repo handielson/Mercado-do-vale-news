@@ -117,7 +117,7 @@ function getCacheAge(): string | null {
 }
 
 async function fetchAllAdminVpsProducts(): Promise<any[] | null> {
-    const pageSize = 300;
+    const pageSize = 500;
     const rows: any[] = [];
 
     for (let offset = 0; ; offset += pageSize) {
@@ -125,6 +125,7 @@ async function fetchAllAdminVpsProducts(): Promise<any[] | null> {
             status: 'all',
             limit: pageSize,
             offset,
+            compact: true,
             noCache: true,
         });
 

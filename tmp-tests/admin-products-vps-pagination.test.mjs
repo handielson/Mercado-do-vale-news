@@ -9,6 +9,18 @@ assert.match(
   'admin product list should page through VPS products instead of relying on one fixed cap',
 );
 
+assert.match(
+  source,
+  /const pageSize = 500;/,
+  'admin product list should use 500-item VPS pages to reduce sequential round trips',
+);
+
+assert.match(
+  source,
+  /vpsApiService\.getProducts\(\{[\s\S]*compact:\s*true,[\s\S]*noCache:\s*true/s,
+  'admin product list should request compact VPS products to avoid heavy image payloads',
+);
+
 assert.doesNotMatch(
   source,
   /vpsApiService\.getProducts\(\{\s*status:\s*'all',\s*limit:\s*2000\s*\}\)/,

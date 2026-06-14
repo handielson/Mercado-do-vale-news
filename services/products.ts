@@ -202,7 +202,7 @@ async function enrichProductsWithShopeeLinks(rows: any[]): Promise<any[]> {
 // ─── READ ──────────────────────────────────────────────────────────────────
 
 async function list(): Promise<Product[]> {
-    const pageSize = 300;
+    const pageSize = 500;
     const maxRecords = 10000;
     const rows: any[] = [];
 
@@ -212,6 +212,7 @@ async function list(): Promise<Product[]> {
                 status: 'all',
                 limit: pageSize,
                 offset,
+                compact: true,
                 noCache: true,
             });
             if (page) return page;
