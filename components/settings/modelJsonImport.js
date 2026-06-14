@@ -7,7 +7,7 @@ const normalizeText = (value) => String(value || '')
     .trim();
 
 const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
-const MODEL_UNIT_FIELD_KEYS = new Set(['imei1', 'imei2', 'serial', 'color']);
+const MODEL_UNIT_FIELD_KEYS = new Set(['imei1', 'imei2', 'serial', 'color', 'ram', 'sku', 'storage']);
 const REQUIRED_SMARTPHONE_FIELD_KEYS = new Set([
     'battery_mah',
     'cam_principal_mpx',
@@ -308,7 +308,7 @@ Regras:
 1. Retorne APENAS um objeto JSON valido. Sem markdown, sem explicacoes.
 2. Use "template_values" para todos os campos tecnicos atuais e futuros.
 3. Use apenas dados reais do produto, confirmados em ficha tecnica, fabricante ou anuncio confiavel. Nao use dados genericos, aproximados ou inventados.
-4. Nao inclua IMEI, serial, cor unica de aparelho ou quantidade de estoque. Esses dados pertencem ao cadastro individual/produto, nao ao modelo.
+4. Nao inclua IMEI, serial, cor unica de aparelho, memoria RAM, armazenamento, SKU/codigo ou quantidade de estoque. Esses dados pertencem ao cadastro individual/produto, nao ao modelo.
 5. Em textos, evite aspas duplas internas; use aspas simples se precisar.
 6. Preencha todas as informacoes basicas reais do smartphone quando existirem em fonte confiavel, especialmente slot para cartao/microSD/SIM, entrada de fone, biometria, rede, NFC, resistencia, tela, chipset, bateria e carregamento.
 7. Na duvida nao preencha: se nao tiver certeza sobre um dado tecnico, deixe o campo ausente ou null para o painel avisar que faltou dado real. Nao crie nada.
@@ -347,8 +347,6 @@ Formato esperado:
     }
   },
   "template_values": {
-    "ram": "4GB",
-    "storage": "128GB",
     "version": "Global",
     "itens_que_acompanham": "1 aparelho\n1 cabo USB Tipo C\n1 ferramenta de ejeção de SIM\n1 guia de início rápido\n1 Adaptador de tomada (pode variar por região)",
     "brindes": "1 capa protetora\n1 capa extra\n1 pelicula 3D aplicada",

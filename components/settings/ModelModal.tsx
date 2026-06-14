@@ -96,10 +96,16 @@ const NON_TEMPLATE_CATEGORY_KEYS = new Set([
     'imei2',
     'serial',
     'color',
+    'ram',
+    'sku',
+    'storage',
     'specs.imei1',
     'specs.imei2',
     'specs.serial',
     'specs.color',
+    'specs.ram',
+    'specs.sku',
+    'specs.storage',
 ]);
 
 const CATEGORY_FIELD_LABELS: Record<string, string> = {
@@ -612,7 +618,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         return normalizeFieldAlias(alias) === normalizeFieldAlias(key);
     });
     const getSanitizedTemplateValues = (values: Record<string, any>) => Object.fromEntries(
-        Object.entries(values).filter(([key]) => !isHiddenSpecKey(key))
+        Object.entries(values).filter(([key]) => !isHiddenSpecKey(key) && !isModelUnitFieldKey(key))
     );
     const modelImportPrompt = buildModelImportPrompt({
         name,
@@ -643,7 +649,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
     const applyNormalizedModelPayload = (normalized: any) => {
         const visibleTemplateValues = Object.fromEntries(
-            Object.entries(normalized.templateValues || {}).filter(([key]) => !isHiddenSpecKey(key))
+            Object.entries(normalized.templateValues || {}).filter(([key]) => !isHiddenSpecKey(key) && !isModelUnitFieldKey(key))
         );
         const translatedTemplateValues = translateTemplateValuesToPortuguese(visibleTemplateValues);
         const appliedFields: string[] = [];
@@ -1403,7 +1409,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         onChange={(e) => setModelJsonInput(e.target.value)}
                                         rows={18}
                                         className="w-full px-3 py-2 text-xs font-mono border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white resize-none"
-                                        placeholder='{"name":"Redmi A7 Pro","brand":"Xiaomi","category":"Smartphones","template_values":{"ram":"4GB","storage":"128GB"}}'
+                                        placeholder='{"name":"Redmi A7 Pro","brand":"Xiaomi","category":"Smartphones","template_values":{"versao":"Global","battery_mah":5000}}'
                                     />
                                     <button
                                         type="button"
@@ -2157,7 +2163,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     </div>
 
                                     {/* Sugestões de Campos Customizados */}
-                                    {customFields.map(field => {
+                                    {customFields.filter(field => !isModelUnitFieldKey(field.key) && !isModelUnitFieldKey(field.label)).map(field => {
                                         const rawValue = templateValues[field.key];
                                         if (rawValue === undefined || rawValue === null || rawValue === '') return null;
                                         const values = Array.isArray(rawValue) ? rawValue : [String(rawValue)];

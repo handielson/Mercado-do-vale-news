@@ -17,6 +17,7 @@ const categories = [
 const customFields = [
   { key: 'ram', label: 'Memoria RAM', field_type: 'select' },
   { key: 'storage', label: 'Armazenamento', field_type: 'select' },
+  { key: 'sku', label: 'SKU (Código)', field_type: 'text' },
   { key: 'version', label: 'Versao', field_type: 'table_relation' },
   { key: 'imei1', label: 'Imei1', field_type: 'text' },
   { key: 'imei2', label: 'Imei2', field_type: 'text' },
@@ -69,6 +70,7 @@ const choiceOptions = {
     "specs": {
       "Memoria RAM": "4GB",
       "Armazenamento": "128GB",
+      "SKU (Código)": "RN-A7-PRO-128",
       "Versao": "Global",
       "Imei1": "123456789012345",
       "imei2": "987654321098765",
@@ -87,8 +89,9 @@ const choiceOptions = {
   assert.equal(normalized.categoryId, 'cat-smartphones');
   assert.equal(normalized.description, 'Descricao do modelo');
   assert.deepEqual(normalized.templateValues.keywords, ['redmi a7 pro', 'xiaomi']);
-  assert.equal(normalized.templateValues.ram, '4GB');
-  assert.equal(normalized.templateValues.storage, '128GB');
+  assert.equal(normalized.templateValues.ram, undefined);
+  assert.equal(normalized.templateValues.storage, undefined);
+  assert.equal(normalized.templateValues.sku, undefined);
   assert.equal(normalized.templateValues.version, 'version-global-id');
   assert.equal(normalized.templateValues.imei1, undefined);
   assert.equal(normalized.templateValues.imei2, undefined);
@@ -140,12 +143,18 @@ const choiceOptions = {
   const availableFieldsBlock = prompt.split('Campos tecnicos disponiveis hoje:')[1].split('Formato esperado:')[0];
 
   assert.match(prompt, /template_values/);
-  assert.match(prompt, /ram/);
+  assert.doesNotMatch(prompt, /"ram"/);
+  assert.doesNotMatch(prompt, /"storage"/);
+  assert.doesNotMatch(prompt, /"sku"/);
+  assert.doesNotMatch(availableFieldsBlock, /Memoria RAM/i);
+  assert.doesNotMatch(availableFieldsBlock, /Armazenamento/i);
+  assert.doesNotMatch(availableFieldsBlock, /SKU/i);
   assert.doesNotMatch(availableFieldsBlock, /imei1/i);
   assert.doesNotMatch(availableFieldsBlock, /imei2/i);
   assert.doesNotMatch(availableFieldsBlock, /serial/i);
   assert.doesNotMatch(availableFieldsBlock, /color/i);
-  assert.match(prompt, /Opcoes validas: 4GB, 6GB/);
+  assert.doesNotMatch(prompt, /Opcoes validas: 4GB, 6GB/);
+  assert.doesNotMatch(prompt, /Opcoes validas: 128GB, 256GB/);
   assert.match(prompt, /Opcoes validas: Global, Nacional/);
   assert.match(prompt, /Use apenas dados reais do produto/);
   assert.match(prompt, /Nao use dados genericos/i);
