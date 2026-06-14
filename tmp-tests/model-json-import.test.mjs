@@ -18,6 +18,10 @@ const customFields = [
   { key: 'ram', label: 'Memoria RAM', field_type: 'select' },
   { key: 'storage', label: 'Armazenamento', field_type: 'select' },
   { key: 'version', label: 'Versao', field_type: 'table_relation' },
+  { key: 'imei1', label: 'Imei1', field_type: 'text' },
+  { key: 'imei2', label: 'Imei2', field_type: 'text' },
+  { key: 'serial', label: 'Serial', field_type: 'text' },
+  { key: 'color', label: 'Color', field_type: 'table_relation' },
   { key: 'water_resistance', label: 'Protecao', field_type: 'select' },
   { key: 'screen_size', label: 'Tamanho da Tela', field_type: 'text' },
 ];
@@ -66,6 +70,10 @@ const choiceOptions = {
       "Memoria RAM": "4GB",
       "Armazenamento": "128GB",
       "Versao": "Global",
+      "Imei1": "123456789012345",
+      "imei2": "987654321098765",
+      "serial": "SN123",
+      "color": "Preto",
       "Protecao": "IP70",
       "novo_campo_futuro": "valor preservado"
     }
@@ -82,6 +90,10 @@ const choiceOptions = {
   assert.equal(normalized.templateValues.ram, '4GB');
   assert.equal(normalized.templateValues.storage, '128GB');
   assert.equal(normalized.templateValues.version, 'version-global-id');
+  assert.equal(normalized.templateValues.imei1, undefined);
+  assert.equal(normalized.templateValues.imei2, undefined);
+  assert.equal(normalized.templateValues.serial, undefined);
+  assert.equal(normalized.templateValues.color, undefined);
   assert.equal(normalized.templateValues.water_resistance, undefined);
   assert.deepEqual(normalized.missingChoices, [{
     fieldKey: 'water_resistance',
@@ -125,11 +137,18 @@ const choiceOptions = {
     choiceOptions,
   });
 
+  const availableFieldsBlock = prompt.split('Campos tecnicos disponiveis hoje:')[1].split('Formato esperado:')[0];
+
   assert.match(prompt, /template_values/);
   assert.match(prompt, /ram/);
+  assert.doesNotMatch(availableFieldsBlock, /imei1/i);
+  assert.doesNotMatch(availableFieldsBlock, /imei2/i);
+  assert.doesNotMatch(availableFieldsBlock, /serial/i);
+  assert.doesNotMatch(availableFieldsBlock, /color/i);
   assert.match(prompt, /Opcoes validas: 4GB, 6GB/);
   assert.match(prompt, /Opcoes validas: Global, Nacional/);
   assert.match(prompt, /Use apenas dados reais do produto/);
+  assert.match(prompt, /dimensoes da caixa\/embalagem/i);
   assert.match(prompt, /Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real/);
   assert.match(prompt, /screen_size/);
   assert.match(prompt, /Galaxy A15/);

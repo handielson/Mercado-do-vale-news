@@ -7,6 +7,7 @@ const normalizeText = (value) => String(value || '')
     .trim();
 
 const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+const MODEL_UNIT_FIELD_KEYS = new Set(['imei1', 'imei2', 'serial', 'color']);
 const REQUIRED_SMARTPHONE_FIELD_KEYS = new Set([
     'battery_mah',
     'cam_principal_mpx',
@@ -58,6 +59,10 @@ const findExistingId = (items, value) => {
     const raw = String(value);
     return items.some((entry) => entry.id === raw) ? raw : '';
 };
+
+export const isModelUnitFieldKey = (key) => MODEL_UNIT_FIELD_KEYS.has(
+    normalizeText(key).replace(/^specs[._-]?/, '').replace(/\s+/g, '_')
+);
 
 const normalizeKeywords = (value) => {
     if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -123,6 +128,7 @@ const mergeTemplateObject = (target, source, resolveFieldKey, emptyFields = [], 
 
     Object.entries(source).forEach(([key, value]) => {
         const fieldKey = resolveFieldKey(key);
+        if (isModelUnitFieldKey(fieldKey) || isModelUnitFieldKey(key)) return;
         if (value === undefined || value === null || value === '') {
             const field = fieldByKey.get(fieldKey);
             if (field) {
@@ -197,6 +203,7 @@ export function normalizeModelImportPayload(data, context = {}) {
     if (depth !== undefined) templateValues['dimensions.depth_cm'] = numberOrValue(depth);
 
     customFields.forEach((field) => {
+        if (isModelUnitFieldKey(field.key) || isModelUnitFieldKey(field.label)) return;
         const directValue = payload[field.key];
         const labelValue = payload[field.label];
         const value = directValue ?? labelValue;
@@ -281,6 +288,7 @@ const describeChoices = (field, choices = []) => {
 
 export function buildModelImportPrompt({ name, brand, category, customFields = [], choiceOptions = {} }) {
     const fieldLines = customFields
+        .filter((field) => !isModelUnitFieldKey(field.key) && !isModelUnitFieldKey(field.label))
         .map((field) => {
             const type = field.field_type ? `, tipo ${field.field_type}` : '';
             return `- "${field.key}" (${field.label || field.key})${type}.${describeChoices(field, choiceOptions[field.key])}`;
@@ -293,11 +301,12 @@ Regras:
 1. Retorne APENAS um objeto JSON valido. Sem markdown, sem explicacoes.
 2. Use "template_values" para todos os campos tecnicos atuais e futuros.
 3. Use apenas dados reais do produto, de ficha tecnica/fabricante/anuncio confiavel. Nao invente especificacoes.
-4. Nao inclua IMEI, serial, cor unica de aparelho ou quantidade de estoque. Esses dados pertencem ao produto, nao ao modelo.
+4. Nao inclua IMEI, serial, cor unica de aparelho ou quantidade de estoque. Esses dados pertencem ao cadastro individual/produto, nao ao modelo.
 5. Em textos, evite aspas duplas internas; use aspas simples se precisar.
 6. Preencha todas as informacoes basicas reais do smartphone quando existirem em fonte confiavel, especialmente slot para cartao/microSD/SIM, entrada de fone, biometria, rede, NFC, resistencia, tela, chipset, bateria e carregamento.
 7. Se nao tiver certeza sobre um dado tecnico, deixe o campo ausente ou null para o painel avisar que faltou dado real. Nao crie nada.
 8. Para campos de escolha, use o valor real do produto. Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real no JSON para o painel avisar que a opcao precisa ser cadastrada. Nao adapte para uma opcao parecida.
+9. Em "logistics", preencha peso e dimensoes da caixa/embalagem quando a ficha tecnica/anuncio confiavel informar esses dados. Nao use dimensoes do aparelho nu como dimensoes da embalagem.
 
 Contexto atual:
 - Nome do modelo: ${name || '[preencher]'}

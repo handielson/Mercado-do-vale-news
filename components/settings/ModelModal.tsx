@@ -15,7 +15,7 @@ import { CurrencyInput } from '../ui/CurrencyInput';
 import { tableDataService, type TableOption } from '../../services/table-data';
 import { CategorySelect } from '../products/CategorySelect';
 import { ColorImageManager } from './ColorImageManager';
-import { buildModelImportPrompt, normalizeModelImportPayload, parseModelImportJson } from './modelJsonImport.js';
+import { buildModelImportPrompt, isModelUnitFieldKey, normalizeModelImportPayload, parseModelImportJson } from './modelJsonImport.js';
 import { generateModelJsonWithAi } from '../../services/modelAiService';
 
 interface ModelModalProps {
@@ -78,6 +78,14 @@ const NON_TEMPLATE_CATEGORY_KEYS = new Set([
     'dimensions.width_cm',
     'dimensions.height_cm',
     'dimensions.depth_cm',
+    'imei1',
+    'imei2',
+    'serial',
+    'color',
+    'specs.imei1',
+    'specs.imei2',
+    'specs.serial',
+    'specs.color',
 ]);
 
 const CATEGORY_FIELD_LABELS: Record<string, string> = {
@@ -227,6 +235,7 @@ const formatCategoryFieldLabel = (key: string) => {
 
 const shouldCreateTemplateFieldFromCategoryConfig = (key: string, value: unknown) => {
     if (NON_TEMPLATE_CATEGORY_KEYS.has(key)) return false;
+    if (isModelUnitFieldKey(key)) return false;
     if (value === 'off' || value === 'hidden') return false;
     return value !== undefined && value !== null;
 };
@@ -535,6 +544,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     };
     const visibleSpecFields = templateFields
         .filter(f => f.category === 'spec')
+        .filter(field => !isModelUnitFieldKey(field.key) && !isModelUnitFieldKey(field.label))
         .filter(isFieldEnabledForCategory)
         .filter(field => !isFieldBlockedForCategory(field))
         .filter(field => !isDuplicateTemplateField(field));
