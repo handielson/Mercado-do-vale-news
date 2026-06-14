@@ -39,9 +39,33 @@ const BASE_SPEC_FIELD_KEYS = new Set([
     'battery_health',
 ]);
 
+const PHONE_ONLY_BASE_SPEC_FIELD_KEYS = new Set([
+    'imei1',
+    'imei2',
+    'serial',
+    'storage',
+    'ram',
+    'version',
+    'battery_health',
+]);
+
+const NON_SERIALIZED_CATEGORY_SLUG_PATTERNS = [
+    'fone-de-ouvido',
+    'headphone',
+    'earphone',
+    'headset',
+];
+
 const normalizeSpecFieldKey = (key?: string | null) => {
     if (!key || typeof key !== 'string') return '';
     return key.trim().replace(/^specs\./, '');
+};
+
+const normalizeCategoryText = (value?: string | null) => {
+    return String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
 };
 
 const isEnabledRequirement = (requirement: unknown): requirement is FieldRequirement => {
@@ -82,6 +106,11 @@ export function ProductSpecifications({
     const [uniqueErrors, setUniqueErrors] = useState<Record<string, string>>({});
     const [checkingField, setCheckingField] = useState<string | null>(null);
     const hasExplicitCategoryFields = Boolean(categoryConfig?.custom_fields?.length);
+    const categorySlug = normalizeCategoryText(categoryConfig?.__category_slug);
+    const categoryName = normalizeCategoryText(categoryConfig?.__category_name);
+    const isNonSerializedLegacyCategory = !hasExplicitCategoryFields && NON_SERIALIZED_CATEGORY_SLUG_PATTERNS.some(pattern =>
+        categorySlug.includes(pattern) || categoryName.includes(pattern.replace(/-/g, ' '))
+    );
 
     const configuredBaseSpecRequirements = useMemo(() => {
         const requirements = new Map<string, FieldRequirement>();
@@ -106,6 +135,10 @@ export function ProductSpecifications({
         const legacyRequirement = categoryConfig?.[key];
 
         if (legacyRequirement === 'off' || legacyRequirement === 'hidden') return false;
+
+        if (isNonSerializedLegacyCategory && PHONE_ONLY_BASE_SPEC_FIELD_KEYS.has(key)) {
+            return false;
+        }
 
         if (hasExplicitCategoryFields) {
             return configuredBaseSpecRequirements.has(key);

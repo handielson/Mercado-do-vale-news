@@ -370,7 +370,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             const category = await categoryService.getById(selectedCategoryId);
             if (category) {
                 console.log("Config carregada:", category.config); // Debug
-                setCategoryConfig(category.config);
+                setCategoryConfig({
+                    ...category.config,
+                    __category_id: category.id,
+                    __category_slug: category.slug,
+                    __category_name: category.name,
+                    __category_parent_id: category.parent_id,
+                });
                 setCategoryWarrantyDays(category.warranty_days || 90);
             }
         } catch (error) {
