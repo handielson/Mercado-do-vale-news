@@ -24917,6 +24917,27 @@ async function runMigrations() {
   `);
   console.log('[migration] customer_debt_payment_intents table: OK');
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS legacy_customer_purchases (
+      id VARCHAR(120) PRIMARY KEY,
+      legacy_sale_id VARCHAR(80) NOT NULL,
+      customer_id VARCHAR(255) NOT NULL,
+      sale_date DATETIME NOT NULL,
+      total BIGINT NOT NULL DEFAULT 0,
+      payment_method VARCHAR(80) NULL,
+      installments INT NULL,
+      notes TEXT NULL,
+      items_json JSON NOT NULL,
+      raw_json JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_legacy_customer_purchases_sale (legacy_sale_id),
+      INDEX idx_legacy_customer_purchases_customer_date (customer_id, sale_date),
+      INDEX idx_legacy_customer_purchases_date (sale_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] legacy_customer_purchases table: OK');
+
   await addColumnIfMissing('customers', 'is_delivery_worker', 'TINYINT(1) NOT NULL DEFAULT 0');
 
   await pool.query(`

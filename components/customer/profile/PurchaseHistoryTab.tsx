@@ -12,6 +12,7 @@ import { getCoinBalance, getCoinsEarnedForReference } from '../../../services/ca
 import { generateLegacySalePdf } from '../../../utils/legacySalePdfGenerator';
 import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
+import { getLegacyCustomerPurchases, type LegacyCustomerPurchase } from '../../../services/legacyCustomerPurchasesService';
 import type { Customer } from '../../../types/customer';
 import {
     createCustomerDebtMercadoPagoIntent,
@@ -94,6 +95,7 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
     const [loading, setLoading] = useState(true);
     const [printingReceiptId, setPrintingReceiptId] = useState<string | null>(null);
     const [printingComprovanteId, setPrintingComprovanteId] = useState<string | null>(null);
+    const [legacyPurchases, setLegacyPurchases] = useState<LegacyCustomerPurchase[]>([]);
     const [companyHeader, setCompanyHeader] = useState<{ name: string; logoUrl: string }>({ name: 'Mercado do Vale', logoUrl: '' });
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed' | 'attention'>('all');
     const [customerDebts, setCustomerDebts] = useState<CustomerDebt[]>([]);
@@ -238,6 +240,12 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                     listCustomerDebts(effectiveCustomer.id).catch(() => []),
                 ]);
                 setCustomerDebts(debtRows);
+                getLegacyCustomerPurchases(effectiveCustomer.id)
+                    .then(setLegacyPurchases)
+                    .catch((error) => {
+                        console.error('Erro ao carregar historico legado:', error);
+                        setLegacyPurchases([]);
+                    });
 
                 // Map online orders to match the Sale structure for UI compatibility.
                 // Preservamos o status original do pedido (awaiting_payment, paid,
@@ -350,6 +358,27 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
         };
         return sales.filter((sale) => statusGroups[statusFilter].has(String(sale.status)));
     }, [sales, statusFilter]);
+
+    const legacySummary = useMemo(() => {
+        return legacyPurchases.reduce(
+            (acc, purchase) => {
+                acc.total += 1;
+                acc.totalSpent += Number(purchase.total) || 0;
+                if (!acc.lastDate || String(purchase.sale_date || '') > acc.lastDate) {
+                    acc.lastDate = String(purchase.sale_date || '');
+                }
+                return acc;
+            },
+            { total: 0, totalSpent: 0, lastDate: '' }
+        );
+    }, [legacyPurchases]);
+
+    const formatDate = (value?: string | null) => {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleDateString('pt-BR');
+    };
 
     const filters = [
         { id: 'all' as const, label: 'Todos os pedidos', count: purchaseSummary.total },
@@ -474,6 +503,83 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                     <p className="mt-2 text-2xl font-semibold text-slate-800">{fmt(purchaseSummary.totalSpent)}</p>
                 </div>
             </div>
+
+            {legacyPurchases.length > 0 && (
+                <section className="rounded-2xl border border-amber-200 bg-white p-5 shadow-sm">
+                    <div className="flex flex-col gap-3 border-b border-amber-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <p className="text-sm font-semibold text-amber-700">Historico do sistema antigo</p>
+                            <h3 className="mt-1 text-xl font-semibold text-slate-800">Compras legadas</h3>
+                            <p className="mt-1 text-sm text-slate-500">
+                                Registros importados apenas para consulta. Nao movimentam estoque, caixa, crediario, cashback ou Bling.
+                            </p>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                            <div className="rounded-xl bg-amber-50 px-3 py-2">
+                                <div className="font-bold text-slate-800">{legacySummary.total}</div>
+                                <div className="text-slate-500">compras</div>
+                            </div>
+                            <div className="rounded-xl bg-amber-50 px-3 py-2">
+                                <div className="font-bold text-slate-800">{fmt(legacySummary.totalSpent)}</div>
+                                <div className="text-slate-500">total</div>
+                            </div>
+                            <div className="rounded-xl bg-amber-50 px-3 py-2">
+                                <div className="font-bold text-slate-800">{formatDate(legacySummary.lastDate)}</div>
+                                <div className="text-slate-500">ultima</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                        {legacyPurchases.map((purchase) => (
+                            <article key={purchase.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">
+                                                <Clock className="h-3 w-3" />
+                                                Informativo
+                                            </span>
+                                            <span className="text-sm font-bold text-slate-800">Venda legada #{purchase.legacy_sale_id}</span>
+                                        </div>
+                                        <p className="mt-1 text-sm text-slate-500">
+                                            {formatDate(purchase.sale_date)}
+                                            {purchase.payment_method ? ` · ${paymentLabel(purchase.payment_method)}` : ''}
+                                            {purchase.installments && purchase.installments > 1 ? ` · ${purchase.installments}x` : ''}
+                                        </p>
+                                    </div>
+                                    <div className="text-left sm:text-right">
+                                        <div className="text-xs font-bold uppercase text-slate-400">Total legado</div>
+                                        <div className="text-lg font-bold text-slate-900">{fmt(purchase.total)}</div>
+                                    </div>
+                                </div>
+
+                                {purchase.items.length > 0 && (
+                                    <div className="mt-4 space-y-2">
+                                        {purchase.items.map((item, index) => (
+                                            <div key={`${purchase.id}-${index}`} className="flex items-start justify-between gap-4 border-t border-slate-200 pt-2 text-sm">
+                                                <div>
+                                                    <div className="font-medium text-slate-800">
+                                                        {item.quantity > 1 ? `${item.quantity}x ` : ''}{item.description}
+                                                    </div>
+                                                    {item.identifier && <div className="mt-0.5 text-xs text-slate-500">{item.identifier}</div>}
+                                                </div>
+                                                <div className="shrink-0 font-bold text-slate-800">{fmt(item.subtotal)}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {purchase.notes && (
+                                    <div className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-slate-500">
+                                        {purchase.notes}
+                                    </div>
+                                )}
+                            </article>
+                        ))}
+                    </div>
+                </section>
+            )}
 
             {openCustomerDebts.length > 0 && (
                 <section className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
@@ -636,7 +742,7 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                 </div>
             </div>
 
-            {sales.length === 0 ? (
+            {sales.length === 0 && legacyPurchases.length === 0 ? (
                 <div className="rounded-2xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
                     <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
                         <ShoppingBag className="text-slate-400" size={32} />
@@ -654,6 +760,12 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                         <Package size={20} />
                         Ver Catalogo
                     </a>
+                </div>
+            ) : sales.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
+                    <ShoppingBag className="mx-auto h-8 w-8 text-slate-400" />
+                    <h3 className="mt-3 text-lg font-bold text-slate-900">Nenhum pedido novo encontrado</h3>
+                    <p className="mt-1 text-sm text-slate-500">Este cliente possui apenas historico informativo do sistema antigo.</p>
                 </div>
             ) : filteredSales.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
