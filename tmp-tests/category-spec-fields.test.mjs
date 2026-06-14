@@ -7,6 +7,7 @@ import {
 const receptorConfig = {
   iks: 'required',
   sks: 'required',
+  irda: 'required',
   serial: 'required',
   ram: 'off',
   custom_fields: [],
@@ -22,9 +23,11 @@ assert.equal(CATEGORY_SPEC_FIELD_METADATA.iks.type, 'select');
 assert.deepEqual(CATEGORY_SPEC_FIELD_METADATA.iks.options, ['Sim', 'Não', 'Consulte']);
 assert.equal(CATEGORY_SPEC_FIELD_METADATA.sks.type, 'select');
 assert.deepEqual(CATEGORY_SPEC_FIELD_METADATA.sks.options, ['Sim', 'Não', 'Consulte']);
+assert.equal(CATEGORY_SPEC_FIELD_METADATA.irda.type, 'select');
+assert.deepEqual(CATEGORY_SPEC_FIELD_METADATA.irda.options, ['Sim', 'Não', 'Consulte']);
 
 assert.deepEqual(
-  getCategoryDynamicSpecFields(receptorConfig, { iks: 'Sim' }).map(field => field.key),
+  getCategoryDynamicSpecFields(receptorConfig, { iks: 'Sim', irda: 'Não' }).map(field => field.key),
   ['serial']
 );
 

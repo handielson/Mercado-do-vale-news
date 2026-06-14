@@ -78,6 +78,29 @@ assert.match(
 
 assert.match(
   source,
+  /CATEGORY_FIELD_FALLBACKS[\s\S]*irda[\s\S]*field_type: 'select'[\s\S]*options: \['Sim', 'N(?:Ã£|ã)o', 'Consulte'\]/,
+  'Fallback model fields must render IrDA as a select instead of a plain text input'
+);
+
+function assertFallbackFieldType(key, fieldType) {
+  const fallbackBlock = source.match(new RegExp(`${key}: \\{([\\s\\S]*?)\\n    \\}`))?.[1] || '';
+  assert.match(
+    fallbackBlock,
+    new RegExp(`field_type: '${fieldType}'`),
+    `Fallback model field ${key} must render as ${fieldType} instead of plain text`
+  );
+}
+
+for (const key of ['iks', 'sks', 'irda', 'nfc', 'entrada_fone_de_ouvido', 'celular_slot_para_cartao']) {
+  assertFallbackFieldType(key, 'select');
+}
+
+for (const key of ['battery_mah', 'display', 'cam_principal_mpx', 'cam_selfie_mpx', 'celular_fps_display', 'antutu', 'peso_g']) {
+  assertFallbackFieldType(key, 'number');
+}
+
+assert.match(
+  source,
   /Object\.keys\(templateValues \|\| \{\}\)\.map/,
   'Fallback model fields must include keys already saved on the model, such as memoria_ram_virtual'
 );

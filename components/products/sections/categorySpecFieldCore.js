@@ -9,6 +9,11 @@ export const CATEGORY_SPEC_FIELD_METADATA = {
         type: 'select',
         options: ['Sim', 'Não', 'Consulte'],
     },
+    irda: {
+        label: 'IrDA',
+        type: 'select',
+        options: ['Sim', 'Não', 'Consulte'],
+    },
 };
 
 const IGNORED_CATEGORY_CONFIG_KEYS = new Set([
@@ -21,6 +26,7 @@ const IGNORED_CATEGORY_CONFIG_KEYS = new Set([
     'unique_fields',
     'iks',
     'sks',
+    'irda',
 ]);
 
 export function getCategoryDynamicSpecFields(categoryConfig, templateValues = {}) {

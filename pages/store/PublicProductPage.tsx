@@ -1766,9 +1766,21 @@ export const PublicProductPage: React.FC = () => {
                                             celular_biometria: 'Biometria',
                                             celular_tipo_de_protecao_de_tela: 'Proteção de tela',
                                             celular_fps_display: 'Display FPS',
+                                            resolucao_tela: 'Resolução da tela',
+                                            taxa_atualizacao_hz: 'Taxa de atualização',
+                                            brilho_nits: 'Brilho',
                                             pontuacao_dxomak: 'Pontuação Dxomak',
                                             cam_principal_mpx: 'Câm. Principal (Mpx)',
                                             cam_selfie_mpx: 'Câm. Selfie (Mpx)',
+                                            camera_principal_mpx: 'Câm. Principal (Mpx)',
+                                            camera_selfie_mpx: 'Câm. Selfie (Mpx)',
+                                            camera_ultrawide_mpx: 'Câm. Ultrawide (Mpx)',
+                                            camera_macro_mpx: 'Câm. Macro (Mpx)',
+                                            camera_depth_mpx: 'Câm. Profundidade (Mpx)',
+                                            camera_teleobjetiva_mpx: 'Câm. Teleobjetiva (Mpx)',
+                                            camera_periscopio_mpx: 'Câm. Periscópio (Mpx)',
+                                            camera_traseira_mpx: 'Câm. Traseira (Mpx)',
+                                            camera_frontal_mpx: 'Câm. Frontal (Mpx)',
                                             rede_operadora: 'Rede Operadora',
                                             tipo_de_tela: 'Formato de tela',
                                             tipo_de_display: 'Display de',
@@ -1777,8 +1789,18 @@ export const PublicProductPage: React.FC = () => {
                                             chipset: 'Chipset',
                                             processador: 'Processador',
                                             carregamento: 'Carregamento',
+                                            carregamento_w: 'Carregamento (W)',
                                             gpu: 'GPU',
+                                            cpu: 'CPU',
+                                            litografia_nm: 'Litografia',
+                                            nucleos_cpu: 'Núcleos da CPU',
                                             nfc: 'NFC',
+                                            irda: 'IrDA',
+                                            gps: 'GPS',
+                                            bluetooth: 'Bluetooth',
+                                            wifi: 'Wi-Fi',
+                                            usb: 'USB',
+                                            sim: 'SIM',
                                             rede: 'Rede',
                                             camera: 'Câmera',
                                             camera_traseira_video: 'Câmera traseira vídeo',
@@ -1797,31 +1819,31 @@ export const PublicProductPage: React.FC = () => {
                                                 id: 'tela',
                                                 label: 'Tela',
                                                 icon: Monitor,
-                                                keys: ['display', 'tipo_de_display', 'tipo_de_tela', 'celular_fps_display', 'celular_tipo_de_protecao_de_tela']
+                                                keys: ['display', 'tipo_de_display', 'tipo_de_tela', 'celular_fps_display', 'taxa_atualizacao_hz', 'brilho_nits', 'resolucao_tela', 'celular_tipo_de_protecao_de_tela']
                                             },
                                             {
                                                 id: 'camera',
                                                 label: 'Câmeras',
                                                 icon: Camera,
-                                                keys: ['cam_principal_mpx', 'cam_selfie_mpx', 'camera', 'camera_traseira_video', 'camera_frontal_video', 'pontuacao_dxomak']
+                                                keys: ['cam_principal_mpx', 'cam_selfie_mpx', 'camera_principal_mpx', 'camera_selfie_mpx', 'camera_ultrawide_mpx', 'camera_macro_mpx', 'camera_depth_mpx', 'camera_teleobjetiva_mpx', 'camera_periscopio_mpx', 'camera_traseira_mpx', 'camera_frontal_mpx', 'camera', 'camera_traseira_video', 'camera_frontal_video', 'pontuacao_dxomak']
                                             },
                                             {
                                                 id: 'desempenho',
                                                 label: 'Processamento',
                                                 icon: Cpu,
-                                                keys: ['chipset', 'processador', 'cpu', 'gpu', 'antutu']
+                                                keys: ['processador', 'cpu', 'gpu', 'chipset', 'antutu', 'litografia_nm', 'nucleos_cpu']
                                             },
                                             {
                                                 id: 'bateria',
                                                 label: 'Bateria',
                                                 icon: Battery,
-                                                keys: ['battery_mah', 'battery_health', 'carregamento']
+                                                keys: ['battery_mah', 'battery_health', 'carregamento', 'carregamento_w']
                                             },
                                             {
                                                 id: 'conexoes',
                                                 label: 'Conectividade',
                                                 icon: Wifi,
-                                                keys: ['rede_operadora', 'rede', 'network', 'network_type', 'nfc', 'bluetooth', 'wifi', 'usb', 'sim', 'celular_slot_para_cartao', 'entrada_fone_de_ouvido']
+                                                keys: ['rede_operadora', 'rede', 'network', 'network_type', 'nfc', 'irda', 'gps', 'bluetooth', 'wifi', 'usb', 'sim', 'celular_slot_para_cartao', 'entrada_fone_de_ouvido']
                                             },
                                             {
                                                 id: 'fisico',
@@ -1887,12 +1909,12 @@ export const PublicProductPage: React.FC = () => {
                                         function resolveSpecGroupId(item: { key: string, label: string }): string | null {
                                             const normalized = normalizeSpecText(`${item.key} ${item.label}`);
 
-                                            if (normalized.includes('camera') || normalized.includes('cam_')) return 'camera';
+                                            if (normalized.includes('camera') || normalized.includes('cam_') || normalized.includes('megapixel') || normalized.includes('mpx') || normalized.includes('selfie') || normalized.includes('ultrawide') || normalized.includes('macro') || normalized.includes('teleobjetiva') || normalized.includes('periscopio') || normalized.includes('video')) return 'camera';
                                             if (normalized.includes('largura') || normalized.includes('altura') || normalized.includes('profundidade') || normalized.includes('dimensions') || normalized.includes('peso')) return 'logistica';
-                                            if (normalized.includes('tela') || normalized.includes('display') || normalized.includes('resolucao') || normalized.includes('pixels') || normalized.includes('brilho')) return 'tela';
-                                            if (normalized.includes('bateria') || normalized.includes('mah') || normalized.includes('carregamento')) return 'bateria';
-                                            if (normalized.includes('processador') || normalized.includes('chipset') || normalized.includes('cpu') || normalized.includes('gpu') || normalized.includes('antutu')) return 'desempenho';
-                                            if (normalized.includes('wifi') || normalized.includes('wi_fi') || normalized.includes('bluetooth') || normalized.includes('nfc') || normalized.includes('rede') || normalized.includes('sim') || normalized.includes('usb') || normalized.includes('fone')) return 'conexoes';
+                                            if (normalized.includes('tela') || normalized.includes('display') || normalized.includes('resolucao') || normalized.includes('pixels') || normalized.includes('brilho') || normalized.includes('nits') || normalized.includes('hz') || normalized.includes('fps') || normalized.includes('refresh')) return 'tela';
+                                            if (normalized.includes('bateria') || normalized.includes('mah') || normalized.includes('carregamento') || normalized.includes('carga') || normalized.includes('watt')) return 'bateria';
+                                            if (normalized.includes('processador') || normalized.includes('chipset') || normalized.includes('cpu') || normalized.includes('gpu') || normalized.includes('antutu') || normalized.includes('snapdragon') || normalized.includes('mediatek') || normalized.includes('exynos') || normalized.includes('helio') || normalized.includes('dimensity') || normalized.includes('litografia')) return 'desempenho';
+                                            if (normalized.includes('wifi') || normalized.includes('wi_fi') || normalized.includes('bluetooth') || normalized.includes('nfc') || normalized.includes('irda') || normalized.includes('infravermelho') || normalized.includes('gps') || normalized.includes('rede') || normalized.includes('sim') || normalized.includes('usb') || normalized.includes('fone')) return 'conexoes';
                                             if (normalized.includes('biometria') || normalized.includes('resistencia') || normalized.includes('ip64') || normalized.includes('seguranca')) return 'fisico';
 
                                             return null;

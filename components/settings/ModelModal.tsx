@@ -107,6 +107,7 @@ const CATEGORY_FIELD_LABELS: Record<string, string> = {
     keyboard_support: 'Suporte a Teclado',
     materials: 'Materiais',
     nfc: 'NFC',
+    irda: 'IrDA',
     iks: 'IKS',
     peso_g: 'Peso (g)',
     pontuacao_dxomak: 'Pontuacao DXOMARK',
@@ -159,11 +160,48 @@ const translateTemplateValuesToPortuguese = (values: Record<string, any>) => Obj
 );
 
 const CATEGORY_FIELD_FALLBACKS: Record<string, Partial<CustomField>> = {
+    antutu: {
+        field_type: 'number',
+    },
+    battery_mah: {
+        field_type: 'number',
+    },
+    cam_principal_mpx: {
+        field_type: 'number',
+    },
+    cam_selfie_mpx: {
+        field_type: 'number',
+    },
+    celular_fps_display: {
+        field_type: 'number',
+    },
+    celular_slot_para_cartao: {
+        field_type: 'select',
+        options: ['Sim', 'Não', 'Consulte'],
+    },
+    display: {
+        field_type: 'number',
+    },
+    entrada_fone_de_ouvido: {
+        field_type: 'select',
+        options: ['Sim', 'Não', 'Consulte'],
+    },
     iks: {
         field_type: 'select',
         options: ['Sim', 'Não', 'Consulte'],
     },
+    nfc: {
+        field_type: 'select',
+        options: ['Sim', 'Não', 'Consulte'],
+    },
+    peso_g: {
+        field_type: 'number',
+    },
     sks: {
+        field_type: 'select',
+        options: ['Sim', 'Não', 'Consulte'],
+    },
+    irda: {
         field_type: 'select',
         options: ['Sim', 'Não', 'Consulte'],
     },
