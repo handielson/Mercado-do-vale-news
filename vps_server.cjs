@@ -17020,7 +17020,7 @@ fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req
       max_output_tokens: 2500,
     };
     if (/^gpt-5/i.test(model)) {
-      requestBody.reasoning = { effort: 'minimal' };
+      requestBody.reasoning = { effort: 'low' };
       requestBody.text = { verbosity: 'low' };
     }
     let responseResult;

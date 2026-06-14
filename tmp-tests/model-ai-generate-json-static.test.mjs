@@ -119,6 +119,15 @@ for (const [label, source] of [['vps_server.js', server], ['vps_server.cjs', ser
     `${label} must restrict the first web search to trusted domains`,
   );
 
+  const generationRoute = source.match(/fastify\.post\('\/models\/generate-json'[\s\S]*?fastify\.get\('\/models\/:id'/)?.[0] || '';
+  assert.ok(generationRoute, `${label} must keep the model AI generation route before /models/:id`);
+
+  assert.doesNotMatch(
+    generationRoute,
+    /reasoning\s*=\s*\{\s*effort:\s*['"]minimal['"]\s*\}/,
+    `${label} must not use GPT-5 minimal reasoning with web_search because OpenAI rejects that combination`,
+  );
+
   assert.match(
     source,
     /CREATE TABLE IF NOT EXISTS model_ai_generation_logs/,
