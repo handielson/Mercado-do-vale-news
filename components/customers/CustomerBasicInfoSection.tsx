@@ -175,6 +175,16 @@ export default function CustomerBasicInfoSection({
                         <option value="inactive">Inativo</option>
                     </select>
                 </div>
+
+                <label className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                    <input
+                        type="checkbox"
+                        checked={formData.is_delivery_worker === true}
+                        onChange={(e) => onFieldUpdate('is_delivery_worker', e.target.checked)}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>Este cliente tambem faz entregas</span>
+                </label>
             </div>
         </div>
     );

@@ -1657,6 +1657,501 @@ function formatDateOnly(value) {
   return date.toISOString().slice(0, 10);
 }
 
+function formatDateTimeSql(value) {
+  const date = value ? new Date(value) : new Date();
+  const safe = Number.isNaN(date.getTime()) ? new Date() : date;
+  return safe.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function normalizeDeliveryLedgerAmount(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+}
+
+function parseDeliveryJson(value, fallback = null) {
+  if (!value) return fallback;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return fallback;
+  }
+}
+
+function buildDeliveryRouteUrl(addressText, location) {
+  if (location?.latitude && location?.longitude) {
+    return `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`;
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText || '')}`;
+}
+
+function normalizeDeliveryAddress(address, customer = {}) {
+  if (!address || typeof address !== 'object') address = {};
+  return {
+    street: address.street || address.logradouro || customer.address_street || '',
+    number: address.number || address.numero || customer.address_number || '',
+    complement: address.complement || address.complemento || customer.address_complement || '',
+    neighborhood: address.neighborhood || address.bairro || customer.address_neighborhood || '',
+    city: address.city || address.localidade || customer.address_city || '',
+    state: address.state || address.uf || customer.address_state || '',
+    zipCode: address.zipCode || address.zip_code || address.cep || address.postal_code || customer.address_zip_code || '',
+    reference: address.reference || address.referencia || customer.address_reference || '',
+    latitude: address.latitude || address.lat || customer.address_lat || '',
+    longitude: address.longitude || address.lng || customer.address_lng || '',
+  };
+}
+
+function buildDeliveryAddressText(address) {
+  if (!address || typeof address !== 'object') return '';
+  const firstLine = [address.street || address.logradouro, address.number || address.numero].filter(Boolean).join(', ');
+  const cityLine = [
+    address.neighborhood || address.bairro,
+    [address.city || address.localidade, address.state || address.uf].filter(Boolean).join('/'),
+  ].filter(Boolean).join(' - ');
+  const cep = address.zipCode || address.zip_code || address.cep || address.postal_code;
+  return [
+    firstLine,
+    cityLine,
+    cep ? `CEP: ${cep}` : '',
+    address.complement || address.reference ? `Complemento: ${address.complement || address.reference}` : '',
+  ].filter(Boolean).join(' | ');
+}
+
+async function lookupDeliveryCepLocation(cepValue) {
+  const cep = String(cepValue || '').replace(/\D/g, '');
+  if (cep.length !== 8) return null;
+  try {
+    const res = await fetch(`https://brasilapi.com.br/api/cep/v2/${cep}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const coordinates = data?.location?.coordinates || {};
+    return {
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      street: data.street,
+      neighborhood: data.neighborhood,
+      city: data.city,
+      state: data.state,
+      cep,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function mapCustomerDeliveryJob(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    receipt_snapshot_json: parseDeliveryJson(row.receipt_snapshot_json, {}),
+  };
+}
+
+const DEFAULT_DELIVERY_COMPLETION_WHATSAPP_TEMPLATE = [
+  'Ola, {cliente}! Obrigado pela compra no Mercado do Vale.',
+  'Sua entrega do pedido {pedido} foi efetuada com sucesso.',
+  'Qualquer duvida, estamos a disposicao.',
+].join('\n');
+
+function renderCustomerDeliveryTemplate(template, job) {
+  const value = String(template || DEFAULT_DELIVERY_COMPLETION_WHATSAPP_TEMPLATE);
+  const replacements = {
+    cliente: job?.buyer_name || 'cliente',
+    pedido: job?.order_number || job?.sale_id || '',
+    entregador: job?.delivery_person_name || '',
+    valor_entrega: ((normalizeDeliveryLedgerAmount(job?.delivery_amount) || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+    data_entrega: job?.delivered_at ? String(job.delivered_at).slice(0, 19) : formatDateTimeSql(new Date()),
+  };
+  return value.replace(/\{(cliente|pedido|entregador|valor_entrega|data_entrega)\}/g, (_, key) => replacements[key] || '');
+}
+
+function normalizeDeliveryWhatsAppNumber(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('55')) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
+}
+
+async function logCustomerDeliveryJobEvent(jobId, level, eventType, message, details = null) {
+  if (!jobId) return;
+  try {
+    await pool.query(
+      `INSERT INTO customer_delivery_job_logs
+        (id, job_id, level, event_type, message, details_json)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID(),
+        jobId,
+        level,
+        eventType,
+        String(message || '').slice(0, 1000),
+        details ? JSON.stringify(details) : null,
+      ]
+    );
+  } catch (err) {
+    console.warn('[customer-delivery-log] failed:', err.message);
+  }
+}
+
+async function getCustomerDeliverySettings() {
+  const [rows] = await pool.query('SELECT * FROM customer_delivery_settings WHERE id = 1 LIMIT 1');
+  const row = rows?.[0] || {};
+  return {
+    id: 1,
+    completion_whatsapp_enabled: row.completion_whatsapp_enabled == null ? true : Number(row.completion_whatsapp_enabled) === 1,
+    completion_whatsapp_template: row.completion_whatsapp_template || DEFAULT_DELIVERY_COMPLETION_WHATSAPP_TEMPLATE,
+    updated_at: row.updated_at || null,
+  };
+}
+
+async function sendDeliveryWhatsappText(phone, text) {
+  const number = normalizeDeliveryWhatsAppNumber(phone);
+  if (!number) throw new Error('Telefone do cliente nao informado');
+
+  let settings = null;
+  try {
+    const [rows] = await pool.query('SELECT * FROM whatsapp_settings WHERE is_active = 1 ORDER BY updated_at DESC, created_at DESC LIMIT 1');
+    settings = rows?.[0] || null;
+  } catch {
+    settings = null;
+  }
+
+  if (settings?.api_url && settings?.api_key && settings?.instance_name) {
+    const baseUrl = String(settings.api_url).replace(/\/+$/, '');
+    const response = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(settings.instance_name)}`, {
+      method: 'POST',
+      headers: {
+        apikey: String(settings.api_key),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ number, text }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const body = await response.text();
+    let parsed = body;
+    try { parsed = JSON.parse(body); } catch {}
+    return { ok: response.ok, status: response.status, body: parsed };
+  }
+
+  return sendAutoresponderEvolutionTextMessage(number, text);
+}
+
+async function notifyCustomerDeliveryCompleted(job) {
+  if (!job?.id) return;
+  const settings = await getCustomerDeliverySettings();
+  if (!settings.completion_whatsapp_enabled) {
+    await logCustomerDeliveryJobEvent(job.id, 'info', 'completion_whatsapp_skipped', 'Mensagem de conclusao desativada.');
+    return;
+  }
+  const text = renderCustomerDeliveryTemplate(settings.completion_whatsapp_template, job);
+  try {
+    const result = await sendDeliveryWhatsappText(job.buyer_phone, text);
+    if (!result?.ok) throw new Error(`WhatsApp API retornou HTTP ${result?.status || 'desconhecido'}`);
+    await pool.query(
+      `UPDATE customer_delivery_jobs
+          SET completion_whatsapp_sent_at = CURRENT_TIMESTAMP,
+              completion_whatsapp_error = NULL,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [job.id]
+    );
+    await logCustomerDeliveryJobEvent(job.id, 'info', 'completion_whatsapp_sent', 'Mensagem de conclusao enviada ao cliente.', { status: result.status });
+  } catch (err) {
+    const message = err?.message || 'Falha ao enviar mensagem de conclusao pelo WhatsApp';
+    await pool.query(
+      `UPDATE customer_delivery_jobs
+          SET completion_whatsapp_error = ?,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [message.slice(0, 1000), job.id]
+    );
+    await logCustomerDeliveryJobEvent(job.id, 'error', 'completion_whatsapp_failed', message, { buyer_phone: job.buyer_phone || null });
+  }
+}
+
+async function createCustomerDeliveryJobForSale(connection, sale) {
+  const customerId = String(sale.delivery_person_customer_id || '').trim();
+  const amount = normalizeDeliveryLedgerAmount(sale.delivery_total || sale.delivery_cost_store || 0);
+  const deliveryType = String(sale.delivery_type || '').trim();
+  if (!customerId || amount <= 0 || (deliveryType !== 'store_delivery' && deliveryType !== 'hybrid_delivery')) return null;
+
+  const saleId = String(sale.id || '').trim();
+  if (!saleId) return null;
+
+  const jobData = await buildCustomerDeliveryJobData(connection, sale);
+  const [existing] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE sale_id = ? LIMIT 1', [saleId]);
+  if (existing?.[0]) {
+    await connection.query(
+      `UPDATE customer_delivery_jobs
+          SET order_number = ?,
+              buyer_customer_id = ?,
+              buyer_name = ?,
+              buyer_phone = ?,
+              delivery_person_customer_id = ?,
+              delivery_amount = ?,
+              payment_amount = ?,
+              delivery_address_text = ?,
+              delivery_route_url = ?,
+              receipt_snapshot_json = ?,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [
+        jobData.orderNumber,
+        jobData.buyerCustomerId,
+        jobData.buyerName,
+        jobData.buyerPhone,
+        customerId,
+        amount,
+        amount,
+        jobData.addressText,
+        jobData.routeUrl,
+        JSON.stringify(jobData.snapshot),
+        existing[0].id,
+      ]
+    );
+    const [updated] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [existing[0].id]);
+    return mapCustomerDeliveryJob(updated?.[0] || existing[0]);
+  }
+
+  const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+  const token = crypto.randomBytes(32).toString('hex');
+
+  await connection.query(
+    `INSERT INTO customer_delivery_jobs
+      (id, token, sale_id, order_number, buyer_customer_id, buyer_name, buyer_phone,
+       delivery_person_customer_id, delivery_amount, payment_amount, delivery_address_text,
+       delivery_route_url, receipt_snapshot_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      token,
+      saleId,
+      jobData.orderNumber,
+      jobData.buyerCustomerId,
+      jobData.buyerName,
+      jobData.buyerPhone,
+      customerId,
+      amount,
+      amount,
+      jobData.addressText,
+      jobData.routeUrl,
+      JSON.stringify(jobData.snapshot),
+    ]
+  );
+
+  const [rows] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [id]);
+  return mapCustomerDeliveryJob(rows?.[0] || null);
+}
+
+async function buildCustomerDeliveryJobData(connection, sale) {
+  const saleId = String(sale.id || '').trim();
+  const [[buyer]] = await connection.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [sale.customer_id]);
+  const buyerAddress = normalizeDeliveryAddress(parseDeliveryJson(buyer?.address, {}), buyer || {});
+  const cepLookup = await lookupDeliveryCepLocation(buyerAddress.zipCode);
+  const address = normalizeDeliveryAddress({ ...(cepLookup || {}), ...(buyerAddress || {}) }, buyer || {});
+  const rawAddressText = buildDeliveryAddressText(address);
+  const addressText = rawAddressText || 'Endereco de entrega nao informado';
+  const routeUrl = rawAddressText ? buildDeliveryRouteUrl(rawAddressText, cepLookup) : null;
+  const [items] = await connection.query('SELECT product_name, quantity, unit_price, total FROM sale_items WHERE sale_id = ? LIMIT 200', [saleId]);
+  const orderNumber = sale.order_number || sale.numero || saleId;
+
+  return {
+    orderNumber,
+    buyerCustomerId: buyer?.id || sale.customer_id || null,
+    buyerName: buyer?.name || sale.customer_name || 'Cliente',
+    buyerPhone: buyer?.phone || sale.customer_phone || null,
+    addressText,
+    routeUrl,
+    snapshot: {
+      sale: {
+        id: saleId,
+        order_number: orderNumber,
+        total: sale.total,
+        subtotal: sale.subtotal,
+        discount_total: sale.discount_total,
+        payment_methods: parseDeliveryJson(sale.payment_methods, sale.payment_methods || []),
+        created_at: sale.created_at || new Date().toISOString(),
+      },
+      items: Array.isArray(items) ? items : [],
+    },
+  };
+}
+
+async function processCustomerDeliveryMercadoPagoPayment(payment) {
+  const gatewayPaymentId = String(payment?.id || '').trim();
+  const { jobId, external_reference, metadata } = getDeliveryJobWebhookContext(payment);
+  if (!jobId) {
+    return { status: 200, body: { error: 'delivery job not identified', external_reference, metadata } };
+  }
+
+  const status = String(payment?.status || '').trim();
+  const mappedStatus = status === 'approved' ? 'approved' : status === 'cancelled' ? 'cancelled' : status === 'rejected' ? 'failed' : 'pending';
+  await pool.query(
+    `UPDATE customer_delivery_jobs
+        SET payment_status = ?, mercado_pago_payment_id = COALESCE(mercado_pago_payment_id, ?), updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`,
+    [mappedStatus, gatewayPaymentId, jobId]
+  );
+  return { status: 200, body: { message: 'success', flow: 'delivery_job', job_id: jobId, payment_status: mappedStatus } };
+}
+
+function getCustomerDeliveryCompletionBlockers(job, proof) {
+  const blockers = [];
+  const addressText = String(job?.delivery_address_text || '').trim();
+  const routeUrl = String(job?.delivery_route_url || '').trim();
+  const deliveryAmount = normalizeDeliveryLedgerAmount(job?.delivery_amount);
+  if (!String(job?.buyer_name || '').trim() || String(job?.buyer_name || '').trim() === 'Cliente') blockers.push('Cliente da entrega pendente');
+  if (!String(job?.buyer_phone || '').trim()) blockers.push('Telefone do cliente pendente');
+  if (!String(job?.delivery_person_customer_id || '').trim()) blockers.push('Entregador pendente');
+  if (deliveryAmount <= 0) blockers.push('Valor da entrega pendente');
+  if (!addressText || addressText === 'Endereco de entrega nao informado') blockers.push('Endereco da entrega pendente');
+  if (!routeUrl) blockers.push('Rota da entrega pendente');
+  if (job?.payment_status !== 'approved' && job?.payment_status !== 'not_required') blockers.push('Pix da entrega ainda nao aprovado');
+  if (!proof?.image_url) blockers.push('Foto de comprovacao obrigatoria');
+  return blockers;
+}
+
+async function completeCustomerDeliveryJob(connection, job, note, options = {}) {
+  const adminReason = String(options.adminReason || '').trim();
+  const isAdminCompletion = Boolean(options.adminOverride);
+  const [proofs] = await connection.query('SELECT * FROM customer_delivery_proofs WHERE job_id = ? ORDER BY created_at DESC LIMIT 1', [job.id]);
+  const proof = proofs?.[0];
+  if (isAdminCompletion && !adminReason) throw Object.assign(new Error('Motivo da baixa administrativa obrigatorio'), { statusCode: 400 });
+  const completionBlockers = getCustomerDeliveryCompletionBlockers(job, proof);
+  if (completionBlockers.length > 0) {
+    throw Object.assign(new Error(`Entrega nao pode ser concluida: ${completionBlockers.join('; ')}`), {
+      statusCode: 409,
+      blockers: completionBlockers,
+    });
+  }
+
+  const deliveredAt = formatDateTimeSql(new Date());
+  await connection.query(
+    `UPDATE customer_delivery_jobs
+        SET delivery_status = 'delivered',
+            delivered_at = ?,
+            admin_completion_reason = COALESCE(?, admin_completion_reason),
+            completed_by_admin_at = CASE WHEN ? = 1 THEN ? ELSE completed_by_admin_at END,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`,
+    [deliveredAt, adminReason || null, isAdminCompletion ? 1 : 0, isAdminCompletion ? deliveredAt : null, job.id]
+  );
+  await connection.query(
+    `INSERT INTO customer_delivery_ledger
+      (id, customer_id, job_id, sale_id, order_number, buyer_name, delivery_address_text,
+       proof_image_url, delivery_person_note, amount, description, status, delivered_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)
+     ON DUPLICATE KEY UPDATE
+       proof_image_url = VALUES(proof_image_url),
+       delivery_person_note = VALUES(delivery_person_note),
+       delivered_at = VALUES(delivered_at)`,
+    [
+      crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID(),
+      job.delivery_person_customer_id,
+      job.id,
+      job.sale_id,
+      job.order_number,
+      job.buyer_name,
+      job.delivery_address_text,
+      proof?.image_url || null,
+      [note, adminReason ? `Baixa admin: ${adminReason}` : ''].filter(Boolean).join('\n') || null,
+      normalizeDeliveryLedgerAmount(job.delivery_amount),
+      isAdminCompletion ? `Entrega baixada pelo admin - Pedido ${job.order_number || job.sale_id}` : `Entrega realizada - Pedido ${job.order_number || job.sale_id}`,
+      deliveredAt,
+    ]
+  );
+
+  const [rows] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
+  return mapCustomerDeliveryJob(rows?.[0] || null);
+}
+
+function parseCustomerDebtPaymentAllocations(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function processCustomerDebtPaymentAllocation(connection, {
+  debt,
+  valorPagoCentavos,
+  dataPagamento,
+  metodoPagamento,
+  mercadoPagoId,
+  mercadoPagoLink,
+  payment,
+}) {
+  const paymentId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+  await connection.query(
+    `INSERT INTO customer_debt_payments
+      (id, debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes, mercado_pago_id, mercado_pago_link)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      paymentId,
+      debt.id,
+      valorPagoCentavos,
+      dataPagamento,
+      metodoPagamento,
+      'Baixa automatica via Mercado Pago',
+      mercadoPagoId,
+      mercadoPagoLink,
+    ]
+  );
+
+  const novoSaldo = Math.max(0, Number(debt.saldo_devedor || 0) - valorPagoCentavos);
+  const novoStatus = novoSaldo === 0 ? 'paid' : 'partial';
+  await connection.query('UPDATE customer_debts SET saldo_devedor = ?, status = ? WHERE id = ?', [
+    novoSaldo,
+    novoStatus,
+    debt.id,
+  ]);
+
+  const [customers] = await connection.query(
+    'SELECT name, cpf_cnpj, phone, email FROM customers WHERE id = ?',
+    [debt.customer_id]
+  );
+
+  let receiptId = null;
+  if (customers.length > 0) {
+    const customer = customers[0];
+    receiptId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+    const receiptNumber = `REC-${dataPagamento.replace(/-/g, '')}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+    await connection.query(
+      `INSERT INTO avulso_receipts
+        (id, numero, tipo, nome_contato, cpf_cnpj, telefone, email, customer_id, valor, descricao, data_emissao)
+       VALUES (?, ?, 'receber', ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        receiptId,
+        receiptNumber,
+        customer.name,
+        customer.cpf_cnpj || null,
+        customer.phone || null,
+        customer.email || null,
+        debt.customer_id,
+        valorPagoCentavos / 100,
+        `Baixa automatica Mercado Pago - Ref: ${debt.descricao}`,
+        dataPagamento,
+      ]
+    );
+  }
+
+  return {
+    payment_id: paymentId,
+    receipt_id: receiptId,
+    debt_id: debt.id,
+    saldo_devedor: novoSaldo,
+    status: novoStatus,
+  };
+}
+
 async function processCustomerDebtMercadoPagoPayment(payment) {
   const gatewayPaymentId = String(payment?.id || '').trim();
   const { debtId, valorLiquidoCentavos, external_reference, metadata } = getCustomerDebtWebhookContext(payment);
@@ -6249,11 +6744,10 @@ function normalizeSeoImages(images) {
 function isSeoPublicImageUrl(value) {
   if (typeof value !== 'string') return false;
   const trimmed = value.trim();
-  if (!trimmed || /^data:/i.test(trimmed)) return false;
-  if (!/^https?:\/\//i.test(trimmed)) return false;
+  if (!trimmed || /^(data:|blob:)/i.test(trimmed)) return false;
   try {
     const url = new URL(trimmed);
-    return url.protocol === 'https:' || url.protocol === 'http:';
+    return url.protocol === 'https:' && Boolean(url.hostname) && Boolean(url.pathname);
   } catch {
     return false;
   }
@@ -6263,7 +6757,13 @@ function normalizeSeoPublicImages(images, baseUrl) {
   const normalized = [];
   for (const rawImage of normalizeSeoImages(images)) {
     const image = String(rawImage || '').trim();
-    const publicImage = image.startsWith('/') ? `${baseUrl}${image}` : image;
+    if (!image || /^(data:|blob:)/i.test(image)) continue;
+    let publicImage = '';
+    try {
+      publicImage = new URL(image, baseUrl).toString();
+    } catch {
+      continue;
+    }
     if (isSeoPublicImageUrl(publicImage)) normalized.push(publicImage);
   }
   return [...new Set(normalized)];
@@ -20049,6 +20549,344 @@ fastify.get('/table-data/:name/export', { preHandler: requireSyncKey }, async (r
   reply.header('Content-Disposition', `attachment; filename="${name}.json"`);
   return rows;
 });
+
+fastify.post('/delivery/jobs/from-sale', { preHandler: requireSyncKey }, async (req, reply) => {
+  const saleId = String(req.body?.sale_id || '').trim();
+  if (!saleId) return reply.code(400).send({ error: 'sale_id obrigatorio' });
+  const [rows] = await pool.query('SELECT * FROM sales WHERE id = ? LIMIT 1', [saleId]);
+  if (!rows?.[0]) return reply.code(404).send({ error: 'Venda nao encontrada' });
+  const job = await createCustomerDeliveryJobForSale(pool, rows[0]);
+  if (!job) return reply.code(202).send({ skipped: true });
+  return reply.code(201).send(job);
+});
+
+fastify.get('/delivery/settings', { preHandler: requireSyncKey }, async () => getCustomerDeliverySettings());
+
+fastify.patch('/delivery/settings', { preHandler: requireSyncKey }, async (req) => {
+  const enabled = req.body?.completion_whatsapp_enabled === undefined
+    ? true
+    : Boolean(req.body.completion_whatsapp_enabled);
+  const template = String(req.body?.completion_whatsapp_template || '').trim() || DEFAULT_DELIVERY_COMPLETION_WHATSAPP_TEMPLATE;
+  await pool.query(
+    `INSERT INTO customer_delivery_settings
+      (id, completion_whatsapp_enabled, completion_whatsapp_template)
+     VALUES (1, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       completion_whatsapp_enabled = VALUES(completion_whatsapp_enabled),
+       completion_whatsapp_template = VALUES(completion_whatsapp_template),
+       updated_at = CURRENT_TIMESTAMP`,
+    [enabled ? 1 : 0, template]
+  );
+  return getCustomerDeliverySettings();
+});
+
+fastify.get('/delivery/jobs/:token', { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const token = String(req.params.token || '').trim();
+  const [rows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE token = ? LIMIT 1', [token]);
+  const job = mapCustomerDeliveryJob(rows?.[0] || null);
+  if (!job) return reply.code(404).send({ error: 'Entrega nao encontrada' });
+  const [proofs] = await pool.query('SELECT * FROM customer_delivery_proofs WHERE job_id = ? ORDER BY created_at DESC LIMIT 20', [job.id]);
+  return { job, proof: proofs?.[0] || null, proofs: proofs || [] };
+});
+
+fastify.get('/delivery/jobs/:token/logs', { preHandler: requireSyncKey }, async (req, reply) => {
+  const token = String(req.params.token || '').trim();
+  const [rows] = await pool.query('SELECT id FROM customer_delivery_jobs WHERE token = ? LIMIT 1', [token]);
+  const job = rows?.[0];
+  if (!job) return reply.code(404).send({ error: 'Entrega nao encontrada' });
+  const [logs] = await pool.query(
+    'SELECT * FROM customer_delivery_job_logs WHERE job_id = ? ORDER BY created_at DESC LIMIT 100',
+    [job.id]
+  );
+  return { logs: logs || [] };
+});
+
+fastify.post('/delivery/jobs/:token/pix-intent', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const token = String(req.params.token || '').trim();
+  const [rows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE token = ? LIMIT 1', [token]);
+  const job = rows?.[0];
+  if (!job) return reply.code(404).send({ error: 'Entrega nao encontrada' });
+  if (job.payment_status === 'approved') return mapCustomerDeliveryJob(job);
+  if (job.pix_expires_at && new Date(job.pix_expires_at).getTime() > Date.now() && job.qr_code) {
+    return mapCustomerDeliveryJob(job);
+  }
+
+  const [integrations] = await pool.query(
+    "SELECT access_token, environment FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 LIMIT 1"
+  );
+  const integration = integrations?.[0] || null;
+  if (!integration?.access_token) return reply.code(400).send({ error: 'Mercado Pago nao configurado' });
+
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const payload = {
+    transaction_amount: Math.max(1, normalizeDeliveryLedgerAmount(job.payment_amount || job.delivery_amount)) / 100,
+    description: `Entrega ${job.order_number || job.sale_id}`,
+    payment_method_id: 'pix',
+    date_of_expiration: expiresAt.toISOString(),
+    external_reference: `delivery_job:${job.id}`,
+    notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook',
+    metadata: {
+      flow: 'delivery_job',
+      job_id: job.id,
+      sale_id: job.sale_id,
+    },
+    payer: {
+      email: String(req.body?.payer_email || 'entrega@mercadodovale.com.br'),
+      first_name: String(job.buyer_name || 'Cliente').slice(0, 60),
+    },
+  };
+  const response = await fetch('https://api.mercadopago.com/v1/payments', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${integration.access_token}`,
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': `delivery-job-${job.id}-${Date.now()}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) return reply.code(502).send({ error: 'Falha ao gerar Pix da entrega', mercado_pago: data });
+  const tx = data?.point_of_interaction?.transaction_data || {};
+  await pool.query(
+    `UPDATE customer_delivery_jobs
+        SET payment_status = 'pending',
+            mercado_pago_payment_id = ?,
+            qr_code = ?,
+            qr_code_base64 = ?,
+            ticket_url = ?,
+            pix_expires_at = ?,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`,
+    [String(data.id || ''), tx.qr_code || null, tx.qr_code_base64 || null, tx.ticket_url || null, formatDateTimeSql(expiresAt), job.id]
+  );
+  const [updated] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
+  return mapCustomerDeliveryJob(updated?.[0] || null);
+});
+
+fastify.post('/delivery/jobs/:token/payment-status', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const token = String(req.params.token || '').trim();
+  const [rows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE token = ? LIMIT 1', [token]);
+  const job = rows?.[0];
+  if (!job) return reply.code(404).send({ error: 'Entrega nao encontrada' });
+  if (!job.mercado_pago_payment_id) return mapCustomerDeliveryJob(job);
+  if (['approved', 'failed', 'cancelled'].includes(job.payment_status)) return mapCustomerDeliveryJob(job);
+
+  const [integrations] = await pool.query(
+    "SELECT access_token FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 LIMIT 1"
+  );
+  const integration = integrations?.[0] || null;
+  if (!integration?.access_token) return mapCustomerDeliveryJob(job);
+  const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(job.mercado_pago_payment_id)}`, {
+    headers: { Authorization: `Bearer ${integration.access_token}` },
+  });
+  const payment = await response.json().catch(() => ({}));
+  const status = payment.status === 'approved' ? 'approved' : payment.status === 'cancelled' ? 'cancelled' : payment.status === 'rejected' ? 'failed' : 'pending';
+  await pool.query('UPDATE customer_delivery_jobs SET payment_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [status, job.id]);
+  const [updated] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
+  return mapCustomerDeliveryJob(updated?.[0] || null);
+});
+
+fastify.post('/delivery/jobs/:token/proof', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const token = String(req.params.token || '').trim();
+  const [rows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE token = ? LIMIT 1', [token]);
+  const job = rows?.[0];
+  if (!job) return reply.code(404).send({ error: 'Entrega nao encontrada' });
+  const imageUrl = String(req.body?.image_url || '').trim();
+  if (!imageUrl) return reply.code(400).send({ error: 'image_url obrigatoria' });
+  const proofId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+  await pool.query(
+    `INSERT INTO customer_delivery_proofs
+      (id, job_id, buyer_customer_id, delivery_person_customer_id, image_url, original_file_name, compressed_size_bytes, description)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      proofId,
+      job.id,
+      job.buyer_customer_id || null,
+      job.delivery_person_customer_id,
+      imageUrl,
+      req.body?.original_file_name || null,
+      Number(req.body?.compressed_size_bytes || 0) || null,
+      req.body?.description || null,
+    ]
+  );
+  const [proofs] = await pool.query('SELECT * FROM customer_delivery_proofs WHERE id = ? LIMIT 1', [proofId]);
+  return reply.code(201).send(proofs?.[0] || { id: proofId });
+});
+
+fastify.post('/delivery/jobs/:token/complete', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const token = String(req.params.token || '').trim();
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE token = ? FOR UPDATE', [token]);
+    const job = rows?.[0];
+    if (!job) throw Object.assign(new Error('Entrega nao encontrada'), { statusCode: 404 });
+    const updated = await completeCustomerDeliveryJob(connection, job, String(req.body?.delivery_person_note || '').trim());
+    await connection.commit();
+    await notifyCustomerDeliveryCompleted(updated).catch((error) => {
+      console.warn('[customer-delivery] completion whatsapp notification failed:', error.message);
+    });
+    return updated;
+  } catch (error) {
+    await connection.rollback().catch(() => {});
+    return reply.code(error.statusCode || 500).send({ error: error.message || 'Erro ao concluir entrega' });
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.post('/delivery/jobs/:token/admin-complete', { preHandler: requireSyncKey }, async (req, reply) => {
+  const token = String(req.params.token || '').trim();
+  const reason = String(req.body?.admin_completion_reason || '').trim();
+  if (!reason) return reply.code(400).send({ error: 'Motivo da baixa administrativa obrigatorio' });
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE token = ? FOR UPDATE', [token]);
+    const job = rows?.[0];
+    if (!job) throw Object.assign(new Error('Entrega nao encontrada'), { statusCode: 404 });
+    const updated = await completeCustomerDeliveryJob(connection, job, String(req.body?.delivery_person_note || '').trim(), {
+      adminOverride: true,
+      adminReason: reason,
+    });
+    await connection.commit();
+    await notifyCustomerDeliveryCompleted(updated).catch((error) => {
+      console.warn('[customer-delivery] completion whatsapp notification failed:', error.message);
+    });
+    return updated;
+  } catch (error) {
+    await connection.rollback().catch(() => {});
+    return reply.code(error.statusCode || 500).send({ error: error.message || 'Erro ao baixar entrega pelo admin' });
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.get('/customers/:customerId/delivery-ledger', { preHandler: requireSyncKey }, async (req, reply) => {
+  const customerId = String(req.params.customerId || '').trim();
+  if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
+  const [ledger] = await pool.query('SELECT * FROM customer_delivery_ledger WHERE customer_id = ? ORDER BY delivered_at DESC, created_at DESC', [customerId]);
+  const [settlements] = await pool.query('SELECT * FROM customer_delivery_settlements WHERE customer_id = ? ORDER BY paid_at DESC, created_at DESC', [customerId]);
+  const earned = (ledger || []).reduce((sum, item) => sum + normalizeDeliveryLedgerAmount(item.amount), 0);
+  const settled = (settlements || []).reduce((sum, item) => sum + normalizeDeliveryLedgerAmount(item.amount), 0);
+  return {
+    ledger,
+    settlements,
+    summary: {
+      open_cents: Math.max(0, earned - settled),
+      earned_cents: earned,
+      settled_cents: settled,
+    },
+  };
+});
+
+fastify.get('/customers/:customerId/delivery-jobs', { preHandler: requireSyncKey }, async (req, reply) => {
+  const customerId = String(req.params.customerId || '').trim();
+  if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
+  const [jobs] = await pool.query(
+    `SELECT * FROM customer_delivery_jobs
+      WHERE delivery_person_customer_id = ?
+      ORDER BY created_at DESC
+      LIMIT 200`,
+    [customerId]
+  );
+  return { jobs: (jobs || []).map(mapCustomerDeliveryJob) };
+});
+
+fastify.post('/customers/:customerId/delivery-payments', { preHandler: requireSyncKey }, async (req, reply) => {
+  const customerId = String(req.params.customerId || '').trim();
+  const amount = normalizeDeliveryLedgerAmount(req.body?.amount);
+  const description = String(req.body?.description || '').trim();
+  const paidAt = formatDateTimeSql(req.body?.paid_at || new Date());
+  if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
+  if (amount <= 0) return reply.code(400).send({ error: 'valor invalido' });
+  if (!description) return reply.code(400).send({ error: 'descricao obrigatoria' });
+  const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+  await pool.query(
+    `INSERT INTO customer_delivery_settlements
+      (id, customer_id, type, amount, paid_at, description)
+     VALUES (?, ?, 'payment', ?, ?, ?)`,
+    [id, customerId, amount, paidAt, description]
+  );
+  return reply.code(201).send({ id, customer_id: customerId, type: 'payment', amount, paid_at: paidAt, description });
+});
+
+fastify.post('/customers/:customerId/delivery-offsets', { preHandler: requireSyncKey }, async (req, reply) => {
+  const customerId = String(req.params.customerId || '').trim();
+  const debtId = String(req.body?.debt_id || '').trim();
+  const amount = normalizeDeliveryLedgerAmount(req.body?.amount);
+  const description = String(req.body?.description || 'Abatimento com saldo de entregas').trim();
+  if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
+  if (!debtId) return reply.code(400).send({ error: 'debt_id obrigatorio' });
+  if (amount <= 0) return reply.code(400).send({ error: 'valor invalido' });
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [[debt]] = await connection.query('SELECT * FROM customer_debts WHERE id = ? AND customer_id = ? FOR UPDATE', [debtId, customerId]);
+    if (!debt) throw Object.assign(new Error('Debito nao encontrado'), { statusCode: 404 });
+    if (amount > Number(debt.saldo_devedor || 0)) throw Object.assign(new Error('Valor excede saldo devedor'), { statusCode: 400 });
+
+    const paymentId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+    const settlementId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+    const paidAt = formatDateTimeSql(new Date());
+    await connection.query(
+      `INSERT INTO customer_debt_payments (id, debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes)
+       VALUES (?, ?, ?, CURDATE(), 'saldo_entregas', ?)`,
+      [paymentId, debtId, amount, description]
+    );
+    const novoSaldo = Math.max(0, Number(debt.saldo_devedor || 0) - amount);
+    await connection.query('UPDATE customer_debts SET saldo_devedor = ?, status = ? WHERE id = ?', [novoSaldo, novoSaldo <= 0 ? 'paid' : 'partial', debtId]);
+    await connection.query(
+      `INSERT INTO customer_delivery_settlements (id, customer_id, debt_id, type, amount, paid_at, description)
+       VALUES (?, ?, ?, 'debt_offset', ?, ?, ?)`,
+      [settlementId, customerId, debtId, amount, paidAt, description]
+    );
+    await connection.commit();
+    return reply.code(201).send({ id: settlementId, customer_id: customerId, debt_id: debtId, type: 'debt_offset', amount, debt_payment_id: paymentId });
+  } catch (err) {
+    await connection.rollback().catch(() => {});
+    return reply.code(err.statusCode || 500).send({ error: err.message || 'Erro ao abater saldo de entregas' });
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.post('/customers/:customerId/delivery-adjustments', { preHandler: requireSyncKey }, async (req, reply) => {
+  const customerId = String(req.params.customerId || '').trim();
+  const amount = normalizeDeliveryLedgerAmount(req.body?.amount);
+  const description = String(req.body?.description || '').trim();
+  const observation = String(req.body?.observation || '').trim();
+  const saleId = String(req.body?.sale_id || '').trim() || null;
+  const orderNumber = String(req.body?.order_number || '').trim() || saleId;
+  if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
+  if (amount === 0) return reply.code(400).send({ error: 'valor positivo ou negativo obrigatorio' });
+  if (!description) return reply.code(400).send({ error: 'descricao obrigatoria' });
+
+  const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+  const deliveredAt = formatDateTimeSql(new Date());
+  const note = [observation, amount < 0 ? 'Lancamento negativo manual' : 'Lancamento positivo manual'].filter(Boolean).join('\n');
+  await pool.query(
+    `INSERT INTO customer_delivery_ledger
+      (id, customer_id, sale_id, order_number, buyer_name, delivery_address_text,
+       delivery_person_note, amount, description, status, delivered_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
+    [
+      id,
+      customerId,
+      saleId,
+      orderNumber,
+      'Lancamento avulso',
+      'Lancamento manual no painel do entregador',
+      note || null,
+      amount,
+      description,
+      deliveredAt,
+    ]
+  );
+  const [rows] = await pool.query('SELECT * FROM customer_delivery_ledger WHERE id = ? LIMIT 1', [id]);
+  return reply.code(201).send(rows?.[0] || { id, customer_id: customerId, amount, description, delivered_at: deliveredAt });
+});
 // --- Schema Inspector ---
 fastify.get('/schema/tables', { preHandler: requireSyncKey }, async (req, reply) => {
   const [tables] = await pool.query('SHOW TABLES');
@@ -23076,6 +23914,18 @@ async function runMigrations() {
   await addColumnIfMissing('products', 'meta_description', "TEXT NULL");
   await addColumnIfMissing('products', 'keywords', "TEXT NULL");
   await addColumnIfMissing('products', 'view_count', "INT DEFAULT 0");
+  await addColumnIfMissing('sales', 'subtotal', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'discount_total', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'cost_total', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'profit', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'coupon_code', 'VARCHAR(120) DEFAULT NULL');
+  await addColumnIfMissing('sales', 'coupon_id', 'CHAR(36) DEFAULT NULL');
+  await addColumnIfMissing('sales', 'final_adjustment_discount', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'finalization_status', "VARCHAR(32) NOT NULL DEFAULT 'success'");
+  await addColumnIfMissing('sales', 'finalization_log', 'LONGTEXT NULL');
+  await addColumnIfMissing('sales', 'finalization_error_summary', 'TEXT NULL');
+  await addColumnIfMissing('sale_items', 'unit_cost', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sale_items', 'product_sku', 'VARCHAR(200) DEFAULT NULL');
 
   // Linkage pai/filho (Bling) - permite combos/kits referenciarem produtos pai (agregados)
   await addColumnIfMissing('products', 'parent_id',       'CHAR(36) DEFAULT NULL');
@@ -24005,6 +24855,155 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] customer_debt_payment_intents table: OK');
+
+  await addColumnIfMissing('customers', 'is_delivery_worker', 'TINYINT(1) NOT NULL DEFAULT 0');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_delivery_profiles (
+      customer_id VARCHAR(255) PRIMARY KEY,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      default_delivery_fee BIGINT NOT NULL DEFAULT 0,
+      pix_key VARCHAR(255) NULL,
+      notes TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_customer_delivery_profiles_active (active)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_delivery_jobs (
+      id CHAR(36) PRIMARY KEY,
+      token VARCHAR(96) NOT NULL,
+      sale_id VARCHAR(36) NOT NULL,
+      order_number VARCHAR(80) NULL,
+      buyer_customer_id VARCHAR(255) NULL,
+      buyer_name VARCHAR(255) NOT NULL,
+      buyer_phone VARCHAR(40) NULL,
+      delivery_person_customer_id VARCHAR(255) NOT NULL,
+      delivery_amount BIGINT NOT NULL DEFAULT 0,
+      payment_amount BIGINT NOT NULL DEFAULT 0,
+      payment_status ENUM('not_required','pending','approved','failed','cancelled') NOT NULL DEFAULT 'pending',
+      delivery_status ENUM('pending','in_route','delivered','cancelled') NOT NULL DEFAULT 'pending',
+      delivery_address_text TEXT NOT NULL,
+      receipt_snapshot_json JSON NOT NULL,
+      mercado_pago_payment_id VARCHAR(120) NULL,
+      qr_code MEDIUMTEXT NULL,
+      qr_code_base64 MEDIUMTEXT NULL,
+      ticket_url TEXT NULL,
+      pix_expires_at DATETIME NULL,
+      delivery_route_url TEXT NULL,
+      delivered_at DATETIME NULL,
+      admin_completion_reason TEXT NULL,
+      completed_by_admin_at DATETIME NULL,
+      completion_whatsapp_sent_at DATETIME NULL,
+      completion_whatsapp_error TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_customer_delivery_jobs_token (token),
+      UNIQUE KEY uniq_customer_delivery_jobs_sale (sale_id),
+      INDEX idx_customer_delivery_jobs_delivery_person (delivery_person_customer_id),
+      INDEX idx_customer_delivery_jobs_sale (sale_id),
+      INDEX idx_customer_delivery_jobs_status (delivery_status, payment_status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('customer_delivery_jobs', 'admin_completion_reason', 'TEXT NULL');
+  await addColumnIfMissing('customer_delivery_jobs', 'completed_by_admin_at', 'DATETIME NULL');
+  await addColumnIfMissing('customer_delivery_jobs', 'completion_whatsapp_sent_at', 'DATETIME NULL');
+  await addColumnIfMissing('customer_delivery_jobs', 'completion_whatsapp_error', 'TEXT NULL');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_delivery_settings (
+      id TINYINT PRIMARY KEY DEFAULT 1,
+      completion_whatsapp_enabled TINYINT(1) NOT NULL DEFAULT 1,
+      completion_whatsapp_template TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(
+    `INSERT IGNORE INTO customer_delivery_settings
+      (id, completion_whatsapp_enabled, completion_whatsapp_template)
+     VALUES (1, 1, ?)`,
+    [DEFAULT_DELIVERY_COMPLETION_WHATSAPP_TEMPLATE]
+  );
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_delivery_job_logs (
+      id CHAR(36) PRIMARY KEY,
+      job_id CHAR(36) NOT NULL,
+      level ENUM('info','warning','error') NOT NULL DEFAULT 'info',
+      event_type VARCHAR(80) NOT NULL,
+      message TEXT NOT NULL,
+      details_json JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_customer_delivery_job_logs_job (job_id),
+      INDEX idx_customer_delivery_job_logs_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_delivery_proofs (
+      id CHAR(36) PRIMARY KEY,
+      job_id CHAR(36) NOT NULL,
+      buyer_customer_id VARCHAR(255) NULL,
+      delivery_person_customer_id VARCHAR(255) NOT NULL,
+      image_url TEXT NOT NULL,
+      original_file_name VARCHAR(255) NULL,
+      compressed_size_bytes INT NULL,
+      description TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_customer_delivery_proofs_job (job_id),
+      INDEX idx_customer_delivery_proofs_buyer (buyer_customer_id),
+      INDEX idx_customer_delivery_proofs_delivery_person (delivery_person_customer_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_delivery_ledger (
+      id CHAR(36) PRIMARY KEY,
+      customer_id VARCHAR(255) NOT NULL,
+      job_id CHAR(36) NULL,
+      sale_id VARCHAR(36) NULL,
+      order_number VARCHAR(80) NULL,
+      buyer_name VARCHAR(255) NULL,
+      delivery_address_text TEXT NULL,
+      proof_image_url TEXT NULL,
+      delivery_person_note TEXT NULL,
+      amount BIGINT NOT NULL,
+      description TEXT NOT NULL,
+      status ENUM('open','settled','cancelled') NOT NULL DEFAULT 'open',
+      delivered_at DATETIME NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_customer_delivery_ledger_sale (sale_id),
+      INDEX idx_customer_delivery_ledger_job (job_id),
+      INDEX idx_customer_delivery_ledger_customer (customer_id),
+      INDEX idx_customer_delivery_ledger_status (status),
+      INDEX idx_customer_delivery_ledger_delivered (delivered_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customer_delivery_settlements (
+      id CHAR(36) PRIMARY KEY,
+      customer_id VARCHAR(255) NOT NULL,
+      ledger_id CHAR(36) NULL,
+      debt_id CHAR(36) NULL,
+      type ENUM('payment','debt_offset') NOT NULL,
+      amount BIGINT NOT NULL,
+      paid_at DATETIME NOT NULL,
+      description TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_customer_delivery_settlements_customer (customer_id),
+      INDEX idx_customer_delivery_settlements_ledger (ledger_id),
+      INDEX idx_customer_delivery_settlements_debt (debt_id),
+      INDEX idx_customer_delivery_settlements_paid_at (paid_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('sales', 'delivery_person_customer_id', 'VARCHAR(255) NULL');
+  await addIndexIfMissing('sales', 'idx_sales_delivery_person_customer', 'delivery_person_customer_id');
+  console.log('[migration] customer delivery tables: OK');
 
   await ensureDefaultAdminAccount();
 }

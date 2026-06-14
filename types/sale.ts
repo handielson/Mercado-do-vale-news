@@ -97,15 +97,27 @@ export interface Sale {
     // Delivery fields
     delivery_type?: DeliveryType;
     delivery_person_id?: string;
+    delivery_person_customer_id?: string | null;
     delivery_cost_store?: number; // em centavos
     delivery_cost_customer?: number; // em centavos
     delivery_total?: number; // em centavos
 
     // Discount fields
     promotional_discount?: number; // em centavos
+    coupon_code?: string;
+    coupon_id?: string;
+    final_adjustment_discount?: number; // em centavos
 
     // Indicação (Referral)
     referral_code?: string;
+
+    // Observação interna
+    internal_notes?: string;
+
+    // Auditoria do fechamento do PDV
+    finalization_status?: 'success' | 'needs_review';
+    finalization_log?: string;
+    finalization_error_summary?: string;
 
     // Importação legada (MV-Gestao)
     legacy_sale_id?: string;
@@ -128,15 +140,24 @@ export interface SaleInput {
     // Delivery fields
     delivery_type?: DeliveryType;
     delivery_person_id?: string;
+    delivery_person_customer_id?: string | null;
     delivery_cost_store?: number; // em centavos
     delivery_cost_customer?: number; // em centavos
     delivery_total?: number; // em centavos
 
     // Discount fields
     promotional_discount?: number; // em centavos
+    coupon_code?: string;
+    coupon_id?: string;
+    final_adjustment_discount?: number; // em centavos
 
     // Indicação (Referral)
     referral_code?: string;
+
+    // Auditoria do fechamento do PDV
+    finalization_status?: 'success' | 'needs_review';
+    finalization_log?: string;
+    finalization_error_summary?: string;
 }
 
 /**
@@ -154,6 +175,17 @@ export interface SaleWithItems extends Sale {
         name: string;
     };
     delivery_job?: SaleDeliveryJobSummary | null;
+}
+
+export interface SaleDeliveryJobSummary {
+    id: string;
+    token: string;
+    sale_id: string;
+    payment_status?: 'not_required' | 'pending' | 'approved' | 'failed' | 'cancelled';
+    delivery_status?: 'pending' | 'in_route' | 'delivered' | 'cancelled';
+    delivery_route_url?: string | null;
+    completed_by_admin_at?: string | null;
+    admin_completion_reason?: string | null;
 }
 
 export interface SaleDeliveryJobSummary {

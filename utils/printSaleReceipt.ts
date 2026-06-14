@@ -147,14 +147,14 @@ export function printSaleReceipt(
     }).join('');
 
     const paymentsHtml = payments.map(p => {
-        const paymentDescription = [paymentLabel(p.method, p.installments), paymentInstallmentDetail(p)]
-            .filter(Boolean)
-            .join('<br><span style="font-size:11px;color:#6b7280;">');
-        const closeInstallmentSpan = paymentInstallmentDetail(p) ? '</span>' : '';
-
+        const paymentView = buildPaymentPresentation(p);
+        const publicInstallmentDetail = paymentView.installments > 1
+            ? `<br><span style="font-size:11px;color:#6b7280;">${paymentView.installments}x de ${fmt(paymentView.installmentValue)} = ${fmt(paymentView.totalWithFee)}</span>`
+            : '';
         return `
         <tr>
-            <td style="padding:3px 0;font-size:13px;color:#374151;">${paymentDescription}${closeInstallmentSpan}</td>
+            <td style="padding:4px 0;font-size:13px;color:#374151;">${escapeHtml(paymentView.labelWithInstallments)}${publicInstallmentDetail}</td>
+            <td style="padding:4px 0;text-align:right;font-size:13px;font-family:monospace;vertical-align:top;">${fmt(paymentView.totalWithFee)}</td>
         </tr>`;
     }).join('');
 

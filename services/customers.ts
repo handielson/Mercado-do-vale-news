@@ -68,12 +68,14 @@ function parseJsonField<T>(value: unknown, fallback: T): T {
 
 function normalizeCustomer(row: Customer): Customer {
     const active = row.is_active as unknown;
+    const deliveryWorker = row.is_delivery_worker as unknown;
     return {
         ...row,
         address: parseJsonField(row.address, undefined as any),
         custom_data: parseJsonField(row.custom_data, undefined as any),
         customer_type: fromVpsCustomerType(row.customer_type),
         is_active: active === true || active === 1 || active === '1',
+        is_delivery_worker: deliveryWorker === true || deliveryWorker === 1 || deliveryWorker === '1',
     };
 }
 
@@ -154,6 +156,7 @@ class CustomerService {
                 return textMatch || digitMatch;
             })
             .filter(customer => filters?.is_active === undefined || customer.is_active === filters.is_active)
+            .filter(customer => filters?.is_delivery_worker === undefined || customer.is_delivery_worker === filters.is_delivery_worker)
             .filter(customer => !filters?.created_after || String(customer.created_at || '') >= filters.created_after!)
             .filter(customer => !filters?.created_before || String(customer.created_at || '') <= filters.created_before!)
             .sort(byCreatedAtDesc);

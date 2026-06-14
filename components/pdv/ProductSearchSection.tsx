@@ -4,12 +4,36 @@ import { Product } from '../../types/product';
 import { toast } from 'sonner';
 import { unitService } from '../../services/units';
 import { UnitStatus } from '../../utils/field-standards';
+import { normalizeCentValue } from '../../utils/promoPrice';
 
 interface ProductSearchSectionProps {
     onAddToCart: (product: Product, quantity: number, unitData?: { unitId: string; imei1?: string; imei2?: string; serial?: string }) => void;
 }
 
 type SearchMode = 'product' | 'imei';
+type ProductSearchOptions = { autoAddSingle?: boolean };
+
+const hasSerializedIdentity = (product: Product): boolean => {
+    const specs = (product as any).specs || {};
+    return Boolean(specs.imei1 || specs.imei_1 || specs.imei2 || specs.imei_2 || specs.serial || specs.serial_number);
+};
+
+const getSerializedSpecs = (product: Product) => {
+    const specs = (product as any).specs || {};
+    return {
+        imei1: specs.imei1 || specs.imei_1 || undefined,
+        imei2: specs.imei2 || specs.imei_2 || undefined,
+        serial: specs.serial || specs.serial_number || undefined,
+    };
+};
+
+const getSerializedLookupValues = (product: Product, preferred?: string) => {
+    const specs = getSerializedSpecs(product);
+    return [preferred, specs.imei1, specs.imei2, specs.serial]
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+        .filter((value, index, values) => values.indexOf(value) === index);
+};
 
 export default function ProductSearchSection({ onAddToCart }: ProductSearchSectionProps) {
     const [mode, setMode] = useState<SearchMode>('product');
@@ -40,12 +64,68 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
             setSearchResults([]);
             return;
         }
-        const timeoutId = setTimeout(() => handleSearch(), 500);
+        const timeoutId = setTimeout(() => handleSearch({ autoAddSingle: false }), 500);
         return () => clearTimeout(timeoutId);
     }, [searchTerm, mode]);
 
+    const addSerializedProductToCart = async (product: Product, preferredIdentifier?: string) => {
+        const specs = getSerializedSpecs(product);
+        const lookupValues = getSerializedLookupValues(product, preferredIdentifier);
+        let unit = null;
+
+        for (const value of lookupValues) {
+            const matches = await unitService.searchByIdentifier(value);
+            if (matches.length > 0) {
+                unit = matches[0];
+                break;
+            }
+        }
+
+        if (!unit) {
+            unit = await unitService.create({
+                product_id: product.id,
+                imei_1: specs.imei1,
+                imei_2: specs.imei2,
+                serial_number: specs.serial,
+                condition: 'new',
+                status: UnitStatus.AVAILABLE,
+                cost_price: normalizeCentValue((product as any).price_cost),
+                internal_notes: 'Unidade criada automaticamente pelo PDV a partir do cadastro legado do produto',
+            });
+        }
+
+        if (unit.status === UnitStatus.SOLD) {
+            toast.error('Unidade já vendida');
+            return;
+        }
+        if (unit.status === UnitStatus.RESERVED) {
+            toast.error('Unidade já reservada para outro pedido');
+            return;
+        }
+        if (unit.status === UnitStatus.RMA) {
+            toast.error('Unidade em processo de devolução (RMA)');
+            return;
+        }
+
+        onAddToCart(product, 1, {
+            unitId: unit.id,
+            imei1: unit.imei_1 || specs.imei1,
+            imei2: unit.imei_2 || specs.imei2,
+            serial: unit.serial_number || specs.serial,
+        });
+
+        toast.success(`✅ ${product.name} — IMEI: ${unit.imei_1 || specs.imei1 || unit.serial_number || specs.serial || preferredIdentifier || ''}`);
+        setImeiQuery('');
+        setSearchResults([]);
+        setSearchTerm('');
+        setTimeout(() => {
+            imeiInputRef.current?.focus();
+            imeiInputRef.current?.select();
+        }, 50);
+    };
+
     // ── Busca por produto (nome/SKU) ────────────────────────────────────────────
-    const handleSearch = async () => {
+    const handleSearch = async (options: ProductSearchOptions = {}) => {
         const term = searchTerm.trim();
         if (term.length < 2) { setSearchResults([]); return; }
 
@@ -74,6 +154,29 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
 
             setSearchResults(availableProducts);
             setSkuStockMap(skuMap);
+
+            // Se retornar exatamente 1 resultado, adiciona automaticamente ao carrinho
+            if (availableProducts.length === 1 && options.autoAddSingle === true) {
+                const singleProduct = availableProducts[0];
+                const quantity = quantities[singleProduct.id] || 1;
+                if (hasSerializedIdentity(singleProduct)) {
+                    await addSerializedProductToCart(singleProduct, term);
+                    return;
+                }
+                if (singleProduct.track_inventory && singleProduct.stock_quantity !== undefined) {
+                    if (singleProduct.stock_quantity < quantity) {
+                        return;
+                    }
+                }
+                onAddToCart(singleProduct, quantity);
+                toast.success(`${singleProduct.name} adicionado ao carrinho`);
+                setSearchResults([]);
+                setSearchTerm('');
+                setTimeout(() => {
+                    searchInputRef.current?.focus();
+                    searchInputRef.current?.select();
+                }, 50);
+            }
         } catch (error) {
             console.error('Erro ao buscar produtos:', error);
             toast.error('Erro ao buscar produtos');
@@ -82,8 +185,12 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
         }
     };
 
-    const handleAddToCart = (product: Product) => {
+    const handleAddToCart = async (product: Product) => {
         const quantity = quantities[product.id] || 1;
+        if (hasSerializedIdentity(product)) {
+            await addSerializedProductToCart(product);
+            return;
+        }
         if (product.track_inventory && product.stock_quantity !== undefined) {
             if (product.stock_quantity < quantity) {
                 toast.error(`Estoque insuficiente. Disponível: ${product.stock_quantity}`);
@@ -101,7 +208,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') handleSearch();
+        if (e.key === 'Enter') handleSearch({ autoAddSingle: true });
     };
 
     // ── Busca por IMEI / Serial ─────────────────────────────────────────────────
@@ -117,6 +224,14 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
             const units = await unitService.searchByIdentifier(query);
 
             if (units.length === 0) {
+                const { getProductByImei } = await import('../../services/productService');
+                const fallbackProduct = await getProductByImei(query);
+
+                if (fallbackProduct && hasSerializedIdentity(fallbackProduct)) {
+                    await addSerializedProductToCart(fallbackProduct, query);
+                    return;
+                }
+
                 toast.error('Nenhuma unidade encontrada para este IMEI/serial');
                 return;
             }

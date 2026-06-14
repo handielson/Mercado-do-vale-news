@@ -5757,6 +5757,34 @@ function normalizeSeoImages(images) {
   return Array.isArray(images) ? images.filter(Boolean) : [];
 }
 
+function isSeoPublicImageUrl(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed || /^(data:|blob:)/i.test(trimmed)) return false;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'https:' && Boolean(url.hostname) && Boolean(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function normalizeSeoPublicImages(images, baseUrl) {
+  const normalized = [];
+  for (const rawImage of normalizeSeoImages(images)) {
+    const image = String(rawImage || '').trim();
+    if (!image || /^(data:|blob:)/i.test(image)) continue;
+    let publicImage = '';
+    try {
+      publicImage = new URL(image, baseUrl).toString();
+    } catch {
+      continue;
+    }
+    if (isSeoPublicImageUrl(publicImage)) normalized.push(publicImage);
+  }
+  return [...new Set(normalized)];
+}
+
 function isUuidLike(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(String(value || ''));
 }
@@ -5871,21 +5899,21 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     }
 
     const baseUrl = buildSeoBaseUrl(request);
-    const images = normalizeSeoImages(product.images);
+    const publicImages = normalizeSeoPublicImages(product.images, baseUrl);
     const keywords = normalizeSeoKeywords(product.keywords || product.seo_keywords);
     const title = product.meta_title || `${product.name} | Mercado do Vale`;
     const cleanDescription = stripSeoHtml(product.meta_description || product.description || '');
     const description = cleanDescription.slice(0, 155) || `Compre ${product.name} no Mercado do Vale com o melhor preco.`;
     const canonicalSlug = product.slug || slug;
     const url = `${baseUrl}/produto/${encodeURIComponent(canonicalSlug)}`;
-    const image = images[0] || `${baseUrl}/og-cover.jpg`;
+    const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
     const stockQuantity = product.computed_stock_quantity ?? product.stock_quantity ?? 0;
     const availability = Number(stockQuantity) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock';
     const schemaProduct = {
       '@context': 'https://schema.org/',
       '@type': 'Product',
       name: product.name || '',
-      image: images.slice(0, 5),
+      image: publicImages.length ? publicImages.slice(0, 5) : [image],
       description,
       sku: product.sku || '',
       offers: {

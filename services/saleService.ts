@@ -23,6 +23,7 @@ import { stockLocationService } from './stockLocationService';
 import { vpsApiService } from './vpsApiService';
 import { vpsClient } from './vpsClient';
 import { deliveryCreditService } from './deliveryCreditService';
+import { moneyReaisToCents, moneyToCents } from '../utils/money';
 
 const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Promise<void> => {
     if (!item.product_id) return;
@@ -84,6 +85,38 @@ function createLocalId(): string {
         return crypto.randomUUID();
     }
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+type SaleFinalizationIssue = {
+    step: string;
+    message: string;
+    name?: string;
+    debug?: unknown;
+    timestamp: string;
+};
+
+function normalizeFinalizationError(error: unknown, step: string): SaleFinalizationIssue {
+    const record = error && typeof error === 'object' ? error as any : null;
+    return {
+        step,
+        message: error instanceof Error ? error.message : String(error || 'Erro desconhecido'),
+        name: error instanceof Error ? error.name : undefined,
+        debug: record?.debug || record?.response?.debug || record?.response?.data?.debug || record?.data?.debug || null,
+        timestamp: new Date().toISOString(),
+    };
+}
+
+function appendIssueToFinalizationLog(logValue: unknown, saleId: string, status: 'success' | 'needs_review', issues: SaleFinalizationIssue[]): string {
+    const base = typeof logValue === 'string' && logValue.trim()
+        ? parseJsonField<Record<string, unknown>>(logValue, { raw_log: logValue })
+        : (logValue && typeof logValue === 'object' ? logValue as Record<string, unknown> : {});
+    return JSON.stringify({
+        ...base,
+        sale_id: saleId,
+        finalization_status: status,
+        finalization_issues: issues,
+        updated_at: new Date().toISOString(),
+    }, null, 2);
 }
 
 function serializeJsonValue(value: unknown): unknown {
@@ -244,18 +277,30 @@ function normalizeSaleRow(row: any, moneyScale = 1): Sale {
     } as Sale;
 }
 
-function normalizeSaleItemRow(row: any, moneyScale = 1): SaleItem {
+function saleRowUsesLegacyDecimalItemMoney(saleRow?: any): boolean {
+    if (!saleRow) return false;
+    const hasModernSubtotal = Number(saleRow.subtotal || 0) > 0;
+    const hasModernPaymentMethods = saleRow.payment_methods != null && saleRow.payment_methods !== '';
+    const totalLooksDecimalReais = typeof saleRow.total === 'string' && /\.\d{2}$/u.test(saleRow.total);
+    return totalLooksDecimalReais && !hasModernSubtotal && !hasModernPaymentMethods;
+}
+
+function normalizeSaleItemMoney(value: unknown, saleRow?: any): number {
+    return saleRowUsesLegacyDecimalItemMoney(saleRow) ? moneyReaisToCents(value) : moneyToCents(value);
+}
+
+function normalizeSaleItemRow(row: any, saleRow?: any): SaleItem {
     const quantity = Number(row.quantity) || 0;
-    const unitPrice = scaleMoneyValue(row.unit_price, moneyScale);
-    const total = row.total == null ? unitPrice * quantity : scaleMoneyValue(row.total, moneyScale);
+    const unitPrice = normalizeSaleItemMoney(row.unit_price, saleRow);
+    const total = row.total == null ? unitPrice * quantity : normalizeSaleItemMoney(row.total, saleRow);
 
     return {
         ...row,
         quantity,
         unit_price: unitPrice,
-        unit_cost: scaleMoneyValue(row.unit_cost, moneyScale),
-        discount: scaleMoneyValue(row.discount, moneyScale),
-        subtotal: row.subtotal == null ? total : scaleMoneyValue(row.subtotal, moneyScale),
+        unit_cost: normalizeSaleItemMoney(row.unit_cost, saleRow),
+        discount: normalizeSaleItemMoney(row.discount, saleRow),
+        subtotal: row.subtotal == null ? total : normalizeSaleItemMoney(row.subtotal, saleRow),
         total,
         is_gift: row.is_gift === true || row.is_gift === 1,
     } as SaleItem;
@@ -302,9 +347,8 @@ async function loadSaleWithItemsById(saleId: string): Promise<SaleWithItems | nu
     if (!saleRow) return null;
 
     const saleItemRows = itemRows.filter(row => String(row.sale_id || '') === String(saleId));
-    const moneyScale = shouldScaleSaleMoneyFromReais(saleRow, saleItemRows) ? 100 : 1;
-    const sale = normalizeSaleRow(saleRow, moneyScale);
-    const items = saleItemRows.map(row => normalizeSaleItemRow(row, moneyScale));
+    const sale = normalizeSaleRow(saleRow);
+    const items = saleItemRows.map(row => normalizeSaleItemRow(row, saleRow));
 
     const customer = customers.find(row => String(row.id || '') === String(sale.customer_id));
     const seller = teamMembers.find(row => String(row.id || '') === String(sale.seller_id || ''));
@@ -343,7 +387,7 @@ function saleMatchesFilters(sale: Sale, filters?: SaleFilters): boolean {
     return true;
 }
 
-async function patchSale(id: string, patch: Partial<Sale>): Promise<Sale> {
+export async function patchSale(id: string, patch: Partial<Sale>): Promise<Sale> {
     const tablePatch: Record<string, unknown> = { ...patch };
     if (Object.prototype.hasOwnProperty.call(tablePatch, 'status')) {
         tablePatch.payment_status = tablePatch.status === 'cancelled' || tablePatch.status === 'refunded'
@@ -383,7 +427,25 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
 
         const promotionalDiscount = Math.max(0, saleInput.promotional_discount || 0);
         const discountTotal = totals.discount_total + (saleInput.delivery_cost_store || 0) + promotionalDiscount;
-        const saleTotal = Math.max(0, totals.total + (saleInput.delivery_cost_customer || 0) - promotionalDiscount);
+        const paymentCollectedTotal = (saleInput.payment_methods || []).reduce((sum, payment) => {
+            return sum + moneyToCents(payment.total_with_fee ?? payment.amount ?? 0);
+        }, 0);
+        const customerFeeTotal = (saleInput.payment_methods || []).reduce((sum, payment) => {
+            return sum + moneyToCents(payment.fee_amount || 0);
+        }, 0);
+        const paymentOperatorFeeTotal = (saleInput.payment_methods || []).reduce((sum, payment) => {
+            return sum + moneyToCents(payment.operator_fee_amount || 0);
+        }, 0);
+        const computedSaleTotal = Math.max(0, totals.total + (saleInput.delivery_cost_customer || 0) + customerFeeTotal - promotionalDiscount);
+        const saleTotal = paymentCollectedTotal > 0 ? paymentCollectedTotal : computedSaleTotal;
+        const realProfit = saleTotal - totals.cost_total - paymentOperatorFeeTotal - (saleInput.delivery_total || 0);
+        const finalizationIssues: SaleFinalizationIssue[] = [];
+        const recordFinalizationIssue = (step: string, error: unknown) => {
+            const issue = normalizeFinalizationError(error, step);
+            finalizationIssues.push(issue);
+            console.error(`[saleService] Venda registrada com erro em ${step}:`, error);
+            return issue;
+        };
 
         const saleId = createLocalId();
         const saleData = {
@@ -395,6 +457,25 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             payment_method: summarizePaymentMethodForSalesTable(saleInput.payment_methods),
             payment_status: 'paid',
             notes: saleInput.notes,
+            payment_methods: saleInput.payment_methods,
+            subtotal: totals.subtotal,
+            discount_total: discountTotal,
+            cost_total: totals.cost_total,
+            profit: realProfit,
+            delivery_type: saleInput.delivery_type || null,
+            delivery_person_id: saleInput.delivery_person_id || null,
+            delivery_person_customer_id: saleInput.delivery_person_customer_id || null,
+            delivery_cost_store: saleInput.delivery_cost_store || 0,
+            delivery_cost_customer: saleInput.delivery_cost_customer || 0,
+            delivery_total: saleInput.delivery_total || 0,
+            promotional_discount: promotionalDiscount,
+            coupon_code: saleInput.coupon_code || null,
+            coupon_id: saleInput.coupon_id || null,
+            final_adjustment_discount: saleInput.final_adjustment_discount || 0,
+            referral_code: saleInput.referral_code || null,
+            finalization_status: 'success',
+            finalization_log: saleInput.finalization_log || null,
+            finalization_error_summary: saleInput.finalization_error_summary || null,
         };
 
         // Insert sale
@@ -407,46 +488,62 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         // Insert sale items (persiste serialized_unit_id pra rastreio do IMEI)
         const saleItems = saleInput.items.map(item => serializeSaleItemRowForTable(item, sale.id));
 
+        let saleItemsPersisted = false;
         try {
             await vpsClient.post('/table-data/sale_items/bulk', saleItems);
+            saleItemsPersisted = true;
+            if (saleInput.delivery_person_customer_id && saleInput.delivery_total && saleInput.delivery_total > 0) {
+                await vpsClient.post('/delivery/jobs/from-sale', { sale_id: sale.id });
+            }
         } catch (itemsError) {
-            // Rollback: delete sale if items insertion fails
-            await deleteSaleRow(sale.id);
-            throw itemsError;
+            recordFinalizationIssue('sale_items', itemsError);
+        }
+
+        const serializedItems = saleItemsPersisted
+            ? saleInput.items.filter(i => (i as any).serialized_unit?.unitId)
+            : [];
+        const markedUnitIds: string[] = [];
+        try {
+            for (const item of serializedItems) {
+                const unitId = (item as any).serialized_unit.unitId;
+                await unitService.markAsSold(unitId, undefined, sale.id);
+                markedUnitIds.push(unitId);
+            }
+        } catch (err) {
+            for (const unitId of markedUnitIds) {
+                try {
+                    await unitService.release(unitId);
+                } catch (releaseError) {
+                    console.error(`[saleService] Falha ao liberar unit ${unitId} apos erro na venda ${sale.id}:`, releaseError);
+                }
+            }
+            recordFinalizationIssue('serialized_units', err);
         }
 
         try {
             await createCustomerDebtForAPrazoSale(saleInput, sale);
         } catch (debtError) {
-            try {
-                await deleteSaleRow(sale.id);
-            } catch (rollbackError) {
-                console.error(`[saleService] Falha ao desfazer venda ${sale.id} apos erro no crediario:`, rollbackError);
-            }
-            throw debtError;
+            recordFinalizationIssue('customer_debt', debtError);
         }
 
-        // Marca units serializadas como vendidas (VPS) — markAsSold dispara
-        // syncProductStock que decrementa products.stock_quantity automaticamente.
-        const serializedItems = saleInput.items.filter(i => (i as any).serialized_unit?.unitId);
-        for (const item of serializedItems) {
-            try {
-                await unitService.markAsSold((item as any).serialized_unit.unitId, undefined, sale.id);
-            } catch (err) {
-                console.error(`[saleService] Falha ao marcar unit como sold:`, err);
-            }
-        }
 
         // Estoque manual (não-serializado) baixa primeiro da Loja Principal, depois dos demais depositos.
-        const itemsWithInventory = saleInput.items.filter(
+        const itemsWithInventory = saleItemsPersisted ? saleInput.items.filter(
             item => item.track_inventory && item.product_id && !(item as any).serialized_unit?.unitId
-        );
+        ) : [];
         for (const item of itemsWithInventory) {
-            await decrementSaleStockByPriority(item, sale.id);
+            try {
+                await decrementSaleStockByPriority(item, sale.id);
+            } catch (stockError) {
+                recordFinalizationIssue('stock_decrement', stockError);
+            }
         }
 
         // Sync bidirecional: deduzir estoque no Bling (fire-and-forget, não bloqueia a venda)
-        for (const item of itemsWithInventory) {
+        const itemsToSyncBling = saleItemsPersisted ? saleInput.items.filter(
+            item => item.track_inventory && item.product_id
+        ) : [];
+        for (const item of itemsToSyncBling) {
             syncStockToBling(
                 item.product_id!,
                 item.quantity,
@@ -518,7 +615,25 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             }
         }
 
-        return sale;
+        const finalization_status = finalizationIssues.length > 0 ? 'needs_review' : 'success';
+        if (finalization_status === 'needs_review' || saleInput.finalization_log) {
+            try {
+                return await patchSale(sale.id, {
+                    finalization_status,
+                    finalization_error_summary: finalizationIssues.map(issue => `${issue.step}: ${issue.message}`).join('\n') || null as any,
+                    finalization_log: appendIssueToFinalizationLog(saleInput.finalization_log, sale.id, finalization_status, finalizationIssues),
+                });
+            } catch (finalizationPatchError) {
+                console.error(`[saleService] Falha ao atualizar auditoria da venda ${sale.id}:`, finalizationPatchError);
+            }
+        }
+
+        return {
+            ...sale,
+            finalization_status,
+            finalization_error_summary: finalizationIssues.map(issue => `${issue.step}: ${issue.message}`).join('\n') || undefined,
+            finalization_log: appendIssueToFinalizationLog(saleInput.finalization_log, sale.id, finalization_status, finalizationIssues),
+        };
     } catch (error) {
         console.error('Error creating sale:', error);
         throw error;
@@ -557,13 +672,12 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
         return saleRows
             .map((saleRow) => {
                 const rawItems = saleItems.filter(row => String(row.sale_id || '') === String(saleRow.id));
-                const moneyScale = shouldScaleSaleMoneyFromReais(saleRow, rawItems) ? 100 : 1;
-                const sale = normalizeSaleRow(saleRow, moneyScale);
-                return { sale, rawItems, moneyScale };
+                const sale = normalizeSaleRow(saleRow);
+                return { sale, rawItems, saleRow };
             })
-            .map(({ sale, rawItems, moneyScale }) => ({
+            .map(({ sale, rawItems, saleRow }) => ({
                 sale,
-                items: rawItems.map(row => normalizeSaleItemRow(row, moneyScale)),
+                items: rawItems.map(row => normalizeSaleItemRow(row, saleRow)),
             }))
             .filter(({ sale }) => saleMatchesFilters(sale, filters))
             .sort((a, b) => String(b.sale.created_at || '').localeCompare(String(a.sale.created_at || '')))

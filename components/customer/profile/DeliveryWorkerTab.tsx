@@ -31,6 +31,13 @@ function todayDateTimeLocal(): string {
     return d.toISOString().slice(0, 16);
 }
 
+function buildDeliveryOperationUrl(token?: string | null): string {
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken) return '';
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${origin}/delivery/${encodeURIComponent(cleanToken)}`;
+}
+
 export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, mode = 'viewer' }) => {
     const isAdminMode = mode === 'admin';
     const [ledger, setLedger] = useState<CustomerDeliveryLedgerEntry[]>([]);
@@ -289,49 +296,62 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
                     <h3 className="font-semibold text-slate-800">Entregas em aberto</h3>
                     {isAdminMode && <p className="mt-1 text-sm text-amber-800">Use a baixa administrativa apenas quando precisar concluir uma entrega fora do fluxo normal.</p>}
                 </div>
-                {openJobs.length === 0 ? <p className="px-5 py-6 text-sm text-slate-500">Nenhuma entrega em aberto para este entregador.</p> : openJobs.map((job) => (
-                    <div key={job.id} className="grid gap-3 border-b border-amber-100 bg-white px-5 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_220px]">
-                        <div>
-                            <p className="text-sm font-semibold text-slate-800">Pedido {job.order_number || job.sale_id}</p>
-                            <p className="mt-1 text-xs text-slate-500">{job.buyer_name} - {formatCurrencyCents(job.delivery_amount)}</p>
-                            <p className="mt-1 text-xs text-slate-500">Pagamento: {job.payment_status} | Entrega: {job.delivery_status}</p>
-                            {job.completion_whatsapp_error && (
-                                <p className="mt-2 inline-flex items-center gap-1 rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
-                                    <AlertTriangle className="h-3 w-3" /> WhatsApp: {job.completion_whatsapp_error}
-                                </p>
-                            )}
-                            {isAdminMode && <textarea
-                                className="mt-3 w-full rounded-xl border border-amber-200 px-3 py-2 text-sm"
-                                value={adminReasonByToken[job.token] || ''}
-                                onChange={(event) => setAdminReasonByToken((current) => ({ ...current, [job.token]: event.target.value }))}
-                                placeholder="Motivo da baixa administrativa"
-                            />}
-                        </div>
-                        {isAdminMode && <button
-                            className="self-end rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                            disabled={saving || !String(adminReasonByToken[job.token] || '').trim()}
-                            onClick={() => submitAdminComplete(job)}
-                        >
-                            Baixar como entregue
-                        </button>}
-                        {isAdminMode && <button
-                            className="self-end rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
-                            disabled={saving}
-                            onClick={() => toggleLogs(job)}
-                        >
-                            {logsByToken[job.token] ? 'Ocultar logs' : 'Ver logs'}
-                        </button>}
-                        {isAdminMode && logsByToken[job.token] && (
-                            <div className="lg:col-span-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-                                {logsByToken[job.token].length === 0 ? 'Nenhum log registrado para esta entrega.' : logsByToken[job.token].map((log) => (
-                                    <p key={log.id} className={log.level === 'error' ? 'text-red-700' : 'text-slate-600'}>
-                                        {new Date(log.created_at).toLocaleString('pt-BR')} - {log.event_type}: {log.message}
+                {openJobs.length === 0 ? <p className="px-5 py-6 text-sm text-slate-500">Nenhuma entrega em aberto para este entregador.</p> : openJobs.map((job) => {
+                    const deliveryUrl = buildDeliveryOperationUrl(job.token);
+                    return (
+                        <div key={job.id} className="grid gap-3 border-b border-amber-100 bg-white px-5 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_220px]">
+                            <div>
+                                <p className="text-sm font-semibold text-slate-800">Pedido {job.order_number || job.sale_id}</p>
+                                <p className="mt-1 text-xs text-slate-500">{job.buyer_name} - {formatCurrencyCents(job.delivery_amount)}</p>
+                                <p className="mt-1 text-xs text-slate-500">Pagamento: {job.payment_status} | Entrega: {job.delivery_status}</p>
+                                {deliveryUrl && (
+                                    <a
+                                        className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                                        href={deliveryUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        Abrir entrega <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                )}
+                                {job.completion_whatsapp_error && (
+                                    <p className="mt-2 inline-flex items-center gap-1 rounded-lg bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
+                                        <AlertTriangle className="h-3 w-3" /> WhatsApp: {job.completion_whatsapp_error}
                                     </p>
-                                ))}
+                                )}
+                                {isAdminMode && <textarea
+                                    className="mt-3 w-full rounded-xl border border-amber-200 px-3 py-2 text-sm"
+                                    value={adminReasonByToken[job.token] || ''}
+                                    onChange={(event) => setAdminReasonByToken((current) => ({ ...current, [job.token]: event.target.value }))}
+                                    placeholder="Motivo da baixa administrativa"
+                                />}
                             </div>
-                        )}
-                    </div>
-                ))}
+                            {isAdminMode && <button
+                                className="self-end rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                                disabled={saving || !String(adminReasonByToken[job.token] || '').trim()}
+                                onClick={() => submitAdminComplete(job)}
+                            >
+                                Baixar como entregue
+                            </button>}
+                            {isAdminMode && <button
+                                className="self-end rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
+                                disabled={saving}
+                                onClick={() => toggleLogs(job)}
+                            >
+                                {logsByToken[job.token] ? 'Ocultar logs' : 'Ver logs'}
+                            </button>}
+                            {isAdminMode && logsByToken[job.token] && (
+                                <div className="lg:col-span-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+                                    {logsByToken[job.token].length === 0 ? 'Nenhum log registrado para esta entrega.' : logsByToken[job.token].map((log) => (
+                                        <p key={log.id} className={log.level === 'error' ? 'text-red-700' : 'text-slate-600'}>
+                                            {new Date(log.created_at).toLocaleString('pt-BR')} - {log.event_type}: {log.message}
+                                        </p>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">

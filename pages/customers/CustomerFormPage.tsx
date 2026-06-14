@@ -57,7 +57,8 @@ export default function CustomerFormPage() {
         },
         custom_data: {},
         customer_type: 'retail',
-        is_active: true
+        is_active: true,
+        is_delivery_worker: false
     });
 
     // Load customer data if editing
@@ -81,7 +82,8 @@ export default function CustomerFormPage() {
                     customer_type: customer.customer_type,
                     address: customer.address,
                     custom_data: customer.custom_data,
-                    is_active: customer.is_active
+                    is_active: customer.is_active,
+                    is_delivery_worker: customer.is_delivery_worker || false
                 });
             }
         } catch (err) {

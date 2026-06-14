@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Edit, Eye, Trash2, User, Mail, Phone, MapPin, FileText, Calendar, CheckCircle, XCircle, Printer, ShoppingBag, RefreshCw, Receipt, DollarSign } from 'lucide-react';
+import { ArrowLeft, Edit, Eye, Trash2, User, Mail, Phone, MapPin, FileText, Calendar, CheckCircle, XCircle, Printer, ShoppingBag, RefreshCw, Receipt, DollarSign, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { Customer } from '../../types/customer';
@@ -17,6 +17,7 @@ import { generateLegacySalePdf } from '../../utils/legacySalePdfGenerator';
 import { vpsApiService } from '../../services/vpsApiService';
 import { warrantyTemplateService } from '../../services/warrantyTemplates';
 import { getCustomerFinancialSummary, type CustomerFinancialSummary } from '../../services/customerFinancialSummaryService';
+import { DeliveryWorkerTab } from '../../components/customer/profile/DeliveryWorkerTab';
 
 /**
  * Customer Details Page
@@ -43,7 +44,7 @@ export default function CustomerDetailsPage() {
     const [printingSaleId, setPrintingSaleId] = useState<string | null>(null);
     const [printingReceiptId, setPrintingReceiptId] = useState<string | null>(null);
     const [printingComprovanteId, setPrintingComprovanteId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'info' | 'compras' | 'beneficios'>('info');
+    const [activeTab, setActiveTab] = useState<'info' | 'compras' | 'beneficios' | 'entregas'>('info');
     // Map: product_id -> specs (for IMEI display in purchase history)
     const [saleProductSpecs, setSaleProductSpecs] = useState<Record<string, Record<string, string>>>();
 
@@ -503,6 +504,7 @@ export default function CustomerDetailsPage() {
                     { key: 'info', label: 'Informações', icon: <User className="w-4 h-4" /> },
                     { key: 'compras', label: `Compras (${salesHistory.length})`, icon: <ShoppingBag className="w-4 h-4" /> },
                     { key: 'beneficios', label: `Benefícios (${benefits.length})`, icon: <CheckCircle className="w-4 h-4" /> },
+                    ...(customer.is_delivery_worker ? [{ key: 'entregas', label: 'Entregas', icon: <Truck className="w-4 h-4" /> }] : []),
                 ].map(tab => (
                     <button
                         key={tab.key}
@@ -859,6 +861,10 @@ export default function CustomerDetailsPage() {
                         </div>
                     )}
                 </div>
+            )}
+
+            {activeTab === 'entregas' && customer.is_delivery_worker && (
+                <DeliveryWorkerTab customer={customer} mode="admin" />
             )}
 
             {/* Delete Confirmation Modal */}

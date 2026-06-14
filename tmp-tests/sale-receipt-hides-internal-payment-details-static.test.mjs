@@ -9,27 +9,27 @@ assert.doesNotMatch(
   'customer sale receipt must not render internal payment details such as machine cost or fee percentages',
 );
 
-assert.doesNotMatch(
-  receipt,
-  /details\.map\(escapeHtml\)/,
-  'customer sale receipt must not map internal payment detail lines into the HTML',
-);
-
 assert.match(
   receipt,
-  /paymentLabel\(p\.method,\s*p\.installments\)|labelWithInstallments/,
+  /paymentView\.labelWithInstallments/,
   'customer sale receipt should still show the public payment method label',
 );
 
 assert.match(
   receipt,
-  /paymentInstallmentDetail/,
-  'customer sale receipt must build a public installment detail line',
+  /paymentView\.totalWithFee/,
+  'customer sale receipt should still show the amount paid for each payment method',
 );
 
 assert.match(
   receipt,
-  /\$\{installments\}x de \$\{fmt\(installmentValue\)\} = \$\{fmt\(total\)\}/,
+  /paymentView\.installments[\s\S]*paymentView\.installmentValue[\s\S]*paymentView\.totalWithFee/,
+  'customer sale receipt must show public installment detail like 10x de R$ 97,40 = R$ 974,00',
+);
+
+assert.match(
+  receipt,
+  /\$\{paymentView\.installments\}x de \$\{fmt\(paymentView\.installmentValue\)\} = \$\{fmt\(paymentView\.totalWithFee\)\}/,
   'customer sale receipt installment detail must include installments, installment amount and charged total',
 );
 

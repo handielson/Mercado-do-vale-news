@@ -93,6 +93,14 @@ export interface CustomerDeliveryProof {
     original_file_name?: string | null;
     compressed_size_bytes?: number | null;
     description?: string | null;
+    created_at?: string | null;
+}
+
+type TableDataResponse<T> = T[] | { data?: T[]; rows?: T[]; items?: T[]; total?: number };
+
+function extractRows<T>(response: TableDataResponse<T>): T[] {
+    if (Array.isArray(response)) return response;
+    return response.data || response.rows || response.items || [];
 }
 
 export async function getCustomerDeliveryLedger(customerId: string): Promise<CustomerDeliveryLedgerResponse> {
@@ -111,6 +119,28 @@ export async function getCustomerDeliveryLedger(customerId: string): Promise<Cus
 export async function getCustomerDeliveryJobs(customerId: string): Promise<CustomerDeliveryJob[]> {
     const data = await vpsClient.get<{ jobs?: CustomerDeliveryJob[] }>(`/customers/${customerId}/delivery-jobs`);
     return Array.isArray(data.jobs) ? data.jobs : [];
+}
+
+export async function getCustomerDeliveryJobBySaleId(saleId: string): Promise<CustomerDeliveryJob | null> {
+    const targetSaleId = String(saleId || '').trim();
+    if (!targetSaleId) return null;
+
+    const pageSize = 200;
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<TableDataResponse<CustomerDeliveryJob>>(
+            `/table-data/customer_delivery_jobs?limit=${pageSize}&offset=${offset}`
+        );
+        const jobs = extractRows(data);
+        const job = jobs.find((item) => String(item.sale_id || '') === targetSaleId);
+        if (job) return job;
+        if (jobs.length < pageSize) return null;
+    }
+}
+
+export async function createDeliveryJobFromSale(saleId: string): Promise<CustomerDeliveryJob | null> {
+    const data = await vpsClient.post<CustomerDeliveryJob | { skipped?: boolean }>('/delivery/jobs/from-sale', { sale_id: saleId });
+    if ((data as { skipped?: boolean })?.skipped) return null;
+    return data as CustomerDeliveryJob;
 }
 
 export async function getCustomerDeliverySettings(): Promise<CustomerDeliverySettings> {
@@ -144,7 +174,7 @@ export async function offsetCustomerDeliveryBalance(customerId: string, input: {
     return vpsClient.post(`/customers/${customerId}/delivery-offsets`, input);
 }
 
-export async function getDeliveryJob(token: string): Promise<{ job: CustomerDeliveryJob; proof?: CustomerDeliveryProof | null }> {
+export async function getDeliveryJob(token: string): Promise<{ job: CustomerDeliveryJob; proof?: CustomerDeliveryProof | null; proofs?: CustomerDeliveryProof[] }> {
     return vpsClient.get(`/delivery/jobs/${encodeURIComponent(token)}`);
 }
 

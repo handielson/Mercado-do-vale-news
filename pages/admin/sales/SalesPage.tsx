@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical, Calendar, DollarSign, RefreshCw, XCircle, RotateCcw, TrendingUp, Truck } from 'lucide-react';
-import { SaleWithItems, SaleFilters } from '../../../types/sale';
-import { getSales, cancelSale, refundSale } from '../../../services/saleService';
+import { SaleWithItems, SaleSummary, SaleFilters } from '../../../types/sale';
+import { getSales, getSalesSummary, cancelSale, refundSale } from '../../../services/saleService';
 import SaleDetailsModal from '../../../components/admin/sales/SaleDetailsModal';
 import toast from 'react-hot-toast';
 
@@ -59,9 +59,13 @@ export default function SalesPage() {
                 activeFilters.end_date = `${dateTo}T23:59:59`;
             }
 
-            const salesData = await getSales(activeFilters);
+            const [salesData, summaryData] = await Promise.all([
+                getSales(activeFilters),
+                getSalesSummary(activeFilters)
+            ]);
 
             setSales(salesData);
+            setSummary(summaryData);
         } catch (error) {
             console.error('Error loading sales data:', error);
             toast.error('Erro ao carregar dados de vendas');
@@ -109,12 +113,8 @@ export default function SalesPage() {
         }
     };
 
-    const isDeliverySale = (sale: SaleWithItems) => {
-        return Boolean(sale.delivery_type && sale.delivery_type !== 'store_pickup' && sale.delivery_type !== 'pickup');
-    };
-
     const getDeliveryStatusLabel = (sale: SaleWithItems) => {
-        if (!isDeliverySale(sale)) return 'Sem entrega';
+        if (!sale.delivery_type || sale.delivery_type === 'store_pickup' || sale.delivery_type === 'pickup') return 'Sem entrega';
         const job = sale.delivery_job;
         if (!job) return 'Aguardando link';
         if (job.completed_by_admin_at) return 'Baixa admin';
@@ -135,6 +135,29 @@ export default function SalesPage() {
         if (label === 'Pix aprovado' || label === 'Em rota') return 'bg-blue-100 text-blue-800 border-blue-200';
         if (label === 'Pix falhou' || label === 'Cancelada') return 'bg-red-100 text-red-800 border-red-200';
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    };
+
+    const isSaleDeliveryComplete = (sale: SaleWithItems) => {
+        if (!sale.delivery_type || sale.delivery_type === 'store_pickup' || sale.delivery_type === 'pickup') return true;
+        const job = sale.delivery_job;
+        return Boolean(job && (job.delivery_status === 'delivered' || job.completed_by_admin_at));
+    };
+
+    const getSaleOperationalStatusLabel = (sale: SaleWithItems) => {
+        if (sale.status === 'cancelled') return 'Cancelada';
+        if (sale.status === 'refunded') return 'Estornada';
+        if (sale.status === 'completed' && !isSaleDeliveryComplete(sale)) return 'Entrega pendente';
+        if (sale.status === 'completed') return 'Concluida';
+        return sale.status;
+    };
+
+    const getSaleOperationalStatusStyle = (sale: SaleWithItems) => {
+        const label = getSaleOperationalStatusLabel(sale);
+        if (label === 'Concluida') return 'bg-green-100 text-green-800 border-green-200';
+        if (label === 'Cancelada') return 'bg-red-100 text-red-800 border-red-200';
+        if (label === 'Estornada') return 'bg-orange-100 text-orange-800 border-orange-200';
+        if (label === 'Entrega pendente') return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        return 'bg-slate-100 text-slate-800 border-slate-200';
     };
 
     // Filtro local por busca textual e data
@@ -446,9 +469,16 @@ export default function SalesPage() {
                                             </div>
                                         </td>
                                         <td className="p-4">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusStyle(sale.status)}`}>
-                                                {getStatusLabel(sale.status)}
-                                            </span>
+                                            <div className="flex flex-col items-start gap-1">
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getSaleOperationalStatusStyle(sale)}`}>
+                                                    {getSaleOperationalStatusLabel(sale)}
+                                                </span>
+                                                {sale.finalization_status === 'needs_review' && (
+                                                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                                                        Corrigir log
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="p-4">
                                             <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${getDeliveryStatusStyle(sale)}`}>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, ArrowLeft, Ticket, X as XIcon } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, Ticket, X as XIcon, Printer, FileText, User, CheckCircle2, RotateCcw, Copy, Download, AlertTriangle } from 'lucide-react';
 import { Product } from '../../types/product';
 import { SaleItem, PaymentMethod, SaleInput, DeliveryType } from '../../types/sale';
 import { calculateSaleTotals, calculateTotalPaid } from '../../utils/saleCalculations';
@@ -34,6 +34,15 @@ import { teamService } from '../../services/team';
 import { getEffectiveCustomerPrice, normalizeCentValue } from '../../utils/promoPrice';
 import { buildPdvProductName } from '../../utils/pdvProductDisplay';
 import type { PdvDisplay, PdvPixPayment } from '../../types/pdvDisplay';
+import {
+    buildPdvSaleFinalizationLog,
+    copyPdvSaleFinalizationLogText,
+    downloadPdvSaleFinalizationLogText,
+    savePdvSaleFinalizationLog,
+    serializePdvSaleFinalizationLog,
+    updatePdvSaleFinalizationLog,
+    type PdvSaleFinalizationLog
+} from '../../utils/pdvSaleFinalizationLog';
 
 type FinalizeStep = {
     id: string;
@@ -43,12 +52,42 @@ type FinalizeStep = {
     debug?: unknown;
 };
 
-function FinalizeProgress({ steps }: { steps: FinalizeStep[] }) {
+function FinalizeProgress({
+    steps,
+    log,
+    onCopyLog,
+    onDownloadLog,
+}: {
+    steps: FinalizeStep[];
+    log?: PdvSaleFinalizationLog | null;
+    onCopyLog?: (log: PdvSaleFinalizationLog) => void;
+    onDownloadLog?: (log: PdvSaleFinalizationLog) => void;
+}) {
     if (steps.length === 0) return null;
 
     return (
         <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-3 text-sm font-semibold text-slate-800">Finalizacao da venda</div>
+            {log && (
+                <div className="mb-3 flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        onClick={() => onCopyLog?.(log)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                        <Copy size={14} />
+                        Copiar log
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onDownloadLog?.(log)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                        <Download size={14} />
+                        Baixar TXT
+                    </button>
+                </div>
+            )}
             <div className="space-y-2">
                 {steps.map((step) => (
                     <div key={step.id} className="flex items-start justify-between gap-3 text-sm">
@@ -155,6 +194,7 @@ export default function PDVPage() {
     const [payments, setPayments] = useState<PaymentMethod[]>([]);
     const [isFinalizing, setIsFinalizing] = useState(false);
     const [finalizeSteps, setFinalizeSteps] = useState<FinalizeStep[]>([]);
+    const [activeFinalizationLog, setActiveFinalizationLog] = useState<PdvSaleFinalizationLog | null>(null);
     const [pdvPixPayment, setPdvPixPayment] = useState<PdvPixPayment | null>(null);
     const [pdvPixLoading, setPdvPixLoading] = useState(false);
     const [pdvPixCashierKey, setPdvPixCashierKey] = useState(() => localStorage.getItem('pdv_pix_cashier_key') || 'caixa-01');
@@ -164,6 +204,7 @@ export default function PDVPage() {
     // Estado da entrega
     const [deliveryType, setDeliveryType] = useState<DeliveryType | undefined>();
     const [deliveryPersonId, setDeliveryPersonId] = useState<string | undefined>();
+    const [deliveryPersonCustomerId, setDeliveryPersonCustomerId] = useState<string>('');
     const [deliveryCostStore, setDeliveryCostStore] = useState(0);
     const [deliveryCostCustomer, setDeliveryCostCustomer] = useState(0);
 
@@ -180,6 +221,7 @@ export default function PDVPage() {
 
     // Estado da Indicação (Moedas do Vale)
     const [referralCode, setReferralCode] = useState('');
+    const [saleNotes, setSaleNotes] = useState('');
 
     // Estado do termo de garantia — N termos (1 por aparelho serializado)
     const [showWarrantyModal, setShowWarrantyModal] = useState(false);
@@ -193,11 +235,22 @@ export default function PDVPage() {
     const [warrantyDocsMeta, setWarrantyDocsMeta] = useState<Array<{ id: string; serialized_unit_id: string }>>([]);
 
     // Entregadores reais do VPS (role = 'delivery')
-    const [deliveryPersons, setDeliveryPersons] = React.useState<{ id: string; name: string }[]>([]);
+    const [deliveryPersons, setDeliveryPersons] = React.useState<{ id: string; name: string; customer_id?: string }[]>([]);
 
     const loadDeliveryPersons = React.useCallback(() => {
-        teamService.list({ role: 'delivery', is_active: true })
-            .then(members => setDeliveryPersons(members.map(m => ({ id: m.id, name: m.name }))))
+        Promise.all([
+            teamService.list({ role: 'delivery', is_active: true }),
+            customerService.list({ is_active: true, is_delivery_worker: true }),
+        ])
+            .then(([members, customers]) => {
+                const teamOptions = members.map(m => ({ id: m.id, name: m.name }));
+                const customerOptions = customers.map(customer => ({
+                    id: `customer:${customer.id}`,
+                    name: `${customer.name} (cliente)`,
+                    customer_id: customer.id,
+                }));
+                setDeliveryPersons([...teamOptions, ...customerOptions]);
+            })
             .catch(() => { /* falha silenciosa — seção de entrega fica sem entregadores */ });
     }, []);
 
@@ -211,11 +264,26 @@ export default function PDVPage() {
             return [person, ...current];
         });
         setDeliveryPersonId(person.id);
+        setDeliveryPersonCustomerId('');
     };
 
 
     // Estado das taxas de pagamento
     const [paymentFees, setPaymentFees] = useState<any[]>([]);
+
+    const handleCopyFinalizationLog = async (log: PdvSaleFinalizationLog) => {
+        try {
+            await copyPdvSaleFinalizationLogText(log);
+            toast.success('Log da venda copiado');
+        } catch (error) {
+            console.error('Erro ao copiar log da venda:', error);
+            toast.error('Nao foi possivel copiar o log');
+        }
+    };
+
+    const handleDownloadFinalizationLog = (log: PdvSaleFinalizationLog) => {
+        downloadPdvSaleFinalizationLogText(log);
+    };
 
     // Buscar taxas de pagamento do VPS
     React.useEffect(() => {
@@ -739,12 +807,13 @@ export default function PDVPage() {
         }
 
         setIsFinalizing(true);
-        setFinalizeSteps([
+        const initialFinalizeSteps: FinalizeStep[] = [
             { id: 'validate', label: 'Validando venda', status: 'saving' },
             { id: 'sale', label: 'Registrando venda na VPS', status: 'idle' },
             { id: 'debt', label: 'Criando debito do cliente', status: 'idle' },
             { id: 'receipt', label: 'Preparando comprovante', status: 'idle' },
-        ]);
+        ];
+        setFinalizeSteps(initialFinalizeSteps);
         const updateFinalizeStep = (id: string, status: FinalizeStep['status'], detail?: string, debug?: unknown) => {
             setFinalizeSteps((current) => current.map((step) => step.id === id ? { ...step, status, detail, debug } : step));
         };
@@ -766,11 +835,53 @@ export default function PDVPage() {
             referral_code: referralCode.trim() || undefined
         };
 
+        let finalizationLog = buildPdvSaleFinalizationLog({
+            saleInput,
+            steps: initialFinalizeSteps,
+            pdvState: {
+                customer: selectedCustomer,
+                cartItems,
+                payments,
+                pdvPixPayment,
+                deliveryType,
+                deliveryPersonId,
+                deliveryPersonCustomerId,
+                deliveryCostStore,
+                deliveryCostCustomer,
+                deliveryTotal,
+                promotionalDiscount,
+                appliedFinalAdjustmentDiscount,
+                finalAdjustmentDiscount,
+                appliedCoupon,
+                referralCode,
+                saleNotes,
+                totals: calculateSaleTotals(cartItems),
+                totalPaid: calculateTotalPaid(payments),
+                createdFromPath: window.location.pathname,
+            },
+        });
+        saleInput.finalization_status = 'success';
+        saleInput.finalization_log = serializePdvSaleFinalizationLog(finalizationLog);
+        saleInput.finalization_error_summary = undefined;
+        savePdvSaleFinalizationLog(finalizationLog);
+        setActiveFinalizationLog(finalizationLog);
+
         try {
             updateFinalizeStep('validate', 'done');
             updateFinalizeStep('sale', 'saving');
             if (hasAPrazoPayment) updateFinalizeStep('debt', 'saving');
             const sale = await createSale(saleInput);
+            finalizationLog = updatePdvSaleFinalizationLog(finalizationLog, {
+                sale_id: sale.id,
+                status: sale.finalization_status === 'needs_review' ? 'needs_review' : 'success',
+                errors: sale.finalization_error_summary ? [{
+                    step: 'createSale',
+                    message: sale.finalization_error_summary,
+                    timestamp: new Date().toISOString(),
+                }] : [],
+            });
+            savePdvSaleFinalizationLog(finalizationLog);
+            setActiveFinalizationLog(finalizationLog);
             updateFinalizeStep('sale', 'done');
             if (hasAPrazoPayment) updateFinalizeStep('debt', 'done');
             // Registrar uso do cupom se houver
@@ -780,6 +891,7 @@ export default function PDVPage() {
             }
 
             // Creditar Moedas do Vale pelo valor final pago
+            if (!isWalkInCustomer(selectedCustomer)) {
             try {
                 const totals = calculateSaleTotals(cartItems);
                 const couponDiscount = appliedCoupon
@@ -796,10 +908,17 @@ export default function PDVPage() {
             } catch {
                 // Erro nas moedas não bloqueia a venda
             }
+            }
 
-            toast.success('Venda finalizada com sucesso!', {
-                description: `Venda #${sale.id.slice(0, 8)} criada`
-            });
+            if (sale.finalization_status === 'needs_review') {
+                toast.warning('Venda registrada com erros para corrigir', {
+                    description: `Venda #${sale.id.slice(0, 8)} salva com log de recuperacao`
+                });
+            } else {
+                toast.success('Venda registrada com sucesso', {
+                    description: `Venda #${sale.id.slice(0, 8)} criada`
+                });
+            }
 
             // Disparo silencioso para o Telegram
             try {
@@ -861,13 +980,12 @@ export default function PDVPage() {
             setLastSaleData({
                 sale,
                 customer: selectedCustomer,
-                items: cartItems
+                items: cartItems,
+                finalizationLog,
             });
 
-            // Gerar termo de garantia
-            updateFinalizeStep('receipt', 'saving');
-            await generateWarrantyTerm(sale, selectedCustomer, cartItems);
-            updateFinalizeStep('receipt', 'done');
+            // Mostrar modal de sucesso
+            setShowSuccessModal(true);
 
             // Limpar todo o PDV
             setCartItems([]);
@@ -885,6 +1003,18 @@ export default function PDVPage() {
         } catch (error) {
             console.error('Erro ao finalizar venda:', error);
             const debug = extractFinalizeDebug(error, saleInput);
+            finalizationLog = updatePdvSaleFinalizationLog(finalizationLog, {
+                status: 'failed',
+                errors: [{
+                    step: 'createSale',
+                    message: debug.message,
+                    name: debug.name,
+                    debug,
+                    timestamp: new Date().toISOString(),
+                }],
+            });
+            savePdvSaleFinalizationLog(finalizationLog);
+            setActiveFinalizationLog(finalizationLog);
             const detail = error instanceof Error ? error.message : 'Erro desconhecido ao finalizar venda';
             setFinalizeSteps((current) => current.map((step) => step.status === 'saving' ? { ...step, status: 'error', detail, debug } : step));
             toast.error('Erro ao finalizar venda. Verifique os dados e tente novamente.');
@@ -1301,7 +1431,12 @@ export default function PDVPage() {
                     </div>
 
                     <div>
-                        <FinalizeProgress steps={finalizeSteps} />
+                        <FinalizeProgress
+                            steps={finalizeSteps}
+                            log={activeFinalizationLog}
+                            onCopyLog={handleCopyFinalizationLog}
+                            onDownloadLog={handleDownloadFinalizationLog}
+                        />
                         <ReceiptPreview
                             customer={selectedCustomer}
                             items={cartItems}
@@ -1329,6 +1464,94 @@ export default function PDVPage() {
                 warrantyTagDataList={warrantyTagDataList}
                 onPrintReceipt={handlePrintReceiptFromModal}
             />
+
+            {/* Sale Success Modal */}
+            {showSuccessModal && lastSaleData && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-md w-full p-6 mx-4 animate-in zoom-in-95 duration-200">
+                        <div className="flex flex-col items-center text-center">
+                            <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${
+                                lastSaleData.sale?.finalization_status === 'needs_review'
+                                    ? 'bg-amber-50 text-amber-600'
+                                    : 'bg-green-50 text-green-600'
+                            }`}>
+                                {lastSaleData.sale?.finalization_status === 'needs_review'
+                                    ? <AlertTriangle size={40} />
+                                    : <CheckCircle2 size={40} />}
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-800 mb-1">
+                                {lastSaleData.sale?.finalization_status === 'needs_review'
+                                    ? 'Venda registrada com erros para corrigir'
+                                    : 'Venda registrada com sucesso'}
+                            </h2>
+                            <p className="text-sm text-slate-500 mb-6 font-mono text-center">Código: #{lastSaleId?.slice(0, 8).toUpperCase()}</p>
+
+                            <div className="w-full space-y-3">
+                                {lastSaleData.finalizationLog && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => handleCopyFinalizationLog(lastSaleData.finalizationLog)}
+                                            className="flex items-center justify-center gap-2 py-2.5 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl transition-colors border border-slate-200"
+                                        >
+                                            <Copy size={16} />
+                                            Copiar log
+                                        </button>
+                                        <button
+                                            onClick={() => handleDownloadFinalizationLog(lastSaleData.finalizationLog)}
+                                            className="flex items-center justify-center gap-2 py-2.5 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-semibold rounded-xl transition-colors border border-slate-200"
+                                        >
+                                            <Download size={16} />
+                                            Baixar TXT
+                                        </button>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => {
+                                        handlePrintReceiptFromModal();
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold rounded-xl transition-colors"
+                                >
+                                    <Printer size={18} />
+                                    Imprimir Comprovante
+                                </button>
+
+                                {lastSaleData.items.some((it: any) => it.serialized_unit?.unitId) && (
+                                    <button
+                                        onClick={() => {
+                                            generateWarrantyTerm(lastSaleData.sale, lastSaleData.customer, lastSaleData.items);
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded-xl transition-colors border border-blue-100"
+                                    >
+                                        <FileText size={18} />
+                                        Gerar Termo de Garantia
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => {
+                                        setShowSuccessModal(false);
+                                        navigate(`/admin/customers/${lastSaleData.customer.id}`);
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold rounded-xl transition-colors border border-purple-100"
+                                >
+                                    <User size={18} />
+                                    Ver no Cadastro do Cliente
+                                </button>
+
+                                <button
+                                    onClick={() => {
+                                        setShowSuccessModal(false);
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors shadow-sm"
+                                >
+                                    <RotateCcw size={18} />
+                                    Nova Venda
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -1,6 +1,6 @@
 # Guia de Publicacao
 
-Atualizado em `10/06/2026`.
+Atualizado em `13/06/2026`.
 
 Este arquivo e o runbook principal para commit, push e publicacao do Mercado do Vale.
 
@@ -20,17 +20,30 @@ Este arquivo e o runbook principal para commit, push e publicacao do Mercado do 
 Quando o pedido for `comitar`, `publicar`, `deployar` ou equivalente:
 
 1. conferir `git status`;
-2. revisar o diff dos arquivos relacionados;
-3. stagear somente o que pertence ao assunto;
-4. rodar as validacoes relevantes;
-5. criar commit com mensagem objetiva;
-6. fazer `git push origin main`, salvo pedido contrario;
-7. se afetar frontend publico/admin, publicar o site na VPS;
-8. se afetar API, cron, webhook ou servidor, publicar/reiniciar a API na VPS;
-9. verificar o dominio final e endpoints afetados;
-10. registrar no resumo final o que foi publicado, validado e reiniciado.
+2. procurar arquivos soltos, temporarios ou nao commitados relacionados ao assunto antes de mexer;
+3. revisar o diff dos arquivos relacionados;
+4. criar ou atualizar protecao contra regressao e refatoracao para a mudanca;
+5. stagear somente o que pertence ao assunto;
+6. rodar as validacoes relevantes;
+7. criar commit com mensagem objetiva;
+8. fazer `git push origin main`, salvo pedido contrario, sempre fora do sandbox com permissao elevada no Codex;
+9. se afetar frontend publico/admin, publicar o site na VPS, sempre fora do sandbox com permissao elevada no Codex;
+10. se afetar API, cron, webhook ou servidor, publicar/reiniciar a API na VPS, sempre fora do sandbox com permissao elevada no Codex;
+11. verificar o dominio final e endpoints afetados, sempre fora do sandbox com permissao elevada no Codex quando usar rede externa;
+12. conferir novamente `git status` e remover ou registrar qualquer lixo gerado nesta edicao;
+13. registrar no resumo final o que foi publicado, validado, reiniciado e limpo.
 
 Nunca usar `git add .` neste projeto. Stagear por arquivo.
+
+## Regras Obrigatorias Para Codex
+
+Estas regras existem para economizar tempo e evitar regressao:
+
+- Nao tentar `git push`, `npm.cmd run deploy:vps-site`, `node deploy-vps-server-only.cjs` nem `curl.exe` de verificacao publica dentro do sandbox. Chamar direto `shell_command` com `sandbox_permissions: "require_escalated"`.
+- Antes de implantar qualquer funcao ou ajuste, procurar arquivos soltos relacionados ao assunto com `git status --short`, `git ls-files --others --exclude-standard` e `rg` por nomes/termos do dominio alterado.
+- Toda mudanca de comportamento, texto critico, recibo, calculo, rota, status, integracao, permissao ou fluxo de usuario deve ter protecao contra regressao. Quando a mudanca puder ser afetada por refatoracao, a protecao deve ser pensada para falhar se o comportamento sumir, mesmo que arquivos mudem de lugar.
+- Ao terminar cada publicacao, conferir o que ficou sujo. Arquivos temporarios, scripts de diagnostico, logs, assets gerados ou testes experimentais criados nessa edicao devem ser removidos ou commitados de proposito. Nao deixar lixo nao publicado para virar regressao depois.
+- Se ja existirem arquivos soltos de outro trabalho do usuario ou de outro fluxo, nao apagar. Registrar que sao preexistentes e stagear somente o escopo atual.
 
 ## Caminho Padrao Mais Rapido
 
@@ -63,7 +76,7 @@ Use worktree separado apenas quando houver necessidade real de isolamento. Para 
 
 ## Sandbox Do Synology Drive
 
-O workspace fica dentro do Synology Drive e o sandbox pode bloquear Git, build, deploy e acesso de rede. Para publicacao na VPS, nao fazer tentativa inicial dentro do sandbox: executar direto fora do sandbox com permissao elevada. Quando outros comandos falharem com erro como `Access is denied`, `Could not resolve vite.config.ts`, `connect EACCES`, DNS bloqueado ou erro de permissao em pasta sincronizada, repetir o mesmo comando fora do sandbox com aprovacao.
+O workspace fica dentro do Synology Drive e o sandbox pode bloquear Git, build, deploy e acesso de rede. Para `git push`, publicacao na VPS e verificacao publica externa, nao fazer tentativa inicial dentro do sandbox: executar direto fora do sandbox com permissao elevada. Quando outros comandos falharem com erro como `Access is denied`, `Could not resolve vite.config.ts`, `connect EACCES`, DNS bloqueado ou erro de permissao em pasta sincronizada, repetir o mesmo comando fora do sandbox com aprovacao.
 
 Na pratica, publicacao na VPS e verificacao externa quase sempre batem no sandbox. Para evitar perder tempo, ja executar estes comandos com permissao elevada:
 
@@ -75,6 +88,8 @@ justification: "Quer permitir rodar este comando fora do sandbox? Publicacao/ver
 Comandos que devem ir direto com permissao elevada:
 
 ```powershell
+git push origin main
+git push origin HEAD:main
 npm.cmd run deploy:vps-site
 node deploy-vps-server-only.cjs
 curl.exe -s -I https://www.mercadodovale.com.br/
@@ -275,6 +290,49 @@ node tools\audit-legacy-deploy-removal-readiness.mjs
 
 Se um teste citar tecnologia aposentada apenas como guarda de regressao, isso e aceitavel. O runtime nao deve depender dela.
 
+## Protecao Contra Regressao E Refatoracao
+
+Toda edicao publicada deve deixar uma defesa proporcional ao risco:
+
+- Bug corrigido: criar teste que falha antes da correcao e passa depois.
+- Texto/rotulo importante: criar teste estatico ou de render que impeça o texto antigo de voltar e confirme o texto esperado.
+- Recibo, pagamento, entrega, financeiro, estoque, crediario, garantia, login, API e webhooks: sempre criar protecao de regressao.
+- Refatoracao: a protecao deve validar comportamento/contrato, nao apenas o nome de uma funcao. Se o teste precisar apontar para arquivo especifico, documentar esse acoplamento e atualizar o teste junto com a refatoracao legitima.
+- Se ja houver teste cobrindo exatamente o comportamento, atualizar esse teste em vez de criar duplicado.
+
+Antes de mexer, verificar se ja existe guarda relacionada:
+
+```powershell
+rg "termo-da-mudanca|nome-da-rota|nome-do-componente|texto-visivel" tmp-tests components pages services utils vps_server.js vps_server.cjs
+```
+
+Depois de mexer, rodar pelo menos a guarda nova/alterada e qualquer teste diretamente relacionado.
+
+## Higiene De Arquivos Da Edicao
+
+Antes de implementar:
+
+```powershell
+git status --short
+git ls-files --others --exclude-standard
+```
+
+Depois de implementar e antes do commit:
+
+```powershell
+git status --short
+git diff --name-only
+git ls-files --others --exclude-standard
+```
+
+Regras:
+
+- arquivos criados para diagnostico temporario devem ser removidos antes do commit;
+- testes de regressao, scripts permanentes e docs atualizadas devem ser commitados de proposito;
+- logs como `deploy-vps-site.log`, dumps locais e assets gerados fora do fluxo normal nao devem ficar soltos;
+- nunca limpar mudancas preexistentes do usuario sem pedido explicito;
+- no resumo final, informar se a worktree ficou limpa ou quais arquivos preexistentes ficaram fora do escopo.
+
 ## Publicar Frontend Na VPS
 
 Use este fluxo quando a mudanca afetar paginas, componentes, estilos, rotas, assets ou qualquer comportamento visivel no site/admin.
@@ -448,7 +506,9 @@ Antes de responder que terminou:
 3. informar se houve commit e push;
 4. informar se o frontend foi publicado e qual release ficou ativa;
 5. informar se a API foi publicada/reiniciada;
-6. informar qualquer bloqueio de sandbox e se foi repetido fora dele;
-7. nao esconder warnings relevantes, mas separar warnings conhecidos de erro real.
+6. informar que `push`, deploy e verificacoes externas foram feitos direto com permissao elevada quando aplicavel;
+7. informar qual protecao contra regressao/refatoracao foi criada ou atualizada;
+8. informar a auditoria de arquivos soltos e se algo foi limpo;
+9. nao esconder warnings relevantes, mas separar warnings conhecidos de erro real.
 
 Frase curta para seguir: commit pequeno, push em `main`, publicacao VPS quando necessario, verificacao no dominio final.

@@ -12,6 +12,7 @@ import {
 } from '../../utils/saleCalculations';
 import { toast } from 'sonner';
 import InstallmentCalculator from './InstallmentCalculator';
+import { getBestCreditFeeByInstallment } from '../../utils/paymentFeeCalculations';
 
 interface PaymentSectionProps {
     total: number; // em centavos
@@ -136,11 +137,7 @@ export default function PaymentSection({
     let twelveInstallmentTotal = 0;
     let twelveInstallmentValue = 0;
     if (paymentFees && paymentFees.length > 0) {
-        const creditFees = paymentFees
-            .filter(f => f.payment_method === 'credit' || (f.channel === 'presencial' && f.installments >= 1))
-            .filter((fee, idx, arr) => idx === arr.findIndex(f => f.installments === fee.installments));
-
-        const twelveFee = creditFees.find(f => f.installments === 12);
+        const twelveFee = getBestCreditFeeByInstallment(paymentFees, 12);
         if (twelveFee) {
              const feeAmount = Math.round(total * (twelveFee.applied_fee / 100));
              twelveInstallmentTotal = total + feeAmount;
