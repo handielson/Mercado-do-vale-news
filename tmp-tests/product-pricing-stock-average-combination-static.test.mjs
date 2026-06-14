@@ -7,14 +7,14 @@ const requiredSnippets = [
   'readSpecCandidate',
   "['ram', 'memoria_ram', 'memory_ram']",
   "['storage', 'armazenamento', 'memoria_interna', 'internal_storage']",
-  'category: categoryId',
+  'model_id: modelId',
   'toPositiveNumber(p.stock_quantity)',
   'toPositiveNumber(p[field])',
-  'matchesSmartphoneMemoryCombination(product, selectedRam, selectedStorage)',
+  'matchesMemoryVariation(product, selectedRam, selectedStorage)',
 ];
 
 const forbiddenSnippets = [
-  'model_id: modelId',
+  'category: categoryId',
 ];
 
 const missing = requiredSnippets.filter((snippet) => !source.includes(snippet));

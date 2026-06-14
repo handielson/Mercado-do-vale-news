@@ -194,6 +194,13 @@ export function ProductSpecifications({
         </label>
     );
 
+    const focusSerializedEntryStart = () => {
+        window.requestAnimationFrame(() => {
+            const imei1Field = document.getElementById('field-imei1');
+            if (imei1Field) (imei1Field as HTMLInputElement).focus();
+        });
+    };
+
     /**
      * Render a generic field based on metadata
      * Used for fields that don't require special components
@@ -242,6 +249,7 @@ export function ProductSpecifications({
                                         setValue(fieldKey, val, { shouldValidate: true });
                                         onAddToBatchList?.({ [key]: val });
                                         setUniqueErrors(prev => ({ ...prev, [key]: '' }));
+                                        focusSerializedEntryStart();
                                         return;
                                     }
                                     const form = e.currentTarget.form;
@@ -338,6 +346,7 @@ export function ProductSpecifications({
                 {shouldShowBaseSpecField('imei1') && (
                     <div className="space-y-1 min-w-0">
                         <IMEIInput
+                            id="field-imei1"
                             label="IMEI 1"
                             technicalName="specs.imei1"
                             value={watch('specs.imei1') || ''}

@@ -6,13 +6,13 @@ const specs = readFileSync('components/products/sections/ProductSpecifications.t
 
 assert.match(
   specs,
-  /onAddToBatchList\?: \(\) => void;/,
-  'ProductSpecifications must receive the batch add action as a header prop',
+  /onAddToBatchList\?: \(overrides\?: Record<string, string>\) => void;/,
+  'ProductSpecifications must receive the batch add action and support serialized field overrides',
 );
 
 assert.match(
   specs,
-  /onClick=\{onAddToBatchList\}[\s\S]*Adicionar .* Lista/,
+  /onClick=\{\(\) => onAddToBatchList\(\)\}[\s\S]*Adicionar .* Lista/,
   'ProductSpecifications header must render the Adicionar a Lista button',
 );
 

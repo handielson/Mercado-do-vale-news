@@ -75,7 +75,7 @@ function readSpecCandidate(specs: Record<string, any>, keys: string[]): string {
     return '';
 }
 
-function matchesSmartphoneMemoryCombination(product: any, selectedRam: string, selectedStorage: string): boolean {
+function matchesMemoryVariation(product: any, selectedRam: string, selectedStorage: string): boolean {
     const specs = readSpecs(product);
     const productRam = readSpecCandidate(specs, ['ram', 'memoria_ram', 'memory_ram']);
     const productStorage = readSpecCandidate(specs, ['storage', 'armazenamento', 'memoria_interna', 'internal_storage']);
@@ -87,7 +87,7 @@ function matchesSmartphoneMemoryCombination(product: any, selectedRam: string, s
 
 const SMARTPHONE_CATEGORY_LABEL = 'Smartphones';
 
-export function ProductPricing({ watch, setValue, errors }: ProductPricingProps) {
+export function ProductPricing({ watch, setValue, errors, modelId }: ProductPricingProps) {
     const cost = watch('price_cost') || 0;
     const priceRetail = watch('price_retail') || 0;
     const priceReseller = watch('price_reseller') || 0;
@@ -138,18 +138,18 @@ export function ProductPricing({ watch, setValue, errors }: ProductPricingProps)
     const [loadingAverages, setLoadingAverages] = useState(false);
 
     useEffect(() => {
-        if (!categoryId || !selectedRam || !selectedStorage) { setStockAverages(null); return; }
+        if (!modelId || !selectedRam || !selectedStorage) { setStockAverages(null); return; }
         let cancelled = false;
         const fetch = async () => {
             setLoadingAverages(true);
             try {
                 const products = await vpsApiService.getProducts({
-                    category: categoryId,
+                    model_id: modelId,
                     status: 'active',
-                    limit: 5000,
+                    limit: 500,
                     noCache: true,
                 });
-                const data = (products || []).filter(product => matchesSmartphoneMemoryCombination(product, selectedRam, selectedStorage));
+                const data = (products || []).filter(product => matchesMemoryVariation(product, selectedRam, selectedStorage));
                 if (cancelled || data.length === 0) { setStockAverages(null); return; }
                 const totalUnits = data.reduce((s, p) => s + toPositiveNumber(p.stock_quantity), 0);
                 if (totalUnits === 0) { setStockAverages(null); return; }
@@ -168,7 +168,7 @@ export function ProductPricing({ watch, setValue, errors }: ProductPricingProps)
         };
         fetch();
         return () => { cancelled = true; };
-    }, [categoryId, selectedRam, selectedStorage]);
+    }, [modelId, selectedRam, selectedStorage]);
     // --- fim médias ---
 
     const rows: PriceRowConfig[] = [
@@ -234,7 +234,7 @@ export function ProductPricing({ watch, setValue, errors }: ProductPricingProps)
             )}
 
             {/* Painel de Médias do Estoque Atual */}
-            {categoryId && selectedRam && selectedStorage && (
+            {modelId && selectedRam && selectedStorage && (
                 <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
                     <div className="flex items-center gap-2 mb-3">
                         <BarChart2 size={15} className="text-amber-600" />
