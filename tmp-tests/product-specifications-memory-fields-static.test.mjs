@@ -5,14 +5,14 @@ const source = readFileSync('components/products/sections/ProductSpecifications.
 
 assert.match(
   source,
-  /const storageRequirement: FieldRequirement = categoryConfig\.storage === 'required' \? 'required' : 'optional';/,
-  'storage must stay visible even when the category only marks it as optional',
+  /const storageRequirement = getBaseSpecRequirement\('storage'\);/,
+  'storage requirement must be resolved from category custom fields or legacy category config',
 );
 
 assert.match(
   source,
-  /const ramRequirement: FieldRequirement = categoryConfig\.ram === 'required' \? 'required' : 'optional';/,
-  'ram must stay visible even when the category only marks it as optional',
+  /const ramRequirement = getBaseSpecRequirement\('ram'\);/,
+  'ram requirement must be resolved from category custom fields or legacy category config',
 );
 
 const storageBlockStart = source.indexOf('/* ARMAZENAMENTO */');
@@ -25,12 +25,16 @@ const storageBlock = source.slice(storageBlockStart, ramBlockStart);
 const ramBlock = source.slice(ramBlockStart);
 
 assert.ok(
-  storageBlock.includes('label="Armazenamento"') && storageBlock.includes('technicalName="specs.storage"'),
+  storageBlock.includes("shouldShowBaseSpecField('storage')") &&
+  storageBlock.includes('label="Armazenamento"') &&
+  storageBlock.includes('technicalName="specs.storage"'),
   'ProductSpecifications must render the storage control directly inside the specifications grid',
 );
 
 assert.ok(
-  ramBlock.includes('label="Memória RAM"') && ramBlock.includes('technicalName="specs.ram"'),
+  ramBlock.includes("shouldShowBaseSpecField('ram')") &&
+  ramBlock.includes('label="Memória RAM"') &&
+  ramBlock.includes('technicalName="specs.ram"'),
   'ProductSpecifications must render the ram control directly inside the specifications grid',
 );
 

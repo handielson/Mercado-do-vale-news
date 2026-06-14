@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { UseFormWatch, UseFormSetValue, FieldErrors } from 'react-hook-form';
 import { ProductInput } from '../../../types/product';
 import { CategoryConfig, FieldRequirement } from '../../../types/category';
@@ -28,6 +28,41 @@ interface ProductSpecificationsProps {
 // Fields that must be unique per product
 const DB_UNIQUE_FIELDS = ['serial', 'imei1', 'imei2'];
 
+const BASE_SPEC_FIELD_KEYS = new Set([
+    'imei1',
+    'imei2',
+    'serial',
+    'color',
+    'storage',
+    'ram',
+    'version',
+    'battery_health',
+]);
+
+const normalizeSpecFieldKey = (key?: string | null) => {
+    if (!key || typeof key !== 'string') return '';
+    return key.trim().replace(/^specs\./, '');
+};
+
+const isEnabledRequirement = (requirement: unknown): requirement is FieldRequirement => {
+    return requirement === 'required' || requirement === 'optional';
+};
+
+const getFieldRequirement = (field: any): FieldRequirement | null => {
+    const requirement = field?.requirement ?? field?.status;
+    return isEnabledRequirement(requirement) ? requirement : null;
+};
+
+const getConfiguredFieldKey = (field: any) => {
+    return normalizeSpecFieldKey(
+        field?.key ??
+        field?.field_key ??
+        field?.technicalName ??
+        field?.technical_name ??
+        field?.name
+    );
+};
+
 export function ProductSpecifications({
     categoryConfig,
     watch,
@@ -46,6 +81,40 @@ export function ProductSpecifications({
     // Unique field validation state
     const [uniqueErrors, setUniqueErrors] = useState<Record<string, string>>({});
     const [checkingField, setCheckingField] = useState<string | null>(null);
+    const hasExplicitCategoryFields = Boolean(categoryConfig?.custom_fields?.length);
+
+    const configuredBaseSpecRequirements = useMemo(() => {
+        const requirements = new Map<string, FieldRequirement>();
+
+        [...(categoryConfig?.custom_fields || []), ...(customFields || [])].forEach((field: any) => {
+            const key = getConfiguredFieldKey(field);
+            const requirement = getFieldRequirement(field);
+
+            if (key && BASE_SPEC_FIELD_KEYS.has(key) && requirement) {
+                requirements.set(key, requirement);
+            }
+        });
+
+        return requirements;
+    }, [categoryConfig?.custom_fields, customFields]);
+
+    const getBaseSpecRequirement = (key: string, fallback: FieldRequirement = 'optional'): FieldRequirement => {
+        return configuredBaseSpecRequirements.get(key) || (isEnabledRequirement(categoryConfig?.[key]) ? categoryConfig?.[key] : fallback);
+    };
+
+    const shouldShowBaseSpecField = (key: string): boolean => {
+        const legacyRequirement = categoryConfig?.[key];
+
+        if (legacyRequirement === 'off' || legacyRequirement === 'hidden') return false;
+
+        if (hasExplicitCategoryFields) {
+            return configuredBaseSpecRequirements.has(key);
+        }
+
+        if (key === 'storage' || key === 'ram') return true;
+
+        return isEnabledRequirement(legacyRequirement);
+    };
 
     const checkUniqueInDb = useCallback(async (field: string, value: string) => {
         if (!value || !DB_UNIQUE_FIELDS.includes(field)) return;
@@ -69,8 +138,8 @@ export function ProductSpecifications({
 
     if (!categoryConfig) return null;
 
-    const storageRequirement: FieldRequirement = categoryConfig.storage === 'required' ? 'required' : 'optional';
-    const ramRequirement: FieldRequirement = categoryConfig.ram === 'required' ? 'required' : 'optional';
+    const storageRequirement = getBaseSpecRequirement('storage');
+    const ramRequirement = getBaseSpecRequirement('ram');
 
     // Helper para Labels com Asterisco
     const FieldLabel = ({ label, required }: { label: string, required: boolean }) => (
@@ -220,14 +289,14 @@ export function ProductSpecifications({
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-5 gap-y-5">
 
                 {/* IMEI 1 */}
-                {categoryConfig.imei1 && categoryConfig.imei1 !== 'off' && (
+                {shouldShowBaseSpecField('imei1') && (
                     <div className="space-y-1 min-w-0">
                         <IMEIInput
                             label="IMEI 1"
                             technicalName="specs.imei1"
                             value={watch('specs.imei1') || ''}
                             onChange={(val) => setValue('specs.imei1', val)}
-                            required={categoryConfig.imei1 === 'required'}
+                            required={getBaseSpecRequirement('imei1') === 'required'}
                             placeholder="Digite 15 dígitos"
                             onBlur={(e) => { if (e.target.value.length === 15) checkUniqueInDb('imei1', e.target.value); }}
                             onKeyDown={(e) => {
@@ -238,7 +307,7 @@ export function ProductSpecifications({
                                 }
                             }}
                         />
-                        {categoryConfig.imei1 === 'required' && errors?.specs?.imei1?.message && (
+                        {getBaseSpecRequirement('imei1') === 'required' && errors?.specs?.imei1?.message && (
                             <p className="text-xs text-red-600 mt-1">{errors.specs.imei1.message as string}</p>
                         )}
                         {uniqueErrors.imei1 && (
@@ -248,7 +317,7 @@ export function ProductSpecifications({
                 )}
 
                 {/* IMEI 2 */}
-                {categoryConfig.imei2 && categoryConfig.imei2 !== 'off' && (
+                {shouldShowBaseSpecField('imei2') && (
                     <div className="space-y-1 min-w-0">
                         <IMEIInput
                             id="field-imei2"
@@ -256,7 +325,7 @@ export function ProductSpecifications({
                             technicalName="specs.imei2"
                             value={watch('specs.imei2') || ''}
                             onChange={(val) => setValue('specs.imei2', val)}
-                            required={categoryConfig.imei2 === 'required'}
+                            required={getBaseSpecRequirement('imei2') === 'required'}
                             placeholder="Digite 15 dígitos"
                             onBlur={(e) => { if (e.target.value.length === 15) checkUniqueInDb('imei2', e.target.value); }}
                             onKeyDown={(e) => {
@@ -267,7 +336,7 @@ export function ProductSpecifications({
                                 }
                             }}
                         />
-                        {categoryConfig.imei2 === 'required' && errors?.specs?.imei2?.message && (
+                        {getBaseSpecRequirement('imei2') === 'required' && errors?.specs?.imei2?.message && (
                             <p className="text-xs text-red-600 mt-1">{errors.specs.imei2.message as string}</p>
                         )}
                         {uniqueErrors.imei2 && (
@@ -277,7 +346,7 @@ export function ProductSpecifications({
                 )}
 
                 {/* SERIAL - Rendered here to ensure it's 3rd field */}
-                {categoryConfig.serial && categoryConfig.serial !== 'off' && renderGenericField('serial', categoryConfig.serial)}
+                {shouldShowBaseSpecField('serial') && renderGenericField('serial', getBaseSpecRequirement('serial'))}
 
                 {/*
                     UNIQUE FIELDS (color, storage, ram, version)
@@ -286,38 +355,41 @@ export function ProductSpecifications({
                 */}
 
                 {/* COR */}
-                {categoryConfig.color && categoryConfig.color !== 'off' && (
+                {shouldShowBaseSpecField('color') && (
                     <div className="space-y-1 min-w-0">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Cor Predominante {categoryConfig.color === 'required' && <span className="text-red-500">*</span>}
+                            Cor Predominante {getBaseSpecRequirement('color') === 'required' && <span className="text-red-500">*</span>}
                             <span className="ml-2 text-xs text-slate-400 font-mono">specs.color</span>
                         </label>
                         <ColorSelect
                             value={watch('specs.color') || ''}
                             onChange={(val) => setValue('specs.color', val)}
                         />
-                        {categoryConfig.color === 'required' && errors?.specs?.color && (
+                        {getBaseSpecRequirement('color') === 'required' && errors?.specs?.color && (
                             <p className="text-xs text-red-600 mt-1">{(errors.specs.color as any)?.message}</p>
                         )}
                     </div>
                 )}
 
                 {/* ARMAZENAMENTO */}
-                <div className="space-y-1 min-w-0">
-                    <CapacitySelect
-                        value={watch('specs.storage') || ''}
-                        onChange={(val) => setValue('specs.storage', val)}
-                        label="Armazenamento"
-                        technicalName="specs.storage"
-                        placeholder="Selecione o armazenamento"
-                    />
-                    {storageRequirement === 'required' && errors?.specs?.storage && (
-                        <p className="text-xs text-red-600 mt-1">{(errors.specs.storage as any)?.message}</p>
-                    )}
-                </div>
+                {shouldShowBaseSpecField('storage') && (
+                    <div className="space-y-1 min-w-0">
+                        <CapacitySelect
+                            value={watch('specs.storage') || ''}
+                            onChange={(val) => setValue('specs.storage', val)}
+                            label="Armazenamento"
+                            technicalName="specs.storage"
+                            placeholder="Selecione o armazenamento"
+                        />
+                        {storageRequirement === 'required' && errors?.specs?.storage && (
+                            <p className="text-xs text-red-600 mt-1">{(errors.specs.storage as any)?.message}</p>
+                        )}
+                    </div>
+                )}
 
                 {/* RAM */}
-                <div className="space-y-1 min-w-0">
+                {shouldShowBaseSpecField('ram') && (
+                    <div className="space-y-1 min-w-0">
                         <CapacitySelect
                             value={watch('specs.ram') || ''}
                             onChange={(val) => setValue('specs.ram', val)}
@@ -329,30 +401,31 @@ export function ProductSpecifications({
                         {ramRequirement === 'required' && errors?.specs?.ram && (
                             <p className="text-xs text-red-600 mt-1">{(errors.specs.ram as any)?.message}</p>
                         )}
-                </div>
+                    </div>
+                )}
 
                 {/* VERSÃO */}
-                {categoryConfig.version && categoryConfig.version !== 'off' && !templateValues?.['version'] && (
+                {shouldShowBaseSpecField('version') && !templateValues?.['version'] && (
                     <div className="space-y-1 min-w-0">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Versão {categoryConfig.version === 'required' && <span className="text-red-500">*</span>}
+                            Versão {getBaseSpecRequirement('version') === 'required' && <span className="text-red-500">*</span>}
                             <span className="ml-2 text-xs text-slate-400 font-mono">specs.version</span>
                         </label>
                         <VersionSelect
                             value={watch('specs.version') || ''}
                             onChange={(val) => setValue('specs.version', val)}
                         />
-                        {categoryConfig.version === 'required' && errors?.specs?.version && (
+                        {getBaseSpecRequirement('version') === 'required' && errors?.specs?.version && (
                             <p className="text-xs text-red-600 mt-1">{(errors.specs.version as any)?.message}</p>
                         )}
                     </div>
                 )}
 
                 {/* SAÚDE DA BATERIA */}
-                {categoryConfig.battery_health && categoryConfig.battery_health !== 'off' && (
+                {shouldShowBaseSpecField('battery_health') && (
                     <div className="space-y-1 min-w-0">
                         <label className="block text-sm font-medium text-slate-700 mb-1">
-                            Saúde Bateria {categoryConfig.battery_health === 'required' && <span className="text-red-500">*</span>}
+                            Saúde Bateria {getBaseSpecRequirement('battery_health') === 'required' && <span className="text-red-500">*</span>}
                             <span className="ml-2 text-xs text-slate-400 font-mono">specs.battery_health</span>
                         </label>
                         <select
@@ -391,8 +464,7 @@ export function ProductSpecifications({
                         ?.filter((customField) => {
                             // Exclude UNIQUE_FIELDS that are already rendered above
                             // These fields appear in the batch entry grid
-                            const uniqueFields = ['color', 'storage', 'ram', 'version', 'imei1', 'imei2', 'serial'];
-                            return !uniqueFields.includes(customField.key);
+                            return !BASE_SPEC_FIELD_KEYS.has(normalizeSpecFieldKey(customField.key));
                         })
                         .map((customField) => {
                             if (customField.requirement === 'off') return null;
