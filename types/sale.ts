@@ -153,6 +153,18 @@ export interface SaleWithItems extends Sale {
         id: string;
         name: string;
     };
+    delivery_job?: SaleDeliveryJobSummary | null;
+}
+
+export interface SaleDeliveryJobSummary {
+    id: string;
+    token: string;
+    sale_id: string;
+    payment_status?: 'not_required' | 'pending' | 'approved' | 'failed' | 'cancelled';
+    delivery_status?: 'pending' | 'in_route' | 'delivered' | 'cancelled';
+    delivery_route_url?: string | null;
+    completed_by_admin_at?: string | null;
+    admin_completion_reason?: string | null;
 }
 
 /**

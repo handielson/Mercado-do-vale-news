@@ -542,15 +542,17 @@ export const getSaleById = async (id: string): Promise<SaleWithItems | null> => 
  */
 export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> => {
     try {
-        const [saleRows, saleItems, customers, teamMembers] = await Promise.all([
+        const [saleRows, saleItems, customers, teamMembers, deliveryJobs] = await Promise.all([
             loadTableRows<any>('sales'),
             loadTableRows<any>('sale_items'),
             loadTableRows<any>('customers'),
             loadTableRows<any>('team_members'),
+            loadTableRows<any>('customer_delivery_jobs'),
         ]);
 
         const customerById = new Map(customers.map(row => [String(row.id), row]));
         const sellerById = new Map(teamMembers.map(row => [String(row.id), row]));
+        const deliveryJobBySaleId = new Map(deliveryJobs.map(row => [String(row.sale_id || ''), row]));
 
         return saleRows
             .map((saleRow) => {
@@ -568,6 +570,7 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
             .map(({ sale, items }) => {
                 const customer = customerById.get(String(sale.customer_id || ''));
                 const seller = sellerById.get(String(sale.seller_id || ''));
+                const deliveryJob = deliveryJobBySaleId.get(String(sale.id || ''));
                 return {
                     ...sale,
                     items,
@@ -580,6 +583,16 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
                         id: String(seller.id),
                         name: String(seller.name || ''),
                     } : undefined,
+                    delivery_job: deliveryJob ? {
+                        id: String(deliveryJob.id || ''),
+                        token: String(deliveryJob.token || ''),
+                        sale_id: String(deliveryJob.sale_id || ''),
+                        payment_status: deliveryJob.payment_status,
+                        delivery_status: deliveryJob.delivery_status,
+                        delivery_route_url: deliveryJob.delivery_route_url || null,
+                        completed_by_admin_at: deliveryJob.completed_by_admin_at || null,
+                        admin_completion_reason: deliveryJob.admin_completion_reason || null,
+                    } : null,
                 } as SaleWithItems;
             });
     } catch (error) {

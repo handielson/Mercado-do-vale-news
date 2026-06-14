@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical, Calendar, DollarSign, RefreshCw, XCircle, RotateCcw, TrendingUp } from 'lucide-react';
+import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical, Calendar, DollarSign, RefreshCw, XCircle, RotateCcw, TrendingUp, Truck } from 'lucide-react';
 import { SaleWithItems, SaleFilters } from '../../../types/sale';
 import { getSales, cancelSale, refundSale } from '../../../services/saleService';
 import SaleDetailsModal from '../../../components/admin/sales/SaleDetailsModal';
@@ -107,6 +107,34 @@ export default function SalesPage() {
             case 'refunded': return 'Estornada';
             default: return status;
         }
+    };
+
+    const isDeliverySale = (sale: SaleWithItems) => {
+        return Boolean(sale.delivery_type && sale.delivery_type !== 'store_pickup' && sale.delivery_type !== 'pickup');
+    };
+
+    const getDeliveryStatusLabel = (sale: SaleWithItems) => {
+        if (!isDeliverySale(sale)) return 'Sem entrega';
+        const job = sale.delivery_job;
+        if (!job) return 'Aguardando link';
+        if (job.completed_by_admin_at) return 'Baixa admin';
+        if (job.delivery_status === 'delivered') return 'Entregue';
+        if (job.delivery_status === 'cancelled') return 'Cancelada';
+        if (job.delivery_status === 'in_route') return 'Em rota';
+        if (job.payment_status === 'approved' || job.payment_status === 'not_required') return 'Pix aprovado';
+        if (job.payment_status === 'failed' || job.payment_status === 'cancelled') return 'Pix falhou';
+        if (job.payment_status === 'pending') return 'Pix pendente';
+        return 'Pendente';
+    };
+
+    const getDeliveryStatusStyle = (sale: SaleWithItems) => {
+        const label = getDeliveryStatusLabel(sale);
+        if (label === 'Sem entrega') return 'bg-slate-100 text-slate-500 border-slate-200';
+        if (label === 'Entregue') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+        if (label === 'Baixa admin') return 'bg-amber-100 text-amber-800 border-amber-200';
+        if (label === 'Pix aprovado' || label === 'Em rota') return 'bg-blue-100 text-blue-800 border-blue-200';
+        if (label === 'Pix falhou' || label === 'Cancelada') return 'bg-red-100 text-red-800 border-red-200';
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
     };
 
     // Filtro local por busca textual e data
@@ -362,6 +390,7 @@ export default function SalesPage() {
                                 <th className="p-4 font-medium">Pedido</th>
                                 <th className="p-4 font-medium">Cliente</th>
                                 <th className="p-4 font-medium">Status</th>
+                                <th className="p-4 font-medium">Entrega</th>
                                 <th className="p-4 font-medium text-right">Total</th>
                                 <th className="p-4 font-medium text-center">Ações</th>
                             </tr>
@@ -369,7 +398,7 @@ export default function SalesPage() {
                         <tbody className="divide-y divide-slate-100">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={6} className="p-8 text-center text-slate-500">
+                                    <td colSpan={7} className="p-8 text-center text-slate-500">
                                         <div className="flex flex-col items-center justify-center">
                                             <RefreshCw className="animate-spin mb-2 text-blue-500" size={24} />
                                             <span>Carregando vendas...</span>
@@ -378,7 +407,7 @@ export default function SalesPage() {
                                 </tr>
                             ) : filteredSales.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="p-8 text-center text-slate-500">
+                                    <td colSpan={7} className="p-8 text-center text-slate-500">
                                         <div className="bg-slate-50 rounded-lg p-8 inline-block mt-4">
                                             <ShoppingBag size={48} className="mx-auto text-slate-300 mb-4" />
                                             <p className="font-medium text-slate-700">Nenhuma venda encontrada</p>
@@ -419,6 +448,12 @@ export default function SalesPage() {
                                         <td className="p-4">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusStyle(sale.status)}`}>
                                                 {getStatusLabel(sale.status)}
+                                            </span>
+                                        </td>
+                                        <td className="p-4">
+                                            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${getDeliveryStatusStyle(sale)}`}>
+                                                <Truck size={12} />
+                                                {getDeliveryStatusLabel(sale)}
                                             </span>
                                         </td>
                                         <td className="p-4 text-right">

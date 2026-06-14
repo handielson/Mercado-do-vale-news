@@ -389,10 +389,10 @@ const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => voi
                 type="button"
                 onClick={() => onNavigate(product.editUrl)}
                 className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                title={`Abre o cadastro do SKU ${product.sku || 'produto'}`}
+                title={`Abre a edicao do SKU ${product.sku || 'produto'}`}
             >
                 <Pencil className="h-3.5 w-3.5" />
-                Cadastro
+                Editar produto
             </button>
             <button
                 type="button"
