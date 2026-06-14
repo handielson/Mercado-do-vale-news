@@ -16451,6 +16451,78 @@ fastify.get('/models', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
   return rows.map(mapVpsModel);
 });
 
+fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req, reply) => {
+  const prompt = String(req.body?.prompt || '').trim();
+  if (!prompt) return reply.code(400).send({ error: 'prompt obrigatorio' });
+
+  const [settingsRows] = await pool.query('SELECT ai_model, openai_api_key FROM autoresponder_settings WHERE id = 1 LIMIT 1');
+  const settings = settingsRows?.[0] || {};
+  const apiKey = String(settings.openai_api_key || process.env.OPENAI_API_KEY || '').trim();
+  const model = String(settings.ai_model || process.env.AUTORESPONDER_AI_MODEL || 'gpt-5-nano').trim() || 'gpt-5-nano';
+  if (!apiKey) return reply.code(400).send({ error: 'Chave OpenAI nao configurada no VPS' });
+
+  const logId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+  try {
+    const requestBody = {
+      model,
+      instructions: 'Voce gera somente JSON valido para cadastro de modelos no Mercado do Vale. Nao use markdown.',
+      input: prompt,
+      max_output_tokens: 2500,
+    };
+    if (/^gpt-5/i.test(model)) {
+      requestBody.reasoning = { effort: 'minimal' };
+      requestBody.text = { verbosity: 'low' };
+    }
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(45000),
+    });
+    const payload = await response.json().catch(() => ({}));
+    const text = extractAutoresponderOpenAiText(payload);
+    await pool.query(
+      `INSERT INTO model_ai_generation_logs
+        (id, model_name, brand_name, category_name, ai_model, prompt_text, response_text, status, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        logId,
+        req.body?.name || null,
+        req.body?.brand || null,
+        req.body?.category || null,
+        model,
+        prompt.slice(0, 12000),
+        text ? text.slice(0, 16000) : null,
+        response.ok && text ? 'success' : 'error',
+        response.ok ? null : JSON.stringify(payload).slice(0, 2000),
+      ]
+    ).catch((error) => console.warn('[model-ai-log] failed:', error.message));
+    if (!response.ok || !text) {
+      return reply.code(502).send({ error: 'IA nao retornou JSON para o modelo' });
+    }
+    return { text, model };
+  } catch (error) {
+    await pool.query(
+      `INSERT INTO model_ai_generation_logs
+        (id, model_name, brand_name, category_name, ai_model, prompt_text, status, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, 'error', ?)`,
+      [
+        logId,
+        req.body?.name || null,
+        req.body?.brand || null,
+        req.body?.category || null,
+        model,
+        prompt.slice(0, 12000),
+        String(error?.message || error).slice(0, 2000),
+      ]
+    ).catch((err) => console.warn('[model-ai-log] failed:', err.message));
+    return reply.code(502).send({ error: error?.message || 'Erro ao gerar JSON com IA' });
+  }
+});
+
 fastify.get('/models/:id', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const companyId = await resolveModelCompanyId(req.query?.company_id);
   const rows = await vpsDbSelect(
@@ -23436,6 +23508,24 @@ async function runMigrations() {
   await addIndexIfMissing('models', 'idx_models_brand_id', 'brand_id');
   await addIndexIfMissing('models', 'idx_models_category_id', 'category_id');
   console.log('[migration] models table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS model_ai_generation_logs (
+      id CHAR(36) PRIMARY KEY,
+      model_name VARCHAR(255) NULL,
+      brand_name VARCHAR(255) NULL,
+      category_name VARCHAR(255) NULL,
+      ai_model VARCHAR(120) NULL,
+      prompt_text LONGTEXT NULL,
+      response_text LONGTEXT NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'success',
+      error_message TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_model_ai_generation_logs_created (created_at),
+      INDEX idx_model_ai_generation_logs_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] model_ai_generation_logs table: OK');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS cashback_settings (

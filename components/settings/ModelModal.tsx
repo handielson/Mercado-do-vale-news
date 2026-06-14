@@ -16,6 +16,7 @@ import { tableDataService, type TableOption } from '../../services/table-data';
 import { CategorySelect } from '../products/CategorySelect';
 import { ColorImageManager } from './ColorImageManager';
 import { buildModelImportPrompt, normalizeModelImportPayload, parseModelImportJson } from './modelJsonImport.js';
+import { generateModelJsonWithAi } from '../../services/modelAiService';
 
 interface ModelModalProps {
     isOpen: boolean;
@@ -402,6 +403,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [modelJsonInput, setModelJsonInput] = useState('');
     const [modelPromptCopied, setModelPromptCopied] = useState(false);
     const [showModelPrompt, setShowModelPrompt] = useState(false);
+    const [generatingModelJson, setGeneratingModelJson] = useState(false);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Update AI Prompt automatically when model data changes
@@ -684,6 +686,39 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         }
     };
 
+    const handleGenerateModelJson = async () => {
+        if (loading) {
+            toast.error('Aguarde marcas, categorias e campos carregarem antes de gerar o JSON.');
+            return;
+        }
+
+        setGeneratingModelJson(true);
+        try {
+            const result = await generateModelJsonWithAi({
+                prompt: modelImportPrompt,
+                name,
+                brand: brandObj?.name || '',
+                category: categoryObj?.name || 'Smartphones',
+            });
+            setModelJsonInput(result.text);
+            const data = parseModelImportJson(result.text);
+            const normalized = normalizeModelImportPayload(data, {
+                brands,
+                categories,
+                customFields: visibleSpecFields,
+                choiceOptions: fieldChoiceOptions,
+            });
+            const appliedFields = applyNormalizedModelPayload(normalized);
+            warnUnresolvedModelPayload(data, normalized);
+            toast.success(appliedFields.length > 0 ? 'Modelo preenchido pela IA.' : 'JSON gerado pela IA. Revise antes de salvar.');
+        } catch (err) {
+            console.error('Erro ao gerar JSON do modelo com IA', err);
+            toast.error(err instanceof Error ? err.message : 'Nao foi possivel gerar o JSON com IA.');
+        } finally {
+            setGeneratingModelJson(false);
+        }
+    };
+
     const handleApplyJson = () => {
         try {
             if (!jsonInput.trim()) {
@@ -957,7 +992,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 : await modelService.create(input);
 
             await onSave();
-            toast.success(`Modelo "${saved?.name || input.name}" salvo com sucesso.`);
+            toast.success(`Modelo "${saved.name}" salvo com sucesso.`);
             onClose();
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Erro ao salvar modelo';
@@ -1256,6 +1291,14 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg bg-slate-50 text-slate-700 resize-none"
                                     />
                                     <div className="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleGenerateModelJson}
+                                            disabled={generatingModelJson || loading}
+                                            className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-700 text-white rounded-lg hover:bg-indigo-800 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {generatingModelJson ? 'Pesquisando...' : 'Pesquisar e preencher pelo sistema'}
+                                        </button>
                                         <a href="https://gemini.google.com/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">
                                             <ExternalLink size={15} /> Gemini
                                         </a>
