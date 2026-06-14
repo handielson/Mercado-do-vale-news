@@ -178,6 +178,13 @@ export function normalizeModelImportPayload(data, context = {}) {
     mergeTemplateObject(templateValues, payload.campos, resolveFieldKey, emptyFields, fieldByKey);
     mergeTemplateObject(templateValues, payload.extra_fields, resolveFieldKey, emptyFields, fieldByKey);
 
+    const gifts = payload.brindes || payload.gifts || payload.bonus_items;
+    if (Array.isArray(gifts)) {
+        templateValues.brindes = gifts.map(String).map((item) => item.trim()).filter(Boolean).join('\n');
+    } else if (typeof gifts === 'string' && gifts.trim()) {
+        templateValues.brindes = gifts.trim();
+    }
+
     const seo = payload.seo || {};
     const slug = payload.slug || seo.slug;
     const metaTitle = payload.meta_title || payload.metaTitle || seo.meta_title || seo.metaTitle;
@@ -307,6 +314,8 @@ Regras:
 7. Na duvida nao preencha: se nao tiver certeza sobre um dado tecnico, deixe o campo ausente ou null para o painel avisar que faltou dado real. Nao crie nada.
 8. Para campos de escolha, use o valor real do produto. Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real no JSON para o painel avisar que a opcao precisa ser cadastrada. Nao adapte para uma opcao parecida.
 9. Em "logistics", preencha peso e dimensoes da caixa/embalagem quando a ficha tecnica/anuncio confiavel informar esses dados. Nao use dimensoes do aparelho nu como dimensoes da embalagem.
+10. Em "template_values.itens_que_acompanham", liste um item por linha no formato "1 item". Se a fonte disser que a unidade/regiao acompanha Adaptador de tomada, inclua "1 Adaptador de tomada"; se disser que pode variar por regiao, escreva "1 Adaptador de tomada (pode variar por regiao)".
+11. Em "template_values.brindes", liste somente os brindes da loja, um por linha no formato "1 item". Exemplo: capa protetora, capa extra, pelicula 3D aplicada.
 
 Contexto atual:
 - Nome do modelo: ${name || '[preencher]'}
@@ -341,6 +350,8 @@ Formato esperado:
     "ram": "4GB",
     "storage": "128GB",
     "version": "Global",
+    "itens_que_acompanham": "1 aparelho\n1 cabo USB Tipo C\n1 ferramenta de ejeção de SIM\n1 guia de início rápido\n1 Adaptador de tomada (pode variar por região)",
+    "brindes": "1 capa protetora\n1 capa extra\n1 pelicula 3D aplicada",
     "battery_health": "100%",
     "screen_size": "6.88 polegadas",
     "processor": null,

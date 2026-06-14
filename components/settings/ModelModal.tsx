@@ -74,6 +74,7 @@ const NON_TEMPLATE_CATEGORY_KEYS = new Set([
     'auto_name_template',
     'auto_name_separator',
     'brand',
+    'brindes',
     'category_id',
     'custom_fields',
     'description',
@@ -1555,6 +1556,22 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                             placeholder="Descricao comercial do modelo"
                                         />
                                     </div>
+
+                                    <div className="lg:col-span-2">
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Brindes
+                                        </label>
+                                        <textarea
+                                            value={templateValues['brindes'] || ''}
+                                            onChange={(e) => handleTemplateValueChange('brindes', e.target.value)}
+                                            rows={3}
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+                                            placeholder={'1 capa protetora\n1 capa extra\n1 pelicula 3D aplicada'}
+                                        />
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            Um item por linha. Aparece na pagina publica como lista.
+                                        </p>
+                                    </div>
                                 </div>
 
                                 <div className="border-t border-slate-200 pt-4 mt-4">
@@ -1704,6 +1721,22 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     style={{ minHeight: '80px' }}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-hidden resize-none"
                                 />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Brindes
+                                </label>
+                                <textarea
+                                    value={templateValues['brindes'] || ''}
+                                    onChange={(e) => handleTemplateValueChange('brindes', e.target.value)}
+                                    rows={3}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                                    placeholder={'1 capa protetora\n1 capa extra\n1 pelicula 3D aplicada'}
+                                />
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Salvo em models.template_values.brindes e exibido como lista na pagina do produto.
+                                </p>
                             </div>
 
                             {/* Dynamic Fields */}

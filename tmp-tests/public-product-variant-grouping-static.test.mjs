@@ -18,8 +18,8 @@ assert.match(
 
 assert.match(
   source,
-  /<h4 className="text-base font-extrabold text-slate-950">\{group\.storage\}<\/h4>/,
-  'variant UI should render a storage heading for each group'
+  /<h4 className="text-base font-extrabold text-slate-950">\{group\.memoryLabel\}<\/h4>/,
+  'variant UI should render a RAM/storage heading for each group'
 );
 
 assert.doesNotMatch(

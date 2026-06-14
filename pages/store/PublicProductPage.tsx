@@ -770,6 +770,83 @@ export const PublicProductPage: React.FC = () => {
         return match ? match[1].toUpperCase() : value.trim();
     };
 
+    function normalizePdpListItems(value: string): string[] {
+        const seen = new Set<string>();
+        return value
+            .split(/\r?\n|[,;]+/)
+            .map(item => item
+                .replace(/^\s*(?:[-*•]|\d+[.)-]?|1\s*x?\s*)\s*/i, '')
+                .trim()
+            )
+            .filter(item => {
+                if (!item || seen.has(item.toLowerCase())) return false;
+                seen.add(item.toLowerCase());
+                return true;
+            });
+    }
+
+    function normalizePdpSpecText(value: string): string {
+        return value
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '');
+    }
+
+    function isListStyleSpecItem(item: { key: string, label: string }): boolean {
+        const normalized = normalizePdpSpecText(`${item.key} ${item.label}`);
+        return (
+            normalized.includes('itens_que_acompanham') ||
+            normalized.includes('conteudo_da_embalagem') ||
+            normalized.includes('acompanha') ||
+            normalized.includes('acessorios_inclusos') ||
+            normalized.includes('brindes') ||
+            normalized.includes('brinde')
+        );
+    }
+
+    const getMemoryGroupLabel = (parts: { storage: string; ram: string }) => {
+        if (parts.ram && parts.storage && !parts.storage.toLowerCase().startsWith('outras')) {
+            return `${parts.ram} de Ram | ${parts.storage} de armazenamento`;
+        }
+        if (parts.ram) return `${parts.ram} de Ram`;
+        return parts.storage;
+    };
+
+    const getVariantColorBorder = (colorName: string): string => {
+        const normalized = normalizePdpSpecText(colorName);
+        const colorMap: Record<string, string> = {
+            preto: '#111827',
+            preta: '#111827',
+            black: '#111827',
+            azul: '#2563eb',
+            blue: '#2563eb',
+            branco: '#d1d5db',
+            branca: '#d1d5db',
+            white: '#d1d5db',
+            verde: '#16a34a',
+            green: '#16a34a',
+            vermelho: '#dc2626',
+            vermelha: '#dc2626',
+            red: '#dc2626',
+            rosa: '#db2777',
+            pink: '#db2777',
+            roxo: '#7c3aed',
+            roxa: '#7c3aed',
+            purple: '#7c3aed',
+            amarelo: '#ca8a04',
+            amarela: '#ca8a04',
+            yellow: '#ca8a04',
+            cinza: '#6b7280',
+            grafite: '#374151',
+            prata: '#9ca3af',
+            dourado: '#b45309',
+            ouro: '#b45309',
+        };
+        return colorMap[normalized] || '#94a3b8';
+    };
+
     const getStorageFromLabel = (label: string): string => {
         const matches = [...label.matchAll(/(\d+)\s*(GB|TB)/gi)];
         const storageMatch = matches.find(match => {
@@ -806,15 +883,16 @@ export const PublicProductPage: React.FC = () => {
 
     const groupedVariantOptions = Array.from(uniqueVariants.reduce((groups, item) => {
         const parts = getVariantParts(item);
-        const key = parts.storage;
+        const key = getMemoryGroupLabel(parts);
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key)!.push({ item, ...parts });
         return groups;
     }, new Map<string, Array<{ item: CatalogProduct; storage: string; ram: string; color: string }>>()))
-        .map(([storage, options]) => {
+        .map(([memoryLabel, options]) => {
             const ramCount = new Set(options.map(option => option.ram).filter(Boolean)).size;
             return {
-                storage,
+                memoryLabel,
+                storage: options[0]?.storage || memoryLabel,
                 options: options.sort((a, b) => a.color.localeCompare(b.color)),
                 showRam: ramCount > 1,
             };
@@ -1253,15 +1331,15 @@ export const PublicProductPage: React.FC = () => {
                                 <h3 className="text-sm font-bold text-slate-900 mb-3">Opções disponíveis:</h3>
                                 <div className="space-y-4">
                                     {groupedVariantOptions.map((group) => (
-                                        <div key={group.storage} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                                        <div key={group.memoryLabel} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
                                             <div className="mb-2">
-                                                <h4 className="text-base font-extrabold text-slate-950">{group.storage}</h4>
+                                                <h4 className="text-base font-extrabold text-slate-950">{group.memoryLabel}</h4>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
                                                 {group.options.map(({ item: sib, color, ram }) => {
                                                     const isCurrent = sib.id === product.id;
                                                     const isOutOfStock = Boolean(sib.track_inventory) && ((sib.stock_quantity || 0) <= 0);
-                                                    const buttonLabel = `${color}${group.showRam && ram ? ` - RAM ${ram}` : ''}`;
+                                                    const buttonLabel = color;
                                                     const variantButtonStateClasses = isOutOfStock
                                                         ? 'relative overflow-hidden border-slate-300 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75 shadow-inner'
                                                         : isCurrent
@@ -1280,6 +1358,7 @@ export const PublicProductPage: React.FC = () => {
                                                             aria-disabled={isOutOfStock}
                                                             title={isOutOfStock ? `${buttonLabel} esgotado` : buttonLabel}
                                                             className={`min-h-11 px-4 py-2 rounded-lg border text-sm font-semibold transition-all duration-300 ${variantButtonStateClasses}`}
+                                                            style={{ borderColor: getVariantColorBorder(color) }}
                                                         >
                                                             <span className={isOutOfStock ? 'line-through decoration-2 decoration-slate-500/70' : ''}>
                                                                 {buttonLabel}
@@ -1897,17 +1976,8 @@ export const PublicProductPage: React.FC = () => {
                                             tryAddItem(key, label, value);
                                         }
 
-                                        function normalizeSpecText(value: string): string {
-                                            return value
-                                                .normalize('NFD')
-                                                .replace(/[\u0300-\u036f]/g, '')
-                                                .toLowerCase()
-                                                .replace(/[^a-z0-9]+/g, '_')
-                                                .replace(/^_+|_+$/g, '');
-                                        }
-
                                         function resolveSpecGroupId(item: { key: string, label: string }): string | null {
-                                            const normalized = normalizeSpecText(`${item.key} ${item.label}`);
+                                            const normalized = normalizePdpSpecText(`${item.key} ${item.label}`);
 
                                             if (normalized.includes('camera') || normalized.includes('cam_') || normalized.includes('megapixel') || normalized.includes('mpx') || normalized.includes('selfie') || normalized.includes('ultrawide') || normalized.includes('macro') || normalized.includes('teleobjetiva') || normalized.includes('periscopio') || normalized.includes('video')) return 'camera';
                                             if (normalized.includes('largura') || normalized.includes('altura') || normalized.includes('profundidade') || normalized.includes('dimensions') || normalized.includes('peso')) return 'logistica';
@@ -1960,7 +2030,18 @@ export const PublicProductPage: React.FC = () => {
                                                                 <div key={item.key} className="flex flex-col max-w-full">
                                                                     <dt className="text-slate-500 text-xs font-semibold uppercase tracking-wide truncate pr-2" title={item.label}>{item.label}</dt>
                                                                     <dd className="font-medium text-slate-900 mt-0.5 break-words pr-2">
-                                                                        {item.key === 'memoria_ram_virtual' ? `+ ${item.strVal}` : item.strVal}
+                                                                        {isListStyleSpecItem(item) ? (
+                                                                            <ul className="space-y-1.5">
+                                                                                {normalizePdpListItems(item.strVal).map((line) => (
+                                                                                    <li key={line} className="flex items-start gap-2">
+                                                                                        <span className="mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded border border-slate-200 bg-slate-50 px-1 text-[11px] font-bold text-slate-700">
+                                                                                            1
+                                                                                        </span>
+                                                                                        <span>{line}</span>
+                                                                                    </li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        ) : item.key === 'memoria_ram_virtual' ? `+ ${item.strVal}` : item.strVal}
                                                                     </dd>
                                                                 </div>
                                                             ))}
