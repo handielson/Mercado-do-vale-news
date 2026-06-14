@@ -300,11 +300,11 @@ export function buildModelImportPrompt({ name, brand, category, customFields = [
 Regras:
 1. Retorne APENAS um objeto JSON valido. Sem markdown, sem explicacoes.
 2. Use "template_values" para todos os campos tecnicos atuais e futuros.
-3. Use apenas dados reais do produto, de ficha tecnica/fabricante/anuncio confiavel. Nao invente especificacoes.
+3. Use apenas dados reais do produto, confirmados em ficha tecnica, fabricante ou anuncio confiavel. Nao use dados genericos, aproximados ou inventados.
 4. Nao inclua IMEI, serial, cor unica de aparelho ou quantidade de estoque. Esses dados pertencem ao cadastro individual/produto, nao ao modelo.
 5. Em textos, evite aspas duplas internas; use aspas simples se precisar.
 6. Preencha todas as informacoes basicas reais do smartphone quando existirem em fonte confiavel, especialmente slot para cartao/microSD/SIM, entrada de fone, biometria, rede, NFC, resistencia, tela, chipset, bateria e carregamento.
-7. Se nao tiver certeza sobre um dado tecnico, deixe o campo ausente ou null para o painel avisar que faltou dado real. Nao crie nada.
+7. Na duvida nao preencha: se nao tiver certeza sobre um dado tecnico, deixe o campo ausente ou null para o painel avisar que faltou dado real. Nao crie nada.
 8. Para campos de escolha, use o valor real do produto. Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real no JSON para o painel avisar que a opcao precisa ser cadastrada. Nao adapte para uma opcao parecida.
 9. Em "logistics", preencha peso e dimensoes da caixa/embalagem quando a ficha tecnica/anuncio confiavel informar esses dados. Nao use dimensoes do aparelho nu como dimensoes da embalagem.
 
@@ -343,9 +343,9 @@ Formato esperado:
     "version": "Global",
     "battery_health": "100%",
     "screen_size": "6.88 polegadas",
-    "processor": "Octa-core",
-    "camera": "50MP",
-    "battery": "5160mAh"
+    "processor": null,
+    "camera": null,
+    "battery": null
   }
 }`;
 }

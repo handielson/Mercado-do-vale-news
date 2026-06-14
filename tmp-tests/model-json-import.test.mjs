@@ -148,6 +148,8 @@ const choiceOptions = {
   assert.match(prompt, /Opcoes validas: 4GB, 6GB/);
   assert.match(prompt, /Opcoes validas: Global, Nacional/);
   assert.match(prompt, /Use apenas dados reais do produto/);
+  assert.match(prompt, /Nao use dados genericos/i);
+  assert.match(prompt, /na duvida nao preencha/i);
   assert.match(prompt, /dimensoes da caixa\/embalagem/i);
   assert.match(prompt, /Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real/);
   assert.match(prompt, /screen_size/);

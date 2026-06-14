@@ -27,6 +27,19 @@ interface ModelModalProps {
 
 type TabType = 'basic' | 'json' | 'template' | 'seo' | 'photos' | 'tags';
 
+const TRUSTED_SOURCE_LINKS_STORAGE_KEY = 'mdv.modelAi.trustedSourceLinks';
+
+const DEFAULT_TRUSTED_SOURCE_LINKS = [
+    'https://www.gsmarena.com/',
+    'https://www.kimovil.com/',
+    'https://www.tudocelular.com/',
+].join('\n');
+
+const parseTrustedSourceLinks = (value: string) => value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 const normalizeAutocompleteText = (value: string) => value
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -451,6 +464,10 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [modelPromptCopied, setModelPromptCopied] = useState(false);
     const [showModelPrompt, setShowModelPrompt] = useState(false);
     const [generatingModelJson, setGeneratingModelJson] = useState(false);
+    const [trustedSourceLinksText, setTrustedSourceLinksText] = useState(() => {
+        if (typeof window === 'undefined') return DEFAULT_TRUSTED_SOURCE_LINKS;
+        return window.localStorage.getItem(TRUSTED_SOURCE_LINKS_STORAGE_KEY) || DEFAULT_TRUSTED_SOURCE_LINKS;
+    });
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Update AI Prompt automatically when model data changes
@@ -604,6 +621,11 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         choiceOptions: fieldChoiceOptions,
     });
 
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.setItem(TRUSTED_SOURCE_LINKS_STORAGE_KEY, trustedSourceLinksText);
+    }, [trustedSourceLinksText]);
+
     const handleCopyModelPrompt = async () => {
         try {
             await navigator.clipboard.writeText(modelImportPrompt);
@@ -747,6 +769,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 name,
                 brand: brandObj?.name || '',
                 category: categoryObj?.name || 'Smartphones',
+                trustedSourceLinks: parseTrustedSourceLinks(trustedSourceLinksText),
             });
             setModelJsonInput(result.text);
             const data = parseModelImportJson(result.text);
@@ -1338,6 +1361,19 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         rows={18}
                                         className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg bg-slate-50 text-slate-700 resize-none"
                                     />
+                                    <label className="block text-sm font-semibold text-slate-800 mt-3 mb-2">
+                                        Sites confiaveis para pesquisa
+                                    </label>
+                                    <textarea
+                                        value={trustedSourceLinksText}
+                                        onChange={(e) => setTrustedSourceLinksText(e.target.value)}
+                                        rows={4}
+                                        className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg bg-white text-slate-700 resize-y"
+                                        placeholder="Um link por linha. Ex: https://www.gsmarena.com/"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        A IA pesquisa primeiro nesses sites. Se nao encontrar dados reais suficientes, usa pesquisa externa.
+                                    </p>
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         <button
                                             type="button"

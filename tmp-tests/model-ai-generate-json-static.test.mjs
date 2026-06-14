@@ -23,6 +23,12 @@ assert.match(
 );
 
 assert.match(
+  service,
+  /trustedSourceLinks\?: string\[\]/,
+  'model AI service must accept trusted source links',
+);
+
+assert.match(
   modal,
   /import\s+\{\s*generateModelJsonWithAi\s*\}\s+from\s+['"]\.\.\/\.\.\/services\/modelAiService['"]/,
   'ModelModal must import the model AI generation service',
@@ -46,6 +52,24 @@ assert.match(
   'JSON tab must expose the internal search/fill action',
 );
 
+assert.match(
+  modal,
+  /const \[trustedSourceLinksText, setTrustedSourceLinksText\] = useState/,
+  'ModelModal must track trusted source links text',
+);
+
+assert.match(
+  modal,
+  /Sites confiaveis para pesquisa/,
+  'JSON tab must expose a trusted source links field',
+);
+
+assert.match(
+  modal,
+  /trustedSourceLinks:\s*parseTrustedSourceLinks\(trustedSourceLinksText\)/,
+  'ModelModal must send trusted source links to the model AI endpoint',
+);
+
 for (const [label, source] of [['vps_server.js', server], ['vps_server.cjs', serverCjs]]) {
   assert.match(
     source,
@@ -57,6 +81,30 @@ for (const [label, source] of [['vps_server.js', server], ['vps_server.cjs', ser
     source,
     /https:\/\/api\.openai\.com\/v1\/responses/,
     `${label} must call the OpenAI Responses API`,
+  );
+
+  assert.match(
+    source,
+    /sanitizeTrustedSourceLinks/,
+    `${label} must sanitize trusted source links before using them`,
+  );
+
+  assert.match(
+    source,
+    /buildModelAiWebSearchTools\(\{ allowedDomains: trustedDomains \}\)/,
+    `${label} must build a trusted-domain web search pass`,
+  );
+
+  assert.match(
+    source,
+    /buildModelAiWebSearchTools\(\{ allowedDomains: \[\] \}\)/,
+    `${label} must keep an external web search fallback`,
+  );
+
+  assert.match(
+    source,
+    /allowed_domains/,
+    `${label} must restrict the first web search to trusted domains`,
   );
 
   assert.match(

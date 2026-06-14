@@ -16951,10 +16951,60 @@ fastify.get('/models', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
   return rows.map(mapVpsModel);
 });
 
+function sanitizeTrustedSourceLinks(rawLinks) {
+  const links = Array.isArray(rawLinks) ? rawLinks : [];
+  const seen = new Set();
+  const sanitized = [];
+  for (const raw of links) {
+    const value = String(raw || '').trim();
+    if (!value) continue;
+    const urlValue = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const parsed = new URL(urlValue);
+      if (!/^https?:$/i.test(parsed.protocol)) continue;
+      const hostname = parsed.hostname.replace(/^www\./i, 'www.').toLowerCase();
+      if (!hostname || seen.has(hostname)) continue;
+      seen.add(hostname);
+      sanitized.push({ url: parsed.href, domain: hostname });
+    } catch {
+      // Ignore invalid source lines from the UI.
+    }
+  }
+  return sanitized.slice(0, 12);
+}
+
+function buildModelAiWebSearchTools({ allowedDomains = [] } = {}) {
+  const webSearchTool = { type: 'web_search' };
+  if (allowedDomains.length > 0) {
+    webSearchTool.filters = { allowed_domains: allowedDomains };
+  }
+  return [webSearchTool];
+}
+
+async function requestModelAiJson({ apiKey, requestBody }) {
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(45000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  const text = extractAutoresponderOpenAiText(payload);
+  return { response, payload, text };
+}
+
 fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req, reply) => {
   const prompt = String(req.body?.prompt || '').trim();
   if (!prompt) return reply.code(400).send({ error: 'prompt obrigatorio' });
 
+  const trustedSources = sanitizeTrustedSourceLinks(req.body?.trustedSourceLinks);
+  const trustedDomains = trustedSources.map((source) => source.domain);
+  const trustedSourcesText = trustedSources.length > 0
+    ? `\n\nFontes confiaveis priorizadas:\n${trustedSources.map((source) => `- ${source.url}`).join('\n')}`
+    : '';
   const [settingsRows] = await pool.query('SELECT ai_model, openai_api_key FROM autoresponder_settings WHERE id = 1 LIMIT 1');
   const settings = settingsRows?.[0] || {};
   const apiKey = String(settings.openai_api_key || process.env.OPENAI_API_KEY || '').trim();
@@ -16966,24 +17016,35 @@ fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req
     const requestBody = {
       model,
       instructions: 'Voce gera somente JSON valido para cadastro de modelos no Mercado do Vale. Nao use markdown.',
-      input: prompt,
+      input: `${prompt}${trustedSourcesText}`,
       max_output_tokens: 2500,
     };
     if (/^gpt-5/i.test(model)) {
       requestBody.reasoning = { effort: 'minimal' };
       requestBody.text = { verbosity: 'low' };
     }
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(45000),
-    });
-    const payload = await response.json().catch(() => ({}));
-    const text = extractAutoresponderOpenAiText(payload);
+    let responseResult;
+    if (trustedDomains.length > 0) {
+      const trustedRequestBody = {
+        ...requestBody,
+        instructions: `${requestBody.instructions} Pesquise primeiro somente nas fontes confiaveis informadas. Se elas nao trouxerem dados reais suficientes, responda apenas {"__trusted_sources_insufficient":true}.`,
+        tools: buildModelAiWebSearchTools({ allowedDomains: trustedDomains }),
+        tool_choice: 'auto',
+      };
+      responseResult = await requestModelAiJson({ apiKey, requestBody: trustedRequestBody });
+      if (!responseResult.response.ok || /"__trusted_sources_insufficient"\s*:\s*true/.test(responseResult.text || '')) {
+        const externalRequestBody = {
+          ...requestBody,
+          instructions: `${requestBody.instructions} As fontes confiaveis informadas nao foram suficientes. Use pesquisa externa ampla, mas mantenha a regra: dados reais confirmados; na duvida, deixe ausente ou null.`,
+          tools: buildModelAiWebSearchTools({ allowedDomains: [] }),
+          tool_choice: 'auto',
+        };
+        responseResult = await requestModelAiJson({ apiKey, requestBody: externalRequestBody });
+      }
+    } else {
+      responseResult = await requestModelAiJson({ apiKey, requestBody });
+    }
+    const { response, payload, text } = responseResult;
     await pool.query(
       `INSERT INTO model_ai_generation_logs
         (id, model_name, brand_name, category_name, ai_model, prompt_text, response_text, status, error_message)
@@ -16994,7 +17055,7 @@ fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req
         req.body?.brand || null,
         req.body?.category || null,
         model,
-        prompt.slice(0, 12000),
+        `${prompt}${trustedSourcesText}`.slice(0, 12000),
         text ? text.slice(0, 16000) : null,
         response.ok && text ? 'success' : 'error',
         response.ok ? null : JSON.stringify(payload).slice(0, 2000),
@@ -17015,7 +17076,7 @@ fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req
         req.body?.brand || null,
         req.body?.category || null,
         model,
-        prompt.slice(0, 12000),
+        `${prompt}${trustedSourcesText}`.slice(0, 12000),
         String(error?.message || error).slice(0, 2000),
       ]
     ).catch((err) => console.warn('[model-ai-log] failed:', err.message));
