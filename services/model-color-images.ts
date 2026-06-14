@@ -134,14 +134,12 @@ async function getAll(): Promise<ModelColorImages[]> {
 async function upsert(input: ModelColorImagesInput): Promise<ModelColorImages> {
     const companyId = await getCompanyId();
     const existing = await get(input.model_id, input.color_id);
-    const now = new Date().toISOString();
     const payload = {
         company_id: companyId,
         model_id: input.model_id,
         color_id: input.color_id,
         images: input.images,
-        image_url: input.images[0] || null,
-        updated_at: now
+        image_url: input.images[0] || null
     };
 
     const existingId = existing?.id;
@@ -153,10 +151,7 @@ async function upsert(input: ModelColorImagesInput): Promise<ModelColorImages> {
         return normalizeRow(data);
     }
 
-    const data = await vpsClient.post<ModelColorImageRow>('/table-data/model_color_images', {
-        ...payload,
-        created_at: now,
-    });
+    const data = await vpsClient.post<ModelColorImageRow>('/table-data/model_color_images', payload);
     return normalizeRow(data);
 }
 

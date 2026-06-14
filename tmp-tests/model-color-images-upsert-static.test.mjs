@@ -3,30 +3,29 @@ import assert from 'node:assert/strict';
 
 const source = readFileSync('services/model-color-images.ts', 'utf8');
 const upsertBody = source.match(/async function upsert\(input: ModelColorImagesInput\): Promise<ModelColorImages> \{([\s\S]*?)\n\}/)?.[1] || '';
-const getBody = source.match(/async function get\(modelId: string, colorId: string\): Promise<ModelColorImages \| null> \{([\s\S]*?)\n\}/)?.[1] || '';
+
+assert.match(
+  upsertBody,
+  /const existing = await get\(input\.model_id, input\.color_id\)/,
+  'model-color image save must look up the existing VPS row before deciding between update and insert',
+);
+
+assert.match(
+  upsertBody,
+  /vpsClient\.patch<ModelColorImageRow>\(\s*`\/table-data\/model_color_images\/\$\{encodeURIComponent\(existingId\)\}\?pk=id`[\s\S]*payload/,
+  'model-color image save must update existing rows through VPS table-data',
+);
+
+assert.match(
+  upsertBody,
+  /vpsClient\.post<ModelColorImageRow>\('\/table-data\/model_color_images'/,
+  'model-color image save must insert new rows through VPS table-data',
+);
 
 assert.doesNotMatch(
   upsertBody,
-  /\.upsert\(/,
-  'model-color image save must not depend on a Supabase unique constraint for company_id/model_id/color_id'
+  /new Date\(\)\.toISOString\(\)|created_at|updated_at/,
+  'model-color image save must let MySQL defaults manage created_at/updated_at instead of sending ISO timestamps',
 );
 
-assert.match(
-  upsertBody,
-  /\.select\('id'\)[\s\S]*\.eq\('company_id', companyId\)[\s\S]*\.eq\('model_id', input\.model_id\)[\s\S]*\.eq\('color_id', input\.color_id\)/,
-  'model-color image save must look up the existing row before deciding between update and insert'
-);
-
-assert.match(
-  upsertBody,
-  /existingId[\s\S]*\.update\(payload\)[\s\S]*\.insert\(payload\)/,
-  'model-color image save must update existing rows and insert only when none exists'
-);
-
-assert.match(
-  getBody,
-  /\.order\('updated_at', \{ ascending: false \}\)[\s\S]*\.limit\(1\)[\s\S]*\.maybeSingle\(\)/,
-  'model-color image reads must tolerate legacy duplicate rows by reading the newest row'
-);
-
-console.log('model-color image upsert static checks passed');
+console.log('model-color image upsert VPS static checks passed');
