@@ -35,6 +35,7 @@ import { colorService } from '../../services/colors';
 import { getAuthSessionToken } from '../../services/authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
+import { unitService } from '../../services/units';
 import { findBlingProductByExactSku } from '../../services/blingService';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
@@ -43,6 +44,7 @@ import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl }
 import { buildSerializedBatchPlan, findSerializedBatchDuplicates, hasSerializedIdentity, resolveSerializedBatchItemImages } from './serializedBatch.js';
 import { getProductSaveProgressPercent } from './productSaveProgress.js';
 import { getBlingSkuPriceAutofill } from './blingSkuPriceAutofill.js';
+import { UnitStatus } from '../../utils/field-standards';
 
 interface ProductFormProps {
     initialData?: Product;
@@ -113,6 +115,62 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [serialList, setSerialList] = useState<BatchItem[]>([]);
     const [batchImageUploadingId, setBatchImageUploadingId] = useState<string | null>(null);
     const [batchBlingLinkingId, setBatchBlingLinkingId] = useState<string | null>(null);
+
+    function stripSerializedIdentityFromSpecs(specs: Record<string, any> = {}) {
+        const {
+            imei1: _imei1,
+            imei2: _imei2,
+            serial: _serial,
+            serial_number: _serialNumber,
+            ...baseSpecs
+        } = specs;
+        return baseSpecs;
+    }
+
+    function getSerializedBatchGroupKey(item: ProductInput) {
+        const specs = item.specs || {};
+        return [
+            item.model_id || '',
+            String(specs.color || '').trim().toLowerCase(),
+            String(specs.storage || '').trim().toLowerCase(),
+            String(specs.ram || '').trim().toLowerCase(),
+            String(specs.version || '').trim().toLowerCase(),
+            Number(item.price_retail || 0),
+            Number(item.price_reseller || 0),
+            Number(item.price_wholesale || 0),
+        ].join('|');
+    }
+
+    function groupSerializedBatchItemsForUnits(items: ProductInput[]) {
+        const groups = new Map<string, { base: ProductInput; units: ProductInput[] }>();
+
+        for (const item of items) {
+            const key = getSerializedBatchGroupKey(item);
+            const existing = groups.get(key);
+            if (existing) {
+                existing.units.push(item);
+                existing.base.stock_quantity = existing.units.length;
+                continue;
+            }
+
+            groups.set(key, {
+                base: {
+                    ...item,
+                    stock_quantity: 1,
+                    specs: stripSerializedIdentityFromSpecs(item.specs || {}),
+                },
+                units: [item],
+            });
+        }
+
+        return Array.from(groups.values()).map((group) => ({
+            ...group,
+            base: {
+                ...group.base,
+                stock_quantity: group.units.length,
+            },
+        }));
+    }
 
     const handleAddToBatchList = (overrides: Partial<BatchItem> = {}) => {
         const currentProductImages = getValues('images') || imagePreviews;
@@ -985,6 +1043,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         );
                         if (existing) {
                             duplicates.push(`${label}: ${val}`);
+                            continue;
+                        }
+                        const existingUnit = await unitService.searchByIdentifier(String(val).trim()).catch(() => []);
+                        if (existingUnit.length > 0) {
+                            duplicates.push(`${label}: ${val}`);
                         }
                     }
                 }
@@ -1017,8 +1080,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     }
                 }));
                 const batchPlan = buildSerializedBatchPlan(mergedData, linkedSerialList);
+                const plannedItems: ProductInput[] = [];
 
-                // Todos únicos — salvar um por um
+                // Todos unicos: prepara os itens e salva como produto base + unidades.
                 for (let index = 0; index < linkedSerialList.length; index++) {
                     const item = linkedSerialList[index];
                     setSaveProgress({
@@ -1047,16 +1111,56 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         colorImages,
                         fallbackImages: mergedData.images,
                     });
-                    const itemData = { ...batchPlan.items[index], images: itemImages };
-                    const savedProduct = await onSubmit(itemData);
-                    showVariationPriceAdjustmentToast(savedProduct);
+                    plannedItems.push({ ...batchPlan.items[index], images: itemImages });
+                }
+
+                const groupedBatch = groupSerializedBatchItemsForUnits(plannedItems);
+                let savedUnits = 0;
+
+                for (let groupIndex = 0; groupIndex < groupedBatch.length; groupIndex++) {
+                    const group = groupedBatch[groupIndex];
                     setSaveProgress({
-                        current: index + 1,
+                        current: savedUnits,
                         total: totalToSave,
-                        message: `Produto ${index + 1} de ${totalToSave} salvo.`
+                        message: `Salvando produto base ${groupIndex + 1} de ${groupedBatch.length}...`
+                    });
+                    const savedProduct = await onSubmit(group.base);
+                    showVariationPriceAdjustmentToast(savedProduct);
+                    if (!savedProduct?.id) {
+                        throw new Error('Produto base salvo sem ID. Cadastro das unidades cancelado.');
+                    }
+
+                    for (const unitItem of group.units) {
+                        const specs = unitItem.specs || {};
+                        setSaveProgress({
+                            current: savedUnits,
+                            total: totalToSave,
+                            message: `Salvando unidade ${savedUnits + 1} de ${totalToSave}...`
+                        });
+                        await unitService.create({
+                            product_id: savedProduct.id,
+                            imei_1: specs.imei1 || undefined,
+                            imei_2: specs.imei2 || undefined,
+                            serial_number: specs.serial || undefined,
+                            condition: 'new',
+                            status: UnitStatus.AVAILABLE,
+                            cost_price: unitItem.price_cost,
+                        });
+                        savedUnits += 1;
+                    }
+
+                    setSaveProgress({
+                        current: savedUnits,
+                        total: totalToSave,
+                        message: `${savedUnits} de ${totalToSave} unidade(s) salvas.`
                     });
                 }
-                toast.success(`${serialList.length} produto(s) cadastrado(s) com sucesso!`);
+                setSaveProgress({
+                    current: totalToSave,
+                    total: totalToSave,
+                    message: `${totalToSave} unidade(s) salvas.`
+                });
+                toast.success(`${groupedBatch.length} produto(s) e ${serialList.length} unidade(s) cadastrados com sucesso!`);
                 setSerialList([]);
                 onBatchComplete?.();
             } else {

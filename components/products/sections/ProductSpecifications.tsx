@@ -507,7 +507,7 @@ export function ProductSpecifications({
 
                 {/* DYNAMIC FIELDS - Render all other configured fields */}
                 {getCategoryDynamicSpecFields(categoryConfig, templateValues)
-                    .filter(({ key }) => !isSpecialField(key))
+                    .filter(({ key, requirement }) => !isSpecialField(key) && shouldRenderField(key, requirement as any))
                     .map(({ key, requirement }) => renderGenericField(key, requirement as any))
                 }
 

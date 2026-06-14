@@ -32,6 +32,10 @@ function toObject(value) {
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
 }
 
+function uniqueArray(values) {
+  return Array.from(new Set(values.filter((item) => item != null && item !== '').map(String)));
+}
+
 export function buildProductClonePrefill(product = {}) {
   const clone = {
     ...product,
@@ -49,6 +53,19 @@ export function buildProductClonePrefill(product = {}) {
   ARRAY_FIELDS.forEach((field) => {
     clone[field] = toArray(clone[field]);
   });
+
+  clone.eans = uniqueArray([
+    ...toArray(product.eans),
+    ...toArray(product.alternative_eans),
+    ...toArray(product.ean),
+  ]);
+
+  clone.images = uniqueArray([
+    ...toArray(product.images),
+    ...toArray(product.product_images),
+    ...toArray(product.image_url),
+    ...toArray(product.image),
+  ]);
 
   return clone;
 }

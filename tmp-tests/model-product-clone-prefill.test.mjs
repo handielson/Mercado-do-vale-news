@@ -55,6 +55,42 @@ assert.equal(prefill.specs.serial, '', 'clone deve limpar serial');
 
 assert.deepEqual(getProductCloneState(product), { cloneProduct: prefill }, 'estado de navegacao deve expor cloneProduct');
 
+const rawProduct = {
+  id: 'raw-1',
+  name: 'Poco X8 Pro 5G',
+  sku: 'PX85G8512P',
+  eans: null,
+  alternative_eans: '["7890000000001"]',
+  ean: '7890000000002',
+  images: null,
+  product_images: '["https://cdn.example.com/raw-1.jpg"]',
+  image_url: 'https://cdn.example.com/raw-main.jpg',
+  image: 'https://cdn.example.com/raw-main.jpg',
+  specs: JSON.stringify({
+    imei1: '866132080815481',
+    imei2: '866132080815479',
+    serial: '73749;66QD01217',
+    color: 'Preto',
+  }),
+};
+
+const rawPrefill = buildProductClonePrefill(rawProduct);
+
+assert.deepEqual(
+  rawPrefill.eans,
+  ['7890000000001', '7890000000002'],
+  'clone deve recuperar EAN de campos alternativos do Bling',
+);
+assert.deepEqual(
+  rawPrefill.images,
+  ['https://cdn.example.com/raw-1.jpg', 'https://cdn.example.com/raw-main.jpg'],
+  'clone deve recuperar imagens de campos alternativos sem duplicar URL',
+);
+assert.equal(rawPrefill.specs.color, 'Preto', 'clone deve normalizar specs em JSON string');
+assert.equal(rawPrefill.specs.imei1, '', 'clone bruto deve limpar IMEI 1');
+assert.equal(rawPrefill.specs.imei2, '', 'clone bruto deve limpar IMEI 2');
+assert.equal(rawPrefill.specs.serial, '', 'clone bruto deve limpar serial');
+
 const aggregatorPage = readFileSync(new URL('../pages/admin/products/ModelProductAggregatorPage.tsx', import.meta.url), 'utf8');
 assert.match(aggregatorPage, /getProductCloneState/, 'painel do modelo deve usar o helper de clone');
 assert.match(aggregatorPage, /Adicionar igual/, 'atalhos por SKU devem mostrar botao Adicionar igual');
