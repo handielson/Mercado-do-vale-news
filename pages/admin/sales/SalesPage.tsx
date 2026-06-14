@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical, Calendar, DollarSign, RefreshCw, XCircle, RotateCcw, TrendingUp } from 'lucide-react';
-import { SaleWithItems, SaleSummary, SaleFilters } from '../../../types/sale';
-import { getSales, getSalesSummary, cancelSale, refundSale } from '../../../services/saleService';
+import { SaleWithItems, SaleFilters } from '../../../types/sale';
+import { getSales, cancelSale, refundSale } from '../../../services/saleService';
 import SaleDetailsModal from '../../../components/admin/sales/SaleDetailsModal';
 import toast from 'react-hot-toast';
 
 export default function SalesPage() {
     const [sales, setSales] = useState<SaleWithItems[]>([]);
-    const [summary, setSummary] = useState<SaleSummary | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [filters, setFilters] = useState<SaleFilters>({});
 
@@ -60,13 +59,9 @@ export default function SalesPage() {
                 activeFilters.end_date = `${dateTo}T23:59:59`;
             }
 
-            const [salesData, summaryData] = await Promise.all([
-                getSales(activeFilters),
-                getSalesSummary(activeFilters)
-            ]);
+            const salesData = await getSales(activeFilters);
 
             setSales(salesData);
-            setSummary(summaryData);
         } catch (error) {
             console.error('Error loading sales data:', error);
             toast.error('Erro ao carregar dados de vendas');
@@ -131,6 +126,32 @@ export default function SalesPage() {
         });
     }, [sales, searchTerm, dateFrom, dateTo]);
 
+    const summaryStats = useMemo(() => {
+        const scopedSales = sales.filter(sale => {
+            if (statusFilter !== 'all' && sale.status !== statusFilter) return false;
+            if (sale.status !== 'completed') return false;
+            if (dateFrom && new Date(sale.created_at) < new Date(dateFrom + 'T00:00:00')) return false;
+            if (dateTo && new Date(sale.created_at) > new Date(dateTo + 'T23:59:59')) return false;
+            return true;
+        });
+
+        const total_sales = scopedSales.length;
+        const total_revenue = scopedSales.reduce((sum, sale) => sum + sale.total, 0);
+        const total_profit = scopedSales.reduce((sum, sale) => sum + sale.profit, 0);
+        const total_cost = scopedSales.reduce((sum, sale) => sum + sale.cost_total, 0);
+        const average_ticket = total_sales > 0 ? total_revenue / total_sales : 0;
+        const profit_margin = total_revenue > 0 ? (total_profit / total_revenue) * 100 : 0;
+
+        return {
+            total_sales,
+            total_revenue,
+            total_profit,
+            total_cost,
+            average_ticket,
+            profit_margin,
+        };
+    }, [sales, dateFrom, dateTo, statusFilter]);
+
     // Totais por período (calculados das vendas já carregadas)
     const periodStats = useMemo(() => {
         const calc = (from: Date) => {
@@ -178,7 +199,7 @@ export default function SalesPage() {
                     <div>
                         <p className="text-sm font-medium text-slate-500 mb-1">Faturamento Bruto</p>
                         <h3 className="text-2xl font-bold text-slate-800">
-                            {summary ? formatCurrency(summary.total_revenue) : 'R$ 0,00'}
+                            {formatCurrency(summaryStats.total_revenue)}
                         </h3>
                     </div>
                 </div>
@@ -195,7 +216,7 @@ export default function SalesPage() {
                     <div>
                         <p className="text-sm font-medium text-slate-500 mb-1">Lucro Real</p>
                         <h3 className="text-2xl font-bold text-slate-800">
-                            {summary ? formatCurrency(summary.total_profit) : 'R$ 0,00'}
+                            {formatCurrency(summaryStats.total_profit)}
                         </h3>
                     </div>
                 </div>
@@ -212,7 +233,7 @@ export default function SalesPage() {
                     <div>
                         <p className="text-sm font-medium text-slate-500 mb-1">Ticket Médio</p>
                         <h3 className="text-2xl font-bold text-slate-800">
-                            {summary ? formatCurrency(summary.average_ticket) : 'R$ 0,00'}
+                            {formatCurrency(summaryStats.average_ticket)}
                         </h3>
                     </div>
                 </div>
@@ -229,7 +250,7 @@ export default function SalesPage() {
                     <div>
                         <p className="text-sm font-medium text-slate-500 mb-1">Margem de Lucro</p>
                         <h3 className="text-2xl font-bold text-slate-800">
-                            {summary ? summary.profit_margin.toFixed(1) : '0'}%
+                            {summaryStats.profit_margin.toFixed(1)}%
                         </h3>
                     </div>
                 </div>
