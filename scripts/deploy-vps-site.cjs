@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { Client } = require('ssh2');
@@ -193,6 +194,26 @@ function uploadFile(sftp, localPath, remotePath) {
   });
 }
 
+function createReleaseArchive(releaseName) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-site-'));
+  const archivePath = path.join(tempDir, `${releaseName}.tar.gz`);
+  const result = spawnSync('tar', ['-czf', archivePath, '-C', DIST_DIR, '.'], {
+    cwd: ROOT,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
+
+  if (result.error) {
+    throw new Error(`tar failed to start: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    const suffix = result.signal ? `, signal ${result.signal}` : '';
+    throw new Error(`tar failed with exit code ${result.status}${suffix}`);
+  }
+
+  return archivePath;
+}
+
 function listRemoteFiles(sftp, remoteDir, baseDir = remoteDir, files = []) {
   return new Promise((resolve, reject) => {
     sftp.readdir(remoteDir, async (err, entries) => {
@@ -234,23 +255,6 @@ async function assertRemoteReleaseComplete(sftp, localDir, remoteDir) {
   }
 }
 
-async function uploadDirectory(sftp, localDir, remoteDir) {
-  await ensureRemoteDir(sftp, remoteDir);
-  const entries = fs.readdirSync(localDir, { withFileTypes: true });
-  for (const entry of entries) {
-    const localPath = path.join(localDir, entry.name);
-    const remotePath = `${remoteDir}/${entry.name}`;
-    if (entry.isDirectory()) {
-      await uploadDirectory(sftp, localPath, remotePath);
-      continue;
-    }
-    if (entry.isFile()) {
-      await uploadFile(sftp, localPath, remotePath);
-      console.log(`Uploaded ${path.relative(DIST_DIR, localPath).replace(/\\/g, '/')}`);
-    }
-  }
-}
-
 function buildReleaseName() {
   return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
 }
@@ -264,17 +268,36 @@ async function main() {
   const releaseDir = `${releasesDir}/${releaseName}`;
   const currentLink = `${config.root}/current`;
   const previousLink = `${config.root}/previous`;
+  const archivePath = createReleaseArchive(releaseName);
+  const remoteArchivePath = `${releasesDir}/${releaseName}.tar.gz`;
 
   const conn = await connect();
   try {
     console.log(`Connected to ${config.host}. Preparing ${releaseDir}`);
-    await execRemote(conn, `mkdir -p ${shellQuote(releaseDir)}`);
+    await execRemote(conn, `mkdir -p ${shellQuote(releasesDir)}`);
     const sftp = await openSftp(conn);
     try {
-      await uploadDirectory(sftp, DIST_DIR, releaseDir);
-      await assertRemoteReleaseComplete(sftp, DIST_DIR, releaseDir);
+      await uploadFile(sftp, archivePath, remoteArchivePath);
+      console.log(`Uploaded release archive ${path.basename(archivePath)}`);
     } finally {
       sftp.end();
+    }
+
+    await execRemote(
+      conn,
+      [
+        `rm -rf ${shellQuote(releaseDir)}`,
+        `mkdir -p ${shellQuote(releaseDir)}`,
+        `tar -xzf ${shellQuote(remoteArchivePath)} -C ${shellQuote(releaseDir)}`,
+        `rm -f ${shellQuote(remoteArchivePath)}`,
+      ].join(' && ')
+    );
+
+    const verifySftp = await openSftp(conn);
+    try {
+      await assertRemoteReleaseComplete(verifySftp, DIST_DIR, releaseDir);
+    } finally {
+      verifySftp.end();
     }
 
     const switchCommand = [
@@ -289,6 +312,7 @@ async function main() {
     console.log(`rollback: ssh ${config.username}@${config.host} "ln -sfn ${previousLink} ${currentLink}"`);
   } finally {
     conn.end();
+    fs.rmSync(path.dirname(archivePath), { recursive: true, force: true });
   }
 }
 

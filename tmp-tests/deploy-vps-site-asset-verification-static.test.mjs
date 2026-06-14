@@ -15,12 +15,34 @@ assert.match(
   'deploy deve ter uma trava de release remota completa'
 );
 
-const uploadIndex = source.indexOf('await uploadDirectory(sftp, DIST_DIR, releaseDir);');
-const verifyIndex = source.indexOf('await assertRemoteReleaseComplete(sftp, DIST_DIR, releaseDir);');
+assert.match(
+  source,
+  /function createReleaseArchive\(/,
+  'deploy deve empacotar o dist em um arquivo unico antes do upload'
+);
+
+assert.match(
+  source,
+  /tar[\s\S]*-czf/,
+  'deploy deve criar um tar.gz local do dist'
+);
+
+assert.match(
+  source,
+  /tar -xzf/,
+  'deploy deve extrair o tar.gz no VPS'
+);
+
+const archiveIndex = source.indexOf('const archivePath = createReleaseArchive(releaseName);');
+const uploadIndex = source.indexOf('await uploadFile(sftp, archivePath, remoteArchivePath);');
+const extractIndex = source.indexOf('tar -xzf');
+const verifyIndex = source.indexOf('await assertRemoteReleaseComplete(verifySftp, DIST_DIR, releaseDir);');
 const switchIndex = source.indexOf('const switchCommand = [');
 
-assert.ok(uploadIndex >= 0, 'deploy deve fazer upload do dist');
-assert.ok(verifyIndex > uploadIndex, 'verificacao remota deve ocorrer depois do upload');
+assert.ok(archiveIndex >= 0, 'deploy deve criar o pacote da release');
+assert.ok(uploadIndex > archiveIndex, 'deploy deve enviar o pacote unico para o VPS');
+assert.ok(extractIndex > uploadIndex, 'deploy deve extrair o pacote depois do upload');
+assert.ok(verifyIndex > extractIndex, 'verificacao remota deve ocorrer depois da extracao');
 assert.ok(switchIndex > verifyIndex, 'deploy so deve trocar current depois de validar assets remotos');
 
 assert.match(
