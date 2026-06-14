@@ -1,4 +1,17 @@
-import { vpsClient } from './vpsClient';
+import { buildAuthHeaders } from './authSession';
+import { VPS_DIRECT_BASE_URL, getVpsSyncHeaders } from './vpsProxyBase';
+
+function directVpsUrl(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${VPS_DIRECT_BASE_URL}${normalizedPath}`;
+}
+
+async function authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
+  return buildAuthHeaders({
+    ...getVpsSyncHeaders(),
+    ...extra,
+  });
+}
 
 function safePathSegment(value: string, fallback: string): string {
   const safe = String(value || '')
@@ -31,6 +44,17 @@ export async function uploadModelColorImageToVps(
   formData.append('file', file, fileName);
   formData.append('path', `model-color/${modelSegment}/${fileName}`);
 
-  const result = await vpsClient.upload<{ url: string }>('/images/upload', formData);
+  const response = await fetch(directVpsUrl('/images/upload'), {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || response.statusText);
+  }
+
+  const result = await response.json() as { url: string };
   return result.url;
 }
