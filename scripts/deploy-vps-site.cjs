@@ -193,6 +193,47 @@ function uploadFile(sftp, localPath, remotePath) {
   });
 }
 
+function listRemoteFiles(sftp, remoteDir, baseDir = remoteDir, files = []) {
+  return new Promise((resolve, reject) => {
+    sftp.readdir(remoteDir, async (err, entries) => {
+      if (err) return reject(err);
+      try {
+        for (const entry of entries) {
+          const remotePath = `${remoteDir}/${entry.filename}`;
+          if (entry.attrs.isDirectory()) {
+            await listRemoteFiles(sftp, remotePath, baseDir, files);
+            continue;
+          }
+          if (entry.attrs.isFile()) {
+            files.push(remotePath.slice(baseDir.length + 1));
+          }
+        }
+        resolve(files);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+async function assertRemoteReleaseComplete(sftp, localDir, remoteDir) {
+  const localFiles = walkFiles(localDir).map((file) =>
+    path.relative(localDir, file).replace(/\\/g, '/')
+  );
+  const remoteFiles = new Set(await listRemoteFiles(sftp, remoteDir));
+  const missing = localFiles.filter((file) => !remoteFiles.has(file));
+
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        `Deploy bloqueado: release remota incompleta (${missing.length} arquivo(s) ausente(s)).`,
+        ...missing.slice(0, 20).map((file) => `- ${file}`),
+        missing.length > 20 ? `... e mais ${missing.length - 20}` : '',
+      ].filter(Boolean).join('\n')
+    );
+  }
+}
+
 async function uploadDirectory(sftp, localDir, remoteDir) {
   await ensureRemoteDir(sftp, remoteDir);
   const entries = fs.readdirSync(localDir, { withFileTypes: true });
@@ -231,6 +272,7 @@ async function main() {
     const sftp = await openSftp(conn);
     try {
       await uploadDirectory(sftp, DIST_DIR, releaseDir);
+      await assertRemoteReleaseComplete(sftp, DIST_DIR, releaseDir);
     } finally {
       sftp.end();
     }
