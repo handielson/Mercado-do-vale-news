@@ -29,6 +29,12 @@ assert.match(
 
 assert.match(
   source,
+  /spawnSync\('tar'[\s\S]*shell:\s*false/,
+  'deploy deve chamar tar sem shell para preservar caminhos com espaco no Windows'
+);
+
+assert.match(
+  source,
   /tar -xzf/,
   'deploy deve extrair o tar.gz no VPS'
 );

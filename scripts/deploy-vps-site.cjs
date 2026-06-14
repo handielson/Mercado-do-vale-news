@@ -200,7 +200,7 @@ function createReleaseArchive(releaseName) {
   const result = spawnSync('tar', ['-czf', archivePath, '-C', DIST_DIR, '.'], {
     cwd: ROOT,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    shell: false,
   });
 
   if (result.error) {
