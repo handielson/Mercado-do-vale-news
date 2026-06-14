@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.1.1-bling-memory-autofill
+version: v1.1.2-visible-version
 date: 2026-06-14
 status: published
-release_vps: /var/www/mdv-site/releases/20260614-191925-v111-bling-memory
+release_vps: /var/www/mdv-site/releases/20260614-192449-v112-visible-version
 branch: codex/publish-delivery-ops-20260614
 ```
 
@@ -22,11 +22,12 @@ branch: codex/publish-delivery-ops-20260614
   - `specs.ram`;
   - `specs.storage`.
 - Registro publico de versao em `/VERSION.json`.
+- Versao visivel no rodape da barra lateral do admin.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.1-bling-memory-autofill` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.2-visible-version` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-14-v1.1.1-bling-memory-autofill.md
+docs/versoes/2026-06-14-v1.1.2-visible-version.md
 ```

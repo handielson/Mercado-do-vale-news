@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup } from 'lucide-react';
 
@@ -11,6 +11,13 @@ function isLikelyCredentialAutofill(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+type AppVersionInfo = {
+  version: string;
+  date?: string;
+  release_vps?: string;
+  summary?: string;
+};
+
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, customer, signOut } = useVpsAuth();
   const { settings } = useTheme();
@@ -18,8 +25,25 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true';
 
   const [search, setSearch] = useState('');
+  const [appVersion, setAppVersion] = useState<AppVersionInfo | null>(null);
 
   usePageTitle();
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/VERSION.json', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((versionInfo) => {
+        if (isMounted && versionInfo?.version) setAppVersion(versionInfo);
+      })
+      .catch(() => {
+        if (isMounted) setAppVersion(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   function handleMenuSearchChange(event: React.ChangeEvent<HTMLInputElement>) {
     const nextSearch = event.target.value;
@@ -139,6 +163,15 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     return match?.to || '';
   }, [location.pathname, menuGroups]);
 
+  const appVersionTooltip = appVersion
+    ? [
+      appVersion.version,
+      appVersion.date ? `Data: ${appVersion.date}` : '',
+      appVersion.release_vps ? `Release: ${appVersion.release_vps}` : '',
+      appVersion.summary || '',
+    ].filter(Boolean).join('\n')
+    : '';
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-50" data-admin-layout-build="2026-06-14-assets-refresh">
       {DEV_MODE && (
@@ -211,6 +244,23 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             ))
           )}
         </nav>
+
+        {appVersion?.version && (
+          <div
+            title={appVersionTooltip}
+            className="mx-2 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-[10px] text-slate-400"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold uppercase tracking-widest text-slate-500">Versao</span>
+              <span className="font-mono text-blue-300">{appVersion.version}</span>
+            </div>
+            {appVersion.release_vps && (
+              <p className="mt-1 truncate font-mono text-[9px] text-slate-600">
+                {appVersion.release_vps.replace('/var/www/mdv-site/releases/', '')}
+              </p>
+            )}
+          </div>
+        )}
 
         {user && (
           <div className="pt-4 border-t border-slate-800">
