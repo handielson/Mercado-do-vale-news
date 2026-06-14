@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { modelService } from '../../../services/models';
 import { vpsApiService } from '../../../services/vpsApiService';
+import { vpsClient } from '../../../services/vpsClient';
 import { unitService } from '../../../services/units';
 import { stockLocationService } from '../../../services/stockLocationService';
 import { aggregateModelProducts } from '../../../services/modelProductAggregator.js';
@@ -39,6 +40,22 @@ function unitLocationText(unit: any): string {
     return unit.locationLabel || unit.locationId || unit.depositId || '-';
 }
 
+async function loadTableRows(tableName: string): Promise<any[]> {
+    const allRows: any[] = [];
+    const pageSize = 200;
+
+    for (let offset = 0; ; offset += pageSize) {
+        const data = await vpsClient.get<{ rows?: any[] }>(
+            `/table-data/${encodeURIComponent(tableName)}?limit=${pageSize}&offset=${offset}`
+        );
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        allRows.push(...rows);
+        if (rows.length < pageSize) break;
+    }
+
+    return allRows;
+}
+
 export const ModelProductAggregatorPage: React.FC = () => {
     const { modelId } = useParams<{ modelId: string }>();
     const navigate = useNavigate();
@@ -49,9 +66,11 @@ export const ModelProductAggregatorPage: React.FC = () => {
         if (!modelId) return;
         setIsLoading(true);
         try {
-            const [model, products] = await Promise.all([
+            const [model, products, sales, saleItems] = await Promise.all([
                 modelService.getById(modelId),
                 vpsApiService.getProducts({ model_id: modelId, status: 'all', limit: 500, noCache: true }),
+                loadTableRows('sales'),
+                loadTableRows('sale_items'),
             ]);
 
             if (!model) throw new Error('Modelo nao encontrado.');
@@ -75,6 +94,8 @@ export const ModelProductAggregatorPage: React.FC = () => {
                 products: safeProducts,
                 units: unitLists.flat(),
                 locationsByProductId,
+                sales,
+                saleItems,
             }));
         } catch (error) {
             console.error(error);

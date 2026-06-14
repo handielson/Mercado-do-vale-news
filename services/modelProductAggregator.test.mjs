@@ -425,6 +425,56 @@ assert.equal(athomicsColor.soldCount, 2);
 assert.equal(athomicsColor.skuGroups[0].sku, 'RAIL');
 assert.equal(athomicsColor.skuGroups[0].availableCount, 6);
 
+const nonSerializedSaleItemResult = aggregateModelProducts({
+  model: { id: 'model-kaidi-kd-750', name: 'Kaidi KD-750' },
+  products: [
+    {
+      id: 'p-kd-750-cinza',
+      model_id: 'model-kaidi-kd-750',
+      name: 'Fone de Ouvido Bluetooth Hifi Stereo, Kaidi KD-750 Cor:Cinza',
+      sku: 'KD-750CIN',
+      slug: 'fone-de-ouvido-bluetooth-hifi-stereo-kaidi-kd-750',
+      specs: { color: 'Cinza' },
+      price_cost: '6200.00',
+      price_retail: '14390.00',
+      stock_quantity: 4,
+      status: 'active',
+    },
+  ],
+  units: [],
+  sales: [
+    {
+      id: 'a822a615-716b-4f47-bf6f-979937ce5cf4',
+      payment_status: 'paid',
+    },
+  ],
+  saleItems: [
+    {
+      sale_id: 'a822a615-716b-4f47-bf6f-979937ce5cf4',
+      product_id: 'p-kd-750-cinza',
+      product_sku: 'KD-750CIN',
+      quantity: 1,
+      unit_price: '14390.00',
+      total: '14390.00',
+      unit_cost: 6200,
+      serialized_unit_id: null,
+    },
+  ],
+  locationsByProductId: {
+    'p-kd-750-cinza': [
+      { location_id: 'loja', deposit_name: 'Loja Principal', location_name: 'Estoque Geral', quantity: 4 },
+    ],
+  },
+});
+
+assert.equal(nonSerializedSaleItemResult.totals.availableCount, 4);
+assert.equal(nonSerializedSaleItemResult.totals.soldCount, 1);
+assert.equal(nonSerializedSaleItemResult.totals.stockCostValue, 24800);
+assert.equal(nonSerializedSaleItemResult.totals.investedValue, 31000);
+assert.equal(nonSerializedSaleItemResult.totals.returnedValue, 14390);
+assert.equal(nonSerializedSaleItemResult.memoryGroups[0].colors[0].soldCount, 1);
+assert.equal(nonSerializedSaleItemResult.memoryGroups[0].colors[0].returnedValue, 14390);
+
 const source = readFileSync(new URL('./modelProductAggregator.js', import.meta.url), 'utf8');
 assert.doesNotMatch(source, /supabase|vercel|VITE_SUPABASE|SUPABASE/i);
 

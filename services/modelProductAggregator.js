@@ -23,6 +23,31 @@ function normalizeKey(value) {
     .trim();
 }
 
+function moneyToCents(value) {
+  if (value == null || value === '') return 0;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return 0;
+    return Number.isInteger(value) ? value : Math.round(value * 100);
+  }
+
+  const clean = String(value).trim().replace(/\s/g, '').replace(/^R\$/i, '');
+  if (!clean) return 0;
+
+  const hasComma = clean.includes(',');
+  const hasDot = clean.includes('.');
+  const decimalDotMatch = !hasComma ? clean.match(/\.(\d{1,2})$/u) : null;
+  const decimalDot = Boolean(decimalDotMatch && decimalDotMatch[1] !== '00');
+  const normalized = hasComma
+    ? clean.replace(/\./g, '').replace(',', '.')
+    : decimalDotMatch && decimalDotMatch[1] === '00'
+      ? clean.slice(0, -3).replace(/[.,]/g, '')
+      : clean.replace(decimalDot ? /,/g : /[.,]/g, '');
+
+  const numeric = Number(normalized);
+  if (!Number.isFinite(numeric)) return 0;
+  return (hasComma || (hasDot && decimalDot)) ? Math.round(numeric * 100) : Math.round(numeric);
+}
+
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
@@ -139,6 +164,63 @@ function addAvailableFallback(target, quantity, costValue) {
   target.availableCount += quantity;
   target.stockCostValue += quantity * costValue;
   target.investedValue += quantity * costValue;
+}
+
+function addSaleStatsFallback(target, stats) {
+  if (!stats || stats.soldCount <= 0) return;
+  target.soldCount += stats.soldCount;
+  target.investedValue += stats.investedValue;
+  target.returnedValue += stats.returnedValue;
+}
+
+function isActiveSale(row) {
+  const status = normalizeKey(row?.status || row?.payment_status || '');
+  return !['cancelled', 'canceled', 'refunded', 'estornado', 'cancelado'].includes(status);
+}
+
+function hasSerializedUnitReference(item) {
+  return Boolean(String(item?.serialized_unit_id || item?.serializedUnitId || item?.unit_id || item?.unitId || '').trim());
+}
+
+function buildSaleStatsByProduct(products, sales, saleItems) {
+  if (!Array.isArray(saleItems) || saleItems.length === 0) return new Map();
+
+  const saleById = new Map((sales || []).map((sale) => [String(sale.id || ''), sale]));
+  const productById = new Map(products.map((product) => [String(product.id), product]));
+  const productIdBySku = new Map();
+  for (const product of products) {
+    const key = normalizeKey(product.sku);
+    if (key && !productIdBySku.has(key)) productIdBySku.set(key, product.id);
+  }
+
+  const statsByProductId = new Map();
+  for (const item of saleItems) {
+    if (hasSerializedUnitReference(item)) continue;
+
+    const saleId = String(item.sale_id || item.saleId || '');
+    if (saleById.has(saleId) && !isActiveSale(saleById.get(saleId))) continue;
+
+    const directProductId = String(item.product_id || item.productId || '');
+    const productId = productById.has(directProductId)
+      ? directProductId
+      : productIdBySku.get(normalizeKey(item.product_sku || item.sku));
+    if (!productId || !productById.has(productId)) continue;
+
+    const product = productById.get(productId);
+    const quantity = Math.max(0, Number(item.quantity || 0));
+    if (quantity <= 0) continue;
+
+    const unitCost = moneyToCents(item.unit_cost ?? item.cost ?? product.price_cost ?? product.priceCost);
+    const unitPrice = moneyToCents(item.unit_price ?? item.price ?? product.price_retail ?? product.priceRetail);
+    const returnedValue = moneyToCents(item.total ?? item.subtotal) || unitPrice * quantity;
+    const current = statsByProductId.get(productId) || { soldCount: 0, investedValue: 0, returnedValue: 0 };
+    current.soldCount += quantity;
+    current.investedValue += unitCost * quantity;
+    current.returnedValue += returnedValue;
+    statsByProductId.set(productId, current);
+  }
+
+  return statsByProductId;
 }
 
 function hasProductIdentifier(product) {
@@ -318,6 +400,7 @@ export function aggregateModelProducts(input) {
   }
 
   const memoryGroupMap = new Map();
+  const saleStatsByProductId = buildSaleStatsByProduct(input.products || [], input.sales || [], input.saleItems || []);
 
   for (const product of input.products || []) {
     const { ram, storage, color } = getProductVariationSpecs(product);
@@ -424,6 +507,11 @@ export function aggregateModelProducts(input) {
         product: productView,
         locations: normalizedLocations,
       });
+    }
+
+    const saleStats = saleStatsByProductId.get(String(product.id));
+    if (saleStats) {
+      addSaleStatsFallback(colorGroup, saleStats);
     }
   }
 
