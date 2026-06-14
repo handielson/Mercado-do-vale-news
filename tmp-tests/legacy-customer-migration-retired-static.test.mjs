@@ -30,7 +30,4 @@ assert.doesNotMatch(routes, /\/admin\/migration/, 'retired customer migration ro
 assert.doesNotMatch(routes, /\/admin\/field-mapping/, 'retired field mapping route must not remain reachable');
 assert.doesNotMatch(adminLayout, /\/admin\/migration/, 'admin menu must not link to the retired customer migration page');
 
-const importHub = readFileSync('pages/admin/import/DataImportExportPage.tsx', 'utf8');
-assert.doesNotMatch(importHub, /Clientes \(Migra/, 'import hub must not show the retired customer migration placeholder tab');
-
 console.log('legacy customer migration retirement static checks passed');

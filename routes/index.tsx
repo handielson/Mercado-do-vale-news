@@ -132,7 +132,6 @@ const PublicProductPage = lazy(() => import('../pages/store/PublicProductPage').
 const FinancialPage = lazy(() => import('../pages/admin/financial/FinancialPage'));
 const CustomerCreditLedgerPage = lazy(() => import('../pages/admin/financial/CustomerCreditLedgerPage'));
 const AccountingPage = lazy(() => import('../pages/admin/accounting/AccountingPage'));
-const DataImportExportPage = lazy(() => import('../pages/admin/import/DataImportExportPage').then(module => ({ default: module.DataImportExportPage })));
 const MySQLExplorerPage = lazy(() => import('../pages/admin/settings/MySQLExplorerPage').then(module => ({ default: module.MySQLExplorerPage })));
 
 const StorePage = () => (
@@ -277,15 +276,6 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><AccountingPage /></AdminLayout>
-      </ProtectedRoute>
-    )
-  },
-
-  {
-    path: "/admin/import",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><DataImportExportPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
