@@ -1235,7 +1235,7 @@ export const PublicProductPage: React.FC = () => {
                                     >
                                         <div className="text-blue-600 flex flex-col items-center">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                                            <span className="text-[10px] font-bold mt-1 tracking-wider uppercase">Vídeo</span>
+                                            <span className="text-[10px] font-semibold mt-1 tracking-wider uppercase">Vídeo</span>
                                         </div>
                                     </button>
                                 )}
@@ -1246,7 +1246,7 @@ export const PublicProductPage: React.FC = () => {
                                     >
                                         <div className="text-blue-600 flex flex-col items-center">
                                             <Layers size={24} />
-                                            <span className="text-[10px] font-bold mt-1 tracking-wider uppercase">Kit</span>
+                                            <span className="text-[10px] font-semibold mt-1 tracking-wider uppercase">Kit</span>
                                         </div>
                                     </button>
                                 )}
@@ -1266,7 +1266,7 @@ export const PublicProductPage: React.FC = () => {
                     {/* Informações do Produto (Direita) */}
                     <div className="space-y-6">
                         <div>
-                            <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight">
+                            <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
                                 {publicProductTitle}
                             </h1>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-slate-500">
@@ -1315,7 +1315,7 @@ export const PublicProductPage: React.FC = () => {
                                     onClick={handleCompare}
                                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-sm shadow-sm ${
                                         isInCompare 
-                                            ? 'border-blue-600 bg-blue-100 text-blue-800 font-bold' 
+                                            ? 'border-blue-600 bg-blue-100 text-blue-800 font-semibold' 
                                             : 'border-slate-300 bg-slate-100 text-slate-700 hover:border-slate-400 hover:bg-slate-200'
                                     }`}
                                 >
@@ -1328,12 +1328,12 @@ export const PublicProductPage: React.FC = () => {
                         {/* Variantes (Cores / Capacidades) */}
                         {shouldShowVariantOptions && (
                             <div className="pt-2">
-                                <h3 className="text-sm font-bold text-slate-900 mb-3">Opções disponíveis:</h3>
+                                <h3 className="text-sm font-semibold text-slate-900 mb-3">Opções disponíveis:</h3>
                                 <div className="space-y-4">
                                     {groupedVariantOptions.map((group) => (
                                         <div key={group.memoryLabel} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
                                             <div className="mb-2">
-                                                <h4 className="text-base font-extrabold text-slate-950">{group.memoryLabel}</h4>
+                                                <h4 className="text-sm font-semibold text-slate-800">{group.memoryLabel}</h4>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
                                                 {group.options.map(({ item: sib, color, ram }) => {
@@ -1357,14 +1357,14 @@ export const PublicProductPage: React.FC = () => {
                                                             disabled={isOutOfStock}
                                                             aria-disabled={isOutOfStock}
                                                             title={isOutOfStock ? `${buttonLabel} esgotado` : buttonLabel}
-                                                            className={`min-h-11 px-4 py-2 rounded-lg border text-sm font-semibold transition-all duration-300 ${variantButtonStateClasses}`}
+                                                            className={`min-h-11 px-4 py-2 rounded-lg border text-sm font-medium transition-all duration-300 ${variantButtonStateClasses}`}
                                                             style={{ borderColor: getVariantColorBorder(color) }}
                                                         >
                                                             <span className={isOutOfStock ? 'line-through decoration-2 decoration-slate-500/70' : ''}>
                                                                 {buttonLabel}
                                                             </span>
                                                             {isOutOfStock && (
-                                                                <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                                                                <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                                                                     Esgotado
                                                                 </span>
                                                             )}
@@ -1384,7 +1384,7 @@ export const PublicProductPage: React.FC = () => {
                         {/* Preço */}
                         <div className="bg-white p-6 rounded-2xl border border-blue-100 shadow-sm relative overflow-hidden">
                             {totalGroupStock !== undefined && totalGroupStock > 0 && totalGroupStock <= 2 && (
-                                <div className="absolute top-0 left-0 w-full bg-red-500 text-white text-xs font-bold text-center py-1 animate-pulse">
+                                <div className="absolute top-0 left-0 w-full bg-red-500 text-white text-xs font-semibold text-center py-1 animate-pulse">
                                     Últimas unidades em estoque!
                                 </div>
                             )}
@@ -1395,12 +1395,12 @@ export const PublicProductPage: React.FC = () => {
                                             <span className="text-lg text-slate-400 line-through">
                                                 R$ {formatDisplayPrice(originalPrice)}
                                             </span>
-                                            <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                                            <span className="text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
                                                 -{product.discount_percentage}% OFF
                                             </span>
                                         </div>
-                                        <p className="text-xs font-bold uppercase tracking-wide text-green-700">À vista no PIX{pixDiscountLabel}</p>
-                                        <div className="text-4xl font-extrabold text-slate-900">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-green-700">À vista no PIX{pixDiscountLabel}</p>
+                                        <div className="text-3xl sm:text-4xl font-bold text-slate-900">
                                             {shouldShowVariantPriceRange ? (
                                                 <>
                                                     R$ {formatDisplayPrice(variantPriceRange.min)}
@@ -1417,7 +1417,7 @@ export const PublicProductPage: React.FC = () => {
                                             </p>
                                         )}
                                         {customerType !== 'wholesale' && estimatedCoins > 0 && (
-                                            <div className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-sm font-bold border border-amber-200">
+                                            <div className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-sm font-semibold border border-amber-200">
                                                 <span className="text-base leading-none">🪙</span>
                                                 Ganhe {estimatedCoins} Moedas do Vale
                                             </div>
@@ -1425,8 +1425,8 @@ export const PublicProductPage: React.FC = () => {
                                     </div>
                                 ) : (
                                     <div>
-                                        <p className="text-xs font-bold uppercase tracking-wide text-green-700">À vista no PIX{pixDiscountLabel}</p>
-                                        <div className="text-4xl font-extrabold text-slate-900">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-green-700">À vista no PIX{pixDiscountLabel}</p>
+                                        <div className="text-3xl sm:text-4xl font-bold text-slate-900">
                                             {shouldShowVariantPriceRange ? (
                                                 <>
                                                     R$ {formatDisplayPrice(variantPriceRange.min)}
@@ -1443,7 +1443,7 @@ export const PublicProductPage: React.FC = () => {
                                             </p>
                                         )}
                                         {customerType !== 'wholesale' && estimatedCoins > 0 && (
-                                            <div className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-sm font-bold border border-amber-200">
+                                            <div className="mt-2 ml-2 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-lg text-sm font-semibold border border-amber-200">
                                                 <span className="text-base leading-none">🪙</span>
                                                 Ganhe {estimatedCoins} Moedas do Vale
                                             </div>
@@ -1454,7 +1454,7 @@ export const PublicProductPage: React.FC = () => {
                                 {/* Seletor de Kits (Descontos por Volume) */}
                                 {product.kits && product.kits.length > 0 && (
                                     <div className="mt-6 pt-4 border-t border-slate-100">
-                                        <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                                        <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
                                             <Layers size={16} className="text-blue-600" />
                                             Compre mais, pague menos
                                         </h4>
@@ -1487,7 +1487,7 @@ export const PublicProductPage: React.FC = () => {
                                                     <span className="font-medium text-slate-800">{baseUnitLabel}</span>
                                                 </div>
                                                 <div className="text-right">
-                                                    <div className="font-bold text-slate-900">R$ {baseDiscountedPrice.toFixed(2).replace('.', ',')}</div>
+                                                    <div className="font-semibold text-slate-900">R$ {baseDiscountedPrice.toFixed(2).replace('.', ',')}</div>
                                                 </div>
                                             </button>
 
@@ -1509,7 +1509,7 @@ export const PublicProductPage: React.FC = () => {
                                                         }`}
                                                     >
                                                         {savings > 0 && (
-                                                            <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-bl-lg">
+                                                            <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-semibold px-2 py-0.5 rounded-bl-lg">
                                                                 Economia de R$ {savings.toFixed(2).replace('.', ',')}
                                                             </div>
                                                         )}
@@ -1519,12 +1519,12 @@ export const PublicProductPage: React.FC = () => {
                                                                     {selectedKitQuantity === kit.quantity && <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />}
                                                                 </div>
                                                                 <div className="text-left">
-                                                                    <span className="font-bold text-blue-900">{kit.name || `Kit com ${kit.quantity} Unidades`}</span>
+                                                                    <span className="font-semibold text-blue-900">{kit.name || `Kit com ${kit.quantity} Unidades`}</span>
                                                                     <div className="text-xs text-blue-600 font-medium">R$ {unitPriceDisplay} cada</div>
                                                                 </div>
                                                             </div>
                                                             <div className="text-right pl-2">
-                                                                <div className="font-bold text-slate-900 text-lg">R$ {kitPriceDisplay}</div>
+                                                                <div className="font-semibold text-slate-900 text-lg">R$ {kitPriceDisplay}</div>
                                                             </div>
                                                         </div>
                                                     </button>
@@ -1538,7 +1538,7 @@ export const PublicProductPage: React.FC = () => {
 
                                 {Boolean((product as unknown as any)?.is_combo) && comboChildren && comboChildren.length > 0 && (
                                     <div className="mt-8 pt-6 border-t border-slate-100">
-                                        <h4 className="text-base font-extrabold text-slate-900 mb-4 flex items-center gap-2">
+                                        <h4 className="text-base font-semibold text-slate-900 mb-4 flex items-center gap-2">
                                             <Package size={20} className="text-blue-600" />
                                             O que vem neste Combo:
                                         </h4>
@@ -1554,27 +1554,27 @@ export const PublicProductPage: React.FC = () => {
                                                 const displayName = brandName ? `${item.name} - ${brandName}` : item.name;
 
                                                 return (
-                                                <div key={idx} className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                                                    <div className="flex items-start gap-3 sm:gap-4">
-                                                        <div className="bg-slate-100 text-slate-700 font-black text-sm px-3 py-1.5 rounded-lg border border-slate-200 mt-0.5">
+                                                    <div key={idx} className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                                                        <div className="flex items-start gap-3 sm:gap-4">
+                                                            <div className="bg-slate-100 text-slate-700 font-semibold text-sm px-3 py-1.5 rounded-lg border border-slate-200 mt-0.5">
                                                             {item.quantity}x
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="text-slate-800 font-medium leading-snug">{displayName}</span>
+                                                                {item.sku && (
+                                                                    <span className="text-slate-400 text-xs mt-1">
+                                                                        SKU: <span className="font-mono bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded text-[10px] text-slate-500">{item.sku}</span>
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-slate-800 font-medium leading-snug">{displayName}</span>
-                                                            {item.sku && (
-                                                                <span className="text-slate-400 text-xs mt-1">
-                                                                    SKU: <span className="font-mono bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded text-[10px] text-slate-500">{item.sku}</span>
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                        {itemPrice > 0 && (
+                                                            <div className="text-right pl-4 flex-shrink-0">
+                                                                <span className="text-slate-400 text-[11px] uppercase font-medium tracking-wider block mb-0.5">Separado</span>
+                                                                <span className="text-slate-700 font-semibold text-sm">R$ {priceReais}</span>
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    {itemPrice > 0 && (
-                                                        <div className="text-right pl-4 flex-shrink-0">
-                                                            <span className="text-slate-400 text-[11px] uppercase font-bold tracking-wider block mb-0.5">Separado</span>
-                                                            <span className="text-slate-700 font-bold text-sm">R$ {priceReais}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
                                                 );
                                             })}
                                             {autoSelectedComboGroups.map(group => {
@@ -1585,12 +1585,12 @@ export const PublicProductPage: React.FC = () => {
                                                             <div className="flex items-start gap-3">
                                                                 <ShieldCheck size={20} className="mt-0.5 text-emerald-600 flex-shrink-0" />
                                                                 <div>
-                                                                    <p className="text-slate-900 font-bold leading-snug">{group.label}</p>
+                                                                    <p className="text-slate-900 font-semibold leading-snug">{group.label}</p>
                                                                     <p className="text-sm text-emerald-700 font-semibold mt-1">Selecionado</p>
                                                                     <p className="text-xs text-slate-500 mt-0.5">{getComboOptionDisplayName(option, group.label)}</p>
                                                                 </div>
                                                             </div>
-                                                            <div className="bg-white text-emerald-700 font-black text-sm px-3 py-1.5 rounded-lg border border-emerald-100">
+                                                            <div className="bg-white text-emerald-700 font-semibold text-sm px-3 py-1.5 rounded-lg border border-emerald-100">
                                                                 Incluso no combo
                                                             </div>
                                                         </div>
@@ -1601,10 +1601,10 @@ export const PublicProductPage: React.FC = () => {
                                                 <div key={group.group_key} className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm">
                                                     <div className="mb-3 flex items-start justify-between gap-3">
                                                         <div>
-                                                            <p className="text-slate-900 font-bold leading-snug">{group.label}</p>
+                                                            <p className="text-slate-900 font-semibold leading-snug">{group.label}</p>
                                                             <p className="text-xs text-slate-500">Escolha {group.quantity} opcao para este combo</p>
                                                         </div>
-                                                        <div className="bg-orange-50 text-orange-700 font-black text-sm px-3 py-1.5 rounded-lg border border-orange-100">
+                                                        <div className="bg-orange-50 text-orange-700 font-semibold text-sm px-3 py-1.5 rounded-lg border border-orange-100">
                                                             {group.quantity}x
                                                         </div>
                                                     </div>
@@ -1616,7 +1616,7 @@ export const PublicProductPage: React.FC = () => {
                                                                     key={option.id}
                                                                     type="button"
                                                                     onClick={() => handleComboOptionSelect(group.group_key, option)}
-                                                                    className={`min-h-[40px] rounded-full border px-4 py-2 text-sm font-bold transition-all ${
+                                                                    className={`min-h-[40px] rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
                                                                         selected
                                                                             ? 'border-orange-500 bg-orange-50 text-orange-800 ring-1 ring-orange-500'
                                                                             : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50/60'
@@ -1658,11 +1658,11 @@ export const PublicProductPage: React.FC = () => {
                                                                 Comprando separados: 
                                                                 <span className="line-through decoration-emerald-800/30">R$ {indivTotalReais.toFixed(2).replace('.', ',')}</span>
                                                             </p>
-                                                            <p className="text-base font-extrabold text-emerald-950 mt-1">
+                                                            <p className="text-base font-semibold text-emerald-950 mt-1">
                                                                 Saindo por: R$ {comboPriceReais.toFixed(2).replace('.', ',')}
                                                             </p>
                                                         </div>
-                                                        <div className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-md shadow-emerald-600/20 flex flex-col items-center leading-tight min-w-[140px]">
+                                                        <div className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-md shadow-emerald-600/20 flex flex-col items-center leading-tight min-w-[140px]">
                                                             <span className="text-emerald-100 text-[10px] uppercase tracking-wider">Você Economiza</span>
                                                             <span className="text-lg">R$ {discountReais.toFixed(2).replace('.', ',')}</span>
                                                         </div>
@@ -1697,7 +1697,7 @@ export const PublicProductPage: React.FC = () => {
                                         onClick={handleAddToCart}
                                         disabled={hasMissingComboChoice || (!product.track_inventory ? false : (product.stock_quantity || 0) <= 0)}
                                         style={(hasMissingComboChoice || (!product.track_inventory ? false : (product.stock_quantity || 0) <= 0)) ? undefined : { backgroundColor: primaryColor, boxShadow: `0 10px 24px -10px ${primaryColor}66` }}
-                                        className="w-full flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-xl transition-opacity hover:opacity-90 shadow-lg text-lg"
+                                        className="w-full flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-4 px-8 rounded-xl transition-opacity hover:opacity-90 shadow-lg text-lg"
                                     >
                                         <ShoppingCart size={24} />
                                         {hasMissingComboChoice
@@ -1709,7 +1709,7 @@ export const PublicProductPage: React.FC = () => {
 
                             {/* Calculadora de Frete */}
                             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm mb-6">
-                                <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+                                <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
                                     <Truck size={16} style={{ color: primaryColor }} /> Consultar Frete e Prazo
                                 </h3>
                                 <div className="flex gap-2">
@@ -1724,7 +1724,7 @@ export const PublicProductPage: React.FC = () => {
                                     <button
                                         onClick={handleCalculateShipping}
                                         disabled={isCalculatingShipping || cep.length < 8}
-                                        className="px-5 py-3 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-colors min-w-[110px] flex justify-center items-center"
+                                        className="px-5 py-3 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl text-sm transition-colors min-w-[110px] flex justify-center items-center"
                                     >
                                         {isCalculatingShipping ? <Loader2 size={18} className="animate-spin" /> : 'Calcular'}
                                     </button>
@@ -1735,10 +1735,10 @@ export const PublicProductPage: React.FC = () => {
                                         {shippingResult.map((res, idx) => (
                                             <div key={idx} className="flex items-center justify-between text-sm p-3 rounded-lg bg-slate-50 border border-slate-100">
                                                 <div>
-                                                    <p className="font-bold text-slate-900">{res.name}</p>
+                                                    <p className="font-semibold text-slate-900">{res.name}</p>
                                                     <p className="text-xs text-slate-500">{res.days}</p>
                                                 </div>
-                                                <div className="font-bold" style={{ color: primaryColor }}>
+                                                <div className="font-semibold" style={{ color: primaryColor }}>
                                                     {res.price === 'Grátis' ? 'Grátis' : `R$ ${res.price}`}
                                                 </div>
                                             </div>
@@ -1785,7 +1785,7 @@ export const PublicProductPage: React.FC = () => {
                         {/* Descrição Longa */}
                         {resolvedDescription && (
                             <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
-                                <h3 className="text-xl font-bold text-slate-900 mb-5 pb-3 border-b border-slate-100">
+                                <h3 className="text-lg font-semibold text-slate-900 mb-5 pb-3 border-b border-slate-100">
                                     Descrição do Produto
                                 </h3>
                                 <div
@@ -1798,7 +1798,7 @@ export const PublicProductPage: React.FC = () => {
                         {/* Especificações Técnicas Longas */}
                         {resolvedTechnicalSpecifications && resolvedTechnicalSpecifications !== resolvedDescription && (
                             <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
-                                <h3 className="text-xl font-bold text-slate-900 mb-5 pb-3 border-b border-slate-100">
+                                <h3 className="text-lg font-semibold text-slate-900 mb-5 pb-3 border-b border-slate-100">
                                     Ficha Técnica
                                 </h3>
                                 <div
@@ -1811,7 +1811,7 @@ export const PublicProductPage: React.FC = () => {
                         {/* Especificações Técnicas */}
                         {product.specs && Object.keys(product.specs).length > 0 && (
                             <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
-                                <h3 className="text-xl font-bold text-slate-900 mb-5 pb-3 border-b border-slate-100">
+                                <h3 className="text-lg font-semibold text-slate-900 mb-5 pb-3 border-b border-slate-100">
                                     Especificações
                                 </h3>
                                 <div className="mt-4">
@@ -2023,7 +2023,7 @@ export const PublicProductPage: React.FC = () => {
                                                     <div key={g.group.id} className={index !== 0 ? "pt-6 border-t border-slate-100" : ""}>
                                                         <div className="flex items-center gap-2 mb-4 text-slate-800">
                                                             <g.group.icon className="w-5 h-5 text-blue-600" />
-                                                            <h4 className="font-bold text-base">{g.group.label}</h4>
+                                                            <h4 className="font-semibold text-sm">{g.group.label}</h4>
                                                         </div>
                                                         <dl className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-6 gap-x-4 text-sm pl-7">
                                                             {g.items.map(item => (
@@ -2034,7 +2034,7 @@ export const PublicProductPage: React.FC = () => {
                                                                             <ul className="space-y-1.5">
                                                                                 {normalizePdpListItems(item.strVal).map((line) => (
                                                                                     <li key={line} className="flex items-start gap-2">
-                                                                                        <span className="mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded border border-slate-200 bg-slate-50 px-1 text-[11px] font-bold text-slate-700">
+                                                                                        <span className="mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded border border-slate-200 bg-slate-50 px-1 text-[11px] font-semibold text-slate-700">
                                                                                             1
                                                                                         </span>
                                                                                         <span>{line}</span>
@@ -2092,14 +2092,14 @@ export const PublicProductPage: React.FC = () => {
             {/* Sticky Mobile CTA */}
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:hidden z-40 flex items-center gap-4">
                 <div className="flex-1">
-                    <p className="text-xs text-slate-500 uppercase font-bold">À vista no PIX</p>
-                    <p className="text-xl font-extrabold" style={{ color: primaryColor }}>R$ {(customerType !== 'wholesale' ? pixPrice : displayPrice).toFixed(2).replace('.', ',')}</p>
+                    <p className="text-xs text-slate-500 uppercase font-semibold">À vista no PIX</p>
+                    <p className="text-xl font-bold" style={{ color: primaryColor }}>R$ {(customerType !== 'wholesale' ? pixPrice : displayPrice).toFixed(2).replace('.', ',')}</p>
                 </div>
                 <button
                     onClick={handleAddToCart}
                     disabled={!product.track_inventory ? false : (product.stock_quantity || 0) <= 0}
                     style={(!product.track_inventory ? false : (product.stock_quantity || 0) <= 0) ? undefined : { backgroundColor: primaryColor, boxShadow: `0 10px 24px -10px ${primaryColor}66` }}
-                    className="flex-shrink-0 flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-opacity hover:opacity-90 shadow-lg"
+                    className="flex-shrink-0 flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-xl transition-opacity hover:opacity-90 shadow-lg"
                 >
                     <ShoppingCart size={20} />
                     {(!product.track_inventory || (product.stock_quantity || 0) > 0) ? 'Comprar' : 'Esgotado'}

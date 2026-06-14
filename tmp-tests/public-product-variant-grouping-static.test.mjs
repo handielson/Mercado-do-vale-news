@@ -18,7 +18,7 @@ assert.match(
 
 assert.match(
   source,
-  /<h4 className="text-base font-extrabold text-slate-950">\{group\.memoryLabel\}<\/h4>/,
+  /<h4 className="text-sm font-semibold text-slate-800">\{group\.memoryLabel\}<\/h4>/,
   'variant UI should render a RAM/storage heading for each group'
 );
 
