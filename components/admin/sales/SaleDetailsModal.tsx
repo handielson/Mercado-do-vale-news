@@ -505,46 +505,71 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                             Itens do Pedido ({sale.items.length})
                         </h3>
                         <div className="space-y-3">
-                            {sale.items.map((item, index) => (
-                                <div key={index} className="flex justify-between items-start py-3 border-b border-slate-100 last:border-0 last:pb-0">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-slate-800">{item.product_name}</p>
-                                            {item.is_gift && (
-                                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded">
-                                                    BRINDE
-                                                </span>
-                                            )}
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            {(() => {
-                                                const itemSpecs = productSpecs[(item as any).id] || {};
-                                                const productLevel = productSpecs[(item as any).product_id] || {};
-                                                const specs = { ...productLevel, ...itemSpecs };
-                                                const parts: string[] = [];
-                                                if (specs.imei1) parts.push(`IMEI 1: ${specs.imei1}`);
-                                                if (specs.imei2) parts.push(`IMEI 2: ${specs.imei2}`);
-                                                if (specs.serial) parts.push(`Serial: ${specs.serial}`);
-                                                const idLine = parts.length > 0
-                                                    ? parts.join(' | ')
-                                                    : `SKU: ${item.product_sku || 'N/A'}`;
-                                                return `${idLine} • Qtd: ${item.quantity}`;
-                                            })()}
-                                            {item.discount > 0 ? ` • Desc: ${formatCurrency(item.discount)}/un` : ''}
-                                        </p>
-                                    </div>
-                                    <div className="text-right">
-                                        {item.discount > 0 && (
-                                            <p className="text-xs text-slate-400 line-through">
-                                                {formatCurrency(item.unit_price * item.quantity)}
+                            {sale.items.map((item, index) => {
+                                const productAdminHref = item.product_id ? `/admin/products/${encodeURIComponent(item.product_id)}` : '';
+                                const quantity = Number(item.quantity) || 1;
+                                const unitCost = Number(item.unit_cost) || 0;
+                                const itemCost = unitCost * quantity;
+                                const itemProfit = Number(item.total || 0) - itemCost;
+
+                                return (
+                                    <div key={index} className="flex justify-between items-start py-3 border-b border-slate-100 last:border-0 last:pb-0">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                {productAdminHref ? (
+                                                    <a
+                                                        href={productAdminHref}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-sm font-medium text-slate-800 hover:text-blue-700 hover:underline underline-offset-2"
+                                                        title="Abrir produto no admin"
+                                                    >
+                                                        {item.product_name}
+                                                    </a>
+                                                ) : (
+                                                    <p className="text-sm font-medium text-slate-800">{item.product_name}</p>
+                                                )}
+                                                {item.is_gift && (
+                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 bg-pink-100 text-pink-700 rounded">
+                                                        BRINDE
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                {(() => {
+                                                    const itemSpecs = productSpecs[(item as any).id] || {};
+                                                    const productLevel = productSpecs[(item as any).product_id] || {};
+                                                    const specs = { ...productLevel, ...itemSpecs };
+                                                    const parts: string[] = [];
+                                                    if (specs.imei1) parts.push(`IMEI 1: ${specs.imei1}`);
+                                                    if (specs.imei2) parts.push(`IMEI 2: ${specs.imei2}`);
+                                                    if (specs.serial) parts.push(`Serial: ${specs.serial}`);
+                                                    const idLine = parts.length > 0
+                                                        ? parts.join(' | ')
+                                                        : `SKU: ${item.product_sku || 'N/A'}`;
+                                                    return `${idLine} • Qtd: ${item.quantity}`;
+                                                })()}
+                                                {item.discount > 0 ? ` • Desc: ${formatCurrency(item.discount)}/un` : ''}
                                             </p>
-                                        )}
-                                        <p className="text-sm font-bold text-slate-800">
-                                            {formatCurrency(item.total)}
-                                        </p>
+                                            <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-slate-500">
+                                                <span>Custo un.: <strong className="text-slate-700">{formatCurrency(unitCost)}</strong></span>
+                                                <span>Custo item: <strong className="text-slate-700">{formatCurrency(itemCost)}</strong></span>
+                                                <span>Lucro item: <strong className={itemProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}>{formatCurrency(itemProfit)}</strong></span>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            {item.discount > 0 && (
+                                                <p className="text-xs text-slate-400 line-through">
+                                                    {formatCurrency(item.unit_price * item.quantity)}
+                                                </p>
+                                            )}
+                                            <p className="text-sm font-bold text-slate-800">
+                                                {formatCurrency(item.total)}
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
 
