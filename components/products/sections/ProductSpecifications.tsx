@@ -56,6 +56,12 @@ const NON_SERIALIZED_CATEGORY_SLUG_PATTERNS = [
     'headset',
 ];
 
+const SMARTPHONE_CATEGORY_PATTERNS = [
+    'smartphone',
+    'celular',
+    'iphone',
+];
+
 const normalizeSpecFieldKey = (key?: string | null) => {
     if (!key || typeof key !== 'string') return '';
     return key.trim().replace(/^specs\./, '');
@@ -106,8 +112,15 @@ export function ProductSpecifications({
     const [uniqueErrors, setUniqueErrors] = useState<Record<string, string>>({});
     const [checkingField, setCheckingField] = useState<string | null>(null);
     const hasExplicitCategoryFields = Boolean(categoryConfig?.custom_fields?.length);
+    const categoryId = normalizeCategoryText(categoryConfig?.__category_id);
     const categorySlug = normalizeCategoryText(categoryConfig?.__category_slug);
     const categoryName = normalizeCategoryText(categoryConfig?.__category_name);
+    const isSmartphoneCategory = SMARTPHONE_CATEGORY_PATTERNS.some(pattern =>
+        categoryId.includes(pattern) || categorySlug.includes(pattern) || categoryName.includes(pattern)
+    );
+    const shouldShowSmartphoneMemoryFields = isSmartphoneCategory || Boolean(
+        watch('specs.storage') || watch('specs.ram')
+    );
     const isNonSerializedLegacyCategory = !hasExplicitCategoryFields && NON_SERIALIZED_CATEGORY_SLUG_PATTERNS.some(pattern =>
         categorySlug.includes(pattern) || categoryName.includes(pattern.replace(/-/g, ' '))
     );
@@ -405,7 +418,7 @@ export function ProductSpecifications({
                 )}
 
                 {/* ARMAZENAMENTO */}
-                {shouldShowBaseSpecField('storage') && (
+                {shouldShowSmartphoneMemoryFields && (
                     <div className="space-y-1 min-w-0">
                         <CapacitySelect
                             value={watch('specs.storage') || ''}
@@ -421,7 +434,7 @@ export function ProductSpecifications({
                 )}
 
                 {/* RAM */}
-                {shouldShowBaseSpecField('ram') && (
+                {shouldShowSmartphoneMemoryFields && (
                     <div className="space-y-1 min-w-0">
                         <CapacitySelect
                             value={watch('specs.ram') || ''}

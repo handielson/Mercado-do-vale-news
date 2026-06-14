@@ -13,8 +13,6 @@ assert.match(
   'specs.imei1',
   'specs.imei2',
   'specs.serial',
-  'specs.storage',
-  'specs.ram',
   'specs.version',
   'specs.battery_health',
 ].forEach((technicalName) => {
@@ -25,6 +23,24 @@ assert.match(
     `${technicalName} must only render when allowed by the category field list.`,
   );
 });
+
+assert.match(
+  source,
+  /const shouldShowSmartphoneMemoryFields\s*=/,
+  'Smartphone memory fields must have a fixed visibility guard outside the category spec list.',
+);
+
+assert.doesNotMatch(
+  source,
+  /shouldShowBaseSpecField\('storage'\)/,
+  'specs.storage must not be controlled by the category field list.',
+);
+
+assert.doesNotMatch(
+  source,
+  /shouldShowBaseSpecField\('ram'\)/,
+  'specs.ram must not be controlled by the category field list.',
+);
 
 assert.match(
   source,

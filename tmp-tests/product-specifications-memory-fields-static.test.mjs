@@ -6,13 +6,13 @@ const source = readFileSync('components/products/sections/ProductSpecifications.
 assert.match(
   source,
   /const storageRequirement = getBaseSpecRequirement\('storage'\);/,
-  'storage requirement must be resolved from category custom fields or legacy category config',
+  'storage requirement must still be resolved from legacy/custom config when present',
 );
 
 assert.match(
   source,
   /const ramRequirement = getBaseSpecRequirement\('ram'\);/,
-  'ram requirement must be resolved from category custom fields or legacy category config',
+  'ram requirement must still be resolved from legacy/custom config when present',
 );
 
 const storageBlockStart = source.indexOf('/* ARMAZENAMENTO */');
@@ -25,17 +25,29 @@ const storageBlock = source.slice(storageBlockStart, ramBlockStart);
 const ramBlock = source.slice(ramBlockStart);
 
 assert.ok(
-  storageBlock.includes("shouldShowBaseSpecField('storage')") &&
+  storageBlock.includes('shouldShowSmartphoneMemoryFields') &&
   storageBlock.includes('label="Armazenamento"') &&
   storageBlock.includes('technicalName="specs.storage"'),
-  'ProductSpecifications must render the storage control directly inside the specifications grid',
+  'ProductSpecifications must render storage as a fixed smartphone field, not a category spec field',
 );
 
 assert.ok(
-  ramBlock.includes("shouldShowBaseSpecField('ram')") &&
-  ramBlock.includes('label="Memória RAM"') &&
+  ramBlock.includes('shouldShowSmartphoneMemoryFields') &&
+  ramBlock.includes('label="Mem') &&
   ramBlock.includes('technicalName="specs.ram"'),
-  'ProductSpecifications must render the ram control directly inside the specifications grid',
+  'ProductSpecifications must render RAM as a fixed smartphone field, not a category spec field',
+);
+
+assert.doesNotMatch(
+  storageBlock,
+  /shouldShowBaseSpecField\('storage'\)/,
+  'Storage visibility must not depend on category spec field configuration.',
+);
+
+assert.doesNotMatch(
+  ramBlock,
+  /shouldShowBaseSpecField\('ram'\)/,
+  'RAM visibility must not depend on category spec field configuration.',
 );
 
 console.log('product specifications memory fields static checks passed');
