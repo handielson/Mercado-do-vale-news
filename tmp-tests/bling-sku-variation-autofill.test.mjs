@@ -15,8 +15,32 @@ assert.deepEqual(
     },
     colors,
   }),
-  { color: 'Preto' },
+  { color: 'Preto', ram: '8GB', storage: '512GB' },
   'deve preencher specs.color pela variacao.nome do Bling'
+);
+
+assert.deepEqual(
+  getBlingSkuSpecAutofill({
+    product: {
+      variacao: { nome: 'Cor: Preto; Memoria: 8GB; Armazenamento: 512GB' },
+      nome: 'Poco X8 Pro 5G',
+    },
+    colors,
+  }),
+  { color: 'Preto', ram: '8GB', storage: '512GB' },
+  'deve preencher specs.ram e specs.storage pela variacao.nome do Bling'
+);
+
+assert.deepEqual(
+  getBlingSkuSpecAutofill({
+    product: {
+      variacao: null,
+      nome: 'Poco X8 Pro 5G 512GB 8GB Preto',
+    },
+    colors,
+  }),
+  { color: 'Preto', ram: '8GB', storage: '512GB' },
+  'deve preencher specs.ram e specs.storage pelo nome quando vierem sem rotulo'
 );
 
 assert.deepEqual(
@@ -40,7 +64,7 @@ assert.deepEqual(
     },
     colors,
   }),
-  { color: 'Branco' },
+  { color: 'Branco', ram: '8GB', storage: '512GB' },
   'deve usar nomePai como fallback depois de variacao.nome e nome'
 );
 

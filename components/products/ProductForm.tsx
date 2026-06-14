@@ -831,12 +831,20 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             if (link.specAutofill.color) {
                 setValue('specs.color', link.specAutofill.color, { shouldDirty: true, shouldValidate: true });
             }
+            if (link.specAutofill.ram) {
+                setValue('specs.ram', link.specAutofill.ram, { shouldDirty: true, shouldValidate: true });
+            }
+            if (link.specAutofill.storage) {
+                setValue('specs.storage', link.specAutofill.storage, { shouldDirty: true, shouldValidate: true });
+            }
             toast.info('Vinculado automaticamente pelo SKU no Bling.', {
                 id: 'bling-auto-sku-link',
-                description: (link.priceAutofill.price_cost || link.priceAutofill.price_retail || link.specAutofill.color)
+                description: (link.priceAutofill.price_cost || link.priceAutofill.price_retail || link.specAutofill.color || link.specAutofill.ram || link.specAutofill.storage)
                     ? [
                         (link.priceAutofill.price_cost || link.priceAutofill.price_retail) ? 'Precos de compra e varejo preenchidos para conferencia.' : '',
                         link.specAutofill.color ? `Cor preenchida: ${link.specAutofill.color}.` : '',
+                        link.specAutofill.ram ? `RAM preenchida: ${link.specAutofill.ram}.` : '',
+                        link.specAutofill.storage ? `Armazenamento preenchido: ${link.specAutofill.storage}.` : '',
                     ].filter(Boolean).join(' ')
                     : undefined,
             });
@@ -873,10 +881,16 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     bling_parent_id: link.parentId,
                     eans: link.ean ? [link.ean] : (batchItem.eans || []),
                     color: link.specAutofill.color || batchItem.color,
+                    ram: link.specAutofill.ram || batchItem.ram,
+                    storage: link.specAutofill.storage || batchItem.storage,
                 };
             }));
             toast.success(link.ean ? 'Bling vinculado e EAN preenchido.' : 'Bling vinculado. Produto sem EAN no Bling.', {
-                description: link.specAutofill.color ? `Cor preenchida: ${link.specAutofill.color}.` : undefined,
+                description: [
+                    link.specAutofill.color ? `Cor preenchida: ${link.specAutofill.color}.` : '',
+                    link.specAutofill.ram ? `RAM preenchida: ${link.specAutofill.ram}.` : '',
+                    link.specAutofill.storage ? `Armazenamento preenchido: ${link.specAutofill.storage}.` : '',
+                ].filter(Boolean).join(' ') || undefined,
             });
         } catch (error) {
             console.warn('[ProductForm] Batch Bling SKU link skipped:', error);
@@ -1087,6 +1101,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                             bling_parent_id: link.parentId,
                             eans: link.ean ? [link.ean] : item.eans,
                             color: link.specAutofill.color || item.color,
+                            ram: link.specAutofill.ram || item.ram,
+                            storage: link.specAutofill.storage || item.storage,
                         };
                     } catch {
                         return item;
