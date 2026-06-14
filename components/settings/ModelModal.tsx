@@ -46,6 +46,30 @@ const normalizeAutocompleteText = (value: string) => value
     .toLowerCase()
     .trim();
 
+const normalizeTemplateFieldAlias = (value: string) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/^specs[._-]?/, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const MODEL_VARIATION_FIELD_ALIASES = new Set([
+    'color',
+    'cor',
+    'colour',
+    'ram',
+    'memoria_ram',
+    'memory_ram',
+    'storage',
+    'armazenamento',
+    'memoria',
+    'capacity',
+    'capacidade',
+]);
+
+const isModelVariationFieldKey = (value: string) => MODEL_VARIATION_FIELD_ALIASES.has(normalizeTemplateFieldAlias(value));
+
 const formatModelNameToken = (part: string) => {
     if (/^\d+[a-z]+$/i.test(part)) {
         return part.replace(/[a-z]+$/i, (suffix) => suffix.toUpperCase());
@@ -294,6 +318,7 @@ const formatCategoryFieldLabel = (key: string) => {
 const shouldCreateTemplateFieldFromCategoryConfig = (key: string, value: unknown) => {
     if (NON_TEMPLATE_CATEGORY_KEYS.has(key)) return false;
     if (isModelUnitFieldKey(key)) return false;
+    if (isModelVariationFieldKey(key)) return false;
     if (value === 'off' || value === 'hidden') return false;
     return value !== undefined && value !== null;
 };
@@ -607,6 +632,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     const visibleSpecFields = templateFields
         .filter(f => f.category === 'spec')
         .filter(field => !isModelUnitFieldKey(field.key) && !isModelUnitFieldKey(field.label))
+        .filter(field => !isModelVariationFieldKey(field.key) && !isModelVariationFieldKey(field.label))
         .filter(isFieldEnabledForCategory)
         .filter(field => !isFieldBlockedForCategory(field))
         .filter(field => !isDuplicateTemplateField(field));
@@ -618,7 +644,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         return normalizeFieldAlias(alias) === normalizeFieldAlias(key);
     });
     const getSanitizedTemplateValues = (values: Record<string, any>) => Object.fromEntries(
-        Object.entries(values).filter(([key]) => !isHiddenSpecKey(key) && !isModelUnitFieldKey(key))
+        Object.entries(values).filter(([key]) => !isHiddenSpecKey(key) && !isModelUnitFieldKey(key) && !isModelVariationFieldKey(key))
     );
     const modelImportPrompt = buildModelImportPrompt({
         name,
@@ -649,7 +675,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
     const applyNormalizedModelPayload = (normalized: any) => {
         const visibleTemplateValues = Object.fromEntries(
-            Object.entries(normalized.templateValues || {}).filter(([key]) => !isHiddenSpecKey(key) && !isModelUnitFieldKey(key))
+            Object.entries(normalized.templateValues || {}).filter(([key]) => !isHiddenSpecKey(key) && !isModelUnitFieldKey(key) && !isModelVariationFieldKey(key))
         );
         const translatedTemplateValues = translateTemplateValuesToPortuguese(visibleTemplateValues);
         const appliedFields: string[] = [];

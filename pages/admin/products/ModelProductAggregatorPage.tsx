@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ExternalLink, FileText, Loader2, MapPin, Pencil, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CopyPlus, ExternalLink, FileText, Loader2, MapPin, Pencil, RefreshCw } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { modelService } from '../../../services/models';
@@ -8,6 +8,7 @@ import { vpsClient } from '../../../services/vpsClient';
 import { unitService } from '../../../services/units';
 import { stockLocationService } from '../../../services/stockLocationService';
 import { aggregateModelProducts } from '../../../services/modelProductAggregator.js';
+import { getProductCloneState } from '../../../services/productClonePrefill.js';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -248,7 +249,15 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                         <td className="px-3 py-4 print:hidden">
                                                             <div className="space-y-2">
                                                                 {(colorGroup.skuGroups || colorGroup.products).map((product: any) => (
-                                                                    <ProductActions key={product.key || product.id} product={product} onNavigate={navigate} />
+                                                                    <ProductActions
+                                                                        key={product.key || product.id}
+                                                                        product={product}
+                                                                        onNavigate={navigate}
+                                                                        onDuplicate={() => {
+                                                                            const source = product.raw || product.products?.[0]?.raw || product.products?.[0] || product;
+                                                                            navigate('/admin/products/new', { state: getProductCloneState(source) });
+                                                                        }}
+                                                                    />
                                                                 ))}
                                                             </div>
                                                         </td>
@@ -371,7 +380,7 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
     </div>
 );
 
-const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void }> = ({ product, onNavigate }) => (
+const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => void; onDuplicate: () => void }> = ({ product, onNavigate, onDuplicate }) => (
     <div className="flex flex-wrap items-center gap-1.5">
         <span className="min-w-[86px] font-mono text-xs font-bold text-slate-700">{product.sku || 'Sem SKU'}</span>
         <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -393,6 +402,15 @@ const ProductActions: React.FC<{ product: any; onNavigate: (path: string) => voi
             >
                 <Pencil className="h-3.5 w-3.5" />
                 Editar produto
+            </button>
+            <button
+                type="button"
+                onClick={onDuplicate}
+                className="inline-flex items-center gap-1 border-l border-slate-200 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                title={`Abre novo cadastro preenchido a partir do SKU ${product.sku || 'produto'}, limpando IMEI e serial`}
+            >
+                <CopyPlus className="h-3.5 w-3.5" />
+                Adicionar igual
             </button>
             <button
                 type="button"

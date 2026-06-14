@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import { ProductForm } from '../../../components/products/ProductForm';
 import { Product, ProductInput } from '../../../types/product';
 import { productService } from '../../../services/products';
+import { buildProductClonePrefill } from '../../../services/productClonePrefill.js';
 
 /**
  * ProductFormPage
@@ -23,16 +24,19 @@ export const ProductFormPage: React.FC = () => {
 
     // Get EAN from navigation state if provided
     const eanFromState = (location.state as any)?.ean;
+    const cloneProductFromState = (location.state as any)?.cloneProduct;
 
     // Fetch product data if editing
     useEffect(() => {
         if (isEditMode) {
             fetchProduct();
+        } else if (cloneProductFromState) {
+            setProduct(buildProductClonePrefill(cloneProductFromState) as unknown as Product);
         } else if (eanFromState) {
             // Pre-fill EAN for new product
             setProduct({ ean: eanFromState } as unknown as Product);
         }
-    }, [id, eanFromState]);
+    }, [id, eanFromState, cloneProductFromState]);
 
     // Update document title
     useEffect(() => {
