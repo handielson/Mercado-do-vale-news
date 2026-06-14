@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Rocket, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup } from 'lucide-react';
 
 import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -52,47 +52,51 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const menuGroups = useMemo(() => [
     {
-      title: 'Operacional',
+      title: 'Atendimento',
       items: [
         { to: '/admin', icon: <LayoutDashboard size={18} />, label: 'Dashboard', keywords: 'inicio home painel' },
         { to: '/admin/pdv', icon: <ShoppingCart size={18} />, label: 'PDV', keywords: 'caixa venda rapida balcao' },
         { to: '/admin/sales', icon: <ShoppingBag size={18} />, label: 'Vendas', keywords: 'pedidos transacoes' },
         { to: '/admin/pedidos-online', icon: <Globe size={18} />, label: 'Pedidos Online', keywords: 'site web' },
-        { to: '/admin/financeiro', icon: <Banknote size={18} />, label: 'Financeiro', keywords: 'dinheiro pagamentos taxas contas' },
-        { to: '/admin/contabilidade', icon: <BookOpen size={18} />, label: 'Contabilidade', keywords: 'imposto simples nacional das nfe faturamento tributavel' },
+        { to: '/admin/customers', icon: <Users size={18} />, label: 'Clientes', keywords: 'usuarios compradores' },
+      ]
+    },
+    {
+      title: 'Produtos & Estoque',
+      items: [
         { to: '/admin/products', icon: <Package size={18} />, label: 'Produtos', keywords: 'catalogo itens mercadoria' },
-        { to: '/admin/products/offers', icon: <Store size={18} />, label: 'Ofertas', keywords: 'kits anuncios shopee marketplace combos' },
-        { to: '/admin/products/labels', icon: <Barcode size={18} />, label: 'Etiquetas', keywords: 'imprimir etiqueta codigo barras ean sku' },
         { to: '/admin/inventory', icon: <ClipboardList size={18} />, label: 'Estoque', keywords: 'quantidade inventario' },
         { to: '/admin/inventory/locations', icon: <Boxes size={18} />, label: 'Locais de Estoque', keywords: 'depositos locais prateleira caixa balcao almoxarifado' },
+        { to: '/admin/products/labels', icon: <Barcode size={18} />, label: 'Etiquetas', keywords: 'imprimir etiqueta codigo barras ean sku' },
         { to: '/admin/inventory/print-list', icon: <Printer size={18} />, label: 'Lista de Impressao', keywords: 'separacao caixa imprimir ean sku conferencia' },
-        { to: '/admin/customers', icon: <Users size={18} />, label: 'Clientes', keywords: 'usuarios compradores' },
-        { to: '/admin/team', icon: <Users size={18} />, label: 'Equipe', keywords: 'funcionarios vendedores' },
+        { to: '/admin/products/offers', icon: <Store size={18} />, label: 'Ofertas', keywords: 'kits anuncios shopee marketplace combos' },
       ]
     },
     {
-      title: 'Marketing & Loja',
+      title: 'Financeiro',
       items: [
-        { to: '/admin/settings/seo-analyzer', icon: <Search size={18} />, label: 'Análise de SEO', keywords: 'google analise indexacao' },
-        { to: '/admin/settings/seo-blacklist', icon: <Globe size={18} />, label: 'Lista Negra SEO', keywords: 'bloquear google ocultar noindex' },
+        { to: '/admin/financeiro', icon: <Banknote size={18} />, label: 'Financeiro', keywords: 'dinheiro pagamentos taxas contas' },
+        { to: '/admin/contabilidade', icon: <BookOpen size={18} />, label: 'Contabilidade', keywords: 'imposto simples nacional das nfe faturamento tributavel' },
+      ]
+    },
+    {
+      title: 'Loja Online & Marketing',
+      items: [
         { to: '/admin/promotions', icon: <Ticket size={18} />, label: 'Promoções', keywords: 'desconto oferta' },
-        { to: '/admin/relatorios/favoritos', icon: <Heart size={18} />, label: 'Ranking Favoritos', keywords: 'wishlist desejo clientes estatistica' },
-        { to: '/admin/catalog-config', icon: <Settings size={18} />, label: 'Config. Catálogo', keywords: 'vitrine exibir' },
-        { to: '/admin/settings/banners', icon: <Image size={18} />, label: 'Banners', keywords: 'imagens carrossel' },
-        { to: '/admin/settings/marketing', icon: <Megaphone size={18} />, label: 'Criativos', keywords: 'anuncios divulgacao' },
         { to: '/admin/coupons', icon: <Ticket size={18} />, label: 'Cupons', keywords: 'codigo desconto' },
         { to: '/admin/cashback', icon: <Coins size={18} />, label: 'Moedas do Vale', keywords: 'cashback pontos fidelidade' },
-        { to: '/admin/settings/whatsapp', icon: <MessageCircle size={18} />, label: 'WhatsApp', keywords: 'conexao evolution atendimento contato' },
-        { to: '/admin/whatsapp/mensagens', icon: <MessageSquareDashed size={18} />, label: 'Mensagens WhatsApp', keywords: 'whatsapp conversas atendimento mensagens historico humano' },
-        { to: '/admin/whatsapp/memoria-ia', icon: <Bot size={18} />, label: 'Memoria IA', keywords: 'whatsapp chatgpt ia memoria contexto prompt historico' },
-        { to: '/admin/settings/telegram', icon: <Bot size={18} />, label: 'Automações Bot', keywords: 'robo respostas' },
-        { to: '/admin/settings/email', icon: <Mail size={18} />, label: 'E-mail', keywords: 'email templates html cadastro promocao compra' },
-        { to: '/admin/feedbacks', icon: <MessageSquareDashed size={18} />, label: 'Fale Conosco', keywords: 'SAC contato reclamacoes' },
+        { to: '/admin/settings/banners', icon: <Image size={18} />, label: 'Banners', keywords: 'imagens carrossel' },
+        { to: '/admin/settings/marketing', icon: <Megaphone size={18} />, label: 'Criativos', keywords: 'anuncios divulgacao' },
+        { to: '/admin/catalog-config', icon: <Settings size={18} />, label: 'Config. Catálogo', keywords: 'vitrine exibir' },
         { to: '/admin/avaliacoes', icon: <Star size={18} />, label: 'Avaliações', keywords: 'estrelas reviews' },
+        { to: '/admin/feedbacks', icon: <MessageSquareDashed size={18} />, label: 'Fale Conosco', keywords: 'SAC contato reclamacoes' },
+        { to: '/admin/relatorios/favoritos', icon: <Heart size={18} />, label: 'Ranking Favoritos', keywords: 'wishlist desejo clientes estatistica' },
+        { to: '/admin/settings/seo-analyzer', icon: <Search size={18} />, label: 'Análise de SEO', keywords: 'google analise indexacao' },
+        { to: '/admin/settings/seo-blacklist', icon: <Globe size={18} />, label: 'Lista Negra SEO', keywords: 'bloquear google ocultar noindex' },
       ]
     },
     {
-      title: 'Estrutura de Catálogo',
+      title: 'Catálogo Técnico',
       items: [
         { to: '/admin/settings/categories', icon: <Tags size={18} />, label: 'Categorias', keywords: 'departamentos sessoes' },
         { to: '/admin/settings/brands', icon: <BadgeCheck size={18} />, label: 'Marcas', keywords: 'fabricantes apple xiaomi' },
@@ -107,29 +111,34 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       ]
     },
     {
-      title: 'Ajustes da Empresa',
+      title: 'Integrações',
       items: [
-        { to: '/admin/settings/company', icon: <Settings size={18} />, label: 'Dados da Empresa', keywords: 'cnpj endereco horarios' },
         { to: '/admin/settings/bling', icon: <Link2 size={18} />, label: 'Bling', keywords: 'erp integracao' },
         { to: '/admin/settings/shopee', icon: <Store size={18} />, label: 'Shopee', keywords: 'shopee marketplace integracao loja api' },
+        { to: '/admin/settings/whatsapp', icon: <MessageCircle size={18} />, label: 'WhatsApp', keywords: 'conexao evolution atendimento contato' },
+        { to: '/admin/whatsapp/mensagens', icon: <MessageSquareDashed size={18} />, label: 'Mensagens WhatsApp', keywords: 'whatsapp conversas atendimento mensagens historico humano' },
+        { to: '/admin/whatsapp/memoria-ia', icon: <Bot size={18} />, label: 'Memoria IA', keywords: 'whatsapp chatgpt ia memoria contexto prompt historico' },
+        { to: '/admin/settings/telegram', icon: <Bot size={18} />, label: 'Automações Bot', keywords: 'robo respostas' },
+        { to: '/admin/settings/email', icon: <Mail size={18} />, label: 'E-mail', keywords: 'email templates html cadastro promocao compra' },
+        { to: '/admin/settings/integrations', icon: <Link2 size={18} />, label: 'Gateways Pagamento', keywords: 'mercado pago pagar.me stripe' },
+      ]
+    },
+    {
+      title: 'Empresa & Sistema',
+      items: [
+        { to: '/admin/settings/company', icon: <Settings size={18} />, label: 'Dados da Empresa', keywords: 'cnpj endereco horarios' },
+        { to: '/admin/team', icon: <Users size={18} />, label: 'Equipe', keywords: 'funcionarios vendedores' },
         { to: '/admin/settings/shipping', icon: <Truck size={18} />, label: 'Frete', keywords: 'entrega correios transportadora' },
         { to: '/admin/settings/payment-fees', icon: <CreditCard size={18} />, label: 'Taxas', keywords: 'juros maquina cartao' },
-        { to: '/admin/settings/integrations', icon: <Link2 size={18} />, label: 'Gateways Pagamento', keywords: 'mercado pago pagar.me stripe' },
         { to: '/admin/settings/displays', icon: <Smartphone size={18} />, label: 'Displays Android', keywords: 'android tablet tv pix caixa propaganda qr code' },
         { to: '/admin/settings/documents', icon: <FileText size={18} />, label: 'Documentos', keywords: 'termos recibos' },
         { to: '/admin/settings/warranty-templates', icon: <Shield size={18} />, label: 'Garantias', keywords: 'padrao tempo meses' },
         { to: '/admin/settings/permissions', icon: <Shield size={18} />, label: 'Permissões', keywords: 'acesso regras', adminOnly: true },
-      ]
-    },
-    {
-      title: 'Sistema',
-      items: [
         { to: '/admin/settings/vps-status', icon: <Activity size={18} />, label: 'Status VPS', keywords: 'servidor hostinger uptime' },
         { to: '/admin/settings/system-backup', icon: <DatabaseBackup size={18} />, label: 'Backup Sistema', keywords: 'backup restore restaurar synology vps banco agendamento' },
         { to: '/admin/settings/mysql', icon: <Database size={18} />, label: 'MySQL Explorer', keywords: 'banco dados query sql tables' },
         { to: '/admin/settings/synology-cdn', icon: <Server size={18} />, label: 'CDN Synology', keywords: 'arquivos imagens videos upload nas' },
         { to: '/admin/settings/synology-config', icon: <Shield size={18} />, label: 'Config Synology', keywords: 'tunel cloudflare runbook restaurar diagnostico' },
-        { to: '/test-tabs', icon: <Tags size={18} />, label: '🧪 Teste de Abas', keywords: 'dev teste' },
       ]
     }
   ], []);

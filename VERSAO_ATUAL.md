@@ -1,26 +1,25 @@
 # Versao Atual
 
 ```text
-version: v1.1.6-retire-import-hub
+version: v1.1.7-organize-admin-menu
 date: 2026-06-14
 status: published
-release_vps: /var/www/mdv-site/releases/20260614-191500-v116-retire-import-hub
+release_vps: /var/www/mdv-site/releases/20260614-193000-v117-organize-admin-menu
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Central manual `Importacao & Sync VPS` removida do admin.
-- Rota `/admin/import` removida.
-- Item `Importacao & Sync VPS` removido do menu `Sistema`.
-- Paginas `DataImportExportPage` e `ModelImportPage` removidas.
-- Componentes e servico exclusivos do hub removidos: `LegacySalesImportTab` e `dataSyncService`.
-- Teste estatico novo garante que o hub manual aposentado nao volte por acidente.
+- Menu lateral do admin reorganizado por rotina de uso.
+- Novos grupos: `Atendimento`, `Produtos & Estoque`, `Financeiro`, `Loja Online & Marketing`, `Catalogo Tecnico`, `Integracoes` e `Empresa & Sistema`.
+- Item de desenvolvimento `Teste de Abas` removido do menu lateral.
+- Rotas administrativas existentes foram preservadas; a mudanca e apenas de organizacao visual/navegacao.
+- Teste estatico novo garante que a organizacao principal do menu continue consistente.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.6-retire-import-hub` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.7-organize-admin-menu` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-14-v1.1.6-retire-import-hub.md
+docs/versoes/2026-06-14-v1.1.7-organize-admin-menu.md
 ```
