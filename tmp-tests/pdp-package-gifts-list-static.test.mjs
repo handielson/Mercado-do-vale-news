@@ -13,6 +13,18 @@ assert.match(
 
 assert.match(
   pdpSource,
+  /function formatPdpListItem\(item: string\): string/,
+  'PDP must format package/gift list item labels before rendering',
+);
+
+assert.match(
+  pdpSource,
+  /return 'Adaptador de tomada';/,
+  'PDP must display a bare "adaptador" package item as "Adaptador de tomada"',
+);
+
+assert.match(
+  pdpSource,
   /function isListStyleSpecItem\(item: \{ key: string, label: string \}\): boolean/,
   'PDP must detect list-style specs by key and label',
 );
@@ -33,6 +45,12 @@ assert.match(
   pdpSource,
   /<span className="[^"]*">\s*1\s*<\/span>/,
   'PDP list rows must show quantity 1 for each package/gift item',
+);
+
+assert.match(
+  pdpSource,
+  /isListStyleSpecItem\(item\) \? 'col-span-2 md:col-span-3 lg:col-span-2' : ''/,
+  'PDP list-style fields must span enough grid columns to avoid short unnecessary line breaks',
 );
 
 assert.match(

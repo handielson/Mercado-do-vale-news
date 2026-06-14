@@ -770,6 +770,12 @@ export const PublicProductPage: React.FC = () => {
         return match ? match[1].toUpperCase() : value.trim();
     };
 
+    function formatPdpListItem(item: string): string {
+        const normalized = normalizePdpSpecText(item);
+        if (normalized === 'adaptador') return 'Adaptador de tomada';
+        return item;
+    }
+
     function normalizePdpListItems(value: string): string[] {
         const seen = new Set<string>();
         return value
@@ -778,6 +784,7 @@ export const PublicProductPage: React.FC = () => {
                 .replace(/^\s*(?:[-*•]|\d+[.)-]?|1\s*x?\s*)\s*/i, '')
                 .trim()
             )
+            .map(formatPdpListItem)
             .filter(item => {
                 if (!item || seen.has(item.toLowerCase())) return false;
                 seen.add(item.toLowerCase());
@@ -2027,7 +2034,7 @@ export const PublicProductPage: React.FC = () => {
                                                         </div>
                                                         <dl className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-6 gap-x-4 text-sm pl-7">
                                                             {g.items.map(item => (
-                                                                <div key={item.key} className="flex flex-col max-w-full">
+                                                                <div key={item.key} className={`flex flex-col max-w-full ${isListStyleSpecItem(item) ? 'col-span-2 md:col-span-3 lg:col-span-2' : ''}`}>
                                                                     <dt className="text-slate-500 text-xs font-semibold uppercase tracking-wide truncate pr-2" title={item.label}>{item.label}</dt>
                                                                     <dd className="font-medium text-slate-900 mt-0.5 break-words pr-2">
                                                                         {isListStyleSpecItem(item) ? (
