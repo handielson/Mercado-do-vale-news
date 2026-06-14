@@ -1,25 +1,26 @@
 # Versao Atual
 
 ```text
-version: v1.1.3-legacy-customer-purchases
+version: v1.1.4-retire-customer-migration
 date: 2026-06-14
 status: published
-release_vps: /var/www/mdv-site/releases/20260614-181727-v113-legacy-customer-purchases
+release_vps: /var/www/mdv-site/releases/20260614-183003-v114-retire-customer-migration
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Tabela VPS `legacy_customer_purchases` para guardar compras antigas como historico informativo.
-- Importacao das vendas antigas do Supabase para a VPS sem movimentar estoque, caixa, crediario, cashback ou Bling.
-- Reconciliacao das compras antigas pelo CPF para apontarem ao cliente correto na VPS.
-- Aba de compras do cliente passa a mostrar `Historico do sistema antigo` separado dos pedidos atuais.
-- Compras legadas aparecem com selo `Informativo`, total, data, pagamento e itens quando existirem.
+- Rota `/admin/migration` removida depois da migracao final de clientes.
+- Item `Migracao` removido do menu admin.
+- Paginas antigas `LegacyMigration` e `FieldMappingPage` removidas.
+- Componentes exclusivos de migracao de cliente removidos de `components/migration`.
+- Aba placeholder `Clientes (Migracao Legado)` removida da Central de Importacao.
+- Teste estatico novo garante que o fluxo antigo de cliente nao volte por acidente.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.3-legacy-customer-purchases` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.4-retire-customer-migration` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-14-v1.1.3-legacy-customer-purchases.md
+docs/versoes/2026-06-14-v1.1.4-retire-customer-migration.md
 ```

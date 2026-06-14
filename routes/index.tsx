@@ -82,8 +82,6 @@ const DisplayPage = lazy(() => import('../pages/display/DisplayPage'));
 const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
 const CatalogPage = lazy(() => import('../pages/catalog/index'));
 const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
-const LegacyMigrationPage = lazy(() => import('../pages/LegacyMigration'));
-const FieldMappingPage = lazy(() => import('../pages/FieldMappingPage'));
 const ExtendedWarrantyPage = lazy(() => import('../pages/customer/ExtendedWarrantyPage'));
 const CustomerPromotionsPage = lazy(() => import('../pages/customer/PromotionsPage').then(module => ({ default: module.PromotionsPage })));
 const FreeScreenProtectorRulesPage = lazy(() => import('../pages/customer/FreeScreenProtectorRulesPage').then(module => ({ default: module.FreeScreenProtectorRulesPage })));
@@ -835,22 +833,6 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><TabsTestPage /></AdminLayout>
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: "/admin/migration",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><LegacyMigrationPage /></AdminLayout>
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: "/admin/field-mapping",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><FieldMappingPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

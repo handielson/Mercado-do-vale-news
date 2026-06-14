@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.3-legacy-customer-purchases",
+  "version": "v1.1.4-retire-customer-migration",
   "date": "2026-06-14",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260614-181727-v113-legacy-customer-purchases",
+  "release_vps": "/var/www/mdv-site/releases/20260614-183003-v114-retire-customer-migration",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Historico informativo de compras do sistema antigo na aba de compras do cliente, sem movimentar estoque, caixa, crediario, cashback ou Bling."
+  "summary": "Fluxo antigo de migracao de clientes aposentado: rota, menu, pagina, componentes e testes antigos removidos apos a migracao final."
 }

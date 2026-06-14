@@ -131,7 +131,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         { to: '/admin/settings/synology-config', icon: <Shield size={18} />, label: 'Config Synology', keywords: 'tunel cloudflare runbook restaurar diagnostico' },
         { to: '/admin/settings/roadmap', icon: <Rocket size={18} />, label: 'Roadmap & Docs', keywords: 'futuro documentacao novidades' },
         { to: '/admin/import', icon: <HardDrive size={18} />, label: 'Importação & Sync VPS', keywords: 'importar sincronizar vps preco estoque planilha banco' },
-        { to: '/admin/migration', icon: <Database size={18} />, label: 'Migração', keywords: 'vps banco transferir' },
         { to: '/test-tabs', icon: <Tags size={18} />, label: '🧪 Teste de Abas', keywords: 'dev teste' },
       ]
     }

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Download, RefreshCw, AlertTriangle, CheckCircle, CheckCircle2, Info, FileSpreadsheet, Database, Users, Box, HardDriveUpload, Upload, ServerCog, Loader2 } from 'lucide-react';
+import { Download, RefreshCw, AlertTriangle, CheckCircle, CheckCircle2, Info, FileSpreadsheet, Database, Box, HardDriveUpload, Upload, ServerCog, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CategorySelect } from '../../../components/products/CategorySelect';
 import { DataSyncService } from '../../../services/dataSyncService';
@@ -7,7 +7,7 @@ import { vpsApiService } from '../../../services/vpsApiService';
 import { LegacySalesImportTab } from '../../../components/import/LegacySalesImportTab';
 
 // Definindo abas/tipos de importação que teremos na central
-type ImportTab = 'modelos' | 'clientes' | 'produtos' | 'vendas' | 'vps-sync';
+type ImportTab = 'modelos' | 'produtos' | 'vendas' | 'vps-sync';
 
 export const DataImportExportPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ImportTab>('modelos');
@@ -182,17 +182,6 @@ export const DataImportExportPage: React.FC = () => {
         >
           <Box className="w-4 h-4" />
           Catálogo: Modelos
-        </button>
-        <button
-          onClick={() => setActiveTab('clientes')}
-          className={`px-5 py-3 rounded-t-xl font-medium text-sm flex items-center gap-2 transition-colors whitespace-nowrap ${
-            activeTab === 'clientes'
-              ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-600'
-              : 'text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          Clientes (Migração Legado)
         </button>
         <button
           disabled
@@ -441,22 +430,7 @@ export const DataImportExportPage: React.FC = () => {
         <LegacySalesImportTab />
       )}
 
-      {/* MODAL / CONTENT PARA CLIENTES */}
-      {activeTab === 'clientes' && (
-        <div className="bg-white p-10 rounded-2xl shadow-sm border border-slate-200 text-center animate-in slide-in-from-bottom-2">
-           <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
-             <Users className="w-10 h-10 text-blue-500" />
-           </div>
-           <h2 className="text-2xl font-bold text-slate-800 mb-2">Migração de Clientes (Legado)</h2>
-           <p className="text-slate-500 max-w-lg mx-auto mb-6">
-             Esta interface será responsável por ler o arquivo exportado do <strong>MV-Gestao</strong> e criar os clientes aqui, automatizando a mensagem de boas-vindas com CPF via Whatsapp.
-           </p>
-           <button className="px-6 py-3 bg-slate-800 text-white font-medium rounded-xl hover:bg-slate-700 transition">
-             Carregar Módulo de Migração
-           </button>
-        </div>
-      )}
-
     </div>
   );
 };
+
