@@ -1,11 +1,41 @@
 const UNIQUE_SERIALIZED_SPEC_KEYS = ['imei1', 'imei2', 'serial'];
+const ARRAY_FIELDS = ['eans', 'images', 'keywords', 'kits', 'tags'];
+
+function parseJsonValue(value) {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  if (!/^[\[{]/.test(trimmed)) return value;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function toArray(value) {
+  const parsed = parseJsonValue(value);
+  if (Array.isArray(parsed)) return parsed.filter((item) => item != null && item !== '');
+  if (parsed == null || parsed === '') return [];
+  if (typeof parsed === 'string') {
+    return parsed
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function toObject(value) {
+  const parsed = parseJsonValue(value);
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+}
 
 export function buildProductClonePrefill(product = {}) {
   const clone = {
     ...product,
-    specs: {
-      ...(product.specs || {}),
-    },
+    specs: toObject(product.specs),
   };
 
   delete clone.id;
@@ -14,6 +44,10 @@ export function buildProductClonePrefill(product = {}) {
 
   UNIQUE_SERIALIZED_SPEC_KEYS.forEach((key) => {
     clone.specs[key] = '';
+  });
+
+  ARRAY_FIELDS.forEach((field) => {
+    clone[field] = toArray(clone[field]);
   });
 
   return clone;

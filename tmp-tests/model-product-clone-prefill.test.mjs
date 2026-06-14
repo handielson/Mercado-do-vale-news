@@ -13,6 +13,11 @@ const product = {
   stock_quantity: 1,
   price_cost: 223500,
   price_retail: 269900,
+  eans: '["7891234567890"]',
+  images: '["https://cdn.example.com/poco.jpg"]',
+  keywords: '["poco", "xiaomi"]',
+  kits: null,
+  tags: 'smartphone,xiaomi',
   specs: {
     imei1: '866132080815481',
     imei2: '866132080815479',
@@ -36,6 +41,11 @@ assert.equal(prefill.sku, product.sku, 'clone deve manter SKU do grupo');
 assert.equal(prefill.model_id, product.model_id, 'clone deve manter modelo');
 assert.equal(prefill.price_cost, product.price_cost, 'clone deve manter custo');
 assert.equal(prefill.price_retail, product.price_retail, 'clone deve manter preco');
+assert.deepEqual(prefill.eans, ['7891234567890'], 'clone deve normalizar eans para array');
+assert.deepEqual(prefill.images, ['https://cdn.example.com/poco.jpg'], 'clone deve normalizar images para array');
+assert.deepEqual(prefill.keywords, ['poco', 'xiaomi'], 'clone deve normalizar keywords para array');
+assert.deepEqual(prefill.kits, [], 'clone deve normalizar kits ausente/nulo para array vazio');
+assert.deepEqual(prefill.tags, ['smartphone', 'xiaomi'], 'clone deve normalizar tags separadas por virgula para array');
 assert.equal(prefill.specs.color, 'Preto', 'clone deve manter cor');
 assert.equal(prefill.specs.ram, '12GB', 'clone deve manter RAM');
 assert.equal(prefill.specs.storage, '512GB', 'clone deve manter armazenamento');

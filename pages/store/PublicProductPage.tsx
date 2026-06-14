@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers } from 'lucide-react';
+import { ArrowLeft, Share2, ShoppingCart, ShieldCheck, Truck, Smartphone, Monitor, Cpu, Camera, Battery, Wifi, Box, Settings, GitCompare, Facebook, Instagram, Package, Loader2, Layers, Pencil } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from 'sonner';
 import { useVpsAuth } from '@/contexts/VpsAuthContext';
@@ -697,6 +697,15 @@ export const PublicProductPage: React.FC = () => {
     };
 
     const isInCompare = product ? isComparing(product.id) : false;
+    const isAdmin = customer?.customer_type === 'ADMIN';
+    const productModelId = String(product.model_id || '').trim();
+    const productSlug = product.slug || product.id;
+    const adminProductUrl = isAdmin && product?.id
+        ? `/admin/products/${encodeURIComponent(product.id)}/${encodeURIComponent(productSlug)}`
+        : '';
+    const adminModelPanelUrl = isAdmin && productModelId && productModelId !== '0' && productModelId !== 'null'
+        ? `/admin/products/models/${encodeURIComponent(productModelId)}`
+        : '';
 
     const handleCompare = () => {
         if (!product) return;
@@ -1321,14 +1330,36 @@ export const PublicProductPage: React.FC = () => {
                                 <button
                                     onClick={handleCompare}
                                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-sm shadow-sm ${
-                                        isInCompare 
+                                        isInCompare
                                             ? 'border-blue-600 bg-blue-100 text-blue-800 font-semibold' 
                                             : 'border-slate-300 bg-slate-100 text-slate-700 hover:border-slate-400 hover:bg-slate-200'
                                     }`}
                                 >
-                                    <GitCompare size={16} className={isInCompare ? "text-blue-700" : "text-slate-600"} /> 
+                                    <GitCompare size={16} className={isInCompare ? "text-blue-700" : "text-slate-600"} />
                                     {isInCompare ? 'Comparando' : 'Comparar'}
                                 </button>
+                                {adminProductUrl && (
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(adminProductUrl)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-100 text-amber-900 hover:border-amber-400 hover:bg-amber-200 transition-all text-sm font-semibold shadow-sm"
+                                        title="Editar produto no admin"
+                                    >
+                                        <Pencil size={16} className="text-amber-800" />
+                                        Editar produto
+                                    </button>
+                                )}
+                                {adminModelPanelUrl && (
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate(adminModelPanelUrl)}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-300 hover:bg-amber-100 transition-all text-sm font-semibold shadow-sm"
+                                        title="Abrir painel do modelo"
+                                    >
+                                        <Settings size={16} className="text-amber-700" />
+                                        Painel do modelo
+                                    </button>
+                                )}
                             </div>
                         </div>
 
