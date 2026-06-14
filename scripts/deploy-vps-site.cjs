@@ -256,6 +256,14 @@ async function assertRemoteReleaseComplete(sftp, localDir, remoteDir) {
 }
 
 function buildReleaseName() {
+  const configuredReleaseName = String(process.env.VPS_SITE_RELEASE_NAME || '').trim();
+  if (configuredReleaseName) {
+    if (!/^[0-9]{8}-[0-9]{6}(?:-[a-z0-9-]+)?$/i.test(configuredReleaseName)) {
+      throw new Error('VPS_SITE_RELEASE_NAME must match YYYYMMDD-HHMMSS or YYYYMMDD-HHMMSS-label');
+    }
+    return configuredReleaseName;
+  }
+
   return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
 }
 

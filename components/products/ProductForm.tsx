@@ -44,6 +44,7 @@ import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl }
 import { buildSerializedBatchPlan, findSerializedBatchDuplicates, hasSerializedIdentity, resolveSerializedBatchItemImages } from './serializedBatch.js';
 import { getProductSaveProgressPercent } from './productSaveProgress.js';
 import { getBlingSkuPriceAutofill } from './blingSkuPriceAutofill.js';
+import { getBlingSkuSpecAutofill } from './blingSkuSpecAutofill.js';
 import { UnitStatus } from '../../utils/field-standards';
 
 interface ProductFormProps {
@@ -796,8 +797,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         const parentId = product.variacao?.produtoPai?.id;
         const blingEan = String(product.gtin || '').trim();
         const priceAutofill = getBlingSkuPriceAutofill(product);
+        const colors = await colorService.listActive().catch(() => []);
+        const specAutofill = getBlingSkuSpecAutofill({ product, colors });
 
-        return { id: product.id, parentId, ean: blingEan || null, priceAutofill };
+        return { id: product.id, parentId, ean: blingEan || null, priceAutofill, specAutofill };
     };
 
     const resolveAutomaticBlingLink = async (sku?: string | null) => {
@@ -825,10 +828,16 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             if (link.priceAutofill.price_retail) {
                 setValue('price_retail', link.priceAutofill.price_retail, { shouldDirty: true, shouldValidate: true });
             }
+            if (link.specAutofill.color) {
+                setValue('specs.color', link.specAutofill.color, { shouldDirty: true, shouldValidate: true });
+            }
             toast.info('Vinculado automaticamente pelo SKU no Bling.', {
                 id: 'bling-auto-sku-link',
-                description: (link.priceAutofill.price_cost || link.priceAutofill.price_retail)
-                    ? 'Precos de compra e varejo preenchidos para conferencia.'
+                description: (link.priceAutofill.price_cost || link.priceAutofill.price_retail || link.specAutofill.color)
+                    ? [
+                        (link.priceAutofill.price_cost || link.priceAutofill.price_retail) ? 'Precos de compra e varejo preenchidos para conferencia.' : '',
+                        link.specAutofill.color ? `Cor preenchida: ${link.specAutofill.color}.` : '',
+                    ].filter(Boolean).join(' ')
                     : undefined,
             });
             return link;
@@ -863,9 +872,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     bling_id: link.id,
                     bling_parent_id: link.parentId,
                     eans: link.ean ? [link.ean] : (batchItem.eans || []),
+                    color: link.specAutofill.color || batchItem.color,
                 };
             }));
-            toast.success(link.ean ? 'Bling vinculado e EAN preenchido.' : 'Bling vinculado. Produto sem EAN no Bling.');
+            toast.success(link.ean ? 'Bling vinculado e EAN preenchido.' : 'Bling vinculado. Produto sem EAN no Bling.', {
+                description: link.specAutofill.color ? `Cor preenchida: ${link.specAutofill.color}.` : undefined,
+            });
         } catch (error) {
             console.warn('[ProductForm] Batch Bling SKU link skipped:', error);
             toast.error('Erro ao buscar SKU no Bling.');
@@ -1074,6 +1086,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                             bling_id: link.id,
                             bling_parent_id: link.parentId,
                             eans: link.ean ? [link.ean] : item.eans,
+                            color: link.specAutofill.color || item.color,
                         };
                     } catch {
                         return item;
@@ -1377,6 +1390,15 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         Lista para Cadastro em Massa
                         <span className="ml-auto text-sm font-normal text-slate-500">{serialList.length} {serialList.length === 1 ? 'item' : 'itens'}</span>
                     </h3>
+
+                    <button
+                        type="button"
+                        onClick={() => handleAddToBatchList()}
+                        className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium"
+                    >
+                        <CheckCircle2 size={16} />
+                        Adicionar à Lista
+                    </button>
 
                     {serialList.length > 0 && (
                         <div className="space-y-2">

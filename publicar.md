@@ -1,6 +1,6 @@
 # Guia de Publicacao
 
-Atualizado em `13/06/2026`.
+Atualizado em `14/06/2026`.
 
 Este arquivo e o runbook principal para commit, push e publicacao do Mercado do Vale.
 
@@ -23,17 +23,40 @@ Quando o pedido for `comitar`, `publicar`, `deployar` ou equivalente:
 2. procurar arquivos soltos, temporarios ou nao commitados relacionados ao assunto antes de mexer;
 3. revisar o diff dos arquivos relacionados;
 4. criar ou atualizar protecao contra regressao e refatoracao para a mudanca;
-5. stagear somente o que pertence ao assunto;
-6. rodar as validacoes relevantes;
-7. criar commit com mensagem objetiva;
-8. fazer `git push origin main`, salvo pedido contrario, sempre fora do sandbox com permissao elevada no Codex;
-9. se afetar frontend publico/admin, publicar o site na VPS, sempre fora do sandbox com permissao elevada no Codex;
-10. se afetar API, cron, webhook ou servidor, publicar/reiniciar a API na VPS, sempre fora do sandbox com permissao elevada no Codex;
-11. verificar o dominio final e endpoints afetados, sempre fora do sandbox com permissao elevada no Codex quando usar rede externa;
-12. conferir novamente `git status` e remover ou registrar qualquer lixo gerado nesta edicao;
-13. registrar no resumo final o que foi publicado, validado, reiniciado e limpo.
+5. atualizar a versao da entrega em `public/VERSION.json`, `VERSAO_ATUAL.md` e `docs/versoes/`;
+6. stagear somente o que pertence ao assunto;
+7. rodar as validacoes relevantes;
+8. criar commit com mensagem objetiva;
+9. criar tag/versao quando a publicacao for ponto de recuperacao;
+10. fazer `git push origin main`, salvo pedido contrario, sempre fora do sandbox com permissao elevada no Codex;
+11. se afetar frontend publico/admin, publicar o site na VPS, sempre fora do sandbox com permissao elevada no Codex;
+12. se afetar API, cron, webhook ou servidor, publicar/reiniciar a API na VPS, sempre fora do sandbox com permissao elevada no Codex;
+13. verificar o dominio final e endpoints afetados, sempre fora do sandbox com permissao elevada no Codex quando usar rede externa;
+14. conferir novamente `git status` e remover ou registrar qualquer lixo gerado nesta edicao;
+15. registrar no resumo final o que foi publicado, validado, reiniciado, versionado e limpo.
 
 Nunca usar `git add .` neste projeto. Stagear por arquivo.
+
+## Regra De Versao
+
+Toda publicacao precisa deixar um ponto facil de recuperacao.
+
+Arquivos obrigatorios:
+
+- `public/VERSION.json`: versao visivel no site depois do deploy, acessivel por `/VERSION.json`;
+- `VERSAO_ATUAL.md`: resumo humano da versao atual;
+- `docs/versoes/YYYY-MM-DD-vX.Y.Z-<assunto>.md`: registro copiavel do que entrou.
+
+Regra pratica:
+
+1. aumentar a versao antes de publicar;
+2. registrar data, branch, release VPS, arquivos alterados e validacoes;
+3. se a publicacao ja tiver release VPS, preencher o caminho exato `/var/www/mdv-site/releases/YYYYMMDD-HHMMSS`;
+4. se ainda nao publicou, deixar `release_vps` como `pendente` e atualizar logo apos o deploy;
+5. criar tag Git para pontos importantes de recuperacao, por exemplo `v1.1.0-bling-spec-autofill`;
+6. quando precisar recuperar algo, procurar primeiro o arquivo em `docs/versoes/` e depois usar a tag/commit registrado.
+
+Nao colocar versao no nome de componentes como `ProductForm-v1.tsx`. A versao pertence a release inteira, nao a um arquivo isolado.
 
 ## Regras Obrigatorias Para Codex
 
@@ -55,6 +78,15 @@ Para a maioria das publicacoes da VPS, o fluxo certo e este:
 ```powershell
 npm.cmd run deploy:vps-site
 ```
+
+Quando a publicacao tiver versao registrada, fixar o nome da release para bater com `public/VERSION.json`:
+
+```powershell
+$env:VPS_SITE_RELEASE_NAME='20260614-190454-v110-bling-spec'
+npm.cmd run deploy:vps-site
+```
+
+O formato aceito e `YYYYMMDD-HHMMSS` ou `YYYYMMDD-HHMMSS-label`.
 
 No Codex, nao tentar esse comando primeiro dentro do sandbox. Ele precisa abrir SSH para a VPS e normalmente falha com `connect EACCES` ou bloqueio equivalente. Chamar direto o `shell_command` com:
 
