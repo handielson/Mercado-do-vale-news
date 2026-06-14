@@ -140,7 +140,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [location.pathname, menuGroups]);
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50" data-admin-layout-build="2026-06-02-cache-bust">
+    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50" data-admin-layout-build="2026-06-14-assets-refresh">
       {DEV_MODE && (
         <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black px-4 py-2 text-center text-sm font-bold z-[100] shadow-lg">
           🔧 MODO DESENVOLVIMENTO - Autenticação Mock Ativa
