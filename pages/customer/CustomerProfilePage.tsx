@@ -4,6 +4,7 @@ import {
     ArrowLeft,
     CheckCircle2,
     Coins,
+    CreditCard,
     Gift,
     Home,
     Mail,
@@ -11,6 +12,7 @@ import {
     ShieldCheck,
     ShoppingBag,
     TrendingUp,
+    Truck,
     User,
     WalletCards,
 } from 'lucide-react';
@@ -22,8 +24,10 @@ import { PurchaseHistoryTab } from '../../components/customer/profile/PurchaseHi
 import { TypeUpgradeTab } from '../../components/customer/profile/TypeUpgradeTab';
 import { BenefitsTab } from '../../components/customer/profile/BenefitsTab';
 import { CoinsTab } from '../../components/customer/profile/CoinsTab';
+import { FinancialTab } from '../../components/customer/profile/FinancialTab';
+import { DeliveryWorkerTab } from '../../components/customer/profile/DeliveryWorkerTab';
 
-type TabType = 'overview' | 'personal' | 'history' | 'upgrade' | 'coins' | 'benefits';
+type TabType = 'overview' | 'personal' | 'history' | 'finance' | 'deliveries' | 'upgrade' | 'coins' | 'benefits';
 
 const getInitialTab = (location: ReturnType<typeof useLocation>): TabType => {
     const tabFromQuery = new URLSearchParams(location.search).get('tab');
@@ -31,6 +35,8 @@ const getInitialTab = (location: ReturnType<typeof useLocation>): TabType => {
     if (tabFromQuery === 'history') return 'history';
     if (tabFromQuery === 'personal') return 'personal';
     if (tabFromQuery === 'benefits') return 'benefits';
+    if (tabFromQuery === 'finance') return 'finance';
+    if (tabFromQuery === 'deliveries') return 'deliveries';
     if (tabFromQuery === 'upgrade') return 'upgrade';
     if (tabFromQuery === 'coins') return 'coins';
     return (location.state as any)?.tab || 'overview';
@@ -54,10 +60,17 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
     const { customer, isLoading } = useVpsAuth();
     const effectiveCustomer = customerOverride || customer;
     const [activeTab, setActiveTab] = useState<TabType>(() => getInitialTab(location));
+    const canManageDeliveries = Boolean(isAdminPreview && effectiveCustomer?.is_delivery_worker === true);
 
     useEffect(() => {
         setActiveTab(getInitialTab(location));
     }, [location]);
+
+    useEffect(() => {
+        if (activeTab === 'deliveries' && !canManageDeliveries) {
+            setActiveTab('overview');
+        }
+    }, [activeTab, canManageDeliveries]);
 
     const profileCompletion = useMemo(() => {
         if (!effectiveCustomer) return { total: 0, done: 0, percent: 0, missing: [] as string[] };
@@ -105,6 +118,8 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
         { id: 'overview' as TabType, label: 'Visao geral', icon: Home },
         { id: 'personal' as TabType, label: 'Meus Dados', icon: User },
         { id: 'history' as TabType, label: 'Historico', icon: ShoppingBag },
+        { id: 'finance' as TabType, label: 'Financeiro', icon: CreditCard },
+        ...(canManageDeliveries ? [{ id: 'deliveries' as TabType, label: 'Entregas', icon: Truck }] : []),
         { id: 'benefits' as TabType, label: 'Beneficios', icon: ShieldCheck },
         { id: 'upgrade' as TabType, label: 'Tipo de Conta', icon: TrendingUp },
         { id: 'coins' as TabType, label: 'Moedas', icon: Coins },
@@ -372,6 +387,8 @@ export const CustomerProfilePage: React.FC<CustomerProfilePageProps> = ({ custom
                             <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6 lg:p-8">
                                 {activeTab === 'personal' && (isAdminPreview ? renderAdminPersonalInfo() : <PersonalInfoTab />)}
                                 {activeTab === 'history' && <PurchaseHistoryTab customerOverride={effectiveCustomer} />}
+                                {activeTab === 'finance' && <FinancialTab customer={effectiveCustomer} />}
+                                {activeTab === 'deliveries' && <DeliveryWorkerTab customer={effectiveCustomer}/>}
                                 {activeTab === 'benefits' && <BenefitsTab />}
                                 {activeTab === 'upgrade' && <TypeUpgradeTab />}
                                 {activeTab === 'coins' && <CoinsTab />}
