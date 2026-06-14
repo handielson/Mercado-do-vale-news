@@ -1,26 +1,25 @@
 # Versao Atual
 
 ```text
-version: v1.1.4-retire-customer-migration
+version: v1.1.5-retire-roadmap-page
 date: 2026-06-14
 status: published
-release_vps: /var/www/mdv-site/releases/20260614-183003-v114-retire-customer-migration
+release_vps: /var/www/mdv-site/releases/20260614-184607-v115-retire-roadmap-page
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Rota `/admin/migration` removida depois da migracao final de clientes.
-- Item `Migracao` removido do menu admin.
-- Paginas antigas `LegacyMigration` e `FieldMappingPage` removidas.
-- Componentes exclusivos de migracao de cliente removidos de `components/migration`.
-- Aba placeholder `Clientes (Migracao Legado)` removida da Central de Importacao.
-- Teste estatico novo garante que o fluxo antigo de cliente nao volte por acidente.
+- Pagina estatica `Roadmap & Docs` removida do admin.
+- Rota `/admin/settings/roadmap` removida.
+- Item `Roadmap & Docs` removido do menu `Sistema`.
+- Arquivo `pages/admin/settings/RoadmapPage.tsx` removido.
+- Teste estatico novo garante que essa pagina interna obsoleta nao volte por acidente.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.4-retire-customer-migration` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.5-retire-roadmap-page` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-14-v1.1.4-retire-customer-migration.md
+docs/versoes/2026-06-14-v1.1.5-retire-roadmap-page.md
 ```

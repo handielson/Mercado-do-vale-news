@@ -98,7 +98,6 @@ const SerializedUnitsPage = lazy(() => import('../pages/admin/inventory/Serializ
 const SEODashboardPage = lazy(() => import('../pages/admin/settings/SEODashboardPage').then(module => ({ default: module.SEODashboardPage })));
 const SEOBlacklistPage = lazy(() => import('../pages/admin/settings/SEOBlacklistPage').then(module => ({ default: module.SEOBlacklistPage })));
 const ReviewsPage = lazy(() => import('../pages/admin/catalog/ReviewsPage').then(module => ({ default: module.ReviewsPage })));
-const RoadmapPage = lazy(() => import('../pages/admin/settings/RoadmapPage'));
 const VpsStatusPage = lazy(() => import('../pages/admin/settings/VpsStatusPage').then(module => ({ default: module.VpsStatusPage })));
 const SystemBackupPage = lazy(() => import('../pages/admin/settings/SystemBackupPage').then(module => ({ default: module.SystemBackupPage })));
 const SynologyFilesPage = lazy(() => import('../pages/admin/settings/SynologyFilesPage').then(module => ({ default: module.SynologyFilesPage })));
@@ -640,14 +639,6 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><WhatsAppAiMemoryPage /></AdminLayout>
-      </ProtectedRoute>
-    )
-  },
-  {
-    path: "/admin/settings/roadmap",
-    element: (
-      <ProtectedRoute requireAdmin={true}>
-        <AdminLayout><RoadmapPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

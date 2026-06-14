@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.4-retire-customer-migration",
+  "version": "v1.1.5-retire-roadmap-page",
   "date": "2026-06-14",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260614-183003-v114-retire-customer-migration",
+  "release_vps": "/var/www/mdv-site/releases/20260614-184607-v115-retire-roadmap-page",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Fluxo antigo de migracao de clientes aposentado: rota, menu, pagina, componentes e testes antigos removidos apos a migracao final."
+  "summary": "Pagina estatica Roadmap & Docs aposentada: rota, menu e arquivo removidos para reduzir telas internas obsoletas."
 }
