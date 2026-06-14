@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Smartphone, Plus, Pencil, Trash2, ChevronDown, ChevronUp, CheckCircle, Loader2, Clock, Search, Save, UploadCloud, DownloadCloud, RefreshCw, Sparkles } from 'lucide-react';
 import { Model } from '../../../types/model';
 import { Brand } from '../../../types/brand';
@@ -199,13 +199,17 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
 
     const PRICE_KEYS: (keyof PriceState)[] = ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale'];
     const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-slate-50/70';
+    const selectedRowClass = isSelected
+        ? 'bg-blue-50/80 ring-2 ring-blue-500 ring-inset shadow-[inset_4px_0_0_#3b82f6] animate-pulse'
+        : '';
+    const actionCellBg = isSelected ? 'bg-blue-50' : index % 2 === 0 ? 'bg-white' : 'bg-slate-50';
     
     const hasSeo = Boolean(model.description?.trim() || model.template_values?.meta_title?.trim());
 
     return (
         <>
             {/* ── Linha principal ─────────────────────────────────────── */}
-            <tr className={`transition-colors ${rowBg} hover:brightness-95 ${isSelected ? 'bg-purple-50/50' : ''}`}>
+            <tr className={`transition-colors duration-200 ${rowBg} hover:brightness-95 ${selectedRowClass}`}>
                 {/* Seleção */}
                 <td className="px-4 py-2.5 whitespace-nowrap w-10">
                     <input
@@ -296,7 +300,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
                 </td>
 
                 {/* Ações */}
-                <td className="px-4 py-3 text-right whitespace-nowrap">
+                <td className={`px-4 py-3 text-right whitespace-nowrap sticky right-0 z-[1] ${actionCellBg} shadow-[-10px_0_18px_-18px_rgba(15,23,42,0.55)]`}>
                     <div className="flex items-center justify-end gap-1">
                         <button
                             onClick={handlePullBling}
@@ -342,7 +346,7 @@ function ModelRow({ model, brandName, index, isSelected, onToggleSelect, onEdit,
 
             {/* ── Linha expandida: Slug + Medidas ───────────────────── */}
             {expanded && (
-                <tr className={`border-b border-slate-200 ${rowBg}`}>
+                <tr className={`border-b border-slate-200 ${rowBg} ${selectedRowClass}`}>
                     <td colSpan={10} className="px-6 py-2.5">
                         <div className="flex flex-wrap items-center gap-6">
                             {/* Slug */}
@@ -436,6 +440,8 @@ export function ModelsPage() {
     const [editingModel, setEditingModel] = useState<Model | null>(null);
     const [deleteError, setDeleteError] = useState('');
     const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
+    const tableScrollRef = useRef<HTMLDivElement | null>(null);
+    const topScrollRef = useRef<HTMLDivElement | null>(null);
 
     // ── Filtros ──
     const [search, setSearch] = useState('');
@@ -503,6 +509,18 @@ export function ModelsPage() {
             if (sortOrder === 'za') return b.name.localeCompare(a.name, 'pt-BR');
             return 0;
         });
+
+    const syncModelTableScroll = (source: 'top' | 'table') => {
+        const top = topScrollRef.current;
+        const table = tableScrollRef.current;
+        if (!top || !table) return;
+
+        if (source === 'top') {
+            table.scrollLeft = top.scrollLeft;
+        } else {
+            top.scrollLeft = table.scrollLeft;
+        }
+    };
 
     const toggleSelectAll = () => {
         if (selectedModelIds.size === filtered.length && filtered.length > 0) {
@@ -665,7 +683,20 @@ export function ModelsPage() {
             </div>
 
             {/* Tabela */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto overflow-y-auto max-h-[65vh]">
+            <div
+                ref={topScrollRef}
+                id="models-table-scroll-top"
+                className="models-table-scroll-top sticky top-0 z-20 -mb-1 overflow-x-auto overflow-y-hidden rounded-t-xl border border-slate-200 bg-white/95 shadow-sm backdrop-blur"
+                onScroll={() => syncModelTableScroll('top')}
+                aria-label="Rolagem horizontal da tabela de modelos"
+            >
+                <div className="h-4 min-w-[1500px]" />
+            </div>
+            <div
+                ref={tableScrollRef}
+                className="bg-white rounded-b-xl border border-slate-200 shadow-sm overflow-x-auto overflow-y-auto max-h-[65vh]"
+                onScroll={() => syncModelTableScroll('table')}
+            >
                 <table className="w-full min-w-[1500px] relative">
                     <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
                         <tr>
@@ -686,7 +717,7 @@ export function ModelsPage() {
                             <th className="px-2 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Atacado</th>
                             <th className="px-2 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Salvar</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Status</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Ações</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap sticky right-0 z-20 bg-slate-50 shadow-[-10px_0_18px_-18px_rgba(15,23,42,0.55)]">Ações</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
