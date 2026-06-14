@@ -1115,7 +1115,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     >
                         <div className="flex items-center justify-center gap-2">
                             <Braces size={18} />
-                            JSON
+                            JSON / IA
                         </div>
                     </button>
                     <button
@@ -1343,6 +1343,20 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                 <div className="bg-white border border-slate-200 rounded-lg p-4">
+                                    <label className="block text-sm font-semibold text-slate-800 mb-2">
+                                        Sites confiaveis para pesquisa
+                                    </label>
+                                    <textarea
+                                        value={trustedSourceLinksText}
+                                        onChange={(e) => setTrustedSourceLinksText(e.target.value)}
+                                        rows={4}
+                                        className="w-full px-3 py-2 text-xs font-mono border border-indigo-200 rounded-lg bg-indigo-50/40 text-slate-800 resize-y focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        placeholder="Um link por linha. Ex: https://www.gsmarena.com/"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1 mb-4">
+                                        Coloque um link por linha. A IA pesquisa primeiro nesses sites; se nao encontrar dados reais suficientes, usa pesquisa externa.
+                                    </p>
+
                                     <div className="flex items-center justify-between gap-3 mb-2">
                                         <label className="text-sm font-semibold text-slate-800">
                                             Prompt de cadastro completo
@@ -1361,19 +1375,6 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         rows={18}
                                         className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg bg-slate-50 text-slate-700 resize-none"
                                     />
-                                    <label className="block text-sm font-semibold text-slate-800 mt-3 mb-2">
-                                        Sites confiaveis para pesquisa
-                                    </label>
-                                    <textarea
-                                        value={trustedSourceLinksText}
-                                        onChange={(e) => setTrustedSourceLinksText(e.target.value)}
-                                        rows={4}
-                                        className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg bg-white text-slate-700 resize-y"
-                                        placeholder="Um link por linha. Ex: https://www.gsmarena.com/"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        A IA pesquisa primeiro nesses sites. Se nao encontrar dados reais suficientes, usa pesquisa externa.
-                                    </p>
                                     <div className="mt-3 flex flex-wrap gap-2">
                                         <button
                                             type="button"

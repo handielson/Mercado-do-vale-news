@@ -66,6 +66,18 @@ assert.match(
 
 assert.match(
   modal,
+  /JSON \/ IA/,
+  'ModelModal JSON tab must clearly mention AI so the trusted source field is discoverable',
+);
+
+assert.match(
+  modal,
+  /Sites confiaveis para pesquisa[\s\S]*Prompt de cadastro completo/,
+  'Trusted source links must appear before the large prompt textarea in the JSON tab',
+);
+
+assert.match(
+  modal,
   /trustedSourceLinks:\s*parseTrustedSourceLinks\(trustedSourceLinksText\)/,
   'ModelModal must send trusted source links to the model AI endpoint',
 );
