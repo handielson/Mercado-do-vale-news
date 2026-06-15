@@ -20,11 +20,13 @@ const requiredCheckinSnippets = [
 ];
 
 const requiredIndexSnippets = [
+  'initial-mobile-meta',
   'initial-mobile-search',
   'initial-checkin-row',
   'initial-checkin',
   'initial-controls',
   'initial-collections',
+  'initial-section-head',
 ];
 
 const missingApp = requiredAppSnippets.filter((snippet) => !appSource.includes(snippet));

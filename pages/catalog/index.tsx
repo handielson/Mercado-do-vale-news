@@ -10,7 +10,7 @@ import {
     CheckinWidget
 } from '@/components/catalog';
 import { CatalogFilters } from '@/components/catalog/CatalogFilters';
-import { ProductGroupGrid } from '@/components/catalog/ProductGroupGrid';
+import { ProductGroupGrid, ProductCardSkeleton } from '@/components/catalog/ProductGroupGrid';
 import { PublicHeader } from '@/components/PublicHeader';
 import { CatalogSectionComponent } from '@/components/catalog/CatalogSection';
 import { FloatingCartButton } from '@/components/catalog/FloatingCartButton';
@@ -47,6 +47,25 @@ import {
     getCatalogSeoConfig,
     getEnabledCatalogCollections,
 } from './catalogCollections.js';
+
+const CatalogSectionsLoadingSkeleton = () => (
+    <div className="mb-12 space-y-12" aria-label="Secoes do catalogo carregando">
+        <section className="py-8">
+            <div className="flex items-center justify-between mb-6">
+                <div className="animate-pulse">
+                    <div className="h-7 bg-slate-200 rounded w-40" />
+                    <div className="h-4 bg-slate-100 rounded w-64 max-w-full mt-2" />
+                </div>
+                <div className="h-5 bg-slate-100 rounded w-16 animate-pulse" />
+            </div>
+            <div className="grid gap-2 sm:gap-4 md:gap-6 grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, index) => (
+                    <ProductCardSkeleton key={index} />
+                ))}
+            </div>
+        </section>
+    </div>
+);
 
 
 function CatalogContent() {
@@ -935,6 +954,10 @@ function CatalogContent() {
                 </div>
 
                 {/* Seções do Catálogo - ocultar quando há filtro de categoria ativo ou busca */}
+                {isHomeCatalogPage && sectionsLoading && !filters.categories.length && !hasActiveSearch && (
+                    <CatalogSectionsLoadingSkeleton />
+                )}
+
                 {isHomeCatalogPage && !sectionsLoading && Array.isArray(sections) && sections.length > 0 && !filters.categories.length && !hasActiveSearch && (
                     <div className="mb-12 space-y-12">
                         {sections.map((section) => (

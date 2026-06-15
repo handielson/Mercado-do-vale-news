@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.15-lcp-banner-discovery",
+  "version": "v1.1.16-sections-cls-reserve",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260614-230651-v1115-lcp-banner-discovery",
+  "release_vps": "/var/www/mdv-site/releases/20260614-231648-v1116-sections-cls-reserve",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Torna o banner LCP do catalogo descobrivel no HTML inicial com preload AVIF e imagem real no shell."
+  "summary": "Reserva as secoes assincronas do catalogo e alinha o shell mobile para reduzir CLS."
 }
