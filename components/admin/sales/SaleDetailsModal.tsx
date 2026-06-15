@@ -913,31 +913,33 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 Formas de Pagamento
                             </h3>
                             <div className="space-y-3">
-                                {sale.payment_methods.map((payment, index) => (
-                                    <div key={index} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex items-start gap-3">
-                                                {getPaymentIcon(payment.method)}
-                                                <div>
-                                                    <p className="text-sm font-medium text-slate-800">
-                                                        {getPaymentLabel(payment.method)}
-                                                        {payment.installments ? ` (${payment.installments}x)` : ''}
-                                                    </p>
-                                                    <div className="mt-1 space-y-0.5">
-                                                        {paymentDetails(payment).map((detail) => (
-                                                            <p key={detail} className="text-xs text-slate-500">
-                                                                {detail}
-                                                            </p>
-                                                        ))}
+                                {sale.payment_methods.map((payment, index) => {
+                                    const paymentView = buildPaymentPresentation(payment);
+                                    return (
+                                        <div key={index} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="flex items-start gap-3">
+                                                    {getPaymentIcon(payment.method)}
+                                                    <div>
+                                                        <p className="text-sm font-medium text-slate-800">
+                                                            {paymentView.labelWithInstallments}
+                                                        </p>
+                                                        <div className="mt-1 space-y-0.5">
+                                                            {paymentDetails(payment).map((detail) => (
+                                                                <p key={detail} className="text-xs text-slate-500">
+                                                                    {detail}
+                                                                </p>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                 </div>
+                                                <p className="text-sm font-bold text-slate-800 whitespace-nowrap">
+                                                    {formatCurrency(paymentTotal(payment))}
+                                                </p>
                                             </div>
-                                            <p className="text-sm font-bold text-slate-800 whitespace-nowrap">
-                                                {formatCurrency(paymentTotal(payment))}
-                                            </p>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 

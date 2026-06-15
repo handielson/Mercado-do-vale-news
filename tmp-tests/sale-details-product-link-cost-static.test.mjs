@@ -69,4 +69,22 @@ assert.doesNotMatch(
   'sale details must not reference undeclared item cost/profit variables in JSX',
 );
 
+assert.match(
+  modal,
+  /const paymentView = buildPaymentPresentation\(payment\);/,
+  'sale details must build payment labels through buildPaymentPresentation',
+);
+
+assert.match(
+  modal,
+  /\{paymentView\.labelWithInstallments\}/,
+  'sale details must render the payment label from the payment presentation object',
+);
+
+assert.doesNotMatch(
+  modal,
+  /getPaymentLabel\(payment\.method\)/,
+  'sale details must not reference an undeclared getPaymentLabel helper in JSX',
+);
+
 console.log('sale-details-product-link-cost-static.test.mjs: ok');
