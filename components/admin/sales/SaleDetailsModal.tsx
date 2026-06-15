@@ -10,6 +10,8 @@ import { getCoinBalance, getCoinsEarnedForReference } from '../../../services/ca
 import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { warrantyTemplateService } from '../../../services/warrantyTemplates';
+import { vpsClient } from '../../../services/vpsClient';
+import { teamService } from '../../../services/team';
 import {
     adminCompleteDeliveryJob,
     createDeliveryJobFromSale,
@@ -56,12 +58,14 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     const [deliveryProofs, setDeliveryProofs] = useState<CustomerDeliveryProof[]>([]);
     const [deliveryLogs, setDeliveryLogs] = useState<CustomerDeliveryJobLog[]>([]);
     const [adminCompletionReason, setAdminCompletionReason] = useState('');
+    const [deliveryPersonName, setDeliveryPersonName] = useState('');
     const [isLoadingDeliveryJob, setIsLoadingDeliveryJob] = useState(false);
     const [isGeneratingDeliveryJob, setIsGeneratingDeliveryJob] = useState(false);
     const [isAdminCompletingDelivery, setIsAdminCompletingDelivery] = useState(false);
     const saleNeedsReview = sale?.finalization_status === 'needs_review';
     const saleFinalizationLog = sale?.finalization_log || '';
-    const isDeliverySale = Boolean(sale?.delivery_type && sale.delivery_type !== 'store_pickup' && sale.delivery_type !== 'pickup');
+    const deliveryType = sale?.delivery_type;
+    const isDeliverySale = Boolean(deliveryType && !['store_pickup', 'pickup'].includes(deliveryType));
     const deliveryPublicUrl = deliveryJob?.token
         ? `${window.location.origin}/delivery/${deliveryJob.token}`
         : '';
@@ -939,14 +943,14 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
 
                     </div>
 
-                    {/* Delivery Section (If Applicable) */}
-                    {sale.delivery_type && sale.delivery_type !== 'store_pickup' && sale.delivery_type !== 'pickup' && (
+                    {/* Delivery Section */}
                         <div className="bg-blue-50/50 p-5 rounded-xl border border-blue-100">
                             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <h3 className="text-sm font-semibold text-blue-800 flex items-center gap-2">
                                     <Truck size={16} />
                                     Dados de Logística
                                 </h3>
+                                {isDeliverySale && (
                                 <div className="flex flex-wrap gap-2">
                                     {deliveryPublicUrl ? (
                                         <>
@@ -980,12 +984,13 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                         </button>
                                     )}
                                 </div>
+                                )}
                             </div>
                             <div className="grid grid-cols-3 gap-4 text-sm">
                                 <div>
                                     <p className="text-xs text-blue-600 uppercase font-medium">Tipo</p>
                                     <p className="font-medium text-slate-700 mt-1">
-                                        {sale.delivery_type === 'store_delivery' || sale.delivery_type === 'delivery' ? 'Entrega Local' : 'Híbrida'}
+                                        {deliveryTypeLabel(sale.delivery_type)}
                                     </p>
                                 </div>
                                 <div>
@@ -1001,7 +1006,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                     </p>
                                 </div>
                             </div>
-                            {deliveryPublicUrl ? (
+                            {isDeliverySale && (deliveryPublicUrl ? (
                                 <div className="mt-4 rounded-lg border border-blue-100 bg-white p-3">
                                     <p className="text-xs font-semibold uppercase text-blue-600">Pagina publica do entregador</p>
                                     <p className="mt-1 break-all text-sm font-medium text-slate-700">{deliveryPublicUrl}</p>
@@ -1015,7 +1020,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                         ? 'Procurando pagina publica da entrega...'
                                         : 'Nenhuma pagina publica de entrega vinculada a esta venda ainda.'}
                                 </p>
-                            )}
+                            ))}
                             {deliveryJob && (
                                 <div className="mt-4 grid gap-3 rounded-lg border border-blue-100 bg-white p-3">
                                     <div className="grid gap-3 sm:grid-cols-3">
@@ -1097,7 +1102,6 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 </div>
                             )}
                         </div>
-                    )}
 
                 </div>
 

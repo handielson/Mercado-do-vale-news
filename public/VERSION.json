@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.20-admin-public-regressions",
+  "version": "v1.1.21-sales-delivery-person-state",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-154700-v1120-admin-public-regressions",
+  "release_vps": "/var/www/mdv-site/releases/20260615-161859-v1121-sales-delivery-person-state",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Corrige crashes do admin, imagens/listagens publicas, banners sem corte/link por produto, clone sem EAN duplicado, validacao de IMEI e atalhos de precificacao/brindes."
+  "summary": "Corrige crash da tela de vendas declarando o estado do entregador no modal e mantendo dados logisticos visiveis para retirada."
 }
