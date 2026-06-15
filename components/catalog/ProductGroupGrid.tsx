@@ -21,7 +21,7 @@ interface ProductGroupGridProps {
 }
 
 // Skeleton loader para ProductCard
-function ProductCardSkeleton() {
+export function ProductCardSkeleton() {
     return (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-pulse">
             <div className="aspect-[4/3] bg-slate-200" />

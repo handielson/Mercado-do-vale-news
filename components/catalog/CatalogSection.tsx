@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { getEffectivePrice } from '@/hooks/useEffectiveCustomerType';
 import { ModernProductCard } from './ModernProductCard';
+import { ProductCardSkeleton } from './ProductGroupGrid';
 import { catalogSectionsService } from '@/services/catalogSectionsService';
 import type { CatalogSection } from '@/types/catalogSections';
 import type { CatalogProduct } from '@/types/catalog';
@@ -93,16 +94,20 @@ export function CatalogSectionComponent({ section, onFavorite, onShare, favorite
 
     if (loading) {
         return (
-            <div className="py-8">
-                <div className="animate-pulse space-y-4">
-                    <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {[...Array(section.max_products)].map((_, i) => (
-                            <div key={i} className="h-64 bg-gray-200 rounded"></div>
-                        ))}
+            <section className="py-8">
+                <div className="flex items-center justify-between mb-6">
+                    <div className="animate-pulse">
+                        <div className="h-7 bg-slate-200 rounded w-40" />
+                        {section.subtitle && <div className="h-4 bg-slate-100 rounded w-64 max-w-full mt-2" />}
                     </div>
+                    {section.show_view_all && <div className="h-5 bg-slate-100 rounded w-16 animate-pulse" />}
                 </div>
-            </div>
+                <div className="grid gap-2 sm:gap-4 md:gap-6 grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {Array.from({ length: Math.min(section.max_products || 8, 8) }).map((_, i) => (
+                        <ProductCardSkeleton key={i} />
+                    ))}
+                </div>
+            </section>
         );
     }
 
