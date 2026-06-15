@@ -5,13 +5,17 @@ import { toBrowserSafeMediaUrl } from '@/utils/media-url';
 
 // ─── Adapters VPS <-> VPS ────────────────────────────────────────────────
 
+function inferBannerLinkType(linkUrl: unknown): Banner['link_type'] {
+    const value = String(linkUrl || '').trim();
+    if (!value) return 'none';
+    if (/\/produto\//i.test(value)) return 'product';
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) return 'product';
+    if (/^https?:\/\//i.test(value)) return 'external';
+    return 'category';
+}
+
 function mapFromVPS(vpsBanner: any): Banner {
-    let link_type: Banner['link_type'] = 'none';
-    if (vpsBanner.link_url) {
-        if (vpsBanner.link_url.includes('http')) link_type = 'external';
-        else if (vpsBanner.link_url.length === 36 && vpsBanner.link_url.includes('-')) link_type = 'product';
-        else link_type = 'category';
-    }
+    const link_type = inferBannerLinkType(vpsBanner.link_url);
 
     return {
         ...vpsBanner,
@@ -94,7 +98,10 @@ function filterActiveBanners(allBanners: Banner[], customerType?: CustomerType) 
 
 function getLinkedProductId(banner: Banner): string | null {
     if (banner.link_type !== 'product') return null;
-    const productId = String(banner.link_target || banner.link_url || '').trim();
+    const raw = String(banner.link_target || banner.link_url || '').trim();
+    const productId = raw.includes('/produto/')
+        ? raw.split('/produto/')[1]?.split(/[?#]/)[0]?.replace(/^\/+|\/+$/g, '')
+        : raw;
     return productId || null;
 }
 

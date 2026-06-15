@@ -41,7 +41,7 @@ import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
 import { buildProductVideoUrl, normalizeProductVideoUrl, normalizeVideoBaseUrl } from '../../utils/video-url';
-import { buildSerializedBatchPlan, findSerializedBatchDuplicates, hasSerializedIdentity, resolveSerializedBatchItemImages } from './serializedBatch.js';
+import { buildSerializedBatchPlan, findSerializedBatchDuplicates, findSerializedBatchInvalidImeis, hasSerializedIdentity, resolveSerializedBatchItemImages } from './serializedBatch.js';
 import { getProductSaveProgressPercent } from './productSaveProgress.js';
 import { getBlingSkuPriceAutofill } from './blingSkuPriceAutofill.js';
 import { getBlingSkuSpecAutofill } from './blingSkuSpecAutofill.js';
@@ -193,6 +193,14 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         // Precisa ao menos de IMEI1 ou Serial
         if (!item.imei1 && !item.serial) {
             toast.warning('Preencha ao menos o IMEI 1 ou o Serial antes de adicionar.');
+            return;
+        }
+
+        const invalidImeis = findSerializedBatchInvalidImeis([item]);
+        if (invalidImeis.length > 0) {
+            toast.warning('Corrija o IMEI antes de adicionar.', {
+                description: invalidImeis.join(' | ')
+            });
             return;
         }
 
@@ -1040,12 +1048,21 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 setSaveProgress({ current: 0, total: totalToSave, message: 'Verificando duplicidades...' });
                 // Entrada em massa: verificar unicidade de todos antes de salvar qualquer um
                 const duplicates: string[] = [];
+                const invalidImeis = findSerializedBatchInvalidImeis(serialList);
                 const duplicateIdentifiers = findSerializedBatchDuplicates(serialList);
                 const existingProducts = await vpsApiService.getProducts({
                     status: 'active',
                     limit: 5000,
                     noCache: true,
                 }) || [];
+
+                if (invalidImeis.length > 0) {
+                    toast.error('Cadastro bloqueado: IMEI invalido na lista', {
+                        description: invalidImeis.join(' | '),
+                        duration: 8000
+                    });
+                    return;
+                }
 
                 if (duplicateIdentifiers.length > 0) {
                     toast.error(`Cadastro bloqueado: existem identificadores repetidos na lista`, {

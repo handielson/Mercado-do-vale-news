@@ -8,6 +8,7 @@ import { ProductStatus } from '../utils/field-standards';
  * Fixed: NaN issue in logistics fields using z.coerce
  */
 
+const IMEI_REGEX = /^[0-9]{15}$/;
 export const productSchema = z.object({
     // Model Reference (optional - populated by EAN scanner)
     model_id: z.union([z.string(), z.null(), z.undefined()]).optional().transform(v => v || undefined),
@@ -171,7 +172,25 @@ export const productSchema = z.object({
         message: 'Quantidade em estoque é obrigatória quando monitoramento está ativo',
         path: ['stock_quantity']
     }
-);
+).superRefine((data, ctx) => {
+    const imei1 = data.specs?.imei1;
+    if (imei1 !== undefined && imei1 !== null && String(imei1).trim() !== '' && !IMEI_REGEX.test(String(imei1).trim())) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'IMEI 1 deve ter exatamente 15 numeros',
+            path: ['specs', 'imei1'],
+        });
+    }
+
+    const imei2 = data.specs?.imei2;
+    if (imei2 !== undefined && imei2 !== null && String(imei2).trim() !== '' && !IMEI_REGEX.test(String(imei2).trim())) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'IMEI 2 deve ter exatamente 15 numeros',
+            path: ['specs', 'imei2'],
+        });
+    }
+});
 
 export type ProductSchemaType = z.infer<typeof productSchema>;
 

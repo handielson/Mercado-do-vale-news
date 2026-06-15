@@ -171,6 +171,14 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
     }, [modelId, selectedRam, selectedStorage]);
     // --- fim médias ---
 
+    const applyStockAveragesToPrices = () => {
+        if (!stockAverages) return;
+        setValue('price_cost', stockAverages.avg_cost, { shouldDirty: true, shouldValidate: true });
+        setValue('price_retail', stockAverages.avg_retail, { shouldDirty: true, shouldValidate: true });
+        setValue('price_reseller', stockAverages.avg_reseller, { shouldDirty: true, shouldValidate: true });
+        setValue('price_wholesale', stockAverages.avg_wholesale, { shouldDirty: true, shouldValidate: true });
+    };
+
     const rows: PriceRowConfig[] = [
         {
             key: 'price_retail',
@@ -243,7 +251,16 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                         <span className="text-xs text-amber-600">{selectedRam}/{selectedStorage}</span>
                         {loadingAverages && <span className="text-xs text-amber-500 ml-auto">carregando...</span>}
                         {stockAverages && !loadingAverages && (
-                            <span className="text-xs text-amber-600 ml-auto">{stockAverages.totalUnits} unidade{stockAverages.totalUnits !== 1 ? 's' : ''} em estoque</span>
+                            <div className="ml-auto flex items-center gap-2">
+                                <span className="text-xs text-amber-600">{stockAverages.totalUnits} unidade{stockAverages.totalUnits !== 1 ? 's' : ''} em estoque</span>
+                                <button
+                                    type="button"
+                                    onClick={applyStockAveragesToPrices}
+                                    className="px-2.5 py-1 rounded-md bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-colors"
+                                >
+                                    Usar médias
+                                </button>
+                            </div>
                         )}
                     </div>
                     {!loadingAverages && !stockAverages && (

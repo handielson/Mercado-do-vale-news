@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical, Calendar, DollarSign, RefreshCw, XCircle, RotateCcw, TrendingUp, Truck } from 'lucide-react';
-import { SaleWithItems, SaleSummary, SaleFilters } from '../../../types/sale';
-import { getSales, getSalesSummary, cancelSale, refundSale } from '../../../services/saleService';
+import { SaleWithItems, SaleFilters } from '../../../types/sale';
+import { getSales, cancelSale, refundSale } from '../../../services/saleService';
 import SaleDetailsModal from '../../../components/admin/sales/SaleDetailsModal';
 import toast from 'react-hot-toast';
 
@@ -59,13 +59,8 @@ export default function SalesPage() {
                 activeFilters.end_date = `${dateTo}T23:59:59`;
             }
 
-            const [salesData, summaryData] = await Promise.all([
-                getSales(activeFilters),
-                getSalesSummary(activeFilters)
-            ]);
-
+            const salesData = await getSales(activeFilters);
             setSales(salesData);
-            setSummary(summaryData);
         } catch (error) {
             console.error('Error loading sales data:', error);
             toast.error('Erro ao carregar dados de vendas');

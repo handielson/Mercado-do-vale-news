@@ -28,6 +28,8 @@ import { catalogConfigService } from '@/services/catalogConfigService';
 import type { CatalogSettings } from '@/types/catalogSettings';
 import { vpsApiService } from '@/services/vpsApiService';
 import { modelService } from '@/services/models';
+import { modelColorImagesService } from '@/services/model-color-images';
+import { colorService } from '@/services/colors';
 import { buildProductVideoPlaylist, isMp4VideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
 import { getPublicProductRouteTarget } from './productRouteTarget.js';
@@ -89,6 +91,28 @@ export const PublicProductPage: React.FC = () => {
     const productVideoPlaylist = useMemo(() => buildProductVideoPlaylist(effectiveVideoUrl), [effectiveVideoUrl]);
     const currentVideoUrl = productVideoPlaylist[videoPlaylistIndex] || effectiveVideoUrl;
     const formatDisplayPrice = (value: number) => value.toFixed(2).replace('.', ',');
+    const resolveModelColorImagesForProduct = async (productLike: any): Promise<string[]> => {
+        const modelId = productLike?.model_id;
+        const specs = productLike?.specs || {};
+        const colorName = String(specs.color || specs.cor || '').trim();
+        if (!modelId || !colorName) return [];
+
+        try {
+            const colors = await colorService.listActive();
+            const normalizedTarget = colorName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+            const color = colors.find((item: any) =>
+                String(item.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() === normalizedTarget ||
+                String(item.id || '') === colorName
+            );
+            if (!color?.id) return [];
+
+            const colorImages = await modelColorImagesService.get(String(modelId), String(color.id));
+            return Array.isArray(colorImages?.images) ? colorImages.images.filter(Boolean) : [];
+        } catch (error) {
+            console.warn('[PublicProductPage] Falha ao carregar imagens por cor do modelo', error);
+            return [];
+        }
+    };
     const getComboOptionStock = (option: any) => Math.max(0, Math.trunc(Number(option?.stock_quantity ?? 0) || 0));
     const getComboOptionDisplayName = (option: any, groupLabel: string) => {
         const name = String(option?.name || '').trim();
@@ -413,17 +437,21 @@ export const PublicProductPage: React.FC = () => {
                     // Garante que o frontend ache que tem uma string de marca
                     brand: typeof data.brand === 'object' ? data.brand?.name : (data.brand || ''),
                 };
+                const resolvedImages = await resolveModelColorImagesForProduct(formattedProduct);
+                const displayProduct = resolvedImages.length > 0
+                    ? { ...formattedProduct, images: resolvedImages, image_url: resolvedImages[0] }
+                    : formattedProduct;
 
                 setSelectedVariantId(null);
-                setProduct(formattedProduct as unknown as CatalogProduct);
+                setProduct(displayProduct as unknown as CatalogProduct);
                 criticalProductLoaded = true;
-                trackViewItem(formattedProduct);
+                trackViewItem(displayProduct);
                 loadCategoryDetails();
 
-                if (data.is_combo && data.tags?.includes('mosaic_combo') && data.images.length > 1) {
+                if (data.is_combo && data.tags?.includes('mosaic_combo') && displayProduct.images.length > 1) {
                     setSelectedImage('MOSAIC');
-                } else if (data.images.length > 0) {
-                    setSelectedImage(data.images[0]);
+                } else if (displayProduct.images.length > 0) {
+                    setSelectedImage(resolvedImages[0] || displayProduct.images[0]);
                 }
 
                 // Release the critical product view before secondary sections finish.
@@ -965,12 +993,15 @@ export const PublicProductPage: React.FC = () => {
         }, 1500);
     };
 
-    const handleVariantChange = (sib: CatalogProduct) => {
+    const handleVariantChange = async (sib: CatalogProduct) => {
         // Altera os dados instantaneamente sem reload de página.
         // Algumas variantes podem vir "compactas" sem descrição/ficha completa.
         // Faz merge com o produto atual para não sumir conteúdo textual.
+        const resolvedImages = await resolveModelColorImagesForProduct(sib);
         const mergedVariant = {
             ...sib,
+            images: resolvedImages.length > 0 ? resolvedImages : sib.images,
+            image_url: resolvedImages[0] || (sib as any).image_url,
             description: sib.description || product.description,
             meta_title: sib.meta_title || product.meta_title,
             meta_description: sib.meta_description || product.meta_description,
@@ -988,7 +1019,7 @@ export const PublicProductPage: React.FC = () => {
         setSelectedVariantId(String(sib.id));
         setProduct(mergedVariant);
         if (mergedVariant.images && mergedVariant.images.length > 0) {
-            setSelectedImage(mergedVariant.images[0]);
+            setSelectedImage(resolvedImages[0] || mergedVariant.images[0]);
         }
 
         // Atualiza a URL na barra do navegador (sem triggerar novo fetch)

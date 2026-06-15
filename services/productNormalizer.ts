@@ -68,6 +68,19 @@ export interface NormalizedProduct {
   [key: string]: unknown;
 }
 
+function normalizeTrackInventory(value: unknown, stockRaw: unknown): boolean {
+  if (value !== undefined && value !== null) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+
+    const normalized = String(value).trim().toLowerCase();
+    if (['0', 'false', 'nao', 'não', 'no', 'null', 'undefined', ''].includes(normalized)) return false;
+    if (['1', 'true', 'sim', 'yes'].includes(normalized)) return true;
+  }
+
+  return stockRaw !== null && stockRaw !== undefined && String(stockRaw).toLowerCase() !== 'null';
+}
+
 export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
   // ── Status ─────────────────────────────────────────────────────────────────
   // VPS: 'active' | 'inactive' | 'ativo' | 'a' | 'disponível' | 'disponivel'
@@ -106,13 +119,7 @@ export function normalizeProduct(p: Record<string, any>): NormalizedProduct {
   }
 
   // ── Track inventory ─────────────────────────────────────────────────────────
-  let track_inventory: boolean;
-  if (p.track_inventory !== undefined) {
-    track_inventory = Boolean(p.track_inventory);
-  } else {
-    // Inferir: se stock existe e é não-nulo, assume que rastrea estoque
-    track_inventory = stockRaw !== null && stockRaw !== undefined && String(stockRaw).toLowerCase() !== 'null';
-  }
+  const track_inventory = normalizeTrackInventory(p.track_inventory, stockRaw);
 
   // ── Imagens ─────────────────────────────────────────────────────────────────
   // VPS pode retornar como array, string JSON ou até uma URL única em string.

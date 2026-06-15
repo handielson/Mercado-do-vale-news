@@ -41,7 +41,7 @@ assert.equal(prefill.sku, product.sku, 'clone deve manter SKU do grupo');
 assert.equal(prefill.model_id, product.model_id, 'clone deve manter modelo');
 assert.equal(prefill.price_cost, product.price_cost, 'clone deve manter custo');
 assert.equal(prefill.price_retail, product.price_retail, 'clone deve manter preco');
-assert.deepEqual(prefill.eans, ['7891234567890'], 'clone deve normalizar eans para array');
+assert.deepEqual(prefill.eans, [], 'clone nao deve reaproveitar EAN para evitar duplicidade ao adicionar igual');
 assert.deepEqual(prefill.images, ['https://cdn.example.com/poco.jpg'], 'clone deve normalizar images para array');
 assert.deepEqual(prefill.keywords, ['poco', 'xiaomi'], 'clone deve normalizar keywords para array');
 assert.deepEqual(prefill.kits, [], 'clone deve normalizar kits ausente/nulo para array vazio');
@@ -78,8 +78,8 @@ const rawPrefill = buildProductClonePrefill(rawProduct);
 
 assert.deepEqual(
   rawPrefill.eans,
-  ['7890000000001', '7890000000002'],
-  'clone deve recuperar EAN de campos alternativos do Bling',
+  [],
+  'clone nao deve recuperar EAN de campos alternativos do Bling para evitar duplicidade',
 );
 assert.deepEqual(
   rawPrefill.images,

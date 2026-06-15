@@ -35,6 +35,12 @@ const DEFAULT_TRUSTED_SOURCE_LINKS = [
     'https://www.tudocelular.com/',
 ].join('\n');
 
+const SMARTPHONE_DEFAULT_GIFTS = [
+    '1 capa protetora',
+    '1 capa extra',
+    '1 pelicula 3D aplicada',
+].join('\n');
+
 const parseTrustedSourceLinks = (value: string) => value
     .split(/\r?\n|,/)
     .map((item) => item.trim())
@@ -1590,15 +1596,24 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     </div>
 
                                     <div className="lg:col-span-2">
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Brindes
-                                        </label>
+                                        <div className="flex items-center justify-between gap-2 mb-1">
+                                            <label className="block text-xs font-medium text-slate-600">
+                                                Brindes
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleTemplateValueChange('brindes', SMARTPHONE_DEFAULT_GIFTS)}
+                                                className="text-xs px-2 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100"
+                                            >
+                                                Usar lista padrão
+                                            </button>
+                                        </div>
                                         <textarea
                                             value={templateValues['brindes'] || ''}
                                             onChange={(e) => handleTemplateValueChange('brindes', e.target.value)}
                                             rows={3}
                                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
-                                            placeholder={'1 capa protetora\n1 capa extra\n1 pelicula 3D aplicada'}
+                                            placeholder={SMARTPHONE_DEFAULT_GIFTS}
                                         />
                                         <p className="mt-1 text-xs text-slate-500">
                                             Um item por linha. Aparece na pagina publica como lista.
@@ -1756,15 +1771,24 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Brindes
-                                </label>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <label className="block text-sm font-medium text-slate-700">
+                                        Brindes
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleTemplateValueChange('brindes', SMARTPHONE_DEFAULT_GIFTS)}
+                                        className="text-xs px-2 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100"
+                                    >
+                                        Usar lista padrão
+                                    </button>
+                                </div>
                                 <textarea
                                     value={templateValues['brindes'] || ''}
                                     onChange={(e) => handleTemplateValueChange('brindes', e.target.value)}
                                     rows={3}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                                    placeholder={'1 capa protetora\n1 capa extra\n1 pelicula 3D aplicada'}
+                                    placeholder={SMARTPHONE_DEFAULT_GIFTS}
                                 />
                                 <p className="text-xs text-slate-500 mt-1">
                                     Salvo em models.template_values.brindes e exibido como lista na pagina do produto.

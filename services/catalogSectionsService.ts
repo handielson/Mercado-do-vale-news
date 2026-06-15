@@ -109,7 +109,7 @@ class CatalogSectionsService {
 
     // Prefix for persistent LocalStorage caching of section products
     // ⚠️ Bump a versão aqui sempre que a lógica de fetch mudar (invalida cache antigo automaticamente)
-    private CACHE_KEY_PREFIX = '@mv:section_products:v4:';
+    private CACHE_KEY_PREFIX = '@mv:section_products:v5:';
 
     // Helper to safely access localStorage (prevents SSR errors)
     private getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;

@@ -156,7 +156,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose 
                             </div>
                             {showPreview && (
                                 <div className="relative w-full aspect-[21/9] rounded-xl overflow-hidden bg-slate-900">
-                                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                    <img src={imagePreview} alt="Preview" className="w-full h-full object-contain bg-slate-950" />
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
                                         <div className="absolute bottom-0 left-0 right-0 p-6">
                                             <h2 className="text-white text-2xl font-bold drop-shadow-lg">
@@ -328,7 +328,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose 
                             <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">
                                     {formData.link_type === 'category' ? 'Slug da Categoria (ex: smartphones)' :
-                                        formData.link_type === 'product' ? 'ID do Produto' :
+                                        formData.link_type === 'product' ? 'Link, ID ou slug do produto' :
                                             'URL Completa'}
                                 </label>
                                 <input
@@ -337,7 +337,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose 
                                     onChange={(e) => setFormData(p => ({ ...p, link_target: e.target.value }))}
                                     placeholder={
                                         formData.link_type === 'category' ? 'smartphones' :
-                                            formData.link_type === 'product' ? 'abc123-uuid...' :
+                                            formData.link_type === 'product' ? 'https://www.mercadodovale.com.br/produto/abc123-uuid...' :
                                                 'https://exemplo.com'
                                     }
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"

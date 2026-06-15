@@ -13,6 +13,26 @@ interface BannerCarouselProps {
     showArrows?: boolean;
 }
 
+function getBannerProductHref(destination: string): string {
+    const raw = String(destination || '').trim();
+    if (!raw) return '/produtos';
+
+    try {
+        const url = new URL(raw, window.location.origin);
+        if (url.pathname.startsWith('/produto/')) {
+            return `${url.pathname}${url.search}${url.hash}`;
+        }
+    } catch {
+        // Continua para caminhos relativos e ids crus.
+    }
+
+    if (raw.startsWith('/produto/')) return raw;
+    const embeddedProductPath = raw.match(/\/produto\/[^?#\s]+(?:[?#][^\s]*)?/);
+    if (embeddedProductPath) return embeddedProductPath[0];
+
+    return `/produto/${encodeURIComponent(raw.replace(/^\/+/, ''))}`;
+}
+
 export function BannerCarousel({
     banners: externalBanners,
     customerType,
@@ -96,7 +116,7 @@ export function BannerCarousel({
         const destination = banner.link_target ?? banner.link_url;
 
         if (banner.link_type === 'product' && destination) {
-            window.location.href = `/catalog?product=${destination}`;
+            window.location.href = getBannerProductHref(destination);
         } else if (banner.link_type === 'category' && destination) {
             window.location.href = `/catalog?category=${destination}`;
         } else if (banner.link_type === 'external' && destination) {
@@ -157,7 +177,7 @@ export function BannerCarousel({
                                             fetchPriority={index === 0 ? 'high' : 'auto'}
                                             width={1280}
                                             height={549}
-                                            className="w-full h-full object-cover"
+                                            className="w-full h-full object-contain bg-slate-950"
                                         />
                                     </picture>
                                 );

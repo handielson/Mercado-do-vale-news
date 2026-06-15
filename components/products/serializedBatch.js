@@ -40,6 +40,28 @@ export function findSerializedBatchDuplicates(items) {
   return duplicates;
 }
 
+export function isValidImeiValue(value) {
+  const clean = cleanValue(value);
+  if (!clean) return true;
+  return /^[0-9]{15}$/.test(String(clean));
+}
+
+export function findSerializedBatchInvalidImeis(items) {
+  const invalid = [];
+  const imeiFields = SERIALIZED_FIELDS.filter(({ key }) => key === 'imei1' || key === 'imei2');
+
+  for (const item of items) {
+    for (const { key, label } of imeiFields) {
+      const value = cleanValue(item?.[key]);
+      if (!value || isValidImeiValue(value)) continue;
+      const prefix = cleanValue(item?.sku) ? `${cleanValue(item.sku)}: ` : '';
+      invalid.push(`${prefix}${label} deve ter exatamente 15 numeros`);
+    }
+  }
+
+  return invalid;
+}
+
 export function buildSerializedBatchPlan(baseData, items) {
   const normalizedItems = items.map((item) => ({
     ...baseData,

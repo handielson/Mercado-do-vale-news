@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 const {
   buildSerializedBatchPlan,
   findSerializedBatchDuplicates,
+  findSerializedBatchInvalidImeis,
+  isValidImeiValue,
   resolveSerializedBatchItemImages,
 } = await import('../components/products/serializedBatch.js');
 
@@ -42,6 +44,17 @@ const {
     'IMEI 2: 222222222222222',
     'Serial: ABC',
   ]);
+}
+
+{
+  assert.equal(isValidImeiValue('123456789012345'), true, 'IMEI com 15 numeros deve ser valido');
+  assert.equal(isValidImeiValue('12345678901234'), false, 'IMEI com menos de 15 numeros deve ser invalido');
+  assert.equal(isValidImeiValue('1234567890123456'), false, 'IMEI com mais de 15 numeros deve ser invalido');
+  assert.equal(isValidImeiValue('12345678901234A'), false, 'IMEI com letras deve ser invalido');
+  assert.deepEqual(
+    findSerializedBatchInvalidImeis([{ sku: 'RN148256P', imei1: '123456789012345', imei2: '1850401003276' }]),
+    ['RN148256P: IMEI 2 deve ter exatamente 15 numeros'],
+  );
 }
 
 {

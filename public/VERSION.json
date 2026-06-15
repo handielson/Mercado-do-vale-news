@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.19-banner-upload-stock",
+  "version": "v1.1.20-admin-public-regressions",
   "date": "2026-06-15",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-114108-v1119-banner-upload-stock",
+  "status": "pending-deploy",
+  "release_vps": "pendente",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Upload de banner passa a enviar multipart direto para a VPS e banners vinculados a produtos somem do publico quando todas as variacoes ficam sem estoque vendavel."
+  "summary": "Corrige crashes do admin, imagens/listagens publicas, banners sem corte/link por produto, clone sem EAN duplicado, validacao de IMEI e atalhos de precificacao/brindes."
 }

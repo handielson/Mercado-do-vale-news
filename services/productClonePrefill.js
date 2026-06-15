@@ -54,11 +54,7 @@ export function buildProductClonePrefill(product = {}) {
     clone[field] = toArray(clone[field]);
   });
 
-  clone.eans = uniqueArray([
-    ...toArray(product.eans),
-    ...toArray(product.alternative_eans),
-    ...toArray(product.ean),
-  ]);
+  clone.eans = [];
 
   clone.images = uniqueArray([
     ...toArray(product.images),
