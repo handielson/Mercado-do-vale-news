@@ -50,8 +50,18 @@ const CatalogRouteFallback: React.FC = () => (
       </div>
     </header>
 
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+    <div className="sm:hidden sticky z-40 bg-white border-b border-slate-200 shadow-sm px-3 py-2 flex items-center gap-2">
+      <div className="flex-1 h-10 rounded-xl bg-slate-100 animate-pulse" />
+      <div className="h-10 w-10 rounded-xl bg-slate-100 animate-pulse" />
+    </div>
+
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-6">
       <div className="aspect-[21/9] w-full rounded-xl bg-slate-200 animate-pulse" />
+
+      <div className="mt-4 sm:hidden flex items-center justify-between gap-2">
+        <div className="h-10 w-24 rounded-full bg-white border border-slate-200 animate-pulse" />
+        <div className="h-[52px] w-[210px] max-w-[58vw] rounded-full bg-white border border-slate-200 shadow-sm animate-pulse" />
+      </div>
 
       <div className="mt-5 flex items-center gap-2 overflow-hidden">
         {['w-20', 'w-24', 'w-16', 'w-28', 'w-24', 'w-32'].map((widthClass, index) => (

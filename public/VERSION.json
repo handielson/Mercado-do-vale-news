@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.11-category-nav-cls",
+  "version": "v1.1.12-mobile-loading-shell-cls",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-005251-v1111-category-nav-cls",
+  "release_vps": "/var/www/mdv-site/releases/20260615-011805-v1112-mobile-loading-shell-cls",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Reserva altura da navegacao desktop de categorias para reduzir CLS apos carregamento dos filtros do catalogo."
+  "summary": "Reserva o shell mobile do catalogo e o check-in durante o carregamento para reduzir telas vazias e CLS inicial."
 }

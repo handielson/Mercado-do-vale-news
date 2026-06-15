@@ -72,7 +72,14 @@ export function CheckinWidget() {
         }
     };
 
-    if (cardState === 'loading') return null;
+    if (cardState === 'loading') {
+        return (
+            <div
+                aria-hidden="true"
+                className="h-[52px] w-[210px] max-w-[58vw] rounded-full bg-white/80 border border-slate-200/60 shadow-sm animate-pulse"
+            />
+        );
+    }
 
     // ----- VISITANTE -----
     if (cardState === 'guest') {
