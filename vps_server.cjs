@@ -2052,7 +2052,7 @@ async function processCustomerDeliveryMercadoPagoPayment(payment) {
   return { status: 200, body: { message: 'success', flow: 'delivery_job', job_id: jobId, payment_status: mappedStatus } };
 }
 
-function getCustomerDeliveryCompletionBlockers(job, proof) {
+function getCustomerDeliveryCompletionBlockers(job, proof, options = {}) {
   const blockers = [];
   const addressText = String(job?.delivery_address_text || '').trim();
   const routeUrl = String(job?.delivery_route_url || '').trim();
@@ -2063,8 +2063,8 @@ function getCustomerDeliveryCompletionBlockers(job, proof) {
   if (deliveryAmount <= 0) blockers.push('Valor da entrega pendente');
   if (!addressText || addressText === 'Endereco de entrega nao informado') blockers.push('Endereco da entrega pendente');
   if (!routeUrl) blockers.push('Rota da entrega pendente');
-  if (job?.payment_status !== 'approved' && job?.payment_status !== 'not_required') blockers.push('Pix da entrega ainda nao aprovado');
-  if (!proof?.image_url) blockers.push('Foto de comprovacao obrigatoria');
+  if (!options?.adminOverride && job?.payment_status !== 'approved' && job?.payment_status !== 'not_required') blockers.push('Pix da entrega ainda nao aprovado');
+  if (!options?.adminOverride && !proof?.image_url) blockers.push('Foto de comprovacao obrigatoria');
   return blockers;
 }
 
@@ -2074,7 +2074,7 @@ async function completeCustomerDeliveryJob(connection, job, note, options = {}) 
   const [proofs] = await connection.query('SELECT * FROM customer_delivery_proofs WHERE job_id = ? ORDER BY created_at DESC LIMIT 1', [job.id]);
   const proof = proofs?.[0];
   if (isAdminCompletion && !adminReason) throw Object.assign(new Error('Motivo da baixa administrativa obrigatorio'), { statusCode: 400 });
-  const completionBlockers = getCustomerDeliveryCompletionBlockers(job, proof);
+  const completionBlockers = getCustomerDeliveryCompletionBlockers(job, proof, { adminOverride: isAdminCompletion });
   if (completionBlockers.length > 0) {
     throw Object.assign(new Error(`Entrega nao pode ser concluida: ${completionBlockers.join('; ')}`), {
       statusCode: 409,

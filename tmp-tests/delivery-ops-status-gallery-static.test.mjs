@@ -28,8 +28,18 @@ for (const file of serverFiles) {
   );
   assert.match(
     source,
-    /getCustomerDeliveryCompletionBlockers\(job, proof\)/,
-    `${file} must evaluate delivery completion blockers with the current proof`
+    /getCustomerDeliveryCompletionBlockers\(job, proof, \{ adminOverride: isAdminCompletion \}\)/,
+    `${file} must let administrative completion skip proof/payment blockers while keeping structural blockers`
+  );
+  assert.match(
+    source,
+    /if \(!options\?\.adminOverride && job\?\.payment_status !== 'approved'/,
+    `${file} must not require approved delivery Pix for administrative completion`
+  );
+  assert.match(
+    source,
+    /if \(!options\?\.adminOverride && !proof\?\.image_url\)/,
+    `${file} must not require proof photo for administrative completion`
   );
   assert.match(
     source,
@@ -60,7 +70,10 @@ assert.match(modal, /deliveryLogs/, 'sale modal must load delivery logs');
 assert.match(modal, /Baixar entrega/, 'sale modal must expose admin delivery completion');
 assert.match(modal, /adminCompletionReason/, 'sale modal must require an admin completion reason');
 assert.match(modal, /getDeliveryCompletionBlockers/, 'sale modal must list blockers before admin completion');
-assert.match(modal, /deliveryCompletionBlockers\.length === 0/, 'sale modal must only allow admin completion when no delivery data is missing');
+assert.match(modal, /getDeliveryCompletionBlockers\(deliveryJob, deliveryProofs, \{ adminOverride: true \}\)/, 'sale modal admin completion must ignore Pix/proof blockers while keeping structural blockers');
+assert.match(modal, /if \(!options\?\.adminOverride && job\.payment_status !== 'approved'/, 'sale modal must not block administrative completion on pending delivery Pix');
+assert.match(modal, /if \(!options\?\.adminOverride && !proofs\.some/, 'sale modal must not block administrative completion on missing proof photo');
+assert.match(modal, /deliveryCompletionBlockers\.length === 0/, 'sale modal must only allow admin completion when no structural delivery data is missing');
 assert.match(modal, /Pendencias para concluir/, 'sale modal must explain what still blocks delivery completion');
 
 assert.match(deliveryPage, /const \[proofs, setProofs\]/, 'delivery page must keep proof gallery state');

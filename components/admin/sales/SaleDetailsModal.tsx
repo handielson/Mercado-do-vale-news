@@ -89,7 +89,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
         return job.payment_status;
     };
 
-    const getDeliveryCompletionBlockers = (job?: CustomerDeliveryJob | null, proofs: CustomerDeliveryProof[] = []) => {
+    const getDeliveryCompletionBlockers = (job?: CustomerDeliveryJob | null, proofs: CustomerDeliveryProof[] = [], options?: { adminOverride?: boolean }) => {
         if (!job) return ['Entrega sem pagina publica vinculada'];
         const blockers: string[] = [];
         const addressText = String(job.delivery_address_text || '').trim();
@@ -100,12 +100,12 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
         if (!Number.isFinite(deliveryAmount) || deliveryAmount <= 0) blockers.push('Valor da entrega pendente');
         if (!addressText || addressText === 'Endereco de entrega nao informado') blockers.push('Endereco da entrega pendente');
         if (!String(job.delivery_route_url || '').trim()) blockers.push('Rota da entrega pendente');
-        if (job.payment_status !== 'approved' && job.payment_status !== 'not_required') blockers.push('Pix da entrega ainda nao aprovado');
-        if (!proofs.some((proof) => String(proof.image_url || '').trim())) blockers.push('Foto de comprovacao obrigatoria');
+        if (!options?.adminOverride && job.payment_status !== 'approved' && job.payment_status !== 'not_required') blockers.push('Pix da entrega ainda nao aprovado');
+        if (!options?.adminOverride && !proofs.some((proof) => String(proof.image_url || '').trim())) blockers.push('Foto de comprovacao obrigatoria');
         return blockers;
     };
 
-    const deliveryCompletionBlockers = getDeliveryCompletionBlockers(deliveryJob, deliveryProofs);
+    const deliveryCompletionBlockers = getDeliveryCompletionBlockers(deliveryJob, deliveryProofs, { adminOverride: true });
     const canAdminCompleteDelivery = deliveryCompletionBlockers.length === 0 && Boolean(adminCompletionReason.trim());
 
     const handleCopyFinalizationLog = async () => {

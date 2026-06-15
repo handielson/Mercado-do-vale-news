@@ -93,6 +93,7 @@ const BlingCallbackPage = lazy(() => import('../pages/admin/settings/BlingCallba
 const CartPage = lazy(() => import('../pages/store/CartPage'));
 const OrderConfirmationPage = lazy(() => import('../pages/store/OrderConfirmationPage'));
 const OrderTrackingPage = lazy(() => import('../pages/store/OrderTrackingPage'));
+const DeliveryOperationPage = lazy(() => import('../pages/delivery/DeliveryOperationPage'));
 const OnlineOrdersPage = lazy(() => import('../pages/admin/orders/OnlineOrdersPage'));
 const SerializedUnitsPage = lazy(() => import('../pages/admin/inventory/SerializedUnitsPage'));
 const SEODashboardPage = lazy(() => import('../pages/admin/settings/SEODashboardPage').then(module => ({ default: module.SEODashboardPage })));
@@ -991,6 +992,10 @@ export const router = createBrowserRouter([
   {
     path: "/pedido/:id/confirmacao",
     element: <OrderConfirmationPage />
+  },
+  {
+    path: "/delivery/:token",
+    element: <DeliveryOperationPage />
   },
   // ─── Admin — Pedidos Online ────────────────────────────────────────────────
   {

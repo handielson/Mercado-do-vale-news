@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.26-pdv-delivery-worker-job",
+  "version": "v1.1.27-delivery-public-admin-complete",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-190702-v1126-pdv-delivery-worker-job",
+  "release_vps": "/var/www/mdv-site/releases/20260615-192101-v1127-delivery-public-admin-complete",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "PDV passa a vincular entregadores-clientes em customer_delivery_jobs para alimentar o historico de entregas."
+  "summary": "Registra a rota publica /delivery/:token e permite baixa administrativa sem exigir Pix/foto quando ha motivo e dados estruturais."
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const tab = fs.readFileSync('components/customer/profile/DeliveryWorkerTab.tsx', 'utf8');
+const routes = fs.readFileSync('routes/index.tsx', 'utf8');
 
 assert.match(
     tab,
@@ -13,6 +14,18 @@ assert.match(
     tab,
     /\/delivery\/\$\{encodeURIComponent\(cleanToken\)\}/,
     'DeliveryWorkerTab deve montar a rota publica /delivery/:token usando o token do job'
+);
+
+assert.match(
+    routes,
+    /DeliveryOperationPage/,
+    'O roteador deve carregar DeliveryOperationPage para a rota publica do entregador'
+);
+
+assert.match(
+    routes,
+    /path:\s*"\/delivery\/:token"/,
+    'O roteador deve registrar /delivery/:token para o link publico nao cair no 404 interno'
 );
 
 assert.match(
