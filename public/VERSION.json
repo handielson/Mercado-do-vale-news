@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.10-catalog-loading-shell",
+  "version": "v1.1.11-category-nav-cls",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-004615-v1110-catalog-loading-shell",
+  "release_vps": "/var/www/mdv-site/releases/20260615-005251-v1111-category-nav-cls",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Troca o fallback inicial generico por um shell de carregamento alinhado ao catalogo e estabiliza skeletons das secoes."
+  "summary": "Reserva altura da navegacao desktop de categorias para reduzir CLS apos carregamento dos filtros do catalogo."
 }

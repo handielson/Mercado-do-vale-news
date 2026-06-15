@@ -712,7 +712,7 @@ function CatalogContent() {
 
             {/* Category Navigation - oculto no mobile (coberto pelo dropdown da sticky bar) */}
             {showDesktopCategoryNav && (
-                <div className="hidden sm:block">
+                <div className="hidden sm:block min-h-[190px]">
                     <CategoryNav
                         activeCategory={filters.categories[0] || null}
                         activeCategoryIds={filters.categories}
