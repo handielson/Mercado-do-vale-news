@@ -59,6 +59,38 @@ export interface BannerStats {
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
+const ACTIVE_BANNERS_CACHE_TTL_MS = 30_000;
+const activeBannersCache = new Map<string, {
+    expiresAt: number;
+    promise?: Promise<Banner[]>;
+    data?: Banner[];
+}>();
+
+function getActiveBannersCacheKey(customerType?: CustomerType) {
+    return customerType ?? 'public';
+}
+
+function filterActiveBanners(allBanners: Banner[], customerType?: CustomerType) {
+    const now = new Date();
+
+    let banners = allBanners.filter(b => {
+        if (!b.is_active) return false;
+        if (b.start_date && new Date(b.start_date) > now) return false;
+        if (b.end_date && new Date(b.end_date) < now) return false;
+        return true;
+    });
+
+    if (customerType) {
+        banners = banners.filter(b =>
+            !b.target_audience ||
+            b.target_audience.length === 0 ||
+            b.target_audience.includes(customerType)
+        );
+    }
+
+    return banners;
+}
+
 export const bannerService = {
 
     /**
@@ -66,24 +98,40 @@ export const bannerService = {
      * Filtra por is_active + datas de agendamento + tipo de cliente.
      */
     getActiveBanners: async (customerType?: CustomerType): Promise<Banner[]> => {
-        const now = new Date();
-        const allBanners = await bannerService.getAllBanners();
+        const cacheKey = getActiveBannersCacheKey(customerType);
+        const cached = activeBannersCache.get(cacheKey);
 
-        let banners = allBanners.filter(b => {
-            if (!b.is_active) return false;
-            if (b.start_date && new Date(b.start_date) > now) return false;
-            if (b.end_date && new Date(b.end_date) < now) return false;
-            return true;
+        if (cached && cached.expiresAt > Date.now()) {
+            if (cached.data) return cached.data;
+            if (cached.promise) return cached.promise;
+        }
+
+        const promise = bannerService.getAllBanners()
+            .then(allBanners => {
+                const banners = filterActiveBanners(allBanners, customerType);
+                activeBannersCache.set(cacheKey, {
+                    data: banners,
+                    expiresAt: Date.now() + ACTIVE_BANNERS_CACHE_TTL_MS,
+                });
+                return banners;
+            })
+            .catch(error => {
+                if (activeBannersCache.get(cacheKey)?.promise === promise) {
+                    activeBannersCache.delete(cacheKey);
+                }
+                throw error;
+            });
+
+        activeBannersCache.set(cacheKey, {
+            promise,
+            expiresAt: Date.now() + ACTIVE_BANNERS_CACHE_TTL_MS,
         });
 
-        if (customerType) {
-            banners = banners.filter(b =>
-                !b.target_audience ||
-                b.target_audience.length === 0 ||
-                b.target_audience.includes(customerType)
-            );
-        }
-        return banners;
+        return promise;
+    },
+
+    warmActiveBanners: (customerType?: CustomerType): void => {
+        bannerService.getActiveBanners(customerType).catch(() => {});
     },
 
     /**

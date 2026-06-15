@@ -10,6 +10,7 @@ import { router } from './routes/index';
 import { useFavicon } from './hooks/useFavicon';
 import { useGoogleAnalytics } from './hooks/useGoogleAnalytics';
 import { installAdminNavigationLogger } from './services/adminNavigationLogService';
+import { bannerService } from './services/bannerService';
 
 const LazyToaster = React.lazy(() => import('sonner').then((module) => ({ default: module.Toaster })));
 
@@ -63,7 +64,13 @@ const CatalogRouteFallback: React.FC = () => (
         <div className="h-[52px] w-[210px] max-w-[58vw] rounded-full bg-white border border-slate-200 shadow-sm animate-pulse" />
       </div>
 
-      <div className="mt-5 flex items-center gap-2 overflow-hidden">
+      <div aria-hidden="true" className="mt-5 flex items-stretch gap-2">
+        <div className="h-10 w-10 shrink-0 rounded-lg border border-slate-200 bg-white animate-pulse sm:hidden" />
+        <div className="h-10 w-24 rounded-xl bg-slate-100 animate-pulse" />
+        <div className="h-10 w-40 max-w-[44vw] rounded-xl bg-slate-100 animate-pulse" />
+      </div>
+
+      <div aria-label="Colecoes carregando" className="mt-4 flex items-center gap-2 overflow-hidden">
         {['w-20', 'w-24', 'w-16', 'w-28', 'w-24', 'w-32'].map((widthClass, index) => (
           <div key={index} className={`h-9 shrink-0 rounded-full bg-slate-100 animate-pulse ${widthClass}`} />
         ))}
@@ -201,6 +208,11 @@ const App: React.FC = () => {
   // Injetar Google Analytics dinamicamente (se configurado nos Dados da Empresa)
   useGoogleAnalytics();
   React.useEffect(() => installAdminNavigationLogger(router), []);
+  React.useEffect(() => {
+    if (isCatalogRouteFallback()) {
+      bannerService.warmActiveBanners();
+    }
+  }, []);
 
   return (
     <HelmetProvider>

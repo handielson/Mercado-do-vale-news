@@ -144,6 +144,19 @@ async function ensureRemoteAdminEnv(appDir) {
   console.log(`Remote admin auth env synced at ${remoteEnv}`);
 }
 
+async function ensureRemoteSharpDependency(appDir) {
+  const checkCommand = `cd ${appDir} && node -e "require.resolve('sharp')"`;
+  try {
+    await exec(checkCommand);
+    console.log('Remote sharp dependency already available');
+    return;
+  } catch {
+    console.log('Installing remote sharp dependency for image derivatives');
+  }
+
+  await exec(`cd ${appDir} && npm install sharp --omit=dev`);
+}
+
 async function main() {
   await new Promise((resolve, reject) => {
     conn.on('ready', resolve);
@@ -167,6 +180,7 @@ async function main() {
   await upload(localServer, `${appDir}/server.js`);
   await uploadAutoresponderEngineFiles(appDir);
   await ensureRemoteAdminEnv(appDir);
+  await ensureRemoteSharpDependency(appDir);
   const restartOutput = await exec(`pm2 restart ${apiProc.name} --update-env`);
   console.log(restartOutput.trim());
   conn.end();

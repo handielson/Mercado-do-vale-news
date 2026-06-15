@@ -51,6 +51,9 @@
     .initial-favorites { width: 96px; height: 40px; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; }
     .initial-checkin { width: 210px; max-width: 58vw; height: 52px; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(15, 23, 42, .05); }
     .initial-search { display: none; height: 48px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0; margin: 1rem 0 1.5rem; }
+    .initial-controls { display: flex; align-items: stretch; gap: .5rem; margin: 1.25rem 0 1rem; }
+    .initial-control-square { width: 40px; height: 40px; flex: 0 0 auto; border-radius: 10px; background: #fff; border: 1px solid #e2e8f0; }
+    .initial-control-wide { width: 152px; max-width: 44vw; height: 40px; flex: 0 0 auto; border-radius: 10px; background: #fff; border: 1px solid #e2e8f0; }
     .initial-collections { display: flex; gap: .5rem; overflow: hidden; margin: 0 0 1.5rem; }
     .initial-chip { height: 30px; flex: 0 0 auto; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; }
     .initial-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
@@ -66,6 +69,8 @@
     @media (min-width: 640px) {
       .initial-mobile-search, .initial-checkin-row { display: none; }
       .initial-main { padding-top: 1.5rem; }
+      .initial-controls { margin-top: 1rem; justify-content: flex-end; }
+      .initial-control-square { display: none; }
       .initial-search { display: block; }
       .initial-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
     }
@@ -100,6 +105,11 @@
           <div class="initial-checkin initial-skel"></div>
         </div>
         <div class="initial-search"></div>
+        <div class="initial-controls" aria-hidden="true">
+          <div class="initial-control-square initial-skel"></div>
+          <div class="initial-control-wide initial-skel"></div>
+          <div class="initial-control-wide initial-skel"></div>
+        </div>
         <div class="initial-collections">
           <span class="initial-chip initial-skel" style="width: 126px"></span>
           <span class="initial-chip initial-skel" style="width: 82px"></span>

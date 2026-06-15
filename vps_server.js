@@ -103,7 +103,60 @@ const AUTORESPONDER_RULE_TEMPLATES = [
 ];
 
 function isImmutableImageDerivative(filePath = '') {
-  return /-\d+\.(webp|avif)$/i.test(filePath);
+  return /-(320|480|768|800|1280)\.(webp|avif)$/i.test(filePath);
+}
+
+const IMAGE_DERIVATIVE_FORMATS = ['webp', 'avif'];
+const PRODUCT_IMAGE_DERIVATIVE_WIDTHS = [320, 480, 800];
+const BANNER_IMAGE_DERIVATIVE_WIDTHS = [768, 1280];
+const IMAGE_DERIVATIVE_SOURCE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif']);
+
+function buildImageDerivativeTargets(filePath, kind = 'product') {
+  const extension = path.extname(filePath || '').toLowerCase();
+  if (!IMAGE_DERIVATIVE_SOURCE_EXTENSIONS.has(extension)) return [];
+
+  const basePath = filePath.slice(0, -extension.length);
+  const widths = kind === 'banner' ? BANNER_IMAGE_DERIVATIVE_WIDTHS : PRODUCT_IMAGE_DERIVATIVE_WIDTHS;
+
+  return IMAGE_DERIVATIVE_FORMATS.flatMap((format) => widths.map((width) => ({
+    width,
+    format,
+    outputPath: `${basePath}-${width}.${format}`,
+  })));
+}
+
+async function generateImageDerivatives(filePath, kind = 'product') {
+  const targets = buildImageDerivativeTargets(filePath, kind);
+  if (targets.length === 0) return [];
+
+  let sharp;
+  try {
+    sharp = require('sharp');
+  } catch (error) {
+    console.warn('Image derivatives skipped: sharp is not installed', error.message);
+    return [];
+  }
+
+  const results = [];
+  for (const target of targets) {
+    try {
+      let pipeline = sharp(filePath)
+        .rotate()
+        .resize({ width: target.width, withoutEnlargement: true });
+
+      pipeline = target.format === 'avif'
+        ? pipeline.avif({ quality: 50, effort: 4 })
+        : pipeline.webp({ quality: 78, effort: 4 });
+
+      await pipeline.toFile(target.outputPath);
+      results.push({ ...target, ok: true });
+    } catch (error) {
+      console.warn(`Image derivative failed for ${target.outputPath}:`, error.message);
+      results.push({ ...target, ok: false, error: error.message });
+    }
+  }
+
+  return results;
 }
 
 function safeAutoresponderAttachmentFilename(originalFilename = '') {
@@ -16529,6 +16582,7 @@ fastify.post('/products/:id/upload-image', { preHandler: requireSyncKey }, async
   for await (const chunk of data.file) chunks.push(chunk);
   const buffer = Buffer.concat(chunks);
   fs.writeFileSync(dest, buffer);
+  await generateImageDerivatives(dest, 'product');
 
   const url = `https://api.xiaomipetrolina.com.br/images/products/${id}/${fname}`;
   return reply.send({ url, filename: fname });
@@ -20102,6 +20156,7 @@ fastify.post('/images/upload', { preHandler: requireSyncKey }, async (req, reply
   const dest = path.join(UPLOADS_DIR, safe);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.writeFileSync(dest, fileBuf);
+  await generateImageDerivatives(dest, 'product');
 
   const url = `${process.env.API_BASE_URL || 'https://api.xiaomipetrolina.com.br'}/images/${safe}`;
   return { ok: true, url, path: safe };
@@ -21847,7 +21902,9 @@ fastify.post('/banners/upload', { preHandler: requireSyncKey }, async (req, repl
   const fname = `${Date.now()}${ext}`;
   const bannerDir = path.join(UPLOADS_DIR, 'banners');
   fs.mkdirSync(bannerDir, { recursive: true });
-  fs.writeFileSync(path.join(bannerDir, fname), fileBuf);
+  const dest = path.join(bannerDir, fname);
+  fs.writeFileSync(dest, fileBuf);
+  await generateImageDerivatives(dest, 'banner');
   const baseUrl = process.env.API_BASE_URL || 'https://api.xiaomipetrolina.com.br';
   return { ok: true, url: `${baseUrl}/images/banners/${fname}`, path: `banners/${fname}` };
 });

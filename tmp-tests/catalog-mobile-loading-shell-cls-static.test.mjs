@@ -8,6 +8,8 @@ const requiredAppSnippets = [
   'sm:hidden sticky z-40 bg-white border-b border-slate-200 shadow-sm px-3 py-2 flex items-center gap-2',
   'h-10 rounded-xl bg-slate-100 animate-pulse',
   'h-[52px] w-[210px] max-w-[58vw] rounded-full bg-white border border-slate-200 shadow-sm animate-pulse',
+  'aria-hidden="true" className="mt-5 flex items-stretch gap-2"',
+  'aria-label="Colecoes carregando"',
   'py-8 sm:py-6',
 ];
 
@@ -21,6 +23,7 @@ const requiredIndexSnippets = [
   'initial-mobile-search',
   'initial-checkin-row',
   'initial-checkin',
+  'initial-controls',
   'initial-collections',
 ];
 
@@ -33,6 +36,20 @@ if (missingApp.length || missingCheckin.length || missingIndex.length) {
   if (missingApp.length) console.error('Missing App.tsx snippets:', missingApp);
   if (missingCheckin.length) console.error('Missing CheckinWidget.tsx snippets:', missingCheckin);
   if (missingIndex.length) console.error('Missing index.html snippets:', missingIndex);
+  process.exit(1);
+}
+
+const initialControlsIndex = indexSource.indexOf('initial-controls');
+const initialCollectionsIndex = indexSource.indexOf('initial-collections');
+if (initialControlsIndex === -1 || initialCollectionsIndex === -1 || initialControlsIndex > initialCollectionsIndex) {
+  console.error('Inline catalog shell must reserve the mobile filter/share controls before collection chips.');
+  process.exit(1);
+}
+
+const fallbackControlsIndex = appSource.indexOf('aria-hidden="true" className="mt-5 flex items-stretch gap-2"');
+const fallbackCollectionsIndex = appSource.indexOf('aria-label="Colecoes carregando"');
+if (fallbackControlsIndex === -1 || fallbackCollectionsIndex === -1 || fallbackControlsIndex > fallbackCollectionsIndex) {
+  console.error('Catalog route fallback must reserve mobile filter/share controls before collection chips.');
   process.exit(1);
 }
 
