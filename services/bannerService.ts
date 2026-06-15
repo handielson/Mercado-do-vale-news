@@ -1,4 +1,5 @@
 import { vpsClient } from './vpsClient';
+import { vpsApiService } from './vpsApiService';
 import type { Banner } from '@/types/catalog';
 import { toBrowserSafeMediaUrl } from '@/utils/media-url';
 
@@ -91,6 +92,59 @@ function filterActiveBanners(allBanners: Banner[], customerType?: CustomerType) 
     return banners;
 }
 
+function getLinkedProductId(banner: Banner): string | null {
+    if (banner.link_type !== 'product') return null;
+    const productId = String(banner.link_target || banner.link_url || '').trim();
+    return productId || null;
+}
+
+function hasSellableStock(product: any): boolean {
+    if (!product) return false;
+    if (String(product.status || 'active').toLowerCase() !== 'active') return false;
+    return product.track_inventory === false ||
+        product.track_inventory === 0 ||
+        product.track_inventory === '0' ||
+        Number(product.stock_quantity ?? 0) > 0;
+}
+
+async function hasAvailableLinkedProduct(banner: Banner): Promise<boolean> {
+    const productId = getLinkedProductId(banner);
+    if (!productId) return true;
+
+    const product = await vpsApiService.getProductById(productId, true);
+    if (!product) return false;
+    if (hasSellableStock(product)) return true;
+
+    const parentId = product.parent_id || (product.is_parent ? product.id : null);
+    if (parentId) {
+        const parentVariations = await vpsApiService.getProducts({ parent_id: String(parentId), status: 'active', limit: 500, noCache: true });
+        if ((parentVariations || []).some(hasSellableStock)) return true;
+    }
+
+    if (product.model_id) {
+        const modelVariations = await vpsApiService.getProducts({ model_id: product.model_id, status: 'active', limit: 500, noCache: true });
+        if ((modelVariations || []).some(hasSellableStock)) return true;
+    }
+
+    return false;
+}
+
+async function filterBannersByLinkedProductAvailability(banners: Banner[]): Promise<Banner[]> {
+    const checks = await Promise.all(banners.map(async banner => {
+        try {
+            return {
+                banner,
+                visible: await hasAvailableLinkedProduct(banner),
+            };
+        } catch (error) {
+            console.warn('[bannerService] Falha ao checar estoque do produto vinculado ao banner:', error);
+            return { banner, visible: true };
+        }
+    }));
+
+    return checks.filter(check => check.visible).map(check => check.banner);
+}
+
 export const bannerService = {
 
     /**
@@ -107,13 +161,14 @@ export const bannerService = {
         }
 
         const promise = bannerService.getAllBanners()
-            .then(allBanners => {
+            .then(async allBanners => {
                 const banners = filterActiveBanners(allBanners, customerType);
+                const availableBanners = await filterBannersByLinkedProductAvailability(banners);
                 activeBannersCache.set(cacheKey, {
-                    data: banners,
+                    data: availableBanners,
                     expiresAt: Date.now() + ACTIVE_BANNERS_CACHE_TTL_MS,
                 });
-                return banners;
+                return availableBanners;
             })
             .catch(error => {
                 if (activeBannersCache.get(cacheKey)?.promise === promise) {

@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.18-admin-image-sibling-fallback",
+  "version": "v1.1.19-banner-upload-stock",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-110000-v1118-admin-image-sibling",
+  "release_vps": "/var/www/mdv-site/releases/20260615-114108-v1119-banner-upload-stock",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Admin passa a usar imagem de produto irmao do mesmo modelo/cor quando o produto atual e a galeria de modelo/cor nao tem capa."
+  "summary": "Upload de banner passa a enviar multipart direto para a VPS e banners vinculados a produtos somem do publico quando todas as variacoes ficam sem estoque vendavel."
 }

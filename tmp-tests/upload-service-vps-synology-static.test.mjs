@@ -11,8 +11,20 @@ assert.doesNotMatch(
 
 assert.match(
   service,
-  /vpsClient\.upload<\{\s*url:\s*string\s*\}>\('\/banners\/upload'/,
-  'banner uploads should stay on the VPS banner endpoint',
+  /VPS_DIRECT_BASE_URL/,
+  'banner uploads should use the direct VPS base URL because the site proxy drops multipart files',
+);
+
+assert.match(
+  service,
+  /fetch\(`\$\{VPS_DIRECT_BASE_URL\}\/banners\/upload`/,
+  'banner uploads should POST directly to the VPS banner endpoint',
+);
+
+assert.doesNotMatch(
+  service,
+  /vpsClient\.upload<[^>]+>\('\/banners\/upload'/,
+  'banner uploads must not go through vpsClient.upload because production proxies multipart through /api/vps-proxy',
 );
 
 assert.match(

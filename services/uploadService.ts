@@ -1,4 +1,6 @@
 import { vpsClient } from './vpsClient';
+import { getAuthSessionToken } from './authSession';
+import { VPS_DIRECT_BASE_URL, getVpsSyncHeaders } from './vpsProxyBase';
 
 /**
  * Serviço para gerenciar uploads de arquivos via VPS/Synology.
@@ -14,6 +16,27 @@ type SynologyUploadResponse = {
     filename?: string;
     storage?: 'synology' | 'local';
 };
+
+async function uploadBannerFormData(formData: FormData): Promise<{ url: string }> {
+    const token = await getAuthSessionToken();
+    const res = await fetch(`${VPS_DIRECT_BASE_URL}/banners/upload`, {
+        method: 'POST',
+        headers: {
+            Accept: 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...getVpsSyncHeaders(),
+        },
+        body: formData,
+    });
+
+    if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText);
+        const summary = text ? ` - ${text}` : '';
+        throw new Error(`[VPS] ${res.status} ${res.url}${summary}`);
+    }
+
+    return res.json() as Promise<{ url: string }>;
+}
 
 export const uploadService = {
     /**
@@ -31,7 +54,7 @@ export const uploadService = {
 
         const formData = new FormData();
         formData.append('file', file);
-        const { url } = await vpsClient.upload<{ url: string }>('/banners/upload', formData);
+        const { url } = await uploadBannerFormData(formData);
         return url;
     },
 
