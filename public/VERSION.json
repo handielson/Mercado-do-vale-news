@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.14-mobile-controls-shell-cls",
+  "version": "v1.1.15-lcp-banner-discovery",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260614-224954-v1114-pagespeed",
+  "release_vps": "/var/www/mdv-site/releases/20260614-230651-v1115-lcp-banner-discovery",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Reduz CLS do catalogo, antecipa banners publicos e prepara a VPS para gerar derivados WebP/AVIF."
+  "summary": "Torna o banner LCP do catalogo descobrivel no HTML inicial com preload AVIF e imagem real no shell."
 }
