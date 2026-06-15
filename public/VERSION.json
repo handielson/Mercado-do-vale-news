@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.24-sales-financial-fields",
+  "version": "v1.1.25-pdv-card-operator-fee",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-174834-v1124-sales-financial-fields",
+  "release_vps": "/var/www/mdv-site/releases/20260615-180606-v1125-pdv-card-operator-fee",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Corrige persistencia e exibicao dos campos financeiros da venda: custos, lucro real, formas de pagamento e escala de valores."
+  "summary": "PDV passa a gravar custo da maquina e percentual da operadora nos pagamentos parcelados de cartao."
 }

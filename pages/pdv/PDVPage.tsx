@@ -556,14 +556,23 @@ export default function PDVPage() {
     };
 
     // Handler de seleção de parcela
-    const handleSelectInstallment = (installments: number, amount: number, feeAmount: number) => {
+    const handleSelectInstallment = (
+        installments: number,
+        amount: number,
+        feeAmount: number,
+        operatorFeeAmount: number,
+        operatorFeePercentage: number,
+        appliedFeePercentage: number
+    ) => {
         const totalWithFee = amount + feeAmount;
         const newPayment: PaymentMethod = {
             method: 'credit',
-            amount: totalWithFee, // Valor total que o cliente vai pagar (COM juros)
+            amount,
             installments: installments,
-            fee_percentage: (feeAmount / amount) * 100,
+            fee_percentage: appliedFeePercentage,
             fee_amount: feeAmount,
+            operator_fee_percentage: operatorFeePercentage,
+            operator_fee_amount: operatorFeeAmount,
             total_with_fee: totalWithFee
         };
         setFinalAdjustmentDiscount(0);

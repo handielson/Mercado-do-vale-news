@@ -1,30 +1,29 @@
 # Versao Atual
 
 ```text
-version: v1.1.24-sales-financial-fields
+version: v1.1.25-pdv-card-operator-fee
 date: 2026-06-15
 status: published
-release_vps: /var/www/mdv-site/releases/20260615-174834-v1124-sales-financial-fields
+release_vps: /var/www/mdv-site/releases/20260615-180606-v1125-pdv-card-operator-fee
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Persiste no MySQL/VPS os campos financeiros completos da venda: subtotal, custo total, lucro, formas de pagamento detalhadas, entrega e descontos.
-- Persiste nos itens da venda `unit_cost`, `product_sku`, desconto e subtotal para o modal nao perder custo/lucro.
-- Corrige normalizacao de vendas antigas em reais para evitar valores multiplicados por 100.
-- O modal de detalhes agora usa os helpers de apresentacao para total do item, pagamentos, custo total e lucro real.
-- Adiciona migrações das colunas financeiras em `vps_server.js` e `vps_server.cjs`.
+- PDV passa a receber da calculadora de parcelas o custo da operadora e o percentual da maquina.
+- Pagamentos de cartao parcelado agora gravam `operator_fee_amount` e `operator_fee_percentage` no TXT de finalizacao e em `payment_methods`.
+- O pagamento de cartao passa a preservar `amount` como valor base e `total_with_fee` como valor cobrado.
+- Reparo manual aplicado na venda `cc27f233-5f8e-4e3e-b06f-79d43f876de4` usando o `finalization_log` salvo.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.24-sales-financial-fields` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.25-pdv-card-operator-fee` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-15-v1.1.24-sales-financial-fields.md
+docs/versoes/2026-06-15-v1.1.25-pdv-card-operator-fee.md
 ```
 
 ## Publicacao
 
-- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260615-174834-v1124-sales-financial-fields`.
-- Esta versao altera frontend e API VPS; site publicado e `mdv-api` reiniciado.
+- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260615-180606-v1125-pdv-card-operator-fee`.
+- Esta versao altera apenas o frontend do PDV; a API VPS ja suporta os campos.

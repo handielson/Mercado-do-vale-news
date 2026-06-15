@@ -14,6 +14,8 @@ export interface PaymentMethod {
     installments?: number; // Número de parcelas (apenas para credit)
     fee_percentage?: number; // Taxa aplicada (%)
     fee_amount?: number; // Valor da taxa em centavos
+    operator_fee_percentage?: number; // Taxa da operadora/maquina (%)
+    operator_fee_amount?: number; // Custo da operadora/maquina em centavos
     total_with_fee: number; // Valor total (amount + fee_amount)
     due_date?: string; // Data de vencimento se for a_prazo (YYYY-MM-DD)
     pix_payment_id?: string;
