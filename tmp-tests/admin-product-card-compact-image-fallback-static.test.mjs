@@ -21,4 +21,16 @@ assert.match(
   'ProductCard must only use the full-product fallback after the model/color image fallback is missing',
 );
 
+assert.match(
+  source,
+  /vpsApiService\.getProducts\(\{\s*model_id:\s*product\.model_id,\s*status:\s*'all',\s*limit:\s*200,\s*noCache:\s*true\s*\}\)/s,
+  'ProductCard must search same-model sibling products when the current product and model/color gallery have no images',
+);
+
+assert.match(
+  source,
+  /findSiblingImagesForProduct\(\s*siblingProducts,\s*product\s*\)/,
+  'ProductCard must choose sibling images through the product-aware helper so color-compatible variants are preferred',
+);
+
 console.log('admin product compact image fallback OK');

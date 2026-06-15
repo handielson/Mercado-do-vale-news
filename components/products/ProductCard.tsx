@@ -156,6 +156,39 @@ const normalizeImageList = (images: unknown): string[] => {
         });
 };
 
+const normalizeComparableText = (value: unknown): string => {
+    if (typeof value !== 'string') return '';
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+};
+
+const findSiblingImagesForProduct = (siblings: unknown, product: Product): string[] => {
+    if (!Array.isArray(siblings)) return [];
+
+    const productColor = normalizeComparableText(product.specs?.color);
+    const productSlug = normalizeComparableText(product.slug || product.specs?.slug);
+    const productName = normalizeComparableText(product.name);
+
+    return siblings
+        .filter((sibling: any) => String(sibling?.id || '') !== String(product.id))
+        .map((sibling: any) => {
+            const images = normalizeImageList(sibling?.images);
+            if (images.length === 0) return null;
+
+            const siblingColor = normalizeComparableText(sibling?.specs?.color);
+            const siblingSlug = normalizeComparableText(sibling?.slug || sibling?.specs?.slug);
+            const siblingName = normalizeComparableText(sibling?.name);
+            let score = 0;
+
+            if (productColor && siblingColor === productColor) score += 4;
+            if (productSlug && siblingSlug === productSlug) score += 2;
+            if (productName && siblingName === productName) score += 1;
+
+            return { images, score };
+        })
+        .filter((entry): entry is { images: string[]; score: number } => Boolean(entry))
+        .sort((left, right) => right.score - left.score)[0]?.images || [];
+};
+
 const getProductImageBankPath = (imageUrl: string): string | null => {
     try {
         const parsed = new URL(imageUrl);
@@ -854,6 +887,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 if (fullProductImages.length > 0) {
                     setProductImages(fullProductImages);
                     setFetchedImages(fullProductImages);
+                    return;
+                }
+
+                if (product.model_id) {
+                    const siblingProducts = await vpsApiService.getProducts({
+                        model_id: product.model_id,
+                        status: 'all',
+                        limit: 200,
+                        noCache: true
+                    });
+                    if (!isMounted) return;
+                    const siblingImages = findSiblingImagesForProduct(
+                        siblingProducts,
+                        product
+                    );
+                    if (siblingImages.length > 0) {
+                        setProductImages(siblingImages);
+                        setFetchedImages(siblingImages);
+                    }
                 }
             } catch (error) {
                 console.warn('[ProductCard] Falha ao carregar imagens completas do produto:', error);
