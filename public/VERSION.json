@@ -1,8 +1,8 @@
 {
   "version": "v1.1.24-sales-financial-fields",
   "date": "2026-06-15",
-  "status": "pending",
-  "release_vps": "/var/www/mdv-site/releases/20260615-174305-v1124-sales-financial-fields",
+  "status": "published",
+  "release_vps": "/var/www/mdv-site/releases/20260615-174834-v1124-sales-financial-fields",
   "branch": "codex/publish-delivery-ops-20260614",
   "summary": "Corrige persistencia e exibicao dos campos financeiros da venda: custos, lucro real, formas de pagamento e escala de valores."
 }

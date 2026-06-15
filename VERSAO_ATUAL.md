@@ -3,8 +3,8 @@
 ```text
 version: v1.1.24-sales-financial-fields
 date: 2026-06-15
-status: pending
-release_vps: /var/www/mdv-site/releases/20260615-174305-v1124-sales-financial-fields
+status: published
+release_vps: /var/www/mdv-site/releases/20260615-174834-v1124-sales-financial-fields
 branch: codex/publish-delivery-ops-20260614
 ```
 
@@ -26,5 +26,5 @@ docs/versoes/2026-06-15-v1.1.24-sales-financial-fields.md
 
 ## Publicacao
 
-- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260615-174305-v1124-sales-financial-fields`.
-- Esta versao altera frontend e API VPS; publicar site e reiniciar `mdv-api`.
+- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260615-174834-v1124-sales-financial-fields`.
+- Esta versao altera frontend e API VPS; site publicado e `mdv-api` reiniciado.
