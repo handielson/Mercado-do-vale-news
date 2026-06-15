@@ -5,6 +5,12 @@ const source = readFileSync('pages/pdv/PDVPage.tsx', 'utf8');
 
 assert.match(
   source,
+  /import\s+\{\s*customerService\s*\}\s+from\s+['"]\.\.\/\.\.\/services\/customers['"];/,
+  'PDVPage must import customerService before loading delivery-worker customers',
+);
+
+assert.match(
+  source,
   /const\s+\[showSuccessModal,\s*setShowSuccessModal\]\s*=\s*useState\(false\);/,
   'PDVPage must define showSuccessModal state before using it in finalization and modal actions',
 );

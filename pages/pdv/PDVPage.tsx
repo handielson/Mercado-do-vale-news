@@ -28,6 +28,7 @@ import { earnCoinsForPurchase } from '../../services/cashbackService';
 import { telegramBotService } from '../../services/telegramBot';
 import { brandService } from '../../services/brands';
 import { categoryService } from '../../services/categories';
+import { customerService } from '../../services/customers';
 import { productService } from '../../services/products';
 import { warrantyTemplateService } from '../../services/warrantyTemplates';
 import { teamService } from '../../services/team';
