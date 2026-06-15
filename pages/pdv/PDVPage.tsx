@@ -149,6 +149,15 @@ interface Customer {
     admin_preview_type?: 'retail' | 'resale' | 'wholesale';
 }
 
+function extractDeliveryPersonCustomerId(
+    personId: string | undefined,
+    deliveryPersons: Array<{ id: string; customer_id?: string }>
+): string | undefined {
+    const selected = deliveryPersons.find(person => person.id === personId);
+    if (selected?.customer_id) return selected.customer_id;
+    return personId?.startsWith('customer:') ? personId.slice('customer:'.length) : undefined;
+}
+
 const WARRANTY_TERM_CATEGORY_KEYS = new Set([
     'smartphones-e-tablet',
     'smartphones-e-tablets',
@@ -551,6 +560,7 @@ export default function PDVPage() {
     ) => {
         setDeliveryType(type);
         setDeliveryPersonId(personId);
+        setDeliveryPersonCustomerId(extractDeliveryPersonCustomerId(personId, deliveryPersons) || '');
         setDeliveryCostStore(costStore);
         setDeliveryCostCustomer(costCustomer);
     };
@@ -839,6 +849,7 @@ export default function PDVPage() {
             notes: undefined,
             delivery_type: deliveryType,
             delivery_person_id: deliveryPersonId,
+            delivery_person_customer_id: extractDeliveryPersonCustomerId(deliveryPersonId, deliveryPersons),
             delivery_cost_store: deliveryCostStore,
             delivery_cost_customer: deliveryCostCustomer,
             delivery_total: deliveryTotal,

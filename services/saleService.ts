@@ -80,6 +80,19 @@ function parseJsonField<T>(value: unknown, fallback: T): T {
     }
 }
 
+function resolveDeliveryPersonCustomerId(saleInput: SaleInput): string | null {
+    const explicit = String(saleInput.delivery_person_customer_id || '').trim();
+    if (explicit) return explicit;
+    const personId = String(saleInput.delivery_person_id || '').trim();
+    return personId.startsWith('customer:') ? personId.slice('customer:'.length) : null;
+}
+
+function resolveLegacyDeliveryPersonId(saleInput: SaleInput): string | null {
+    const personId = String(saleInput.delivery_person_id || '').trim();
+    if (!personId || personId.startsWith('customer:')) return null;
+    return personId;
+}
+
 function createLocalId(): string {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
         return crypto.randomUUID();
@@ -464,6 +477,8 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         };
 
         const saleId = createLocalId();
+        const deliveryPersonCustomerId = resolveDeliveryPersonCustomerId(saleInput);
+        const legacyDeliveryPersonId = resolveLegacyDeliveryPersonId(saleInput);
         const saleData = {
             id: saleId,
             customer_id: saleInput.customer_id,
@@ -479,8 +494,8 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             cost_total: totals.cost_total,
             profit: realProfit,
             delivery_type: saleInput.delivery_type || null,
-            delivery_person_id: saleInput.delivery_person_id || null,
-            delivery_person_customer_id: saleInput.delivery_person_customer_id || null,
+            delivery_person_id: legacyDeliveryPersonId,
+            delivery_person_customer_id: deliveryPersonCustomerId,
             delivery_cost_store: saleInput.delivery_cost_store || 0,
             delivery_cost_customer: saleInput.delivery_cost_customer || 0,
             delivery_total: saleInput.delivery_total || 0,
@@ -508,7 +523,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         try {
             await vpsClient.post('/table-data/sale_items/bulk', saleItems);
             saleItemsPersisted = true;
-            if (saleInput.delivery_person_customer_id && saleInput.delivery_total && saleInput.delivery_total > 0) {
+            if (deliveryPersonCustomerId && saleInput.delivery_total && saleInput.delivery_total > 0) {
                 await vpsClient.post('/delivery/jobs/from-sale', { sale_id: sale.id });
             }
         } catch (itemsError) {
@@ -569,9 +584,9 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         }
 
         // Create delivery credit if applicable
-        if (saleInput.delivery_person_id && saleInput.delivery_total && saleInput.delivery_total > 0) {
+        if (legacyDeliveryPersonId && saleInput.delivery_total && saleInput.delivery_total > 0) {
             const deliveryCredit = {
-                delivery_person_id: saleInput.delivery_person_id,
+                delivery_person_id: legacyDeliveryPersonId,
                 sale_id: sale.id,
                 amount: saleInput.delivery_total,
                 delivery_type: saleInput.delivery_type!,

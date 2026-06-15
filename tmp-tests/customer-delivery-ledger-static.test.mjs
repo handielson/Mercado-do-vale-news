@@ -45,7 +45,23 @@ assert.match(vps, /fastify\.post\('\/customers\/:customerId\/delivery-offsets'/,
 assert.match(vps, /createCustomerDeliveryJobForSale/, 'Sale creation must create pending delivery jobs');
 assert.match(vps, /completeCustomerDeliveryJob/, 'Delivery completion must create ledger entries');
 assert.match(pdv, /deliveryPersonCustomerId/, 'PDV must keep the linked delivery customer id');
-assert.match(readProjectFile('../services/saleService.ts'), /delivery_person_customer_id/, 'Sale service must persist linked delivery customer id');
+assert.match(
+  pdv,
+  /function\s+extractDeliveryPersonCustomerId/,
+  'PDV must derive the linked delivery customer id from customer delivery worker options'
+);
+assert.match(
+  pdv,
+  /delivery_person_customer_id:\s*extractDeliveryPersonCustomerId\(deliveryPersonId,\s*deliveryPersons\)/,
+  'PDV sale input must send the linked delivery customer id so customer_delivery_jobs can be created'
+);
+const saleService = readProjectFile('../services/saleService.ts');
+assert.match(saleService, /function\s+resolveDeliveryPersonCustomerId/, 'Sale service must defensively resolve customer-prefixed delivery person ids');
+assert.match(saleService, /function\s+resolveLegacyDeliveryPersonId/, 'Sale service must avoid storing customer-prefixed ids in legacy delivery_person_id');
+assert.match(saleService, /delivery_person_id:\s*legacyDeliveryPersonId/, 'Sale service must persist only legacy delivery ids in delivery_person_id');
+assert.match(saleService, /delivery_person_customer_id:\s*deliveryPersonCustomerId/, 'Sale service must persist linked delivery customer id');
+assert.match(saleService, /deliveryPersonCustomerId[\s\S]*\/delivery\/jobs\/from-sale/, 'Sale service must create delivery jobs when the resolved delivery customer id is present');
+assert.match(saleService, /if\s*\(legacyDeliveryPersonId\s*&&\s*saleInput\.delivery_total/, 'Legacy delivery credits must only be created for legacy delivery person ids');
 assert.match(pdv, /is_delivery_worker: true/, 'PDV must only list customers explicitly enabled as delivery workers');
 assert.match(customerTypes, /is_delivery_worker\?: boolean/, 'Customer types must expose delivery worker flag');
 assert.match(customerService, /is_delivery_worker: deliveryWorker === true/, 'Customer service must normalize delivery worker flag');
