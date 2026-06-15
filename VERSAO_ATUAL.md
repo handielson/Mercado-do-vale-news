@@ -3,8 +3,8 @@
 ```text
 version: v1.1.20-admin-public-regressions
 date: 2026-06-15
-status: pending-deploy
-release_vps: pendente
+status: published
+release_vps: /var/www/mdv-site/releases/20260615-154700-v1120-admin-public-regressions
 branch: codex/publish-delivery-ops-20260614
 ```
 
@@ -29,5 +29,5 @@ docs/versoes/2026-06-15-v1.1.20-admin-public-regressions.md
 
 ## Publicacao
 
-- Release VPS planejada/publicada: `pendente`.
+- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260615-154700-v1120-admin-public-regressions`.
 - Esta versao altera apenas o frontend; a API VPS nao precisa ser reiniciada.
