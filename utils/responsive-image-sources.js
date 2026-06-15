@@ -35,6 +35,13 @@ export function deriveImageVariantUrl(rawUrl, width, format) {
   return `${pathname.slice(0, -extension.length)}-${width}.${format}${search}${hash}`;
 }
 
+function addCacheKey(rawUrl, cacheKey) {
+  if (!cacheKey) return rawUrl;
+  const { pathname, search, hash } = splitUrl(rawUrl);
+  if (search) return rawUrl;
+  return `${pathname}?v=${encodeURIComponent(String(cacheKey))}${hash}`;
+}
+
 function canBuildSources(rawUrl, kind) {
   if (!rawUrl || isInlineOrBlobUrl(rawUrl) || isBlingProxyUrl(rawUrl)) return false;
   const { pathname } = splitUrl(rawUrl);
@@ -43,19 +50,20 @@ function canBuildSources(rawUrl, kind) {
 
   const lowerPath = pathname.toLowerCase();
   if (kind === 'banner') return lowerPath.includes('/banners/');
-  return lowerPath.includes('/products/') || lowerPath.includes('/legacy/external/');
+  return lowerPath.includes('/products/') || lowerPath.includes('/legacy/external/') || lowerPath.includes('/model-color/');
 }
 
 export function buildResponsiveImageSources(rawUrl, options = {}) {
   const kind = options.kind === 'banner' ? 'banner' : 'product';
   if (!canBuildSources(rawUrl, kind)) return null;
 
+  const sourceUrl = addCacheKey(rawUrl, options.cacheKey);
   const widths = kind === 'banner' ? BANNER_WIDTHS : PRODUCT_WIDTHS;
   const byFormat = Object.fromEntries(
     DERIVATIVE_FORMATS.map((format) => [
       format,
       widths
-        .map((width) => `${deriveImageVariantUrl(rawUrl, width, format)} ${width}w`)
+        .map((width) => `${deriveImageVariantUrl(sourceUrl, width, format)} ${width}w`)
         .join(', '),
     ]),
   );

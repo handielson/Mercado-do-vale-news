@@ -6,6 +6,7 @@ import {
 
 const productUrl = 'https://api.xiaomipetrolina.com.br/images/products/SKU/img-1.png?v=123';
 const webpProductUrl = 'https://api.xiaomipetrolina.com.br/images/products/SKU/photo.webp';
+const modelColorUrl = 'https://api.xiaomipetrolina.com.br/images/model-color/redmi-a5/preto.jpg';
 const legacyProductUrl = 'https://api.xiaomipetrolina.com.br/images/legacy/external/external/e3771d34b703c814.png';
 const legacyInlineProductUrl = 'https://api.xiaomipetrolina.com.br/images/legacy/inline/8ea8b186ab613115.jpg';
 
@@ -35,11 +36,28 @@ assert.equal(
   'existing WebP originals should still receive width-specific derivatives',
 );
 
+const cacheKeySources = buildResponsiveImageSources(webpProductUrl, {
+  kind: 'product',
+  cacheKey: 'product-123',
+});
+assert.match(
+  cacheKeySources.avifSrcSet,
+  /\/images\/products\/SKU\/photo-480\.avif\?v=product-123 480w/,
+  'derivative sources should receive a stable cache key when the original URL has no query string',
+);
+
 const legacyProductSources = buildResponsiveImageSources(legacyProductUrl, { kind: 'product' });
 assert.match(
   legacyProductSources.webpSrcSet,
   /\/images\/legacy\/external\/external\/e3771d34b703c814-320\.webp 320w/,
   'legacy external images should use product derivative sources',
+);
+
+const modelColorSources = buildResponsiveImageSources(modelColorUrl, { kind: 'product' });
+assert.match(
+  modelColorSources.avifSrcSet,
+  /\/images\/model-color\/redmi-a5\/preto-320\.avif 320w/,
+  'model color images should use product derivative sources',
 );
 
 assert.equal(

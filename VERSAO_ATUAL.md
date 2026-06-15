@@ -1,24 +1,24 @@
 # Versao Atual
 
 ```text
-version: v1.1.8-admin-products-compact-load
-date: 2026-06-14
+version: v1.1.9-cls-a11y-cache
+date: 2026-06-15
 status: published
-release_vps: /var/www/mdv-site/releases/20260614-201837-v118-admin-products-compact-load
+release_vps: /var/www/mdv-site/releases/20260615-002826-v119-cls-a11y
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Listagem admin de produtos passa a buscar produtos da VPS com `compact: true`.
-- Carga inicial/fallback usa paginas de 500 produtos em vez de 300 para reduzir chamadas sequenciais.
-- O payload evita trazer listas completas de imagens/base64 na abertura da tela.
-- Protecao estatica atualizada para impedir regressao para carga pesada sem `compact`.
+- O mini badge de avaliacao reserva altura mesmo sem reviews para reduzir CLS no catalogo.
+- Botoes iconicos do card moderno ganharam `aria-label` nos controles de editar, cores, favorito e compartilhar.
+- Imagens de produto recebem chave de cache estavel quando a URL original nao traz query string.
+- Imagens `model-color` entram no fluxo de fontes responsivas e derivativos remotos.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.8-admin-products-compact-load` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.9-cls-a11y-cache` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-14-v1.1.8-admin-products-compact-load.md
+docs/versoes/2026-06-15-v1.1.9-cls-a11y-cache.md
 ```

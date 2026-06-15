@@ -29,6 +29,7 @@ assert.match(lowThreshold, /--limit 20 --apply --skip-existing --min-bytes 10240
 const source = fs.readFileSync('tools/remote-image-derivative-command.mjs', 'utf8');
 assert.match(source, /const optimizableExts = new Set\(\['\.jpg', '\.jpeg', '\.png', '\.webp', '\.avif'\]\)/);
 assert.match(source, /lower\.includes\('\/legacy\/external\/'\)/);
+assert.match(source, /lower\.includes\('\/model-color\/'\)/);
 assert.match(source, /function isImmutableImageDerivative/);
 
 const focused = buildRemoteDerivativeCommand({

@@ -392,7 +392,10 @@ export function ModernProductCard({
     const activeImageUrl = displayImageUrl || currentImage;
     const responsiveImageSources = optimizedImageFailed
         ? null
-        : buildResponsiveImageSources(activeImageUrl, { kind: 'product' });
+        : buildResponsiveImageSources(activeImageUrl, {
+            kind: 'product',
+            cacheKey: (currentProduct as CatalogProduct)?.id || product.id,
+        });
 
     useEffect(() => {
         let objectUrl: string | null = null;
@@ -556,6 +559,7 @@ export function ModernProductCard({
                             }}
                             className="shrink-0 p-1.5 rounded-lg bg-blue-100 text-blue-600 hover:bg-blue-200 transition-colors"
                             title="Editar Produto"
+                            aria-label="Editar produto"
                         >
                             <Pencil className="w-4 h-4" />
                         </button>
@@ -616,11 +620,13 @@ export function ModernProductCard({
                                 className={`absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all ${isHovered ? 'opacity-100' : 'opacity-0'
                                     }`}
                                 title="Cor anterior"
+                                aria-label="Cor anterior"
                             >
                                 <ChevronLeft className="w-5 h-5" />
                             </button>
                             <button
                                 onClick={handleNextImage}
+                                aria-label="Próxima cor"
                                 className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all ${isHovered ? 'opacity-100' : 'opacity-0'
                                     }`}
                                 title="Próxima cor"
@@ -714,6 +720,7 @@ export function ModernProductCard({
                                 }}
                                 className="p-2.5 rounded-full backdrop-blur-md transition-all shadow-lg bg-blue-500 text-white hover:bg-blue-600"
                                 title="Editar Produto"
+                                aria-label="Editar produto"
                             >
                                 <Pencil className="w-4 h-4" />
                             </button>
@@ -725,6 +732,7 @@ export function ModernProductCard({
                                 : 'bg-white/90 text-slate-700 hover:bg-white'
                                 }`}
                             title={isFavorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+                            aria-label={isFavorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
                         >
                             <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
                         </button>
@@ -732,6 +740,7 @@ export function ModernProductCard({
                             onClick={handleShare}
                             className="p-2.5 rounded-full bg-white/90 backdrop-blur-md text-slate-700 hover:bg-white transition-all shadow-lg"
                             title="Compartilhar"
+                            aria-label="Compartilhar produto"
                         >
                             <Share2 className="w-4 h-4" />
                         </button>

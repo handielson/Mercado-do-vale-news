@@ -40,7 +40,7 @@ function classify(file, size, options) {
   const ext = path.extname(lower);
   const kind = lower.includes('/banners/')
     ? 'banner'
-    : lower.includes('/products/') || lower.includes('/legacy/external/')
+    : lower.includes('/products/') || lower.includes('/legacy/external/') || lower.includes('/model-color/')
       ? 'product'
       : 'other';
 
