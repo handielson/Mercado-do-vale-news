@@ -844,9 +844,9 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                                 {item.discount > 0 ? ` • Desc: ${formatCurrency(item.discount)}/un` : ''}
                                             </p>
                                             <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-slate-500">
-                                                <span>Custo un.: <strong className="text-slate-700">{formatCurrency(unitCost)}</strong></span>
-                                                <span>Custo item: <strong className="text-slate-700">{formatCurrency(itemCost)}</strong></span>
-                                                <span>Lucro item: <strong className={itemProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}>{formatCurrency(itemProfit)}</strong></span>
+                                                <span>Custo un.: <strong className="text-slate-700">{formatCurrency(itemView.unitCost)}</strong></span>
+                                                <span>Custo item: <strong className="text-slate-700">{formatCurrency(itemView.itemCost)}</strong></span>
+                                                <span>Lucro item: <strong className={itemView.itemProfit >= 0 ? 'text-emerald-700' : 'text-red-700'}>{formatCurrency(itemView.itemProfit)}</strong></span>
                                             </div>
                                         </div>
                                         <div className="text-right">

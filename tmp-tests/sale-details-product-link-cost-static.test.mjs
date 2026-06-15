@@ -35,8 +35,38 @@ assert.match(
 
 assert.match(
   modal,
-  /const unitCost = Number\(item\.unit_cost\) \|\| 0;/,
-  'sale details must compute item cost from the sale item unit_cost saved at sale time',
+  /const itemView = buildSaleItemPresentation\(item, productSpecs, realProfit\);/,
+  'sale details must build item cost/profit presentation through buildSaleItemPresentation',
+);
+
+assert.match(
+  modal,
+  /formatCurrency\(itemView\.unitCost\)/,
+  'sale details must render unit cost from the item presentation object',
+);
+
+assert.match(
+  modal,
+  /formatCurrency\(itemView\.itemCost\)/,
+  'sale details must render item cost from the item presentation object',
+);
+
+assert.match(
+  modal,
+  /itemView\.itemProfit >= 0/,
+  'sale details must use itemView.itemProfit when choosing profit color',
+);
+
+assert.match(
+  modal,
+  /formatCurrency\(itemView\.itemProfit\)/,
+  'sale details must render item profit from the item presentation object',
+);
+
+assert.doesNotMatch(
+  modal,
+  /formatCurrency\((unitCost|itemCost|itemProfit)\)|className=\{itemProfit >= 0/,
+  'sale details must not reference undeclared item cost/profit variables in JSX',
 );
 
 console.log('sale-details-product-link-cost-static.test.mjs: ok');
