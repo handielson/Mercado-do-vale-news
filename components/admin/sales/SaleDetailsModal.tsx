@@ -472,11 +472,11 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     if (!isOpen || !sale) return null;
 
     const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('pt-BR', {
-            style: 'currency',
-            currency: 'BRL'
-        }).format(value / 100);
+        return formatCurrencyCents(value);
     };
+    const collectedTotal = getSaleCollectedTotal(sale, realProfit);
+    const costTotal = getSaleCostTotal(sale, realProfit);
+    const realProfitTotal = getSaleRealProfit(sale, realProfit);
 
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleString('pt-BR', {
@@ -486,65 +486,6 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
             hour: '2-digit',
             minute: '2-digit'
         });
-    };
-
-    const paymentAmount = (payment: any) => Number(payment.amount ?? 0);
-
-    const paymentTotal = (payment: any) => Number(payment.total_with_fee ?? payment.total_with_fee_cents ?? payment.amount ?? 0);
-
-    const paymentPercent = (payment: any) => {
-        const amount = paymentAmount(payment);
-        const fee = Number(payment.fee_amount ?? Math.max(0, paymentTotal(payment) - amount));
-        return Number(payment.fee_percentage ?? (amount > 0 ? (fee / amount) * 100 : 0));
-    };
-
-    const paymentOperatorPercent = (payment: any) => {
-        return Number(
-            payment.operator_fee_percentage ??
-            payment.operator_fee_percent ??
-            payment.machine_fee_percentage ??
-            payment.machine_fee_percent ??
-            payment.operator_fee ??
-            0
-        );
-    };
-
-    const paymentOperatorFeeAmount = (payment: any) => {
-        const amount = paymentAmount(payment);
-        const operatorPercent = paymentOperatorPercent(payment);
-        return Number(
-            payment.operator_fee_amount ??
-            payment.machine_fee_amount ??
-            (operatorPercent > 0 ? Math.round(amount * (operatorPercent / 100)) : 0)
-        );
-    };
-
-    const paymentDetails = (payment: any) => {
-        const details: string[] = [];
-        const amount = paymentAmount(payment);
-        const total = paymentTotal(payment);
-        const fee = Number(payment.fee_amount ?? Math.max(0, total - amount));
-        const installments = Math.max(1, Number(payment.installments) || 1);
-        const chargedPercent = paymentPercent(payment);
-        const operatorPercent = paymentOperatorPercent(payment);
-        const operatorFee = paymentOperatorFeeAmount(payment);
-        const spread = Math.max(0, fee - operatorFee);
-
-        details.push(`Valor base: ${formatCurrency(amount)}`);
-        if (payment.method === 'credit' && installments > 1) {
-            details.push(`${installments}x de ${formatCurrency(Math.round(total / installments))}`);
-        }
-        if (fee > 0) details.push(`Acrescimo cobrado do cliente: ${formatCurrency(fee)}`);
-        details.push(operatorFee > 0 ? `Custo da maquina: ${formatCurrency(operatorFee)}` : 'Custo da maquina calculado: nao registrado');
-        if (fee > 0 || operatorFee > 0) details.push(`Sobra da taxa: ${formatCurrency(spread)}`);
-        details.push(`Percentual cobrado: ${chargedPercent.toFixed(2).replace('.', ',')}%`);
-        details.push(operatorPercent > 0 ? `Percentual da maquina: ${operatorPercent.toFixed(2).replace('.', ',')}%` : 'Percentual da maquina: nao registrado');
-        if (payment.due_date) details.push(`Vencimento: ${new Date(payment.due_date).toLocaleDateString('pt-BR')}`);
-        if (payment.pix_status) details.push(`Status PIX: ${payment.pix_status}`);
-        if (payment.pix_payment_id) details.push(`PIX ID: ${payment.pix_payment_id}`);
-        if (payment.mercado_pago_payment_id) details.push(`Mercado Pago ID: ${payment.mercado_pago_payment_id}`);
-
-        return details;
     };
 
     const deliveryTypeLabel = (type?: string) => {
@@ -852,11 +793,11 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                         <div className="text-right">
                                             {item.discount > 0 && (
                                                 <p className="text-xs text-slate-400 line-through">
-                                                    {formatCurrency(item.unit_price * item.quantity)}
+                                                    {formatCurrency(itemView.itemSubtotal)}
                                                 </p>
                                             )}
                                             <p className="text-sm font-bold text-slate-800">
-                                                {formatCurrency(item.total)}
+                                                {formatCurrency(itemView.itemTotal)}
                                             </p>
                                         </div>
                                     </div>
@@ -877,7 +818,10 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between text-slate-600">
                                     <span>Subtotal Produtos</span>
-                                    <span>{formatCurrency(sale.subtotal)}</span>
+                                    <span>{formatCurrency(sale.subtotal || sale.items.reduce((sum, item) => {
+                                        const itemView = buildSaleItemPresentation(item, productSpecs, realProfit);
+                                        return sum + itemView.itemSubtotal;
+                                    }, 0))}</span>
                                 </div>
 
                                 {sale.promotional_discount ? (
@@ -896,12 +840,17 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
 
                                 <div className="pt-3 mt-3 border-t border-slate-100 flex justify-between font-bold text-lg text-slate-800">
                                     <span>Total Pago</span>
-                                    <span>{formatCurrency(sale.total)}</span>
+                                    <span>{formatCurrency(collectedTotal)}</span>
+                                </div>
+
+                                <div className="flex justify-between text-slate-600">
+                                    <span>Custo Total</span>
+                                    <span>{formatCurrency(costTotal)}</span>
                                 </div>
 
                                 <div className="pt-3 mt-3 border-t border-slate-100 flex justify-between text-sm font-medium">
                                     <span className="text-emerald-600">Lucro Real</span>
-                                    <span className="text-emerald-700">{formatCurrency(sale.profit)}</span>
+                                    <span className={realProfitTotal >= 0 ? 'text-emerald-700' : 'text-red-700'}>{formatCurrency(realProfitTotal)}</span>
                                 </div>
                             </div>
                         </div>
@@ -925,7 +874,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                                             {paymentView.labelWithInstallments}
                                                         </p>
                                                         <div className="mt-1 space-y-0.5">
-                                                            {paymentDetails(payment).map((detail) => (
+                                                            {paymentView.details.map((detail) => (
                                                                 <p key={detail} className="text-xs text-slate-500">
                                                                     {detail}
                                                                 </p>
@@ -934,7 +883,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                                     </div>
                                                 </div>
                                                 <p className="text-sm font-bold text-slate-800 whitespace-nowrap">
-                                                    {formatCurrency(paymentTotal(payment))}
+                                                    {formatCurrency(paymentView.totalWithFee)}
                                                 </p>
                                             </div>
                                         </div>

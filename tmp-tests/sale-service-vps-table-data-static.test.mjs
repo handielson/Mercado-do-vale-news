@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync('services/saleService.ts', 'utf8');
+const vpsServers = [
+  readFileSync('vps_server.js', 'utf8'),
+  readFileSync('vps_server.cjs', 'utf8'),
+];
 
 assert.match(
   source,
@@ -66,11 +70,36 @@ assert.match(
   /vpsClient\.post\([\s\S]*['"]\/table-data\/sale_items\/bulk['"]/,
   'createSale must insert sale items through VPS table-data bulk insert',
 );
-assert.doesNotMatch(
-  createSaleBody,
-  /subtotal:\s*totals\.subtotal|discount_total:\s*discountTotal|cost_total:\s*totals\.cost_total|profit:\s*totals\.profit|payment_methods:\s*saleInput\.payment_methods/,
-  'createSale must not send rich Sale fields that are absent from the VPS sales table',
-);
+for (const persistedSaleField of [
+  'subtotal',
+  'discount_total',
+  'cost_total',
+  'profit',
+  'payment_methods',
+  'delivery_type',
+  'delivery_cost_store',
+  'delivery_cost_customer',
+  'delivery_total',
+  'promotional_discount',
+]) {
+  assert.match(
+    source,
+    new RegExp(`${persistedSaleField}:\\s*row\\.${persistedSaleField}|${persistedSaleField}:\\s*serializeJsonValue\\(row\\.${persistedSaleField}\\)`),
+    `serializeSaleRowForTable must persist ${persistedSaleField} for admin sale details`,
+  );
+}
+for (const persistedItemField of [
+  'product_sku',
+  'unit_cost',
+  'discount',
+  'subtotal',
+]) {
+  assert.match(
+    source,
+    new RegExp(`${persistedItemField}:\\s*item\\.${persistedItemField}`),
+    `serializeSaleItemRowForTable must persist ${persistedItemField} for admin sale details`,
+  );
+}
 assert.match(
   createSaleBody,
   /discount:\s*discountTotal/,
@@ -86,6 +115,40 @@ assert.match(
   /serializeSaleItemRowForTable/,
   'createSale must filter sale item fields to the VPS sale_items schema',
 );
+assert.doesNotMatch(
+  source,
+  /delete tablePatch\.(subtotal|discount_total|cost_total|profit|payment_methods|delivery_type|delivery_person_id|delivery_cost_store|delivery_cost_customer|delivery_total|promotional_discount)/,
+  'patchSale must not drop financial fields that now exist in the VPS sales table',
+);
+
+for (const vpsSource of vpsServers) {
+  for (const salesColumn of [
+    'subtotal',
+    'discount_total',
+    'cost_total',
+    'profit',
+    'payment_methods',
+    'delivery_type',
+    'delivery_person_id',
+    'delivery_cost_store',
+    'delivery_cost_customer',
+    'delivery_total',
+    'promotional_discount',
+  ]) {
+    assert.match(
+      vpsSource,
+      new RegExp(`addColumnIfMissing\\(['"]sales['"],\\s*['"]${salesColumn}['"]`),
+      `VPS sales table migration must include ${salesColumn}`,
+    );
+  }
+  for (const saleItemsColumn of ['unit_cost', 'product_sku', 'discount', 'subtotal']) {
+    assert.match(
+      vpsSource,
+      new RegExp(`addColumnIfMissing\\(['"]sale_items['"],\\s*['"]${saleItemsColumn}['"]`),
+      `VPS sale_items table migration must include ${saleItemsColumn}`,
+    );
+  }
+}
 assert.doesNotMatch(
   createSaleBody,
   /supabase\s*\.\s*from\(['"]customers['"]\)/,

@@ -2,21 +2,22 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const modal = readFileSync('components/admin/sales/SaleDetailsModal.tsx', 'utf8');
+const presentation = readFileSync('utils/salePresentation.ts', 'utf8');
 
 assert.match(
   modal,
-  /paymentDetails\(payment\)/,
+  /paymentView\.details\.map/,
   'admin sale modal must render the full internal payment details for each payment'
 );
 
 assert.match(
-  modal,
+  presentation,
   /Custo da m[aá]quina|Custo da maquina/,
   'admin sale modal must show machine cost details again'
 );
 
 assert.match(
-  modal,
+  presentation,
   /Percentual cobrado/,
   'admin sale modal must show charged percentage details again'
 );

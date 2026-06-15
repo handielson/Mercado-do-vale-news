@@ -24036,14 +24036,24 @@ async function runMigrations() {
   await addColumnIfMissing('sales', 'discount_total', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('sales', 'cost_total', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('sales', 'profit', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'payment_methods', 'JSON NULL');
+  await addColumnIfMissing('sales', 'delivery_type', 'VARCHAR(40) DEFAULT NULL');
+  await addColumnIfMissing('sales', 'delivery_person_id', 'VARCHAR(255) NULL');
+  await addColumnIfMissing('sales', 'delivery_cost_store', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'delivery_cost_customer', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'delivery_total', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'promotional_discount', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('sales', 'coupon_code', 'VARCHAR(120) DEFAULT NULL');
   await addColumnIfMissing('sales', 'coupon_id', 'CHAR(36) DEFAULT NULL');
   await addColumnIfMissing('sales', 'final_adjustment_discount', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sales', 'referral_code', 'VARCHAR(80) DEFAULT NULL');
   await addColumnIfMissing('sales', 'finalization_status', "VARCHAR(32) NOT NULL DEFAULT 'success'");
   await addColumnIfMissing('sales', 'finalization_log', 'LONGTEXT NULL');
   await addColumnIfMissing('sales', 'finalization_error_summary', 'TEXT NULL');
   await addColumnIfMissing('sale_items', 'unit_cost', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('sale_items', 'product_sku', 'VARCHAR(200) DEFAULT NULL');
+  await addColumnIfMissing('sale_items', 'discount', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('sale_items', 'subtotal', 'INT NOT NULL DEFAULT 0');
 
   // Linkage pai/filho (Bling) - permite combos/kits referenciarem produtos pai (agregados)
   await addColumnIfMissing('products', 'parent_id',       'CHAR(36) DEFAULT NULL');

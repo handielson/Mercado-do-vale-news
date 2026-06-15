@@ -63,9 +63,15 @@ assert.match(
   'sale details must render item profit from the item presentation object',
 );
 
+assert.match(
+  modal,
+  /formatCurrency\(itemView\.itemTotal\)/,
+  'sale details must render item total from the item presentation object',
+);
+
 assert.doesNotMatch(
   modal,
-  /formatCurrency\((unitCost|itemCost|itemProfit)\)|className=\{itemProfit >= 0/,
+  /formatCurrency\((unitCost|itemCost|itemProfit|item\.total)\)|className=\{itemProfit >= 0/,
   'sale details must not reference undeclared item cost/profit variables in JSX',
 );
 
@@ -79,6 +85,42 @@ assert.match(
   modal,
   /\{paymentView\.labelWithInstallments\}/,
   'sale details must render the payment label from the payment presentation object',
+);
+
+assert.match(
+  modal,
+  /paymentView\.details\.map/,
+  'sale details must render payment details from the payment presentation object',
+);
+
+assert.match(
+  modal,
+  /formatCurrency\(paymentView\.totalWithFee\)/,
+  'sale details must render payment total from the payment presentation object',
+);
+
+assert.doesNotMatch(
+  modal,
+  /paymentDetails\(payment\)|paymentTotal\(payment\)|const paymentDetails|const paymentAmount|const paymentTotal|const paymentPercent|const paymentOperatorPercent|const paymentOperatorFeeAmount/,
+  'sale details must not keep duplicate raw payment math in the modal',
+);
+
+assert.match(
+  modal,
+  /const collectedTotal = getSaleCollectedTotal\(sale, realProfit\);/,
+  'sale details must derive collected total through sale presentation helpers',
+);
+
+assert.match(
+  modal,
+  /const costTotal = getSaleCostTotal\(sale, realProfit\);/,
+  'sale details must derive cost total through sale presentation helpers',
+);
+
+assert.match(
+  modal,
+  /const realProfitTotal = getSaleRealProfit\(sale, realProfit\);/,
+  'sale details must derive real profit through sale presentation helpers',
 );
 
 assert.doesNotMatch(

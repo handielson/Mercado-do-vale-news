@@ -77,6 +77,8 @@ export function buildSaleItemPresentation(
     if (specs.serial) identifiers.push(`Serial: ${specs.serial}`);
 
     const quantity = Number(item.quantity) || 1;
+    const unitPrice = moneyToCents(item.unit_price);
+    const itemSubtotal = moneyToCents((item as any).subtotal ?? unitPrice * quantity);
     const itemTotal = moneyToCents(item.total);
     const profitUnitCost = moneyToCents(profitItem?.unit_cost ?? 0);
     const itemUnitCost = moneyToCents(item.unit_cost ?? 0);
@@ -90,6 +92,9 @@ export function buildSaleItemPresentation(
         sku: sku || 'N/A',
         identifiers,
         identifierLine: identifiers.length > 0 ? identifiers.join(' | ') : 'SKU: N/A',
+        unitPrice,
+        itemSubtotal,
+        itemTotal,
         unitCost,
         itemCost,
         itemProfit

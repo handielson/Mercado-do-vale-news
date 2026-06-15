@@ -148,9 +148,28 @@ function serializeSaleRowForTable<T extends Record<string, unknown>>(row: T): Re
         seller_id: row.seller_id || null,
         total: row.total || 0,
         discount: row.discount || 0,
+        subtotal: row.subtotal || 0,
+        discount_total: row.discount_total || row.discount || 0,
+        cost_total: row.cost_total || 0,
+        profit: row.profit || 0,
         payment_method: row.payment_method || null,
+        payment_methods: serializeJsonValue(row.payment_methods),
         payment_status: row.payment_status || 'paid',
         notes: row.notes || null,
+        delivery_type: row.delivery_type || null,
+        delivery_person_id: row.delivery_person_id || null,
+        delivery_person_customer_id: row.delivery_person_customer_id || null,
+        delivery_cost_store: row.delivery_cost_store || 0,
+        delivery_cost_customer: row.delivery_cost_customer || 0,
+        delivery_total: row.delivery_total || 0,
+        promotional_discount: row.promotional_discount || 0,
+        coupon_code: row.coupon_code || null,
+        coupon_id: row.coupon_id || null,
+        final_adjustment_discount: row.final_adjustment_discount || 0,
+        referral_code: row.referral_code || null,
+        finalization_status: row.finalization_status || 'success',
+        finalization_log: row.finalization_log || null,
+        finalization_error_summary: row.finalization_error_summary || null,
     };
 }
 
@@ -159,8 +178,12 @@ function serializeSaleItemRowForTable(item: SaleItem, saleId: string): Record<st
         sale_id: saleId,
         product_id: item.product_id || null,
         product_name: item.product_name || null,
+        product_sku: item.product_sku || null,
         quantity: item.quantity || 1,
         unit_price: item.unit_price || 0,
+        unit_cost: item.unit_cost || 0,
+        discount: item.discount || 0,
+        subtotal: item.subtotal || 0,
         total: item.total || 0,
         warranty_months: item.warranty_months || 0,
         imei: item.serialized_unit?.imei1 || item.serialized_unit?.serial || null,
@@ -192,6 +215,7 @@ function normalizePaymentMethods(paymentMethods: PaymentMethod[], moneyScale: nu
         ...payment,
         amount: scaleMoneyValue(payment.amount, moneyScale),
         fee_amount: payment.fee_amount == null ? payment.fee_amount : scaleMoneyValue(payment.fee_amount, moneyScale),
+        operator_fee_amount: (payment as any).operator_fee_amount == null ? (payment as any).operator_fee_amount : scaleMoneyValue((payment as any).operator_fee_amount, moneyScale),
         total_with_fee: scaleMoneyValue(payment.total_with_fee ?? payment.amount, moneyScale),
     }));
 }
@@ -332,8 +356,7 @@ async function loadSaleItemsBySaleId(saleId: string): Promise<SaleItem[]> {
     const saleRows = await loadTableRows<any>('sales');
     const sale = saleRows.find(row => String(row.id) === String(saleId));
     const saleItems = rows.filter(row => String(row.sale_id || '') === String(saleId));
-    const moneyScale = shouldScaleSaleMoneyFromReais(sale || {}, saleItems) ? 100 : 1;
-    return saleItems.map(row => normalizeSaleItemRow(row, moneyScale));
+    return saleItems.map(row => normalizeSaleItemRow(row, sale));
 }
 
 async function loadSaleWithItemsById(saleId: string): Promise<SaleWithItems | null> {
@@ -347,7 +370,8 @@ async function loadSaleWithItemsById(saleId: string): Promise<SaleWithItems | nu
     if (!saleRow) return null;
 
     const saleItemRows = itemRows.filter(row => String(row.sale_id || '') === String(saleId));
-    const sale = normalizeSaleRow(saleRow);
+    const moneyScale = shouldScaleSaleMoneyFromReais(saleRow, saleItemRows) ? 100 : 1;
+    const sale = normalizeSaleRow(saleRow, moneyScale);
     const items = saleItemRows.map(row => normalizeSaleItemRow(row, saleRow));
 
     const customer = customers.find(row => String(row.id || '') === String(sale.customer_id));
@@ -395,17 +419,9 @@ export async function patchSale(id: string, patch: Partial<Sale>): Promise<Sale>
             : 'paid';
         delete tablePatch.status;
     }
-    delete tablePatch.subtotal;
-    delete tablePatch.discount_total;
-    delete tablePatch.cost_total;
-    delete tablePatch.profit;
-    delete tablePatch.payment_methods;
-    delete tablePatch.delivery_type;
-    delete tablePatch.delivery_person_id;
-    delete tablePatch.delivery_cost_store;
-    delete tablePatch.delivery_cost_customer;
-    delete tablePatch.delivery_total;
-    delete tablePatch.promotional_discount;
+    if (Object.prototype.hasOwnProperty.call(tablePatch, 'payment_methods')) {
+        tablePatch.payment_methods = serializeJsonValue(tablePatch.payment_methods);
+    }
 
     return normalizeSaleRow(await vpsClient.patch<any>(
         `/table-data/sales/${encodeURIComponent(id)}?pk=id`,
@@ -672,7 +688,8 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
         return saleRows
             .map((saleRow) => {
                 const rawItems = saleItems.filter(row => String(row.sale_id || '') === String(saleRow.id));
-                const sale = normalizeSaleRow(saleRow);
+                const moneyScale = shouldScaleSaleMoneyFromReais(saleRow, rawItems) ? 100 : 1;
+                const sale = normalizeSaleRow(saleRow, moneyScale);
                 return { sale, rawItems, saleRow };
             })
             .map(({ sale, rawItems, saleRow }) => ({

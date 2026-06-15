@@ -33,10 +33,16 @@ assert.match(
   'getSales must pass the detected money scale into sale normalization',
 );
 
-assert.match(
+assert.doesNotMatch(
   source,
   /normalizeSaleItemRow\(row,\s*moneyScale\)/,
-  'getSales must pass the detected money scale into item normalization',
+  'sale item normalization must receive the sale row context, not the numeric money scale',
+);
+
+assert.match(
+  source,
+  /normalizeSaleItemRow\(row,\s*sale(?:Row)?\)/,
+  'sale item normalization must receive sale row context so legacy decimal rows are detected',
 );
 
 assert.match(
