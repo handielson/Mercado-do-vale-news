@@ -225,6 +225,7 @@ export default function PDVPage() {
 
     // Estado do termo de garantia — N termos (1 por aparelho serializado)
     const [showWarrantyModal, setShowWarrantyModal] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastSaleId, setLastSaleId] = useState<string>('');
     const [lastSaleData, setLastSaleData] = useState<any>(null);
     const [warrantyContents, setWarrantyContents] = useState<string[]>([]);

@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.16-sections-cls-reserve",
+  "version": "v1.1.17-admin-pdv-media-fixes",
   "date": "2026-06-15",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260614-231648-v1116-sections-cls-reserve",
+  "status": "pending",
+  "release_vps": "pendente",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Reserva as secoes assincronas do catalogo e alinha o shell mobile para reduzir CLS."
+  "summary": "Corrige o modal de sucesso do PDV e hidrata imagens completas quando a lista compacta do admin nao traz capa."
 }

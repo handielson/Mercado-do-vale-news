@@ -821,22 +821,47 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         await persistProductImages(nextImages);
     };
 
-    // Resolve cover image: VPS now returns images directly (no compact mode).
-    // Only lazy-load model image as fallback when product has no custom images.
+    // Resolve cover image from the compact admin row, then model/color, then full product.
     useEffect(() => {
-        if (Array.isArray(product.images) && product.images.length > 0) {
-            const cleanImages = normalizeImageList(product.images);
+        let isMounted = true;
+        const cleanImages = normalizeImageList(product.images);
+
+        if (cleanImages.length > 0) {
             setProductImages(cleanImages);
             setFetchedImages(cleanImages);
-            return;
+            return () => { isMounted = false; };
         }
+
         setProductImages([]);
         setFetchedImages([]);
-        // Fallback: model image for products without custom images
-        if (!product.model_id) return;
-        let isMounted = true;
-        getModelImageWithCache(product.model_id, product.specs?.color)
-            .then(imageUrl => { if (isMounted && imageUrl) setFetchedImages([imageUrl]); });
+
+        const resolveFallbackImages = async () => {
+            let fetchedImageUrl: string | null = null;
+
+            if (product.model_id) {
+                fetchedImageUrl = await getModelImageWithCache(product.model_id, product.specs?.color);
+                if (!isMounted) return;
+                if (fetchedImageUrl) {
+                    setFetchedImages([fetchedImageUrl]);
+                    return;
+                }
+            }
+
+            try {
+                const fullProduct = await vpsApiService.getProductById(product.id, true);
+                if (!isMounted || fetchedImageUrl) return;
+                const fullProductImages = normalizeImageList(fullProduct?.images);
+                if (fullProductImages.length > 0) {
+                    setProductImages(fullProductImages);
+                    setFetchedImages(fullProductImages);
+                }
+            } catch (error) {
+                console.warn('[ProductCard] Falha ao carregar imagens completas do produto:', error);
+            }
+        };
+
+        resolveFallbackImages();
+
         return () => { isMounted = false; };
     }, [product.id, product.images, product.model_id, product.specs?.color]);
 
