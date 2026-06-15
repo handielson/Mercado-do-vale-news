@@ -42,9 +42,17 @@
     .initial-header-inner { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
     .initial-brand, .initial-actions { display: flex; align-items: center; gap: .75rem; }
     .initial-logo { width: 40px; height: 40px; border-radius: 10px; background: #dbeafe; }
-    .initial-main { padding-top: 1.5rem; padding-bottom: 2rem; }
+    .initial-mobile-search { position: sticky; top: 64px; z-index: 2; display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; background: #fff; border-bottom: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(15, 23, 42, .08); }
+    .initial-mobile-input { flex: 1; height: 40px; border-radius: 12px; background: #f1f5f9; }
+    .initial-mobile-button { width: 40px; height: 40px; border-radius: 12px; background: #f1f5f9; }
+    .initial-main { padding-top: 2rem; padding-bottom: 2rem; }
     .initial-banner { aspect-ratio: 21 / 9; width: 100%; border-radius: 14px; background: #e2e8f0; margin-bottom: 1rem; }
-    .initial-search { height: 48px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0; margin: 1rem 0 1.5rem; }
+    .initial-checkin-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin: 1rem 0 1.25rem; }
+    .initial-favorites { width: 96px; height: 40px; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; }
+    .initial-checkin { width: 210px; max-width: 58vw; height: 52px; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; box-shadow: 0 1px 2px rgba(15, 23, 42, .05); }
+    .initial-search { display: none; height: 48px; border-radius: 16px; background: #fff; border: 1px solid #e2e8f0; margin: 1rem 0 1.5rem; }
+    .initial-collections { display: flex; gap: .5rem; overflow: hidden; margin: 0 0 1.5rem; }
+    .initial-chip { height: 30px; flex: 0 0 auto; border-radius: 999px; background: #fff; border: 1px solid #e2e8f0; }
     .initial-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
     .initial-card { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; }
     .initial-photo { aspect-ratio: 4 / 3; background: #e2e8f0; }
@@ -55,7 +63,12 @@
     .initial-price { width: 120px; height: 20px; margin-top: 14px; }
     .initial-pill { width: 92px; height: 34px; border-radius: 10px; }
     @keyframes initial-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
-    @media (min-width: 640px) { .initial-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; } }
+    @media (min-width: 640px) {
+      .initial-mobile-search, .initial-checkin-row { display: none; }
+      .initial-main { padding-top: 1.5rem; }
+      .initial-search { display: block; }
+      .initial-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+    }
   </style>
 </head>
 
@@ -76,9 +89,23 @@
           </div>
         </div>
       </header>
+      <div class="initial-mobile-search">
+        <div class="initial-mobile-input initial-skel"></div>
+        <div class="initial-mobile-button initial-skel"></div>
+      </div>
       <main class="initial-main">
         <div class="initial-banner initial-skel"></div>
+        <div class="initial-checkin-row">
+          <div class="initial-favorites initial-skel"></div>
+          <div class="initial-checkin initial-skel"></div>
+        </div>
         <div class="initial-search"></div>
+        <div class="initial-collections">
+          <span class="initial-chip initial-skel" style="width: 126px"></span>
+          <span class="initial-chip initial-skel" style="width: 82px"></span>
+          <span class="initial-chip initial-skel" style="width: 96px"></span>
+          <span class="initial-chip initial-skel" style="width: 110px"></span>
+        </div>
         <div class="initial-grid">
           <div class="initial-card"><div class="initial-photo initial-skel"></div><div class="initial-card-body"><span class="initial-skel initial-title"></span><span class="initial-skel initial-small"></span><span class="initial-skel initial-price"></span></div></div>
           <div class="initial-card"><div class="initial-photo initial-skel"></div><div class="initial-card-body"><span class="initial-skel initial-title"></span><span class="initial-skel initial-small"></span><span class="initial-skel initial-price"></span></div></div>

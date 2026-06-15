@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.12-mobile-loading-shell-cls",
+  "version": "v1.1.13-inline-mobile-shell-cls",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-011805-v1112-mobile-loading-shell-cls",
+  "release_vps": "/var/www/mdv-site/releases/20260615-012945-v1113-inline-mobile-shell-cls",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Reserva o shell mobile do catalogo e o check-in durante o carregamento para reduzir telas vazias e CLS inicial."
+  "summary": "Alinha o shell inline e o fallback React do catalogo mobile para reduzir telas vazias e CLS inicial."
 }
