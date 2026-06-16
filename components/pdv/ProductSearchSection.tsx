@@ -4,226 +4,148 @@ import { Product } from '../../types/product';
 import { toast } from 'sonner';
 import { unitService } from '../../services/units';
 import { UnitStatus } from '../../utils/field-standards';
-import { normalizeCentValue } from '../../utils/promoPrice';
+import {
+    buildPdvSearchCards,
+    buildPdvUnitOption,
+    fromHydratedPdvSearchPayload,
+    type PdvSearchCard,
+    type PdvSerializedUnitOption,
+} from '../../services/pdvSerializedInventory';
+import { vpsApiService } from '../../services/vpsApiService';
 
 interface ProductSearchSectionProps {
+    customer?: unknown;
     onAddToCart: (product: Product, quantity: number, unitData?: { unitId: string; imei1?: string; imei2?: string; serial?: string }) => void;
 }
 
 type SearchMode = 'product' | 'imei';
 type ProductSearchOptions = { autoAddSingle?: boolean };
 
-const hasSerializedIdentity = (product: Product): boolean => {
-    const specs = (product as any).specs || {};
-    return Boolean(specs.imei1 || specs.imei_1 || specs.imei2 || specs.imei_2 || specs.serial || specs.serial_number);
-};
+function formatPrice(cents: number): string {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(cents || 0) / 100);
+}
 
-const getSerializedSpecs = (product: Product) => {
-    const specs = (product as any).specs || {};
-    return {
-        imei1: specs.imei1 || specs.imei_1 || undefined,
-        imei2: specs.imei2 || specs.imei_2 || undefined,
-        serial: specs.serial || specs.serial_number || undefined,
-    };
-};
-
-const getSerializedLookupValues = (product: Product, preferred?: string) => {
-    const specs = getSerializedSpecs(product);
-    return [preferred, specs.imei1, specs.imei2, specs.serial]
-        .map(value => String(value || '').trim())
-        .filter(Boolean)
-        .filter((value, index, values) => values.indexOf(value) === index);
-};
-
-const formatUnitIdentifierLine = (unit: any): string => [
-    unit.imei_1 && `IMEI 1: ${unit.imei_1}`,
-    unit.imei_2 && `IMEI 2: ${unit.imei_2}`,
-    unit.serial_number && `Serial: ${unit.serial_number}`,
-].filter(Boolean).join(' | ');
+function renderProductSpecs(product: Product) {
+    const specs = product.specs || {};
+    if (!specs.ram && !specs.storage && !specs.color) return null;
+    return (
+        <span className="text-slate-500 font-normal">
+            {[
+                specs.ram && specs.storage
+                    ? `, ${specs.ram}/${specs.storage}`
+                    : specs.ram
+                        ? `, ${specs.ram}`
+                        : specs.storage
+                            ? `, ${specs.storage}`
+                            : '',
+                specs.color ? ` - ${specs.color}` : '',
+            ].join('')}
+        </span>
+    );
+}
 
 export default function ProductSearchSection({ onAddToCart }: ProductSearchSectionProps) {
     const [mode, setMode] = useState<SearchMode>('product');
-
-    // ── Busca por Produto (modo original) ──────────────────────────────────────
     const [searchTerm, setSearchTerm] = useState('');
-    const [searchResults, setSearchResults] = useState<Product[]>([]);
+    const [searchCards, setSearchCards] = useState<PdvSearchCard[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [quantities, setQuantities] = useState<Record<string, number>>({});
-    const [skuStockMap, setSkuStockMap] = useState<Record<string, number>>({});
-    const [availableSerializedLines, setAvailableSerializedLines] = useState<Record<string, string[]>>({});
-    const isKnownSerializedProduct = (product: Product): boolean =>
-        hasSerializedIdentity(product) || Object.prototype.hasOwnProperty.call(availableSerializedLines, product.id);
+    const [selectedUnitByCardId, setSelectedUnitByCardId] = useState<Record<string, string>>({});
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
-    const getResultIdentifierLine = (product: Product): string => {
-        const serializedLines = availableSerializedLines[product.id];
-        if (serializedLines?.length) return serializedLines.join(' | ');
-        return `SKU: ${product.sku}`;
-    };
-
-    // ── Busca por IMEI / Serial ─────────────────────────────────────────────────
     const [imeiQuery, setImeiQuery] = useState('');
     const [isImeiSearching, setIsImeiSearching] = useState(false);
     const imeiInputRef = useRef<HTMLInputElement>(null);
 
-    // Foco automático no campo IMEI ao trocar de tab
     useEffect(() => {
         if (mode === 'imei') {
             setTimeout(() => imeiInputRef.current?.focus(), 50);
         }
     }, [mode]);
 
-    // Busca automática com debounce (modo produto)
     useEffect(() => {
         if (mode !== 'product') return;
         if (searchTerm.trim().length < 2) {
-            setSearchResults([]);
+            setSearchCards([]);
             return;
         }
         const timeoutId = setTimeout(() => handleSearch({ autoAddSingle: false }), 500);
         return () => clearTimeout(timeoutId);
     }, [searchTerm, mode]);
 
-    const addSerializedProductToCart = async (product: Product, preferredIdentifier?: string) => {
-        const specs = getSerializedSpecs(product);
-        const lookupValues = getSerializedLookupValues(product, preferredIdentifier);
-        let unit = null;
-
-        if (preferredIdentifier) {
-            for (const value of lookupValues) {
-                const matches = await unitService.searchByIdentifier(value);
-                if (matches.length > 0) {
-                    unit = matches[0];
-                    break;
-                }
-            }
-        } else {
-            const productUnits = await unitService.listByProduct(product.id);
-            unit = productUnits.find(candidate => candidate.status === UnitStatus.AVAILABLE) || null;
-        }
-
-        if (!unit) {
-            const productUnits = await unitService.listByProduct(product.id).catch(() => []);
-            const availableUnit = productUnits.find(candidate => candidate.status === UnitStatus.AVAILABLE);
-            if (availableUnit) {
-                unit = availableUnit;
-            } else if (productUnits.length > 0) {
-                toast.error('Nenhuma unidade disponivel para este produto');
-                return;
-            } else {
-                unit = await unitService.create({
-                    product_id: product.id,
-                    imei_1: specs.imei1,
-                    imei_2: specs.imei2,
-                    serial_number: specs.serial,
-                    condition: 'new',
-                    status: UnitStatus.AVAILABLE,
-                    cost_price: normalizeCentValue((product as any).price_cost),
-                    internal_notes: 'Unidade criada automaticamente pelo PDV a partir do cadastro legado do produto',
-                });
-            }
-        }
-
-        if (unit.status === UnitStatus.SOLD) {
-            toast.error('Unidade já vendida');
-            return;
-        }
-        if (unit.status === UnitStatus.RESERVED) {
-            toast.error('Unidade já reservada para outro pedido');
-            return;
-        }
-        if (unit.status === UnitStatus.RMA) {
-            toast.error('Unidade em processo de devolução (RMA)');
-            return;
-        }
-
-        onAddToCart(product, 1, {
-            unitId: unit.id,
-            imei1: unit.imei_1 || specs.imei1,
-            imei2: unit.imei_2 || specs.imei2,
-            serial: unit.serial_number || specs.serial,
-        });
-
-        toast.success(`✅ ${product.name} — IMEI: ${unit.imei_1 || specs.imei1 || unit.serial_number || specs.serial || preferredIdentifier || ''}`);
-        setImeiQuery('');
-        setSearchResults([]);
-        setSearchTerm('');
-        setTimeout(() => {
-            imeiInputRef.current?.focus();
-            imeiInputRef.current?.select();
-        }, 50);
+    const getSelectedUnit = (card: PdvSearchCard): PdvSerializedUnitOption | undefined => {
+        if (card.kind !== 'serialized-product') return undefined;
+        const selectedId = selectedUnitByCardId[card.id] || card.unitOptions[0]?.id;
+        return card.unitOptions.find(option => option.id === selectedId) || card.unitOptions[0];
     };
 
-    // ── Busca por produto (nome/SKU) ────────────────────────────────────────────
+    const addCardToCart = async (card: PdvSearchCard) => {
+        if (card.kind === 'serialized-product') {
+            const selectedUnit = getSelectedUnit(card);
+            if (!selectedUnit) {
+                toast.error('Selecione uma unidade disponivel');
+                return;
+            }
+
+            onAddToCart(card.product, 1, selectedUnit.unitData);
+            toast.success(`${card.product.name} adicionado ao carrinho`);
+            setImeiQuery('');
+            setSearchCards([]);
+            setSearchTerm('');
+            setTimeout(() => {
+                searchInputRef.current?.focus();
+                searchInputRef.current?.select();
+            }, 50);
+            return;
+        }
+
+        const quantity = quantities[card.id] || 1;
+        if (card.product.track_inventory && card.maxQuantity !== undefined && quantity > card.maxQuantity) {
+            toast.error(`Estoque insuficiente. Disponivel: ${card.maxQuantity}`);
+            return;
+        }
+
+        onAddToCart(card.product, quantity);
+        toast.success(`${card.product.name} adicionado ao carrinho`);
+        setQuantities(prev => ({ ...prev, [card.id]: 1 }));
+    };
+
     const handleSearch = async (options: ProductSearchOptions = {}) => {
         const term = searchTerm.trim();
-        if (term.length < 2) { setSearchResults([]); return; }
+        if (term.length < 2) {
+            setSearchCards([]);
+            return;
+        }
 
         setIsSearching(true);
         try {
-            const { searchProducts } = await import('../../services/productService');
-            const results = await searchProducts(term);
+            const hydrated = await vpsApiService.searchPdvProducts(term, 50);
+            let cards = fromHydratedPdvSearchPayload(hydrated || []);
 
-            const availableProducts = results.filter(product => {
-                if (!product.track_inventory) return true;
-                return product.stock_quantity !== undefined && product.stock_quantity > 0;
-            });
-
-            const skuMap: Record<string, number> = {};
-            for (const p of availableProducts) {
-                if (p.track_inventory && p.sku) {
-                    const specs = (p as any).specs;
-                    const isSerialized = specs?.imei1 || specs?.imei2 || specs?.serial;
-                    const key = isSerialized
-                        ? `${p.model_id}|${specs?.ram || ''}|${specs?.storage || ''}|${specs?.color || ''}`
-                        : p.sku;
-                    skuMap[key] = (skuMap[key] || 0) + 1;
-                    (p as any)._stockKey = key;
-                }
+            if (hydrated === null) {
+                const { searchProducts } = await import('../../services/productService');
+                const results = await searchProducts(term);
+                const availableProducts = results.filter(product => {
+                    if (!product.track_inventory) return true;
+                    return product.stock_quantity !== undefined && product.stock_quantity > 0;
+                });
+                cards = await buildPdvSearchCards(availableProducts, {
+                    listUnitsByProduct: unitService.listByProduct,
+                });
             }
 
-            const serializedLines: Record<string, string[]> = {};
-            await Promise.all(availableProducts
-                .filter(product => product.track_inventory || hasSerializedIdentity(product))
-                .map(async (product) => {
-                    try {
-                        const units = await unitService.listByProduct(product.id);
-                        const availableLines = units
-                            .filter(unit => unit.status === UnitStatus.AVAILABLE)
-                            .map(formatUnitIdentifierLine)
-                            .filter(Boolean);
-                        if (units.length > 0 || hasSerializedIdentity(product)) {
-                            serializedLines[product.id] = availableLines;
-                        }
-                    } catch {
-                        if (hasSerializedIdentity(product)) serializedLines[product.id] = [];
-                    }
-                }));
+            setSearchCards(cards);
 
-            setSearchResults(availableProducts);
-            setSkuStockMap(skuMap);
-            setAvailableSerializedLines(serializedLines);
+            const firstSelections: Record<string, string> = {};
+            for (const card of cards) {
+                if (card.kind === 'serialized-product' && card.unitOptions[0]) {
+                    firstSelections[card.id] = card.unitOptions[0].id;
+                }
+            }
+            setSelectedUnitByCardId(firstSelections);
 
-            // Se retornar exatamente 1 resultado, adiciona automaticamente ao carrinho
-            if (availableProducts.length === 1 && options.autoAddSingle === true) {
-                const singleProduct = availableProducts[0];
-                const quantity = quantities[singleProduct.id] || 1;
-                if (hasSerializedIdentity(singleProduct) || Object.prototype.hasOwnProperty.call(serializedLines, singleProduct.id)) {
-                    await addSerializedProductToCart(singleProduct, term);
-                    return;
-                }
-                if (singleProduct.track_inventory && singleProduct.stock_quantity !== undefined) {
-                    if (singleProduct.stock_quantity < quantity) {
-                        return;
-                    }
-                }
-                onAddToCart(singleProduct, quantity);
-                toast.success(`${singleProduct.name} adicionado ao carrinho`);
-                setSearchResults([]);
-                setSearchTerm('');
-                setTimeout(() => {
-                    searchInputRef.current?.focus();
-                    searchInputRef.current?.select();
-                }, 50);
+            if (cards.length === 1 && options.autoAddSingle === true) {
+                await addCardToCart(cards[0]);
             }
         } catch (error) {
             console.error('Erro ao buscar produtos:', error);
@@ -233,33 +155,19 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
         }
     };
 
-    const handleAddToCart = async (product: Product) => {
-        const quantity = quantities[product.id] || 1;
-        if (isKnownSerializedProduct(product)) {
-            await addSerializedProductToCart(product);
-            return;
-        }
-        if (product.track_inventory && product.stock_quantity !== undefined) {
-            if (product.stock_quantity < quantity) {
-                toast.error(`Estoque insuficiente. Disponível: ${product.stock_quantity}`);
-                return;
-            }
-        }
-        onAddToCart(product, quantity);
-        toast.success(`${product.name} adicionado ao carrinho`);
-        setQuantities(prev => ({ ...prev, [product.id]: 1 }));
+    const handleAddToCart = async (card: PdvSearchCard) => {
+        await addCardToCart(card);
     };
 
-    const updateQuantity = (productId: string, quantity: number) => {
+    const updateQuantity = (cardId: string, quantity: number) => {
         if (quantity < 1) return;
-        setQuantities(prev => ({ ...prev, [productId]: quantity }));
+        setQuantities(prev => ({ ...prev, [cardId]: quantity }));
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') handleSearch({ autoAddSingle: true });
     };
 
-    // ── Busca por IMEI / Serial ─────────────────────────────────────────────────
     const handleImeiSearch = async () => {
         const query = imeiQuery.trim();
         if (query.length < 5) {
@@ -272,30 +180,14 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
             const units = await unitService.searchByIdentifier(query);
 
             if (units.length === 0) {
-                const { getProductByImei } = await import('../../services/productService');
-                const fallbackProduct = await getProductByImei(query);
-
-                if (fallbackProduct && hasSerializedIdentity(fallbackProduct)) {
-                    await addSerializedProductToCart(fallbackProduct, query);
-                    return;
-                }
-
                 toast.error('Nenhuma unidade encontrada para este IMEI/serial');
                 return;
             }
 
             const unit = units[0];
 
-            if (unit.status === UnitStatus.SOLD) {
-                toast.error(`Unidade já vendida`);
-                return;
-            }
-            if (unit.status === UnitStatus.RESERVED) {
-                toast.error('Unidade já reservada para outro pedido');
-                return;
-            }
-            if (unit.status === UnitStatus.RMA) {
-                toast.error('Unidade em processo de devolução (RMA)');
+            if (unit.status !== UnitStatus.AVAILABLE) {
+                toast.error('Esta unidade nao esta disponivel para venda');
                 return;
             }
 
@@ -303,21 +195,15 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
             const product = await getProductById(unit.product_id);
 
             if (!product) {
-                toast.error('Produto vinculado a este IMEI não encontrado');
+                toast.error('Produto vinculado a este IMEI/serial nao encontrado');
                 return;
             }
 
-            onAddToCart(product, 1, {
-                unitId: unit.id,
-                imei1: unit.imei_1 || undefined,
-                imei2: unit.imei_2 || undefined,
-                serial: unit.serial_number || undefined,
-            });
-
-            toast.success(`✅ ${product.name} — IMEI: ${unit.imei_1 || unit.serial_number}`);
+            const selectedUnit = buildPdvUnitOption(unit);
+            onAddToCart(product, 1, selectedUnit.unitData);
+            toast.success(`${product.name} adicionado ao carrinho`);
             setImeiQuery('');
             setTimeout(() => imeiInputRef.current?.focus(), 100);
-
         } catch (error: any) {
             console.error('Erro na busca por IMEI:', error);
             toast.error(error.message || 'Erro ao buscar unidade');
@@ -330,7 +216,6 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
         if (e.key === 'Enter') handleImeiSearch();
     };
 
-    // ── Render ──────────────────────────────────────────────────────────────────
     return (
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
             <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
@@ -338,7 +223,6 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                 Buscar Produto
             </h3>
 
-            {/* Tabs de modo */}
             <div className="flex gap-1 p-1 bg-slate-100 rounded-lg mb-4">
                 <button
                     onClick={() => setMode('product')}
@@ -364,17 +248,17 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                 </button>
             </div>
 
-            {/* ── Modo: Busca por produto ─────────────────────────────────────── */}
             {mode === 'product' && (
                 <>
                     <div className="mb-4">
                         <div className="relative">
                             <input
+                                ref={searchInputRef}
                                 type="text"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 onKeyPress={handleKeyPress}
-                                placeholder="Nome, SKU, Código de Barras..."
+                                placeholder="Nome, SKU, Codigo de Barras..."
                                 className="w-full px-4 py-2 pl-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 autoFocus
                             />
@@ -388,28 +272,30 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                     </div>
 
                     <p className="text-xs text-slate-500 mb-4">
-                        💡 Digite pelo menos 2 caracteres para buscar automaticamente
+                        Digite pelo menos 2 caracteres para buscar automaticamente
                     </p>
 
                     <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {searchResults.length === 0 && !isSearching && (
+                        {searchCards.length === 0 && !isSearching && (
                             <div className="text-center py-8 text-slate-400">
                                 <Package size={48} className="mx-auto mb-2 opacity-50" />
                                 <p>Busque produtos para adicionar ao carrinho</p>
                             </div>
                         )}
 
-                        {searchResults.map((product) => {
-                            const quantity = quantities[product.id] || 1;
+                        {searchCards.map((card) => {
+                            const product = card.product;
+                            const quantity = card.kind === 'serialized-product' ? 1 : quantities[card.id] || 1;
                             const price = product.price_retail;
                             const isGift = product.is_gift || false;
+                            const isUnavailable = card.kind === 'stock-product' && product.track_inventory && card.maxQuantity === 0;
 
                             return (
                                 <div
-                                    key={product.id}
+                                    key={card.id}
                                     className={`p-4 border rounded-lg hover:bg-slate-50 transition-colors ${isGift ? 'border-green-300 bg-green-50' : 'border-slate-200'}`}
                                 >
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-start gap-4">
                                         <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden">
                                             {product.images && product.images.length > 0 ? (
                                                 <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover" />
@@ -418,82 +304,89 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                             )}
                                         </div>
 
-                                        <div className="flex-1">
+                                        <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2">
                                                 <h4 className="font-medium text-slate-800">
-                                                    {product.name}
-                                                    {(product.specs?.ram || product.specs?.storage || product.specs?.color) && (
-                                                        <span className="text-slate-500 font-normal">
-                                                            {[
-                                                                product.specs?.ram && product.specs?.storage
-                                                                    ? `, ${product.specs.ram}/${product.specs.storage}`
-                                                                    : product.specs?.ram
-                                                                        ? `, ${product.specs.ram}`
-                                                                        : product.specs?.storage
-                                                                            ? `, ${product.specs.storage}`
-                                                                            : '',
-                                                                product.specs?.color ? ` - ${product.specs.color}` : '',
-                                                            ].join('')}
-                                                        </span>
-                                                    )}
+                                                    {card.title}
+                                                    {renderProductSpecs(product)}
                                                 </h4>
                                                 {isGift && (
                                                     <span className="px-2 py-0.5 bg-green-600 text-white text-xs rounded font-medium">
-                                                        🎁 BRINDE
+                                                        BRINDE
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-slate-500">
-                                                {getResultIdentifierLine(product)}
-                                            </p>
+                                            <p className="text-sm text-slate-500">{card.subtitle}</p>
                                             <div className="flex items-center gap-4 mt-1">
                                                 <p className={`text-lg font-bold ${isGift ? 'text-green-700' : 'text-blue-700'}`}>
                                                     {isGift ? (
                                                         <>
                                                             <span className="line-through text-slate-400 text-sm mr-2">
-                                                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price / 100)}
+                                                                {formatPrice(price)}
                                                             </span>
                                                             R$ 0,00
                                                         </>
                                                     ) : (
-                                                        new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(price / 100)
+                                                        formatPrice(price)
                                                     )}
                                                 </p>
                                                 {product.track_inventory && (
-                                                    <p className={`text-sm ${product.stock_quantity === 0 ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
-                                                        {(() => {
-                                                            const key = (product as any)._stockKey || product.sku;
-                                                            const count = key ? skuStockMap[key] : undefined;
-                                                            return count !== undefined
-                                                                ? `${count} disponíveis`
-                                                                : `Estoque: ${product.stock_quantity || 0} un.`;
-                                                        })()}
+                                                    <p className={`text-sm ${isUnavailable ? 'text-red-600 font-semibold' : 'text-slate-500'}`}>
+                                                        {card.stockLabel}
                                                     </p>
                                                 )}
                                             </div>
+
+                                            {card.kind === 'serialized-product' && (
+                                                <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 p-2">
+                                                    <div className="mb-2 text-xs font-semibold text-blue-800">
+                                                        Escolha a unidade que sera vendida
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        {card.unitOptions.map((option) => (
+                                                            <label
+                                                                key={option.id}
+                                                                className="flex cursor-pointer items-start gap-2 rounded-md bg-white px-2 py-2 text-xs text-slate-700 hover:bg-blue-50"
+                                                            >
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`unit-${card.id}`}
+                                                                    checked={(selectedUnitByCardId[card.id] || card.unitOptions[0]?.id) === option.id}
+                                                                    onChange={() => setSelectedUnitByCardId(prev => ({ ...prev, [card.id]: option.id }))}
+                                                                    className="mt-0.5"
+                                                                />
+                                                                <span>
+                                                                    <span className="block font-mono font-semibold">{option.label}</span>
+                                                                    {option.detail && <span className="block font-mono text-slate-500">{option.detail}</span>}
+                                                                </span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="flex items-center gap-2">
                                             <input
                                                 type="number"
                                                 min="1"
-                                                max={product.track_inventory ? product.stock_quantity : undefined}
+                                                max={card.kind === 'serialized-product' ? 1 : card.maxQuantity}
                                                 value={quantity}
                                                 onChange={(e) => {
                                                     const newQty = parseInt(e.target.value) || 1;
-                                                    const maxQty = product.track_inventory ? (product.stock_quantity || 0) : Infinity;
-                                                    updateQuantity(product.id, Math.min(newQty, maxQty));
+                                                    const maxQty = card.kind === 'stock-product' ? card.maxQuantity ?? Infinity : 1;
+                                                    updateQuantity(card.id, Math.min(newQty, maxQty));
                                                 }}
-                                                className="w-16 px-2 py-1 border border-slate-300 rounded text-center"
-                                                disabled={product.track_inventory && product.stock_quantity === 0}
+                                                className="w-16 px-2 py-1 border border-slate-300 rounded text-center disabled:bg-slate-50"
+                                                disabled={card.kind === 'serialized-product' || isUnavailable}
                                             />
                                             <button
-                                                onClick={() => handleAddToCart(product)}
-                                                disabled={product.track_inventory && product.stock_quantity === 0}
+                                                onClick={() => handleAddToCart(card)}
+                                                disabled={isUnavailable}
                                                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed"
                                             >
                                                 <Plus size={18} />
-                                                {product.track_inventory && product.stock_quantity === 0 ? 'Sem Estoque' : 'Adicionar'}
+                                                {isUnavailable ? 'Sem Estoque' : 'Adicionar'}
                                             </button>
                                         </div>
                                     </div>
@@ -504,7 +397,6 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                 </>
             )}
 
-            {/* ── Modo: Busca por IMEI / Serial ──────────────────────────────────── */}
             {mode === 'imei' && (
                 <div>
                     <div className="relative mb-3">
@@ -540,11 +432,11 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                     </button>
 
                     <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                        <p className="text-xs text-blue-700 font-medium mb-1">📱 Como usar:</p>
+                        <p className="text-xs text-blue-700 font-medium mb-1">Como usar:</p>
                         <ul className="text-xs text-blue-600 space-y-0.5">
-                            <li>• Bipe o código de barras do IMEI 1, IMEI 2 ou Serial</li>
-                            <li>• O aparelho será adicionado automaticamente ao carrinho</li>
-                            <li>• Quantidade travada em 1 unidade por aparelho</li>
+                            <li>Bipe o codigo de barras do IMEI 1, IMEI 2 ou Serial</li>
+                            <li>O aparelho sera adicionado automaticamente ao carrinho</li>
+                            <li>Quantidade travada em 1 unidade por aparelho</li>
                         </ul>
                     </div>
                 </div>

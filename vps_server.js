@@ -17874,6 +17874,81 @@ function comboStockSql(productAlias = 'products') {
   ), 0) ELSE ${productAlias}.stock_quantity END)`;
 }
 
+fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+  const search = normalizeCatalogProductSearchText(req.query.search);
+
+  if (!search || search.length < 2) return [];
+
+  const searchLike = `%${search}%`;
+  const cols = `id, model_id, category_id, brand, name, sku, ean, alternative_eans, description,
+       price_cost, price_retail, price_reseller, price_wholesale,
+       price_promo, promo_start, promo_end,
+       is_combo, combo_discount_type, combo_discount_value,
+       ${comboStockSql('products')} AS stock_quantity,
+       track_inventory, is_gift,
+       warranty_type, warranty_template_id,
+       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
+       slug, origin, specs, custom_fields, kits,
+       offer_type, offer_parent_product_id, offer_visibility,
+       shopee_strategy, shopee_offer_status, shopee_offer_error,
+       exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
+
+  const [rows] = await pool.query(
+    `SELECT ${cols}
+       FROM products
+      WHERE status = 'active'
+        AND (is_parent = 0 OR is_parent IS NULL)
+        AND (
+          name COLLATE utf8mb4_unicode_ci LIKE ?
+          OR sku COLLATE utf8mb4_unicode_ci LIKE ?
+          OR ean COLLATE utf8mb4_unicode_ci LIKE ?
+          OR CAST(alternative_eans AS CHAR) COLLATE utf8mb4_unicode_ci LIKE ?
+          OR model_id COLLATE utf8mb4_unicode_ci LIKE ?
+          OR slug COLLATE utf8mb4_unicode_ci LIKE ?
+        )
+      ORDER BY name ASC
+      LIMIT ?`,
+    [searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, limit]
+  );
+
+  const products = rows.map(r => ({
+    ...r,
+    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+    custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+  }));
+
+  const productIds = products.map((product) => product.id).filter(Boolean);
+  const unitsByProduct = new Map();
+
+  if (productIds.length > 0) {
+    const placeholders = productIds.map(() => '?').join(', ');
+    const [units] = await pool.query(
+      `SELECT u.*
+         FROM units u
+        WHERE u.status = 'available'
+          AND u.product_id IN (${placeholders})
+        ORDER BY u.created_at ASC`,
+      productIds,
+    );
+
+    for (const unit of units) {
+      const list = unitsByProduct.get(unit.product_id) || [];
+      list.push(unit);
+      unitsByProduct.set(unit.product_id, list);
+    }
+  }
+
+  reply.header('Cache-Control', 'no-store');
+  return products.map((product) => ({
+    product,
+    available_units: unitsByProduct.get(product.id) || [],
+  }));
+});
+
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const limit  = Math.min(parseInt(req.query.limit)  || 500, 2000);
   const offset = parseInt(req.query.offset) || 0;

@@ -17,7 +17,7 @@ assert.match(
 
 assert.match(
   source,
-  /if \(availableProducts\.length === 1 && options\.autoAddSingle === true\)/,
+  /if \(cards\.length === 1 && options\.autoAddSingle === true\)/,
   'Single-result auto-add must be limited to explicit actions',
 );
 

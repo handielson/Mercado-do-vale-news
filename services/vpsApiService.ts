@@ -418,6 +418,13 @@ class VpsApiService {
     return result;
   }
 
+  async searchPdvProducts(search: string, limit: number = 50): Promise<Array<{ product: any; available_units: any[] }> | null> {
+    const qs = new URLSearchParams();
+    qs.set('search', search);
+    qs.set('limit', String(limit));
+    return this.fetchSafe<Array<{ product: any; available_units: any[] }>>(`/pdv/product-search?${qs.toString()}`, true);
+  }
+
   /** Atualiza o array de imagens de um produto pelo SKU (image bank sync).
    * Retorna o número de linhas afetadas. 0 = produto ainda não existe no MySQL VPS. */
   async updateProductImagesBySku(sku: string, images: string[]): Promise<number> {

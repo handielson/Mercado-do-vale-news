@@ -362,6 +362,14 @@ export default function PDVPage() {
         // Unidades serializadas (com IMEI) são sempre itens individuais — nunca agrupa
         const isSerialized = !!unitData;
 
+        if (unitData?.unitId) {
+            const alreadyInCart = cartItems.some((item) => item.serialized_unit?.unitId === unitData.unitId);
+            if (alreadyInCart) {
+                toast.error('Esta unidade ja esta no carrinho');
+                return;
+            }
+        }
+
         if (!isSerialized) {
             const existingItemIndex = cartItems.findIndex(item => item.product_id === product.id && !item.serialized_unit);
 

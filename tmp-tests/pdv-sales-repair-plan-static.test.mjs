@@ -13,9 +13,10 @@ assert.match(pdvPage, /isFinalizingRef\.current \|\| isFinalizing/, 'PDV finaliz
 assert.match(pdvPage, /isFinalizingRef\.current = true[\s\S]*setIsFinalizing\(true\)/, 'PDV finalize must lock before async sale creation');
 assert.match(pdvPage, /finally \{[\s\S]*isFinalizingRef\.current = false[\s\S]*setIsFinalizing\(false\)/, 'PDV finalize lock must be released in finally');
 
-assert.match(productSearch, /availableSerializedLines/, 'PDV product search must keep available serialized unit labels separate from legacy specs');
-assert.match(productSearch, /unitService\.listByProduct\(product\.id\)/, 'PDV product search must read units by product before rendering serialized identifiers');
-assert.match(productSearch, /unit\.status === UnitStatus\.AVAILABLE/, 'PDV product search must display only available serialized units');
+assert.match(productSearch, /fromHydratedPdvSearchPayload/, 'PDV product search must normalize hydrated product/unit payloads before rendering');
+assert.match(productSearch, /buildPdvSearchCards/, 'PDV product search must keep a fallback card builder for local product search results');
+assert.match(productSearch, /unitService\.listByProduct/, 'PDV fallback product search must read units by product before rendering serialized identifiers');
+assert.match(productSearch, /unit\.status !== UnitStatus\.AVAILABLE/, 'PDV IMEI search must reject unavailable serialized units');
 assert.doesNotMatch(productSearch, /\(product as any\)\.specs\?\.imei1[\s\S]*IMEI 1:/, 'PDV result row must not render legacy specs IMEI directly');
 
 assert.match(saleService, /export const updateSaleCostsAndProfit/, 'saleService must expose a sale-wide cost/profit recalculation action');
@@ -39,8 +40,8 @@ assert.match(cartShare, /Cores:/, 'budget sharing must show available colors on 
 assert.doesNotMatch(cartShare, /Opcoes disponiveis/, 'budget sharing must not nest variants under a mixed legacy block');
 assert.match(cartShare, /getSpecValue\(specs, \['storage', 'armazenamento', 'capacidade', 'memoria', 'memoria_interna', 'memory'\]\)/, 'budget sharing must support legacy storage aliases');
 
-assert.match(productSearch, /isKnownSerializedProduct/, 'PDV must treat products with available units as serialized even without legacy specs');
-assert.match(productSearch, /availableProducts[\s\S]*unitService\.listByProduct\(product\.id\)/, 'PDV product search must inspect product units while preparing results');
+assert.match(productSearch, /card\.kind === 'serialized-product'/, 'PDV must treat cards with available units as serialized even without legacy specs');
+assert.match(productSearch, /availableProducts[\s\S]*buildPdvSearchCards[\s\S]*unitService\.listByProduct/, 'PDV fallback search must inspect product units while preparing card results');
 assert.doesNotMatch(productSearch, /Sem unidade disponivel/, 'PDV product result rows must fall back to SKU instead of showing a dead serialized warning');
 
 console.log('pdv-sales repair plan static checks passed');
