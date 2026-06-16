@@ -469,7 +469,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         }, 0);
         const computedSaleTotal = Math.max(0, totals.total + (saleInput.delivery_cost_customer || 0) + customerFeeTotal - promotionalDiscount);
         const saleTotal = paymentCollectedTotal > 0 ? paymentCollectedTotal : computedSaleTotal;
-        const realProfit = saleTotal - totals.cost_total - paymentOperatorFeeTotal - (saleInput.delivery_total || 0);
+        const realProfit = saleTotal - customerFeeTotal - totals.cost_total - paymentOperatorFeeTotal - (saleInput.delivery_total || 0);
         const finalizationIssues: SaleFinalizationIssue[] = [];
         const recordFinalizationIssue = (step: string, error: unknown) => {
             const issue = normalizeFinalizationError(error, step);

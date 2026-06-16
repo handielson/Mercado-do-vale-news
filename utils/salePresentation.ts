@@ -103,9 +103,9 @@ export function buildSaleItemPresentation(
 
 export function buildPaymentPresentation(payment: PaymentMethod) {
     const installments = Math.max(1, Number(payment.installments) || 1);
-    const amount = moneyToCents(payment.amount);
     const totalWithFee = moneyToCents((payment as any).total_with_fee ?? (payment as any).total_with_fee_cents ?? payment.amount ?? 0);
     const feeAmount = moneyToCents((payment as any).fee_amount ?? (payment as any).fee_cents ?? 0);
+    const amount = getPaymentBaseAmount(payment, totalWithFee, feeAmount);
     const operatorFeeAmount = moneyToCents((payment as any).operator_fee_amount ?? (payment as any).operator_fee_cents ?? 0);
     const spreadAmount = Math.max(0, feeAmount - operatorFeeAmount);
     const installmentValue = installments > 1 ? Math.round(totalWithFee / installments) : 0;
@@ -157,6 +157,17 @@ export function buildPaymentPresentation(payment: PaymentMethod) {
     };
 }
 
+export function getPaymentBaseAmount(payment: PaymentMethod, knownTotalWithFee?: number, knownFeeAmount?: number): number {
+    const rawAmount = moneyToCents(payment.amount);
+    const totalWithFee = knownTotalWithFee ?? moneyToCents((payment as any).total_with_fee ?? (payment as any).total_with_fee_cents ?? payment.amount ?? 0);
+    const feeAmount = knownFeeAmount ?? moneyToCents((payment as any).fee_amount ?? (payment as any).fee_cents ?? 0);
+    const inferredBaseAmount = totalWithFee > 0 && feeAmount > 0 && rawAmount === totalWithFee
+        ? Math.max(0, totalWithFee - feeAmount)
+        : rawAmount;
+
+    return inferredBaseAmount > 0 ? inferredBaseAmount : totalWithFee;
+}
+
 export function getSaleCostTotal(sale: SaleWithItems, profitData?: SaleProfitData): number {
     if (profitData && Number.isFinite(Number(profitData.cost_total_cents))) {
         return moneyToCents(profitData.cost_total_cents);
@@ -174,7 +185,7 @@ export function getSaleCollectedTotal(sale: SaleWithItems, profitData?: SaleProf
     }
 
     const paymentTotal = (sale.payment_methods || []).reduce((sum, payment) => {
-        return sum + moneyToCents(payment.total_with_fee ?? payment.amount ?? 0);
+        return sum + getPaymentBaseAmount(payment);
     }, 0);
 
     return paymentTotal > 0 ? paymentTotal : moneyToCents(sale.total || 0);

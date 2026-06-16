@@ -1,30 +1,30 @@
 # Versao Atual
 
 ```text
-version: v1.1.41-pdv-receipt-warranty-summary
+version: v1.1.42-card-net-summary
 date: 2026-06-16
 status: published
-release_vps: /var/www/mdv-site/releases/20260616-103015-v1141-pdv-receipt-warranty-summary
+release_vps: /var/www/mdv-site/releases/20260616-105331-v1142-card-net-summary
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Inclui os dados do cliente no recibo gerado pelo modal de venda finalizada no PDV.
-- Fecha o modal de sucesso antes de abrir o termo de garantia, evitando que o termo fique escondido sem acao aparente.
-- Corrige o ajuste final de pagamento no cartao para manter separados valor base, taxa cobrada do cliente e taxa da operadora.
-- Recalcula o lucro real do resumo financeiro quando a venda tem custos detalhados de operadora.
-- Atualiza a guarda de regressao do PDV para cobrir recibo com cliente, termo de garantia visivel e resumo financeiro.
+- Corrige o resumo financeiro para usar o valor base da venda, abatendo do total do cartao o acrescimo cobrado do cliente.
+- Recupera vendas antigas em que `amount` foi gravado igual a `total_with_fee`, inferindo a base por `total_with_fee - fee_amount`.
+- Mantem o total passado no cartao visivel em formas de pagamento, mas calcula `Total Pago` e `Lucro Real` pela base liquida.
+- Corrige o lucro salvo em novas vendas para nao tratar o acrescimo do cliente como receita real.
+- Atualiza a guarda de regressao do PDV para impedir que o resumo volte a somar o total do cartao com taxa.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.41-pdv-receipt-warranty-summary` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.42-card-net-summary` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-16-v1.1.41-pdv-receipt-warranty-summary.md
+docs/versoes/2026-06-16-v1.1.42-card-net-summary.md
 ```
 
 ## Publicacao
 
-- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260616-103015-v1141-pdv-receipt-warranty-summary`.
+- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260616-105331-v1142-card-net-summary`.
 - Esta versao altera o frontend/admin de vendas/PDV e o arquivo publico de versao; publicar site.

@@ -58,6 +58,18 @@ assert.match(
 
 assert.match(
     salePresentation,
+    /const inferredBaseAmount = totalWithFee > 0 && feeAmount > 0 && rawAmount === totalWithFee\s*\?\s*Math\.max\(0, totalWithFee - feeAmount\)\s*:\s*rawAmount/,
+    'payment presentation must infer the card base amount by subtracting customer fee from bad legacy card totals'
+);
+
+assert.match(
+    salePresentation,
+    /return sum \+ getPaymentBaseAmount\(payment\)/,
+    'sale financial summary must sum base payment amounts instead of total card amounts with customer fees'
+);
+
+assert.match(
+    salePresentation,
     /getSaleCollectedTotal\(sale, profitData\)[\s\S]*- getSaleCostTotal\(sale, profitData\)[\s\S]*- operatorFeeTotal/,
     'sale financial summary must recompute real profit from collected total, item cost and operator fee'
 );
@@ -90,6 +102,12 @@ assert.match(
     saleService,
     /const promotionalDiscount = Math\.max\(0, saleInput\.promotional_discount \|\| 0\)/,
     'sale service must persist promotional/final adjustment discounts in sale totals'
+);
+
+assert.match(
+    saleService,
+    /const realProfit = saleTotal - customerFeeTotal - totals\.cost_total - paymentOperatorFeeTotal - \(saleInput\.delivery_total \|\| 0\)/,
+    'sale service must subtract customer card fee from the card total before calculating real profit'
 );
 
 assert.match(
