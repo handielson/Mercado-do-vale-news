@@ -51,6 +51,14 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
     const [quantities, setQuantities] = useState<Record<string, number>>({});
     const [skuStockMap, setSkuStockMap] = useState<Record<string, number>>({});
     const [availableSerializedLines, setAvailableSerializedLines] = useState<Record<string, string[]>>({});
+    const isKnownSerializedProduct = (product: Product): boolean =>
+        hasSerializedIdentity(product) || Object.prototype.hasOwnProperty.call(availableSerializedLines, product.id);
+
+    const getResultIdentifierLine = (product: Product): string => {
+        const serializedLines = availableSerializedLines[product.id];
+        if (serializedLines?.length) return serializedLines.join(' | ');
+        return `SKU: ${product.sku}`;
+    };
 
     // ── Busca por IMEI / Serial ─────────────────────────────────────────────────
     const [imeiQuery, setImeiQuery] = useState('');
@@ -175,16 +183,19 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
 
             const serializedLines: Record<string, string[]> = {};
             await Promise.all(availableProducts
-                .filter(hasSerializedIdentity)
+                .filter(product => product.track_inventory || hasSerializedIdentity(product))
                 .map(async (product) => {
                     try {
                         const units = await unitService.listByProduct(product.id);
-                        serializedLines[product.id] = units
+                        const availableLines = units
                             .filter(unit => unit.status === UnitStatus.AVAILABLE)
                             .map(formatUnitIdentifierLine)
                             .filter(Boolean);
+                        if (units.length > 0 || hasSerializedIdentity(product)) {
+                            serializedLines[product.id] = availableLines;
+                        }
                     } catch {
-                        serializedLines[product.id] = [];
+                        if (hasSerializedIdentity(product)) serializedLines[product.id] = [];
                     }
                 }));
 
@@ -196,7 +207,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
             if (availableProducts.length === 1 && options.autoAddSingle === true) {
                 const singleProduct = availableProducts[0];
                 const quantity = quantities[singleProduct.id] || 1;
-                if (hasSerializedIdentity(singleProduct)) {
+                if (hasSerializedIdentity(singleProduct) || Object.prototype.hasOwnProperty.call(serializedLines, singleProduct.id)) {
                     await addSerializedProductToCart(singleProduct, term);
                     return;
                 }
@@ -224,7 +235,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
 
     const handleAddToCart = async (product: Product) => {
         const quantity = quantities[product.id] || 1;
-        if (hasSerializedIdentity(product)) {
+        if (isKnownSerializedProduct(product)) {
             await addSerializedProductToCart(product);
             return;
         }
@@ -433,13 +444,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                                 )}
                                             </div>
                                             <p className="text-sm text-slate-500">
-                                                {hasSerializedIdentity(product) ? (
-                                                    availableSerializedLines[product.id]?.length
-                                                        ? availableSerializedLines[product.id].join(' | ')
-                                                        : 'Sem unidade disponivel'
-                                                ) : (
-                                                    `SKU: ${product.sku}`
-                                                )}
+                                                {getResultIdentifierLine(product)}
                                             </p>
                                             <div className="flex items-center gap-4 mt-1">
                                                 <p className={`text-lg font-bold ${isGift ? 'text-green-700' : 'text-blue-700'}`}>

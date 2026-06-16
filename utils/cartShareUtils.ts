@@ -20,6 +20,8 @@ type VariationSummary = Array<{ label: string; values: string[] }>;
 type BudgetVariantGroup = {
     key: string;
     label: string;
+    specLine: string;
+    name: string;
     price: number;
     colors: string[];
     products: any[];
@@ -130,6 +132,22 @@ function getBudgetVariantLabel(product: any): string {
     return [ram && `${ram} RAM`, storage].filter(Boolean).join(' / ') || 'Opcao disponivel';
 }
 
+function getBudgetVariantSpecLine(product: any): string {
+    const specs = product?.specs || {};
+    const ram = getSpecValue(specs, ['ram', 'memoria_ram']);
+    const storage = getSpecValue(specs, ['storage', 'armazenamento', 'capacidade', 'memoria', 'memoria_interna', 'memory']);
+    return [ram, storage].filter(Boolean).join('/') || 'Opcao disponivel';
+}
+
+function getBudgetVariantName(product: any): string {
+    const name = String(product?.model || product?.name || 'Produto').trim();
+    const specLine = getBudgetVariantSpecLine(product);
+    if (!specLine || specLine === 'Opcao disponivel') return name;
+    return name
+        .replace(new RegExp(`,?\\s*${specLine.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i'), '')
+        .trim() || name;
+}
+
 function getBudgetVariantColor(product: any): string {
     return getSpecValue(product?.specs || {}, ['color', 'cor', 'colour']);
 }
@@ -234,6 +252,8 @@ export async function fetchSiblingBudgetVariantGroups(product: any): Promise<Bud
             groups.set(key, {
                 key,
                 label: getBudgetVariantLabel(row),
+                specLine: getBudgetVariantSpecLine(row),
+                name: getBudgetVariantName(row),
                 price,
                 colors: color ? [color] : [],
                 products: [row],
@@ -272,84 +292,66 @@ export async function generateBudgetText(
     items: Array<{ product: any; unit_price: number; quantity: number }>
 ): Promise<string> {
     const lines: string[] = [
-        '📝 ORÇAMENTO DE PRODUTOS',
+        '📱 CATÁLOGO - SMARTPHONES',
         `📅 Data: ${formatDate()}`,
         '',
-        'ITENS:',
+        '━━━━━━━━━━━━━━━━━━━━━━',
+        '',
     ];
+
+    const categoryRows: Array<{
+        name: string;
+        specLine: string;
+        price: number;
+        quantity: number;
+        colors: string[];
+    }> = [];
 
     for (const item of items) {
         const { product, unit_price, quantity } = item;
-        const subtotal = unit_price * quantity;
 
-        // Installments (12x)
-        const plans = await calculateInstallments(subtotal, 12);
-        const plan12 = plans.find(p => p.installments === 12);
-        const pixPlan = plans[0]; // à vista
-
-        // Sibling variations
         const budgetVariants = await fetchSiblingBudgetVariantGroups(product);
-        const variations = budgetVariants.length > 1 ? [] : await fetchSiblingVariations(product);
+        if (budgetVariants.length > 0) {
+            for (const variant of budgetVariants) {
+                categoryRows.push({
+                    name: variant.name,
+                    specLine: variant.specLine,
+                    price: variant.price || unit_price,
+                    quantity: 1,
+                    colors: variant.colors,
+                });
+            }
+            continue;
+        }
 
-        // Product name + optional qty
-        const qtyLabel = quantity > 1 ? ` (${quantity}x)` : '';
-        lines.push(`* ${product.name}${qtyLabel}`);
-        lines.push(`  🔗 ${getProductUrl(product)}`);
-        lines.push(`  ${brl(pixPlan?.total ?? subtotal)} à vista`);
+        categoryRows.push({
+            name: getBudgetVariantName(product),
+            specLine: getBudgetVariantSpecLine(product),
+            price: unit_price,
+            quantity,
+            colors: [getBudgetVariantColor(product)].filter(Boolean),
+        });
+    }
 
+    for (let index = 0; index < categoryRows.length; index += 1) {
+        const row = categoryRows[index];
+        const total = row.price * row.quantity;
+        const plans = await calculateInstallments(total, 12);
+        const pixPlan = plans[0];
+        const plan12 = plans.find(p => p.installments === 12);
+        const qtyLabel = row.quantity > 1 ? ` (${row.quantity}x)` : '';
+
+        lines.push(`${index + 1}. ${row.name}${qtyLabel}`);
+        lines.push(`   📱 ${row.specLine}`);
+        lines.push(`   💰 ${brl(pixPlan?.total ?? total)} à vista no PIX`);
         if (plan12) {
-            lines.push(
-                `  💳 12x de ${brl(plan12.value)} (Total: ${brl(plan12.total)})`
-            );
+            lines.push(`   💳 Cartão: 12x de ${brl(plan12.value)} (total ${brl(plan12.total)})`);
         }
-
-        if (budgetVariants.length > 1) {
-            lines.push('  Opcoes disponiveis:');
-            for (let index = 0; index < budgetVariants.length; index += 1) {
-                const variant = budgetVariants[index];
-                const variantPlans = await calculateInstallments(variant.price || subtotal, 12);
-                const variantPix = variantPlans[0];
-                const variantPlan12 = variantPlans.find(p => p.installments === 12);
-                lines.push(`  ${index + 1}. ${variant.label}`);
-                lines.push(`     A vista: ${brl(variantPix?.total ?? variant.price)}`);
-                if (variantPlan12) {
-                    lines.push(`     12x de ${brl(variantPlan12.value)} (Total: ${brl(variantPlan12.total)})`);
-                }
-                if (variant.colors.length > 0) {
-                    lines.push(`     Cores: ${variant.colors.join(', ')}`);
-                }
-            }
-        }
-
-        for (const variation of variations) {
-            if (variation.values.length > 0) {
-                lines.push(`  ${variation.label} disponíveis: ${variation.values.join(', ')}`);
-            }
-        }
-
+        lines.push(`   🎨 Cores: ${row.colors.length > 0 ? row.colors.join(', ') : 'Consultar'}`);
         lines.push('');
     }
 
-    // Grand total (pix/à vista)
-    const grandTotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
-    if (items.length > 1) {
-        const grandPlans = await calculateInstallments(grandTotal, 12);
-        const grandPixPlan = grandPlans[0];
-        const grandPlan12 = grandPlans.find(p => p.installments === 12);
-
-        lines.push('---');
-        lines.push(`Total a vista: ${brl(grandPixPlan?.total ?? grandTotal)}`);
-
-        if (grandPlan12) {
-            lines.push(
-                `Total no cartao: 12x de ${brl(grandPlan12.value)} (Total: ${brl(grandPlan12.total)})`
-            );
-        }
-    }
-
-    lines.push(SITE_BASE);
-
-    return lines.join('\n');
+    return lines.join('\n').trim();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

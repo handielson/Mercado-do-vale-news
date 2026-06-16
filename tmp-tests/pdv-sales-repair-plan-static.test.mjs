@@ -32,7 +32,15 @@ assert.match(salesPage, /getSaleRealProfit/, 'sales dashboard must use real prof
 assert.doesNotMatch(salesPage, /sum, sale\) => sum \+ sale\.profit/, 'sales dashboard must not sum stale saved sale.profit');
 
 assert.match(cartShare, /fetchSiblingBudgetVariantGroups/, 'budget sharing must build grouped sibling variant rows');
-assert.match(cartShare, /Opcoes disponiveis/, 'budget sharing must list grouped variant options');
+assert.match(cartShare, /CAT.LOGO - SMARTPHONES/, 'budget sharing must use the same readable catalog header pattern');
+assert.match(cartShare, /categoryRows/, 'budget sharing must flatten each available variant as its own numbered catalog row');
+assert.match(cartShare, /Cart.o: 12x de/, 'budget sharing must show 12x card terms on each catalog row');
+assert.match(cartShare, /Cores:/, 'budget sharing must show available colors on each catalog row');
+assert.doesNotMatch(cartShare, /Opcoes disponiveis/, 'budget sharing must not nest variants under a mixed legacy block');
 assert.match(cartShare, /getSpecValue\(specs, \['storage', 'armazenamento', 'capacidade', 'memoria', 'memoria_interna', 'memory'\]\)/, 'budget sharing must support legacy storage aliases');
+
+assert.match(productSearch, /isKnownSerializedProduct/, 'PDV must treat products with available units as serialized even without legacy specs');
+assert.match(productSearch, /availableProducts[\s\S]*unitService\.listByProduct\(product\.id\)/, 'PDV product search must inspect product units while preparing results');
+assert.doesNotMatch(productSearch, /Sem unidade disponivel/, 'PDV product result rows must fall back to SKU instead of showing a dead serialized warning');
 
 console.log('pdv-sales repair plan static checks passed');
