@@ -91,8 +91,6 @@ for (const persistedSaleField of [
 for (const persistedItemField of [
   'product_sku',
   'unit_cost',
-  'discount',
-  'subtotal',
 ]) {
   assert.match(
     source,
@@ -100,6 +98,21 @@ for (const persistedItemField of [
     `serializeSaleItemRowForTable must persist ${persistedItemField} for admin sale details`,
   );
 }
+assert.match(
+  source,
+  /const\s+subtotal\s*=\s*moneyToCents\(item\.subtotal \|\| item\.total \|\| unitPrice \* quantity \|\| 0\);/,
+  'serializeSaleItemRowForTable must derive subtotal from item subtotal, total, or unit price',
+);
+assert.match(
+  source,
+  /subtotal,\s*\n\s*total,/,
+  'serializeSaleItemRowForTable must persist derived subtotal and total for admin sale details',
+);
+assert.match(
+  source,
+  /discount:\s*moneyToCents\(item\.discount \|\| 0\)/,
+  'serializeSaleItemRowForTable must persist normalized discount for admin sale details',
+);
 assert.match(
   createSaleBody,
   /discount:\s*discountTotal/,

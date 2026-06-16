@@ -3,6 +3,7 @@ import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical
 import { SaleWithItems, SaleFilters } from '../../../types/sale';
 import { getSales, cancelSale, refundSale } from '../../../services/saleService';
 import SaleDetailsModal from '../../../components/admin/sales/SaleDetailsModal';
+import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../../../utils/salePresentation';
 import toast from 'react-hot-toast';
 
 export default function SalesPage() {
@@ -182,9 +183,9 @@ export default function SalesPage() {
         });
 
         const total_sales = scopedSales.length;
-        const total_revenue = scopedSales.reduce((sum, sale) => sum + sale.total, 0);
-        const total_profit = scopedSales.reduce((sum, sale) => sum + sale.profit, 0);
-        const total_cost = scopedSales.reduce((sum, sale) => sum + sale.cost_total, 0);
+        const total_revenue = scopedSales.reduce((sum, sale) => sum + getSaleCollectedTotal(sale), 0);
+        const total_profit = scopedSales.reduce((sum, sale) => sum + getSaleRealProfit(sale), 0);
+        const total_cost = scopedSales.reduce((sum, sale) => sum + getSaleCostTotal(sale), 0);
         const average_ticket = total_sales > 0 ? total_revenue / total_sales : 0;
         const profit_margin = total_revenue > 0 ? (total_profit / total_revenue) * 100 : 0;
 
@@ -202,7 +203,7 @@ export default function SalesPage() {
     const periodStats = useMemo(() => {
         const calc = (from: Date) => {
             const s = sales.filter(v => v.status === 'completed' && new Date(v.created_at) >= from);
-            return { count: s.length, total: s.reduce((acc, v) => acc + v.total, 0) };
+            return { count: s.length, total: s.reduce((acc, v) => acc + getSaleCollectedTotal(v), 0) };
         };
         return {
             day: calc(startOf('day')),

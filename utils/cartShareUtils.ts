@@ -17,6 +17,13 @@ export function getProductUrl(product: any): string {
 }
 
 type VariationSummary = Array<{ label: string; values: string[] }>;
+type BudgetVariantGroup = {
+    key: string;
+    label: string;
+    price: number;
+    colors: string[];
+    products: any[];
+};
 
 const VARIATION_LABELS: Record<string, string> = {
     color: 'Cores',
@@ -100,6 +107,33 @@ function formatSpecValue(value: unknown): string | null {
     return formatted;
 }
 
+function getSpecValue(specs: Record<string, unknown> | undefined, keys: string[]): string {
+    for (const key of keys) {
+        const value = formatSpecValue(specs?.[key]);
+        if (value) return value;
+    }
+    return '';
+}
+
+function getProductBudgetGroupKey(product: any): string {
+    const specs = product?.specs || {};
+    const ram = getSpecValue(specs, ['ram', 'memoria_ram']);
+    const storage = getSpecValue(specs, ['storage', 'armazenamento', 'capacidade', 'memoria', 'memoria_interna', 'memory']);
+    const base = product?.model_id || product?.model || product?.name || product?.id || 'produto';
+    return [base, ram, storage].map(value => String(value || '').toLowerCase().trim()).join('|');
+}
+
+function getBudgetVariantLabel(product: any): string {
+    const specs = product?.specs || {};
+    const ram = getSpecValue(specs, ['ram', 'memoria_ram']);
+    const storage = getSpecValue(specs, ['storage', 'armazenamento', 'capacidade', 'memoria', 'memoria_interna', 'memory']);
+    return [ram && `${ram} RAM`, storage].filter(Boolean).join(' / ') || 'Opcao disponivel';
+}
+
+function getBudgetVariantColor(product: any): string {
+    return getSpecValue(product?.specs || {}, ['color', 'cor', 'colour']);
+}
+
 function buildVariationSummary(rows: Array<{ specs?: Record<string, unknown> }>): VariationSummary {
     const valuesByKey = new Map<string, { originalKey: string; values: Set<string> }>();
 
@@ -168,6 +202,52 @@ export async function fetchSiblingVariations(product: any): Promise<VariationSum
     }
 }
 
+export async function fetchSiblingBudgetVariantGroups(product: any): Promise<BudgetVariantGroup[]> {
+    const modelId = product.model_id;
+    const rows = modelId
+        ? await vpsApiService.getProducts({
+            model_id: modelId,
+            status: 'active',
+            limit: 500,
+            compact: true,
+            noCache: true,
+        }).catch(() => null)
+        : null;
+
+    const candidates = (rows && rows.length > 0 ? rows : [product]).filter((row: any) => {
+        if (row?.offer_type && row?.offer_visibility === 'hidden') return false;
+        if (row?.track_inventory === false) return true;
+        const stock = row?.stock_quantity ?? row?.stock ?? row?.available_stock;
+        return Number(stock || 0) > 0;
+    });
+
+    const currentBaseKey = getProductBudgetGroupKey(product).split('|')[0];
+    const groups = new Map<string, BudgetVariantGroup>();
+
+    for (const row of candidates) {
+        if (getProductBudgetGroupKey(row).split('|')[0] !== currentBaseKey) continue;
+        const key = getProductBudgetGroupKey(row);
+        const price = Number(row.price_retail ?? row.price ?? product.price_retail ?? 0) || 0;
+        const color = getBudgetVariantColor(row);
+        const existing = groups.get(key);
+        if (!existing) {
+            groups.set(key, {
+                key,
+                label: getBudgetVariantLabel(row),
+                price,
+                colors: color ? [color] : [],
+                products: [row],
+            });
+            continue;
+        }
+        existing.products.push(row);
+        if (price > 0 && (existing.price <= 0 || price < existing.price)) existing.price = price;
+        if (color && !existing.colors.includes(color)) existing.colors.push(color);
+    }
+
+    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+}
+
 /** Fetch distinct colors of sibling products (same model_id) */
 export async function fetchSiblingColors(product: any): Promise<string[]> {
     const variations = await fetchSiblingVariations(product);
@@ -208,7 +288,8 @@ export async function generateBudgetText(
         const pixPlan = plans[0]; // à vista
 
         // Sibling variations
-        const variations = await fetchSiblingVariations(product);
+        const budgetVariants = await fetchSiblingBudgetVariantGroups(product);
+        const variations = budgetVariants.length > 1 ? [] : await fetchSiblingVariations(product);
 
         // Product name + optional qty
         const qtyLabel = quantity > 1 ? ` (${quantity}x)` : '';
@@ -220,6 +301,24 @@ export async function generateBudgetText(
             lines.push(
                 `  💳 12x de ${brl(plan12.value)} (Total: ${brl(plan12.total)})`
             );
+        }
+
+        if (budgetVariants.length > 1) {
+            lines.push('  Opcoes disponiveis:');
+            for (let index = 0; index < budgetVariants.length; index += 1) {
+                const variant = budgetVariants[index];
+                const variantPlans = await calculateInstallments(variant.price || subtotal, 12);
+                const variantPix = variantPlans[0];
+                const variantPlan12 = variantPlans.find(p => p.installments === 12);
+                lines.push(`  ${index + 1}. ${variant.label}`);
+                lines.push(`     A vista: ${brl(variantPix?.total ?? variant.price)}`);
+                if (variantPlan12) {
+                    lines.push(`     12x de ${brl(variantPlan12.value)} (Total: ${brl(variantPlan12.total)})`);
+                }
+                if (variant.colors.length > 0) {
+                    lines.push(`     Cores: ${variant.colors.join(', ')}`);
+                }
+            }
         }
 
         for (const variation of variations) {

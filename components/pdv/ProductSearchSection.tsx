@@ -35,6 +35,12 @@ const getSerializedLookupValues = (product: Product, preferred?: string) => {
         .filter((value, index, values) => values.indexOf(value) === index);
 };
 
+const formatUnitIdentifierLine = (unit: any): string => [
+    unit.imei_1 && `IMEI 1: ${unit.imei_1}`,
+    unit.imei_2 && `IMEI 2: ${unit.imei_2}`,
+    unit.serial_number && `Serial: ${unit.serial_number}`,
+].filter(Boolean).join(' | ');
+
 export default function ProductSearchSection({ onAddToCart }: ProductSearchSectionProps) {
     const [mode, setMode] = useState<SearchMode>('product');
 
@@ -44,6 +50,7 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
     const [isSearching, setIsSearching] = useState(false);
     const [quantities, setQuantities] = useState<Record<string, number>>({});
     const [skuStockMap, setSkuStockMap] = useState<Record<string, number>>({});
+    const [availableSerializedLines, setAvailableSerializedLines] = useState<Record<string, string[]>>({});
 
     // ── Busca por IMEI / Serial ─────────────────────────────────────────────────
     const [imeiQuery, setImeiQuery] = useState('');
@@ -73,25 +80,39 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
         const lookupValues = getSerializedLookupValues(product, preferredIdentifier);
         let unit = null;
 
-        for (const value of lookupValues) {
-            const matches = await unitService.searchByIdentifier(value);
-            if (matches.length > 0) {
-                unit = matches[0];
-                break;
+        if (preferredIdentifier) {
+            for (const value of lookupValues) {
+                const matches = await unitService.searchByIdentifier(value);
+                if (matches.length > 0) {
+                    unit = matches[0];
+                    break;
+                }
             }
+        } else {
+            const productUnits = await unitService.listByProduct(product.id);
+            unit = productUnits.find(candidate => candidate.status === UnitStatus.AVAILABLE) || null;
         }
 
         if (!unit) {
-            unit = await unitService.create({
-                product_id: product.id,
-                imei_1: specs.imei1,
-                imei_2: specs.imei2,
-                serial_number: specs.serial,
-                condition: 'new',
-                status: UnitStatus.AVAILABLE,
-                cost_price: normalizeCentValue((product as any).price_cost),
-                internal_notes: 'Unidade criada automaticamente pelo PDV a partir do cadastro legado do produto',
-            });
+            const productUnits = await unitService.listByProduct(product.id).catch(() => []);
+            const availableUnit = productUnits.find(candidate => candidate.status === UnitStatus.AVAILABLE);
+            if (availableUnit) {
+                unit = availableUnit;
+            } else if (productUnits.length > 0) {
+                toast.error('Nenhuma unidade disponivel para este produto');
+                return;
+            } else {
+                unit = await unitService.create({
+                    product_id: product.id,
+                    imei_1: specs.imei1,
+                    imei_2: specs.imei2,
+                    serial_number: specs.serial,
+                    condition: 'new',
+                    status: UnitStatus.AVAILABLE,
+                    cost_price: normalizeCentValue((product as any).price_cost),
+                    internal_notes: 'Unidade criada automaticamente pelo PDV a partir do cadastro legado do produto',
+                });
+            }
         }
 
         if (unit.status === UnitStatus.SOLD) {
@@ -152,8 +173,24 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                 }
             }
 
+            const serializedLines: Record<string, string[]> = {};
+            await Promise.all(availableProducts
+                .filter(hasSerializedIdentity)
+                .map(async (product) => {
+                    try {
+                        const units = await unitService.listByProduct(product.id);
+                        serializedLines[product.id] = units
+                            .filter(unit => unit.status === UnitStatus.AVAILABLE)
+                            .map(formatUnitIdentifierLine)
+                            .filter(Boolean);
+                    } catch {
+                        serializedLines[product.id] = [];
+                    }
+                }));
+
             setSearchResults(availableProducts);
             setSkuStockMap(skuMap);
+            setAvailableSerializedLines(serializedLines);
 
             // Se retornar exatamente 1 resultado, adiciona automaticamente ao carrinho
             if (availableProducts.length === 1 && options.autoAddSingle === true) {
@@ -396,12 +433,10 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                                 )}
                                             </div>
                                             <p className="text-sm text-slate-500">
-                                                {((product as any).specs?.imei1 || (product as any).specs?.imei2 || (product as any).specs?.serial) ? (
-                                                    [
-                                                        (product as any).specs?.imei1 && `IMEI 1: ${(product as any).specs.imei1}`,
-                                                        (product as any).specs?.imei2 && `IMEI 2: ${(product as any).specs.imei2}`,
-                                                        (product as any).specs?.serial && `Serial: ${(product as any).specs.serial}`,
-                                                    ].filter(Boolean).join(' | ')
+                                                {hasSerializedIdentity(product) ? (
+                                                    availableSerializedLines[product.id]?.length
+                                                        ? availableSerializedLines[product.id].join(' | ')
+                                                        : 'Sem unidade disponivel'
                                                 ) : (
                                                     `SKU: ${product.sku}`
                                                 )}

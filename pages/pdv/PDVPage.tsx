@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, ArrowLeft, Ticket, X as XIcon, Printer, FileText, User, CheckCircle2, RotateCcw, Copy, Download, AlertTriangle } from 'lucide-react';
 import { Product } from '../../types/product';
@@ -204,6 +204,7 @@ export default function PDVPage() {
     // Estado dos pagamentos
     const [payments, setPayments] = useState<PaymentMethod[]>([]);
     const [isFinalizing, setIsFinalizing] = useState(false);
+    const isFinalizingRef = useRef(false);
     const [finalizeSteps, setFinalizeSteps] = useState<FinalizeStep[]>([]);
     const [activeFinalizationLog, setActiveFinalizationLog] = useState<PdvSaleFinalizationLog | null>(null);
     const [pdvPixPayment, setPdvPixPayment] = useState<PdvPixPayment | null>(null);
@@ -839,6 +840,8 @@ export default function PDVPage() {
 
     // Finalizar venda
     const handleFinalizeSale = async () => {
+        if (isFinalizingRef.current || isFinalizing) return;
+
         if (pixPaymentPending) {
             toast.error('Aguarde o Pix ser aprovado antes de finalizar a venda');
             return;
@@ -854,6 +857,7 @@ export default function PDVPage() {
             return;
         }
 
+        isFinalizingRef.current = true;
         setIsFinalizing(true);
         const initialFinalizeSteps: FinalizeStep[] = [
             { id: 'validate', label: 'Validando venda', status: 'saving' },
@@ -1065,6 +1069,7 @@ export default function PDVPage() {
             setFinalizeSteps((current) => current.map((step) => step.status === 'saving' ? { ...step, status: 'error', detail, debug } : step));
             toast.error('Erro ao finalizar venda. Verifique os dados e tente novamente.');
         } finally {
+            isFinalizingRef.current = false;
             setIsFinalizing(false);
         }
     };

@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.44-pdv-profit-and-price-input",
+  "version": "v1.1.45-pdv-sales-repair-global",
   "date": "2026-06-16",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260616-110247-v1144-pdv-profit-and-price-input",
+  "release_vps": "/var/www/mdv-site/releases/20260616-151404-v1145-pdv-sales-repair-global",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Corrige digitacao do valor unitario no PDV e calcula lucro pelo valor total recebido no cartao."
+  "summary": "Corrige pacote global de PDV e vendas: duplicidade, IMEI disponivel, lucro real, historico legado, custos e orcamento."
 }

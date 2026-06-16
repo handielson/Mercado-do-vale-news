@@ -52,8 +52,8 @@ assert.match(
 
 assert.match(
     salePresentation,
-    /const hasDetailedPaymentCosts = payments\.some/,
-    'sale financial summary must detect detailed payment operator costs'
+    /const operatorFeeTotal = payments\.reduce/,
+    'sale financial summary must subtract operator costs for every sale calculation'
 );
 
 assert.match(
@@ -70,8 +70,8 @@ assert.match(
 
 assert.match(
     salePresentation,
-    /getSaleCollectedTotal\(sale, profitData\)[\s\S]*- getSaleCostTotal\(sale, profitData\)[\s\S]*- operatorFeeTotal/,
-    'sale financial summary must recompute real profit from collected total, item cost and operator fee'
+    /getSaleCollectedTotal\(sale, profitData\)[\s\S]*- getSaleCostTotal\(sale, profitData\)[\s\S]*- operatorFeeTotal[\s\S]*- moneyToCents\(\(sale as any\)\.delivery_total \|\| 0\)/,
+    'sale financial summary must recompute real profit from collected total, item cost, operator fee and delivery payout'
 );
 
 assert.match(

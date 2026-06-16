@@ -39,4 +39,22 @@ assert.doesNotMatch(
   'SalesPage must not fetch a separate summary that can race with the filtered sales list',
 );
 
+assert.match(
+  source,
+  /getSaleCollectedTotal/,
+  'SalesPage revenue cards must use the same collected-total helper as sale details',
+);
+
+assert.match(
+  source,
+  /getSaleRealProfit/,
+  'SalesPage profit cards must use the same real-profit helper as sale details',
+);
+
+assert.doesNotMatch(
+  source,
+  /sum, sale\) => sum \+ sale\.profit/,
+  'SalesPage summary must not add stale persisted sale.profit values',
+);
+
 console.log('sales summary date filters static checks passed');

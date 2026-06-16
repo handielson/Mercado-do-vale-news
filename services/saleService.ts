@@ -24,6 +24,7 @@ import { vpsApiService } from './vpsApiService';
 import { vpsClient } from './vpsClient';
 import { deliveryCreditService } from './deliveryCreditService';
 import { moneyReaisToCents, moneyToCents } from '../utils/money';
+import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../utils/salePresentation';
 
 const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Promise<void> => {
     if (!item.product_id) return;
@@ -187,17 +188,22 @@ function serializeSaleRowForTable<T extends Record<string, unknown>>(row: T): Re
 }
 
 function serializeSaleItemRowForTable(item: SaleItem, saleId: string): Record<string, unknown> {
+    const quantity = Number(item.quantity) || 1;
+    const unitPrice = moneyToCents(item.unit_price || 0);
+    const subtotal = moneyToCents(item.subtotal || item.total || unitPrice * quantity || 0);
+    const total = moneyToCents(item.total || subtotal || 0);
+
     return {
         sale_id: saleId,
         product_id: item.product_id || null,
         product_name: item.product_name || null,
         product_sku: item.product_sku || null,
-        quantity: item.quantity || 1,
-        unit_price: item.unit_price || 0,
-        unit_cost: item.unit_cost || 0,
-        discount: item.discount || 0,
-        subtotal: item.subtotal || 0,
-        total: item.total || 0,
+        quantity,
+        unit_price: unitPrice,
+        unit_cost: moneyToCents(item.unit_cost || 0),
+        discount: moneyToCents(item.discount || 0),
+        subtotal,
+        total,
         warranty_months: item.warranty_months || 0,
         imei: item.serialized_unit?.imei1 || item.serialized_unit?.serial || null,
         serialized_unit_id: item.serialized_unit?.unitId || null,
@@ -330,8 +336,13 @@ function normalizeSaleItemMoney(value: unknown, saleRow?: any): number {
 
 function normalizeSaleItemRow(row: any, saleRow?: any): SaleItem {
     const quantity = Number(row.quantity) || 0;
-    const unitPrice = normalizeSaleItemMoney(row.unit_price, saleRow);
-    const total = row.total == null ? unitPrice * quantity : normalizeSaleItemMoney(row.total, saleRow);
+    const rawUnitPrice = normalizeSaleItemMoney(row.unit_price, saleRow);
+    const rawTotal = row.total == null ? 0 : normalizeSaleItemMoney(row.total, saleRow);
+    const unitPrice = rawUnitPrice > 0
+        ? rawUnitPrice
+        : (quantity > 0 && rawTotal > 0 ? Math.round(rawTotal / quantity) : 0);
+    const total = rawTotal > 0 ? rawTotal : unitPrice * quantity;
+    const rawSubtotal = row.subtotal == null ? 0 : normalizeSaleItemMoney(row.subtotal, saleRow);
 
     return {
         ...row,
@@ -339,10 +350,17 @@ function normalizeSaleItemRow(row: any, saleRow?: any): SaleItem {
         unit_price: unitPrice,
         unit_cost: normalizeSaleItemMoney(row.unit_cost, saleRow),
         discount: normalizeSaleItemMoney(row.discount, saleRow),
-        subtotal: row.subtotal == null ? total : normalizeSaleItemMoney(row.subtotal, saleRow),
+        subtotal: rawSubtotal > 0 ? rawSubtotal : total,
         total,
         is_gift: row.is_gift === true || row.is_gift === 1,
     } as SaleItem;
+}
+
+function calculateSaleProfitFromCurrentData(sale: SaleWithItems): { total_cost: number; profit: number } {
+    return {
+        total_cost: getSaleCostTotal(sale),
+        profit: getSaleRealProfit(sale),
+    };
 }
 
 async function loadTableRows<T>(tableName: string): Promise<T[]> {
@@ -749,6 +767,65 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
     }
 };
 
+export const updateSaleCostsAndProfit = async (saleId: string): Promise<SaleWithItems> => {
+    const sale = await loadSaleWithItemsById(saleId);
+    if (!sale) throw new Error('Venda nao encontrada');
+
+    const productIds = [...new Set((sale.items || []).map(item => String(item.product_id || '')).filter(Boolean))];
+    const serializedUnitIds = [...new Set((sale.items || []).map(item => String((item as any).serialized_unit_id || (item as any).serialized_unit?.unitId || '')).filter(Boolean))];
+
+    const [products, units] = await Promise.all([
+        productIds.length ? vpsApiService.getProductsByIds(productIds) : Promise.resolve([]),
+        serializedUnitIds.length ? unitService.listByIds(serializedUnitIds) : Promise.resolve([]),
+    ]);
+
+    const productCostById = new Map((products || []).map((product: any) => [
+        String(product.id || ''),
+        moneyToCents(product.price_cost || 0),
+    ]));
+    const unitCostById = new Map((units || []).map((unit: any) => [
+        String(unit.id || ''),
+        moneyToCents(unit.cost_price || 0),
+    ]));
+
+    const updatedItems = (sale.items || []).map((item) => {
+        const serializedUnitId = String((item as any).serialized_unit_id || (item as any).serialized_unit?.unitId || '');
+        const currentCost = moneyToCents(item.unit_cost || 0);
+        const unitCost = serializedUnitId ? unitCostById.get(serializedUnitId) || 0 : 0;
+        const productCost = productCostById.get(String(item.product_id || '')) || 0;
+        return {
+            ...item,
+            unit_cost: unitCost > 0 ? unitCost : productCost > 0 ? productCost : currentCost,
+        } as SaleItem;
+    });
+
+    for (const item of updatedItems) {
+        const itemId = String((item as any).id || '');
+        if (!itemId) continue;
+        await vpsClient.patch<any>(
+            `/table-data/sale_items/${encodeURIComponent(itemId)}?pk=id`,
+            { unit_cost: item.unit_cost }
+        );
+    }
+
+    const recalculatedSale = {
+        ...sale,
+        items: updatedItems,
+    } as SaleWithItems;
+    const totals = calculateSaleProfitFromCurrentData(recalculatedSale);
+
+    await patchSale(sale.id, {
+        cost_total: totals.total_cost,
+        profit: totals.profit,
+    });
+
+    return {
+        ...recalculatedSale,
+        cost_total: totals.total_cost,
+        profit: totals.profit,
+    };
+};
+
 /**
  * Cancel a sale
  */
@@ -834,9 +911,9 @@ export const getSalesSummary = async (filters?: SaleFilters): Promise<SaleSummar
         }
 
         const total_sales = sales.length;
-        const total_revenue = sales.reduce((sum, sale) => sum + sale.total, 0);
-        const total_profit = sales.reduce((sum, sale) => sum + sale.profit, 0);
-        const total_cost = sales.reduce((sum, sale) => sum + sale.cost_total, 0);
+        const total_revenue = sales.reduce((sum, sale) => sum + getSaleCollectedTotal(sale as SaleWithItems), 0);
+        const total_profit = sales.reduce((sum, sale) => sum + getSaleRealProfit(sale as SaleWithItems), 0);
+        const total_cost = sales.reduce((sum, sale) => sum + getSaleCostTotal(sale as SaleWithItems), 0);
         const average_ticket = total_revenue / total_sales;
         const profit_margin = total_revenue > 0 ? (total_profit / total_revenue) * 100 : 0;
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ShoppingBag, X, Calendar, User, UserCheck, Package, DollarSign, CreditCard, Banknote, Truck, AlertCircle, RefreshCw, FileText, Receipt, ExternalLink, Copy, Download } from 'lucide-react';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
 import { SaleWithItems } from '../../../types/sale';
-import { cancelSale, refundSale, deleteSale, patchSale } from '../../../services/saleService';
+import { cancelSale, refundSale, deleteSale, patchSale, updateSaleCostsAndProfit } from '../../../services/saleService';
 import { toast } from 'sonner';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { replaceWarrantyTags, applyWarrantyDisplayFlags, renderWarrantyBothCopies, getWarrantyDeclaration, formatWarrantyDate, formatWarrantyPhone, formatWarrantyCpfCnpj } from '../../../utils/warrantyTagReplacement';
@@ -47,6 +47,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     const [isPrintingWarranty, setIsPrintingWarranty] = useState(false);
     const [isPrintingReceipt, setIsPrintingReceipt] = useState(false);
     const [isPrintingAll, setIsPrintingAll] = useState(false);
+    const [isUpdatingCosts, setIsUpdatingCosts] = useState(false);
     // Map keyed por product_id (specs gerais) e por sale_item.id (IMEI da unit serializada).
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
 
@@ -466,6 +467,37 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
             await Promise.all([handleReprintWarranty(), handlePrintReceipt()]);
         } finally {
             setIsPrintingAll(false);
+        }
+    };
+
+    const handleUpdateCostsAndProfit = async () => {
+        if (!sale) return;
+        setIsUpdatingCosts(true);
+        try {
+            const updated = await updateSaleCostsAndProfit(sale.id);
+            setRealProfit({
+                sale_id: updated.id,
+                total_cents: getSaleCollectedTotal(updated),
+                cost_total_cents: updated.cost_total,
+                profit_cents: updated.profit,
+                items: updated.items.map((item: any) => ({
+                    sale_item_id: item.id,
+                    product_id: item.product_id,
+                    product_name: item.product_name,
+                    sku: item.product_sku,
+                    quantity: item.quantity,
+                    unit_price: item.unit_price,
+                    unit_cost: item.unit_cost,
+                    item_profit: Number(item.total || 0) - (Number(item.unit_cost || 0) * Number(item.quantity || 1)),
+                })),
+            });
+            toast.success('Custos e lucro atualizados');
+            onStatusChange();
+        } catch (error: any) {
+            console.error('Erro ao atualizar custos/lucro:', error);
+            toast.error(error?.message || 'Nao foi possivel atualizar custos e lucro');
+        } finally {
+            setIsUpdatingCosts(false);
         }
     };
 
@@ -1123,6 +1155,15 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                     ? <RefreshCw size={16} className="animate-spin" />
                                     : <Receipt size={16} />}
                                 <span className="text-sm">Recibo</span>
+                            </button>
+                            <button
+                                onClick={handleUpdateCostsAndProfit}
+                                disabled={isUpdatingCosts}
+                                title="Atualizar custos e lucro desta venda sem alterar data ou pedido"
+                                className="px-3 py-2 bg-emerald-50 text-emerald-700 font-medium rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50 flex items-center gap-2 border border-emerald-200"
+                            >
+                                <RefreshCw size={16} className={isUpdatingCosts ? 'animate-spin' : ''} />
+                                <span className="text-sm">Atualizar Custos/Lucro</span>
                             </button>
                         </div>
 
