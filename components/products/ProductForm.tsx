@@ -842,6 +842,68 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         return byBling?.[0] || null;
     };
 
+    const findLocalProductByBlingIdForBlingLink = async (blingProductId: number) => {
+        const byBling = await vpsApiService.getProducts({
+            bling_id: String(blingProductId),
+            status: 'all',
+            limit: 1,
+            noCache: true,
+        }).catch(() => null);
+        return byBling?.[0] || null;
+    };
+
+    const buildBlingLinkFromLocalProduct = async (blingProductId: number, localProduct: any, parentId?: number) => {
+        const localProductEans = getLocalProductEansForBlingLink(localProduct);
+        const localProductModelName = await getLocalProductModelNameForBlingLink(localProduct);
+
+        return {
+            id: blingProductId,
+            parentId,
+            ean: localProductEans[0] || null,
+            eans: localProductEans,
+            model_id: localProduct?.model_id || null,
+            model: localProductModelName,
+            priceAutofill: {},
+            specAutofill: {},
+        };
+    };
+
+    const applyBlingLinkAutofillToForm = (link: any, options: { linkIds?: boolean } = {}) => {
+        const linkEans = Array.isArray(link.eans) && link.eans.length > 0 ? link.eans : (link.ean ? [link.ean] : []);
+        if (linkEans.length > 0) {
+            const currentEans = Array.isArray(getValues('eans')) ? getValues('eans') : [];
+            const hasAnyEan = currentEans.some((ean) => String(ean || '').trim());
+            if (!hasAnyEan) {
+                setValue('eans', linkEans, { shouldDirty: true, shouldValidate: true });
+            }
+        }
+        if (options.linkIds !== false) {
+            setBlingId(link.id);
+            setBlingParentId(link.parentId);
+        }
+        if (link.model_id) {
+            setValue('model_id', link.model_id, { shouldDirty: true, shouldValidate: true });
+        }
+        if (link.model) {
+            setValue('model', link.model, { shouldDirty: true, shouldValidate: true });
+        }
+        if (link.priceAutofill?.price_cost) {
+            setValue('price_cost', link.priceAutofill.price_cost, { shouldDirty: true, shouldValidate: true });
+        }
+        if (link.priceAutofill?.price_retail) {
+            setValue('price_retail', link.priceAutofill.price_retail, { shouldDirty: true, shouldValidate: true });
+        }
+        if (link.specAutofill?.color) {
+            setValue('specs.color', link.specAutofill.color, { shouldDirty: true, shouldValidate: true });
+        }
+        if (link.specAutofill?.ram) {
+            setValue('specs.ram', link.specAutofill.ram, { shouldDirty: true, shouldValidate: true });
+        }
+        if (link.specAutofill?.storage) {
+            setValue('specs.storage', link.specAutofill.storage, { shouldDirty: true, shouldValidate: true });
+        }
+    };
+
     const findBlingLinkBySku = async (sku?: string | null) => {
         const cleanSku = String(sku || '').trim();
         if (!cleanSku) return null;
@@ -880,37 +942,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             const link = await findBlingLinkBySku(cleanSku);
             if (!link) return null;
 
-            const linkEans = Array.isArray(link.eans) && link.eans.length > 0 ? link.eans : (link.ean ? [link.ean] : []);
-            if (linkEans.length > 0) {
-                const currentEans = Array.isArray(getValues('eans')) ? getValues('eans') : [];
-                const hasAnyEan = currentEans.some((ean) => String(ean || '').trim());
-                if (!hasAnyEan) {
-                    setValue('eans', linkEans, { shouldDirty: true, shouldValidate: true });
-                }
-            }
-            setBlingId(link.id);
-            setBlingParentId(link.parentId);
-            if (link.model_id) {
-                setValue('model_id', link.model_id, { shouldDirty: true, shouldValidate: true });
-            }
-            if (link.model) {
-                setValue('model', link.model, { shouldDirty: true, shouldValidate: true });
-            }
-            if (link.priceAutofill.price_cost) {
-                setValue('price_cost', link.priceAutofill.price_cost, { shouldDirty: true, shouldValidate: true });
-            }
-            if (link.priceAutofill.price_retail) {
-                setValue('price_retail', link.priceAutofill.price_retail, { shouldDirty: true, shouldValidate: true });
-            }
-            if (link.specAutofill.color) {
-                setValue('specs.color', link.specAutofill.color, { shouldDirty: true, shouldValidate: true });
-            }
-            if (link.specAutofill.ram) {
-                setValue('specs.ram', link.specAutofill.ram, { shouldDirty: true, shouldValidate: true });
-            }
-            if (link.specAutofill.storage) {
-                setValue('specs.storage', link.specAutofill.storage, { shouldDirty: true, shouldValidate: true });
-            }
+            applyBlingLinkAutofillToForm(link);
             toast.info('Vinculado automaticamente pelo SKU no Bling.', {
                 id: 'bling-auto-sku-link',
                 description: (link.priceAutofill.price_cost || link.priceAutofill.price_retail || link.specAutofill.color || link.specAutofill.ram || link.specAutofill.storage)
@@ -925,6 +957,31 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             return link;
         } catch (error) {
             console.warn('[ProductForm] Auto Bling SKU link skipped:', error);
+            return null;
+        } finally {
+            setIsAutoLinkingBling(false);
+        }
+    };
+
+    const hydrateExistingBlingLinkFields = async () => {
+        if (!blingId || isBlingLinkManualOverride) return null;
+
+        const currentEans = Array.isArray(getValues('eans')) ? getValues('eans') : [];
+        const hasAnyEan = currentEans.some((ean) => String(ean || '').trim());
+        const hasModel = Boolean(String(getValues('model') || '').trim());
+        const hasModelId = Boolean(String(getValues('model_id') || '').trim());
+        if (hasAnyEan && hasModel && hasModelId) return null;
+
+        try {
+            setIsAutoLinkingBling(true);
+            const localProduct = await findLocalProductByBlingIdForBlingLink(blingId);
+            if (!localProduct) return null;
+
+            const link = await buildBlingLinkFromLocalProduct(blingId, localProduct, blingParentId);
+            applyBlingLinkAutofillToForm(link, { linkIds: false });
+            return link;
+        } catch (error) {
+            console.warn('[ProductForm] Existing Bling link hydration skipped:', error);
             return null;
         } finally {
             setIsAutoLinkingBling(false);
@@ -953,7 +1010,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     ...batchItem,
                     bling_id: link.id,
                     bling_parent_id: link.parentId,
-                    eans: link.ean ? [link.ean] : (batchItem.eans || []),
+                    eans: link.eans?.length ? link.eans : (link.ean ? [link.ean] : batchItem.eans),
+                    model_id: link.model_id || batchItem.model_id,
+                    model: link.model || batchItem.model,
                     color: link.specAutofill.color || batchItem.color,
                     ram: link.specAutofill.ram || batchItem.ram,
                     storage: link.specAutofill.storage || batchItem.storage,
@@ -975,14 +1034,20 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     };
 
     useEffect(() => {
-        if (initialData?.bling_id || blingId || isBlingLinkManualOverride || !currentSkuForVideo) return;
+        if (isBlingLinkManualOverride) return;
 
         const timer = setTimeout(() => {
-            resolveAutomaticBlingLink(currentSkuForVideo);
+            if (blingId) {
+                hydrateExistingBlingLinkFields();
+                return;
+            }
+            if (currentSkuForVideo) {
+                resolveAutomaticBlingLink(currentSkuForVideo);
+            }
         }, 900);
 
         return () => clearTimeout(timer);
-    }, [currentSkuForVideo, initialData?.bling_id, blingId, isBlingLinkManualOverride]);
+    }, [currentSkuForVideo, blingId, isBlingLinkManualOverride]);
 
     // Wrapper para onSubmit que mostra toast de erro e calcula preço médio
     const handleFormSubmit = handleSubmit(
@@ -1092,7 +1157,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             // Inject external integration IDs
             const automaticBlingLink = !blingId
                 ? await resolveAutomaticBlingLink(mergedData.sku)
-                : null;
+                : await hydrateExistingBlingLinkFields();
 
             if (automaticBlingLink) {
                 mergedData.bling_id = automaticBlingLink.id;

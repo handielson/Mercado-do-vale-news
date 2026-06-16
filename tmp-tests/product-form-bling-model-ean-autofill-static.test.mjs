@@ -65,6 +65,30 @@ assert.match(
 
 assert.match(
   source,
+  /const hydrateExistingBlingLinkFields = async \(\) =>/,
+  'Product form must hydrate EAN/model fields when a Bling link already exists',
+);
+
+assert.match(
+  source,
+  /if \(blingId\) \{\s*hydrateExistingBlingLinkFields\(\);\s*return;\s*\}/s,
+  'Existing Bling links must not skip EAN/model hydration in the form effect',
+);
+
+assert.match(
+  source,
+  /: await hydrateExistingBlingLinkFields\(\);/,
+  'Saving an already-linked Bling product must still hydrate EAN/model into the payload',
+);
+
+assert.match(
+  source,
+  /eans: link\.eans\?\.length \? link\.eans : \(link\.ean \? \[link\.ean\] : batchItem\.eans\),/,
+  'batch auto-link must preserve all normalized EANs, not only link.ean',
+);
+
+assert.match(
+  source,
   /model_id: link\.model_id \|\| item\.model_id,/,
   'batch auto-link must preserve or fill model_id per item',
 );
