@@ -5,6 +5,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   const source = readFileSync(file, 'utf8');
 
   assert.match(source, /CREATE TABLE IF NOT EXISTS telegram_notification_log/, `${file} must create a Telegram notification log for dedupe`);
+  assert.match(source, /CREATE TABLE IF NOT EXISTS telegram_settings/, `${file} must create Telegram settings table before sales notifications read it`);
+  assert.match(source, /INSERT IGNORE INTO telegram_settings[\s\S]*sale_template[\s\S]*online_order_paid_template/, `${file} must seed default Telegram sales templates`);
   assert.match(source, /async function notifyTelegramOnlineOrderPaidVps/, `${file} must implement server-side paid online order notifications`);
   assert.match(source, /async function notifyTelegramPdvSaleVps/, `${file} must implement server-side PDV sale notifications`);
   assert.match(source, /online_order_paid_template/, `${file} must use the configured paid online order template`);

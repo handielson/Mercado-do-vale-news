@@ -17,6 +17,12 @@ assert.match(
 
 assert.match(
   source,
+  /totalLooksDecimalReais[\s\S]*!looksLikeCentStoredMoney\(saleRow\.total\)/,
+  'legacy decimal detection must not treat cent-stored MySQL values like 59710.00 as reais',
+);
+
+assert.match(
+  source,
   /if\s*\(itemMoneyValues\.some\(looksLikeCentStoredMoney\)\)\s*return false;/,
   'cent-stored item rows such as 19710.00 must not be multiplied by 100',
 );

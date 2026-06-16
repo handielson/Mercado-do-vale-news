@@ -24383,6 +24383,41 @@ async function runMigrations() {
   console.log('[migration] company_settings synology columns: OK');
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS telegram_settings (
+      id CHAR(36) PRIMARY KEY,
+      bot_token TEXT NULL,
+      chat_id VARCHAR(120) NULL,
+      active TINYINT(1) NOT NULL DEFAULT 0,
+      templates JSON NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(`
+    INSERT IGNORE INTO telegram_settings (id, active, templates)
+    VALUES (
+      '00000000-0000-0000-0000-000000000001',
+      0,
+      JSON_ARRAY(
+        JSON_OBJECT(
+          'id', 'sale_template',
+          'name', 'Venda Padrao (PDV)',
+          'type', 'action',
+          'action_type', 'sale',
+          'content', '🛒 *Nova Venda Registrada!* (#{id_venda})\\n\\n👤 *Cliente:* {cliente}\\n📱 *Produto:* {produto}\\n💳 *Pagamento:* {pagamento} ({desconto} desc.)\\n💰 *Valor Pago:* {valor}\\n📈 *Lucro Estimado:* {lucro}\\n\\n🚚 *Entrega:* {entregador}\\n💠 *PIX Entregador:* {entregador_pix}\\n\\n📦 *Estoque de {modelo}:* {estoque} unidade(s)'
+        ),
+        JSON_OBJECT(
+          'id', 'online_order_paid_template',
+          'name', 'Pedido Pago (Tempo Real)',
+          'type', 'action',
+          'action_type', 'online_order_paid',
+          'content', '✅ *Pedido Pago Confirmado!* (#{id_pedido})\\n\\n👤 *Cliente:* {cliente}\\n📞 *Telefone:* {telefone}\\n📧 *Email:* {email}\\n\\n📦 *Itens:*\\n{itens}\\n\\n💸 *Preço de Compra:* {preco_compra}\\n💰 *Preço de Venda:* {preco_venda}\\n📈 *Lucro:* {lucro}\\n\\n💳 *Pagamento:* {pagamento}\\n🚚 *Entrega:* {entrega}\\n📍 *Endereço:* {endereco}\\n🕒 *Pago em:* {data_pagamento}\\n🔎 *Pedido completo:* {id_pedido_completo}'
+        )
+      )
+    )
+  `);
+  console.log('[migration] telegram_settings table: OK');
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS payment_fees (
       id CHAR(36) PRIMARY KEY,
       method VARCHAR(50) NOT NULL,

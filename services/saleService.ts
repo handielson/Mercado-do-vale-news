@@ -318,7 +318,9 @@ function saleRowUsesLegacyDecimalItemMoney(saleRow?: any): boolean {
     if (!saleRow) return false;
     const hasModernSubtotal = Number(saleRow.subtotal || 0) > 0;
     const hasModernPaymentMethods = saleRow.payment_methods != null && saleRow.payment_methods !== '';
-    const totalLooksDecimalReais = typeof saleRow.total === 'string' && /\.\d{2}$/u.test(saleRow.total);
+    const totalLooksDecimalReais = typeof saleRow.total === 'string'
+        && /\.\d{2}$/u.test(saleRow.total)
+        && !looksLikeCentStoredMoney(saleRow.total);
     return totalLooksDecimalReais && !hasModernSubtotal && !hasModernPaymentMethods;
 }
 
