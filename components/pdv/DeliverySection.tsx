@@ -211,63 +211,77 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
     };
 
     const needsDeliveryPerson = selectedType === 'store_delivery' || selectedType === 'hybrid_delivery';
+    const deliveryCardClass = (type: DeliveryType, selectedClass: string) => [
+        'relative flex min-h-[112px] cursor-pointer flex-col gap-2 rounded-lg border p-3 transition-colors',
+        selectedType === type ? selectedClass : 'border-slate-200 bg-white hover:bg-slate-50'
+    ].join(' ');
 
     return (
         <div className="delivery-section bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <h3 className="text-base font-semibold mb-4 flex items-center gap-2 text-slate-800">
                 <Truck className="w-5 h-5" />
                 Modalidade de Entrega
             </h3>
 
             {/* Radio buttons para tipo de entrega */}
-            <div className="space-y-3 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                 {/* Retirada na loja */}
-                <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                <label
+                    data-pdv-delivery-card="store_pickup"
+                    className={deliveryCardClass('store_pickup', 'border-blue-300 bg-blue-50')}
+                >
                     <input
                         type="radio"
                         name="deliveryType"
                         checked={selectedType === 'store_pickup'}
                         onChange={() => handleTypeChange('store_pickup')}
-                        className="w-4 h-4"
+                        className="absolute right-3 top-3 h-4 w-4"
                     />
-                    <Store className="w-5 h-5 text-blue-600" />
-                    <div className="flex-1">
-                        <div className="font-medium">Retirada na Loja</div>
-                        <div className="text-sm text-gray-600">Sem custo de entrega</div>
+                    <Store className="h-5 w-5 text-blue-600" />
+                    <div className="pr-6">
+                        <div className="text-sm font-semibold text-slate-900">Retirada</div>
+                        <div className="mt-1 text-xs leading-4 text-slate-600">Cliente retira na loja</div>
+                        <div className="mt-2 text-xs font-semibold text-blue-700">Sem custo</div>
                     </div>
                 </label>
 
                 {/* Entrega pela loja */}
-                <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                <label
+                    data-pdv-delivery-card="store_delivery"
+                    className={deliveryCardClass('store_delivery', 'border-emerald-300 bg-emerald-50')}
+                >
                     <input
                         type="radio"
                         name="deliveryType"
                         checked={selectedType === 'store_delivery'}
                         onChange={() => handleTypeChange('store_delivery')}
-                        className="w-4 h-4"
+                        className="absolute right-3 top-3 h-4 w-4"
                     />
-                    <Truck className="w-5 h-5 text-green-600" />
-                    <div className="flex-1">
-                        <div className="font-medium">Entrega pela Loja</div>
-                        <div className="text-sm text-gray-600">
-                            Custo: {formatCurrency(DELIVERY_COST_DEFAULT)} (desconto integral para cliente)
-                        </div>
+                    <Truck className="h-5 w-5 text-emerald-600" />
+                    <div className="pr-6">
+                        <div className="text-sm font-semibold text-slate-900">Loja entrega</div>
+                        <div className="mt-1 text-xs leading-4 text-slate-600">Repasse para entregador</div>
+                        <div className="mt-2 text-xs font-semibold text-emerald-700">{formatCurrency(costStore)}</div>
                     </div>
                 </label>
 
                 {/* Entrega híbrida */}
-                <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                <label
+                    data-pdv-delivery-card="hybrid_delivery"
+                    className={deliveryCardClass('hybrid_delivery', 'border-orange-300 bg-orange-50')}
+                >
                     <input
                         type="radio"
                         name="deliveryType"
                         checked={selectedType === 'hybrid_delivery'}
                         onChange={() => handleTypeChange('hybrid_delivery')}
-                        className="w-4 h-4"
+                        className="absolute right-3 top-3 h-4 w-4"
                     />
-                    <Users className="w-5 h-5 text-orange-600" />
-                    <div className="flex-1">
-                        <div className="font-medium">Entrega Híbrida</div>
-                        <div className="text-sm text-gray-600">Custo dividido entre loja e cliente</div>
+                    <Users className="h-5 w-5 text-orange-600" />
+                    <div className="pr-6">
+                        <div className="text-sm font-semibold text-slate-900">Hibrida</div>
+                        <div className="mt-1 text-xs leading-4 text-slate-600">Loja + cliente</div>
+                        <div className="mt-2 text-xs font-semibold text-orange-700">{formatCurrency(costStore + costCustomer)}</div>
                     </div>
                 </label>
             </div>

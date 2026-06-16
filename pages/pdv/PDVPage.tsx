@@ -1381,8 +1381,9 @@ export default function PDVPage() {
                             onDeliveryPersonCreated={handleDeliveryPersonCreated}
                         />
 
+                        <div data-pdv-commercial-options className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                         {/* Cupom de desconto */}
-                        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+                        <div data-pdv-option-card="coupon" className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
                             <div className="flex items-center gap-2 mb-1">
                                 <Ticket className="w-4 h-4 text-blue-600" />
                                 <span className="text-sm font-semibold text-slate-700">Cupom de Desconto</span>
@@ -1418,7 +1419,7 @@ export default function PDVPage() {
                         </div>
 
                         {/* Código de Indicação */}
-                        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-2">
+                        <div data-pdv-option-card="referral" className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-2">
                             <div className="flex items-center justify-between mb-1">
                                 <div className="flex items-center gap-2">
                                     <span className="text-lg">🤝</span>
@@ -1432,6 +1433,7 @@ export default function PDVPage() {
                                 className="w-full px-3 py-2 border-2 border-purple-200 rounded-lg focus:border-purple-500 focus:outline-none font-mono uppercase text-sm bg-white"
                             />
                             <p className="text-xs text-purple-600/80">Recompensa o divulgador que indicou esta venda.</p>
+                        </div>
                         </div>
 
 
