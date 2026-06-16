@@ -17,14 +17,32 @@ assert.match(
 
 assert.match(
   source,
-  /model: localProduct\?\.model \|\| null,/,
-  'Bling auto-link must expose model name from the local product when available',
+  /model: localProductModelName,/,
+  'Bling auto-link must expose model name resolved from the local product when available',
 );
 
 assert.match(
   source,
-  /const resolvedEans = uniqueEans\(\[blingEan,\s*\.\.\.\(localProduct\?\.eans \|\| \[\]\)\]\);/,
-  'Bling auto-link must merge Bling GTIN and local product EANs',
+  /const localProductEans = getLocalProductEansForBlingLink\(localProduct\);/,
+  'Bling auto-link must normalize local product EAN fields before merging',
+);
+
+assert.match(
+  source,
+  /localProduct\?\.ean/,
+  'Bling auto-link must read the raw ean field returned by the VPS products API',
+);
+
+assert.match(
+  source,
+  /localProduct\?\.alternative_eans/,
+  'Bling auto-link must read alternative_eans returned by the VPS products API',
+);
+
+assert.match(
+  source,
+  /const resolvedEans = uniqueEans\(\[blingEan,\s*\.\.\.localProductEans\]\);/,
+  'Bling auto-link must merge Bling GTIN and normalized local product EANs',
 );
 
 assert.match(
@@ -37,6 +55,12 @@ assert.match(
   source,
   /setValue\('model', link\.model, \{ shouldDirty: true, shouldValidate: true \}\);/,
   'automatic Bling link must fill model name into the form',
+);
+
+assert.match(
+  source,
+  /modelService\.getById\(localProduct\.model_id\)/,
+  'Bling auto-link must resolve model name from model_id when the local product row only has model_id',
 );
 
 assert.match(

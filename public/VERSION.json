@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.36-product-bling-prefill",
+  "version": "v1.1.37-product-bling-ean-model",
   "date": "2026-06-16",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260616-083350-v1136-product-bling-prefill",
+  "release_vps": "/var/www/mdv-site/releases/20260616-084951-v1137-product-bling-ean-model",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Normaliza flags booleanas ao clonar produtos e reaproveita EAN/modelo no vinculo automatico do Bling para cadastro de unidades."
+  "summary": "Corrige o preenchimento visual de EAN e modelo no vinculo automatico do Bling usando o formato real da API VPS."
 }

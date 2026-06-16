@@ -804,6 +804,22 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             .filter(Boolean)
     ));
 
+    const getLocalProductEansForBlingLink = (localProduct: any) => uniqueEans([
+        localProduct?.eans,
+        localProduct?.ean,
+        localProduct?.alternative_eans,
+    ]);
+
+    const getLocalProductModelNameForBlingLink = async (localProduct: any) => {
+        if (!localProduct) return null;
+        if (localProduct.model) return localProduct.model;
+        if (localProduct.model_name) return localProduct.model_name;
+        if (!localProduct.model_id) return null;
+
+        const model = await modelService.getById(localProduct.model_id).catch(() => null);
+        return model?.name || null;
+    };
+
     const findLocalProductForBlingLink = async (sku: string, blingProductId: number) => {
         const bySku = await vpsApiService.getProducts({
             sku,
@@ -836,7 +852,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         const localProduct = await findLocalProductForBlingLink(cleanSku, product.id);
         const parentId = product.variacao?.produtoPai?.id;
         const blingEan = String(product.gtin || '').trim();
-        const resolvedEans = uniqueEans([blingEan, ...(localProduct?.eans || [])]);
+        const localProductEans = getLocalProductEansForBlingLink(localProduct);
+        const resolvedEans = uniqueEans([blingEan, ...localProductEans]);
+        const localProductModelName = await getLocalProductModelNameForBlingLink(localProduct);
         const priceAutofill = getBlingSkuPriceAutofill(product);
         const colors = await colorService.listActive().catch(() => []);
         const specAutofill = getBlingSkuSpecAutofill({ product, colors });
@@ -847,7 +865,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             ean: resolvedEans[0] || null,
             eans: resolvedEans,
             model_id: localProduct?.model_id || null,
-            model: localProduct?.model || null,
+            model: localProductModelName,
             priceAutofill,
             specAutofill
         };
