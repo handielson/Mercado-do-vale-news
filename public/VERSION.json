@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.42-card-net-summary",
+  "version": "v1.1.43-pdv-unit-price-input",
   "date": "2026-06-16",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260616-105331-v1142-card-net-summary",
+  "release_vps": "/var/www/mdv-site/releases/20260616-110247-v1143-pdv-unit-price-input",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Corrige resumo financeiro para abater acrescimos do cartao do valor base da venda."
+  "summary": "Corrige digitacao do valor unitario no carrinho do PDV."
 }

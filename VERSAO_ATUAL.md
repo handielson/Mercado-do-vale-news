@@ -1,30 +1,30 @@
 # Versao Atual
 
 ```text
-version: v1.1.42-card-net-summary
+version: v1.1.43-pdv-unit-price-input
 date: 2026-06-16
 status: published
-release_vps: /var/www/mdv-site/releases/20260616-105331-v1142-card-net-summary
+release_vps: /var/www/mdv-site/releases/20260616-110247-v1143-pdv-unit-price-input
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Corrige o resumo financeiro para usar o valor base da venda, abatendo do total do cartao o acrescimo cobrado do cliente.
-- Recupera vendas antigas em que `amount` foi gravado igual a `total_with_fee`, inferindo a base por `total_with_fee - fee_amount`.
-- Mantem o total passado no cartao visivel em formas de pagamento, mas calcula `Total Pago` e `Lucro Real` pela base liquida.
-- Corrige o lucro salvo em novas vendas para nao tratar o acrescimo do cliente como receita real.
-- Atualiza a guarda de regressao do PDV para impedir que o resumo volte a somar o total do cartao com taxa.
+- Corrige a digitacao do campo `Unidade` no carrinho do PDV.
+- Mantem o texto digitado localmente enquanto o campo esta em foco, evitando que a formatacao `R$ ...` trave a entrada depois do primeiro digito.
+- Ao sair do campo, volta a exibir o valor em formato monetario brasileiro.
+- Atualiza a guarda de regressao do input monetario do carrinho.
+- Atualiza a guarda de normalizacao de preco do PDV para o helper atual de preco por cliente.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.42-card-net-summary` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.43-pdv-unit-price-input` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-16-v1.1.42-card-net-summary.md
+docs/versoes/2026-06-16-v1.1.43-pdv-unit-price-input.md
 ```
 
 ## Publicacao
 
-- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260616-105331-v1142-card-net-summary`.
+- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260616-110247-v1143-pdv-unit-price-input`.
 - Esta versao altera o frontend/admin de vendas/PDV e o arquivo publico de versao; publicar site.

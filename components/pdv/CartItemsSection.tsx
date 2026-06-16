@@ -35,6 +35,8 @@ const parseCurrencyToCents = (value: string): number | null => {
 };
 
 export default function CartItemsSection({ items, warrantyOptions, onUpdateQuantity, onRemoveItem, onUpdateWarranty, onUpdatePrice }: CartItemsSectionProps) {
+    const [editingPriceInputs, setEditingPriceInputs] = React.useState<Record<string, string>>({});
+
     if (items.length === 0) return null;
 
     return (
@@ -73,9 +75,17 @@ export default function CartItemsSection({ items, warrantyOptions, onUpdateQuant
                                                     type="text"
                                                     inputMode="decimal"
                                                     className="w-24 px-2 py-1 text-right text-sm font-semibold text-slate-800 border-2 border-slate-200 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                                                    value={fmt(item.unit_price)}
-                                                    onFocus={(e) => e.currentTarget.select()}
+                                                    value={editingPriceInputs[item.id] ?? fmt(item.unit_price)}
+                                                    onFocus={(e) => {
+                                                        e.currentTarget.select();
+                                                    }}
+                                                    onBlur={() => setEditingPriceInputs(current => {
+                                                        const next = { ...current };
+                                                        delete next[item.id];
+                                                        return next;
+                                                    })}
                                                     onChange={(e) => {
+                                                        setEditingPriceInputs(current => ({ ...current, [item.id]: e.target.value }));
                                                         const cents = parseCurrencyToCents(e.target.value);
                                                         if (cents !== null && cents >= 0) {
                                                             onUpdatePrice(item.id, cents);

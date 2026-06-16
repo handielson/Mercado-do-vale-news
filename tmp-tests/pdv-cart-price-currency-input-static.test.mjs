@@ -23,13 +23,31 @@ assert.match(
 
 assert.match(
     source,
-    /value=\{fmt\(item\.unit_price\)\}/,
-    'unit price input must always show Brazilian currency formatting'
+    /const \[editingPriceInputs, setEditingPriceInputs\] = React\.useState<Record<string, string>>\(\{\}\)/,
+    'unit price input must keep raw typed text while focused'
 );
 
 assert.match(
     source,
-    /onFocus=\{\(e\) => e\.currentTarget\.select\(\)\}/,
+    /value=\{editingPriceInputs\[item\.id\] \?\? fmt\(item\.unit_price\)\}/,
+    'unit price input must not force currency formatting on every keystroke'
+);
+
+assert.match(
+    source,
+    /setEditingPriceInputs\(current => \(\{ \.\.\.current, \[item\.id\]: e\.target\.value \}\)\)/,
+    'unit price input must store each typed character before recalculating the item'
+);
+
+assert.match(
+    source,
+    /onBlur=\{\(\) => setEditingPriceInputs\(current => \{/,
+    'unit price input must return to formatted display on blur'
+);
+
+assert.match(
+    source,
+    /onFocus=\{\(e\) => \{[\s\S]*e\.currentTarget\.select\(\)/,
     'unit price input must select all text on focus'
 );
 
