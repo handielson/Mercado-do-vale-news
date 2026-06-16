@@ -11,6 +11,8 @@ export interface Banner {
     title: string;
     subtitle?: string;   // texto exibido abaixo do título no carrossel
     image_url: string;
+    /** Cor usada no fundo/letterbox quando a imagem usa object-contain. */
+    background_color?: string;
     /** Destino do link — campo canônico da tabela. */
     link_target?: string;
     /** Campo legado na tabela — mantido para SELECT; não usar em INSERT/UPDATE. */

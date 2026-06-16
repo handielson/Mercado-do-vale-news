@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.27-delivery-public-admin-complete",
+  "version": "v1.1.28-banner-background-color",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-192101-v1127-delivery-public-admin-complete",
+  "release_vps": "/var/www/mdv-site/releases/20260615-212330-v1128-banner-background-color",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Registra a rota publica /delivery/:token e permite baixa administrativa sem exigir Pix/foto quando ha motivo e dados estruturais."
+  "summary": "Adiciona cor de fundo editavel por banner e aplica essa cor nas bordas do carrossel publico."
 }

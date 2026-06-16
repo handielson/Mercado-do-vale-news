@@ -17680,9 +17680,26 @@ function mapBannerRow(r) {
   return {
     ...r,
     active: r.active === 1,
+    background_color: r.background_color || '#020617',
     clicks_count: r.clicks_count ?? r.click_count ?? 0,
     views_count: r.views_count ?? r.view_count ?? 0,
   };
+}
+
+let bannerBackgroundColorColumnReady = false;
+async function ensureBannerBackgroundColorColumn() {
+  if (bannerBackgroundColorColumnReady) return;
+  try {
+    await pool.query('ALTER TABLE banners ADD COLUMN background_color VARCHAR(16) NULL AFTER image_url');
+  } catch (error) {
+    if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+  }
+  try {
+    await pool.query('ALTER TABLE banners ADD COLUMN updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+  } catch (error) {
+    if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+  }
+  bannerBackgroundColorColumnReady = true;
 }
 
 fastify.get('/banners', async (req, reply) => {
@@ -17704,10 +17721,11 @@ fastify.get('/banners/:id', async (req, reply) => {
 fastify.post('/banners', { preHandler: requireSyncKey }, async (req, reply) => {
   const b = req.body;
   const id = require('crypto').randomUUID();
+  await ensureBannerBackgroundColorColumn();
   await pool.query(
-    `INSERT INTO banners (id,title,image_url,link_url,active,display_order,start_date,end_date)
-     VALUES (?,?,?,?,?,?,?,?)`,
-    [id,b.title||null,b.image_url||null,b.link_url||b.link_target||null,b.active?1:0,b.display_order||0,b.start_date||null,b.end_date||null]
+    `INSERT INTO banners (id,title,image_url,background_color,link_url,active,display_order,start_date,end_date)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [id,b.title||null,b.image_url||null,b.background_color||null,b.link_url||b.link_target||null,b.active?1:0,b.display_order||0,b.start_date||null,b.end_date||null]
   );
   const [rows] = await pool.query('SELECT * FROM banners WHERE id=?', [id]);
   return mapBannerRow(rows[0]);
@@ -17715,9 +17733,10 @@ fastify.post('/banners', { preHandler: requireSyncKey }, async (req, reply) => {
 
 fastify.patch('/banners/:id', { preHandler: requireSyncKey }, async (req, reply) => {
   const b = req.body;
-  const allowedBannerFields = ['title', 'image_url', 'link_url', 'link_target', 'active', 'display_order', 'start_date', 'end_date'];
+  const allowedBannerFields = ['title', 'image_url', 'background_color', 'link_url', 'link_target', 'active', 'display_order', 'start_date', 'end_date'];
   const sets = [];
   const params = [];
+  await ensureBannerBackgroundColorColumn();
   for (const field of allowedBannerFields) {
     if (b[field] === undefined) continue;
     if (field === 'link_target') {

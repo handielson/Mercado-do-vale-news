@@ -35,6 +35,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose 
         title: banner?.title ?? '',
         subtitle: banner?.subtitle ?? '',
         image_url: banner?.image_url ?? '',
+        background_color: banner?.background_color ?? '#020617',
         link_type: (banner?.link_type ?? 'none') as 'none' | 'product' | 'category' | 'external',
         // Bug fix: unificar link_target e link_value (campo canônico = link_target)
         link_target: banner?.link_target ?? banner?.link_value ?? '',
@@ -104,6 +105,7 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose 
                 title: formData.title.trim(),
                 subtitle: formData.subtitle.trim() || undefined,
                 image_url: formData.image_url,
+                background_color: formData.background_color,
                 link_type: formData.link_type,
                 link_target: formData.link_target.trim() || undefined,
                 is_active: formData.is_active,
@@ -155,8 +157,16 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose 
                                 </button>
                             </div>
                             {showPreview && (
-                                <div className="relative w-full aspect-[21/9] rounded-xl overflow-hidden bg-slate-900">
-                                    <img src={imagePreview} alt="Preview" className="w-full h-full object-contain bg-slate-950" />
+                                <div
+                                    className="relative w-full aspect-[21/9] rounded-xl overflow-hidden"
+                                    style={{ backgroundColor: formData.background_color }}
+                                >
+                                    <img
+                                        src={imagePreview}
+                                        alt="Preview"
+                                        className="w-full h-full object-contain"
+                                        style={{ backgroundColor: formData.background_color }}
+                                    />
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
                                         <div className="absolute bottom-0 left-0 right-0 p-6">
                                             <h2 className="text-white text-2xl font-bold drop-shadow-lg">
@@ -235,6 +245,30 @@ export const BannerForm: React.FC<BannerFormProps> = ({ banner, onSave, onClose 
                                 placeholder="https://exemplo.com/banner.jpg"
                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
+                        </div>
+                    </div>
+
+                    {/* Background Color */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Cor do fundo</label>
+                        <div className="flex items-center gap-3">
+                            <input
+                                type="color"
+                                value={formData.background_color}
+                                onChange={(e) => setFormData(p => ({ ...p, background_color: e.target.value }))}
+                                className="h-10 w-14 rounded-lg border border-gray-300 bg-white p-1"
+                                aria-label="Cor do fundo do banner"
+                            />
+                            <input
+                                type="text"
+                                value={formData.background_color}
+                                onChange={(e) => setFormData(p => ({ ...p, background_color: e.target.value }))}
+                                className="w-32 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                placeholder="#020617"
+                            />
+                            <span className="text-xs text-gray-500">
+                                Aparece nas bordas quando a arte não ocupa todo o quadro.
+                            </span>
                         </div>
                     </div>
 

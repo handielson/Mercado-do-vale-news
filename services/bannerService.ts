@@ -20,6 +20,7 @@ function mapFromVPS(vpsBanner: any): Banner {
     return {
         ...vpsBanner,
         image_url: toBrowserSafeMediaUrl(vpsBanner.image_url),
+        background_color: vpsBanner.background_color || '#020617',
         is_active: vpsBanner.active ?? false,
         link_target: vpsBanner.link_url,
         link_type,

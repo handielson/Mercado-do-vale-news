@@ -146,58 +146,65 @@ export function BannerCarousel({
             {/* Banners */}
             <div className="relative w-full h-full">
                 {banners.map((banner, index) => (
-                    <div
-                        key={banner.id}
-                        className={`absolute inset-0 transition-all duration-700 ease-in-out ${index === currentIndex
-                            ? 'opacity-100 scale-100'
-                            : 'opacity-0 scale-105'
-                            }`}
-                        style={{ pointerEvents: index === currentIndex ? 'auto' : 'none' }}
-                    >
-                        <div
-                            className="w-full h-full cursor-pointer"
-                            onClick={(e) => handleBannerClick(banner, e)}
-                        >
-                            {(() => {
-                                const responsiveImageSources = buildResponsiveImageSources(banner.image_url, { kind: 'banner' });
+                    (() => {
+                        const bannerBackgroundColor = banner.background_color || '#020617';
+                        return (
+                            <div
+                                key={banner.id}
+                                className={`absolute inset-0 transition-all duration-700 ease-in-out ${index === currentIndex
+                                    ? 'opacity-100 scale-100'
+                                    : 'opacity-0 scale-105'
+                                    }`}
+                                style={{ pointerEvents: index === currentIndex ? 'auto' : 'none', backgroundColor: bannerBackgroundColor }}
+                            >
+                                <div
+                                    className="w-full h-full cursor-pointer"
+                                    onClick={(e) => handleBannerClick(banner, e)}
+                                    style={{ backgroundColor: bannerBackgroundColor }}
+                                >
+                                    {(() => {
+                                        const responsiveImageSources = buildResponsiveImageSources(banner.image_url, { kind: 'banner' });
 
-                                return (
-                                    <picture>
-                                        {responsiveImageSources && (
-                                            <>
-                                                <source type="image/avif" srcSet={responsiveImageSources.avifSrcSet} sizes={responsiveImageSources.sizes} />
-                                                <source type="image/webp" srcSet={responsiveImageSources.webpSrcSet} sizes={responsiveImageSources.sizes} />
-                                            </>
-                                        )}
-                                        <img
-                                            src={banner.image_url}
-                                            alt={banner.title}
-                                            loading={index === 0 ? 'eager' : 'lazy'}
-                                            decoding={index === 0 ? 'sync' : 'async'}
-                                            fetchPriority={index === 0 ? 'high' : 'auto'}
-                                            width={1280}
-                                            height={549}
-                                            className="w-full h-full object-contain bg-slate-950"
-                                        />
-                                    </picture>
-                                );
-                            })()}
+                                        return (
+                                            <picture>
+                                                {responsiveImageSources && (
+                                                    <>
+                                                        <source type="image/avif" srcSet={responsiveImageSources.avifSrcSet} sizes={responsiveImageSources.sizes} />
+                                                        <source type="image/webp" srcSet={responsiveImageSources.webpSrcSet} sizes={responsiveImageSources.sizes} />
+                                                    </>
+                                                )}
+                                                <img
+                                                    src={banner.image_url}
+                                                    alt={banner.title}
+                                                    loading={index === 0 ? 'eager' : 'lazy'}
+                                                    decoding={index === 0 ? 'sync' : 'async'}
+                                                    fetchPriority={index === 0 ? 'high' : 'auto'}
+                                                    width={1280}
+                                                    height={549}
+                                                    className="w-full h-full object-contain"
+                                                    style={{ backgroundColor: bannerBackgroundColor }}
+                                                />
+                                            </picture>
+                                        );
+                                    })()}
 
-                            {/* Overlay com título */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
-                                <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-8">
-                                    <h2 className="text-white text-base sm:text-3xl md:text-4xl font-bold mb-1 sm:mb-2 drop-shadow-lg">
-                                        {banner.title}
-                                    </h2>
-                                    {banner.subtitle && (
-                                        <p className="hidden sm:block text-white/90 text-lg md:text-xl drop-shadow-lg">
-                                            {banner.subtitle}
-                                        </p>
-                                    )}
+                                    {/* Overlay com título */}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
+                                        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-8">
+                                            <h2 className="text-white text-base sm:text-3xl md:text-4xl font-bold mb-1 sm:mb-2 drop-shadow-lg">
+                                                {banner.title}
+                                            </h2>
+                                            {banner.subtitle && (
+                                                <p className="hidden sm:block text-white/90 text-lg md:text-xl drop-shadow-lg">
+                                                    {banner.subtitle}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
+                        );
+                    })()
                 ))}
             </div>
 
