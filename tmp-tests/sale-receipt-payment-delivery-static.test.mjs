@@ -5,8 +5,8 @@ const receipt = readFileSync('utils/printSaleReceipt.ts', 'utf8');
 
 assert.match(
   receipt,
-  /const\s+paymentDescription/,
-  'customer receipt must render payment as a description, not as a second total column'
+  /paymentView\.labelWithInstallments/,
+  'customer receipt must render payment as a public description, not as internal fee details'
 );
 
 assert.doesNotMatch(

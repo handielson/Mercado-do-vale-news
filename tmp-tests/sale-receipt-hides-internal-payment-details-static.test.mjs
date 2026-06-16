@@ -17,6 +17,24 @@ assert.match(
 
 assert.match(
   receipt,
+  /import\s*\{\s*buildPaymentPresentation\s*\}\s*from\s*['"]\.\/salePresentation['"]/,
+  'customer sale receipt must import buildPaymentPresentation before using it at runtime',
+);
+
+assert.match(
+  receipt,
+  /import\s+type\s*\{\s*BenefitStatus\s*\}\s*from\s*['"]\.\.\/services\/benefitService['"]/,
+  'customer sale receipt must import BenefitStatus for extra page benefit tags',
+);
+
+assert.match(
+  receipt,
+  /function\s+escapeHtml\(/,
+  'customer sale receipt must define escapeHtml before escaping payment labels',
+);
+
+assert.match(
+  receipt,
   /paymentView\.totalWithFee/,
   'customer sale receipt should still show the amount paid for each payment method',
 );

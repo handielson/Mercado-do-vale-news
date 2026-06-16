@@ -1,33 +1,20 @@
 import { SaleWithItems } from '../types/sale';
 import { CompanySettings } from '../types/companySettings';
-import { companySettingsService } from '../services/companySettingsService';
 import { CoinBalance } from '../types/cashback';
-
-
+import type { BenefitStatus } from '../services/benefitService';
 import { buildGlobalHeader, getHeaderTemplate } from './headerBuilder';
+import { buildPaymentPresentation } from './salePresentation';
 
 const fmt = (v: number) => `R$ ${(v / 100).toFixed(2).replace('.', ',')}`;
 
-const paymentLabel = (method: string, installments?: number) => {
-    const labels: Record<string, string> = {
-        money: 'Dinheiro', pix: 'PIX', credit: 'Crédito', debit: 'Débito',
-    };
-    const base = labels[method] || method;
-    return method === 'credit' && installments && installments > 1
-        ? `${base} ${installments}x`
-        : base;
-};
-
-const paymentTotal = (payment: any) => Number(payment.total_with_fee ?? payment.total_with_fee_cents ?? payment.amount ?? 0);
-
-const paymentInstallmentDetail = (payment: any) => {
-    const installments = Math.max(1, Number(payment.installments) || 1);
-    if (payment.method !== 'credit' || installments <= 1) return '';
-
-    const total = paymentTotal(payment);
-    const installmentValue = Math.round(total / installments);
-    return `${installments}x de ${fmt(installmentValue)} = ${fmt(total)}`;
-};
+function escapeHtml(value: unknown): string {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
 
 const deliveryLabel = (type: string) => {
     if (!type) return '-';
