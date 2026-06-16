@@ -387,7 +387,7 @@ class VpsApiService {
   }
 
 
-  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; noCache?: boolean; parent_id?: string; sku?: string; ean?: string; model_id?: string; favoritesOnly?: boolean; customerId?: string }): Promise<any[] | null> {
+  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; noCache?: boolean; parent_id?: string; sku?: string; ean?: string; model_id?: string; bling_id?: string; favoritesOnly?: boolean; customerId?: string }): Promise<any[] | null> {
     const qs = new URLSearchParams();
     if (params?.category)  qs.set('category',  params.category);
     if (params?.status)    qs.set('status',     params.status);
@@ -399,6 +399,7 @@ class VpsApiService {
     if (params?.sku)       qs.set('sku',         params.sku);
     if (params?.ean)       qs.set('ean',         params.ean);
     if (params?.model_id)  qs.set('model_id',    params.model_id);
+    if (params?.bling_id)  qs.set('bling_id',    params.bling_id);
     if (params?.favoritesOnly) qs.set('favoritesOnly', 'true');
     if (params?.customerId) qs.set('customerId', params.customerId);
     if (params?.noCache)   qs.set('_t',          String(Date.now()));

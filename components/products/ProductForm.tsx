@@ -102,6 +102,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         eans?: string[];
         bling_id?: number;
         bling_parent_id?: number;
+        model_id?: string;
+        model?: string;
         imei1?: string;
         imei2?: string;
         serial?: string;
@@ -795,6 +797,35 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         return () => clearTimeout(timer);
     }, [currentSkuForVideo, setValue, getValues]);
 
+    const uniqueEans = (values: unknown[]) => Array.from(new Set(
+        values
+            .flatMap((value) => Array.isArray(value) ? value : [value])
+            .map((value) => String(value || '').trim())
+            .filter(Boolean)
+    ));
+
+    const findLocalProductForBlingLink = async (sku: string, blingProductId: number) => {
+        const bySku = await vpsApiService.getProducts({
+            sku,
+            status: 'all',
+            limit: 5,
+            noCache: true,
+        }).catch(() => null);
+
+        const exactSku = (bySku || []).find((product: any) =>
+            String(product?.sku || '').trim().toLowerCase() === sku.toLowerCase()
+        );
+        if (exactSku) return exactSku;
+
+        const byBling = await vpsApiService.getProducts({
+            bling_id: String(blingProductId),
+            status: 'all',
+            limit: 1,
+            noCache: true,
+        }).catch(() => null);
+        return byBling?.[0] || null;
+    };
+
     const findBlingLinkBySku = async (sku?: string | null) => {
         const cleanSku = String(sku || '').trim();
         if (!cleanSku) return null;
@@ -802,13 +833,24 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         const product = await findBlingProductByExactSku(cleanSku);
         if (!product) return null;
 
+        const localProduct = await findLocalProductForBlingLink(cleanSku, product.id);
         const parentId = product.variacao?.produtoPai?.id;
         const blingEan = String(product.gtin || '').trim();
+        const resolvedEans = uniqueEans([blingEan, ...(localProduct?.eans || [])]);
         const priceAutofill = getBlingSkuPriceAutofill(product);
         const colors = await colorService.listActive().catch(() => []);
         const specAutofill = getBlingSkuSpecAutofill({ product, colors });
 
-        return { id: product.id, parentId, ean: blingEan || null, priceAutofill, specAutofill };
+        return {
+            id: product.id,
+            parentId,
+            ean: resolvedEans[0] || null,
+            eans: resolvedEans,
+            model_id: localProduct?.model_id || null,
+            model: localProduct?.model || null,
+            priceAutofill,
+            specAutofill
+        };
     };
 
     const resolveAutomaticBlingLink = async (sku?: string | null) => {
@@ -820,16 +862,22 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             const link = await findBlingLinkBySku(cleanSku);
             if (!link) return null;
 
-            const blingEan = link.ean || '';
-            if (blingEan) {
+            const linkEans = Array.isArray(link.eans) && link.eans.length > 0 ? link.eans : (link.ean ? [link.ean] : []);
+            if (linkEans.length > 0) {
                 const currentEans = Array.isArray(getValues('eans')) ? getValues('eans') : [];
                 const hasAnyEan = currentEans.some((ean) => String(ean || '').trim());
                 if (!hasAnyEan) {
-                    setValue('eans', [blingEan], { shouldDirty: true, shouldValidate: true });
+                    setValue('eans', linkEans, { shouldDirty: true, shouldValidate: true });
                 }
             }
             setBlingId(link.id);
             setBlingParentId(link.parentId);
+            if (link.model_id) {
+                setValue('model_id', link.model_id, { shouldDirty: true, shouldValidate: true });
+            }
+            if (link.model) {
+                setValue('model', link.model, { shouldDirty: true, shouldValidate: true });
+            }
             if (link.priceAutofill.price_cost) {
                 setValue('price_cost', link.priceAutofill.price_cost, { shouldDirty: true, shouldValidate: true });
             }
@@ -1033,7 +1081,13 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 mergedData.bling_parent_id = automaticBlingLink.parentId;
                 const currentPayloadEans = Array.isArray(mergedData.eans) ? mergedData.eans : [];
                 if (automaticBlingLink.ean && !currentPayloadEans.some((ean) => String(ean || '').trim())) {
-                    mergedData.eans = [automaticBlingLink.ean];
+                    mergedData.eans = automaticBlingLink.eans || [automaticBlingLink.ean];
+                }
+                if (automaticBlingLink.model_id && !mergedData.model_id) {
+                    mergedData.model_id = automaticBlingLink.model_id;
+                }
+                if (automaticBlingLink.model && !mergedData.model) {
+                    mergedData.model = automaticBlingLink.model;
                 }
             } else {
                 mergedData.bling_id = blingId;
@@ -1116,7 +1170,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                             ...item,
                             bling_id: link.id,
                             bling_parent_id: link.parentId,
-                            eans: link.ean ? [link.ean] : item.eans,
+                            eans: link.eans?.length ? link.eans : (link.ean ? [link.ean] : item.eans),
+                            model_id: link.model_id || item.model_id,
+                            model: link.model || item.model,
                             color: link.specAutofill.color || item.color,
                             ram: link.specAutofill.ram || item.ram,
                             storage: link.specAutofill.storage || item.storage,

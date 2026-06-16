@@ -66,6 +66,8 @@ export function buildSerializedBatchPlan(baseData, items) {
   const normalizedItems = items.map((item) => ({
     ...baseData,
     sku: cleanValue(item.sku) || baseData.sku,
+    model_id: cleanValue(item.model_id) || baseData.model_id,
+    model: cleanValue(item.model) || baseData.model,
     eans: Array.isArray(item.eans) && item.eans.length > 0 ? item.eans : baseData.eans,
     bling_id: item.bling_id ?? baseData.bling_id,
     bling_parent_id: item.bling_parent_id ?? baseData.bling_parent_id,

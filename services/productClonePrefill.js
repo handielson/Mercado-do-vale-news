@@ -1,5 +1,6 @@
 const UNIQUE_SERIALIZED_SPEC_KEYS = ['imei1', 'imei2', 'serial'];
 const ARRAY_FIELDS = ['eans', 'images', 'keywords', 'kits', 'tags'];
+const BOOLEAN_FIELDS = ['track_inventory', 'is_gift', 'is_combo', 'is_virtual', 'exclude_from_seo'];
 
 function parseJsonValue(value) {
   if (typeof value !== 'string') return value;
@@ -36,9 +37,26 @@ function uniqueArray(values) {
   return Array.from(new Set(values.filter((item) => item != null && item !== '').map(String)));
 }
 
+function toBoolean(value) {
+  if (value === true || value === false) return value;
+  if (value === 1 || value === '1') return true;
+  if (value === 0 || value === '0') return false;
+  return value;
+}
+
+export function normalizeProductFormBooleans(product = {}) {
+  const normalized = { ...product };
+  BOOLEAN_FIELDS.forEach((field) => {
+    if (Object.prototype.hasOwnProperty.call(normalized, field)) {
+      normalized[field] = toBoolean(normalized[field]);
+    }
+  });
+  return normalized;
+}
+
 export function buildProductClonePrefill(product = {}) {
   const clone = {
-    ...product,
+    ...normalizeProductFormBooleans(product),
     specs: toObject(product.specs),
   };
 
