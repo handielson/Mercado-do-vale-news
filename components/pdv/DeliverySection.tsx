@@ -75,8 +75,8 @@ export const DeliverySection: React.FC<DeliverySectionProps> = ({
             // Retirada: sem custo, sem entregador
             onDeliveryChange(selectedType, undefined, 0, 0);
         } else if (selectedType === 'store_delivery') {
-            // Entrega loja: R$ 30 loja, R$ 0 cliente
-            onDeliveryChange(selectedType, selectedPerson, DELIVERY_COST_DEFAULT, 0);
+            // Entrega loja: custo da loja pode ser ajustado no PDV, cliente nao paga entrega.
+            onDeliveryChange(selectedType, selectedPerson, costStore, 0);
         } else if (selectedType === 'hybrid_delivery') {
             // Híbrida: valores customizados
             onDeliveryChange(selectedType, selectedPerson, costStore, costCustomer);

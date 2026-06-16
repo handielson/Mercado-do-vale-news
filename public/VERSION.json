@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.29-pdv-counter-customer",
+  "version": "v1.1.30-pdv-delivery-dynamic-value",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-214800-v1129-pdv-counter-customer",
+  "release_vps": "/var/www/mdv-site/releases/20260615-223831-v1130-pdv-delivery-dynamic-value",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Restaura a venda rapida do PDV usando o cadastro existente Cliente Balcao, sem criar duplicados."
+  "summary": "Corrige a entrega pela loja no PDV para enviar o valor digitado ao total de entrega e credito do entregador."
 }
