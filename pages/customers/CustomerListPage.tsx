@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Users, Plus, Search, Filter, Edit, Trash2, Eye, UserCheck, UserX, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
@@ -17,14 +17,18 @@ import { welcomeMessageService, buildMessage, buildWhatsAppUrl } from '../../ser
  */
 export default function CustomerListPage() {
     const navigate = useNavigate();
+    const location = useLocation();
+    const deliveryFromQuery = new URLSearchParams(location.search).get('delivery');
 
     // State
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [showFilters, setShowFilters] = useState(false);
-    const [filters, setFilters] = useState<CustomerFilters>({});
+    const [showFilters, setShowFilters] = useState(deliveryFromQuery === '1');
+    const [filters, setFilters] = useState<CustomerFilters>(() => (
+        deliveryFromQuery === '1' ? { is_delivery_worker: true } : {}
+    ));
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
     const [welcomeTemplate, setWelcomeTemplate] = useState('');
 
@@ -32,6 +36,14 @@ export default function CustomerListPage() {
     useEffect(() => {
         loadCustomers();
     }, [filters]);
+
+    useEffect(() => {
+        if (deliveryFromQuery !== '1') return;
+        setShowFilters(true);
+        setFilters((current) => (
+            current.is_delivery_worker === true ? current : { ...current, is_delivery_worker: true }
+        ));
+    }, [deliveryFromQuery]);
 
     useEffect(() => {
         welcomeMessageService.getTemplate().then(setWelcomeTemplate);
@@ -152,7 +164,7 @@ export default function CustomerListPage() {
 
                 {/* Advanced Filters */}
                 {showFilters && (
-                    <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-3 gap-4">
+                    <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">
                                 Status
@@ -168,6 +180,23 @@ export default function CustomerListPage() {
                                 <option value="all">Todos</option>
                                 <option value="active">Ativos</option>
                                 <option value="inactive">Inativos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Tipo
+                            </label>
+                            <select
+                                value={filters.is_delivery_worker === undefined ? 'all' : filters.is_delivery_worker ? 'delivery' : 'customer'}
+                                onChange={(e) => setFilters({
+                                    ...filters,
+                                    is_delivery_worker: e.target.value === 'all' ? undefined : e.target.value === 'delivery'
+                                })}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                            >
+                                <option value="all">Todos</option>
+                                <option value="customer">Clientes</option>
+                                <option value="delivery">Entregadores</option>
                             </select>
                         </div>
                         <div>
@@ -192,6 +221,11 @@ export default function CustomerListPage() {
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg"
                             />
                         </div>
+                    </div>
+                )}
+                {filters.is_delivery_worker === true && (
+                    <div className="mt-3 inline-flex items-center rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700 ring-1 ring-cyan-100">
+                        Mostrando apenas entregadores
                     </div>
                 )}
             </div>

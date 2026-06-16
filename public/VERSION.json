@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.31-pdv-compact-layout",
+  "version": "v1.1.32-delivery-workers-shortcut",
   "date": "2026-06-16",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260616-041936-v1131-pdv-compact-layout",
+  "release_vps": "/var/www/mdv-site/releases/20260616-045013-v1132-delivery-workers-shortcut",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Compacta o layout do PDV com mini-cards para entrega, cupom e codigo de indicacao."
+  "summary": "Adiciona atalho administrativo para entregadores cadastrados e filtro dedicado na lista de clientes."
 }

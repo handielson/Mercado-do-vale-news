@@ -83,6 +83,14 @@ const dailyItems: QuickAccessItem[] = [
     iconClassName: 'bg-teal-100 group-hover:bg-teal-200',
   },
   {
+    label: 'Entregadores',
+    description: 'Clientes de entrega',
+    path: '/admin/customers?delivery=1',
+    icon: '🚚',
+    cardClassName: 'bg-white border-slate-200 hover:border-cyan-400',
+    iconClassName: 'bg-cyan-100 group-hover:bg-cyan-200',
+  },
+  {
     label: 'Financeiro',
     description: 'Contas e fluxo',
     path: '/admin/financeiro',
@@ -136,7 +144,7 @@ export const AdminQuickAccessGrid: React.FC<AdminQuickAccessGridProps> = ({ onNa
         <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
           <span>⚡</span> Operações Diárias
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
           {dailyItems.map((item) => (
             <QuickAccessCard key={item.label} item={item} onNavigate={onNavigate} />
           ))}
