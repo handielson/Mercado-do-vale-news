@@ -15,6 +15,7 @@ import { VPS_DIRECT_BASE_URL, buildVpsUrl, getVpsSyncHeaders } from '../../servi
 import { vpsApiService } from '../../services/vpsApiService';
 import { shopeeProductService } from '../../services/shopeeProducts';
 import { stockLocationService } from '../../services/stockLocationService';
+import { unitService } from '../../services/units';
 import { deleteImageFromBank, uploadImagesToBank } from '../../services/productImageBank';
 import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct, validateShopeeItemForProduct } from './productCardShopee.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
@@ -58,6 +59,12 @@ type SynologyUploadStatus = {
     debug?: unknown;
     name?: string;
     url?: string;
+};
+
+type IdentifierChip = {
+    key: string;
+    label: string;
+    value: string;
 };
 
 const idleVideoUploadState: VideoUploadState = {
@@ -202,6 +209,36 @@ const getProductImageBankPath = (imageUrl: string): string | null => {
     }
 };
 
+const cleanIdentifierValue = (value: unknown): string => String(value || '').trim();
+
+const getSpecIdentifierChips = (product: Product): IdentifierChip[] => {
+    const imei1 = cleanIdentifierValue(product.specs?.imei1 || (product.specs as any)?.imei_1);
+    const imei2 = cleanIdentifierValue(product.specs?.imei2 || (product.specs as any)?.imei_2);
+    const serial = cleanIdentifierValue(product.specs?.serial || product.specs?.serial_number);
+
+    return [
+        imei1 ? { key: 'spec-imei1', label: 'IMEI1', value: imei1 } : null,
+        imei2 ? { key: 'spec-imei2', label: 'IMEI2', value: imei2 } : null,
+        !imei1 && serial ? { key: 'spec-serial', label: 'Serial', value: serial } : null,
+    ].filter(Boolean) as IdentifierChip[];
+};
+
+const getUnitIdentifierChips = (units: Awaited<ReturnType<typeof unitService.listByProduct>>): IdentifierChip[] => {
+    return units
+        .filter((unit) => String(unit.status) === 'available')
+        .flatMap((unit) => {
+            const imei1 = cleanIdentifierValue(unit.imei_1);
+            const imei2 = cleanIdentifierValue(unit.imei_2);
+            const serial = cleanIdentifierValue(unit.serial_number);
+            return [
+                imei1 ? { key: `${unit.id}-imei1`, label: 'IMEI1', value: imei1 } : null,
+                imei2 ? { key: `${unit.id}-imei2`, label: 'IMEI2', value: imei2 } : null,
+                !imei1 && serial ? { key: `${unit.id}-serial`, label: 'Serial', value: serial } : null,
+            ].filter(Boolean) as IdentifierChip[];
+        })
+        .slice(0, 6);
+};
+
 const uploadVideoWithProgress = (
     formData: FormData,
     token: string | undefined,
@@ -294,6 +331,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [stockLocationRows, setStockLocationRows] = useState<ProductStockLocation[]>([]);
     const [stockLocationLoading, setStockLocationLoading] = useState(false);
     const [stockLocationError, setStockLocationError] = useState<string | null>(null);
+    const [unitIdentifierChips, setUnitIdentifierChips] = useState<IdentifierChip[]>([]);
 
     // Video checking and uploading state
     const [videoInfo, setVideoInfo] = useState<{ exists: boolean; url: string | null; checking: boolean }>({ exists: false, url: null, checking: true });
@@ -337,6 +375,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const stockLocationTotal = displayStockLocationRows.reduce((sum, item) => sum + item.quantity, 0);
     const stockLocationReserved = displayStockLocationRows.reduce((sum, item) => sum + item.reserved, 0);
     const stockLocationAvailable = Math.max(0, stockLocationTotal - stockLocationReserved);
+    const specIdentifierChips = getSpecIdentifierChips(product);
+    const hasSpecIdentifiers = specIdentifierChips.length > 0;
+    const identifierChips = hasSpecIdentifiers ? specIdentifierChips : unitIdentifierChips;
 
     // Check video: URLs do Synology precisam existir de verdade; URLs externas salvas continuam confiaveis.
     useEffect(() => {
@@ -399,6 +440,28 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             
         return () => { isMounted = false; };
     }, [product.sku, product.video_url]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (!product.track_inventory || hasSpecIdentifiers || !product.id || Number(product.stock_quantity || 0) <= 0) {
+            setUnitIdentifierChips([]);
+            return;
+        }
+
+        unitService.listByProduct(product.id)
+            .then((units) => {
+                if (cancelled) return;
+                setUnitIdentifierChips(getUnitIdentifierChips(units));
+            })
+            .catch(() => {
+                if (!cancelled) setUnitIdentifierChips([]);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [hasSpecIdentifiers, product.id, product.stock_quantity, product.track_inventory]);
 
     // Handle Upload video
     const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1599,25 +1662,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 )}
 
                 {/* Unique Identifiers (IMEI / Serial) */}
-                {(product.specs?.imei1 || product.specs?.serial || product.specs?.serial_number) && (
+                {identifierChips.length > 0 && (
                     <div className="border-t border-slate-100 pt-2 space-y-1">
                         <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide">Identificadores</p>
                         <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-                            {product.specs?.imei1 && (
-                                <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
-                                    IMEI1 {product.specs.imei1}
+                            {identifierChips.map((chip) => (
+                                <span key={chip.key} className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
+                                    {chip.label} {chip.value}
                                 </span>
-                            )}
-                            {product.specs?.imei2 && (
-                                <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
-                                    IMEI2 {product.specs.imei2}
-                                </span>
-                            )}
-                            {!product.specs?.imei1 && (product.specs?.serial || product.specs?.serial_number) && (
-                                <span className="font-mono text-[10px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">
-                                    Serial {product.specs?.serial || product.specs?.serial_number}
-                                </span>
-                            )}
+                            ))}
                         </div>
                     </div>
                 )}

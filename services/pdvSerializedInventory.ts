@@ -74,6 +74,12 @@ function stripLegacySerializedSpecs(product: Product): Product {
     };
 }
 
+function getProductGroupingKey(product: Product): string {
+    const sku = cleanText(product.sku).toLowerCase();
+    if (sku) return `sku:${sku}`;
+    return `product:${product.id}`;
+}
+
 export function buildPdvUnitOption(unit: Unit): PdvSerializedUnitOption {
     const imei1 = cleanText(unit.imei_1);
     const imei2 = cleanText(unit.imei_2);
@@ -165,7 +171,30 @@ export async function buildPdvSearchCards(
 }
 
 export function fromHydratedPdvSearchPayload(payload: HydratedPdvProduct[]): PdvSearchCard[] {
-    return payload.map((entry) => {
+    const grouped = new Map<string, HydratedPdvProduct>();
+
+    for (const entry of payload) {
+        const key = getProductGroupingKey(entry.product);
+        const current = grouped.get(key);
+        const entryUnits = (entry.available_units || []).filter(isAvailableUnit);
+
+        if (!current) {
+            grouped.set(key, { product: entry.product, available_units: entryUnits });
+            continue;
+        }
+
+        const currentUnits = (current.available_units || []).filter(isAvailableUnit);
+        const product = currentUnits.length > 0 && entryUnits.length === 0
+            ? current.product
+            : entry.product;
+
+        grouped.set(key, {
+            product,
+            available_units: [...currentUnits, ...entryUnits],
+        });
+    }
+
+    return [...grouped.values()].map((entry) => {
         const availableUnits = (entry.available_units || []).filter(isAvailableUnit);
         return availableUnits.length > 0
             ? buildSerializedProductCard(entry.product, availableUnits)

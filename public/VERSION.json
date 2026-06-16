@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.47-pdv-serialized-inventory-rebuild",
+  "version": "v1.1.48-pdv-serialized-sku-grouping",
   "date": "2026-06-16",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260616-170149-v1147-pdv-serialized-inventory-rebuild",
+  "release_vps": "/var/www/mdv-site/releases/20260616-171407-v1148-pdv-serialized-sku-grouping",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Reconstrui o fluxo de estoque serializado do PDV com cards agrupados por produto, selecao exata de unidade e baixa da unidade escolhida."
+  "summary": "Agrupa duplicados por SKU no PDV serializado e mostra identificadores vindos das unidades no card de produto."
 }

@@ -87,4 +87,42 @@ assert.equal(exactOption.unitData.imei1, '860000000000001');
 assert.equal(exactOption.unitData.imei2, '860000000000002');
 assert.equal(exactOption.unitData.serial, 'AT2209901885');
 
+const hydratedCards = mod.fromHydratedPdvSearchPayload([
+  {
+    product: {
+      id: 'prod-athomics-canonical',
+      name: 'Athomics Inspire Lite',
+      sku: 'RAIL',
+      track_inventory: true,
+      stock_quantity: 21,
+      price_retail: 45000,
+      specs: {},
+    },
+    available_units: [
+      { id: 'unit-hydrated', product_id: 'prod-athomics-canonical', status: 'available', imei_1: '', imei_2: '', serial: 'AT2209901855', condition: 'new', created: '', updated: '' },
+    ],
+  },
+  {
+    product: {
+      id: 'prod-athomics-legacy-duplicate',
+      name: 'Athomics Inspire Lite',
+      sku: 'rail',
+      track_inventory: true,
+      stock_quantity: 21,
+      price_retail: 45000,
+      specs: { serial: 'LEGACY-DUPLICATE-SHOULD-NOT-RENDER' },
+    },
+    available_units: [],
+  },
+]);
+
+assert.equal(hydratedCards.length, 1, 'hydrated duplicate products with the same SKU must render one product card');
+assert.equal(hydratedCards[0].id, 'product:prod-athomics-canonical:serialized');
+assert.equal(hydratedCards[0].kind, 'serialized-product');
+assert.deepEqual(hydratedCards[0].unitOptions.map((option) => option.label), ['Serial: AT2209901855']);
+assert.ok(
+  JSON.stringify(hydratedCards[0]).includes('LEGACY-DUPLICATE-SHOULD-NOT-RENDER') === false,
+  'legacy duplicate specs must not leak into grouped hydrated card',
+);
+
 console.log('pdv serialized inventory core checks passed');
