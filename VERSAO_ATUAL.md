@@ -1,32 +1,30 @@
 # Versao Atual
 
 ```text
-version: v1.1.38-product-bling-linked-hydrate
+version: v1.1.39-pdv-finalization-log-vps
 date: 2026-06-16
 status: published
-release_vps: /var/www/mdv-site/releases/20260616-090221-v1138-product-bling-linked-hydrate
+release_vps: /var/www/mdv-site/releases/20260616-094333-v1139-pdv-finalization-log-vps
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Corrige o preenchimento de EAN e modelo quando o formulario ja abre com `bling_id` vinculado.
-- O formulario agora hidrata dados locais pelo `bling_id` existente em vez de pular o preenchimento automatico.
-- O salvamento tambem tenta hidratar EAN/modelo antes de montar o payload, mesmo quando o Bling ja estava vinculado.
-- O cadastro em massa preserva todos os EANs normalizados (`link.eans`) e nao apenas `link.ean`.
-- Mantem a leitura de `ean` e `alternative_eans` retornados pela API VPS, alem de `eans`.
-- Mantem a correcao anterior das flags booleanas do clone/prefill para evitar `Expected boolean, received number`.
-- Atualiza a guarda de regressao para cobrir o estado "Bling ja vinculado, campos visiveis vazios".
+- Remove a gravacao do historico local do log de finalizacao do PDV em `localStorage`.
+- Mantem o log disponivel na tela para copiar ou baixar em TXT.
+- Mantem o envio do log no payload da venda, em `finalization_log`, para registro na VPS.
+- Ajusta o nome do TXT baixado para usar o numero da venda quando existir.
+- Atualiza a guarda de regressao para impedir a volta da chave antiga `pdv_sale_finalization_log_*`.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.38-product-bling-linked-hydrate` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.39-pdv-finalization-log-vps` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-16-v1.1.38-product-bling-linked-hydrate.md
+docs/versoes/2026-06-16-v1.1.39-pdv-finalization-log-vps.md
 ```
 
 ## Publicacao
 
-- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260616-090221-v1138-product-bling-linked-hydrate`.
-- Esta versao altera o frontend/admin de produtos e o arquivo publico de versao; publicar site.
+- Release VPS planejada/publicada: `/var/www/mdv-site/releases/20260616-094333-v1139-pdv-finalization-log-vps`.
+- Esta versao altera o frontend/admin do PDV e o arquivo publico de versao; publicar site.

@@ -20,6 +20,10 @@ function createLogId(): string {
     return `pdv-log-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function getPdvSaleFinalizationLogFileId(log: PdvSaleFinalizationLog): string {
+    return log.sale_id ? log.sale_id.split('-')[0].toUpperCase() : log.id;
+}
+
 export function serializePdvSaleFinalizationLog(log: PdvSaleFinalizationLog): string {
     return JSON.stringify(log, null, 2);
 }
@@ -60,13 +64,6 @@ export function updatePdvSaleFinalizationLog(
     };
 }
 
-export function savePdvSaleFinalizationLog(log: PdvSaleFinalizationLog): void {
-    if (typeof localStorage === 'undefined') return;
-    const key = `pdv_sale_finalization_log_${log.id}`;
-    localStorage.setItem(key, serializePdvSaleFinalizationLog(log));
-    localStorage.setItem('pdv_sale_finalization_log_latest', key);
-}
-
 export async function copyPdvSaleFinalizationLogText(log: PdvSaleFinalizationLog): Promise<void> {
     const text = serializePdvSaleFinalizationLog(log);
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -82,7 +79,7 @@ export function downloadPdvSaleFinalizationLogText(log: PdvSaleFinalizationLog):
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `venda-pdv-log-${log.sale_id || log.id}.txt`;
+    link.download = `venda-pdv-log-${getPdvSaleFinalizationLogFileId(log)}.txt`;
     document.body.appendChild(link);
     link.click();
     link.remove();

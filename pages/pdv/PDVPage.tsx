@@ -39,7 +39,6 @@ import {
     buildPdvSaleFinalizationLog,
     copyPdvSaleFinalizationLogText,
     downloadPdvSaleFinalizationLogText,
-    savePdvSaleFinalizationLog,
     serializePdvSaleFinalizationLog,
     updatePdvSaleFinalizationLog,
     type PdvSaleFinalizationLog
@@ -906,7 +905,6 @@ export default function PDVPage() {
         saleInput.finalization_status = 'success';
         saleInput.finalization_log = serializePdvSaleFinalizationLog(finalizationLog);
         saleInput.finalization_error_summary = undefined;
-        savePdvSaleFinalizationLog(finalizationLog);
         setActiveFinalizationLog(finalizationLog);
 
         try {
@@ -923,7 +921,6 @@ export default function PDVPage() {
                     timestamp: new Date().toISOString(),
                 }] : [],
             });
-            savePdvSaleFinalizationLog(finalizationLog);
             setActiveFinalizationLog(finalizationLog);
             updateFinalizeStep('sale', 'done');
             if (hasAPrazoPayment) updateFinalizeStep('debt', 'done');
@@ -1056,7 +1053,6 @@ export default function PDVPage() {
                     timestamp: new Date().toISOString(),
                 }],
             });
-            savePdvSaleFinalizationLog(finalizationLog);
             setActiveFinalizationLog(finalizationLog);
             const detail = error instanceof Error ? error.message : 'Erro desconhecido ao finalizar venda';
             setFinalizeSteps((current) => current.map((step) => step.status === 'saving' ? { ...step, status: 'error', detail, debug } : step));

@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.38-product-bling-linked-hydrate",
+  "version": "v1.1.39-pdv-finalization-log-vps",
   "date": "2026-06-16",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260616-090221-v1138-product-bling-linked-hydrate",
+  "release_vps": "/var/www/mdv-site/releases/20260616-094333-v1139-pdv-finalization-log-vps",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Preenche EAN e modelo tambem quando o formulario ja abre com Bling vinculado."
+  "summary": "Remove historico local do log de finalizacao do PDV e mantem o log no payload da venda."
 }

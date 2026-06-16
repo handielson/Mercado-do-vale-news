@@ -8,6 +8,7 @@ const saleDetails = fs.readFileSync('components/admin/sales/SaleDetailsModal.tsx
 const salesPage = fs.readFileSync('pages/admin/sales/SalesPage.tsx', 'utf8');
 const vpsServer = fs.readFileSync('vps_server.js', 'utf8');
 const vpsServerCjs = fs.readFileSync('vps_server.cjs', 'utf8');
+const finalizationLogUtil = fs.readFileSync('utils/pdvSaleFinalizationLog.ts', 'utf8');
 
 for (const field of ['finalization_status', 'finalization_log', 'finalization_error_summary']) {
   assert.match(saleTypes, new RegExp(`${field}\\?`), `types/sale.ts must type ${field}`);
@@ -17,7 +18,9 @@ for (const field of ['finalization_status', 'finalization_log', 'finalization_er
 }
 
 assert.match(pdvPage, /buildPdvSaleFinalizationLog/, 'PDV must build a complete finalization log before createSale');
-assert.match(pdvPage, /savePdvSaleFinalizationLog/, 'PDV must persist local backup before network calls');
+assert.doesNotMatch(pdvPage, /savePdvSaleFinalizationLog/, 'PDV must not persist finalization history in browser localStorage');
+assert.match(pdvPage, /saleInput\.finalization_log\s*=\s*serializePdvSaleFinalizationLog\(finalizationLog\)/, 'PDV must send finalization log to VPS through sale payload');
+assert.doesNotMatch(finalizationLogUtil, /pdv_sale_finalization_log/, 'finalization logs must not be stored in browser local history');
 assert.match(pdvPage, /downloadPdvSaleFinalizationLogText/, 'PDV must offer TXT download for debugging/recovery');
 assert.match(pdvPage, /copyPdvSaleFinalizationLogText/, 'PDV must offer copy-to-clipboard for debugging');
 assert.match(pdvPage, /Venda registrada com erros para corrigir/, 'PDV must warn when sale is saved with correction errors');
@@ -33,5 +36,10 @@ assert.match(saleDetails, /Copiar log/, 'sale details modal must expose copy log
 assert.match(saleDetails, /Baixar TXT/, 'sale details modal must expose TXT download action');
 assert.match(saleDetails, /Venda registrada com erros para corrigir/, 'sale details modal must show correction-needed status');
 assert.match(salesPage, /needs_review/, 'sales table must flag needs_review sales');
+assert.match(
+  finalizationLogUtil,
+  /sale_id\.split\('-'\)\[0\]/,
+  'downloaded PDV log filename must use the sale/order number when available'
+);
 
 console.log('pdv-sale-finalization-log-static.test.mjs: ok');
