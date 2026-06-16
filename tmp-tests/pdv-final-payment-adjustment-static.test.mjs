@@ -64,8 +64,8 @@ assert.match(
 
 assert.match(
     salePresentation,
-    /return sum \+ getPaymentBaseAmount\(payment\)/,
-    'sale financial summary must sum base payment amounts instead of total card amounts with customer fees'
+    /return sum \+ moneyToCents\(payment\.total_with_fee \?\? payment\.amount \?\? 0\)/,
+    'sale financial summary must sum the full amount received on the card'
 );
 
 assert.match(
@@ -106,8 +106,8 @@ assert.match(
 
 assert.match(
     saleService,
-    /const realProfit = saleTotal - customerFeeTotal - totals\.cost_total - paymentOperatorFeeTotal - \(saleInput\.delivery_total \|\| 0\)/,
-    'sale service must subtract customer card fee from the card total before calculating real profit'
+    /const realProfit = saleTotal - totals\.cost_total - paymentOperatorFeeTotal - \(saleInput\.delivery_total \|\| 0\)/,
+    'sale service must keep the full card amount as revenue and subtract only real costs from profit'
 );
 
 assert.match(

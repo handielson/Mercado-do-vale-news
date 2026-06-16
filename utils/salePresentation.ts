@@ -185,7 +185,7 @@ export function getSaleCollectedTotal(sale: SaleWithItems, profitData?: SaleProf
     }
 
     const paymentTotal = (sale.payment_methods || []).reduce((sum, payment) => {
-        return sum + getPaymentBaseAmount(payment);
+        return sum + moneyToCents(payment.total_with_fee ?? payment.amount ?? 0);
     }, 0);
 
     return paymentTotal > 0 ? paymentTotal : moneyToCents(sale.total || 0);

@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.43-pdv-unit-price-input",
+  "version": "v1.1.44-pdv-profit-and-price-input",
   "date": "2026-06-16",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260616-110247-v1143-pdv-unit-price-input",
+  "release_vps": "/var/www/mdv-site/releases/20260616-110247-v1144-pdv-profit-and-price-input",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Corrige digitacao do valor unitario no carrinho do PDV."
+  "summary": "Corrige digitacao do valor unitario no PDV e calcula lucro pelo valor total recebido no cartao."
 }
