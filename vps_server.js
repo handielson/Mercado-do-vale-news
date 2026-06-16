@@ -2487,7 +2487,7 @@ async function handleMercadoPagoWebhookVps(body) {
     const gatewayPaymentId = String(payment.id);
     const orders = await vpsDbSelect(
       'orders',
-      `select=id,status&gateway_payment_id=eq.${encodeURIComponent(gatewayPaymentId)}&limit=1`
+      `select=*&gateway_payment_id=eq.${encodeURIComponent(gatewayPaymentId)}&limit=1`
     );
     const order = Array.isArray(orders) ? orders[0] : null;
 
@@ -2512,6 +2512,13 @@ async function handleMercadoPagoWebhookVps(body) {
     }
 
     await vpsDbPatch('orders', `id=eq.${encodeURIComponent(order.id)}`, { status: 'paid', payment_status: 'paid' });
+    await notifyTelegramOnlineOrderPaidVps(order.id).catch((notifyError) => {
+      console.error('[telegram-sales] paid order notification failed:', buildCopyableDebug('telegram-sales', {
+        step: 'notify paid order',
+        order_id: order.id,
+        rawMessage: notifyError?.message || String(notifyError),
+      }));
+    });
 
     return { status: 200, body: { message: 'success', order_id: order.id } };
   } catch (err) {
@@ -6345,6 +6352,265 @@ function cronDispatcherSaoPauloDayRangeVps(now) {
 
 function nlDbCronDispatcherVps(value) {
   return String(value || '').replace(/\\n/g, '\n');
+}
+
+function telegramSalesParseJsonVps(value, fallback = null) {
+  if (value == null || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function formatTelegramSalesMoneyFromCentsVps(value) {
+  const cents = Number(value) || 0;
+  return formatCronDispatcherMoneyVps(cents / 100);
+}
+
+function telegramSalesDeliveryLabelVps(deliveryType) {
+  const value = String(deliveryType || '').trim();
+  if (value === 'pickup') return 'Retirada na loja';
+  if (value === 'store_delivery' || value === 'hybrid_delivery') return 'Entrega da loja';
+  if (value === 'delivery') return 'Entrega em casa';
+  return value || 'Retirada na loja';
+}
+
+function telegramSalesPaymentLabelVps(paymentMethod) {
+  const value = String(paymentMethod || '').trim();
+  const labels = {
+    pix: 'PIX',
+    money: 'Dinheiro',
+    cash: 'Dinheiro',
+    credit: 'Cartao de credito',
+    credit_card: 'Cartao de credito',
+    debit: 'Cartao de debito',
+    debit_card: 'Cartao de debito',
+    on_delivery: 'Pagamento na entrega/retirada',
+  };
+  if (!value) return 'Nao informado';
+  return value.split(',').map((part) => labels[part.trim()] || part.trim()).filter(Boolean).join(', ');
+}
+
+function telegramSalesAddressLabelVps(addressValue) {
+  const address = telegramSalesParseJsonVps(addressValue, null);
+  if (!address || typeof address !== 'object') return 'Retirada presencial';
+  return [
+    `${address.street || ''}${address.number ? `, ${address.number}` : ''}`.trim(),
+    address.complement ? String(address.complement).trim() : '',
+    `${address.neighborhood || ''}${address.city ? `, ${address.city}` : ''}${address.state ? `/${address.state}` : ''}`.trim(),
+  ].filter(Boolean).join(' - ') || 'Endereco nao informado';
+}
+
+function applyTelegramSalesTemplateVps(content, data) {
+  let message = String(content || '');
+  for (const [key, value] of Object.entries(data || {})) {
+    message = message.split(`{${key}}`).join(value == null ? '' : String(value));
+  }
+  if (message.length > 4000) return `${message.slice(0, 3900)}\n\n... [mensagem truncada]`;
+  return message;
+}
+
+async function loadTelegramSalesSettingsVps() {
+  const rows = await vpsDbSelect('telegram_settings', 'select=*&limit=1');
+  const settings = cronDispatcherFirstRowVps(rows);
+  if (!settings || !settings.active || !settings.bot_token || !settings.chat_id) return null;
+  return settings;
+}
+
+function findTelegramSalesTemplateVps(settings, templateId, actionType) {
+  const templates = parseCronDispatcherTemplatesVps(settings);
+  return templates.find((template) => template.id === templateId)
+    || templates.find((template) => template.type === 'action' && template.action_type === actionType)
+    || null;
+}
+
+async function ensureTelegramNotificationLogTableVps() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS telegram_notification_log (
+      event_key VARCHAR(160) PRIMARY KEY,
+      event_type VARCHAR(80) NOT NULL,
+      status VARCHAR(24) NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      sent_at TIMESTAMP NULL DEFAULT NULL,
+      error_message TEXT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+}
+
+async function reserveTelegramNotificationEventVps(eventKey, eventType) {
+  await ensureTelegramNotificationLogTableVps();
+  const [result] = await pool.query(
+    'INSERT IGNORE INTO telegram_notification_log (event_key, event_type, status) VALUES (?, ?, ?)',
+    [eventKey, eventType, 'pending']
+  );
+  return Number(result?.affectedRows || 0) > 0;
+}
+
+async function markTelegramNotificationEventSentVps(eventKey) {
+  await pool.query(
+    "UPDATE telegram_notification_log SET status = 'sent', sent_at = CURRENT_TIMESTAMP, error_message = NULL WHERE event_key = ?",
+    [eventKey]
+  );
+}
+
+async function releaseTelegramNotificationEventVps(eventKey, error) {
+  await pool.query(
+    'DELETE FROM telegram_notification_log WHERE event_key = ?',
+    [eventKey]
+  ).catch(() => {});
+  console.error('[telegram-sales] notification send failed:', buildCopyableDebug('telegram-sales', {
+    step: 'send telegram message',
+    event_key: eventKey,
+    rawMessage: error?.message || String(error),
+  }));
+}
+
+async function sendTelegramSalesMessageVps(settings, message) {
+  try {
+    await sendCronDispatcherTelegramMessageVps(settings, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    if (!/parse|markdown|entity/i.test(String(error?.message || ''))) throw error;
+    await sendCronDispatcherTelegramMessageVps(settings, message);
+  }
+}
+
+async function sendDedupedTelegramSalesTemplateVps(eventKey, eventType, templateId, actionType, data) {
+  const settings = await loadTelegramSalesSettingsVps();
+  if (!settings) return false;
+  const template = findTelegramSalesTemplateVps(settings, templateId, actionType);
+  if (!template?.content) return false;
+
+  const reserved = await reserveTelegramNotificationEventVps(eventKey, eventType);
+  if (!reserved) return false;
+
+  const message = applyTelegramSalesTemplateVps(template.content, data);
+  try {
+    await sendTelegramSalesMessageVps(settings, message);
+    await markTelegramNotificationEventSentVps(eventKey);
+    return true;
+  } catch (error) {
+    await releaseTelegramNotificationEventVps(eventKey, error);
+    throw error;
+  }
+}
+
+async function notifyTelegramOnlineOrderPaidVps(orderId) {
+  if (!orderId) return false;
+  const [orders] = await pool.query('SELECT * FROM orders WHERE id = ? LIMIT 1', [orderId]);
+  const order = orders?.[0] || null;
+  if (!order) return false;
+
+  const [items] = await pool.query(
+    `SELECT oi.*, p.price_cost
+       FROM order_items oi
+       LEFT JOIN products p ON p.id = oi.product_id
+      WHERE oi.order_id = ?
+      ORDER BY oi.created_at ASC`,
+    [orderId]
+  );
+
+  const totalSale = Number(order.total) || 0;
+  const totalCost = (Array.isArray(items) ? items : []).reduce((sum, item) => {
+    const qty = Number(item.quantity) || 0;
+    const cost = Number(item.price_cost) || 0;
+    return sum + (qty * cost);
+  }, 0);
+  const itemsText = (Array.isArray(items) ? items : []).map((item) => {
+    const qty = Number(item.quantity) || 0;
+    const subtotal = Number(item.subtotal) || ((Number(item.unit_price) || 0) * qty);
+    return `- ${item.product_name || 'Item'} x${qty} - ${formatTelegramSalesMoneyFromCentsVps(subtotal)}`;
+  }).join('\n') || 'Sem itens detalhados';
+
+  const paidAt = new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date());
+
+  return sendDedupedTelegramSalesTemplateVps(
+    `online_order_paid:${orderId}`,
+    'online_order_paid',
+    'online_order_paid_template',
+    'online_order_paid',
+    {
+      id_pedido: String(order.id || '').slice(0, 8),
+      id_pedido_completo: String(order.id || '-'),
+      cliente: order.customer_name || '-',
+      telefone: order.customer_phone || '-',
+      email: order.customer_email || '-',
+      itens: itemsText,
+      preco_compra: formatTelegramSalesMoneyFromCentsVps(totalCost),
+      preco_venda: formatTelegramSalesMoneyFromCentsVps(totalSale),
+      lucro: formatTelegramSalesMoneyFromCentsVps(totalSale - totalCost),
+      pagamento: telegramSalesPaymentLabelVps(order.payment_method),
+      entrega: telegramSalesDeliveryLabelVps(order.delivery_type),
+      endereco: telegramSalesAddressLabelVps(order.shipping_address),
+      data_pagamento: paidAt,
+    }
+  );
+}
+
+async function notifyTelegramPdvSaleVps(saleId) {
+  if (!saleId) return false;
+  const [sales] = await pool.query(
+    `SELECT s.*, c.name AS customer_name, c.phone AS customer_phone
+       FROM sales s
+       LEFT JOIN customers c ON c.id = s.customer_id
+      WHERE s.id = ?
+      LIMIT 1`,
+    [saleId]
+  );
+  const sale = sales?.[0] || null;
+  if (!sale) return false;
+
+  const [items] = await pool.query(
+    `SELECT si.*, p.stock_quantity
+       FROM sale_items si
+       LEFT JOIN products p ON p.id = si.product_id
+      WHERE si.sale_id = ?
+      ORDER BY si.created_at ASC`,
+    [saleId]
+  );
+  const saleItems = Array.isArray(items) ? items : [];
+  const firstItem = saleItems[0] || null;
+  const isMultiple = saleItems.length > 1;
+
+  let deliveryName = 'Retirada na Loja';
+  let deliveryPix = '-';
+  if (sale.delivery_person_customer_id) {
+    const [rows] = await pool.query('SELECT name, pix_key FROM customers WHERE id = ? LIMIT 1', [sale.delivery_person_customer_id]);
+    const person = rows?.[0] || null;
+    deliveryName = person?.name || 'Entregador';
+    deliveryPix = person?.pix_key || '-';
+  } else if (sale.delivery_person_id) {
+    const [rows] = await pool.query('SELECT name, pix_key FROM team_members WHERE id = ? LIMIT 1', [sale.delivery_person_id]).catch(() => [[]]);
+    const person = rows?.[0] || null;
+    deliveryName = person?.name || 'Entregador';
+    deliveryPix = person?.pix_key || '-';
+  }
+
+  return sendDedupedTelegramSalesTemplateVps(
+    `pdv_sale:${saleId}`,
+    'sale',
+    'sale_template',
+    'sale',
+    {
+      id_venda: String(sale.id || '').slice(0, 8).toUpperCase(),
+      cliente: sale.customer_name || '-',
+      telefone: sale.customer_phone || '-',
+      produto: isMultiple ? `${saleItems.length} itens diversificados` : (firstItem?.product_name || 'Item'),
+      modelo: isMultiple ? '-' : String(firstItem?.product_name || 'Item').split(',')[0],
+      valor: formatTelegramSalesMoneyFromCentsVps(sale.total),
+      lucro: formatTelegramSalesMoneyFromCentsVps(sale.profit),
+      pagamento: telegramSalesPaymentLabelVps(sale.payment_method),
+      desconto: Number(sale.discount_total || sale.discount || 0) > 0 ? formatTelegramSalesMoneyFromCentsVps(sale.discount_total || sale.discount) : 'Nenhum',
+      estoque: isMultiple ? '-' : String(firstItem?.stock_quantity ?? '-'),
+      entregador: deliveryName,
+      entregador_pix: deliveryPix,
+    }
+  );
 }
 
 function safeMarkdownCronDispatcherVps(value) {
@@ -20617,6 +20883,17 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
     `INSERT INTO \`${name}\` (${colList}) VALUES ${allPlaceholders}`,
     allValues
   );
+
+  if (name === 'sale_items') {
+    const saleIds = Array.from(new Set(insertRows.map((row) => row.sale_id).filter(Boolean).map(String)));
+    void Promise.all(saleIds.map((saleId) => notifyTelegramPdvSaleVps(saleId))).catch((notifyError) => {
+      console.error('[telegram-sales] PDV sale notification failed:', buildCopyableDebug('telegram-sales', {
+        step: 'notify pdv sale after sale_items bulk',
+        sale_count: saleIds.length,
+        rawMessage: notifyError?.message || String(notifyError),
+      }));
+    });
+  }
 
   return { inserted: rows.length };
 });
