@@ -69,6 +69,7 @@ function parseJsonField<T>(value: unknown, fallback: T): T {
 function normalizeCustomer(row: Customer): Customer {
     const active = row.is_active as unknown;
     const deliveryWorker = row.is_delivery_worker as unknown;
+    const walkInCustomer = row.is_walk_in_customer as unknown;
     return {
         ...row,
         address: parseJsonField(row.address, undefined as any),
@@ -76,6 +77,7 @@ function normalizeCustomer(row: Customer): Customer {
         customer_type: fromVpsCustomerType(row.customer_type),
         is_active: active === true || active === 1 || active === '1',
         is_delivery_worker: deliveryWorker === true || deliveryWorker === 1 || deliveryWorker === '1',
+        is_walk_in_customer: walkInCustomer === true || walkInCustomer === 1 || walkInCustomer === '1',
     };
 }
 
@@ -102,6 +104,20 @@ function onlyDigits(value: unknown): string {
 
 function byCreatedAtDesc(a: Customer, b: Customer): number {
     return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+}
+
+function normalizeCustomerName(value: unknown): string {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function isWalkInCustomerCandidate(customer: Customer, companyId: string): boolean {
+    return customer.company_id === companyId &&
+        (customer.is_walk_in_customer === true || normalizeCustomerName(customer.name) === 'cliente balcao');
 }
 
 class CustomerService {
@@ -157,6 +173,7 @@ class CustomerService {
             })
             .filter(customer => filters?.is_active === undefined || customer.is_active === filters.is_active)
             .filter(customer => filters?.is_delivery_worker === undefined || customer.is_delivery_worker === filters.is_delivery_worker)
+            .filter(customer => filters?.is_walk_in_customer === undefined || customer.is_walk_in_customer === filters.is_walk_in_customer)
             .filter(customer => !filters?.created_after || String(customer.created_at || '') >= filters.created_after!)
             .filter(customer => !filters?.created_before || String(customer.created_at || '') <= filters.created_before!)
             .sort(byCreatedAtDesc);
@@ -204,6 +221,31 @@ class CustomerService {
             customer.company_id === companyId &&
             onlyDigits(customer.cpf_cnpj) === onlyDigits(cpfCnpj)
         ) || null;
+    }
+
+    /**
+     * Select the existing counter customer used for quick in-store sales.
+     * This intentionally never creates records, avoiding duplicated "Cliente Balcão" rows.
+     */
+    async getWalkInCustomer(): Promise<Customer> {
+        const companyId = await this.getCompanyId();
+        const customer = (await this.loadAllCustomers())
+            .find(candidate => isWalkInCustomerCandidate(candidate, companyId));
+
+        if (!customer) {
+            throw new Error('Cliente Balcão não encontrado no cadastro. Reative ou cadastre esse cliente antes de usar venda rápida.');
+        }
+
+        return {
+            ...customer,
+            is_walk_in_customer: true,
+            custom_data: {
+                ...(customer.custom_data || {}),
+                walk_in_customer: true,
+                no_benefits: true,
+                no_coins: true,
+            },
+        };
     }
 
     /**

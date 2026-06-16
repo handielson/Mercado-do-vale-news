@@ -147,6 +147,7 @@ interface Customer {
     phone?: string;
     customer_type?: 'wholesale' | 'resale' | 'retail' | 'ADMIN';
     admin_preview_type?: 'retail' | 'resale' | 'wholesale';
+    is_walk_in_customer?: boolean;
 }
 
 function extractDeliveryPersonCustomerId(
@@ -199,6 +200,7 @@ export default function PDVPage() {
 
     // Estado do cliente
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>();
+    const [isSelectingWalkInCustomer, setIsSelectingWalkInCustomer] = useState(false);
 
     // Estado dos pagamentos
     const [payments, setPayments] = useState<PaymentMethod[]>([]);
@@ -563,6 +565,25 @@ export default function PDVPage() {
         setDeliveryPersonCustomerId(extractDeliveryPersonCustomerId(personId, deliveryPersons) || '');
         setDeliveryCostStore(costStore);
         setDeliveryCostCustomer(costCustomer);
+    };
+
+    const isWalkInCustomer = (customer?: Customer): boolean => customer?.is_walk_in_customer === true;
+
+    const handleSelectWalkInCustomer = async () => {
+        try {
+            setIsSelectingWalkInCustomer(true);
+            const customer = await customerService.getWalkInCustomer();
+            setSelectedCustomer(customer);
+            handleDeliveryChange('store_pickup', undefined, 0, 0);
+            toast.success('Venda rápida selecionada', {
+                description: 'Cliente Balcão com retirada na loja.'
+            });
+        } catch (error: any) {
+            console.error('Erro ao selecionar Cliente Balcão:', error);
+            toast.error(error?.message || 'Erro ao selecionar Cliente Balcão');
+        } finally {
+            setIsSelectingWalkInCustomer(false);
+        }
     };
 
     // Handler de seleção de parcela
@@ -1330,6 +1351,8 @@ export default function PDVPage() {
                         <CustomerSection
                             selectedCustomer={selectedCustomer}
                             onSelectCustomer={setSelectedCustomer}
+                            onSelectWalkInCustomer={handleSelectWalkInCustomer}
+                            isSelectingWalkInCustomer={isSelectingWalkInCustomer}
                         />
 
                         <ProductSearchSection

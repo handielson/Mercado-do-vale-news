@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.28-banner-background-color",
+  "version": "v1.1.29-pdv-counter-customer",
   "date": "2026-06-15",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260615-212330-v1128-banner-background-color",
+  "release_vps": "/var/www/mdv-site/releases/20260615-214800-v1129-pdv-counter-customer",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Adiciona cor de fundo editavel por banner e aplica essa cor nas bordas do carrossel publico."
+  "summary": "Restaura a venda rapida do PDV usando o cadastro existente Cliente Balcao, sem criar duplicados."
 }

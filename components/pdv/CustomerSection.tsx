@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Search, X, Calendar, ShoppingBag, ExternalLink, UserPlus, Loader2, MapPin, FileText } from 'lucide-react';
+import { User, Search, X, Calendar, ShoppingBag, ExternalLink, UserPlus, Loader2, MapPin, FileText, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { formatCpfCnpj, formatPhone, validateCpfCnpj, validateEmail } from '../../utils/cpfCnpjValidation';
@@ -13,16 +13,21 @@ interface Customer {
     email?: string;
     phone?: string;
     birth_date?: string;
+    is_walk_in_customer?: boolean;
 }
 
 interface CustomerSectionProps {
     selectedCustomer?: Customer;
     onSelectCustomer: (customer: Customer | undefined) => void;
+    onSelectWalkInCustomer?: () => void | Promise<void>;
+    isSelectingWalkInCustomer?: boolean;
 }
 
 export default function CustomerSection({
     selectedCustomer,
-    onSelectCustomer
+    onSelectCustomer,
+    onSelectWalkInCustomer,
+    isSelectingWalkInCustomer = false
 }: CustomerSectionProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState<Customer[]>([]);
@@ -88,7 +93,6 @@ export default function CustomerSection({
     const fetchRecentCustomers = async () => {
         try {
             const data = await customerService.list({ is_active: true });
-
             // Buscar últimos 3 clientes que fizeram compras (TODO: ordenar por última compra)
             setRecentCustomers(data.slice(0, 3));
         } catch (error) {
@@ -377,6 +381,9 @@ export default function CustomerSection({
                                         {selectedCustomer.phone && (
                                             <p className="text-sm text-slate-600">Tel: {selectedCustomer.phone}</p>
                                         )}
+                                        {selectedCustomer.is_walk_in_customer && (
+                                            <p className="text-sm text-amber-700 font-medium">Venda rápida sem cadastro</p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -463,6 +470,18 @@ export default function CustomerSection({
                             >
                                 <UserPlus size={18} />
                             </button>
+                            {onSelectWalkInCustomer && (
+                                <button
+                                    type="button"
+                                    onClick={onSelectWalkInCustomer}
+                                    disabled={isSelectingWalkInCustomer}
+                                    className="inline-flex items-center gap-2 px-4 py-2 border border-amber-200 bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors"
+                                    title="Venda rápida para Cliente Balcão"
+                                >
+                                    {isSelectingWalkInCustomer ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
+                                    <span className="hidden sm:inline text-sm font-medium">Venda rápida</span>
+                                </button>
+                            )}
                         </div>
 
                         <p className="text-xs text-red-600">
