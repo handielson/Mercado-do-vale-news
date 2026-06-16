@@ -38,6 +38,37 @@ function buildDeliveryOperationUrl(token?: string | null): string {
     return `${origin}/delivery/${encodeURIComponent(cleanToken)}`;
 }
 
+function formatDeliveryOrderNumber(value?: string | null): string {
+    const cleanValue = String(value || '').trim();
+    if (!cleanValue) return '#SEM-NUMERO';
+    const uuidMatch = cleanValue.match(/^([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    const displayValue = uuidMatch ? uuidMatch[1].toUpperCase() : cleanValue;
+    return displayValue.startsWith('#') ? displayValue : `#${displayValue}`;
+}
+
+function getSnapshotOrderNumber(job: CustomerDeliveryJob): string {
+    const snapshotOrderNumber = job.receipt_snapshot_json?.sale?.order_number;
+    return typeof snapshotOrderNumber === 'string' ? snapshotOrderNumber : '';
+}
+
+function getDeliveryJobOrderNumber(job: CustomerDeliveryJob): string {
+    return formatDeliveryOrderNumber(job.order_number || getSnapshotOrderNumber(job) || job.sale_id);
+}
+
+function getDeliveryLedgerOrderNumber(item: CustomerDeliveryLedgerEntry): string {
+    return formatDeliveryOrderNumber(item.order_number || item.sale_id);
+}
+
+function getDeliveryLedgerDescription(item: CustomerDeliveryLedgerEntry): string {
+    const description = String(item.description || '').trim();
+    const orderNumber = getDeliveryLedgerOrderNumber(item);
+    if (!description) return `Entrega - Pedido ${orderNumber}`;
+    return description.replace(
+        /Pedido\s+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+        `Pedido ${orderNumber}`
+    );
+}
+
 export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, mode = 'viewer' }) => {
     const isAdminMode = mode === 'admin';
     const [ledger, setLedger] = useState<CustomerDeliveryLedgerEntry[]>([]);
@@ -301,7 +332,7 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
                     return (
                         <div key={job.id} className="grid gap-3 border-b border-amber-100 bg-white px-5 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_220px]">
                             <div>
-                                <p className="text-sm font-semibold text-slate-800">Pedido {job.order_number || job.sale_id}</p>
+                                <p className="text-sm font-semibold text-slate-800">Pedido {getDeliveryJobOrderNumber(job)}</p>
                                 <p className="mt-1 text-xs text-slate-500">{job.buyer_name} - {formatCurrencyCents(job.delivery_amount)}</p>
                                 <p className="mt-1 text-xs text-slate-500">Pagamento: {job.payment_status} | Entrega: {job.delivery_status}</p>
                                 {deliveryUrl && (
@@ -359,8 +390,8 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
                 {ledger.length === 0 ? <p className="px-5 py-6 text-sm text-slate-500">Nenhuma entrega registrada.</p> : ledger.map((item) => (
                     <div key={item.id} className="grid gap-3 border-b border-slate-100 px-5 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_auto]">
                         <div>
-                            <p className="text-sm font-semibold text-slate-800">{item.description}</p>
-                            <p className="mt-1 text-xs text-slate-500">Pedido {item.order_number || item.sale_id} - {item.buyer_name || 'Cliente'}</p>
+                            <p className="text-sm font-semibold text-slate-800">{getDeliveryLedgerDescription(item)}</p>
+                            <p className="mt-1 text-xs text-slate-500">Pedido {getDeliveryLedgerOrderNumber(item)} - {item.buyer_name || 'Cliente'}</p>
                             <p className="mt-1 text-xs text-slate-500">{item.delivery_address_text}</p>
                             {item.proof_image_url && (
                                 <a className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-700" href={item.proof_image_url} target="_blank" rel="noreferrer">

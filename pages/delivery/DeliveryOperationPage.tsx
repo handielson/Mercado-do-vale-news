@@ -46,6 +46,20 @@ function getDeliveryErrorMessage(error: unknown, fallback: string): string {
     return message || fallback;
 }
 
+function formatDeliveryOrderNumber(value?: string | null): string {
+    const cleanValue = String(value || '').trim();
+    if (!cleanValue) return '#SEM-NUMERO';
+    const uuidMatch = cleanValue.match(/^([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    const displayValue = uuidMatch ? uuidMatch[1].toUpperCase() : cleanValue;
+    return displayValue.startsWith('#') ? displayValue : `#${displayValue}`;
+}
+
+function getDeliveryJobOrderNumber(job: CustomerDeliveryJob): string {
+    const snapshotOrderNumber = job.receipt_snapshot_json?.sale?.order_number;
+    const receiptOrderNumber = typeof snapshotOrderNumber === 'string' ? snapshotOrderNumber : '';
+    return formatDeliveryOrderNumber(job.order_number || receiptOrderNumber || job.sale_id);
+}
+
 const DeliveryOperationPage: React.FC = () => {
     const { token = '' } = useParams();
     const [job, setJob] = useState<CustomerDeliveryJob | null>(null);
@@ -191,7 +205,7 @@ const DeliveryOperationPage: React.FC = () => {
                 <header className="mb-5 flex items-start justify-between gap-4">
                     <div>
                         <p className="text-xs font-semibold uppercase text-blue-700">Operacao de entrega</p>
-                        <h1 className="mt-1 text-2xl font-bold text-slate-900">Pedido {job.order_number || job.sale_id}</h1>
+                        <h1 className="mt-1 text-2xl font-bold text-slate-900">Pedido {getDeliveryJobOrderNumber(job)}</h1>
                         <p className="mt-1 text-sm text-slate-600">{job.buyer_name}</p>
                     </div>
                     <Bike className="h-8 w-8 text-blue-600" />

@@ -20878,6 +20878,24 @@ fastify.post('/delivery/jobs/:token/admin-complete', { preHandler: requireSyncKe
   }
 });
 
+fastify.patch('/admin/delivery/jobs/:jobId/amount', { preHandler: requireSyncKey }, async (req, reply) => {
+  const jobId = String(req.params.jobId || '').trim();
+  const deliveryAmount = normalizeDeliveryLedgerAmount(req.body?.delivery_amount ?? req.body?.amount);
+  const paymentAmount = normalizeDeliveryLedgerAmount(req.body?.payment_amount ?? deliveryAmount);
+  if (!jobId) return reply.code(400).send({ error: 'job_id obrigatorio' });
+  if (deliveryAmount <= 0 || paymentAmount <= 0) return reply.code(400).send({ error: 'valor invalido' });
+  const [existingRows] = await pool.query('SELECT id FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [jobId]);
+  if (!existingRows?.[0]) return reply.code(404).send({ error: 'Entrega nao encontrada' });
+  await pool.query(
+    `UPDATE customer_delivery_jobs
+       SET delivery_amount = ?, payment_amount = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [deliveryAmount, paymentAmount, jobId]
+  );
+  const [updatedRows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [jobId]);
+  return mapCustomerDeliveryJob(updatedRows?.[0] || null);
+});
+
 fastify.get('/customers/:customerId/delivery-ledger', { preHandler: requireSyncKey }, async (req, reply) => {
   const customerId = String(req.params.customerId || '').trim();
   if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
