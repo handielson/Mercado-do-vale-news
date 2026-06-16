@@ -6,6 +6,7 @@ const paymentSection = fs.readFileSync('components/pdv/PaymentSection.tsx', 'utf
 const receiptPreview = fs.readFileSync('components/pdv/ReceiptPreview.tsx', 'utf8');
 const saleService = fs.readFileSync('services/saleService.ts', 'utf8');
 const displayHelper = fs.readFileSync('utils/pdvProductDisplay.ts', 'utf8');
+const salePresentation = fs.readFileSync('utils/salePresentation.ts', 'utf8');
 
 assert.match(
     pdvPage,
@@ -17,6 +18,48 @@ assert.match(
     pdvPage,
     /targetCreditTotal = safeTargetTotal - paymentsWithoutAdjustedCredit/,
     'final adjustment must recalculate the selected credit payment instead of only changing sale total'
+);
+
+assert.match(
+    pdvPage,
+    /const adjustedCreditBaseAmount = Math\.round\(targetCreditTotal \/ \(1 \+ appliedFeeRate\)\)/,
+    'final adjustment must keep credit amount as the base amount before customer fee'
+);
+
+assert.match(
+    pdvPage,
+    /fee_amount: adjustedCreditFeeAmount/,
+    'final adjustment must recalculate the customer fee separately from the base amount'
+);
+
+assert.match(
+    pdvPage,
+    /operator_fee_amount: adjustedOperatorFeeAmount/,
+    'final adjustment must recalculate the operator fee from the adjusted base amount'
+);
+
+assert.match(
+    pdvPage,
+    /const saleForPrint = \{ \.\.\.lastSaleData\.sale, customer: lastSaleData\.customer, items: lastSaleData\.items \}/,
+    'success modal receipt must carry the selected customer into printSaleReceipt'
+);
+
+assert.match(
+    pdvPage,
+    /setShowSuccessModal\(false\);[\s\S]*setShowWarrantyModal\(true\);/,
+    'success modal must be closed before opening the warranty modal so the term is actionable'
+);
+
+assert.match(
+    salePresentation,
+    /const hasDetailedPaymentCosts = payments\.some/,
+    'sale financial summary must detect detailed payment operator costs'
+);
+
+assert.match(
+    salePresentation,
+    /getSaleCollectedTotal\(sale, profitData\)[\s\S]*- getSaleCostTotal\(sale, profitData\)[\s\S]*- operatorFeeTotal/,
+    'sale financial summary must recompute real profit from collected total, item cost and operator fee'
 );
 
 assert.match(
@@ -57,7 +100,7 @@ assert.match(
 
 assert.match(
     pdvPage,
-    /buildPdvProductName\(product\.name, \(product as any\)\.specs\)/,
+    /buildPdvProductName\(product\.name, \(product as any\)\.specs, unitData\)/,
     'PDV cart item names must use the display helper'
 );
 

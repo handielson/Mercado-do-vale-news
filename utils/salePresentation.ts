@@ -184,6 +184,20 @@ export function getSaleRealProfit(sale: SaleWithItems, profitData?: SaleProfitDa
     if (profitData && Number.isFinite(Number(profitData.profit_cents))) {
         return moneyToCents(profitData.profit_cents);
     }
+    const payments = sale.payment_methods || [];
+    const hasDetailedPaymentCosts = payments.some(payment => (
+        Number((payment as any).operator_fee_amount || 0) > 0
+        || Number((payment as any).operator_fee_cents || 0) > 0
+    ));
+    if (hasDetailedPaymentCosts) {
+        const operatorFeeTotal = payments.reduce((sum, payment) => {
+            return sum + moneyToCents((payment as any).operator_fee_amount ?? (payment as any).operator_fee_cents ?? 0);
+        }, 0);
+        return getSaleCollectedTotal(sale, profitData)
+            - getSaleCostTotal(sale, profitData)
+            - operatorFeeTotal
+            - moneyToCents((sale as any).delivery_total || 0);
+    }
     if (Number(sale.profit) !== 0) return moneyToCents(sale.profit);
     return getSaleCollectedTotal(sale, profitData) - getSaleCostTotal(sale, profitData);
 }

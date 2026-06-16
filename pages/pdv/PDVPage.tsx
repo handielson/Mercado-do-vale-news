@@ -638,10 +638,17 @@ export default function PDVPage() {
 
         const nextPayments = payments.map((payment, index) => {
             if (index !== creditPaymentIndex) return payment;
+            const appliedFeeRate = Math.max(0, Number(payment.fee_percentage || 0)) / 100;
+            const operatorFeeRate = Math.max(0, Number((payment as any).operator_fee_percentage || 0)) / 100;
+            const adjustedCreditBaseAmount = Math.round(targetCreditTotal / (1 + appliedFeeRate));
+            const adjustedCreditFeeAmount = Math.max(0, targetCreditTotal - adjustedCreditBaseAmount);
+            const adjustedOperatorFeeAmount = Math.round(adjustedCreditBaseAmount * operatorFeeRate);
 
             return {
                 ...payment,
-                amount: targetCreditTotal,
+                amount: adjustedCreditBaseAmount,
+                fee_amount: adjustedCreditFeeAmount,
+                operator_fee_amount: adjustedOperatorFeeAmount,
                 total_with_fee: targetCreditTotal
             };
         });
@@ -1209,6 +1216,7 @@ export default function PDVPage() {
             setWarrantyDocsMeta(docsMeta);
             setWarrantyTemplate(settings.warranty_template);
             setWarrantyDeliveryType(initialType);
+            setShowSuccessModal(false);
             setShowWarrantyModal(true);
         } catch (error) {
             console.error('Erro ao gerar termo de garantia:', error);
@@ -1267,7 +1275,7 @@ export default function PDVPage() {
                     };
                 }
             });
-            const saleForPrint = { ...lastSaleData.sale, items: lastSaleData.items };
+            const saleForPrint = { ...lastSaleData.sale, customer: lastSaleData.customer, items: lastSaleData.items };
             printSaleReceipt(saleForPrint as any, settings, specsByItem);
         } catch (e) {
             console.error(e);
