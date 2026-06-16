@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.48-pdv-serialized-sku-grouping",
+  "version": "v1.1.49-smartphone-serialized-units",
   "date": "2026-06-16",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260616-171407-v1148-pdv-serialized-sku-grouping",
+  "release_vps": "/var/www/mdv-site/releases/20260616-181000-v1149-smartphone-serialized-units",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Agrupa duplicados por SKU no PDV serializado e mostra identificadores vindos das unidades no card de produto."
+  "summary": "Agrupa smartphones serializados por modelo, memoria, armazenamento e cor no PDV, com reconstrucao dos IMEIs legados em unidades."
 }

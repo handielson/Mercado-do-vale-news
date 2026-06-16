@@ -125,4 +125,82 @@ assert.ok(
   'legacy duplicate specs must not leak into grouped hydrated card',
 );
 
+const smartphoneCards = mod.fromHydratedPdvSearchPayload([
+  {
+    product: {
+      id: 'prod-redmi-legacy-duplicate',
+      name: 'Redmi note 15 pró 4g',
+      sku: 'XI-REDMINOTE15PRO4G-TI-8GB-256GB',
+      model_id: 'model-redmi-15-pro',
+      track_inventory: true,
+      stock_quantity: 1,
+      price_retail: 177000,
+      specs: {
+        ram: '8GB',
+        storage: '256GB',
+        color: 'Titânio',
+        imei1: '865750085805988',
+        imei2: '865750085805996',
+      },
+    },
+    available_units: [],
+  },
+  {
+    product: {
+      id: 'prod-redmi-canonical',
+      name: 'Redmi Note 15 Pró 4G',
+      sku: 'RN15P8256T',
+      model_id: 'model-redmi-15-pro',
+      track_inventory: true,
+      stock_quantity: 2,
+      price_retail: 177000,
+      specs: {
+        ram: '8GB',
+        storage: '256GB',
+        color: 'Titanio',
+      },
+    },
+    available_units: [
+      { id: 'unit-redmi-1', product_id: 'prod-redmi-canonical', status: 'available', imei_1: '865750085805988', imei_2: '865750085805996', serial: '72698/W5XJ03708', condition: 'new', created: '', updated: '' },
+      { id: 'unit-redmi-2', product_id: 'prod-redmi-canonical', status: 'available', imei_1: '865750084601982', imei_2: '865750084601990', serial: '72698/W5XJ04308', condition: 'new', created: '', updated: '' },
+    ],
+  },
+  {
+    product: {
+      id: 'prod-redmi-preto',
+      name: 'Redmi Note 15 Pró 4G',
+      sku: 'RN15P8256P',
+      model_id: 'model-redmi-15-pro',
+      track_inventory: true,
+      stock_quantity: 1,
+      price_retail: 177000,
+      specs: {
+        ram: '8GB',
+        storage: '256GB',
+        color: 'Preto',
+      },
+    },
+    available_units: [
+      { id: 'unit-redmi-preto', product_id: 'prod-redmi-preto', status: 'available', imei_1: '865750081088886', imei_2: '865750081088894', serial: '71373/W5XH022', condition: 'new', created: '', updated: '' },
+    ],
+  },
+]);
+
+assert.equal(smartphoneCards.length, 2, 'same smartphone model/spec/color must group even when duplicate SKUs differ');
+const titanium = smartphoneCards.find((card) => card.id === 'product:prod-redmi-canonical:serialized');
+assert.equal(titanium.kind, 'serialized-product');
+assert.equal(titanium.stockLabel, '2 unidades disponiveis');
+assert.deepEqual(
+  titanium.unitOptions.map((option) => option.label),
+  ['IMEI 1: 865750085805988', 'IMEI 1: 865750084601982'],
+);
+assert.ok(
+  JSON.stringify(titanium).includes('XI-REDMINOTE15PRO4G-TI-8GB-256GB') === false,
+  'legacy duplicate smartphone SKU must not leak into the grouped PDV card',
+);
+assert.ok(
+  smartphoneCards.some((card) => card.id === 'product:prod-redmi-preto:serialized'),
+  'different smartphone color must remain a separate product card',
+);
+
 console.log('pdv serialized inventory core checks passed');

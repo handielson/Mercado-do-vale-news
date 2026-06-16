@@ -50,6 +50,14 @@ function cleanText(value: unknown): string {
     return String(value || '').trim();
 }
 
+function normalizeKeyText(value: unknown): string {
+    return cleanText(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .toLowerCase();
+}
+
 function isAvailableUnit(unit: Unit): boolean {
     return String(unit.status) === 'available';
 }
@@ -75,6 +83,15 @@ function stripLegacySerializedSpecs(product: Product): Product {
 }
 
 function getProductGroupingKey(product: Product): string {
+    const modelId = cleanText((product as any).model_id);
+    const ram = normalizeKeyText(product.specs?.ram);
+    const storage = normalizeKeyText(product.specs?.storage);
+    const color = normalizeKeyText(product.specs?.color);
+
+    if (modelId && ram && storage && color) {
+        return `model:${modelId}:ram:${ram}:storage:${storage}:color:${color}`;
+    }
+
     const sku = cleanText(product.sku).toLowerCase();
     if (sku) return `sku:${sku}`;
     return `product:${product.id}`;
