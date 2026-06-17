@@ -17,18 +17,62 @@ export function mergeProductsById(current: Product[], incoming: Product[]): Prod
     return current.map(product => byId.get(product.id) || product).concat(appended);
 }
 
+function normalizeSearchValue(value: unknown): string {
+    return String(value ?? '').toLowerCase();
+}
+
+function collectSerializedSearchValues(product: Product): string[] {
+    const specs = product.specs || {};
+    const values: unknown[] = [
+        specs.imei1,
+        specs.imei_1,
+        specs.imei,
+        specs.imei2,
+        specs.imei_2,
+        specs.serial,
+        specs.serial_number,
+        (product as any).imei1,
+        (product as any).imei_1,
+        (product as any).imei2,
+        (product as any).imei_2,
+        (product as any).serial,
+        (product as any).serial_number,
+    ];
+
+    const units = [
+        ...((product as any).units || []),
+        ...((product as any).available_units || []),
+    ];
+
+    for (const unit of units) {
+        values.push(
+            unit?.imei1,
+            unit?.imei_1,
+            unit?.imei,
+            unit?.imei2,
+            unit?.imei_2,
+            unit?.serial,
+            unit?.serial_number,
+        );
+    }
+
+    return values.map(normalizeSearchValue).filter(Boolean);
+}
+
 export function filterAdminProducts(products: Product[], filters: ProductFiltersState): Product[] {
     let filtered = [...products];
 
     if (filters.search.trim() !== '') {
         const searchLower = filters.search.toLowerCase();
         filtered = filtered.filter(product => {
-            const nameMatch = (product.name || '').toLowerCase().includes(searchLower);
-            const skuMatch = (product.sku || '').toLowerCase().includes(searchLower);
-            const eanMatch = (product.eans || []).some(ean => ean?.toLowerCase().includes(searchLower));
+            const nameMatch = normalizeSearchValue(product.name).includes(searchLower);
+            const skuMatch = normalizeSearchValue(product.sku).includes(searchLower);
+            const eanMatch = (product.eans || []).some(ean => normalizeSearchValue(ean).includes(searchLower));
             const blingMatch = product.bling_id?.toString().includes(searchLower);
+            const serializedMatch = collectSerializedSearchValues(product)
+                .some(value => value.includes(searchLower));
 
-            return nameMatch || skuMatch || eanMatch || blingMatch;
+            return nameMatch || skuMatch || eanMatch || blingMatch || serializedMatch;
         });
     }
 

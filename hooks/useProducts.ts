@@ -5,6 +5,7 @@ import { ProductStatus } from '../utils/field-standards';
 import { productService } from '../services/products';
 import { vpsApiService } from '../services/vpsApiService';
 import { shopeeProductService } from '../services/shopeeProducts';
+import { unitService } from '../services/units';
 import { ProductFiltersState } from '../components/products/ProductFilters';
 import { prefetchModelImages } from '../services/modelImageCache';
 import { filterAdminProducts, mergeProductsById } from './adminProductFilters';
@@ -279,10 +280,19 @@ export const useProducts = () => {
             looksLikeSku
                 ? vpsApiService.getProducts({ sku: term, status: 'all', limit: 5, noCache: true })
                 : Promise.resolve(null),
+            unitService.searchByIdentifier(term)
+                .then(units => {
+                    const productIds = [...new Set(units.map(unit => unit.product_id).filter(Boolean))];
+                    return productIds.length > 0 ? vpsApiService.getProductsByIds(productIds) : null;
+                }),
         ])
-            .then(async ([searchRows, skuRows]) => {
+            .then(async ([searchRows, skuRows, unitProductRows]) => {
                 if (requestId !== searchRequestSeq.current) return;
-                const remoteProducts = await enrichProductsWithShopeeLinks([...(searchRows || []), ...(skuRows || [])].map(mapVpsProduct));
+                const remoteProducts = await enrichProductsWithShopeeLinks([
+                    ...(searchRows || []),
+                    ...(skuRows || []),
+                    ...(unitProductRows || []),
+                ].map(mapVpsProduct));
                 if (remoteProducts.length === 0) return;
 
                 setProducts(current => {

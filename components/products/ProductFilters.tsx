@@ -96,7 +96,7 @@ export const ProductFilters: React.FC<ProductFiltersProps> = ({ onFilterChange }
                         type="text"
                         value={filters.search}
                         onChange={(e) => applyChange({ search: e.target.value })}
-                        placeholder="Buscar por Nome ou SKU..."
+                        placeholder="Buscar por Nome, SKU, IMEI 1 ou Serial..."
                         className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                 </div>

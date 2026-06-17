@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.57-model-panel-serial-brand",
+  "version": "v1.1.58-admin-product-serial-search",
   "date": "2026-06-17",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260617-175659-v1157-model-panel-serial-brand",
+  "release_vps": "/var/www/mdv-site/releases/20260617-181327-v1158-admin-product-serial-search",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Corrige painel do modelo para exibir aparelhos serializados legados como disponiveis, mostrar pedido e cliente de vendas PDV, preservar 5G no nome publico e atualizar marcas novas sem cache."
+  "summary": "Permite pesquisar produtos no admin por IMEI 1, IMEI 2 e serial, incluindo busca remota nas unidades serializadas quando o produto nao esta no cache da tela."
 }

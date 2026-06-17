@@ -1,31 +1,29 @@
 # Versao Atual
 
 ```text
-version: v1.1.57-model-panel-serial-brand
+version: v1.1.58-admin-product-serial-search
 date: 2026-06-17
 status: published
-release_vps: /var/www/mdv-site/releases/20260617-175659-v1157-model-panel-serial-brand
+release_vps: /var/www/mdv-site/releases/20260617-181327-v1158-admin-product-serial-search
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- O painel do modelo passa a contar produtos com IMEI/serial em `specs` como unidade disponivel quando nao existe linha em `units`, alinhando com o PDV.
-- A tabela `Unidades vendidas` agora mostra `Pedido` e `Cliente` em colunas separadas, buscando o nome do cliente por `customer_id`.
-- Vendas PDV sem numero proprio aparecem com rotulo curto `PDV-XXXXXXXX`, em vez do UUID inteiro.
-- O nome publico preserva sufixos de rede como `5G`, mantendo `Redmi Note 15 Pro 5G` completo.
-- A modal de novo modelo carrega marcas sem cache, para marcas recem-criadas como `Oukitel` aparecerem imediatamente.
-- Mantem as correcoes de custo/lucro do painel do modelo e normalizacao de valores legados de venda.
+- A busca da pagina admin de produtos passa a encontrar aparelhos por `IMEI 1`, `IMEI 2` e `Serial`, alem de nome, SKU, EAN e Bling ID.
+- O filtro local considera identificadores salvos em `specs`, no proprio produto e em listas de `units`/`available_units`.
+- Quando o produto ainda nao esta no cache da tela, a busca consulta as unidades serializadas por identificador e hidrata o produto correspondente pela VPS.
+- O placeholder da busca foi atualizado para deixar claro que IMEI 1 e Serial podem ser pesquisados.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.57-model-panel-serial-brand` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.58-admin-product-serial-search` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-17-v1.1.57-model-panel-serial-brand.md
+docs/versoes/2026-06-17-v1.1.58-admin-product-serial-search.md
 ```
 
 ## Publicacao
 
-- Release VPS publicada: `/var/www/mdv-site/releases/20260617-175659-v1157-model-panel-serial-brand`.
-- Esta versao altera painel admin de modelos, pagina publica de produto e servicos frontend; site VPS publicado.
+- Release VPS publicada: `/var/www/mdv-site/releases/20260617-181327-v1158-admin-product-serial-search`.
+- Esta versao altera a busca da pagina admin de produtos e servicos frontend; site VPS publicado.
