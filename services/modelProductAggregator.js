@@ -223,6 +223,40 @@ function buildSaleStatsByProduct(products, sales, saleItems) {
   return statsByProductId;
 }
 
+function buildSerializedSaleInfoByUnitId(sales, saleItems) {
+  if (!Array.isArray(saleItems) || saleItems.length === 0) return new Map();
+
+  const saleById = new Map((sales || []).map((sale) => [String(sale.id || ''), sale]));
+  const infoByUnitId = new Map();
+
+  for (const item of saleItems) {
+    const unitId = String(item.serialized_unit_id || item.serializedUnitId || item.unit_id || item.unitId || '').trim();
+    if (!unitId) continue;
+
+    const saleId = String(item.sale_id || item.saleId || '').trim();
+    const sale = saleById.get(saleId) || {};
+    if (saleById.has(saleId) && !isActiveSale(sale)) continue;
+
+    const quantity = Math.max(1, Number(item.quantity || 1));
+    const unitPrice = moneyToCents(item.unit_price ?? item.price);
+    const returnedValue = moneyToCents(item.total ?? item.subtotal) || unitPrice * quantity;
+    const unitReturnedValue = Math.round(returnedValue / quantity);
+    const orderId = String(item.order_id || item.orderId || sale.order_id || sale.orderId || '').trim();
+    const orderNumber = String(
+      sale.order_number || sale.orderNumber || sale.number || sale.numero_pedido || item.order_number || item.orderNumber || orderId || ''
+    ).trim();
+
+    infoByUnitId.set(unitId, {
+      saleId,
+      orderId,
+      orderNumber,
+      returnedValue: unitReturnedValue,
+    });
+  }
+
+  return infoByUnitId;
+}
+
 function hasProductIdentifier(product) {
   const specs = product.raw?.specs || {};
   return Boolean(
@@ -401,6 +435,7 @@ export function aggregateModelProducts(input) {
 
   const memoryGroupMap = new Map();
   const saleStatsByProductId = buildSaleStatsByProduct(input.products || [], input.sales || [], input.saleItems || []);
+  const serializedSaleInfoByUnitId = buildSerializedSaleInfoByUnitId(input.sales || [], input.saleItems || []);
 
   for (const product of input.products || []) {
     const { ram, storage, color } = getProductVariationSpecs(product);
@@ -478,7 +513,11 @@ export function aggregateModelProducts(input) {
       const status = String(unit.status || '').toLowerCase();
       const costValue = Number(unit.cost_price ?? product.price_cost ?? 0);
       const explicitReturn = saleReturnByUnitId[String(unit.id)];
-      const returnedValueEstimated = explicitReturn == null && status === 'sold';
+      const saleInfo = serializedSaleInfoByUnitId.get(String(unit.id)) || {};
+      const returnedValue = Number(explicitReturn ?? saleInfo.returnedValue ?? (status === 'sold' ? product.price_retail || 0 : 0));
+      const returnedValueEstimated = explicitReturn == null && saleInfo.returnedValue == null && status === 'sold';
+      const saleId = unit.sale_id || saleInfo.saleId || null;
+      const orderId = unit.order_id || saleInfo.orderId || null;
       const unitView = {
         id: String(unit.id || ''),
         productId: String(product.id || ''),
@@ -489,13 +528,15 @@ export function aggregateModelProducts(input) {
         locationId: unit.location_id || null,
         depositId: unit.deposit_id || null,
         locationLabel: locationLabelById.get(String(unit.location_id || '')) || '',
-        saleId: unit.sale_id || null,
-        orderId: unit.order_id || null,
+        saleId,
+        orderId,
+        orderNumber: saleInfo.orderNumber || orderId || '',
         costValue,
-        returnedValue: Number(explicitReturn ?? (returnedValueEstimated ? product.price_retail || 0 : 0)),
+        returnedValue,
         returnedValueEstimated,
-        saleUrl: saleUrl(unit),
-        orderUrl: orderUrl(unit),
+        profitValue: status === 'sold' && returnedValue ? returnedValue - costValue : 0,
+        saleUrl: saleUrl({ sale_id: saleId }),
+        orderUrl: orderUrl({ order_id: orderId }),
         raw: unit,
       };
       colorGroup.units.push(unitView);

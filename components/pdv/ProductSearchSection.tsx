@@ -402,10 +402,10 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                             ref={imeiInputRef}
                             type="text"
                             value={imeiQuery}
-                            onChange={(e) => setImeiQuery(e.target.value)}
+                            onChange={(e) => setImeiQuery(e.target.value.toUpperCase())}
                             onKeyPress={handleImeiKeyPress}
                             placeholder="Bipe ou digite o IMEI / Serial..."
-                            className="w-full px-4 py-3 pl-10 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base font-mono"
+                            className="w-full px-4 py-3 pl-10 border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base font-mono uppercase"
                             autoComplete="off"
                         />
                         <Smartphone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-400" size={18} />

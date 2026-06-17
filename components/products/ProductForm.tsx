@@ -175,6 +175,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         }));
     }
 
+    const normalizeSerializedTextInput = (key: string, value: unknown): string | undefined => {
+        const text = String(value || '').trim();
+        if (!text) return undefined;
+        return key === 'serial' ? text.toUpperCase() : text;
+    };
+
     const handleAddToBatchList = (overrides: Partial<BatchItem> = {}) => {
         const currentProductImages = getValues('images') || imagePreviews;
         const item: BatchItem = {
@@ -183,7 +189,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             eans: [],
             imei1: overrides.imei1 || watch('specs.imei1') || undefined,
             imei2: overrides.imei2 || watch('specs.imei2') || undefined,
-            serial: overrides.serial || watch('specs.serial') || undefined,
+            serial: normalizeSerializedTextInput('serial', overrides.serial || watch('specs.serial')),
             color: watch('specs.color') || undefined,
             storage: watch('specs.storage') || undefined,
             ram: watch('specs.ram') || undefined,

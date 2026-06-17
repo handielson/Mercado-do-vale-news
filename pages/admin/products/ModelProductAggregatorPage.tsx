@@ -305,12 +305,12 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                             </td>
                                                         </tr>
                                                     )}
-                                                    {colorGroup.units.length > 0 && (
+                                                    {colorGroup.units.filter((unit: any) => unit.status === 'sold').length > 0 && (
                                                         <tr className="bg-slate-50/70">
                                                             <td colSpan={8} className="px-3 py-3">
                                                                 <div>
                                                                     <div className="text-xs font-bold uppercase text-slate-500">
-                                                                        Unidades com IMEI, serial e custo ({colorGroup.units.length})
+                                                                        Unidades vendidas ({colorGroup.units.filter((unit: any) => unit.status === 'sold').length})
                                                                     </div>
                                                                     <div className="mt-3 overflow-x-auto">
                                                                         <table className="min-w-full text-left text-xs">
@@ -320,14 +320,14 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                                     <th className="px-2 py-2">IMEI 1</th>
                                                                                     <th className="px-2 py-2">IMEI 2</th>
                                                                                     <th className="px-2 py-2">Serial</th>
-                                                                                    <th className="px-2 py-2">Status</th>
-                                                                                    <th className="px-2 py-2">Local</th>
+                                                                                    <th className="px-2 py-2">Pedido</th>
+                                                                                    <th className="px-2 py-2">Venda</th>
                                                                                     <th className="px-2 py-2">Custo</th>
-                                                                                    <th className="px-2 py-2">Retorno</th>
+                                                                                    <th className="px-2 py-2">Lucro</th>
                                                                                 </tr>
                                                                             </thead>
                                                                             <tbody className="divide-y divide-slate-100 bg-white">
-                                                                                {colorGroup.units.map((unit: any) => {
+                                                                                {colorGroup.units.filter((unit: any) => unit.status === 'sold').map((unit: any) => {
                                                                                     const product = colorGroup.products.find((item: any) => item.id === unit.productId);
                                                                                     return (
                                                                                         <tr key={unit.id}>
@@ -335,12 +335,25 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                                             <td className="px-2 py-2 font-mono">{unit.imei1 || '-'}</td>
                                                                                             <td className="px-2 py-2 font-mono">{unit.imei2 || '-'}</td>
                                                                                             <td className="px-2 py-2 font-mono">{unit.serial || '-'}</td>
-                                                                                            <td className="px-2 py-2">{statusLabel(unit.status)}</td>
-                                                                                            <td className="px-2 py-2">{unitLocationText(unit)}</td>
-                                                                                            <td className="px-2 py-2">{money(unit.costValue)}</td>
+                                                                                            <td className="px-2 py-2">
+                                                                                                {unit.orderUrl || unit.saleUrl ? (
+                                                                                                    <a
+                                                                                                        href={unit.saleUrl || unit.orderUrl}
+                                                                                                        className="font-semibold text-blue-700 hover:text-blue-900"
+                                                                                                    >
+                                                                                                        {unit.orderNumber || unit.saleId || unit.orderId || 'Abrir venda'}
+                                                                                                    </a>
+                                                                                                ) : (
+                                                                                                    unit.orderNumber || '-'
+                                                                                                )}
+                                                                                            </td>
                                                                                             <td className="px-2 py-2">
                                                                                                 {unit.returnedValue ? money(unit.returnedValue) : '-'}
                                                                                                 {unit.returnedValueEstimated ? <span className="ml-1 text-amber-600">(estimado)</span> : null}
+                                                                                            </td>
+                                                                                            <td className="px-2 py-2">{money(unit.costValue)}</td>
+                                                                                            <td className={`px-2 py-2 font-semibold ${unit.profitValue >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                                                                                {unit.returnedValue ? money(unit.profitValue) : '-'}
                                                                                             </td>
                                                                                         </tr>
                                                                                     );

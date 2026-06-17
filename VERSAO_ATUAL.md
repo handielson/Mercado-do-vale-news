@@ -1,30 +1,30 @@
 # Versao Atual
 
 ```text
-version: v1.1.51-pdv-finalize-imei-layout
+version: v1.1.52-pdv-serial-sales-panel
 date: 2026-06-17
 status: published
-release_vps: /var/www/mdv-site/releases/20260617-104432-v1151-pdv-finalize-imei-layout
+release_vps: /var/www/mdv-site/releases/20260617-111538-v1152-pdv-serial-sales-panel
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Mantem o seletor de unidade serializada por radio, agora usando a largura completa do card do produto.
-- Remove a barra horizontal do seletor de IMEI/serial e deixa os identificadores quebrarem dentro do espaco disponivel.
-- Mostra o `IMEI 1` abaixo do aparelho no preview do recibo para conferencia antes de finalizar.
-- Corrige o calculo de pagamento no preview do recibo para considerar `total_with_fee` em credito parcelado.
-- Desbloqueia o botao `Finalizar Venda` quando o total pago com juros cobre o total da venda.
+- A busca Nome/SKU do PDV agora tambem encontra produtos quando o termo digitado bate com IMEI 1, IMEI 2 ou Serial de uma unidade disponivel.
+- O campo de busca IMEI/Serial do PDV e o campo `Serial` do cadastro passam a gravar/exibir letras maiusculas independente da digitacao.
+- A tabela inferior do painel do modelo passa a focar nas unidades vendidas.
+- Cada vendido mostra SKU, IMEI/serial, numero do pedido com link para a venda, valor da venda, custo e lucro.
+- O retorno/lucro de unidade vendida usa os itens reais da venda quando houver `sale_items`, mantendo estimativa apenas como fallback.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.51-pdv-finalize-imei-layout` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.52-pdv-serial-sales-panel` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-17-v1.1.51-pdv-finalize-imei-layout.md
+docs/versoes/2026-06-17-v1.1.52-pdv-serial-sales-panel.md
 ```
 
 ## Publicacao
 
-- Release VPS publicada: `/var/www/mdv-site/releases/20260617-104432-v1151-pdv-finalize-imei-layout`.
-- Esta versao altera somente frontend/admin/PDV; site publicado. A API VPS nao precisou de novo deploy.
+- Release VPS publicada: `/var/www/mdv-site/releases/20260617-111538-v1152-pdv-serial-sales-panel`.
+- Esta versao altera frontend/admin e endpoint VPS do PDV; site e API VPS publicados.

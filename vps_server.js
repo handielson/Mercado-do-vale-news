@@ -17881,6 +17881,23 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
   if (!search || search.length < 2) return [];
 
   const searchLike = `%${search}%`;
+  const [matchingUnitRows] = await pool.query(
+    `SELECT DISTINCT u.product_id
+       FROM units u
+      WHERE u.status = 'available'
+        AND (
+          LOWER(TRIM(u.imei_1)) LIKE ?
+          OR LOWER(TRIM(u.imei_2)) LIKE ?
+          OR LOWER(TRIM(u.serial)) LIKE ?
+        )
+      LIMIT ?`,
+    [searchLike, searchLike, searchLike, limit]
+  );
+  const matchingUnitProductIds = matchingUnitRows.map((row) => row.product_id).filter(Boolean);
+  const unitProductPlaceholders = matchingUnitProductIds.map(() => '?').join(', ');
+  const unitProductCondition = matchingUnitProductIds.length > 0
+    ? ` OR id IN (${unitProductPlaceholders})`
+    : '';
   const cols = `id, model_id, category_id, brand, name, sku, ean, alternative_eans, description,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
@@ -17906,10 +17923,11 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
           OR CAST(alternative_eans AS CHAR) COLLATE utf8mb4_unicode_ci LIKE ?
           OR model_id COLLATE utf8mb4_unicode_ci LIKE ?
           OR slug COLLATE utf8mb4_unicode_ci LIKE ?
+          ${unitProductCondition}
         )
       ORDER BY name ASC
       LIMIT ?`,
-    [searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, limit]
+    [searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, ...matchingUnitProductIds, limit]
   );
 
   const products = rows.map(r => ({

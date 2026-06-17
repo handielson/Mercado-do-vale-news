@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.51-pdv-finalize-imei-layout",
+  "version": "v1.1.52-pdv-serial-sales-panel",
   "date": "2026-06-17",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260617-104432-v1151-pdv-finalize-imei-layout",
+  "release_vps": "/var/www/mdv-site/releases/20260617-111538-v1152-pdv-serial-sales-panel",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Corrige o desbloqueio da finalizacao no PDV com credito parcelado, amplia o seletor de IMEI para a largura do card e mostra o IMEI 1 no preview do recibo."
+  "summary": "Melhora a busca de serial no PDV, padroniza serial em caixa alta e troca a tabela inferior do painel do modelo para unidades vendidas com pedido, venda e lucro."
 }

@@ -93,6 +93,10 @@ const getConfiguredFieldKey = (field: any) => {
     );
 };
 
+const normalizeSerializedTextInput = (key: string, value: string): string => {
+    return key === 'serial' ? value.toUpperCase() : value;
+};
+
 export function ProductSpecifications({
     categoryConfig,
     watch,
@@ -226,7 +230,8 @@ export function ProductSpecifications({
                             type={metadata.type}
                             value={watch(fieldKey) || ''}
                             onChange={(e) => {
-                                setValue(fieldKey, e.target.value);
+                                const nextValue = normalizeSerializedTextInput(key, e.target.value);
+                                setValue(fieldKey, nextValue);
                                 // Clear unique error when user starts typing again
                                 if (isUnique && uniqueErrors[key]) {
                                     setUniqueErrors(prev => ({ ...prev, [key]: '' }));
@@ -240,7 +245,7 @@ export function ProductSpecifications({
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                     e.preventDefault();
-                                    const val = (e.currentTarget as HTMLInputElement).value;
+                                    const val = normalizeSerializedTextInput(key, (e.currentTarget as HTMLInputElement).value);
                                     if (shouldAddSerializedFieldToBatchOnEnter({
                                         key,
                                         value: val,
@@ -262,7 +267,7 @@ export function ProductSpecifications({
                                 }
                             }}
                             className={`w-full rounded-md border p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none ${(errors?.specs?.[key] || uniqueError) ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
-                                } ${isChecking ? 'pr-8' : ''}`}
+                                } ${isChecking ? 'pr-8' : ''} ${key === 'serial' ? 'uppercase' : ''}`}
                             placeholder={metadata.placeholder}
                         />
                         {isChecking && (
