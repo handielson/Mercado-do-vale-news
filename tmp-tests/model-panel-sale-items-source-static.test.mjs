@@ -20,13 +20,18 @@ assert.match(
 );
 assert.match(
   page,
-  /Unidades vendidas[\s\S]*Pedido[\s\S]*Venda[\s\S]*Lucro/,
-  'model panel bottom unit table must focus on sold units with order, sale value and profit'
+  /Unidades vendidas[\s\S]*Pedido[\s\S]*Cliente[\s\S]*Venda[\s\S]*Lucro/,
+  'model panel bottom unit table must show separate order and customer columns'
 );
 assert.match(
   page,
-  /unit\.orderUrl \|\| unit\.saleUrl[\s\S]*href=\{unit\.saleUrl \|\| unit\.orderUrl\}[\s\S]*unit\.orderNumber/,
-  'model panel sold unit rows must link directly to the related order/sale'
+  /href=\{unit\.saleUrl \|\| unit\.orderUrl\}[\s\S]*unit\.orderNumber \|\| 'Abrir venda'/,
+  'model panel sold unit order links must open the related sale directly when a sale exists'
+);
+assert.doesNotMatch(
+  page,
+  /unit\.orderNumber \|\| unit\.saleId \|\| unit\.orderId/,
+  'model panel sold unit rows must not fall back to internal sale/order ids as the visible order label'
 );
 
 console.log('model panel sale item source static checks passed');

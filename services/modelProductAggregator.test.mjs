@@ -498,6 +498,128 @@ assert.equal(nonSerializedSaleItemResult.totals.returnedValue, 14390);
 assert.equal(nonSerializedSaleItemResult.memoryGroups[0].colors[0].soldCount, 1);
 assert.equal(nonSerializedSaleItemResult.memoryGroups[0].colors[0].returnedValue, 14390);
 
+const legacyDecimalSerializedSaleResult = aggregateModelProducts({
+  model: { id: 'model-athomics', name: 'Athomics Inspire Lite' },
+  products: [
+    {
+      id: 'p-rail',
+      model_id: 'model-athomics',
+      name: 'Athomics Inspire Lite',
+      sku: 'RAIL',
+      specs: { color: 'Preto' },
+      price_cost: 27500,
+      price_retail: 45000,
+      stock_quantity: 0,
+      status: 'active',
+    },
+  ],
+  units: [
+    { id: 'rail-sold-legacy', product_id: 'p-rail', status: 'sold', serial_number: 'AT2208000891', cost_price: 27500, sale_id: 'sale-legacy' },
+  ],
+  sales: [
+    {
+      id: 'sale-legacy',
+      total: '400.00',
+      payment_status: 'paid',
+      customer: { name: 'Cliente Legacy' },
+    },
+  ],
+  saleItems: [
+    {
+      sale_id: 'sale-legacy',
+      serialized_unit_id: 'rail-sold-legacy',
+      quantity: 1,
+      unit_price: '400.00',
+      total: '400.00',
+      unit_cost: 30000,
+    },
+  ],
+});
+
+const legacySoldUnit = legacyDecimalSerializedSaleResult.memoryGroups[0].colors[0].units[0];
+assert.equal(legacySoldUnit.returnedValue, 40000);
+assert.equal(legacySoldUnit.costValue, 30000);
+assert.equal(legacySoldUnit.profitValue, 10000);
+
+const productSpecsSerializedAvailableResult = aggregateModelProducts({
+  model: { id: 'model-redmi-note-15-pro-5g', name: 'Redmi Note 15 Pró 5G' },
+  products: [
+    {
+      id: 'p-rn15p8256t',
+      model_id: 'model-redmi-note-15-pro-5g',
+      name: 'Redmi Note 15 Pró 5G',
+      sku: 'RN15P8256T',
+      slug: 'redmi-note-15-pro-5g-titanio',
+      specs: {
+        ram: '8GB',
+        storage: '256GB',
+        color: 'Titânio',
+        imei1: '865750084601982',
+        imei2: '865750084601990',
+        serial: '72698/W5XJ04308',
+      },
+      price_cost: 152000,
+      price_retail: 177000,
+      stock_quantity: 1,
+      status: 'active',
+    },
+  ],
+  units: [],
+});
+
+const productSpecsSerializedColor = productSpecsSerializedAvailableResult.memoryGroups[0].colors[0];
+assert.equal(productSpecsSerializedColor.availableCount, 1);
+assert.equal(productSpecsSerializedColor.units.length, 1);
+assert.equal(productSpecsSerializedColor.units[0].status, 'available');
+assert.equal(productSpecsSerializedColor.units[0].sku, 'RN15P8256T');
+assert.equal(productSpecsSerializedColor.units[0].imei1, '865750084601982');
+assert.equal(productSpecsSerializedColor.units[0].serial, '72698/W5XJ04308');
+assert.equal(productSpecsSerializedColor.skuGroups[0].availableCount, 1);
+
+const pdvCustomerLookupResult = aggregateModelProducts({
+  model,
+  products: [
+    {
+      id: 'p-pdv-customer',
+      model_id: model.id,
+      name: 'Redmi 15',
+      sku: 'R15CUSTOMER',
+      specs: { ram: '8GB', storage: '256GB', color: 'Preto' },
+      price_cost: 100000,
+      price_retail: 130000,
+      stock_quantity: 0,
+      status: 'active',
+    },
+  ],
+  units: [
+    { id: 'u-pdv-customer', product_id: 'p-pdv-customer', imei_1: '999', status: 'sold', sale_id: 'c68b386f-5e91-4414-a968-893d99318c51' },
+  ],
+  sales: [
+    {
+      id: 'c68b386f-5e91-4414-a968-893d99318c51',
+      customer_id: 'customer-1',
+      payment_status: 'paid',
+    },
+  ],
+  customers: [
+    { id: 'customer-1', name: 'Joao Cliente' },
+  ],
+  saleItems: [
+    {
+      sale_id: 'c68b386f-5e91-4414-a968-893d99318c51',
+      serialized_unit_id: 'u-pdv-customer',
+      quantity: 1,
+      unit_price: 130000,
+      total: 130000,
+      unit_cost: 100000,
+    },
+  ],
+});
+
+const pdvCustomerSoldUnit = pdvCustomerLookupResult.memoryGroups[0].colors[0].units[0];
+assert.equal(pdvCustomerSoldUnit.orderNumber, 'PDV-C68B386F');
+assert.equal(pdvCustomerSoldUnit.customerName, 'Joao Cliente');
+
 const source = readFileSync(new URL('./modelProductAggregator.js', import.meta.url), 'utf8');
 assert.doesNotMatch(source, /supabase|vercel|VITE_SUPABASE|SUPABASE/i);
 

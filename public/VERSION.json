@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.55-pdv-merge-legacy-serial-units",
+  "version": "v1.1.57-model-panel-serial-brand",
   "date": "2026-06-17",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260617-131425-v1155-pdv-merge-legacy-serial-units",
+  "release_vps": "/var/www/mdv-site/releases/20260617-175659-v1157-model-panel-serial-brand",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Inclui seriais legados de produtos duplicados na mesma lista de unidades do PDV quando a busca por nome agrupa SKUs iguais."
+  "summary": "Corrige painel do modelo para exibir aparelhos serializados legados como disponiveis, mostrar pedido e cliente de vendas PDV, preservar 5G no nome publico e atualizar marcas novas sem cache."
 }

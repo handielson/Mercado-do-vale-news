@@ -48,6 +48,40 @@ function moneyToCents(value) {
   return (hasComma || (hasDot && decimalDot)) ? Math.round(numeric * 100) : Math.round(numeric);
 }
 
+function moneyReaisToCents(value) {
+  if (value == null || value === '') return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value * 100) : 0;
+
+  const clean = String(value).trim().replace(/\s/g, '').replace(/^R\$/i, '');
+  if (!clean) return 0;
+
+  const normalized = clean.includes(',')
+    ? clean.replace(/\./g, '').replace(',', '.')
+    : clean.replace(/,/g, '');
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? Math.round(numeric * 100) : 0;
+}
+
+function looksLikeCentStoredMoney(value) {
+  const n = Math.abs(Number(value));
+  return Number.isFinite(n) && Math.abs(n - Math.round(n)) <= 0.001 && n >= 1000;
+}
+
+function saleRowUsesLegacyDecimalItemMoney(saleRow) {
+  if (!saleRow) return false;
+  const hasModernSubtotal = Number(saleRow.subtotal || 0) > 0;
+  const hasModernPaymentMethods = saleRow.payment_methods != null && saleRow.payment_methods !== '';
+  const totalLooksDecimalReais = typeof saleRow.total === 'string'
+    && /\.\d{2}$/u.test(saleRow.total)
+    && !looksLikeCentStoredMoney(saleRow.total);
+  return totalLooksDecimalReais && !hasModernSubtotal && !hasModernPaymentMethods;
+}
+
+function saleItemMoneyToCents(value, saleRow) {
+  const legacyDecimalText = typeof value === 'string' && /[,.]\d{1,2}$/u.test(value.trim());
+  return saleRowUsesLegacyDecimalItemMoney(saleRow) && legacyDecimalText ? moneyReaisToCents(value) : moneyToCents(value);
+}
+
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
@@ -71,11 +105,20 @@ function orderUrl(unit) {
   return unit.order_id ? `/admin/orders?order=${encodeURIComponent(unit.order_id)}` : null;
 }
 
-function saleCustomerName(sale) {
+function displaySaleNumber(saleId) {
+  const value = String(saleId || '').trim();
+  if (!value) return '';
+  return isUuid(value) ? `PDV-${value.slice(0, 8).toUpperCase()}` : value;
+}
+
+function saleCustomerName(sale, customerById = new Map()) {
+  const customerId = String(sale?.customer_id || sale?.customerId || '').trim();
+  const customer = customerId ? customerById.get(customerId) : null;
   return String(
     sale?.customer_name ||
     sale?.customerName ||
     sale?.customer?.name ||
+    customer?.name ||
     sale?.buyer_name ||
     sale?.buyerName ||
     ''
@@ -209,7 +252,8 @@ function buildSaleStatsByProduct(products, sales, saleItems) {
     if (hasSerializedUnitReference(item)) continue;
 
     const saleId = String(item.sale_id || item.saleId || '');
-    if (saleById.has(saleId) && !isActiveSale(saleById.get(saleId))) continue;
+    const sale = saleById.get(saleId);
+    if (saleById.has(saleId) && !isActiveSale(sale)) continue;
 
     const directProductId = String(item.product_id || item.productId || '');
     const productId = productById.has(directProductId)
@@ -221,9 +265,9 @@ function buildSaleStatsByProduct(products, sales, saleItems) {
     const quantity = Math.max(0, Number(item.quantity || 0));
     if (quantity <= 0) continue;
 
-    const unitCost = moneyToCents(item.unit_cost ?? item.cost ?? product.price_cost ?? product.priceCost);
-    const unitPrice = moneyToCents(item.unit_price ?? item.price ?? product.price_retail ?? product.priceRetail);
-    const returnedValue = moneyToCents(item.total ?? item.subtotal) || unitPrice * quantity;
+    const unitCost = saleItemMoneyToCents(item.unit_cost ?? item.cost ?? product.price_cost ?? product.priceCost, sale);
+    const unitPrice = saleItemMoneyToCents(item.unit_price ?? item.price ?? product.price_retail ?? product.priceRetail, sale);
+    const returnedValue = saleItemMoneyToCents(item.total ?? item.subtotal, sale) || unitPrice * quantity;
     const current = statsByProductId.get(productId) || { soldCount: 0, investedValue: 0, returnedValue: 0 };
     current.soldCount += quantity;
     current.investedValue += unitCost * quantity;
@@ -234,10 +278,11 @@ function buildSaleStatsByProduct(products, sales, saleItems) {
   return statsByProductId;
 }
 
-function buildSerializedSaleInfoByUnitId(sales, saleItems) {
+function buildSerializedSaleInfoByUnitId(sales, saleItems, customers) {
   if (!Array.isArray(saleItems) || saleItems.length === 0) return new Map();
 
   const saleById = new Map((sales || []).map((sale) => [String(sale.id || ''), sale]));
+  const customerById = new Map((customers || []).map((customer) => [String(customer.id || ''), customer]));
   const infoByUnitId = new Map();
 
   for (const item of saleItems) {
@@ -249,20 +294,22 @@ function buildSerializedSaleInfoByUnitId(sales, saleItems) {
     if (saleById.has(saleId) && !isActiveSale(sale)) continue;
 
     const quantity = Math.max(1, Number(item.quantity || 1));
-    const unitPrice = moneyToCents(item.unit_price ?? item.price);
-    const returnedValue = moneyToCents(item.total ?? item.subtotal) || unitPrice * quantity;
+    const unitPrice = saleItemMoneyToCents(item.unit_price ?? item.price, sale);
+    const returnedValue = saleItemMoneyToCents(item.total ?? item.subtotal, sale) || unitPrice * quantity;
     const unitReturnedValue = Math.round(returnedValue / quantity);
+    const unitCost = saleItemMoneyToCents(item.unit_cost ?? item.cost, sale);
     const orderId = String(item.order_id || item.orderId || sale.order_id || sale.orderId || '').trim();
     const orderNumber = String(
-      sale.order_number || sale.orderNumber || sale.number || sale.numero_pedido || item.order_number || item.orderNumber || orderId || ''
+      sale.order_number || sale.orderNumber || sale.number || sale.numero_pedido || item.order_number || item.orderNumber || orderId || displaySaleNumber(saleId)
     ).trim();
 
     infoByUnitId.set(unitId, {
       saleId,
       orderId,
       orderNumber,
-      customerName: saleCustomerName(sale) || String(item.customer_name || item.customerName || '').trim(),
+      customerName: saleCustomerName(sale, customerById) || String(item.customer_name || item.customerName || '').trim(),
       returnedValue: unitReturnedValue,
+      unitCost,
     });
   }
 
@@ -287,6 +334,37 @@ function productIdentifier(product) {
     editUrl: product.editUrl,
   };
   return identifier.imei1 || identifier.imei2 || identifier.serial ? identifier : null;
+}
+
+function productIdentifierUnit(product) {
+  const identifier = productIdentifier(product);
+  if (!identifier) return null;
+  const availableCount = Number(product.availableCount || 0);
+  if (!isActiveProduct(product) || (product.raw?.track_inventory && availableCount <= 0)) return null;
+  return {
+    id: `product-specs:${product.id}`,
+    productId: String(product.id || ''),
+    sku: product.sku || '',
+    imei1: identifier.imei1,
+    imei2: identifier.imei2,
+    serial: identifier.serial,
+    status: 'available',
+    locationId: null,
+    depositId: null,
+    locationLabel: '',
+    saleId: null,
+    orderId: null,
+    orderNumber: '',
+    customerName: '',
+    costValue: Number(product.priceCost || 0),
+    returnedValue: 0,
+    returnedValueEstimated: false,
+    profitValue: 0,
+    saleUrl: null,
+    orderUrl: null,
+    raw: product.raw,
+    isProductSpecsUnit: true,
+  };
 }
 
 function isActiveProduct(product) {
@@ -348,6 +426,21 @@ function buildSkuGroups(colorGroup) {
     if (group.availableCount === 0) {
       group.availableCount = group.products.reduce((sum, product) => sum + Number(product.availableCount || 0), 0);
     }
+    if (group.registeredCount == null) {
+      group.registeredCount = group.identifiers.length;
+    }
+    if (group.locationCount == null) {
+      const productIds = new Set(group.products.map((product) => String(product.id)));
+      group.locationCount = dedupeLocations(
+        (colorGroup.locations || []).filter((location) => productIds.has(String(location.productId || location.product_id || '')))
+      ).reduce((sum, location) => sum + Number(location.quantity || 0), 0);
+    }
+    if (group.stockQuantityCount == null) {
+      group.stockQuantityCount = group.products.reduce((sum, product) => sum + Number(product.availableCount || 0), 0);
+    }
+    if (group.hasStockDivergence == null) {
+      group.hasStockDivergence = group.registeredCount > 0 && group.locationCount < group.registeredCount;
+    }
     if (group.products.length > 1) {
       group.duplicateCount = group.products.length;
     }
@@ -361,6 +454,7 @@ function applyFallbackStockBySku(colorGroup) {
   if (fallbackSources.length === 0) {
     colorGroup.locations = dedupeLocations(colorGroup.locations);
     colorGroup.skuGroups = buildSkuGroups(colorGroup);
+    colorGroup.stockDivergences = colorGroup.skuGroups.filter((group) => group.hasStockDivergence);
     return;
   }
 
@@ -447,7 +541,7 @@ export function aggregateModelProducts(input) {
 
   const memoryGroupMap = new Map();
   const saleStatsByProductId = buildSaleStatsByProduct(input.products || [], input.sales || [], input.saleItems || []);
-  const serializedSaleInfoByUnitId = buildSerializedSaleInfoByUnitId(input.sales || [], input.saleItems || []);
+  const serializedSaleInfoByUnitId = buildSerializedSaleInfoByUnitId(input.sales || [], input.saleItems || [], input.customers || []);
 
   for (const product of input.products || []) {
     const { ram, storage, color } = getProductVariationSpecs(product);
@@ -512,7 +606,10 @@ export function aggregateModelProducts(input) {
       memoryGroup.colors.push(colorGroup);
     }
     colorGroup.products.push(productView);
-    const normalizedLocations = (locationsByProductId[String(product.id)] || []).map(normalizeLocation);
+    const normalizedLocations = (locationsByProductId[String(product.id)] || []).map((location) => ({
+      ...normalizeLocation(location),
+      productId: String(product.id),
+    }));
     const locationLabelById = new Map(
       normalizedLocations
         .map((location) => [String(location.location_id || location.id || ''), location.label])
@@ -523,9 +620,9 @@ export function aggregateModelProducts(input) {
     const productUnits = unitsByProductId.get(String(product.id)) || [];
     for (const unit of productUnits) {
       const status = String(unit.status || '').toLowerCase();
-      const costValue = Number(unit.cost_price ?? product.price_cost ?? 0);
       const explicitReturn = saleReturnByUnitId[String(unit.id)];
       const saleInfo = serializedSaleInfoByUnitId.get(String(unit.id)) || {};
+      const costValue = Number((status === 'sold' && saleInfo.unitCost > 0) ? saleInfo.unitCost : (unit.cost_price ?? product.price_cost ?? 0));
       const returnedValue = Number(explicitReturn ?? saleInfo.returnedValue ?? (status === 'sold' ? product.price_retail || 0 : 0));
       const returnedValueEstimated = explicitReturn == null && saleInfo.returnedValue == null && status === 'sold';
       const saleId = unit.sale_id || saleInfo.saleId || null;
@@ -533,6 +630,7 @@ export function aggregateModelProducts(input) {
       const unitView = {
         id: String(unit.id || ''),
         productId: String(product.id || ''),
+        sku: product.sku || '',
         imei1: String(unit.imei_1 || unit.imei1 || ''),
         imei2: String(unit.imei_2 || unit.imei2 || ''),
         serial: String(unit.serial_number || unit.serial || ''),
@@ -556,7 +654,11 @@ export function aggregateModelProducts(input) {
       addUnitToTotals(colorGroup, unitView);
     }
 
-    if (productUnits.length === 0) {
+    const productSpecsUnit = productUnits.length === 0 ? productIdentifierUnit(productView) : null;
+    if (productSpecsUnit) {
+      colorGroup.units.push(productSpecsUnit);
+      addUnitToTotals(colorGroup, productSpecsUnit);
+    } else if (productUnits.length === 0) {
       colorGroup.fallbackSources.push({
         product: productView,
         locations: normalizedLocations,

@@ -29,17 +29,18 @@ function mapRow(row: any): Brand {
     };
 }
 
-function getBrandProxyUrl(): string {
+function getBrandProxyUrl(noCache = false): string {
     const env = (import.meta as any).env ?? {};
     const proxyBase = env.DEV ? '/vps-proxy' : '/api/vps-proxy';
-    return `${proxyBase}?path=${encodeURIComponent('/brands')}`;
+    const path = noCache ? `/brands?_t=${Date.now()}` : '/brands';
+    return `${proxyBase}?path=${encodeURIComponent(path)}`;
 }
 
-async function loadVpsBrands(): Promise<any[]> {
-    const rows = await vpsApiService.getBrands();
+async function loadVpsBrands(options: { noCache?: boolean } = {}): Promise<any[]> {
+    const rows = await vpsApiService.getBrands(options.noCache);
     if (Array.isArray(rows) && rows.length > 0) return rows;
 
-    const response = await fetch(getBrandProxyUrl(), {
+    const response = await fetch(getBrandProxyUrl(options.noCache), {
         headers: { Accept: 'application/json' },
         cache: 'no-store',
     });
@@ -56,8 +57,8 @@ async function loadVpsBrands(): Promise<any[]> {
     return fallbackRows;
 }
 
-async function list(): Promise<Brand[]> {
-    const rows = await loadVpsBrands();
+async function list(options: { noCache?: boolean } = {}): Promise<Brand[]> {
+    const rows = await loadVpsBrands(options);
     return rows.map(mapRow);
 }
 

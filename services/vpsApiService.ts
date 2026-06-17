@@ -507,8 +507,8 @@ class VpsApiService {
     }
   }
 
-  async getBrands(): Promise<any[] | null> {
-    return this.fetchSafe<any[]>('/brands');
+  async getBrands(noCache = false): Promise<any[] | null> {
+    return this.fetchSafe<any[]>('/brands', noCache);
   }
 
   async getCatalogSettings(): Promise<any | null> {

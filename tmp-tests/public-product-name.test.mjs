@@ -34,4 +34,13 @@ assert.equal(
   'Carregador Turbo 33W',
 );
 
+assert.equal(
+  getPublicProductName({
+    name: 'Redmi Note 15 Pró 5G 8GB/256GB Cor:Preto',
+    model: 'Redmi Note 15 Pró 5G',
+    specs: { color: 'Preto', storage: '256GB', ram: '8GB' },
+  }),
+  'Redmi Note 15 Pró 5G',
+);
+
 console.log('public-product-name tests passed');

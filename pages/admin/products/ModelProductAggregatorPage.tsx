@@ -67,11 +67,12 @@ export const ModelProductAggregatorPage: React.FC = () => {
         if (!modelId) return;
         setIsLoading(true);
         try {
-            const [model, products, sales, saleItems] = await Promise.all([
+            const [model, products, sales, saleItems, customers] = await Promise.all([
                 modelService.getById(modelId),
                 vpsApiService.getProducts({ model_id: modelId, status: 'all', limit: 500, noCache: true }),
                 loadTableRows('sales'),
                 loadTableRows('sale_items'),
+                loadTableRows('customers'),
             ]);
 
             if (!model) throw new Error('Modelo nao encontrado.');
@@ -97,6 +98,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                 locationsByProductId,
                 sales,
                 saleItems,
+                customers,
             }));
         } catch (error) {
             console.error(error);
@@ -307,7 +309,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                     )}
                                                     {colorGroup.units.filter((unit: any) => unit.status === 'sold').length > 0 && (
                                                         <tr className="bg-slate-50/70">
-                                                            <td colSpan={8} className="px-3 py-3">
+                                                            <td colSpan={9} className="px-3 py-3">
                                                                 <div>
                                                                     <div className="text-xs font-bold uppercase text-slate-500">
                                                                         Unidades vendidas ({colorGroup.units.filter((unit: any) => unit.status === 'sold').length})
@@ -321,6 +323,7 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                                     <th className="px-2 py-2">IMEI 2</th>
                                                                                     <th className="px-2 py-2">Serial</th>
                                                                                     <th className="px-2 py-2">Pedido</th>
+                                                                                    <th className="px-2 py-2">Cliente</th>
                                                                                     <th className="px-2 py-2">Venda</th>
                                                                                     <th className="px-2 py-2">Custo</th>
                                                                                     <th className="px-2 py-2">Lucro</th>
@@ -329,10 +332,6 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                             <tbody className="divide-y divide-slate-100 bg-white">
                                                                                 {colorGroup.units.filter((unit: any) => unit.status === 'sold').map((unit: any) => {
                                                                                     const product = colorGroup.products.find((item: any) => item.id === unit.productId);
-                                                                                    const saleLabel = [
-                                                                                        unit.orderNumber || unit.saleId || unit.orderId || 'Abrir venda',
-                                                                                        unit.customerName,
-                                                                                    ].filter(Boolean).join(' - ');
                                                                                     return (
                                                                                         <tr key={unit.id}>
                                                                                             <td className="px-2 py-2 font-semibold text-slate-700">{product?.sku || '-'}</td>
@@ -345,12 +344,13 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                                                         href={unit.saleUrl || unit.orderUrl}
                                                                                                         className="font-semibold text-blue-700 hover:text-blue-900"
                                                                                                     >
-                                                                                                        {saleLabel}
+                                                                                                        {unit.orderNumber || 'Abrir venda'}
                                                                                                     </a>
                                                                                                 ) : (
-                                                                                                    saleLabel || '-'
+                                                                                                    unit.orderNumber || '-'
                                                                                                 )}
                                                                                             </td>
+                                                                                            <td className="px-2 py-2">{unit.customerName || '-'}</td>
                                                                                             <td className="px-2 py-2">
                                                                                                 {unit.returnedValue ? money(unit.returnedValue) : '-'}
                                                                                                 {unit.returnedValueEstimated ? <span className="ml-1 text-amber-600">(estimado)</span> : null}

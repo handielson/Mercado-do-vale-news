@@ -795,7 +795,7 @@ export const updateSaleCostsAndProfit = async (saleId: string): Promise<SaleWith
         const productCost = productCostById.get(String(item.product_id || '')) || 0;
         return {
             ...item,
-            unit_cost: unitCost > 0 ? unitCost : productCost > 0 ? productCost : currentCost,
+            unit_cost: productCost > 0 ? productCost : unitCost > 0 ? unitCost : currentCost,
         } as SaleItem;
     });
 

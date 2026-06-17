@@ -56,7 +56,7 @@ export function getPublicProductName(product) {
     .replace(/\s+cor\s*:?\s*[-–—|,/()]?\s*$/i, '')
     .replace(/\b(?:ram\s*)?\d+\s*(?:gb|g)\s*\/\s*\d+\s*(?:gb|g)?\b/gi, '')
     .replace(/\b\d+\s*\/\s*\d+\b/gi, '')
-    .replace(/\b\d+\s*(?:gb|g)\s*(?:ram)?\b/gi, '')
+    .replace(/\b(?!(?:4|5)\s*g\b)\d+\s*(?:gb|g)\s*(?:ram)?\b/gi, '')
     .replace(/\bram\s*$/i, '')
     .replace(/\s*(?:[-–—|,/])\s*$/g, '');
 

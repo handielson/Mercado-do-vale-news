@@ -6,8 +6,14 @@ const loadDataBody = source.match(/const loadData = async \(\) => \{([\s\S]*?)\n
 
 assert.match(
   loadDataBody,
-  /brandService\.list\(\)/,
+  /brandService\.list\(/,
   'Model modal must load the full brand list used by ModelsPage, so legacy/inactive flag values do not hide every brand'
+);
+
+assert.match(
+  loadDataBody,
+  /brandService\.list\(\{\s*noCache:\s*true\s*\}\)/,
+  'Model modal must bypass cached brand data so newly-created brands appear immediately when adding a model'
 );
 
 assert.doesNotMatch(

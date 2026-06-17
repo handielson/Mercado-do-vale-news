@@ -985,7 +985,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             setLoading(true);
             customFieldsService.clearCache();
             const [brandsResult, categoriesResult, fieldsResult, tagsResult] = await Promise.allSettled([
-                brandService.list(),
+                brandService.list({ noCache: true }),
                 categoryService.list(),
                 customFieldsService.list(),
                 crossSellTagsService.list()
