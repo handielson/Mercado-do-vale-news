@@ -3,8 +3,8 @@
 ```text
 version: v1.1.50-pdv-layout-name-imei
 date: 2026-06-17
-status: pending_deploy
-release_vps: pendente
+status: published
+release_vps: /var/www/mdv-site/releases/20260617-100551-v1150-pdv-layout-name-imei
 branch: codex/publish-delivery-ops-20260614
 ```
 
@@ -26,5 +26,5 @@ docs/versoes/2026-06-17-v1.1.50-pdv-layout-name-imei.md
 
 ## Publicacao
 
-- Release VPS: `pendente`.
-- Esta versao altera somente frontend/admin/PDV; site deve ser publicado. A API VPS nao precisa de novo deploy.
+- Release VPS publicada: `/var/www/mdv-site/releases/20260617-100551-v1150-pdv-layout-name-imei`.
+- Esta versao altera somente frontend/admin/PDV; site publicado. A API VPS nao precisou de novo deploy.
