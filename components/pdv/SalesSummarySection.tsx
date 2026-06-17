@@ -9,6 +9,7 @@ import {
     getPaymentMethodLabel,
     getPaymentMethodIcon
 } from '../../utils/saleCalculations';
+import { capitalizeName } from '../../utils/customerFormUtils';
 
 import { DeliveryType } from '../../types/sale';
 
@@ -77,7 +78,7 @@ export default function SalesSummarySection({
                     <Users size={16} className="text-slate-500" />
                     <span className="text-slate-600">Cliente:</span>
                     <span className="font-medium">
-                        {customer ? customer.name : (
+                        {customer ? capitalizeName(customer.name) : (
                             <span className="text-red-600">Não selecionado ⚠️</span>
                         )}
                     </span>

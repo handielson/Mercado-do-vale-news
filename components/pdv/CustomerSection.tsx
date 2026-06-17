@@ -60,6 +60,8 @@ export default function CustomerSection({
     });
     const [documentType, setDocumentType] = useState<'CPF' | 'CNPJ'>('CPF');
 
+    const formatCustomerName = (name: string) => capitalizeName(name);
+
     const onlyDigits = (value: string) => value.replace(/\D/g, '');
 
     const emptyQuickCustomer = (): CustomerInput => ({
@@ -320,7 +322,7 @@ export default function CustomerSection({
         setSearchTerm('');
         setSearchResults([]);
         if (options.showToast !== false) {
-            toast.success(`Cliente ${customer.name} selecionado`);
+            toast.success(`Cliente ${formatCustomerName(customer.name)} selecionado`);
         }
     };
 
@@ -354,9 +356,9 @@ export default function CustomerSection({
                                 key={customer.id}
                                 onClick={() => handleSelectCustomer(customer)}
                                 className="px-3 py-1 text-xs bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors border border-blue-200"
-                                title={`Selecionar ${customer.name}`}
+                                title={`Selecionar ${formatCustomerName(customer.name)}`}
                             >
-                                {customer.name.split(' ')[0]}
+                                {formatCustomerName(customer.name).split(' ')[0]}
                             </button>
                         ))}
                     </div>
@@ -371,10 +373,10 @@ export default function CustomerSection({
                             <div className="flex-1">
                                 <div className="flex items-center gap-2">
                                     <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-                                        {selectedCustomer.name.charAt(0).toUpperCase()}
+                                        {formatCustomerName(selectedCustomer.name).charAt(0).toUpperCase()}
                                     </div>
                                     <div>
-                                        <h4 className="font-semibold text-slate-800">{selectedCustomer.name}</h4>
+                                        <h4 className="font-semibold text-slate-800">{formatCustomerName(selectedCustomer.name)}</h4>
                                         {selectedCustomer.cpf_cnpj && (
                                             <p className="text-sm text-slate-600">CPF/CNPJ: {selectedCustomer.cpf_cnpj}</p>
                                         )}
@@ -800,7 +802,7 @@ export default function CustomerSection({
                                                 onClick={() => handleSelectCustomer(customer)}
                                                 className="w-full p-3 text-left hover:bg-slate-50 transition-colors"
                                             >
-                                                <h4 className="font-medium text-slate-800">{customer.name}</h4>
+                                                <h4 className="font-medium text-slate-800">{formatCustomerName(customer.name)}</h4>
                                                 {customer.cpf_cnpj && (
                                                     <p className="text-sm text-slate-600">CPF/CNPJ: {customer.cpf_cnpj}</p>
                                                 )}

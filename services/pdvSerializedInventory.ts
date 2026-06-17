@@ -102,24 +102,20 @@ export function buildPdvUnitOption(unit: Unit): PdvSerializedUnitOption {
     const imei2 = cleanText(unit.imei_2);
     const serial = cleanText(unit.serial_number || (unit as any).serial);
 
-    const label = imei1
-        ? `IMEI 1: ${imei1}`
-        : serial
-            ? `Serial: ${serial}`
-            : imei2
-                ? `IMEI 2: ${imei2}`
-                : `Unidade: ${String(unit.id || '').slice(0, 8)}`;
-
-    const detail = [
-        imei1 && imei2 ? `IMEI 2: ${imei2}` : '',
-        imei1 && serial ? `Serial: ${serial}` : '',
-    ].filter(Boolean).join(' | ');
+    const identifierParts = [
+        imei1 ? `IMEI 1: ${imei1}` : '',
+        imei2 ? `IMEI 2: ${imei2}` : '',
+        serial ? `Serial: ${serial}` : '',
+    ].filter(Boolean);
+    const label = identifierParts.length > 0
+        ? identifierParts.join(' | ')
+        : `Unidade: ${String(unit.id || '').slice(0, 8)}`;
 
     return {
         id: `unit:${unit.id}`,
         unit,
         label,
-        detail,
+        detail: '',
         unitData: {
             unitId: unit.id,
             imei1: imei1 || undefined,

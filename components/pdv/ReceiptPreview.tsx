@@ -5,6 +5,7 @@ import * as ReactQRCode from 'react-qr-code';
 import { calculateSaleTotals } from '../../utils/saleCalculations';
 import { companySettingsService } from '../../services/companySettingsService';
 import { CompanySettings } from '../../types/companySettings';
+import { capitalizeName } from '../../utils/customerFormUtils';
 
 const QRCode = (
     (ReactQRCode as any).default?.default ||
@@ -247,7 +248,7 @@ export default function ReceiptPreview({
                     </div>
                     {customer ? (
                         <div className="text-sm text-slate-600 space-y-1 ml-6">
-                            <p className="font-medium text-slate-800">{customer.name}</p>
+                            <p className="font-medium text-slate-800">{capitalizeName(customer.name)}</p>
                             {customer.cpf_cnpj && <p>CPF/CNPJ: {maskCPF(customer.cpf_cnpj)}</p>}
                             {customer.phone && <p>Tel: {customer.phone}</p>}
                         </div>

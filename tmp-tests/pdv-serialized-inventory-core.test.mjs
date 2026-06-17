@@ -80,8 +80,8 @@ const exactOption = mod.buildPdvUnitOption({
 });
 
 assert.equal(exactOption.id, 'unit:unit-exact');
-assert.equal(exactOption.label, 'IMEI 1: 860000000000001');
-assert.equal(exactOption.detail, 'IMEI 2: 860000000000002 | Serial: AT2209901885');
+assert.equal(exactOption.label, 'IMEI 1: 860000000000001 | IMEI 2: 860000000000002 | Serial: AT2209901885');
+assert.equal(exactOption.detail, '');
 assert.equal(exactOption.unitData.unitId, 'unit-exact');
 assert.equal(exactOption.unitData.imei1, '860000000000001');
 assert.equal(exactOption.unitData.imei2, '860000000000002');
@@ -192,7 +192,10 @@ assert.equal(titanium.kind, 'serialized-product');
 assert.equal(titanium.stockLabel, '2 unidades disponiveis');
 assert.deepEqual(
   titanium.unitOptions.map((option) => option.label),
-  ['IMEI 1: 865750085805988', 'IMEI 1: 865750084601982'],
+  [
+    'IMEI 1: 865750085805988 | IMEI 2: 865750085805996 | Serial: 72698/W5XJ03708',
+    'IMEI 1: 865750084601982 | IMEI 2: 865750084601990 | Serial: 72698/W5XJ04308',
+  ],
 );
 assert.ok(
   JSON.stringify(titanium).includes('XI-REDMINOTE15PRO4G-TI-8GB-256GB') === false,

@@ -346,19 +346,16 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                                         {card.unitOptions.map((option) => (
                                                             <label
                                                                 key={option.id}
-                                                                className="flex cursor-pointer items-start gap-2 rounded-md bg-white px-2 py-2 text-xs text-slate-700 hover:bg-blue-50"
+                                                                className="flex cursor-pointer items-center gap-3 overflow-x-auto rounded-md bg-white px-2 py-2 text-2xl leading-tight text-slate-800 hover:bg-blue-50"
                                                             >
                                                                 <input
                                                                     type="radio"
                                                                     name={`unit-${card.id}`}
                                                                     checked={(selectedUnitByCardId[card.id] || card.unitOptions[0]?.id) === option.id}
                                                                     onChange={() => setSelectedUnitByCardId(prev => ({ ...prev, [card.id]: option.id }))}
-                                                                    className="mt-0.5"
+                                                                    className="h-4 w-4 shrink-0"
                                                                 />
-                                                                <span>
-                                                                    <span className="block font-mono font-semibold">{option.label}</span>
-                                                                    {option.detail && <span className="block font-mono text-slate-500">{option.detail}</span>}
-                                                                </span>
+                                                                <span className="whitespace-nowrap font-mono font-semibold">{option.label}</span>
                                                             </label>
                                                         ))}
                                                     </div>

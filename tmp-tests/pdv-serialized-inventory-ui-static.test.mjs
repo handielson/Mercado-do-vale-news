@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync('components/pdv/ProductSearchSection.tsx', 'utf8');
+const customerSection = readFileSync('components/pdv/CustomerSection.tsx', 'utf8');
+const receiptPreview = readFileSync('components/pdv/ReceiptPreview.tsx', 'utf8');
+const salesSummary = readFileSync('components/pdv/SalesSummarySection.tsx', 'utf8');
 
 assert.match(
   source,
@@ -25,6 +28,30 @@ assert.match(
   source,
   /selectedUnit\.unitData/,
   'Adding a serialized product must pass the selected unitData to the cart',
+);
+
+assert.match(
+  source,
+  /overflow-x-auto[\s\S]*text-2xl[\s\S]*whitespace-nowrap[\s\S]*option\.label/,
+  'Serialized unit selector must render the IMEI/serial line enlarged and on one line',
+);
+
+assert.match(
+  customerSection,
+  /formatCustomerName\(selectedCustomer\.name\)/,
+  'PDV selected customer card must display customer names in title case',
+);
+
+assert.match(
+  receiptPreview,
+  /capitalizeName\(customer\.name\)/,
+  'PDV receipt preview must display customer names in title case',
+);
+
+assert.match(
+  salesSummary,
+  /capitalizeName\(customer\.name\)/,
+  'PDV sale summary must display customer names in title case',
 );
 
 assert.doesNotMatch(
