@@ -329,6 +329,10 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                             <tbody className="divide-y divide-slate-100 bg-white">
                                                                                 {colorGroup.units.filter((unit: any) => unit.status === 'sold').map((unit: any) => {
                                                                                     const product = colorGroup.products.find((item: any) => item.id === unit.productId);
+                                                                                    const saleLabel = [
+                                                                                        unit.orderNumber || unit.saleId || unit.orderId || 'Abrir venda',
+                                                                                        unit.customerName,
+                                                                                    ].filter(Boolean).join(' - ');
                                                                                     return (
                                                                                         <tr key={unit.id}>
                                                                                             <td className="px-2 py-2 font-semibold text-slate-700">{product?.sku || '-'}</td>
@@ -341,10 +345,10 @@ export const ModelProductAggregatorPage: React.FC = () => {
                                                                                                         href={unit.saleUrl || unit.orderUrl}
                                                                                                         className="font-semibold text-blue-700 hover:text-blue-900"
                                                                                                     >
-                                                                                                        {unit.orderNumber || unit.saleId || unit.orderId || 'Abrir venda'}
+                                                                                                        {saleLabel}
                                                                                                     </a>
                                                                                                 ) : (
-                                                                                                    unit.orderNumber || '-'
+                                                                                                    saleLabel || '-'
                                                                                                 )}
                                                                                             </td>
                                                                                             <td className="px-2 py-2">

@@ -4613,6 +4613,14 @@ async function syncShopeeStockFromBlingTargetsVps(_stockTargets) {
   return { ok: true, skipped: 'vps_webhook_local_shopee_sync_pending', updated: 0, errors: [] };
 }
 
+function isLocalBlingNameManagedVps(product) {
+  let specs = product?.specs || {};
+  if (typeof specs === 'string') {
+    try { specs = JSON.parse(specs); } catch { specs = {}; }
+  }
+  return specs && typeof specs === 'object' && specs._bling_name_sync === 'local';
+}
+
 function normalizeBlingAdminSlugVps(value) {
   return String(value || '')
     .toLowerCase()
@@ -4741,16 +4749,20 @@ async function handleBlingWebhookVps(request, reply) {
         resolvedName = resolvedName || detail?.nome;
         resolvedSku = resolvedSku || detail?.codigo;
       }
-      if (!resolvedSku && blingId) {
-        const rows = await vpsDbSelect('products', `select=sku,name&bling_id=eq.${encodeURIComponent(String(blingId))}&limit=1`);
+      let localProductForNameSync = null;
+      if (blingId) {
+        const rows = await vpsDbSelect('products', `select=sku,name,specs&bling_id=eq.${encodeURIComponent(String(blingId))}&limit=1`);
         const product = Array.isArray(rows) ? rows[0] : null;
-        resolvedSku = product?.sku;
-        resolvedName = resolvedName || product?.name;
+        localProductForNameSync = product || null;
+        if (!resolvedSku) {
+          resolvedSku = product?.sku;
+          resolvedName = resolvedName || product?.name;
+        }
       }
       if (!resolvedSku) return reply.code(200).send({ ok: false, message: `SKU not found for bling_id: ${blingId}` });
 
       const updates = {};
-      if (resolvedName) updates.name = resolvedName;
+      if (resolvedName && !isLocalBlingNameManagedVps(localProductForNameSync)) updates.name = resolvedName;
       if (preco !== undefined && preco !== null && Number.isFinite(Number(preco))) {
         updates.price_retail = Math.round(Number(preco) * 100);
       }
@@ -17923,11 +17935,15 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
           OR CAST(alternative_eans AS CHAR) COLLATE utf8mb4_unicode_ci LIKE ?
           OR model_id COLLATE utf8mb4_unicode_ci LIKE ?
           OR slug COLLATE utf8mb4_unicode_ci LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(specs, '$.serial')) COLLATE utf8mb4_unicode_ci LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(specs, '$.serial_number')) COLLATE utf8mb4_unicode_ci LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(specs, '$.imei1')) COLLATE utf8mb4_unicode_ci LIKE ?
+          OR JSON_UNQUOTE(JSON_EXTRACT(specs, '$.imei2')) COLLATE utf8mb4_unicode_ci LIKE ?
           ${unitProductCondition}
         )
       ORDER BY name ASC
       LIMIT ?`,
-    [searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, ...matchingUnitProductIds, limit]
+    [searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, searchLike, ...matchingUnitProductIds, limit]
   );
 
   const products = rows.map(r => ({
@@ -20007,7 +20023,10 @@ fastify.patch('/products/name', { preHandler: requireSyncKey }, async (req, repl
   const { sku, name } = req.body || {};
   if (!sku || !name) return reply.code(400).send({ error: 'sku and name required' });
   const [result] = await pool.query(
-    'UPDATE products SET name=?, updated_at=CURRENT_TIMESTAMP WHERE sku=?',
+    `UPDATE products
+        SET name=?, updated_at=CURRENT_TIMESTAMP
+      WHERE sku=?
+        AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(specs, '$._bling_name_sync')), '') <> 'local'`,
     [name, sku]
   );
   return { ok: true, affectedRows: result.affectedRows };

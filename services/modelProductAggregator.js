@@ -71,6 +71,17 @@ function orderUrl(unit) {
   return unit.order_id ? `/admin/orders?order=${encodeURIComponent(unit.order_id)}` : null;
 }
 
+function saleCustomerName(sale) {
+  return String(
+    sale?.customer_name ||
+    sale?.customerName ||
+    sale?.customer?.name ||
+    sale?.buyer_name ||
+    sale?.buyerName ||
+    ''
+  ).trim();
+}
+
 function emptyTotals() {
   return {
     availableCount: 0,
@@ -250,6 +261,7 @@ function buildSerializedSaleInfoByUnitId(sales, saleItems) {
       saleId,
       orderId,
       orderNumber,
+      customerName: saleCustomerName(sale) || String(item.customer_name || item.customerName || '').trim(),
       returnedValue: unitReturnedValue,
     });
   }
@@ -531,6 +543,7 @@ export function aggregateModelProducts(input) {
         saleId,
         orderId,
         orderNumber: saleInfo.orderNumber || orderId || '',
+        customerName: saleInfo.customerName || '',
         costValue,
         returnedValue,
         returnedValueEstimated,

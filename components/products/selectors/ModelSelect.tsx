@@ -163,7 +163,10 @@ export const ModelSelect: React.FC<ModelSelectProps> = ({
 
                 <button
                     type="button"
-                    onClick={() => setShowCreateDialog(true)}
+                    onClick={() => {
+                        setNewModelName(searchTerm.trim());
+                        setShowCreateDialog(true);
+                    }}
                     className="p-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors inline-flex items-center justify-center"
                     title="Novo Modelo"
                 >

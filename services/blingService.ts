@@ -10,6 +10,7 @@ import { getCompanyId } from './companyContext';
 import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
 import { buildComboStockDeductionTargets, type BlingComboSelection } from './blingComboStock';
 import { resolveBlingDescription } from './blingDescription.js';
+import { markBlingNameManaged, stripBlingNameFieldsWhenLocalManaged } from './blingNameSyncPolicy.js';
 
 const BLING_API_BASE = 'https://www.bling.com.br/Api/v3';
 const parentDetailCache = new Map<number, any>();
@@ -703,7 +704,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
     console.log('[mapBlingToDb] variacaoNome resolvido:', variacaoNome);
 
     const nomeLimpo = cleanVariacaoNome(item.nome || 'Produto sem nome', variacaoNome);
-    const specs = variacaoNome ? parseVariacaoAtributos(variacaoNome) : {};
+    const specs = markBlingNameManaged(variacaoNome ? parseVariacaoAtributos(variacaoNome) : {});
 
     console.log('[mapBlingToDb] nomeLimpo:', nomeLimpo);
     console.log('[mapBlingToDb] specs:', specs);
@@ -1650,7 +1651,7 @@ export async function importBlingProducts(
                 // NOTA: specs (cor, ram, storage) é INCLUÍDO para que mudanças de variação
                 // no Bling (ex: "vinho escuro" → "vinho") sejam refletidas ao reimportar.
                 const { company_id, bling_id, stock_quantity, track_inventory, is_gift, warranty_type, ...updateFields } = dbRow;
-                await updateWithColumnFallback(existing.id, updateFields);
+                await updateWithColumnFallback(existing.id, stripBlingNameFieldsWhenLocalManaged(existing, updateFields));
                 result.updated++;
                 vpsRows.push({ ...dbRow, id: existing.id });
             } else {

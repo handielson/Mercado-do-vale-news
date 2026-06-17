@@ -7,7 +7,7 @@ export type PdvSerializedUnitOption = {
     label: string;
     detail: string;
     unitData: {
-        unitId: string;
+        unitId?: string;
         imei1?: string;
         imei2?: string;
         serial?: string;
@@ -82,6 +82,44 @@ function stripLegacySerializedSpecs(product: Product): Product {
     };
 }
 
+function buildLegacyProductUnitOption(product: Product): PdvSerializedUnitOption | null {
+    if (product.track_inventory && Math.max(0, Math.trunc(Number(product.stock_quantity || 0))) <= 0) return null;
+
+    const specs = (product as any).specs || {};
+    const imei1 = cleanText(specs.imei1 || specs.imei_1 || specs.imei);
+    const imei2 = cleanText(specs.imei2 || specs.imei_2);
+    const serial = cleanText(specs.serial || specs.serial_number);
+    if (!imei1 && !imei2 && !serial) return null;
+
+    const identifierParts = [
+        imei1 ? `IMEI 1: ${imei1}` : '',
+        imei2 ? `IMEI 2: ${imei2}` : '',
+        serial ? `Serial: ${serial}` : '',
+    ].filter(Boolean);
+
+    return {
+        id: `legacy-unit:${product.id}`,
+        unit: {
+            id: '',
+            product_id: product.id,
+            imei_1: imei1,
+            imei_2: imei2,
+            serial_number: serial,
+            condition: 'new',
+            status: 'available' as any,
+            created: '',
+            updated: '',
+        },
+        label: identifierParts.join(' | '),
+        detail: '',
+        unitData: {
+            imei1: imei1 || undefined,
+            imei2: imei2 || undefined,
+            serial: serial || undefined,
+        },
+    };
+}
+
 function getProductGroupingKey(product: Product): string {
     const modelId = cleanText((product as any).model_id);
     const ram = normalizeKeyText(product.specs?.ram);
@@ -148,6 +186,10 @@ export function buildSerializedProductCard(
 ): Extract<PdvSearchCard, { kind: 'serialized-product' }> {
     const displayProduct = stripLegacySerializedSpecs(product);
     const unitOptions = availableUnits.filter(isAvailableUnit).map(buildPdvUnitOption);
+    if (unitOptions.length === 0) {
+        const legacyOption = buildLegacyProductUnitOption(product);
+        if (legacyOption) unitOptions.push(legacyOption);
+    }
     return {
         kind: 'serialized-product',
         id: `product:${product.id}:serialized`,
@@ -171,8 +213,9 @@ export async function buildPdvSearchCards(
             ? await deps.listUnitsByProduct(product.id).catch(() => [])
             : [];
         const availableUnits = units.filter(isAvailableUnit);
+        const legacyOption = buildLegacyProductUnitOption(product);
 
-        if (availableUnits.length > 0) {
+        if (availableUnits.length > 0 || legacyOption) {
             cards.push(buildSerializedProductCard(product, availableUnits));
             continue;
         }
@@ -209,7 +252,7 @@ export function fromHydratedPdvSearchPayload(payload: HydratedPdvProduct[]): Pdv
 
     return [...grouped.values()].map((entry) => {
         const availableUnits = (entry.available_units || []).filter(isAvailableUnit);
-        return availableUnits.length > 0
+        return availableUnits.length > 0 || buildLegacyProductUnitOption(entry.product)
             ? buildSerializedProductCard(entry.product, availableUnits)
             : buildStockProductCard(entry.product);
     });

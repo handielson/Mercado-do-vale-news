@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.53-pdv-receipt-serial-preview",
+  "version": "v1.1.54-pdv-serial-bling-name-lock",
   "date": "2026-06-17",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260617-113047-v1153-pdv-receipt-serial-preview",
+  "release_vps": "/var/www/mdv-site/releases/20260617-130333-v1154-pdv-serial-bling-name-lock",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Mostra Serial/IMEI da unidade escolhida no preview do recibo e mantem a busca de serial no PDV, caixa alta no cadastro e painel de vendidos com pedido, venda e lucro."
+  "summary": "Corrige cadastro e busca de produtos serializados no PDV, abre vendas direto pelo painel do modelo e protege nomes locais contra atualizacao automatica do Bling."
 }

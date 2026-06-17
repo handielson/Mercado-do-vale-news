@@ -73,6 +73,23 @@ const result = aggregateModelProducts({
   model,
   products,
   units,
+  sales: [
+    {
+      id: 'sale-1',
+      order_number: 'PDV-1024',
+      customer: { name: 'Maria Silva' },
+      status: 'completed',
+    },
+  ],
+  saleItems: [
+    {
+      sale_id: 'sale-1',
+      serialized_unit_id: 'u2',
+      quantity: 1,
+      unit_price: 122600,
+      total: 122600,
+    },
+  ],
   saleReturnByUnitId,
   locationsByProductId,
 });
@@ -103,6 +120,8 @@ const roxoSoldUnit = roxo.units.find((unit) => unit.id === 'u2');
 assert.equal(roxoSoldUnit.returnedValue, 122600);
 assert.equal(roxoSoldUnit.profitValue, 11600);
 assert.equal(roxoSoldUnit.saleUrl, '/admin/sales?sale=sale-1');
+assert.equal(roxoSoldUnit.orderNumber, 'PDV-1024');
+assert.equal(roxoSoldUnit.customerName, 'Maria Silva');
 assert.equal(roxo.products[0].publicUrl, '/produto/redmi-15-roxo');
 assert.equal(roxo.products[0].editUrl, '/admin/products/p-roxo/redmi-15-roxo');
 assert.equal(roxo.products[0].modelPanelUrl, '/admin/products/models/model-redmi-15');

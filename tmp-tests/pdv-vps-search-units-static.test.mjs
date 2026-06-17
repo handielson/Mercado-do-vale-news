@@ -12,6 +12,11 @@ assert.match(
   /matchingUnitProductIds[\s\S]*FROM units u[\s\S]*u\.status = 'available'[\s\S]*LOWER\(TRIM\(u\.serial\)\)/,
   'PDV product search must also search available unit identifiers so a typed serial can find its product card',
 );
+assert.match(
+  vps,
+  /JSON_UNQUOTE\(JSON_EXTRACT\(specs, '\$\.serial'\)\)[\s\S]*LIKE \?/,
+  'PDV product search must find legacy serialized products whose serial is still stored in products.specs.serial',
+);
 assert.match(api, /async searchPdvProducts/, 'vpsApiService must expose searchPdvProducts');
 assert.match(pdv, /fromHydratedPdvSearchPayload/, 'pdvSerializedInventory must normalize hydrated VPS payloads into product cards');
 

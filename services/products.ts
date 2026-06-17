@@ -9,6 +9,7 @@ import { buildProductVideoUrl } from '../utils/video-url';
 import { getCompanyId } from './companyContext';
 import { ensureTag, parseTagsVenda } from '../utils/cross-sell-tags';
 import { shopeeProductService } from './shopeeProducts';
+import { markLocalNameManaged } from './blingNameSyncPolicy.js';
 
 /**
  * PRODUCT SERVICE — VPS MySQL (fonte exclusiva de verdade)
@@ -404,6 +405,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
             tags_venda: ensureTag(parseTagsVenda(payload.specs?.tags_venda), brand),
         };
     }
+    payload.specs = markLocalNameManaged(payload.specs);
 
     const result = await vpsApiService.createProduct(payload);
     if (result.errors.length > 0) throw new Error(`Failed to create product: ${result.errors[0].error}`);
@@ -535,6 +537,7 @@ async function update(id: string, input: ProductInput): Promise<ProductWithPrice
             tags_venda: ensureTag(parseTagsVenda(payload.specs?.tags_venda), brand),
         };
     }
+    payload.specs = markLocalNameManaged(payload.specs);
 
     const ok = await vpsApiService.updateProduct(id, payload);
     if (!ok) throw new Error(`Failed to update product in VPS`);

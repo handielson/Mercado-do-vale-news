@@ -61,7 +61,7 @@ export interface SaleItem {
 
     // Unidade serializada vinculada (bip de IMEI no PDV)
     serialized_unit?: {
-        unitId: string;
+        unitId?: string;
         imei1?: string;
         imei2?: string;
         serial?: string;

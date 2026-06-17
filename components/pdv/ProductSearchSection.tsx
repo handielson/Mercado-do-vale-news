@@ -15,7 +15,7 @@ import { vpsApiService } from '../../services/vpsApiService';
 
 interface ProductSearchSectionProps {
     customer?: unknown;
-    onAddToCart: (product: Product, quantity: number, unitData?: { unitId: string; imei1?: string; imei2?: string; serial?: string }) => void;
+    onAddToCart: (product: Product, quantity: number, unitData?: { unitId?: string; imei1?: string; imei2?: string; serial?: string }) => void;
 }
 
 type SearchMode = 'product' | 'imei';

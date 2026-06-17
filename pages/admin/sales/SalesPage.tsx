@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ShoppingBag, Search, Filter, ArrowUpRight, ArrowDownRight, MoreVertical, Calendar, DollarSign, RefreshCw, XCircle, RotateCcw, TrendingUp, Truck } from 'lucide-react';
 import { SaleWithItems, SaleFilters } from '../../../types/sale';
 import { getSales, cancelSale, refundSale } from '../../../services/saleService';
@@ -7,6 +8,7 @@ import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../.
 import toast from 'react-hot-toast';
 
 export default function SalesPage() {
+    const [searchParams] = useSearchParams();
     const [sales, setSales] = useState<SaleWithItems[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [filters, setFilters] = useState<SaleFilters>({});
@@ -73,6 +75,15 @@ export default function SalesPage() {
     useEffect(() => {
         loadData();
     }, [filters, statusFilter, dateFrom, dateTo]);
+
+    useEffect(() => {
+        const saleId = searchParams.get('sale');
+        if (!saleId || sales.length === 0) return;
+        const sale = sales.find(item => item.id === saleId);
+        if (!sale) return;
+        setSelectedSale(sale);
+        setIsModalOpen(true);
+    }, [searchParams, sales]);
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('pt-BR', {

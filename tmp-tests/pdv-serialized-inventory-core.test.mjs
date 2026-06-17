@@ -21,6 +21,15 @@ const products = [
     price_retail: 2500,
     specs: {},
   },
+  {
+    id: 'prod-legacy-serial',
+    name: 'Athomics Inspire Lite',
+    sku: 'RAIL-LEGACY',
+    track_inventory: true,
+    stock_quantity: 1,
+    price_retail: 45000,
+    specs: { serial: 'AT2209900136' },
+  },
 ];
 
 const unitsByProduct = new Map([
@@ -30,13 +39,14 @@ const unitsByProduct = new Map([
     { id: 'unit-sold', product_id: 'prod-athomics', status: 'sold', imei_1: '', imei_2: '', serial_number: 'SOLD-SHOULD-NOT-SHOW', condition: 'new', created: '', updated: '' },
   ]],
   ['prod-cable', []],
+  ['prod-legacy-serial', []],
 ]);
 
 const cards = await mod.buildPdvSearchCards(products, {
   listUnitsByProduct: async (productId) => unitsByProduct.get(productId) || [],
 });
 
-assert.equal(cards.length, 2, 'one serialized product card plus one normal stock product card');
+assert.equal(cards.length, 3, 'serialized unit cards, one normal stock product card, and one legacy serial card');
 
 const serialized = cards.find((card) => card.id === 'product:prod-athomics:serialized');
 assert.equal(serialized.kind, 'serialized-product');
@@ -66,6 +76,13 @@ assert.equal(cable.subtitle, 'SKU: CABO-USB');
 assert.equal(cable.quantityLocked, false);
 assert.equal(cable.maxQuantity, 3);
 assert.equal(cable.stockLabel, '3 disponiveis');
+
+const legacySerial = cards.find((card) => card.id === 'product:prod-legacy-serial:serialized');
+assert.equal(legacySerial.kind, 'serialized-product');
+assert.equal(legacySerial.stockLabel, '1 unidade disponivel');
+assert.deepEqual(legacySerial.unitOptions.map((option) => option.label), ['Serial: AT2209900136']);
+assert.equal(legacySerial.unitOptions[0].unitData.unitId, undefined);
+assert.equal(legacySerial.unitOptions[0].unitData.serial, 'AT2209900136');
 
 const exactOption = mod.buildPdvUnitOption({
   id: 'unit-exact',

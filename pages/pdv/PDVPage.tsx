@@ -357,7 +357,7 @@ export default function PDVPage() {
     const handleAddToCart = (
         product: Product,
         quantity: number,
-        unitData?: { unitId: string; imei1?: string; imei2?: string; serial?: string }
+        unitData?: { unitId?: string; imei1?: string; imei2?: string; serial?: string }
     ) => {
         // Unidades serializadas (com IMEI) são sempre itens individuais — nunca agrupa
         const isSerialized = !!unitData;

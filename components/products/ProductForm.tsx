@@ -826,6 +826,35 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         return model?.name || null;
     };
 
+    const normalizeBlingModelMatchName = (value: unknown) => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ');
+
+    const resolveBlingProductDisplayName = (product: any) => String(product?.nome || product?.name || '').trim();
+
+    const resolveBlingModelSuggestion = async (product: any) => {
+        const suggestedName = String(
+            product?.variacao?.produtoPai?.nome ||
+            product?.nomePai ||
+            product?.nome ||
+            product?.name ||
+            ''
+        ).trim();
+        if (!suggestedName) return null;
+
+        const normalizedSuggestion = normalizeBlingModelMatchName(suggestedName);
+        const models = await modelService.listActive().catch(() => []);
+        const exactModel = models.find((model) =>
+            normalizeBlingModelMatchName(model.name) === normalizedSuggestion
+        );
+
+        return exactModel || { id: null, name: suggestedName };
+    };
+
     const findLocalProductForBlingLink = async (sku: string, blingProductId: number) => {
         const bySku = await vpsApiService.getProducts({
             sku,
@@ -893,6 +922,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         if (link.model) {
             setValue('model', link.model, { shouldDirty: true, shouldValidate: true });
         }
+        if (link.productName && !String(getValues('name') || '').trim()) {
+            setValue('name', link.productName, { shouldDirty: true, shouldValidate: true });
+        }
         if (link.priceAutofill?.price_cost) {
             setValue('price_cost', link.priceAutofill.price_cost, { shouldDirty: true, shouldValidate: true });
         }
@@ -926,14 +958,16 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         const priceAutofill = getBlingSkuPriceAutofill(product);
         const colors = await colorService.listActive().catch(() => []);
         const specAutofill = getBlingSkuSpecAutofill({ product, colors });
+        const blingModelSuggestion = localProduct?.model_id ? null : await resolveBlingModelSuggestion(product);
 
         return {
             id: product.id,
             parentId,
             ean: resolvedEans[0] || null,
             eans: resolvedEans,
-            model_id: localProduct?.model_id || null,
-            model: localProductModelName,
+            model_id: localProduct?.model_id || blingModelSuggestion?.id || null,
+            model: localProductModelName || blingModelSuggestion?.name || null,
+            productName: resolveBlingProductDisplayName(product),
             priceAutofill,
             specAutofill
         };
@@ -1376,12 +1410,40 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                         }
                     }
                 }
-                if (hasSerializedIdentity(mergedData.specs || {})) {
-                    mergedData.stock_quantity = 1;
+                const singleSerializedIdentity = hasSerializedIdentity(mergedData.specs || {});
+                const singleSerializedSpecs = singleSerializedIdentity
+                    ? {
+                        serial: normalizeSerializedTextInput('serial', mergedData.specs?.serial),
+                        imei1: normalizeSerializedTextInput('imei1', mergedData.specs?.imei1),
+                        imei2: normalizeSerializedTextInput('imei2', mergedData.specs?.imei2),
+                    }
+                    : null;
+
+                if (!initialData && singleSerializedIdentity) {
+                    mergedData.specs = { ...(mergedData.specs || {}) };
+                    delete mergedData.specs.serial;
+                    delete mergedData.specs.imei1;
+                    delete mergedData.specs.imei2;
+                    mergedData.stock_quantity = 0;
                 }
                 setSaveProgress({ current: 0, total: 1, message: 'Salvando produto...' });
                 const savedProduct = await onSubmit(mergedData);
                 showVariationPriceAdjustmentToast(savedProduct);
+                if (!initialData && singleSerializedIdentity) {
+                    if (!savedProduct?.id) {
+                        throw new Error('Produto salvo sem ID. Cadastro da unidade cancelado.');
+                    }
+                    setSaveProgress({ current: 0, total: 1, message: 'Salvando unidade...' });
+                    await unitService.create({
+                        product_id: savedProduct.id,
+                        serial_number: singleSerializedSpecs?.serial || undefined,
+                        imei_1: singleSerializedSpecs?.imei1 || undefined,
+                        imei_2: singleSerializedSpecs?.imei2 || undefined,
+                        condition: 'new',
+                        status: UnitStatus.AVAILABLE,
+                        cost_price: mergedData.price_cost,
+                    });
+                }
                 setSaveProgress({ current: 1, total: 1, message: 'Produto salvo.' });
                 if (!initialData) {
                     toast.success('Produto cadastrado com sucesso!');

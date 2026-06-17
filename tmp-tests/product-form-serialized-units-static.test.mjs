@@ -33,6 +33,18 @@ assert.match(
   'ProductForm must create available serialized units for IMEI/serial rows',
 );
 
+assert.match(
+  form,
+  /const singleSerializedIdentity = hasSerializedIdentity\(mergedData\.specs \|\| \{\}\)[\s\S]*const singleSerializedSpecs = singleSerializedIdentity[\s\S]*delete mergedData\.specs\.serial[\s\S]*delete mergedData\.specs\.imei1[\s\S]*delete mergedData\.specs\.imei2/s,
+  'ProductForm single-product save must move serial/IMEI out of product specs before saving the base product',
+);
+
+assert.match(
+  form,
+  /if \(!initialData && singleSerializedIdentity\) \{[\s\S]*await unitService\.create\(\{[\s\S]*product_id: savedProduct\.id[\s\S]*serial_number: singleSerializedSpecs\?\.serial[\s\S]*status: UnitStatus\.AVAILABLE/s,
+  'ProductForm single-product save must create an available unit for the extracted serial/IMEI',
+);
+
 assert.doesNotMatch(
   form,
   /const itemData = \{ \.\.\.batchPlan\.items\[index\], images: itemImages \};[\s\S]*await onSubmit\(itemData\);/,
