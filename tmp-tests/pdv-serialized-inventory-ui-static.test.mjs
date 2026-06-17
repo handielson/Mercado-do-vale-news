@@ -30,10 +30,22 @@ assert.match(
   'Adding a serialized product must pass the selected unitData to the cart',
 );
 
+assert.doesNotMatch(
+  source,
+  /overflow-x-auto/,
+  'Serialized unit selector must not require horizontal scrolling',
+);
+
+assert.doesNotMatch(
+  source,
+  /whitespace-nowrap/,
+  'Serialized unit selector must allow long IMEI/serial values to fit the card',
+);
+
 assert.match(
   source,
-  /overflow-x-auto[\s\S]*text-2xl[\s\S]*whitespace-nowrap[\s\S]*option\.label/,
-  'Serialized unit selector must render the IMEI/serial line enlarged and on one line',
+  /card\.kind === 'serialized-product'[\s\S]*className="mt-3 w-full[\s\S]*option\.label/,
+  'Serialized unit selector must render below the product row using the full card width',
 );
 
 assert.match(
@@ -46,6 +58,24 @@ assert.match(
   receiptPreview,
   /capitalizeName\(customer\.name\)/,
   'PDV receipt preview must display customer names in title case',
+);
+
+assert.match(
+  receiptPreview,
+  /calculateTotalPaid\(payments\)/,
+  'PDV receipt preview must use the shared payment total including credit fees',
+);
+
+assert.doesNotMatch(
+  receiptPreview,
+  /payments\.reduce\(\(sum,\s*p\)\s*=>\s*sum\s*\+\s*p\.amount/,
+  'PDV receipt preview must not ignore total_with_fee when checking if the sale is complete',
+);
+
+assert.match(
+  receiptPreview,
+  /serialized_unit\?\.imei1[\s\S]*IMEI 1:/,
+  'PDV receipt preview must show IMEI 1 below serialized products',
 );
 
 assert.match(

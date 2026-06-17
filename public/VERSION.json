@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.50-pdv-layout-name-imei",
+  "version": "v1.1.51-pdv-finalize-imei-layout",
   "date": "2026-06-17",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260617-100551-v1150-pdv-layout-name-imei",
+  "release_vps": "/var/www/mdv-site/releases/20260617-104432-v1151-pdv-finalize-imei-layout",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Ajusta visualmente o PDV para exibir nomes de cliente em titulo e unidades serializadas em uma linha IMEI 1 | IMEI 2 | Serial com fonte maior."
+  "summary": "Corrige o desbloqueio da finalizacao no PDV com credito parcelado, amplia o seletor de IMEI para a largura do card e mostra o IMEI 1 no preview do recibo."
 }

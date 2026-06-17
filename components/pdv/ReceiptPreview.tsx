@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Receipt, User, Package, Truck, CreditCard, DollarSign, Smartphone } from 'lucide-react';
 import { SaleItem, PaymentMethod, DeliveryType } from '../../types/sale';
 import * as ReactQRCode from 'react-qr-code';
-import { calculateSaleTotals } from '../../utils/saleCalculations';
+import { calculateSaleTotals, calculateTotalPaid } from '../../utils/saleCalculations';
 import { companySettingsService } from '../../services/companySettingsService';
 import { CompanySettings } from '../../types/companySettings';
 import { capitalizeName } from '../../utils/customerFormUtils';
@@ -97,8 +97,8 @@ export default function ReceiptPreview({
     // Total = Subtotal - Brindes - Promoção + Entrega + Juros
     const total = itemsTotal - giftDiscount - (promotionalDiscount || 0) - (finalAdjustmentDiscount || 0) + deliveryCostCustomer + totalFees;
 
-    // Total pago (já inclui os juros no amount de cada pagamento)
-    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    // Total pago usa o mesmo calculo da secao de pagamento, incluindo juros do credito.
+    const totalPaid = calculateTotalPaid(payments);
 
     // Troco ou falta
     const change = totalPaid - total;
@@ -268,6 +268,7 @@ export default function ReceiptPreview({
                             {items.map((item, index) => {
                                 const productTotal = item.unit_price * item.quantity;
                                 const warrantyTotal = item.warranty_price || 0;
+                                const serializedImei1 = item.serialized_unit?.imei1;
 
                                 return (
                                     <div key={index} className="space-y-0.5">
@@ -285,6 +286,11 @@ export default function ReceiptPreview({
                                                     <span className="text-xs text-slate-500 ml-2">
                                                         (Uni {formatCurrency(item.unit_price)})
                                                     </span>
+                                                )}
+                                                {serializedImei1 && (
+                                                    <p className="mt-0.5 font-mono text-xs text-slate-500">
+                                                        IMEI 1: {serializedImei1}
+                                                    </p>
                                                 )}
                                             </div>
                                             <span className="font-mono text-slate-800 ml-2 text-right">

@@ -337,30 +337,6 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                                 )}
                                             </div>
 
-                                            {card.kind === 'serialized-product' && (
-                                                <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 p-2">
-                                                    <div className="mb-2 text-xs font-semibold text-blue-800">
-                                                        Escolha a unidade que sera vendida
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        {card.unitOptions.map((option) => (
-                                                            <label
-                                                                key={option.id}
-                                                                className="flex cursor-pointer items-center gap-3 overflow-x-auto rounded-md bg-white px-2 py-2 text-2xl leading-tight text-slate-800 hover:bg-blue-50"
-                                                            >
-                                                                <input
-                                                                    type="radio"
-                                                                    name={`unit-${card.id}`}
-                                                                    checked={(selectedUnitByCardId[card.id] || card.unitOptions[0]?.id) === option.id}
-                                                                    onChange={() => setSelectedUnitByCardId(prev => ({ ...prev, [card.id]: option.id }))}
-                                                                    className="h-4 w-4 shrink-0"
-                                                                />
-                                                                <span className="whitespace-nowrap font-mono font-semibold">{option.label}</span>
-                                                            </label>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
 
                                         <div className="flex items-center gap-2">
@@ -387,6 +363,31 @@ export default function ProductSearchSection({ onAddToCart }: ProductSearchSecti
                                             </button>
                                         </div>
                                     </div>
+
+                                    {card.kind === 'serialized-product' && (
+                                        <div className="mt-3 w-full rounded-lg border border-blue-100 bg-blue-50 p-2">
+                                            <div className="mb-2 text-xs font-semibold text-blue-800">
+                                                Escolha a unidade que sera vendida
+                                            </div>
+                                            <div className="space-y-1">
+                                                {card.unitOptions.map((option) => (
+                                                    <label
+                                                        key={option.id}
+                                                        className="flex w-full cursor-pointer items-start gap-3 rounded-md bg-white px-3 py-2 text-base leading-snug text-slate-800 hover:bg-blue-50 sm:text-lg"
+                                                    >
+                                                        <input
+                                                            type="radio"
+                                                            name={`unit-${card.id}`}
+                                                            checked={(selectedUnitByCardId[card.id] || card.unitOptions[0]?.id) === option.id}
+                                                            onChange={() => setSelectedUnitByCardId(prev => ({ ...prev, [card.id]: option.id }))}
+                                                            className="mt-1 h-4 w-4 shrink-0"
+                                                        />
+                                                        <span className="min-w-0 break-words font-mono font-semibold">{option.label}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
