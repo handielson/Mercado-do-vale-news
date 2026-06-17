@@ -1,33 +1,29 @@
 # Versao Atual
 
 ```text
-version: v1.1.54-pdv-serial-bling-name-lock
+version: v1.1.55-pdv-merge-legacy-serial-units
 date: 2026-06-17
 status: published
-release_vps: /var/www/mdv-site/releases/20260617-130333-v1154-pdv-serial-bling-name-lock
+release_vps: /var/www/mdv-site/releases/20260617-131425-v1155-pdv-merge-legacy-serial-units
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Produtos serializados novos cadastrados pelo formulario passam a gerar unidade em `units`, em vez de deixar Serial/IMEI apenas em `products.specs`.
-- A busca do PDV continua encontrando unidades reais e agora tambem cobre produtos legados com Serial/IMEI salvo em `specs`, evitando sumico de item disponivel.
-- O endpoint VPS `/pdv/product-search` tambem busca por `specs.serial`, `specs.serial_number`, `specs.imei1` e `specs.imei2`.
-- O painel do modelo mostra o numero do pedido e o nome do cliente na lista de vendidos.
-- Clicar na venda pelo painel do modelo abre direto o detalhe da venda, em vez de parar na lista de vendas.
-- Produtos criados ou editados no sistema preservam o nome local contra atualizacao automatica do Bling.
-- Produtos importados do Bling continuam com nome dinamico pelo Bling.
-- Ao informar SKU do Bling no cadastro, o formulario tenta pre-selecionar modelo local existente e preencher o nome somente quando o campo esta vazio.
+- A lista de unidades do PDV agora junta unidades reais e seriais legados vindos de produtos duplicados agrupados pelo mesmo SKU.
+- O serial legado `AT2209900136`, que estava em outro registro `Athomics Inspire Lite` com SKU `rail`, passa a aparecer junto das unidades reais quando a busca e feita por nome.
+- A deduplicacao compara Serial, IMEI 1 e IMEI 2 para nao mostrar duas vezes o mesmo aparelho quando o legado ja virou unidade real.
+- Mantem a correcao anterior de cadastro serializado, abertura direta de venda pelo painel do modelo e protecao de nome local contra regressao do Bling.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.54-pdv-serial-bling-name-lock` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.55-pdv-merge-legacy-serial-units` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-17-v1.1.54-pdv-serial-bling-name-lock.md
+docs/versoes/2026-06-17-v1.1.55-pdv-merge-legacy-serial-units.md
 ```
 
 ## Publicacao
 
-- Release VPS publicada: `/var/www/mdv-site/releases/20260617-130333-v1154-pdv-serial-bling-name-lock`.
-- Esta versao altera frontend/admin, servicos de produto/Bling e endpoints VPS; site e API VPS publicados.
+- Release VPS publicada: `/var/www/mdv-site/releases/20260617-131425-v1155-pdv-merge-legacy-serial-units`.
+- Esta versao altera o agrupamento frontend do PDV; site VPS publicado.

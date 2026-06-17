@@ -127,7 +127,7 @@ const hydratedCards = mod.fromHydratedPdvSearchPayload([
       track_inventory: true,
       stock_quantity: 21,
       price_retail: 45000,
-      specs: { serial: 'LEGACY-DUPLICATE-SHOULD-NOT-RENDER' },
+      specs: { serial: 'AT2209900136' },
     },
     available_units: [],
   },
@@ -136,10 +136,10 @@ const hydratedCards = mod.fromHydratedPdvSearchPayload([
 assert.equal(hydratedCards.length, 1, 'hydrated duplicate products with the same SKU must render one product card');
 assert.equal(hydratedCards[0].id, 'product:prod-athomics-canonical:serialized');
 assert.equal(hydratedCards[0].kind, 'serialized-product');
-assert.deepEqual(hydratedCards[0].unitOptions.map((option) => option.label), ['Serial: AT2209901855']);
+assert.deepEqual(hydratedCards[0].unitOptions.map((option) => option.label), ['Serial: AT2209901855', 'Serial: AT2209900136']);
 assert.ok(
-  JSON.stringify(hydratedCards[0]).includes('LEGACY-DUPLICATE-SHOULD-NOT-RENDER') === false,
-  'legacy duplicate specs must not leak into grouped hydrated card',
+  hydratedCards[0].unitOptions.some((option) => option.unitData.serial === 'AT2209900136' && option.unitData.unitId === undefined),
+  'legacy duplicate serial must be selectable in the grouped hydrated card',
 );
 
 const smartphoneCards = mod.fromHydratedPdvSearchPayload([

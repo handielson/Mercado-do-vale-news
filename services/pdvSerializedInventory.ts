@@ -120,6 +120,14 @@ function buildLegacyProductUnitOption(product: Product): PdvSerializedUnitOption
     };
 }
 
+function getUnitIdentifierKeys(unitData: PdvSerializedUnitOption['unitData']): string[] {
+    return [
+        unitData.serial,
+        unitData.imei1,
+        unitData.imei2,
+    ].map(normalizeKeyText).filter(Boolean);
+}
+
 function getProductGroupingKey(product: Product): string {
     const modelId = cleanText((product as any).model_id);
     const ram = normalizeKeyText(product.specs?.ram);
@@ -183,9 +191,13 @@ export function buildStockProductCard(product: Product): Extract<PdvSearchCard, 
 export function buildSerializedProductCard(
     product: Product,
     availableUnits: Unit[],
+    extraUnitOptions: PdvSerializedUnitOption[] = [],
 ): Extract<PdvSearchCard, { kind: 'serialized-product' }> {
     const displayProduct = stripLegacySerializedSpecs(product);
-    const unitOptions = availableUnits.filter(isAvailableUnit).map(buildPdvUnitOption);
+    const unitOptions = [
+        ...availableUnits.filter(isAvailableUnit).map(buildPdvUnitOption),
+        ...extraUnitOptions,
+    ];
     if (unitOptions.length === 0) {
         const legacyOption = buildLegacyProductUnitOption(product);
         if (legacyOption) unitOptions.push(legacyOption);
@@ -227,33 +239,40 @@ export async function buildPdvSearchCards(
 }
 
 export function fromHydratedPdvSearchPayload(payload: HydratedPdvProduct[]): PdvSearchCard[] {
-    const grouped = new Map<string, HydratedPdvProduct>();
+    const grouped = new Map<string, HydratedPdvProduct[]>();
 
     for (const entry of payload) {
         const key = getProductGroupingKey(entry.product);
-        const current = grouped.get(key);
-        const entryUnits = (entry.available_units || []).filter(isAvailableUnit);
-
-        if (!current) {
-            grouped.set(key, { product: entry.product, available_units: entryUnits });
-            continue;
-        }
-
-        const currentUnits = (current.available_units || []).filter(isAvailableUnit);
-        const product = currentUnits.length > 0 && entryUnits.length === 0
-            ? current.product
-            : entry.product;
-
-        grouped.set(key, {
-            product,
-            available_units: [...currentUnits, ...entryUnits],
+        const entries = grouped.get(key) || [];
+        entries.push({
+            product: entry.product,
+            available_units: (entry.available_units || []).filter(isAvailableUnit),
         });
+        grouped.set(key, entries);
     }
 
-    return [...grouped.values()].map((entry) => {
-        const availableUnits = (entry.available_units || []).filter(isAvailableUnit);
-        return availableUnits.length > 0 || buildLegacyProductUnitOption(entry.product)
-            ? buildSerializedProductCard(entry.product, availableUnits)
-            : buildStockProductCard(entry.product);
+    return [...grouped.values()].map((entries) => {
+        const canonical = entries.find((entry) => (entry.available_units || []).filter(isAvailableUnit).length > 0) || entries[entries.length - 1];
+        const availableUnits = entries.flatMap((entry) => (entry.available_units || []).filter(isAvailableUnit));
+        const legacyOptions = entries
+            .filter((entry) => entry.product.id !== canonical.product.id)
+            .map((entry) => buildLegacyProductUnitOption(entry.product))
+            .filter((option): option is PdvSerializedUnitOption => Boolean(option));
+
+        const seenOptionKeys = new Set(
+            availableUnits
+                .map(buildPdvUnitOption)
+                .flatMap((option) => getUnitIdentifierKeys(option.unitData))
+        );
+        const dedupedLegacyOptions = legacyOptions.filter((option) => {
+            const keys = getUnitIdentifierKeys(option.unitData);
+            if (keys.length === 0 || keys.some((key) => seenOptionKeys.has(key))) return false;
+            keys.forEach((key) => seenOptionKeys.add(key));
+            return true;
+        });
+
+        return availableUnits.length > 0 || dedupedLegacyOptions.length > 0 || buildLegacyProductUnitOption(canonical.product)
+            ? buildSerializedProductCard(canonical.product, availableUnits, dedupedLegacyOptions)
+            : buildStockProductCard(canonical.product);
     });
 }
