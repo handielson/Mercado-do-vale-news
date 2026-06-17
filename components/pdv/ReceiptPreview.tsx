@@ -269,6 +269,13 @@ export default function ReceiptPreview({
                                 const productTotal = item.unit_price * item.quantity;
                                 const warrantyTotal = item.warranty_price || 0;
                                 const serializedImei1 = item.serialized_unit?.imei1;
+                                const serializedImei2 = item.serialized_unit?.imei2;
+                                const serializedSerial = item.serialized_unit?.serial;
+                                const serializedIdentifiers = [
+                                    serializedImei1 ? `IMEI 1: ${serializedImei1}` : '',
+                                    serializedImei2 ? `IMEI 2: ${serializedImei2}` : '',
+                                    serializedSerial ? `Serial: ${serializedSerial}` : '',
+                                ].filter(Boolean).join(' | ');
 
                                 return (
                                     <div key={index} className="space-y-0.5">
@@ -287,9 +294,9 @@ export default function ReceiptPreview({
                                                         (Uni {formatCurrency(item.unit_price)})
                                                     </span>
                                                 )}
-                                                {serializedImei1 && (
+                                                {serializedIdentifiers && (
                                                     <p className="mt-0.5 font-mono text-xs text-slate-500">
-                                                        IMEI 1: {serializedImei1}
+                                                        {serializedIdentifiers}
                                                     </p>
                                                 )}
                                             </div>

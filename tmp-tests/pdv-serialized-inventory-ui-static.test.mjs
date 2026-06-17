@@ -79,6 +79,12 @@ assert.match(
 );
 
 assert.match(
+  receiptPreview,
+  /serialized_unit\?\.serial[\s\S]*Serial:/,
+  'PDV receipt preview must show Serial below serialized products when the selected unit has a serial',
+);
+
+assert.match(
   salesSummary,
   /capitalizeName\(customer\.name\)/,
   'PDV sale summary must display customer names in title case',
