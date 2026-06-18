@@ -8,6 +8,7 @@ export type CustomerType = 'retail' | 'wholesale' | 'resale';
 
 interface GroupedProduct {
     name: string;
+    brand: string;
     model: string;
     variant: {
         ram: string;
@@ -48,6 +49,7 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
         const ram = product.specs?.ram || 'N/A';
         const storage = product.specs?.storage || 'N/A';
         const color = product.specs?.color || 'Sem cor';
+        const brand = product.brand || 'Sem marca';
 
         // Create unique key for variant
         const key = `${product.model || cleanName}-${ram}-${storage}`;
@@ -58,10 +60,14 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
             if (!existing.colors.includes(color)) {
                 existing.colors.push(color);
             }
+            if (product.price_retail > 0 && product.price_retail < existing.price) {
+                existing.price = product.price_retail;
+            }
         } else {
             // Create new variant entry
             grouped.set(key, {
                 name: cleanName,
+                brand,
                 model: product.model || cleanName,
                 variant: { ram, storage },
                 colors: [color],
@@ -73,6 +79,24 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
     });
 
     return Array.from(grouped.values());
+}
+
+function groupCatalogItemsByBrand(items: GroupedProduct[]): Array<{ brand: string; items: GroupedProduct[] }> {
+    const groups = new Map<string, GroupedProduct[]>();
+
+    for (const item of items) {
+        const brand = item.brand || 'Sem marca';
+        const brandItems = groups.get(brand) || [];
+        brandItems.push(item);
+        groups.set(brand, brandItems);
+    }
+
+    return Array.from(groups.entries())
+        .sort(([brandA], [brandB]) => brandA.localeCompare(brandB, 'pt-BR'))
+        .map(([brand, brandItems]) => ({
+            brand,
+            items: brandItems.sort((a, b) => a.price - b.price || a.name.localeCompare(b.name, 'pt-BR')),
+        }));
 }
 
 function hasAvailableStock(product: Product): boolean {
@@ -125,9 +149,7 @@ export function generateCatalogMessage(
 
     // Group products by variant
     const grouped = groupProductsByVariant(productsWithPrices);
-
-    // Sort by name
-    grouped.sort((a, b) => a.name.localeCompare(b.name));
+    const groupedByBrand = groupCatalogItemsByBrand(grouped);
 
     // Build message
     let message = '';
@@ -141,16 +163,22 @@ export function generateCatalogMessage(
     message += `📅 Data: ${new Date().toLocaleDateString('pt-BR')}\n\n`;
     message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    grouped.forEach((item, index) => {
-        const pixPrice = calculatePixPrice(item.price, pixDiscountPercent);
-        const installment = calculateInstallmentFromFees(item.price, paymentFees, 12);
-        const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
+    let productIndex = 1;
 
-        message += `${index + 1}. *${item.name}*\n`;
-        message += `   📱 ${item.variant.ram}/${item.variant.storage}\n`;
-        message += `   💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}\n`;
-        message += `   💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})\n`;
-        message += `   🎨 Cores: ${item.colors.join(', ')}\n\n`;
+    groupedByBrand.forEach(({ brand, items }) => {
+        message += `*${brand}*\n\n`;
+
+        items.forEach((item) => {
+            const pixPrice = calculatePixPrice(item.price, pixDiscountPercent);
+            const installment = calculateInstallmentFromFees(item.price, paymentFees, 12);
+            const pixDiscountLabel = pixDiscountPercent > 0 ? ` (${pixDiscountPercent}% de desconto)` : '';
+
+            message += `${productIndex++}. *${item.name}*\n`;
+            message += `   📱 ${item.variant.ram}/${item.variant.storage}\n`;
+            message += `   💰 ${formatPrice(pixPrice)} à vista no PIX${pixDiscountLabel}\n`;
+            message += `   💳 Cartão: 12x de ${formatPrice(installment.value)} (total ${formatPrice(installment.total)})\n`;
+            message += `   🎨 Cores: ${item.colors.join(', ')}\n\n`;
+        });
     });
 
     message += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;

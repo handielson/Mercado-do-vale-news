@@ -281,18 +281,37 @@ export const useProducts = () => {
                 ? vpsApiService.getProducts({ sku: term, status: 'all', limit: 5, noCache: true })
                 : Promise.resolve(null),
             unitService.searchByIdentifier(term)
-                .then(units => {
+                .then(async units => {
                     const productIds = [...new Set(units.map(unit => unit.product_id).filter(Boolean))];
-                    return productIds.length > 0 ? vpsApiService.getProductsByIds(productIds) : null;
+                    const productRows = productIds.length > 0 ? await vpsApiService.getProductsByIds(productIds) : null;
+                    return { productRows, units };
                 }),
         ])
-            .then(async ([searchRows, skuRows, unitProductRows]) => {
+            .then(async ([searchRows, skuRows, unitSearchResult]) => {
                 if (requestId !== searchRequestSeq.current) return;
+                const unitsByProductId = new Map<string, typeof unitSearchResult.units>();
+                for (const unit of unitSearchResult.units) {
+                    const productId = String(unit.product_id || '');
+                    if (!productId) continue;
+                    const currentUnits = unitsByProductId.get(productId) || [];
+                    currentUnits.push(unit);
+                    unitsByProductId.set(productId, currentUnits);
+                }
+
+                const unitProducts = (unitSearchResult.productRows || []).map(row => {
+                    const product = mapVpsProduct(row);
+                    const matchedUnits = unitsByProductId.get(String(product.id)) || [];
+                    return {
+                        ...product,
+                        available_units: [...((product as any).available_units || []), ...matchedUnits],
+                    };
+                });
+
                 const remoteProducts = await enrichProductsWithShopeeLinks([
                     ...(searchRows || []),
                     ...(skuRows || []),
-                    ...(unitProductRows || []),
-                ].map(mapVpsProduct));
+                    ...unitProducts,
+                ].map(row => (row && 'available_units' in row ? row as Product : mapVpsProduct(row))));
                 if (remoteProducts.length === 0) return;
 
                 setProducts(current => {

@@ -292,7 +292,7 @@ export async function generateBudgetText(
     items: Array<{ product: any; unit_price: number; quantity: number }>
 ): Promise<string> {
     const lines: string[] = [
-        '📱 CATÁLOGO - SMARTPHONES',
+        '📱 Orçamento',
         `📅 Data: ${formatDate()}`,
         '',
         '━━━━━━━━━━━━━━━━━━━━━━',
@@ -305,6 +305,7 @@ export async function generateBudgetText(
         price: number;
         quantity: number;
         colors: string[];
+        url: string;
     }> = [];
 
     for (const item of items) {
@@ -319,6 +320,7 @@ export async function generateBudgetText(
                     price: variant.price || unit_price,
                     quantity: 1,
                     colors: variant.colors,
+                    url: getProductUrl(variant.products[0] || product),
                 });
             }
             continue;
@@ -330,6 +332,7 @@ export async function generateBudgetText(
             price: unit_price,
             quantity,
             colors: [getBudgetVariantColor(product)].filter(Boolean),
+            url: getProductUrl(product),
         });
     }
 
@@ -348,6 +351,7 @@ export async function generateBudgetText(
             lines.push(`   💳 Cartão: 12x de ${brl(plan12.value)} (total ${brl(plan12.total)})`);
         }
         lines.push(`   🎨 Cores: ${row.colors.length > 0 ? row.colors.join(', ') : 'Consultar'}`);
+        lines.push(`   🔗 ${row.url}`);
         lines.push('');
     }
 
