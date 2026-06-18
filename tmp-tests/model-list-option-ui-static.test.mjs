@@ -84,6 +84,26 @@ assert.match(modelModal, /import\s*\{\s*ModelListOptionModal\s*\}\s*from\s*['"].
 assert.match(modelModal, /import\s*\{\s*saveModelListOption\s*,\s*type\s+ModelListOptionDraft\s*\}\s*from\s*['"]\.\.\/\.\.\/services\/modelListOptions['"]/, 'model modal must import list option persistence');
 assert.match(modelModal, /const\s+\[listEditor,\s*setListEditor\]\s*=\s*useState<\{\s*field:\s*CustomField;\s*current:\s*TableOption\s*\|\s*null;\s*\}\s*\|\s*null>\(null\)/, 'model modal must keep the active list editor');
 assert.match(modelModal, /const\s+\[savingListOption,\s*setSavingListOption\]\s*=\s*useState\(false\)/, 'model modal must track list option saves');
+assert.match(
+  modelModal,
+  /const\s+fieldChoiceOptionsGenerationRef\s*=\s*useRef\(0\)/,
+  'model modal must version asynchronous choice loads with a ref',
+);
+assert.match(
+  modelModal,
+  /useEffect\(\(\)\s*=>\s*\{\s*let\s+cancelled\s*=\s*false;\s*const\s+requestId\s*=\s*\+\+fieldChoiceOptionsGenerationRef\.current;/,
+  'each choice-loading effect must capture a new request generation and cancellation flag',
+);
+assert.match(
+  modelModal,
+  /if\s*\(\s*!cancelled\s*&&\s*requestId\s*===\s*fieldChoiceOptionsGenerationRef\.current\s*\)\s*\{\s*setFieldChoiceOptions\(nextOptions\);\s*\}/,
+  'only the latest non-cancelled choice request may replace option state',
+);
+assert.match(
+  modelModal,
+  /loadFieldChoiceOptions\(\);\s*return\s*\(\)\s*=>\s*\{\s*cancelled\s*=\s*true;\s*\};\s*\},\s*\[customFields\]\);/,
+  'choice-loading effect cleanup must cancel its request',
+);
 assert.match(modelModal, /const\s+handleOpenListOptionEditor\s*=\s*\(field:\s*CustomField,\s*current:\s*TableOption\s*\|\s*null\s*=\s*null\)/, 'model modal must expose a list editor opener');
 assert.match(modelModal, /const\s+handleSaveListOption\s*=\s*async\s*\(draft:\s*ModelListOptionDraft\)/, 'model modal must save list options');
 assert.match(modelModal, /saveModelListOption\(\{\s*field:\s*listEditor\.field,\s*options:\s*fieldChoiceOptions\[listEditor\.field\.key\]\s*\|\|\s*\[\],\s*draft,\s*current:\s*listEditor\.current,\s*\}\)/, 'save handler must persist against current field choices');
@@ -108,6 +128,11 @@ assert.match(
   modelModal,
   /const\s+sorted\s*=\s*normalizeChoiceOptions\(\[\.\.\.withoutEdited,\s*persisted\.option\]\)/,
   'immediate save updates must use the same choice normalizer',
+);
+assert.match(
+  modelModal,
+  /fieldChoiceOptionsGenerationRef\.current\s*\+=\s*1;\s*setFieldChoiceOptions\(\(currentOptions\)\s*=>/,
+  'saving a list option must invalidate older fetch generations before applying immediate state',
 );
 assert.match(modelModal, /handleTemplateValueChange\(listEditor\.field\.key,\s*String\(persisted\.option\.value\)\)/, 'saved options must become selected immediately');
 assert.match(modelModal, /toast\.success\(listEditor\.current\s*\?\s*['"]Opcao atualizada com sucesso\.['"]\s*:\s*['"]Opcao adicionada com sucesso\.['"]\)/, 'save handler must report create and edit success');

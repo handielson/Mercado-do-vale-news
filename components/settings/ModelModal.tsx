@@ -433,6 +433,7 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [officialTags, setOfficialTags] = useState<CrossSellTag[]>([]);
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
     const [fieldChoiceOptions, setFieldChoiceOptions] = useState<Record<string, TableOption[]>>({});
+    const fieldChoiceOptionsGenerationRef = useRef(0);
 
     // UI State
     const [saving, setSaving] = useState(false);
@@ -867,6 +868,9 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     }, [isOpen]);
 
     useEffect(() => {
+        let cancelled = false;
+        const requestId = ++fieldChoiceOptionsGenerationRef.current;
+
         const loadFieldChoiceOptions = async () => {
             const nextOptions: Record<string, TableOption[]> = {};
 
@@ -897,10 +901,16 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 }
             }));
 
-            setFieldChoiceOptions(nextOptions);
+            if (!cancelled && requestId === fieldChoiceOptionsGenerationRef.current) {
+                setFieldChoiceOptions(nextOptions);
+            }
         };
 
         loadFieldChoiceOptions();
+
+        return () => {
+            cancelled = true;
+        };
     }, [customFields]);
 
     useEffect(() => {
@@ -1021,6 +1031,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 setCustomFields((fields) => fields.map((field) => field.id === persisted.field.id ? persisted.field : field));
             }
 
+            fieldChoiceOptionsGenerationRef.current += 1;
             setFieldChoiceOptions((currentOptions) => {
                 const previous = currentOptions[listEditor.field.key] || [];
                 const withoutEdited = listEditor.current
