@@ -35,3 +35,16 @@ export function isCreatableAiOption(value) {
 
   return !GENERIC_AI_OPTIONS.has(genericCandidate);
 }
+
+export function parseCapacityValue(label) {
+  const normalized = String(label ?? '').trim();
+  const match = normalized.match(/(\d+(?:[.,]\d+)?)\s*(tb|gb)?/i);
+
+  if (!match) {
+    throw new Error('Informe uma capacidade numerica valida.');
+  }
+
+  const numericValue = Number(match[1].replace(',', '.'));
+  const unit = match[2]?.toLowerCase();
+  return unit === 'tb' ? numericValue * 1024 : numericValue;
+}

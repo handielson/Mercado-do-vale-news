@@ -4,6 +4,7 @@ import {
   findEquivalentOption,
   isCreatableAiOption,
   normalizeOptionText,
+  parseCapacityValue,
 } from '../components/settings/modelListOptionCore.js';
 
 assert.equal(
@@ -64,6 +65,13 @@ assert.equal(
   isCreatableAiOption('Gorilla Glass Victus 3'),
   true,
   'accepts a specific list option returned by AI',
+);
+
+assert.equal(parseCapacityValue('12 GB'), 12);
+assert.equal(parseCapacityValue('1 TB'), 1024);
+assert.throws(
+  () => parseCapacityValue('Grande'),
+  /capacidade numerica/i,
 );
 
 console.log('model list option core tests passed');

@@ -24,4 +24,14 @@ assert.match(
     'updateRow must PATCH values using encoded table, primary value, and primary key'
 );
 
+const optionService = readFileSync('services/modelListOptions.ts', 'utf8');
+
+assert.match(optionService, /customFieldsService\.update/);
+assert.match(optionService, /colorService\.(create|update)/);
+assert.match(optionService, /ramService\.(create|update)/);
+assert.match(optionService, /storageService\.(create|update)/);
+assert.match(optionService, /versionService\.(create|update)/);
+assert.match(optionService, /tableDataService\.(createRow|updateRow)/);
+assert.match(optionService, /findEquivalentOption/);
+
 console.log('model list option table-data mutation static checks passed');
