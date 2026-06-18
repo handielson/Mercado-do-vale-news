@@ -104,6 +104,11 @@ const choiceOptions = {
     value: 'IP70',
     options: ['IP67', 'IP68'],
   }]);
+  assert.equal(
+    normalized.templateValues.water_resistance,
+    undefined,
+    'missing list values must remain metadata until asynchronous resolution finishes',
+  );
   assert.equal(normalized.templateValues.novo_campo_futuro, 'valor preservado');
   assert.equal(normalized.templateValues.weight_kg, 0.25);
   assert.equal(normalized.templateValues['dimensions.width_cm'], 8);

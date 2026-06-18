@@ -5,6 +5,7 @@ import {
   isCreatableAiOption,
   normalizeOptionText,
   parseCapacityValue,
+  resolveMissingListChoices,
 } from '../components/settings/modelListOptionCore.js';
 
 assert.equal(
@@ -82,5 +83,108 @@ assert.throws(
   () => parseCapacityValue('abc 12 TB'),
   /capacidade numerica/i,
 );
+
+{
+  const screenField = { id: 'screen', key: 'screen', label: 'Tela', field_type: 'select' };
+  const resistanceField = { id: 'resistance', key: 'resistance', label: 'Resistencia', field_type: 'select' };
+  const networkField = { id: 'network', key: 'network', label: 'Rede', field_type: 'select' };
+  const createCalls = [];
+  const persistenceError = new Error('falha ao persistir rede');
+
+  const result = await resolveMissingListChoices({
+    missingChoices: [
+      { fieldKey: 'screen', fieldLabel: 'Tela', value: 'Gorilla Glass 7i', options: [] },
+      { fieldKey: 'resistance', fieldLabel: 'Resistencia', value: 'Nao informado.', options: [] },
+      { fieldKey: 'network', fieldLabel: 'Rede', value: '6G', options: [] },
+    ],
+    fields: [screenField, resistanceField, networkField],
+    choiceOptions: {
+      screen: [],
+      resistance: [],
+      network: [],
+    },
+    createOption: async ({ field, options, value }) => {
+      createCalls.push({ fieldKey: field.key, options, value });
+      if (field.key === 'network') throw persistenceError;
+      return {
+        field: { ...field, options: [value] },
+        option: { value, label: value },
+      };
+    },
+  });
+
+  assert.deepEqual(result.resolvedValues, { screen: 'Gorilla Glass 7i' });
+  assert.equal(result.created.length, 1);
+  assert.equal(result.created[0].fieldKey, 'screen');
+  assert.equal(result.created[0].persisted.option.label, 'Gorilla Glass 7i');
+  assert.deepEqual(result.rejected, [
+    { fieldKey: 'resistance', fieldLabel: 'Resistencia', value: 'Nao informado.', options: [] },
+  ]);
+  assert.equal(result.failed.length, 1);
+  assert.equal(result.failed[0].choice.fieldKey, 'network');
+  assert.equal(result.failed[0].error, persistenceError, 'preserves the original persistence error');
+  assert.deepEqual(
+    createCalls.map((call) => call.fieldKey),
+    ['screen', 'network'],
+    'rejected generic values never reach persistence',
+  );
+}
+
+{
+  let createCalls = 0;
+  const existing = { value: 'victus-id', label: 'Gorilla Glass Victus' };
+  const result = await resolveMissingListChoices({
+    missingChoices: [
+      { fieldKey: 'screen', fieldLabel: 'Tela', value: '  gorilla glass VICTUS ', options: [] },
+    ],
+    fields: [{ id: 'screen', key: 'screen', label: 'Tela', field_type: 'table_relation' }],
+    choiceOptions: { screen: [existing] },
+    createOption: async () => {
+      createCalls += 1;
+      throw new Error('must not create an equivalent option');
+    },
+  });
+
+  assert.deepEqual(result.resolvedValues, { screen: 'victus-id' });
+  assert.equal(result.created.length, 0);
+  assert.equal(result.rejected.length, 0);
+  assert.equal(result.failed.length, 0);
+  assert.equal(createCalls, 0);
+}
+
+{
+  const receivedFieldOptions = [];
+  await resolveMissingListChoices({
+    missingChoices: [
+      { fieldKey: 'protection', fieldLabel: 'Protecao', value: 'Victus 2', options: [] },
+      { fieldKey: 'protection', fieldLabel: 'Protecao', value: 'Armor', options: [] },
+    ],
+    fields: [{
+      id: 'protection',
+      key: 'protection',
+      label: 'Protecao',
+      field_type: 'select',
+      options: [],
+    }],
+    choiceOptions: { protection: [] },
+    createOption: async ({ field, value }) => {
+      receivedFieldOptions.push([...(field.options || [])]);
+      const updatedField = {
+        ...field,
+        options: [...(field.options || []), value],
+      };
+      return {
+        field: updatedField,
+        option: { value, label: value },
+      };
+    },
+  });
+
+  assert.deepEqual(
+    receivedFieldOptions,
+    [[], ['Victus 2']],
+    'multiple creations for one field must use the field returned by the previous save',
+  );
+}
 
 console.log('model list option core tests passed');

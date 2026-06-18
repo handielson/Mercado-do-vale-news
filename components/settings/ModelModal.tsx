@@ -20,6 +20,7 @@ import { generateModelJsonWithAi } from '../../services/modelAiService';
 import { ModelListFieldInput } from './ModelListFieldInput';
 import { ModelListOptionModal } from './ModelListOptionModal';
 import { saveModelListOption, type ModelListOptionDraft } from '../../services/modelListOptions';
+import { resolveMissingListChoices } from './modelListOptionCore.js';
 
 interface ModelModalProps {
     isOpen: boolean;
@@ -632,12 +633,61 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         }
     };
 
-    const applyNormalizedModelPayload = (normalized: any) => {
+    const applyNormalizedModelPayload = async (normalized: any) => {
         const visibleTemplateValues = Object.fromEntries(
             Object.entries(normalized.templateValues || {}).filter(([key]) => !isHiddenSpecKey(key) && !isModelUnitFieldKey(key) && !isModelVariationFieldKey(key))
         );
-        const translatedTemplateValues = translateTemplateValuesToPortuguese(visibleTemplateValues);
+        const choiceResolution = await resolveMissingListChoices({
+            missingChoices: normalized.missingChoices || [],
+            fields: visibleSpecFields,
+            choiceOptions: fieldChoiceOptions,
+            createOption: async ({ field, options, value }: any) => saveModelListOption({
+                field,
+                options,
+                draft: { label: value },
+            }),
+        });
+        const translatedTemplateValues = {
+            ...translateTemplateValuesToPortuguese(visibleTemplateValues),
+            ...choiceResolution.resolvedValues,
+        };
         const appliedFields: string[] = [];
+
+        if (choiceResolution.created.length > 0) {
+            fieldChoiceOptionsGenerationRef.current += 1;
+            setFieldChoiceOptions((currentOptions) => {
+                const nextOptions = { ...currentOptions };
+                choiceResolution.created.forEach((created: any) => {
+                    nextOptions[created.fieldKey] = normalizeChoiceOptions([
+                        ...(nextOptions[created.fieldKey] || []),
+                        created.persisted.option,
+                    ]);
+                });
+                return nextOptions;
+            });
+            const createdFieldsById = new Map<string, CustomField>();
+            choiceResolution.created.forEach((created: any) => {
+                if (created.persisted.field.field_type === 'select') {
+                    createdFieldsById.set(created.persisted.field.id, created.persisted.field);
+                }
+            });
+            setCustomFields((fields) => fields.map(
+                (field) => createdFieldsById.get(field.id) || field
+            ));
+
+            const firstCreated = choiceResolution.created[0];
+            toast.success(
+                choiceResolution.created.length === 1
+                    ? 'Opcao criada automaticamente pela IA.'
+                    : `${choiceResolution.created.length} opcoes criadas automaticamente pela IA.`,
+                {
+                    action: {
+                        label: 'Editar',
+                        onClick: () => setListEditor({ field: firstCreated.persisted.field, current: firstCreated.persisted.option }),
+                    },
+                }
+            );
+        }
 
         if (normalized.name) {
             setName(formatModelNameTitleCase(normalized.name));
@@ -671,11 +721,15 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             appliedFields.push(`${Object.keys(translatedTemplateValues).length} campo(s) do template`);
         }
 
-        if (normalized.missingChoices?.length) {
-            const missingList = normalized.missingChoices
+        if (choiceResolution.rejected.length || choiceResolution.failed.length) {
+            const unresolvedChoices = [
+                ...choiceResolution.rejected,
+                ...choiceResolution.failed.map((item: any) => item.choice),
+            ];
+            const missingList = unresolvedChoices
                 .map((item: any) => `${item.fieldLabel}: "${item.value}"`)
                 .join('; ');
-            toast.warning('Cadastre novas opcoes antes de salvar', {
+            toast.warning('Algumas opcoes da IA nao foram criadas', {
                 description: missingList,
                 duration: 10000,
             });
@@ -713,7 +767,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         }
     };
 
-    const handleApplyModelJson = () => {
+    const handleApplyModelJson = async () => {
         try {
             if (loading) {
                 toast.error('Aguarde marcas, categorias e campos carregarem antes de aplicar o JSON.');
@@ -727,7 +781,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 customFields: visibleSpecFields,
                 choiceOptions: fieldChoiceOptions,
             });
-            const appliedFields = applyNormalizedModelPayload(normalized);
+            const appliedFields = await applyNormalizedModelPayload(normalized);
             warnUnresolvedModelPayload(data, normalized);
 
             if (appliedFields.length === 0) {
@@ -771,7 +825,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 customFields: visibleSpecFields,
                 choiceOptions: fieldChoiceOptions,
             });
-            const appliedFields = applyNormalizedModelPayload(normalized);
+            const appliedFields = await applyNormalizedModelPayload(normalized);
             warnUnresolvedModelPayload(data, normalized);
             toast.success(appliedFields.length > 0 ? 'Modelo preenchido pela IA.' : 'JSON gerado pela IA. Revise antes de salvar.');
         } catch (err) {
@@ -782,7 +836,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         }
     };
 
-    const handleApplyJson = () => {
+    const handleApplyJson = async () => {
         try {
             if (!jsonInput.trim()) {
                 toast.error('Cole o JSON gerado pela IA primeiro.');
@@ -805,7 +859,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     customFields: visibleSpecFields,
                     choiceOptions: fieldChoiceOptions,
                 });
-                const appliedFields = applyNormalizedModelPayload(normalized);
+                const appliedFields = await applyNormalizedModelPayload(normalized);
                 warnUnresolvedModelPayload(data, normalized);
 
                 if (appliedFields.length === 0) {

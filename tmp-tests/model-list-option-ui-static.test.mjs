@@ -79,6 +79,31 @@ assert.match(
 );
 
 assert.ok(modelModal, 'ModelModal.tsx must exist');
+assert.match(modelModal, /resolveMissingListChoices/, 'model modal must resolve missing AI list choices');
+assert.match(
+  modelModal,
+  /const\s+applyNormalizedModelPayload\s*=\s*async/,
+  'normalized payload application must wait for missing choice persistence',
+);
+assert.ok(
+  (modelModal.match(/await\s+applyNormalizedModelPayload\(normalized\)/g) || []).length >= 3,
+  'all JSON apply and generation flows must await missing choice resolution',
+);
+assert.match(
+  modelModal,
+  /action:\s*\{\s*label:\s*['"]Editar['"]/,
+  'created AI choices must expose an Editar toast action',
+);
+assert.match(
+  modelModal,
+  /setListEditor\(\{\s*field:\s*firstCreated\.persisted\.field,\s*current:\s*firstCreated\.persisted\.option\s*\}\)/,
+  'Editar must open the first created option as the current modal value',
+);
+assert.match(
+  modelModal,
+  /const\s+createdFieldsById\s*=\s*new\s+Map[\s\S]*createdFieldsById\.set\(created\.persisted\.field\.id,\s*created\.persisted\.field\)[\s\S]*createdFieldsById\.get\(field\.id\)/,
+  'manual fields must keep the latest field returned when AI creates multiple choices',
+);
 assert.match(modelModal, /import\s*\{\s*ModelListFieldInput\s*\}\s*from\s*['"].\/ModelListFieldInput['"]/, 'model modal must import ModelListFieldInput');
 assert.match(modelModal, /import\s*\{\s*ModelListOptionModal\s*\}\s*from\s*['"].\/ModelListOptionModal['"]/, 'model modal must import ModelListOptionModal');
 assert.match(modelModal, /import\s*\{\s*saveModelListOption\s*,\s*type\s+ModelListOptionDraft\s*\}\s*from\s*['"]\.\.\/\.\.\/services\/modelListOptions['"]/, 'model modal must import list option persistence');

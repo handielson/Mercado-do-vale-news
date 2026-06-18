@@ -48,3 +48,66 @@ export function parseCapacityValue(label) {
   const unit = match[2]?.toLowerCase();
   return unit === 'tb' ? numericValue * 1024 : numericValue;
 }
+
+export async function resolveMissingListChoices({
+  missingChoices = [],
+  fields = [],
+  choiceOptions = {},
+  createOption,
+}) {
+  const fieldsByKey = new Map(fields.map((field) => [field.key, field]));
+  const optionsByKey = Object.fromEntries(
+    Object.entries(choiceOptions).map(([key, options]) => [key, [...options]]),
+  );
+  const result = {
+    resolvedValues: {},
+    created: [],
+    rejected: [],
+    failed: [],
+  };
+
+  for (const choice of missingChoices) {
+    const field = fieldsByKey.get(choice.fieldKey);
+    const options = optionsByKey[choice.fieldKey] || [];
+    const equivalent = findEquivalentOption(choice.value, options);
+
+    if (equivalent) {
+      result.resolvedValues[choice.fieldKey] = equivalent.value;
+      continue;
+    }
+
+    if (!isCreatableAiOption(choice.value)) {
+      result.rejected.push(choice);
+      continue;
+    }
+
+    if (!field) {
+      result.failed.push({
+        choice,
+        error: new Error(`Campo ${choice.fieldLabel || choice.fieldKey} nao encontrado.`),
+      });
+      continue;
+    }
+
+    try {
+      const persisted = await createOption({
+        field,
+        options,
+        value: choice.value,
+        choice,
+      });
+      fieldsByKey.set(choice.fieldKey, persisted.field);
+      optionsByKey[choice.fieldKey] = [...options, persisted.option];
+      result.resolvedValues[choice.fieldKey] = persisted.option.value;
+      result.created.push({
+        fieldKey: choice.fieldKey,
+        choice,
+        persisted,
+      });
+    } catch (error) {
+      result.failed.push({ choice, error });
+    }
+  }
+
+  return result;
+}
