@@ -3,8 +3,8 @@
 ```text
 version: v1.1.62-model-list-options
 date: 2026-06-18
-status: pending_deploy
-release_vps: /var/www/mdv-site/releases/20260618-144542-v1162-model-list-options
+status: published
+release_vps: /var/www/mdv-site/releases/20260618-144906-v1162-model-list-options
 branch: codex/publish-delivery-ops-20260614
 ```
 
@@ -27,6 +27,6 @@ docs/versoes/2026-06-18-v1.1.62-model-list-options.md
 
 ## Publicacao
 
-- Release VPS planejada: `/var/www/mdv-site/releases/20260618-144542-v1162-model-list-options`.
-- Esta versao altera comportamento visivel no admin; site VPS deve ser publicado.
+- Release VPS publicada: `/var/www/mdv-site/releases/20260618-144906-v1162-model-list-options`.
+- Esta versao altera comportamento visivel no admin; site VPS publicado.
 - Esta versao nao altera `vps_server.js` nem `vps_server.cjs`; API VPS nao precisa ser reiniciada.
