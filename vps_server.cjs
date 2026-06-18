@@ -2123,6 +2123,7 @@ async function processCustomerDeliveryMercadoPagoPayment(payment) {
 }
 
 function getCustomerDeliveryCompletionBlockers(job, proof, options = {}) {
+  if (options?.adminOverride) return [];
   const blockers = [];
   const addressText = String(job?.delivery_address_text || '').trim();
   const routeUrl = String(job?.delivery_route_url || '').trim();

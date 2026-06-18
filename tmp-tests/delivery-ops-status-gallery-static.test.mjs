@@ -28,8 +28,8 @@ for (const file of serverFiles) {
   );
   assert.match(
     source,
-    /getCustomerDeliveryCompletionBlockers\(job, proof, \{ adminOverride: isAdminCompletion \}\)/,
-    `${file} must let administrative completion skip proof/payment blockers while keeping structural blockers`
+    /function getCustomerDeliveryCompletionBlockers\(job, proof, options = \{\}\) \{\s*if \(options\?\.adminOverride\) return \[];/,
+    `${file} must skip every delivery blocker for administrative completion`
   );
   assert.match(
     source,
@@ -69,11 +69,12 @@ assert.match(modal, /deliveryProofs/, 'sale modal must load delivery proof galle
 assert.match(modal, /deliveryLogs/, 'sale modal must load delivery logs');
 assert.match(modal, /Baixar entrega/, 'sale modal must expose admin delivery completion');
 assert.match(modal, /adminCompletionReason/, 'sale modal must require an admin completion reason');
-assert.match(modal, /getDeliveryCompletionBlockers/, 'sale modal must list blockers before admin completion');
-assert.match(modal, /getDeliveryCompletionBlockers\(deliveryJob, deliveryProofs, \{ adminOverride: true \}\)/, 'sale modal admin completion must ignore Pix/proof blockers while keeping structural blockers');
+assert.match(modal, /getDeliveryCompletionBlockers/, 'sale modal must calculate operational blockers');
+assert.match(modal, /if \(options\?\.adminOverride\) return \[];/, 'sale modal must skip every operational blocker for administrative completion');
+assert.match(modal, /const canAdminCompleteDelivery = Boolean\(adminCompletionReason\.trim\(\)\)/, 'sale modal admin completion must require only an administrative reason');
 assert.match(modal, /if \(!options\?\.adminOverride && job\.payment_status !== 'approved'/, 'sale modal must not block administrative completion on pending delivery Pix');
 assert.match(modal, /if \(!options\?\.adminOverride && !proofs\.some/, 'sale modal must not block administrative completion on missing proof photo');
-assert.match(modal, /deliveryCompletionBlockers\.length === 0/, 'sale modal must only allow admin completion when no structural delivery data is missing');
+assert.doesNotMatch(modal, /if \(deliveryCompletionBlockers\.length > 0\)/, 'sale modal must not block administrative completion on operational pending data');
 assert.match(modal, /Pendencias para concluir/, 'sale modal must explain what still blocks delivery completion');
 
 assert.match(deliveryPage, /const \[proofs, setProofs\]/, 'delivery page must keep proof gallery state');

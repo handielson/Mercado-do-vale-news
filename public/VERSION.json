@@ -1,8 +1,8 @@
-﻿{
-    "version":  "v1.1.66-delivery-admin-complete-toast",
-    "date":  "2026-06-18",
-    "status":  "published",
-    "release_vps":  "/var/www/mdv-site/releases/20260618-174244-v1166-delivery-admin-complete-toast",
-    "branch":  "codex/publish-delivery-ops-20260614",
-    "summary":  "Mostra a mensagem de erro da VPS quando a baixa administrativa de entrega nao pode ser concluida."
+{
+  "version": "v1.1.67-delivery-admin-unrestricted",
+  "date": "2026-06-18",
+  "status": "published",
+  "release_vps": "/var/www/mdv-site/releases/20260618-180815-v1167-delivery-admin-unrestricted",
+  "branch": "codex/publish-delivery-ops-20260614",
+  "summary": "Permite baixa administrativa de entrega sem bloqueios operacionais, exigindo somente a observacao."
 }

@@ -91,6 +91,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     };
 
     const getDeliveryCompletionBlockers = (job?: CustomerDeliveryJob | null, proofs: CustomerDeliveryProof[] = [], options?: { adminOverride?: boolean }) => {
+        if (options?.adminOverride) return [];
         if (!job) return ['Entrega sem pagina publica vinculada'];
         const blockers: string[] = [];
         const addressText = String(job.delivery_address_text || '').trim();
@@ -107,7 +108,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     };
 
     const deliveryCompletionBlockers = getDeliveryCompletionBlockers(deliveryJob, deliveryProofs, { adminOverride: true });
-    const canAdminCompleteDelivery = deliveryCompletionBlockers.length === 0 && Boolean(adminCompletionReason.trim());
+    const canAdminCompleteDelivery = Boolean(adminCompletionReason.trim());
 
     const handleCopyFinalizationLog = async () => {
         if (!saleFinalizationLog) return;
@@ -191,9 +192,6 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
         if (!deliveryJob?.token) return;
         const reason = adminCompletionReason.trim();
         if (!reason) return toast.error('Informe o motivo da baixa da entrega');
-        if (deliveryCompletionBlockers.length > 0) {
-            return toast.error(`Entrega com pendencias: ${deliveryCompletionBlockers.join('; ')}`);
-        }
         setIsAdminCompletingDelivery(true);
         try {
             const updated = await adminCompleteDeliveryJob(deliveryJob.token, { admin_completion_reason: reason });
