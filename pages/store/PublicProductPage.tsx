@@ -319,6 +319,13 @@ export const PublicProductPage: React.FC = () => {
                     return;
                 }
 
+                if (data && data.hide_from_catalog) {
+                    console.error('Not found: produto oculto do site:', slug);
+                    toast.error('Produto não encontrado');
+                    navigate('/');
+                    return;
+                }
+
                 if (!data || data.error || data.status === 'inactive') {
                     console.error('Produto não encontrado ou inativo na VPS:', slug);
                     toast.error('Produto não encontrado');

@@ -108,6 +108,7 @@ export interface Product {
 
     // SEO Fields (AI-Generated)
     exclude_from_seo?: boolean;    // Se true, renderiza a meta tag noindex
+    hide_from_catalog?: boolean;   // Se true, oculta da vitrine/site sem tirar do PDV
     description?: string;          // Detailed product description (HTML/Rich Text) for SEO
     slug?: string;                 // URL-friendly slug (e.g., iphone-15-pro-max-256gb-preto)
     meta_title?: string;           // SEO meta title (max 60 characters)
@@ -206,6 +207,7 @@ export interface ProductInput {
     warranty_template_id?: string;
     // SEO Fields (AI-Generated)
     exclude_from_seo?: boolean;
+    hide_from_catalog?: boolean;
     description?: string;
     slug?: string;
     meta_title?: string;

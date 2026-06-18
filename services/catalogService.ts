@@ -21,6 +21,9 @@ const getStorage = () => typeof window !== 'undefined' ? window.localStorage : n
 const removeHiddenOffers = <T extends Record<string, any>>(products: T[]): T[] =>
     products.filter(product => !product.offer_type || product.offer_visibility !== 'hidden');
 
+const removeHiddenCatalogProducts = <T extends Record<string, any>>(products: T[]): T[] =>
+    products.filter(product => !product.hide_from_catalog);
+
 export const catalogService = {
     _lastVpsRaw: null as any,
     _lastMappedResult: null as any[] | null,
@@ -57,7 +60,7 @@ export const catalogService = {
                 const byEan = await vpsApiService.getProductByEan(searchTerm);
                 if (byEan && byEan.length > 0) {
                     const settings = await catalogConfigService.getSettings();
-                    let mapped = removeHiddenOffers(byEan.map(normalizeProduct)) as unknown as CatalogProduct[];
+                    let mapped = removeHiddenCatalogProducts(removeHiddenOffers(byEan.map(normalizeProduct))) as unknown as CatalogProduct[];
                     mapped = catalogConfigService.applyVisibilityRules(mapped, settings) as unknown as CatalogProduct[];
                     return { products: mapped, total: mapped.length, hasMore: false };
                 }
@@ -77,7 +80,7 @@ export const catalogService = {
                 (vpsCats || []).map((c: any) => [c.id, c.slug])
             );
 
-            let result = removeHiddenOffers(vpsRaw).map((p: any) => ({
+            let result = removeHiddenCatalogProducts(removeHiddenOffers(vpsRaw)).map((p: any) => ({
                 ...normalizeProduct(p),
                 category_slug: p.category_id ? catSlugMap.get(p.category_id) : undefined,
             })) as unknown as CatalogProduct[];
@@ -145,7 +148,7 @@ export const catalogService = {
                 // IMPORTANT: create a new array to avoid mutating the cached mapping!
                 result = [...catalogService._lastMappedResult];
             } else {
-                result = removeHiddenOffers(vpsRaw as any[]).map((p: any) => {
+                result = removeHiddenCatalogProducts(removeHiddenOffers(vpsRaw as any[])).map((p: any) => {
                     const normalized = normalizeProduct(p);
                     
                     // Pré-calcula uma string de busca sem acentos para este produto
@@ -394,7 +397,7 @@ export const catalogService = {
         if (query.length < 2) return [];
         // VPS é a fonte de verdade — catálogo VPS descontinuado para catálogo
         const results = await vpsApiService.getProducts({ search: query, limit: 50, noCache: true });
-        return removeHiddenOffers(results || []).map(normalizeProduct) as unknown as CatalogProduct[];
+        return removeHiddenCatalogProducts(removeHiddenOffers(results || [])).map(normalizeProduct) as unknown as CatalogProduct[];
     },
 
     /**
@@ -406,6 +409,7 @@ export const catalogService = {
         if (!product) return null;
         // Registrar visualização (analytics VPS — ok manter)
         await catalogService.recordProductView(id);
+        if (product.hide_from_catalog) return null;
         if (product.offer_type && product.offer_visibility === 'hidden') return null;
         return normalizeProduct(product) as unknown as CatalogProduct;
     },
@@ -429,7 +433,7 @@ export const catalogService = {
         }
         // VPS é a fonte de verdade — catálogo VPS descontinuado para catálogo
         const results = await vpsApiService.getProducts({ category, limit: 200 });
-        const products = removeHiddenOffers(results || []).map(normalizeProduct) as unknown as CatalogProduct[];
+        const products = removeHiddenCatalogProducts(removeHiddenOffers(results || [])).map(normalizeProduct) as unknown as CatalogProduct[];
         if (!bypassCache) {
             const storage = getStorage();
             if (storage) {
@@ -462,7 +466,7 @@ export const catalogService = {
             const res = await fetch(buildVpsUrl(`/products?is_featured=true&limit=${limit}`));
             if (res.ok) {
                 const data = await res.json();
-                products = removeHiddenOffers(data || []).map(normalizeProduct) as unknown as CatalogProduct[];
+                products = removeHiddenCatalogProducts(removeHiddenOffers(data || [])).map(normalizeProduct) as unknown as CatalogProduct[];
             }
         } catch (e) { console.warn('[catalogService] getFeaturedProducts VPS error:', e); }
         if (!bypassCache) {
@@ -497,7 +501,7 @@ export const catalogService = {
             const res = await fetch(buildVpsUrl(`/products?is_new=true&limit=${limit}`));
             if (res.ok) {
                 const data = await res.json();
-                products = removeHiddenOffers(data || []).map(normalizeProduct) as unknown as CatalogProduct[];
+                products = removeHiddenCatalogProducts(removeHiddenOffers(data || [])).map(normalizeProduct) as unknown as CatalogProduct[];
             }
         } catch (e) { console.warn('[catalogService] getNewProducts VPS error:', e); }
         if (!bypassCache) {

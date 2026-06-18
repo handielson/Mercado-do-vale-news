@@ -17921,7 +17921,7 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
-       exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
+       exclude_from_seo, hide_from_catalog, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
 
   const [rows] = await pool.query(
     `SELECT ${cols}
@@ -18018,7 +18018,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
-       exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`
+       exclude_from_seo, hide_from_catalog, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`
     : `id, model_id, category_id, brand, name, sku, ean, alternative_eans, description,
        price_cost, price_retail, price_reseller, price_wholesale,
        price_promo, promo_start, promo_end,
@@ -18030,7 +18030,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
-       exclude_from_seo, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
+       exclude_from_seo, hide_from_catalog, meta_title, meta_description, keywords, view_count, production_days, created_at, updated_at`;
 
 
   let sql = `SELECT ${cols} FROM products WHERE 1=1`;
@@ -19674,8 +19674,8 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           warranty_type, warranty_template_id, company_id, kits,
           offer_type, offer_parent_product_id, offer_visibility,
           shopee_strategy, shopee_offer_status, shopee_offer_error,
-          meta_title, meta_description, keywords
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          hide_from_catalog, meta_title, meta_description, keywords
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
           name=IF(VALUES(name) IS NULL, name, VALUES(name)),
           slug=IF(VALUES(slug) IS NULL, slug, VALUES(slug)),
@@ -19719,6 +19719,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           shopee_strategy=VALUES(shopee_strategy),
           shopee_offer_status=VALUES(shopee_offer_status),
           shopee_offer_error=VALUES(shopee_offer_error),
+          hide_from_catalog=IF(VALUES(hide_from_catalog) IS NULL, hide_from_catalog, VALUES(hide_from_catalog)),
           meta_title=IF(VALUES(meta_title) IS NULL, meta_title, VALUES(meta_title)),
           meta_description=IF(VALUES(meta_description) IS NULL, meta_description, VALUES(meta_description)),
           keywords=IF(VALUES(keywords) IS NULL, keywords, VALUES(keywords)),
@@ -19741,6 +19742,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.company_id || null, jsonStr(p.kits),
           p.offer_type || null, p.offer_parent_product_id || null, p.offer_visibility || 'visible',
           p.shopee_strategy || 'variation', p.shopee_offer_status || null, p.shopee_offer_error || null,
+          optionalBool(p.hide_from_catalog),
           p.meta_title || null, p.meta_description || null, p.keywords || null,
         ]
       );
@@ -19872,7 +19874,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?,
       video_url=?, track_inventory=?, is_gift=?,
       warranty_type=?, warranty_template_id=?, kits=?,
-      meta_title=?, meta_description=?, keywords=?,
+      hide_from_catalog=?, meta_title=?, meta_description=?, keywords=?,
       production_days=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?`,
@@ -19892,6 +19894,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       p.video_url || null,
       p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
       p.warranty_type || 'brand', p.warranty_template_id || null, jsonStr(p.kits),
+      p.hide_from_catalog ? 1 : 0,
       p.meta_title || null, p.meta_description || null, p.keywords || null,
       p.production_days != null ? parseInt(p.production_days) : null,
       req.params.id,
@@ -20040,6 +20043,16 @@ fastify.patch('/products/:id/seo', { preHandler: requireSyncKey }, async (req, r
     [exclude_from_seo ? 1 : 0, req.params.id]
   );
   return { ok: true };
+});
+
+fastify.patch('/products/:id/catalog-visibility', { preHandler: requireSyncKey }, async (req, reply) => {
+  const { hide_from_catalog } = req.body || {};
+  const [result] = await pool.query(
+    'UPDATE products SET hide_from_catalog=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+    [hide_from_catalog ? 1 : 0, req.params.id]
+  );
+  if (result.affectedRows === 0) return reply.code(404).send({ error: 'Not found' });
+  return { ok: true, hide_from_catalog: Boolean(hide_from_catalog) };
 });
 
 // Bulk update category + specs for multiple products
@@ -20931,6 +20944,9 @@ function isValidTable(name) {
 
 function normalizeTableDataValue(value) {
   if (value === undefined) return null;
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)) {
+    return value.slice(0, 19).replace('T', ' ');
+  }
   if (value !== null && typeof value === 'object') return JSON.stringify(value);
   return value;
 }
@@ -24454,6 +24470,7 @@ async function runMigrations() {
   await addColumnIfMissing('company_settings', 'synology_video_base_url', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('company_settings', 'synology_video_extension', "VARCHAR(20) DEFAULT '.mp4'");
   await addColumnIfMissing('products', 'exclude_from_seo', "TINYINT(1) DEFAULT 0");
+  await addColumnIfMissing('products', 'hide_from_catalog', "TINYINT(1) DEFAULT 0");
   await addColumnIfMissing('products', 'meta_title', "VARCHAR(255) NULL");
   await addColumnIfMissing('products', 'meta_description', "TEXT NULL");
   await addColumnIfMissing('products', 'keywords', "TEXT NULL");

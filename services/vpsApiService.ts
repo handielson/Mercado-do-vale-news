@@ -828,6 +828,12 @@ class VpsApiService {
     return this.writeSafe('PATCH', `/products/${id}/seo`, { exclude_from_seo });
   }
 
+  async updateProductCatalogVisibility(id: string, hide_from_catalog: boolean): Promise<boolean> {
+    this.cache.delete(`/products/${id}`);
+    this.invalidateProductCache();
+    return this.writeSafe('PATCH', `/products/${id}/catalog-visibility`, { hide_from_catalog });
+  }
+
   /**
    * Atualiza campos fiscais do produto na VPS (fonte primária).
    * ncm: código NCM (8 dígitos, ex: "85176262")

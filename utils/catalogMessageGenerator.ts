@@ -105,8 +105,12 @@ function hasAvailableStock(product: Product): boolean {
     return Number(product.stock_quantity || 0) > 0;
 }
 
+function filterCatalogVisibleProducts(products: Product[]): Product[] {
+    return products.filter((product) => !product.hide_from_catalog);
+}
+
 function normalizeProducts(rows: unknown[] | null): Product[] {
-    return (rows || []).map((row) => row as Product).filter(hasAvailableStock);
+    return filterCatalogVisibleProducts((rows || []).map((row) => row as Product)).filter(hasAvailableStock);
 }
 
 async function getCategoryName(categoryId: string): Promise<string | undefined> {
@@ -139,6 +143,8 @@ export function generateCatalogMessage(
     paymentFees: PaymentFee[] = [],
     pixDiscountPercent: number = 0
 ): string {
+    products = filterCatalogVisibleProducts(products);
+
     if (products.length === 0) {
         return 'Nenhum produto disponível no momento.';
     }

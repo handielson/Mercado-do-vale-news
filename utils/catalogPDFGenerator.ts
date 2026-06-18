@@ -113,8 +113,12 @@ function hasAvailableStock(product: Product): boolean {
     return Number(product.stock_quantity || 0) > 0;
 }
 
+function filterCatalogVisibleProducts(products: Product[]): Product[] {
+    return products.filter((product) => !product.hide_from_catalog);
+}
+
 function normalizeProducts(rows: unknown[] | null): Product[] {
-    return (rows || []).map((row) => row as Product).filter(hasAvailableStock);
+    return filterCatalogVisibleProducts((rows || []).map((row) => row as Product)).filter(hasAvailableStock);
 }
 
 async function getCategoryName(categoryId: string): Promise<string | undefined> {
@@ -171,6 +175,8 @@ export async function generateCatalogPDF(
     customerType: CustomerType = 'retail',
     categoryName?: string
 ): Promise<void> {
+    products = filterCatalogVisibleProducts(products);
+
     // Create PDF
     const doc = new jsPDF({
         orientation: 'portrait',

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Barcode, ChevronDown, ChevronUp, Copy, Edit, ImagePlus, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
+import { Barcode, ChevronDown, ChevronUp, Copy, Edit, Eye, EyeOff, ImagePlus, MapPin, Package, Trash2, Printer, Power, PowerOff, RefreshCw, Type, Video, VideoOff, Loader2, Tags, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Product } from '../../types/product';
 import { Company } from '../../types/company';
@@ -325,7 +325,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     });
     const [currentStatus, setCurrentStatus] = useState<ProductStatus>(product.status);
     const [currentStock, setCurrentStock] = useState<number | undefined>(product.stock_quantity);
+    const [isHiddenFromCatalog, setIsHiddenFromCatalog] = useState(Boolean(product.hide_from_catalog));
     const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+    const [isTogglingCatalogVisibility, setIsTogglingCatalogVisibility] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [isStockLocationModalOpen, setIsStockLocationModalOpen] = useState(false);
     const [stockLocationRows, setStockLocationRows] = useState<ProductStockLocation[]>([]);
@@ -590,6 +592,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     useEffect(() => {
         setCurrentStatus(product.status);
         setCurrentStock(product.stock_quantity);
+        setIsHiddenFromCatalog(Boolean(product.hide_from_catalog));
         setShopeeModalProductSource(product as Product & Record<string, any>);
     }, [product]);
 
@@ -615,6 +618,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
             console.error('[ProductCard] Erro ao alterar status:', err);
         } finally {
             setIsTogglingStatus(false);
+        }
+    };
+
+    const handleToggleCatalogVisibility = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const nextHidden = !isHiddenFromCatalog;
+        setIsTogglingCatalogVisibility(true);
+        try {
+            const updated = await vpsApiService.updateProductCatalogVisibility(product.id, nextHidden);
+            if (!updated) throw new Error('Falha ao alterar visibilidade do produto no site');
+            setIsHiddenFromCatalog(nextHidden);
+            toast.success(nextHidden ? 'Produto oculto do site' : 'Produto visivel no site');
+        } catch (err) {
+            console.error('[ProductCard] Erro ao alterar visibilidade no catalogo:', err);
+            toast.error('Nao foi possivel alterar a visibilidade no site');
+        } finally {
+            setIsTogglingCatalogVisibility(false);
         }
     };
 
@@ -1370,6 +1390,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             <Printer className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
                         </button>
                         <button
+                            onClick={handleToggleCatalogVisibility}
+                            disabled={isTogglingCatalogVisibility}
+                            className={cn(
+                                'shrink-0 p-1.5 rounded-lg transition-colors group',
+                                isHiddenFromCatalog ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-sky-50'
+                            )}
+                            title={isHiddenFromCatalog ? 'Mostrar no site' : 'Ocultar do site'}
+                            aria-label={isHiddenFromCatalog ? 'Mostrar produto no site' : 'Ocultar produto do site'}
+                        >
+                            {isTogglingCatalogVisibility ? (
+                                <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                            ) : isHiddenFromCatalog ? (
+                                <EyeOff className="w-4 h-4 text-amber-600 group-hover:text-amber-700" />
+                            ) : (
+                                <Eye className="w-4 h-4 text-slate-400 group-hover:text-sky-600" />
+                            )}
+                        </button>
+                        <button
                             onClick={handleToggleStatus}
                             disabled={isTogglingStatus}
                             className={cn(
@@ -1557,6 +1595,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             <Printer className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
                         </button>
                         <button
+                            onClick={handleToggleCatalogVisibility}
+                            disabled={isTogglingCatalogVisibility}
+                            className={cn(
+                                'p-1.5 rounded-lg transition-colors group',
+                                isHiddenFromCatalog ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-sky-50'
+                            )}
+                            title={isHiddenFromCatalog ? 'Mostrar no site' : 'Ocultar do site'}
+                            aria-label={isHiddenFromCatalog ? 'Mostrar produto no site' : 'Ocultar produto do site'}
+                        >
+                            {isTogglingCatalogVisibility ? (
+                                <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                            ) : isHiddenFromCatalog ? (
+                                <EyeOff className="w-4 h-4 text-amber-600 group-hover:text-amber-700" />
+                            ) : (
+                                <Eye className="w-4 h-4 text-slate-400 group-hover:text-sky-600" />
+                            )}
+                        </button>
+                        <button
                             onClick={handleToggleStatus}
                             disabled={isTogglingStatus}
                             className={cn(
@@ -1635,6 +1691,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                     )}>
                         {getStatusLabel(currentStatus)}
                     </span>
+                    {isHiddenFromCatalog && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                            <EyeOff className="h-3 w-3" />
+                            Oculto no site
+                        </span>
+                    )}
                     {(product.production_days != null && product.production_days > 0) && (
                         <span className="inline-block px-2 py-1 text-xs font-medium rounded-md border bg-amber-50 text-amber-700 border-amber-200">
                             ⚙️ {product.production_days}d fab.

@@ -175,6 +175,10 @@ class CatalogConfigService {
      */
     applyVisibilityRules(products: any[], settings: CatalogSettings): any[] {
         return products.filter(product => {
+            if (product.hide_from_catalog) {
+                return false;
+            }
+
             if (product.offer_type && product.offer_visibility === 'hidden') {
                 return false;
             }
