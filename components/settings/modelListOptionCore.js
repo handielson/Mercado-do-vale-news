@@ -38,7 +38,7 @@ export function isCreatableAiOption(value) {
 
 export function parseCapacityValue(label) {
   const normalized = String(label ?? '').trim();
-  const match = normalized.match(/(\d+(?:[.,]\d+)?)\s*(tb|gb)?/i);
+  const match = normalized.match(/^(\d+(?:[.,]\d+)?)\s*(tb|gb)?$/i);
 
   if (!match) {
     throw new Error('Informe uma capacidade numerica valida.');

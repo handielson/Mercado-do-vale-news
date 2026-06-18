@@ -69,8 +69,17 @@ assert.equal(
 
 assert.equal(parseCapacityValue('12 GB'), 12);
 assert.equal(parseCapacityValue('1 TB'), 1024);
+assert.equal(parseCapacityValue('12GB'), 12);
 assert.throws(
   () => parseCapacityValue('Grande'),
+  /capacidade numerica/i,
+);
+assert.throws(
+  () => parseCapacityValue('12 bananas'),
+  /capacidade numerica/i,
+);
+assert.throws(
+  () => parseCapacityValue('abc 12 TB'),
   /capacidade numerica/i,
 );
 
