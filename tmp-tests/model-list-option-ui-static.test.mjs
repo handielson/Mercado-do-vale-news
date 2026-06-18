@@ -28,6 +28,13 @@ assert.ok((fieldInput.match(/type=["']button["']/g) || []).length >= 2, 'both ac
 assert.match(fieldInput, /String\(option\.value\)\s*===\s*String\(value\)/, 'selected option must compare values as strings');
 assert.ok((fieldInput.match(/h-10\s+w-10|w-10\s+h-10/g) || []).length >= 2, 'action buttons must have stable h-10/w-10 dimensions');
 assert.match(fieldInput, /min-w-0/, 'list field must allow text to shrink without overflow');
+assert.match(fieldInput, /value:\s*string\s*;/, 'value prop must be exactly string');
+assert.match(fieldInput, /onAdd:\s*\(\)\s*=>\s*void\s*;/, 'onAdd prop must not receive field');
+assert.match(fieldInput, /onEdit:\s*\(option:\s*TableOption\)\s*=>\s*void\s*;/, 'onEdit prop must receive only the selected option');
+assert.match(fieldInput, /onClick=\{onAdd\}/, 'add button must call onAdd without arguments');
+assert.match(fieldInput, /onEdit\(selectedOption\)/, 'edit button must call onEdit with only selectedOption');
+assert.doesNotMatch(fieldInput, /onAdd\(field\)/, 'add callback must not receive field');
+assert.doesNotMatch(fieldInput, /onEdit\(field\s*,/, 'edit callback must not receive field');
 
 assert.ok(optionModal, 'ModelListOptionModal.tsx must exist');
 assert.match(optionModal, /field\??\.table_config\?\.table_name\s*===\s*['"]colors['"]/, 'modal must detect the colors table');

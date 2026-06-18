@@ -5,13 +5,13 @@ import type { TableOption } from '../../services/table-data';
 
 interface ModelListFieldInputProps {
     field: CustomField;
-    value: string | number | null | undefined;
+    value: string;
     options: TableOption[];
     loading?: boolean;
     saving?: boolean;
     onChange: (value: string) => void;
-    onAdd: (field: CustomField) => void;
-    onEdit: (field: CustomField, option: TableOption) => void;
+    onAdd: () => void;
+    onEdit: (option: TableOption) => void;
 }
 
 export const ModelListFieldInput: React.FC<ModelListFieldInputProps> = ({
@@ -51,7 +51,7 @@ export const ModelListFieldInput: React.FC<ModelListFieldInputProps> = ({
 
             <button
                 type="button"
-                onClick={() => onAdd(field)}
+                onClick={onAdd}
                 disabled={disabled}
                 title="Adicionar opcao"
                 aria-label="Adicionar opcao"
@@ -62,7 +62,7 @@ export const ModelListFieldInput: React.FC<ModelListFieldInputProps> = ({
 
             <button
                 type="button"
-                onClick={() => selectedOption && onEdit(field, selectedOption)}
+                onClick={() => selectedOption && onEdit(selectedOption)}
                 disabled={disabled || !selectedOption}
                 title="Editar opcao selecionada"
                 aria-label="Editar opcao selecionada"
