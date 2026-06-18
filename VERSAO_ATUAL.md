@@ -1,33 +1,32 @@
 # Versao Atual
 
 ```text
-version: v1.1.61-catalog-visibility-datetime
+version: v1.1.62-model-list-options
 date: 2026-06-18
-status: published
-release_vps: /var/www/mdv-site/releases/20260618-103819-v1161-catalog-visibility
+status: pending_deploy
+release_vps: /var/www/mdv-site/releases/20260618-144542-v1162-model-list-options
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- Produtos agora podem ficar ativos para venda/PDV e ocultos apenas do site publico.
-- Admin > Produtos exibe botao de olho para alternar a visibilidade no site.
-- Cards de produto mostram o selo `Oculto no site` quando a flag esta ativa.
-- Catalogo publico, pagina direta do produto, mensagem de categoria e PDF ignoram produtos ocultos.
-- VPS cria e persiste `products.hide_from_catalog`.
-- Endpoint focado `PATCH /products/:id/catalog-visibility` altera apenas a visibilidade do site.
-- O endpoint generico `/table-data` normaliza timestamps ISO UTC para `YYYY-MM-DD HH:mm:ss`, evitando erro MySQL ao salvar campos personalizados.
+- Admin > Modelos agora mostra botoes alinhados de adicionar e editar ao lado de campos em formato de lista.
+- Novas opcoes podem ser criadas dentro do editor e ja ficam pre-selecionadas no modelo.
+- Opcoes existentes podem ser editadas sem sair do modal do modelo.
+- O preenchimento por JSON/IA cria automaticamente opcoes ausentes em listas manuais e relacoes de tabela quando o valor e confiavel.
+- As opcoes dinamicas sao normalizadas, deduplicadas e protegidas contra recarregamentos antigos sobrescreverem escolhas novas.
+- Opcoes genericas/pontuadas da IA continuam bloqueadas para evitar sujeira nos cadastros.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.61-catalog-visibility-datetime` ou o arquivo copiavel em:
+Use a tag/versao `v1.1.62-model-list-options` ou o arquivo copiavel em:
 
 ```text
-docs/versoes/2026-06-18-v1.1.61-catalog-visibility-datetime.md
+docs/versoes/2026-06-18-v1.1.62-model-list-options.md
 ```
 
 ## Publicacao
 
-- Release VPS publicada: `/var/www/mdv-site/releases/20260618-103819-v1161-catalog-visibility`.
-- Esta versao altera comportamento visivel no frontend/admin; site VPS publicado.
-- Esta versao altera rotas e normalizacao da API VPS; API VPS publicada/reiniciada.
+- Release VPS planejada: `/var/www/mdv-site/releases/20260618-144542-v1162-model-list-options`.
+- Esta versao altera comportamento visivel no admin; site VPS deve ser publicado.
+- Esta versao nao altera `vps_server.js` nem `vps_server.cjs`; API VPS nao precisa ser reiniciada.

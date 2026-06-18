@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.61-catalog-visibility-datetime",
+  "version": "v1.1.62-model-list-options",
   "date": "2026-06-18",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260618-103819-v1161-catalog-visibility",
+  "status": "pending_deploy",
+  "release_vps": "/var/www/mdv-site/releases/20260618-144542-v1162-model-list-options",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Adiciona ocultar produto do site sem inativar no PDV e corrige datas ISO no table-data da VPS."
+  "summary": "Adiciona gerenciamento inline de opcoes de listas no editor de modelos e cria opcoes ausentes durante preenchimento por IA."
 }
