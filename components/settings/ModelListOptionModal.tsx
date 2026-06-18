@@ -1,4 +1,4 @@
-import React, { FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { FormEvent, KeyboardEvent, useLayoutEffect, useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import type { CustomField } from '../../services/custom-fields';
 import type { ModelListOptionDraft } from '../../services/modelListOptions';
@@ -37,11 +37,17 @@ const ModelListOptionModalContent: React.FC<ModelListOptionModalContentProps> = 
     const submittingRef = useRef(false);
     const dialogRef = useRef<HTMLDivElement>(null);
     const labelInputRef = useRef<HTMLInputElement>(null);
+    const previousFocusRef = useRef<HTMLElement | null>(null);
     const isColor = field.table_config?.table_name === 'colors';
     const busy = saving || submitting;
 
     useLayoutEffect(() => {
+        previousFocusRef.current = document.activeElement as HTMLElement | null;
         labelInputRef.current?.focus();
+
+        return () => {
+            previousFocusRef.current?.focus();
+        };
     }, []);
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -111,7 +117,7 @@ const ModelListOptionModalContent: React.FC<ModelListOptionModalContentProps> = 
                 aria-modal="true"
                 aria-labelledby="model-list-option-title"
                 onKeyDown={handleKeyDown}
-                className="w-full max-w-md overflow-hidden rounded-lg bg-white shadow-2xl"
+                className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg bg-white shadow-2xl"
             >
                 <form onSubmit={handleSubmit}>
                     <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
@@ -216,17 +222,6 @@ export const ModelListOptionModal: React.FC<ModelListOptionModalProps> = ({
     onClose,
     onSave,
 }) => {
-    const previousFocusRef = useRef<HTMLElement | null>(null);
-
-    useEffect(() => {
-        if (!isOpen) return;
-
-        previousFocusRef.current = document.activeElement as HTMLElement | null;
-        return () => {
-            previousFocusRef.current?.focus();
-        };
-    }, [isOpen]);
-
     if (!isOpen || !field) return null;
 
     const modalKey = [

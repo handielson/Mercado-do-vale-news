@@ -58,12 +58,20 @@ assert.match(optionModal, /id=["']model-list-option-title["']/, 'modal title mus
 assert.match(optionModal, /event\.key\s*===\s*['"]Escape['"][\s\S]*onClose\(\)/, 'Escape must close the modal');
 assert.match(optionModal, /event\.key\s*(?:===|!==)\s*['"]Tab['"]/, 'modal must trap Tab navigation');
 assert.match(optionModal, /querySelectorAll<HTMLElement>\(/, 'focus trap must discover focusable elements');
-assert.match(optionModal, /previousFocusRef\.current\s*=\s*document\.activeElement/, 'modal must remember the previously focused element');
-assert.match(optionModal, /previousFocusRef\.current\?\.focus\(\)/, 'modal must restore focus after closing');
-assert.match(optionModal, /labelInputRef\.current\?\.focus\(\)/, 'modal must focus the label input on open');
+assert.match(
+  optionModal,
+  /useLayoutEffect\(\(\)\s*=>\s*\{[\s\S]*previousFocusRef\.current\s*=\s*document\.activeElement[\s\S]*labelInputRef\.current\?\.focus\(\)[\s\S]*return\s*\(\)\s*=>\s*\{[\s\S]*previousFocusRef\.current\?\.focus\(\)/,
+  'the same layout effect must capture focus before focusing the input and restore it on cleanup',
+);
+assert.doesNotMatch(optionModal, /useEffect\(\(\)\s*=>\s*\{[\s\S]*previousFocusRef/, 'modal must not use a competing passive effect for focus restoration');
 assert.match(optionModal, /if\s*\(!isOpen\s*\|\|\s*!field\)\s*return\s+null/, 'closed modal must render nothing');
 assert.match(optionModal, /key=\{modalKey\}/, 'modal content must remount from a field/current-derived key');
 assert.match(optionModal, /useState\(\(\)\s*=>\s*current\?\.label\s*\|\|\s*['"]{2}\)/, 'label state must initialize synchronously from current');
 assert.match(optionModal, /current\?\.meta\?\.row\?\.hex_code\s*\|\|\s*['"]#000000['"]/, 'hex state must initialize synchronously from current');
+assert.match(
+  optionModal,
+  /className=["'][^"']*max-h-\[calc\(100vh-2rem\)\][^"']*overflow-y-auto[^"']*["']/,
+  'dialog panel must fit low viewports and scroll internally',
+);
 
 console.log('model list option UI static tests passed');
