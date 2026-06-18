@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.64-customer-pix-order-refresh",
-  "date": "2026-06-18",
-  "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260618-154234-v1164-customer-pix-order-refresh",
-  "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Adiciona conferencia instantanea do Pix Mercado Pago no crediario e libera o fluxo Fazer Pedido do carrinho para cliente autenticado."
+    "version":  "v1.1.65-pdv-mp-auto-response",
+    "date":  "2026-06-18",
+    "status":  "published",
+    "release_vps":  "/var/www/mdv-site/releases/20260618-171838-v1165-pdv-mp-auto-response",
+    "branch":  "codex/publish-delivery-ops-20260614",
+    "summary":  "Ajusta a resposta automatica do PDV para identificar Pix aprovado como Pago via Mercado Pago com data e hora."
 }

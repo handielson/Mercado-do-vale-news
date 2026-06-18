@@ -21,6 +21,7 @@ export interface PaymentMethod {
     pix_payment_id?: string;
     mercado_pago_payment_id?: string;
     pix_status?: 'pending' | 'approved' | 'rejected' | 'expired' | 'error';
+    pix_paid_at?: string;
 }
 
 /**

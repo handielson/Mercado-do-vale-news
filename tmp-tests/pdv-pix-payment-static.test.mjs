@@ -83,6 +83,7 @@ const requiredSaleTypeSnippets = [
   'pix_payment_id?: string',
   'mercado_pago_payment_id?: string',
   'pix_status?:',
+  'pix_paid_at?: string',
 ];
 
 for (const snippet of requiredSaleTypeSnippets) {
@@ -105,6 +106,11 @@ assert.match(
   paymentSection,
   /pdvPixPayment\.status !== ['"]approved['"]/,
   'PaymentSection.tsx deve ocultar QR/copia-e-cola quando o Pix for aprovado'
+);
+assert.match(
+  pdvPage,
+  /pix_paid_at:\s*payment\.updated_at\s*\|\|\s*new Date\(\)\.toISOString\(\)/,
+  'PDVPage.tsx deve guardar a hora da aprovacao do Pix Mercado Pago no pagamento da venda'
 );
 
 console.log('pdv pix payment static checks passed');

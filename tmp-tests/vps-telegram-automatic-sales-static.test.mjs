@@ -9,6 +9,11 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /INSERT IGNORE INTO telegram_settings[\s\S]*sale_template[\s\S]*online_order_paid_template/, `${file} must seed default Telegram sales templates`);
   assert.match(source, /async function notifyTelegramOnlineOrderPaidVps/, `${file} must implement server-side paid online order notifications`);
   assert.match(source, /async function notifyTelegramPdvSaleVps/, `${file} must implement server-side PDV sale notifications`);
+  assert.match(source, /function formatTelegramPdvSalePaymentLabelVps/, `${file} must format PDV payment labels from full payment_methods`);
+  assert.match(source, /telegramSalesParseJsonVps\(paymentMethodsValue/, `${file} must parse detailed PDV payment methods before building the automatic response`);
+  assert.match(source, /formatTelegramPdvSalePaymentLabelVps\(sale\.payment_methods,\s*sale\.payment_method,\s*sale\.created_at\)/, `${file} must use detailed PDV payment methods in the automatic response`);
+  assert.match(source, /Pago via Mercado Pago/, `${file} must mention Mercado Pago explicitly for approved PDV Pix payments`);
+  assert.match(source, /pix_paid_at/, `${file} must support the PDV Pix approval timestamp in automatic responses`);
   assert.match(source, /online_order_paid_template/, `${file} must use the configured paid online order template`);
   assert.match(source, /sale_template/, `${file} must use the configured PDV sale template`);
   assert.match(source, /order_items[\s\S]*order_id = \?/, `${file} must load order_items for paid order notifications`);

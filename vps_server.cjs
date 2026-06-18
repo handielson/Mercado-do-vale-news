@@ -6475,6 +6475,36 @@ function telegramSalesPaymentLabelVps(paymentMethod) {
   return value.split(',').map((part) => labels[part.trim()] || part.trim()).filter(Boolean).join(', ');
 }
 
+function formatTelegramSalesDateTimeVps(value) {
+  const date = value ? new Date(value) : new Date();
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
+  }).format(safeDate);
+}
+
+function formatTelegramPdvSalePaymentLabelVps(paymentMethodsValue, fallbackPaymentMethod, fallbackPaidAt) {
+  const paymentMethods = telegramSalesParseJsonVps(paymentMethodsValue, []);
+  if (!Array.isArray(paymentMethods) || paymentMethods.length === 0) {
+    return telegramSalesPaymentLabelVps(fallbackPaymentMethod);
+  }
+
+  const labels = paymentMethods.map((payment) => {
+    const method = String(payment?.method || '').trim();
+    const pixStatus = String(payment?.pix_status || '').trim().toLowerCase();
+    const mercadoPagoPaymentId = String(payment?.mercado_pago_payment_id || '').trim();
+    if (method === 'pix' && mercadoPagoPaymentId && pixStatus === 'approved') {
+      const paidAt = payment?.pix_paid_at || payment?.approved_at || payment?.updated_at || fallbackPaidAt;
+      return `Pago via Mercado Pago - ${formatTelegramSalesDateTimeVps(paidAt)}`;
+    }
+    return telegramSalesPaymentLabelVps(method);
+  }).filter(Boolean);
+
+  return labels.length > 0 ? Array.from(new Set(labels)).join(', ') : telegramSalesPaymentLabelVps(fallbackPaymentMethod);
+}
+
 function telegramSalesAddressLabelVps(addressValue) {
   const address = telegramSalesParseJsonVps(addressValue, null);
   if (!address || typeof address !== 'object') return 'Retirada presencial';
@@ -6686,7 +6716,7 @@ async function notifyTelegramPdvSaleVps(saleId) {
       modelo: isMultiple ? '-' : String(firstItem?.product_name || 'Item').split(',')[0],
       valor: formatTelegramSalesMoneyFromCentsVps(sale.total),
       lucro: formatTelegramSalesMoneyFromCentsVps(sale.profit),
-      pagamento: telegramSalesPaymentLabelVps(sale.payment_method),
+      pagamento: formatTelegramPdvSalePaymentLabelVps(sale.payment_methods, sale.payment_method, sale.created_at),
       desconto: Number(sale.discount_total || sale.discount || 0) > 0 ? formatTelegramSalesMoneyFromCentsVps(sale.discount_total || sale.discount) : 'Nenhum',
       estoque: isMultiple ? '-' : String(firstItem?.stock_quantity ?? '-'),
       entregador: deliveryName,
