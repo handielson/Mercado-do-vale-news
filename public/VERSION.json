@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.62-model-list-options",
+  "version": "v1.1.63-customer-debt-pix-auth",
   "date": "2026-06-18",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260618-144906-v1162-model-list-options",
+  "release_vps": "/var/www/mdv-site/releases/20260618-150339-v1163-customer-debt-pix-auth",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Adiciona gerenciamento inline de opcoes de listas no editor de modelos e cria opcoes ausentes durante preenchimento por IA."
+  "summary": "Corrige o fluxo do cliente para gerar Pix do crediario novamente sem exigir permissao administrativa."
 }

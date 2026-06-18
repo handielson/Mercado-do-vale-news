@@ -1400,6 +1400,18 @@ function extractVpsProxyFavoritesCustomerId(proxyPath) {
   return match?.[1] || null;
 }
 
+function isVpsProxyCustomerFinancialPath(proxyPath, method = 'GET') {
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  const pathname = proxyPath.split('?')[0] || '/';
+  if ((normalizedMethod === 'GET' || normalizedMethod === 'HEAD') && (
+    pathname === '/financial/customer-debts' ||
+    pathname === '/financial/customer-debts/payments'
+  )) {
+    return true;
+  }
+  return normalizedMethod === 'POST' && pathname === '/financial/customer-debts/mp-intent';
+}
+
 async function handleBrasilapiNcmProxy(request, reply) {
   const search = String(request.query?.search || '').trim();
   if (!search || search.length < 2) {
@@ -7384,6 +7396,7 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
   const isWrite = method !== 'GET' && method !== 'HEAD';
   const isPublicPath = isVpsProxyPublicPath(vpsProxyTargetPath, method);
   const favoritesCustomerId = extractVpsProxyFavoritesCustomerId(vpsProxyTargetPath);
+  const isCustomerFinancialPath = isVpsProxyCustomerFinancialPath(vpsProxyTargetPath, method);
 
   if (favoritesCustomerId) {
     if (!auth.userId) return reply.code(401).send({ error: 'Auth required' });
@@ -7396,11 +7409,13 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
     if (!auth.isAdmin && (!bodyCustomerId || auth.customerId !== bodyCustomerId)) {
       return reply.code(403).send({ error: 'Forbidden for this customer' });
     }
+  } else if (isCustomerFinancialPath) {
+    if (!auth.userId) return reply.code(401).send({ error: 'Auth required' });
   } else if (!isPublicPath && (isWrite || isVpsProxySensitiveGetPath(vpsProxyTargetPath)) && !auth.isAdmin) {
     return reply.code(403).send({ error: 'Admin required' });
   }
 
-  const needsInternalSyncKey = !isPublicPath || isVpsProxyPublicTableDataReadPath(vpsProxyTargetPath.split('?')[0] || '/');
+  const needsInternalSyncKey = (!isPublicPath && !isCustomerFinancialPath) || isVpsProxyPublicTableDataReadPath(vpsProxyTargetPath.split('?')[0] || '/');
   if (needsInternalSyncKey && !process.env.SYNC_SECRET) {
     return reply.code(500).send({ error: 'SYNC_SECRET not configured on server' });
   }
@@ -25843,6 +25858,10 @@ fastify.get('/financial/customer-debts/payments', { preHandler: requireSyncKeyOr
   if (debt_id) {
     queryStr = 'SELECT p.*, d.customer_id, d.descricao as debito_descricao FROM customer_debt_payments p JOIN customer_debts d ON p.debt_id = d.id WHERE p.debt_id = ?';
     params.push(debt_id);
+    if (!access.isSync && !access.isAdmin) {
+      queryStr += ' AND d.customer_id = ?';
+      params.push(access.customerId);
+    }
   } else if (customer_id) {
     queryStr = 'SELECT p.*, d.customer_id, d.descricao as debito_descricao FROM customer_debt_payments p JOIN customer_debts d ON p.debt_id = d.id WHERE d.customer_id = ?';
     params.push(customer_id);
