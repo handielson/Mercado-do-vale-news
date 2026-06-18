@@ -41,6 +41,12 @@ assert.match(
 );
 
 assert.match(
+  source,
+  /useEffect\(\(\) => \{\s*if \(isOpen\) \{\s*loadData\(\);\s*\}\s*\}, \[isOpen\]\);/,
+  'Model modal must reload dynamic custom field options every time it opens'
+);
+
+assert.match(
   loadDataBody,
   /fieldsResult\.status === 'fulfilled'[\s\S]*setCustomFields\(fieldsResult\.value\)/,
   'Model modal must not drop category-configured custom fields such as Receptor serial before visibility rules run'

@@ -909,8 +909,10 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     };
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (isOpen) {
+            loadData();
+        }
+    }, [isOpen]);
 
     useEffect(() => {
         const loadFieldChoiceOptions = async () => {
