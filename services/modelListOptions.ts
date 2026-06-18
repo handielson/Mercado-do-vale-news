@@ -44,6 +44,26 @@ function configuredOption(
     };
 }
 
+function strictConfiguredOption(field: CustomField, row: TableRow): TableOption {
+    const { table_name: tableName, value_column: valueColumn, label_column: labelColumn } = field.table_config!;
+    if (row[valueColumn] == null || row[labelColumn] == null) {
+        throw new Error(
+            `A tabela ${tableName} nao retornou as colunas configuradas ${valueColumn} e ${labelColumn}.`
+        );
+    }
+
+    const primaryKey = row.id != null ? 'id' : valueColumn;
+    return {
+        value: row[valueColumn] as string | number,
+        label: String(row[labelColumn]),
+        meta: {
+            primaryKey,
+            primaryValue: row[primaryKey] as string | number,
+            row,
+        },
+    };
+}
+
 function manualOptionsWithSavedLabel(
     field: CustomField,
     label: string,
@@ -143,18 +163,22 @@ export async function saveModelListOption({
     const { value_column: valueColumn, label_column: labelColumn } = field.table_config;
     const values: TableRow = {
         [labelColumn]: label,
-        active: true,
     };
     if (valueColumn !== 'id' && valueColumn !== labelColumn) {
         values[valueColumn] = label;
     }
 
+    const primaryKey = current?.meta?.primaryKey ?? (valueColumn === 'id' ? 'id' : valueColumn);
+    const primaryValue = current?.meta?.primaryValue ?? current?.value;
     const saved = current
-        ? await tableDataService.updateRow(tableName, 'id', current.value, values)
+        ? await tableDataService.updateRow(tableName, primaryKey, primaryValue!, values)
         : await tableDataService.createRow(tableName, values);
+    const persistedRow = current
+        ? { ...(current.meta?.row || {}), ...saved }
+        : saved;
 
     return {
         field,
-        option: configuredOption(field, saved, current?.value ?? label, label),
+        option: strictConfiguredOption(field, persistedRow),
     };
 }

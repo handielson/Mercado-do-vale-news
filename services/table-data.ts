@@ -3,6 +3,11 @@ import { vpsClient } from './vpsClient';
 export interface TableOption {
     value: string | number;
     label: string;
+    meta?: {
+        primaryKey: string;
+        primaryValue: string | number;
+        row: TableRow;
+    };
 }
 
 export type TableRow = Record<string, unknown>;
@@ -26,6 +31,24 @@ function sortRows(rows: TableRow[], labelColumn: string, orderBy?: string): Tabl
     const sortColumn = column || labelColumn;
     const ascending = direction.toUpperCase() !== 'DESC';
     return [...rows].sort((a, b) => compareValues(a[sortColumn], b[sortColumn], ascending));
+}
+
+function createTableOption(
+    row: TableRow,
+    valueColumn: string,
+    labelColumn: string
+): TableOption {
+    const primaryKey = row.id != null ? 'id' : valueColumn;
+
+    return {
+        value: row[valueColumn] as string | number,
+        label: String(row[labelColumn]),
+        meta: {
+            primaryKey,
+            primaryValue: row[primaryKey] as string | number,
+            row,
+        },
+    };
 }
 
 async function loadRows(tableName: string): Promise<TableRow[]> {
@@ -81,10 +104,7 @@ export const tableDataService = {
             const rows = sortRows(await loadRows(tableName), labelColumn, orderBy);
             return rows
                 .filter((row) => row[valueColumn] != null && row[labelColumn] != null)
-                .map(row => ({
-                    value: row[valueColumn] as string | number,
-                    label: String(row[labelColumn])
-                }));
+                .map(row => createTableOption(row, valueColumn, labelColumn));
         } catch (error) {
             console.error(`Failed to load options from ${tableName}:`, error);
             return [];
@@ -102,10 +122,7 @@ export const tableDataService = {
             const data = rows.find((row) => String(row[valueColumn]) === String(value));
             if (!data || data[valueColumn] == null || data[labelColumn] == null) return null;
 
-            return {
-                value: data[valueColumn] as string | number,
-                label: String(data[labelColumn])
-            };
+            return createTableOption(data, valueColumn, labelColumn);
         } catch (error) {
             console.error(`Failed to load option from ${tableName}:`, error);
             return null;
