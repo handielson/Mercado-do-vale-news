@@ -20,7 +20,7 @@ assert.match(productSearch, /unit\.status !== UnitStatus\.AVAILABLE/, 'PDV IMEI 
 assert.doesNotMatch(productSearch, /\(product as any\)\.specs\?\.imei1[\s\S]*IMEI 1:/, 'PDV result row must not render legacy specs IMEI directly');
 
 assert.match(saleService, /export const updateSaleCostsAndProfit/, 'saleService must expose a sale-wide cost/profit recalculation action');
-assert.match(saleService, /productCostById[\s\S]*unitCostById[\s\S]*currentCost/, 'recalculation must prefer current product cost, then unit cost, then existing sale item cost');
+assert.match(saleService, /unit_cost: unitCost > 0 \? unitCost : productCost > 0 \? productCost : currentCost/, 'recalculation must prefer serialized unit cost, then current product cost, then existing sale item cost');
 assert.match(saleService, /patchSale\(sale\.id,\s*\{[\s\S]*cost_total: totals\.total_cost[\s\S]*profit: totals\.profit/, 'recalculation must patch only financial totals on the sale');
 assert.match(saleService, /subtotal = moneyToCents\(item\.subtotal \|\| item\.total \|\| unitPrice \* quantity \|\| 0\)/, 'sale item serialization must not persist zero subtotal when price and quantity exist');
 assert.match(saleService, /rawSubtotal > 0 \? rawSubtotal : total/, 'sale item normalization must repair legacy zero subtotals on read');

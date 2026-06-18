@@ -357,9 +357,14 @@ function normalizeSaleItemRow(row: any, saleRow?: any): SaleItem {
 }
 
 function calculateSaleProfitFromCurrentData(sale: SaleWithItems): { total_cost: number; profit: number } {
+    const saleWithCurrentItemCosts = {
+        ...sale,
+        cost_total: 0,
+        profit: 0,
+    } as SaleWithItems;
     return {
-        total_cost: getSaleCostTotal(sale),
-        profit: getSaleRealProfit(sale),
+        total_cost: getSaleCostTotal(saleWithCurrentItemCosts),
+        profit: getSaleRealProfit(saleWithCurrentItemCosts),
     };
 }
 
@@ -795,7 +800,7 @@ export const updateSaleCostsAndProfit = async (saleId: string): Promise<SaleWith
         const productCost = productCostById.get(String(item.product_id || '')) || 0;
         return {
             ...item,
-            unit_cost: productCost > 0 ? productCost : unitCost > 0 ? unitCost : currentCost,
+            unit_cost: unitCost > 0 ? unitCost : productCost > 0 ? productCost : currentCost,
         } as SaleItem;
     });
 

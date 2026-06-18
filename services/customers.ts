@@ -1,6 +1,7 @@
 import { vpsClient } from './vpsClient';
 import { Customer, CustomerInput, CustomerFilters } from '../types/customer';
 import { telegramBotService } from './telegramBot';
+import { capitalizeName } from '../utils/customerFormUtils';
 
 /**
  * Customer Service
@@ -72,6 +73,7 @@ function normalizeCustomer(row: Customer): Customer {
     const walkInCustomer = row.is_walk_in_customer as unknown;
     return {
         ...row,
+        name: capitalizeName(String(row.name || '')),
         address: parseJsonField(row.address, undefined as any),
         custom_data: parseJsonField(row.custom_data, undefined as any),
         customer_type: fromVpsCustomerType(row.customer_type),
@@ -83,6 +85,10 @@ function normalizeCustomer(row: Customer): Customer {
 
 function serializeCustomerPayload<T extends Partial<CustomerInput>>(input: T): T {
     const payload = { ...input } as Record<string, unknown>;
+
+    if ('name' in payload) {
+        payload.name = capitalizeName(String(payload.name || ''));
+    }
 
     for (const key of ['address', 'custom_data']) {
         if (payload[key] && typeof payload[key] === 'object') {

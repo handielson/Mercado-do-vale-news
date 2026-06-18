@@ -1897,6 +1897,7 @@ export const PublicProductPage: React.FC = () => {
                                             'imei1', 'imei2', 'imei', 'serial', 'serial_number',
                                             'weight_kg', 'width_cm', 'height_cm', 'depth_cm', 'peso_kg', 'largura_cm', 'altura_cm', 'profundidade_cm',
                                             'tags_venda', 'cross_sell_tags', 'tags',
+                                            'bling_name_sync',
                                             'slug', 'meta_title', 'meta_description', 'keywords', 'exclude_from_seo'
                                         ]);
 

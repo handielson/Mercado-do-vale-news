@@ -10,7 +10,6 @@ import { getCoinBalance, getCoinsEarnedForReference } from '../../../services/ca
 import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { warrantyTemplateService } from '../../../services/warrantyTemplates';
-import { vpsClient } from '../../../services/vpsClient';
 import { teamService } from '../../../services/team';
 import {
     adminCompleteDeliveryJob,
@@ -37,6 +36,25 @@ interface SaleDetailsModalProps {
     onClose: () => void;
     sale: SaleWithItems | null;
     onStatusChange: () => void; // Triggered after cancel or refund to reload lists
+}
+
+function buildCurrentSaleProfitData(updated: SaleWithItems): NonNullable<SaleProfitData> {
+    return {
+        sale_id: updated.id,
+        total_cents: getSaleCollectedTotal(updated),
+        cost_total_cents: updated.cost_total,
+        profit_cents: updated.profit,
+        items: updated.items.map((item: any) => ({
+            sale_item_id: item.id,
+            product_id: item.product_id,
+            product_name: item.product_name,
+            sku: item.product_sku,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            unit_cost: item.unit_cost,
+            item_profit: Number(item.total || 0) - (Number(item.unit_cost || 0) * Number(item.quantity || 1)),
+        })),
+    };
 }
 
 export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange }: SaleDetailsModalProps) {
@@ -230,15 +248,22 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
         void loadDeliveryJob();
     }, [isOpen, sale?.id, isDeliverySale]);
 
-    // Busca lucro real via endpoint dedicado (JOIN com price_cost dos produtos)
     useEffect(() => {
         if (!isOpen || !sale?.id) return;
         let cancelled = false;
         setIsLoadingProfit(true);
         setRealProfit(null);
-        vpsClient.get<any>(`/sales/${sale.id}/profit`)
-            .then(data => { if (!cancelled) setRealProfit(data); })
-            .catch((err) => { console.error('[profit] endpoint falhou:', err?.message || err); })
+        updateSaleCostsAndProfit(sale.id)
+            .then((updated) => {
+                if (cancelled) return;
+                setRealProfit(buildCurrentSaleProfitData(updated));
+                onStatusChange();
+            })
+            .catch((error) => {
+                if (cancelled) return;
+                console.error('Erro ao atualizar custos atuais da venda:', error);
+                toast.error('Nao foi possivel atualizar os custos atuais desta venda');
+            })
             .finally(() => { if (!cancelled) setIsLoadingProfit(false); });
         return () => { cancelled = true; };
     }, [isOpen, sale?.id]);
@@ -473,23 +498,8 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
         setIsUpdatingCosts(true);
         try {
             const updated = await updateSaleCostsAndProfit(sale.id);
-            setRealProfit({
-                sale_id: updated.id,
-                total_cents: getSaleCollectedTotal(updated),
-                cost_total_cents: updated.cost_total,
-                profit_cents: updated.profit,
-                items: updated.items.map((item: any) => ({
-                    sale_item_id: item.id,
-                    product_id: item.product_id,
-                    product_name: item.product_name,
-                    sku: item.product_sku,
-                    quantity: item.quantity,
-                    unit_price: item.unit_price,
-                    unit_cost: item.unit_cost,
-                    item_profit: Number(item.total || 0) - (Number(item.unit_cost || 0) * Number(item.quantity || 1)),
-                })),
-            });
-            toast.success('Custos e lucro atualizados');
+            setRealProfit(buildCurrentSaleProfitData(updated));
+            toast.success('Custos recalculados com os valores atuais dos produtos');
             onStatusChange();
         } catch (error: any) {
             console.error('Erro ao atualizar custos/lucro:', error);
@@ -875,8 +885,11 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
 
                                 <div className="flex justify-between text-slate-600">
                                     <span>Custo Total</span>
-                                    <span>{formatCurrency(costTotal)}</span>
+                                    <span>{isLoadingProfit ? 'Atualizando...' : formatCurrency(costTotal)}</span>
                                 </div>
+                                <p className="text-xs leading-5 text-amber-700">
+                                    Os custos salvos desta venda serao substituidos pelos custos atuais dos produtos ao abrir ou atualizar.
+                                </p>
 
                                 <div className="pt-3 mt-3 border-t border-slate-100 flex justify-between text-sm font-medium">
                                     <span className="text-emerald-600">Lucro Real</span>
@@ -1157,7 +1170,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                             <button
                                 onClick={handleUpdateCostsAndProfit}
                                 disabled={isUpdatingCosts}
-                                title="Atualizar custos e lucro desta venda sem alterar data ou pedido"
+                                title="Recalcular usando os custos atuais dos produtos e unidades"
                                 className="px-3 py-2 bg-emerald-50 text-emerald-700 font-medium rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50 flex items-center gap-2 border border-emerald-200"
                             >
                                 <RefreshCw size={16} className={isUpdatingCosts ? 'animate-spin' : ''} />

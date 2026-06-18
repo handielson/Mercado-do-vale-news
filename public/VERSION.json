@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.67-delivery-admin-unrestricted",
+  "version": "v1.1.68-sales-cost-customer-specs",
   "date": "2026-06-18",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260618-180815-v1167-delivery-admin-unrestricted",
+  "release_vps": "/var/www/mdv-site/releases/20260618-201014-v1168-sales-cost-customer-specs",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Permite baixa administrativa de entrega sem bloqueios operacionais, exigindo somente a observacao."
+  "summary": "Atualiza custos de vendas pelos valores atuais, normaliza nomes de clientes e oculta metadado interno do Bling na pagina publica."
 }
