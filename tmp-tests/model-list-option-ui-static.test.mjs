@@ -89,7 +89,26 @@ assert.match(modelModal, /const\s+handleSaveListOption\s*=\s*async\s*\(draft:\s*
 assert.match(modelModal, /saveModelListOption\(\{\s*field:\s*listEditor\.field,\s*options:\s*fieldChoiceOptions\[listEditor\.field\.key\]\s*\|\|\s*\[\],\s*draft,\s*current:\s*listEditor\.current,\s*\}\)/, 'save handler must persist against current field choices');
 assert.match(modelModal, /setCustomFields\(\(fields\)\s*=>\s*fields\.map\(\(field\)\s*=>\s*field\.id\s*===\s*persisted\.field\.id\s*\?\s*persisted\.field\s*:\s*field\)\)/, 'manual list saves must replace the returned custom field');
 assert.match(modelModal, /setFieldChoiceOptions\(\(currentOptions\)\s*=>/, 'list saves must update choices immediately');
-assert.match(modelModal, /new\s+Map\([\s\S]*String\(option\.value\)[\s\S]*\.sort\(\(left,\s*right\)\s*=>\s*left\.label\.localeCompare\(right\.label\)/, 'choice updates must deduplicate by value and sort by label');
+assert.match(
+  modelModal,
+  /const\s+normalizeChoiceOptions\s*=\s*\(options:\s*TableOption\[\]\):\s*TableOption\[\]\s*=>\s*\[\.\.\.new\s+Map\([\s\S]*String\(option\.value\)[\s\S]*\.values\(\)\][\s\S]*\.sort\(\(left,\s*right\)\s*=>\s*left\.label\.localeCompare\(right\.label\)\)/,
+  'model modal must define one helper that deduplicates choices by value and sorts by label',
+);
+assert.match(
+  modelModal,
+  /nextOptions\[field\.key\]\s*=\s*normalizeChoiceOptions\(\s*field\.options[\s\S]*\.map\(\(option\)\s*=>\s*\(\{\s*value:\s*option,\s*label:\s*option\s*\}\)\)\s*\)/,
+  'manual choices loaded by the effect must use the shared normalizer',
+);
+assert.match(
+  modelModal,
+  /nextOptions\[field\.key\]\s*=\s*normalizeChoiceOptions\(\s*options\.map\(\(option\)\s*=>\s*\(\{[\s\S]*meta:\s*option\.meta,[\s\S]*\}\)\)\s*\)/,
+  'relation choices loaded by the effect must use the shared normalizer',
+);
+assert.match(
+  modelModal,
+  /const\s+sorted\s*=\s*normalizeChoiceOptions\(\[\.\.\.withoutEdited,\s*persisted\.option\]\)/,
+  'immediate save updates must use the same choice normalizer',
+);
 assert.match(modelModal, /handleTemplateValueChange\(listEditor\.field\.key,\s*String\(persisted\.option\.value\)\)/, 'saved options must become selected immediately');
 assert.match(modelModal, /toast\.success\(listEditor\.current\s*\?\s*['"]Opcao atualizada com sucesso\.['"]\s*:\s*['"]Opcao adicionada com sucesso\.['"]\)/, 'save handler must report create and edit success');
 assert.match(modelModal, /catch\s*\(saveError\)\s*\{[\s\S]*toast\.error\([\s\S]*\)[\s\S]*\}\s*finally\s*\{[\s\S]*setSavingListOption\(false\)/, 'save errors must toast and always release saving state');

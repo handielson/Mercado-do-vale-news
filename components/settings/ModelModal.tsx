@@ -44,6 +44,11 @@ const SMARTPHONE_DEFAULT_GIFTS = [
     '1 pelicula 3D aplicada',
 ].join('\n');
 
+const normalizeChoiceOptions = (options: TableOption[]): TableOption[] => [...new Map(
+    options.map((option) => [String(option.value), option])
+).values()]
+    .sort((left, right) => left.label.localeCompare(right.label));
+
 const parseTrustedSourceLinks = (value: string) => value
     .split(/\r?\n|,/)
     .map((item) => item.trim())
@@ -867,9 +872,9 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
             customFields.forEach((field) => {
                 if (field.field_type === 'select' && Array.isArray(field.options)) {
-                    nextOptions[field.key] = field.options
+                    nextOptions[field.key] = normalizeChoiceOptions(field.options
                         .filter(Boolean)
-                        .map((option) => ({ value: option, label: option }));
+                        .map((option) => ({ value: option, label: option })));
                 }
             });
 
@@ -882,11 +887,11 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                         field.table_config!.label_column,
                         field.table_config!.order_by
                     );
-                    nextOptions[field.key] = options.map((option) => ({
+                    nextOptions[field.key] = normalizeChoiceOptions(options.map((option) => ({
                         value: String(option.value),
                         label: String(option.label),
                         meta: option.meta,
-                    }));
+                    })));
                 } catch (error) {
                     console.error(`Error loading choices for ${field.key}:`, error);
                 }
@@ -1021,11 +1026,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 const withoutEdited = listEditor.current
                     ? previous.filter((option) => String(option.value) !== String(listEditor.current?.value))
                     : previous;
-                const deduplicated = new Map(
-                    [...withoutEdited, persisted.option].map((option) => [String(option.value), option])
-                );
-                const sorted = [...deduplicated.values()]
-                    .sort((left, right) => left.label.localeCompare(right.label));
+                const sorted = normalizeChoiceOptions([...withoutEdited, persisted.option]);
 
                 return {
                     ...currentOptions,
