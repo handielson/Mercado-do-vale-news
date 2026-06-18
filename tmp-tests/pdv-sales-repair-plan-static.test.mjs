@@ -33,12 +33,12 @@ assert.match(salesPage, /getSaleRealProfit/, 'sales dashboard must use real prof
 assert.doesNotMatch(salesPage, /sum, sale\) => sum \+ sale\.profit/, 'sales dashboard must not sum stale saved sale.profit');
 
 assert.match(cartShare, /fetchSiblingBudgetVariantGroups/, 'budget sharing must build grouped sibling variant rows');
-assert.match(cartShare, /CAT.LOGO - SMARTPHONES/, 'budget sharing must use the same readable catalog header pattern');
+assert.match(cartShare, /Or.amento/, 'budget sharing must use the readable budget header');
 assert.match(cartShare, /categoryRows/, 'budget sharing must flatten each available variant as its own numbered catalog row');
 assert.match(cartShare, /Cart.o: 12x de/, 'budget sharing must show 12x card terms on each catalog row');
 assert.match(cartShare, /Cores:/, 'budget sharing must show available colors on each catalog row');
 assert.doesNotMatch(cartShare, /Opcoes disponiveis/, 'budget sharing must not nest variants under a mixed legacy block');
-assert.match(cartShare, /getSpecValue\(specs, \['storage', 'armazenamento', 'capacidade', 'memoria', 'memoria_interna', 'memory'\]\)/, 'budget sharing must support legacy storage aliases');
+assert.match(cartShare, /getMemorySpecs\(product\)/, 'budget sharing must use the shared memory spec reader');
 
 assert.match(productSearch, /card\.kind === 'serialized-product'/, 'PDV must treat cards with available units as serialized even without legacy specs');
 assert.match(productSearch, /availableProducts[\s\S]*buildPdvSearchCards[\s\S]*unitService\.listByProduct/, 'PDV fallback search must inspect product units while preparing card results');

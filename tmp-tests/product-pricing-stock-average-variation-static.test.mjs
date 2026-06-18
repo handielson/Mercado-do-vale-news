@@ -7,11 +7,10 @@ assert.match(source, /const selectedRam = watch\('specs\.ram'\)/);
 assert.match(source, /const selectedStorage = watch\('specs\.storage'\)/);
 assert.match(source, /if \(!modelId \|\| !selectedRam \|\| !selectedStorage\)/);
 assert.match(source, /import \{ vpsApiService \} from '..\/..\/..\/services\/vpsApiService'/);
+assert.match(source, /import \{ matchesMemorySpecs \} from '..\/..\/..\/utils\/productSpecUtils'/);
 assert.match(source, /vpsApiService\.getProducts\(\{\s*model_id: modelId,\s*status: 'active',\s*limit: 500,\s*noCache: true,\s*\}\)/);
-assert.match(source, /function matchesMemoryVariation\(product: any, selectedRam: string, selectedStorage: string\)/);
-assert.match(source, /const productRam = readSpecCandidate\(specs, \['ram', 'memoria_ram', 'memory_ram'\]\)/);
-assert.match(source, /const productStorage = readSpecCandidate\(specs, \['storage', 'armazenamento', 'memoria_interna', 'internal_storage'\]\)/);
-assert.match(source, /normalizeSpecValue\(productRam\) === normalizeSpecValue\(selectedRam\)[\s\S]*normalizeSpecValue\(productStorage\) === normalizeSpecValue\(selectedStorage\)/);
+assert.match(source, /matchesMemorySpecs\(product, selectedRam, selectedStorage\)/);
+assert.doesNotMatch(source, /function matchesMemoryVariation|readSpecCandidate|function normalizeSpecValue/);
 assert.doesNotMatch(source, /specs->>color|selectedColor|specs\.color\).*stockAverages|stockAverages[\s\S]{0,120}specs\.color/);
 assert.match(source, /\[modelId, selectedRam, selectedStorage\]/);
 

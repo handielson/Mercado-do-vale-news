@@ -3,6 +3,7 @@ import { calculateInstallmentFromFees, calculatePixPrice, formatPrice } from '@/
 import { paymentFeesService, type PaymentFee } from '@/services/payment-fees';
 import { vpsApiService } from '@/services/vpsApiService';
 import { publicCompanySettingsService } from '@/services/publicCompanySettings';
+import { getMemorySpecs } from '@/utils/productSpecUtils';
 
 export type CustomerType = 'retail' | 'wholesale' | 'resale';
 
@@ -46,8 +47,9 @@ function groupProductsByVariant(products: Product[]): GroupedProduct[] {
         // Clean product name (remove RAM/Storage if present)
         const cleanName = product.name.replace(/,?\s*\d+GB\/\d+GB\s*$/i, '').trim();
 
-        const ram = product.specs?.ram || 'N/A';
-        const storage = product.specs?.storage || 'N/A';
+        const { ram: rawRam, storage: rawStorage } = getMemorySpecs(product);
+        const ram = rawRam || 'N/A';
+        const storage = rawStorage || 'N/A';
         const color = product.specs?.color || 'Sem cor';
         const brand = product.brand || 'Sem marca';
 
@@ -95,7 +97,7 @@ function groupCatalogItemsByBrand(items: GroupedProduct[]): Array<{ brand: strin
         .sort(([brandA], [brandB]) => brandA.localeCompare(brandB, 'pt-BR'))
         .map(([brand, brandItems]) => ({
             brand,
-            items: brandItems.sort((a, b) => a.price - b.price || a.name.localeCompare(b.name, 'pt-BR')),
+            items: brandItems.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR') || a.price - b.price),
         }));
 }
 

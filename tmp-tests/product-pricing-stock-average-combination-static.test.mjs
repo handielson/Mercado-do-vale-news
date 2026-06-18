@@ -4,13 +4,11 @@ const source = fs.readFileSync('components/products/sections/ProductPricing.tsx'
 
 const requiredSnippets = [
   'const SMARTPHONE_CATEGORY_LABEL =',
-  'readSpecCandidate',
-  "['ram', 'memoria_ram', 'memory_ram']",
-  "['storage', 'armazenamento', 'memoria_interna', 'internal_storage']",
+  "import { matchesMemorySpecs } from '../../../utils/productSpecUtils'",
   'model_id: modelId',
   'toPositiveNumber(p.stock_quantity)',
   'toPositiveNumber(p[field])',
-  'matchesMemoryVariation(product, selectedRam, selectedStorage)',
+  'matchesMemorySpecs(product, selectedRam, selectedStorage)',
 ];
 
 const forbiddenSnippets = [

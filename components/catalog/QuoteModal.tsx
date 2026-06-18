@@ -23,6 +23,7 @@ import { categoryService } from '@/services/categories';
 import { paymentIntegrationService } from '@/services/paymentIntegrationService';
 import { createOrder } from '@/services/orderService';
 import { vpsApiService } from '@/services/vpsApiService';
+import { getMemorySpecs } from '@/utils/productSpecUtils';
 import toast from 'react-hot-toast';
 
 interface QuoteModalProps {
@@ -49,12 +50,6 @@ interface QuoteModalProps {
     externalWarrantyProductId?: string;
     externalWarrantyImageUrl?: string;
     onCoinDiscountChange?: (discountBrl: number, coinsToSpend: number) => void;
-}
-
-function getSpecValue(specs: Record<string, any>, names: string[]): string {
-    const wanted = new Set(names.map(name => name.toLowerCase()));
-    const entry = Object.entries(specs || {}).find(([key]) => wanted.has(key.toLowerCase()));
-    return entry?.[1] == null ? '' : String(entry[1]);
 }
 
 export function QuoteModal({ product, variants, isOpen, onClose, initialVariant, inline, totalOverride, selectedWarranty: externalWarranty, onWarrantyChange, selectedDelivery: externalDelivery, onDeliveryChange, externalCouponCode, externalCouponDiscount, externalReferralCode, externalReferralName, externalWarrantyPrice, externalWarrantyProductName, externalWarrantyProductId, externalWarrantyImageUrl, onCoinDiscountChange }: QuoteModalProps) {
@@ -367,8 +362,7 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
                 const matchingProducts = (data || []).filter((row: any) => {
                     const specs = row.specs || {};
                     const stock = row.stock_quantity ?? row.stock ?? row.available_stock;
-                    const ram = getSpecValue(specs, ['ram']);
-                    const storage = getSpecValue(specs, ['storage', 'armazenamento', 'memoria', 'memory']);
+                    const { ram, storage } = getMemorySpecs(specs);
 
                     return Number(stock || 0) > 0
                         && ram === selectedVariant.ram

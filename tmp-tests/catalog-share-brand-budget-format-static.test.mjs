@@ -3,12 +3,29 @@ import { readFileSync } from 'node:fs';
 
 const catalogSource = readFileSync('utils/catalogMessageGenerator.ts', 'utf8');
 const cartShareSource = readFileSync('utils/cartShareUtils.ts', 'utf8');
+const specUtilsSource = readFileSync('utils/productSpecUtils.ts', 'utf8');
 
 assert(
   catalogSource.includes('brand:') &&
     catalogSource.includes('groupCatalogItemsByBrand') &&
-    catalogSource.includes('sort((a, b) => a.price - b.price'),
-  'copied category message must group products by brand and sort each brand from cheapest to most expensive',
+    catalogSource.includes("a.name.localeCompare(b.name, 'pt-BR') || a.price - b.price"),
+  'copied category message must group products by brand, sort products alphabetically, then cheapest to most expensive',
+);
+
+assert(
+  catalogSource.includes("import { getMemorySpecs } from '@/utils/productSpecUtils'") &&
+    catalogSource.includes('getMemorySpecs(product)'),
+  'copied category message must use the shared memory spec reader so products do not show N/A/N/A when memory exists',
+);
+
+assert(
+  specUtilsSource.includes("RAM_SPEC_KEYS = ['ram', 'memoria_ram', 'memory_ram']") &&
+    specUtilsSource.includes("'storage'") &&
+    specUtilsSource.includes("'armazenamento'") &&
+    specUtilsSource.includes("'capacidade'") &&
+    specUtilsSource.includes("'memoria_interna'") &&
+    specUtilsSource.includes("'internal_storage'"),
+  'memory spec aliases must live in the shared product spec utility',
 );
 
 assert(

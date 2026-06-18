@@ -7,6 +7,7 @@
 
 import { calculateInstallments, formatPrice } from '@/services/installmentCalculator';
 import { vpsApiService } from '@/services/vpsApiService';
+import { getMemorySpecs, normalizeSpecValue, readSpecValue } from '@/utils/productSpecUtils';
 
 const SITE_BASE = 'https://mercadodovale.com.br';
 
@@ -102,40 +103,19 @@ function pluralizeSpecLabel(key: string): string {
     return `${label}s`;
 }
 
-function formatSpecValue(value: unknown): string | null {
-    if (value === null || value === undefined || typeof value === 'object') return null;
-    const formatted = String(value).trim();
-    if (!formatted || formatted === 'no-ram' || formatted === 'no-storage') return null;
-    return formatted;
-}
-
-function getSpecValue(specs: Record<string, unknown> | undefined, keys: string[]): string {
-    for (const key of keys) {
-        const value = formatSpecValue(specs?.[key]);
-        if (value) return value;
-    }
-    return '';
-}
-
 function getProductBudgetGroupKey(product: any): string {
-    const specs = product?.specs || {};
-    const ram = getSpecValue(specs, ['ram', 'memoria_ram']);
-    const storage = getSpecValue(specs, ['storage', 'armazenamento', 'capacidade', 'memoria', 'memoria_interna', 'memory']);
+    const { ram, storage } = getMemorySpecs(product);
     const base = product?.model_id || product?.model || product?.name || product?.id || 'produto';
     return [base, ram, storage].map(value => String(value || '').toLowerCase().trim()).join('|');
 }
 
 function getBudgetVariantLabel(product: any): string {
-    const specs = product?.specs || {};
-    const ram = getSpecValue(specs, ['ram', 'memoria_ram']);
-    const storage = getSpecValue(specs, ['storage', 'armazenamento', 'capacidade', 'memoria', 'memoria_interna', 'memory']);
+    const { ram, storage } = getMemorySpecs(product);
     return [ram && `${ram} RAM`, storage].filter(Boolean).join(' / ') || 'Opcao disponivel';
 }
 
 function getBudgetVariantSpecLine(product: any): string {
-    const specs = product?.specs || {};
-    const ram = getSpecValue(specs, ['ram', 'memoria_ram']);
-    const storage = getSpecValue(specs, ['storage', 'armazenamento', 'capacidade', 'memoria', 'memoria_interna', 'memory']);
+    const { ram, storage } = getMemorySpecs(product);
     return [ram, storage].filter(Boolean).join('/') || 'Opcao disponivel';
 }
 
@@ -149,7 +129,7 @@ function getBudgetVariantName(product: any): string {
 }
 
 function getBudgetVariantColor(product: any): string {
-    return getSpecValue(product?.specs || {}, ['color', 'cor', 'colour']);
+    return readSpecValue(product?.specs || {}, ['color', 'cor', 'colour']);
 }
 
 function buildVariationSummary(rows: Array<{ specs?: Record<string, unknown> }>): VariationSummary {
@@ -163,7 +143,7 @@ function buildVariationSummary(rows: Array<{ specs?: Record<string, unknown> }>)
             if (IGNORED_SPEC_KEYS.has(normalizedKey)) continue;
             if (!ALLOWED_VARIATION_KEYS.has(normalizedKey)) continue;
 
-            const value = formatSpecValue(rawValue);
+            const value = normalizeSpecValue(rawValue);
             if (!value) continue;
 
             const entry = valuesByKey.get(normalizedKey) || { originalKey: key, values: new Set<string>() };

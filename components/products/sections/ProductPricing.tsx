@@ -4,6 +4,7 @@ import { ProductInput } from '../../../types/product';
 import { CurrencyInput } from '../../ui/CurrencyInput';
 import { DollarSign, ShoppingCart, Users, Package, BarChart2 } from 'lucide-react';
 import { vpsApiService } from '../../../services/vpsApiService';
+import { matchesMemorySpecs } from '../../../utils/productSpecUtils';
 
 interface ProductPricingProps {
     watch: UseFormWatch<ProductInput>;
@@ -44,45 +45,9 @@ function calcMargin(cost: number, price: number) {
     return { marginCents, marginPct, markup };
 }
 
-function normalizeSpecValue(value: unknown): string {
-    return String(value || '').trim().toLowerCase();
-}
-
 function toPositiveNumber(value: unknown): number {
     const numeric = Number(value || 0);
     return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
-}
-
-function readSpecs(product: any): Record<string, any> {
-    if (!product?.specs) return {};
-    if (typeof product.specs === 'string') {
-        try {
-            return JSON.parse(product.specs) || {};
-        } catch {
-            return {};
-        }
-    }
-    return product.specs;
-}
-
-function readSpecCandidate(specs: Record<string, any>, keys: string[]): string {
-    for (const key of keys) {
-        const value = specs[key];
-        if (value !== undefined && value !== null && String(value).trim() !== '') {
-            return String(value);
-        }
-    }
-    return '';
-}
-
-function matchesMemoryVariation(product: any, selectedRam: string, selectedStorage: string): boolean {
-    const specs = readSpecs(product);
-    const productRam = readSpecCandidate(specs, ['ram', 'memoria_ram', 'memory_ram']);
-    const productStorage = readSpecCandidate(specs, ['storage', 'armazenamento', 'memoria_interna', 'internal_storage']);
-    return (
-        normalizeSpecValue(productRam) === normalizeSpecValue(selectedRam) &&
-        normalizeSpecValue(productStorage) === normalizeSpecValue(selectedStorage)
-    );
 }
 
 const SMARTPHONE_CATEGORY_LABEL = 'Smartphones';
@@ -149,7 +114,7 @@ export function ProductPricing({ watch, setValue, errors, modelId }: ProductPric
                     limit: 500,
                     noCache: true,
                 });
-                const data = (products || []).filter(product => matchesMemoryVariation(product, selectedRam, selectedStorage));
+                const data = (products || []).filter(product => matchesMemorySpecs(product, selectedRam, selectedStorage));
                 if (cancelled || data.length === 0) { setStockAverages(null); return; }
                 const totalUnits = data.reduce((s, p) => s + toPositiveNumber(p.stock_quantity), 0);
                 if (totalUnits === 0) { setStockAverages(null); return; }
