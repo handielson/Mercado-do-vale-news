@@ -1409,7 +1409,65 @@ function isVpsProxyCustomerFinancialPath(proxyPath, method = 'GET') {
   )) {
     return true;
   }
+  if (normalizedMethod === 'POST' && /^\/financial\/customer-debts\/mp-intent\/[^/]+\/status$/u.test(pathname)) {
+    return true;
+  }
   return normalizedMethod === 'POST' && pathname === '/financial/customer-debts/mp-intent';
+}
+
+function isVpsProxyCustomerOrderWritePath(proxyPath, method = 'GET') {
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  const pathname = proxyPath.split('?')[0] || '/';
+  if (normalizedMethod === 'POST' && pathname === '/table-data/orders') return true;
+  if (normalizedMethod === 'POST' && pathname === '/table-data/order_items/bulk') return true;
+  if (normalizedMethod === 'POST' && pathname === '/stock-locations/priority-reservations') return true;
+  if (normalizedMethod === 'POST' && pathname === '/stock-locations/order-reservations/release') return true;
+  return normalizedMethod === 'DELETE' && /^\/table-data\/orders\/[^/]+$/u.test(pathname);
+}
+
+async function assertVpsProxyOrdersBelongToCustomer(orderIds, customerId) {
+  const ids = Array.from(new Set((orderIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+  if (!ids.length) return false;
+  const [rows] = await pool.query(
+    `SELECT customer_id FROM orders WHERE id IN (${ids.map(() => '?').join(',')})`,
+    ids
+  );
+  if (!rows || rows.length !== ids.length) return false;
+  return rows.every((row) => String(row.customer_id || '') === String(customerId || ''));
+}
+
+async function assertVpsProxyCustomerOrderWriteAllowed(request, auth, proxyPath, method = 'GET') {
+  if (auth.isAdmin) return true;
+  if (!auth.userId || !auth.customerId) return false;
+
+  const normalizedMethod = String(method || 'GET').toUpperCase();
+  const pathname = proxyPath.split('?')[0] || '/';
+  const body = request.body || {};
+
+  if (normalizedMethod === 'POST' && pathname === '/table-data/orders') {
+    return auth.customerId !== String(body.customer_id || '') ? false : true;
+  }
+
+  if (normalizedMethod === 'POST' && pathname === '/table-data/order_items/bulk') {
+    if (!Array.isArray(body) || body.length === 0) return false;
+    return assertVpsProxyOrdersBelongToCustomer(body.map((row) => row?.order_id), auth.customerId);
+  }
+
+  if (normalizedMethod === 'POST' && pathname === '/stock-locations/priority-reservations') {
+    if (String(body.reference_type || '') !== 'order_reservation') return false;
+    return assertVpsProxyOrdersBelongToCustomer([body.reference_id], auth.customerId);
+  }
+
+  if (normalizedMethod === 'POST' && pathname === '/stock-locations/order-reservations/release') {
+    return assertVpsProxyOrdersBelongToCustomer([body.order_id], auth.customerId);
+  }
+
+  if (normalizedMethod === 'DELETE') {
+    const match = pathname.match(/^\/table-data\/orders\/([^/]+)$/u);
+    return match ? assertVpsProxyOrdersBelongToCustomer([decodeURIComponent(match[1])], auth.customerId) : false;
+  }
+
+  return false;
 }
 
 async function handleBrasilapiNcmProxy(request, reply) {
@@ -7397,6 +7455,7 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
   const isPublicPath = isVpsProxyPublicPath(vpsProxyTargetPath, method);
   const favoritesCustomerId = extractVpsProxyFavoritesCustomerId(vpsProxyTargetPath);
   const isCustomerFinancialPath = isVpsProxyCustomerFinancialPath(vpsProxyTargetPath, method);
+  const isCustomerOrderWritePath = isVpsProxyCustomerOrderWritePath(vpsProxyTargetPath, method);
 
   if (favoritesCustomerId) {
     if (!auth.userId) return reply.code(401).send({ error: 'Auth required' });
@@ -7411,6 +7470,11 @@ fastify.all('/api/vps-proxy', async (request, reply) => {
     }
   } else if (isCustomerFinancialPath) {
     if (!auth.userId) return reply.code(401).send({ error: 'Auth required' });
+  } else if (isCustomerOrderWritePath) {
+    if (!auth.userId) return reply.code(401).send({ error: 'Auth required' });
+    if (!await assertVpsProxyCustomerOrderWriteAllowed(request, auth, vpsProxyTargetPath, method)) {
+      return reply.code(403).send({ error: 'Forbidden for this order' });
+    }
   } else if (!isPublicPath && (isWrite || isVpsProxySensitiveGetPath(vpsProxyTargetPath)) && !auth.isAdmin) {
     return reply.code(403).send({ error: 'Admin required' });
   }
@@ -26367,6 +26431,74 @@ fastify.post('/financial/customer-debts/mp-intent', { preHandler: requireSyncKey
       error: 'Erro ao criar intent Mercado Pago do crediario',
       debug: buildCustomerDebtDebug('mercado pago intent failed', { debt_id, metodo, valor_liquido }),
     });
+  }
+});
+
+fastify.post('/financial/customer-debts/mp-intent/:id/status', { preHandler: requireSyncKeyOrCustomer }, async (req, reply) => {
+  const id = String(req.params?.id || '').trim();
+  if (!id) return reply.code(400).send({ error: 'id obrigatorio' });
+
+  try {
+    const [intents] = await pool.query('SELECT * FROM customer_debt_payment_intents WHERE id = ? LIMIT 1', [id]);
+    const intent = intents?.[0] || null;
+    if (!intent) return reply.code(404).send({ error: 'Intent Mercado Pago nao encontrado' });
+
+    const [debts] = await pool.query('SELECT * FROM customer_debts WHERE id = ? LIMIT 1', [intent.debt_id]);
+    const debt = debts?.[0] || null;
+    if (!debt) return reply.code(404).send({ error: 'Debito nao encontrado' });
+
+    const access = req.customerAccess || {};
+    if (!access.isSync && !access.isAdmin && String(debt.customer_id) !== String(access.customerId)) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    let currentIntent = intent;
+    if (!['approved', 'failed', 'cancelled', 'expired'].includes(String(intent.status || '').toLowerCase()) && intent.provider_intent_id && intent.metodo === 'pix') {
+      const [integrations] = await pool.query(
+        "SELECT access_token FROM payment_integrations WHERE gateway_name = 'mercado_pago' AND is_active = 1 LIMIT 1"
+      );
+      const accessToken = integrations?.[0]?.access_token;
+      if (accessToken) {
+        const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(intent.provider_intent_id)}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(12000),
+        });
+        const payment = await response.json().catch(() => ({}));
+        if (response.ok && payment.status === 'approved') {
+          await processCustomerDebtMercadoPagoPayment(payment);
+        } else if (response.ok && ['rejected', 'cancelled', 'canceled'].includes(String(payment.status || '').toLowerCase())) {
+          const nextStatus = String(payment.status).toLowerCase() === 'rejected' ? 'failed' : 'cancelled';
+          await pool.query(
+            'UPDATE customer_debt_payment_intents SET status = ?, raw_response = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [nextStatus, JSON.stringify(payment), intent.id]
+          );
+        }
+      }
+
+      const [updatedIntents] = await pool.query('SELECT * FROM customer_debt_payment_intents WHERE id = ? LIMIT 1', [id]);
+      currentIntent = updatedIntents?.[0] || intent;
+    }
+
+    const [updatedDebts] = await pool.query('SELECT * FROM customer_debts WHERE id = ? LIMIT 1', [intent.debt_id]);
+    const [payments] = await pool.query(
+      'SELECT p.*, d.customer_id, d.descricao as debito_descricao FROM customer_debt_payments p JOIN customer_debts d ON p.debt_id = d.id WHERE p.debt_id = ? ORDER BY p.created_at DESC LIMIT 200',
+      [intent.debt_id]
+    );
+
+    return {
+      ...currentIntent,
+      provider: currentIntent.provider || 'mercado_pago',
+      debt: updatedDebts?.[0] || debt,
+      payments,
+    };
+  } catch (err) {
+    req.log.error({
+      debug: buildCustomerDebtDebug('refresh mercado pago intent status failed', {
+        intent_id: id,
+        error: err?.message,
+      }),
+    });
+    return reply.code(500).send({ error: 'Erro ao conferir pagamento Mercado Pago' });
   }
 });
 

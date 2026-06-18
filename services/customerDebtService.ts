@@ -24,6 +24,9 @@ export interface CustomerDebtPayment {
     debito_descricao?: string;
     customer_id?: string;
     mercado_pago_link?: string;
+    mercado_pago_id?: string;
+    created_at?: string;
+    updated_at?: string;
 }
 
 export interface CustomerDebtResponse {
@@ -65,6 +68,8 @@ export interface CustomerDebtMercadoPagoIntent {
     environment?: string;
     is_sandbox?: boolean;
     expires_at?: string;
+    debt?: CustomerDebt;
+    payments?: CustomerDebtPayment[];
 }
 
 export function toCents(value: unknown): number {
@@ -107,4 +112,11 @@ export async function createCustomerDebtMercadoPagoIntent(input: {
     allocations?: CustomerDebtAllocationInput[];
 }): Promise<CustomerDebtMercadoPagoIntent> {
     return vpsClient.post<CustomerDebtMercadoPagoIntent>('/financial/customer-debts/mp-intent', input);
+}
+
+export async function refreshCustomerDebtMercadoPagoIntentStatus(intentId: string): Promise<CustomerDebtMercadoPagoIntent> {
+    return vpsClient.post<CustomerDebtMercadoPagoIntent>(
+        `/financial/customer-debts/mp-intent/${encodeURIComponent(intentId)}/status`,
+        {}
+    );
 }
