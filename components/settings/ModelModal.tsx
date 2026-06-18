@@ -17,6 +17,9 @@ import { CategorySelect } from '../products/CategorySelect';
 import { ColorImageManager } from './ColorImageManager';
 import { buildModelImportPrompt, isModelUnitFieldKey, normalizeModelImportPayload, parseModelImportJson } from './modelJsonImport.js';
 import { generateModelJsonWithAi } from '../../services/modelAiService';
+import { ModelListFieldInput } from './ModelListFieldInput';
+import { ModelListOptionModal } from './ModelListOptionModal';
+import { saveModelListOption, type ModelListOptionDraft } from '../../services/modelListOptions';
 
 interface ModelModalProps {
     isOpen: boolean;
@@ -377,79 +380,18 @@ interface TemplateFieldInputProps {
 }
 
 const TemplateFieldInput: React.FC<TemplateFieldInputProps> = ({ field, value, onChange }) => {
-    const [options, setOptions] = useState<TableOption[]>([]);
-    const [loading, setLoading] = useState(false);
-
-
-    useEffect(() => {
-        if (field.field_type === 'table_relation' && field.table_config) {
-            loadTableOptions();
-        }
-    }, [field]);
-
-    const loadTableOptions = async () => {
-        if (!field.table_config) return;
-
-        setLoading(true);
-        try {
-            const data = await tableDataService.loadOptions(
-                field.table_config.table_name,
-                field.table_config.value_column,
-                field.table_config.label_column,
-                field.table_config.order_by
-            );
-            setOptions(data);
-        } catch (error) {
-            console.error(`Error loading options for ${field.key}: `, error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     return (
         <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">
                 {field.label} <span className="text-slate-400 font-mono">({field.key})</span>
             </label>
-            {field.field_type === 'table_relation' ? (
-                // Dropdown from database table
-                <select
-                    value={value || ''}
-                    onChange={(e) => onChange(e.target.value)}
-                    disabled={loading}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                >
-                    <option value="">Selecione...</option>
-                    {options.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                        </option>
-                    ))}
-                </select>
-            ) : field.field_type === 'select' && field.options ? (
-                // Dropdown from manual options
-                <select
-                    value={value || ''}
-                    onChange={(e) => onChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                    <option value="">Selecione...</option>
-                    {field.options.map((opt) => (
-                        <option key={opt} value={opt}>
-                            {opt}
-                        </option>
-                    ))}
-                </select>
-            ) : (
-                // Text or number input
-                <input
-                    type={field.field_type === 'number' ? 'number' : 'text'}
-                    value={value || ''}
-                    onChange={(e) => onChange(e.target.value)}
-                    placeholder={field.placeholder || ''}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-            )}
+            <input
+                type={field.field_type === 'number' ? 'number' : 'text'}
+                value={value || ''}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={field.placeholder || ''}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
         </div>
     );
 };
@@ -485,10 +427,15 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [customFields, setCustomFields] = useState<CustomField[]>([]);
     const [officialTags, setOfficialTags] = useState<CrossSellTag[]>([]);
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
-    const [fieldChoiceOptions, setFieldChoiceOptions] = useState<Record<string, Array<{ value: string; label: string }>>>({});
+    const [fieldChoiceOptions, setFieldChoiceOptions] = useState<Record<string, TableOption[]>>({});
 
     // UI State
     const [saving, setSaving] = useState(false);
+    const [listEditor, setListEditor] = useState<{
+        field: CustomField;
+        current: TableOption | null;
+    } | null>(null);
+    const [savingListOption, setSavingListOption] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -916,7 +863,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
     useEffect(() => {
         const loadFieldChoiceOptions = async () => {
-            const nextOptions: Record<string, Array<{ value: string; label: string }>> = {};
+            const nextOptions: Record<string, TableOption[]> = {};
 
             customFields.forEach((field) => {
                 if (field.field_type === 'select' && Array.isArray(field.options)) {
@@ -938,6 +885,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     nextOptions[field.key] = options.map((option) => ({
                         value: String(option.value),
                         label: String(option.label),
+                        meta: option.meta,
                     }));
                 } catch (error) {
                     console.error(`Error loading choices for ${field.key}:`, error);
@@ -1047,6 +995,80 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             [key]: value
         }));
     };
+
+    const handleOpenListOptionEditor = (field: CustomField, current: TableOption | null = null) => {
+        setListEditor({ field, current });
+    };
+
+    const handleSaveListOption = async (draft: ModelListOptionDraft) => {
+        if (!listEditor) return;
+
+        setSavingListOption(true);
+        try {
+            const persisted = await saveModelListOption({
+                field: listEditor.field,
+                options: fieldChoiceOptions[listEditor.field.key] || [],
+                draft,
+                current: listEditor.current,
+            });
+
+            if (listEditor.field.field_type === 'select') {
+                setCustomFields((fields) => fields.map((field) => field.id === persisted.field.id ? persisted.field : field));
+            }
+
+            setFieldChoiceOptions((currentOptions) => {
+                const previous = currentOptions[listEditor.field.key] || [];
+                const withoutEdited = listEditor.current
+                    ? previous.filter((option) => String(option.value) !== String(listEditor.current?.value))
+                    : previous;
+                const deduplicated = new Map(
+                    [...withoutEdited, persisted.option].map((option) => [String(option.value), option])
+                );
+                const sorted = [...deduplicated.values()]
+                    .sort((left, right) => left.label.localeCompare(right.label));
+
+                return {
+                    ...currentOptions,
+                    [listEditor.field.key]: sorted,
+                };
+            });
+
+            handleTemplateValueChange(listEditor.field.key, String(persisted.option.value));
+            toast.success(listEditor.current ? 'Opcao atualizada com sucesso.' : 'Opcao adicionada com sucesso.');
+            setListEditor(null);
+        } catch (saveError) {
+            const message = saveError instanceof Error ? saveError.message : 'Erro ao salvar opcao.';
+            toast.error(message);
+        } finally {
+            setSavingListOption(false);
+        }
+    };
+
+    const renderTemplateField = (field: CustomField) => (
+        (field.field_type === 'select' || field.field_type === 'table_relation') ? (
+            <div key={field.id}>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                    {field.label} <span className="text-slate-400 font-mono">({field.key})</span>
+                </label>
+                <ModelListFieldInput
+                    field={field}
+                    options={fieldChoiceOptions[field.key] || []}
+                    value={String(templateValues[field.key] ?? '')}
+                    saving={savingListOption}
+                    onChange={(value) => handleTemplateValueChange(field.key, value)}
+                    onAdd={() => handleOpenListOptionEditor(field)}
+                    onEdit={(option) => handleOpenListOptionEditor(field, option)}
+                />
+            </div>
+        ) : (
+            <TemplateFieldInput
+                key={field.id}
+                field={field}
+                value={templateValues[field.key]}
+                onChange={(value) => handleTemplateValueChange(field.key, value)}
+            />
+        )
+    );
 
     const handleAddEan = (value?: string) => {
         const nextEan = (value ?? eanInputRef.current?.value ?? '').trim();
@@ -1626,14 +1648,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 <div className="border-t border-slate-200 pt-4 mt-4">
                                     <h5 className="text-sm font-semibold text-slate-800 mb-3">Campos tecnicos editaveis</h5>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {visibleSpecFields.map((field) => (
-                                                <TemplateFieldInput
-                                                    key={field.id}
-                                                    field={field}
-                                                    value={templateValues[field.key]}
-                                                    onChange={(value) => handleTemplateValueChange(field.key, value)}
-                                                />
-                                            ))}
+                                        {visibleSpecFields.map((field) => renderTemplateField(field))}
                                     </div>
                                     {categoryId && categoryConfig && visibleSpecFields.length === 0 && (
                                         <div className="text-center py-6 text-slate-500">
@@ -1812,14 +1827,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
                                 {/* Spec Fields */}
                                 <div className="grid grid-cols-2 gap-4">
-                                    {visibleSpecFields.map((field) => (
-                                        <TemplateFieldInput
-                                            key={field.id}
-                                            field={field}
-                                            value={templateValues[field.key]}
-                                            onChange={(value) => handleTemplateValueChange(field.key, value)}
-                                        />
-                                    ))}
+                                    {visibleSpecFields.map((field) => renderTemplateField(field))}
                                 </div>
 
                                 {/* No fields message */}
@@ -2297,6 +2305,17 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     </button>
                 </div>
             </div>
+            <ModelListOptionModal
+                key={`${listEditor?.field.id || 'closed'}:${listEditor?.current?.value || 'new'}:${listEditor?.current ? 'edit' : 'create'}`}
+                isOpen={!!listEditor}
+                field={listEditor?.field || null}
+                current={listEditor?.current || null}
+                saving={savingListOption}
+                onClose={() => {
+                    if (!savingListOption) setListEditor(null);
+                }}
+                onSave={handleSaveListOption}
+            />
         </div>
     );
 };

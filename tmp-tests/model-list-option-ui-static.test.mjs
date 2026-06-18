@@ -11,6 +11,10 @@ function read(path) {
 
 const fieldInput = read('components/settings/ModelListFieldInput.tsx');
 const optionModal = read('components/settings/ModelListOptionModal.tsx');
+const modelModal = read('components/settings/ModelModal.tsx');
+const templateFieldInputBlock = modelModal.match(
+  /const\s+TemplateFieldInput:[\s\S]*?\n\};\s*\n\s*\/\*\*\s*\n\s*\*\s*Model Modal Component/,
+)?.[0] || '';
 
 assert.ok(fieldInput, 'ModelListFieldInput.tsx must exist');
 assert.match(
@@ -73,5 +77,30 @@ assert.match(
   /className=["'][^"']*max-h-\[calc\(100vh-2rem\)\][^"']*overflow-y-auto[^"']*["']/,
   'dialog panel must fit low viewports and scroll internally',
 );
+
+assert.ok(modelModal, 'ModelModal.tsx must exist');
+assert.match(modelModal, /import\s*\{\s*ModelListFieldInput\s*\}\s*from\s*['"].\/ModelListFieldInput['"]/, 'model modal must import ModelListFieldInput');
+assert.match(modelModal, /import\s*\{\s*ModelListOptionModal\s*\}\s*from\s*['"].\/ModelListOptionModal['"]/, 'model modal must import ModelListOptionModal');
+assert.match(modelModal, /import\s*\{\s*saveModelListOption\s*,\s*type\s+ModelListOptionDraft\s*\}\s*from\s*['"]\.\.\/\.\.\/services\/modelListOptions['"]/, 'model modal must import list option persistence');
+assert.match(modelModal, /const\s+\[listEditor,\s*setListEditor\]\s*=\s*useState<\{\s*field:\s*CustomField;\s*current:\s*TableOption\s*\|\s*null;\s*\}\s*\|\s*null>\(null\)/, 'model modal must keep the active list editor');
+assert.match(modelModal, /const\s+\[savingListOption,\s*setSavingListOption\]\s*=\s*useState\(false\)/, 'model modal must track list option saves');
+assert.match(modelModal, /const\s+handleOpenListOptionEditor\s*=\s*\(field:\s*CustomField,\s*current:\s*TableOption\s*\|\s*null\s*=\s*null\)/, 'model modal must expose a list editor opener');
+assert.match(modelModal, /const\s+handleSaveListOption\s*=\s*async\s*\(draft:\s*ModelListOptionDraft\)/, 'model modal must save list options');
+assert.match(modelModal, /saveModelListOption\(\{\s*field:\s*listEditor\.field,\s*options:\s*fieldChoiceOptions\[listEditor\.field\.key\]\s*\|\|\s*\[\],\s*draft,\s*current:\s*listEditor\.current,\s*\}\)/, 'save handler must persist against current field choices');
+assert.match(modelModal, /setCustomFields\(\(fields\)\s*=>\s*fields\.map\(\(field\)\s*=>\s*field\.id\s*===\s*persisted\.field\.id\s*\?\s*persisted\.field\s*:\s*field\)\)/, 'manual list saves must replace the returned custom field');
+assert.match(modelModal, /setFieldChoiceOptions\(\(currentOptions\)\s*=>/, 'list saves must update choices immediately');
+assert.match(modelModal, /new\s+Map\([\s\S]*String\(option\.value\)[\s\S]*\.sort\(\(left,\s*right\)\s*=>\s*left\.label\.localeCompare\(right\.label\)/, 'choice updates must deduplicate by value and sort by label');
+assert.match(modelModal, /handleTemplateValueChange\(listEditor\.field\.key,\s*String\(persisted\.option\.value\)\)/, 'saved options must become selected immediately');
+assert.match(modelModal, /toast\.success\(listEditor\.current\s*\?\s*['"]Opcao atualizada com sucesso\.['"]\s*:\s*['"]Opcao adicionada com sucesso\.['"]\)/, 'save handler must report create and edit success');
+assert.match(modelModal, /catch\s*\(saveError\)\s*\{[\s\S]*toast\.error\([\s\S]*\)[\s\S]*\}\s*finally\s*\{[\s\S]*setSavingListOption\(false\)/, 'save errors must toast and always release saving state');
+assert.doesNotMatch(templateFieldInputBlock, /tableDataService\.loadOptions/, 'TemplateFieldInput must not load list options per field');
+assert.doesNotMatch(templateFieldInputBlock, /field\.field_type\s*===\s*['"](?:select|table_relation)['"]/, 'TemplateFieldInput must not render list fields');
+assert.match(modelModal, /\(field\.field_type\s*===\s*['"]select['"]\s*\|\|\s*field\.field_type\s*===\s*['"]table_relation['"]\)\s*\?\s*\([\s\S]*<ModelListFieldInput/, 'list fields must render through ModelListFieldInput');
+assert.match(modelModal, /options=\{fieldChoiceOptions\[field\.key\]\s*\|\|\s*\[\]\}/, 'list field input must use centralized field choices');
+assert.match(modelModal, /value=\{String\(templateValues\[field\.key\]\s*\?\?\s*['"]{2}\)\}/, 'list field input value must be a controlled string');
+assert.match(modelModal, /onAdd=\{\(\)\s*=>\s*handleOpenListOptionEditor\(field\)\}/, 'add action must open a new option editor');
+assert.match(modelModal, /onEdit=\{\(option\)\s*=>\s*handleOpenListOptionEditor\(field,\s*option\)\}/, 'edit action must open the selected option');
+assert.equal((modelModal.match(/<ModelListOptionModal/g) || []).length, 1, 'model modal must render one list option modal');
+assert.match(modelModal, /<ModelListOptionModal[\s\S]*key=\{[\s\S]*listEditor\?\.field\.id[\s\S]*listEditor\?\.current\?\.value[\s\S]*isOpen=\{!!listEditor\}[\s\S]*saving=\{savingListOption\}[\s\S]*onClose=\{\(\)\s*=>\s*\{[\s\S]*if\s*\(!savingListOption\)\s*setListEditor\(null\)/, 'list option modal must use a stable editor key and block close while saving');
 
 console.log('model list option UI static tests passed');
