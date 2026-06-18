@@ -85,10 +85,48 @@ assert.match(
   /const\s+applyNormalizedModelPayload\s*=\s*async/,
   'normalized payload application must wait for missing choice persistence',
 );
+assert.match(
+  modelModal,
+  /const\s+\[applyingModelPayload,\s*setApplyingModelPayload\]\s*=\s*useState\(false\)/,
+  'model modal must expose applying state',
+);
+assert.match(
+  modelModal,
+  /const\s+applyingModelPayloadRef\s*=\s*useRef\(false\)/,
+  'model modal must keep a synchronous application lock',
+);
+assert.ok(
+  (modelModal.match(/if\s*\(applyingModelPayloadRef\.current\)\s*return/g) || []).length >= 3,
+  'all three application flows must reject concurrent entry synchronously',
+);
+assert.ok(
+  (modelModal.match(/applyingModelPayloadRef\.current\s*=\s*true[\s\S]{0,120}setApplyingModelPayload\(true\)/g) || []).length >= 3,
+  'all three application flows must acquire state and ref locks',
+);
+assert.ok(
+  (modelModal.match(/finally\s*\{[\s\S]{0,180}applyingModelPayloadRef\.current\s*=\s*false[\s\S]{0,120}setApplyingModelPayload\(false\)/g) || []).length >= 3,
+  'all three application flows must release the lock in finally',
+);
 assert.ok(
   (modelModal.match(/await\s+applyNormalizedModelPayload\(normalized\)/g) || []).length >= 3,
   'all JSON apply and generation flows must await missing choice resolution',
 );
+assert.match(
+  modelModal,
+  /disabled=\{generatingModelJson\s*\|\|\s*applyingModelPayload\s*\|\|\s*loading\}/,
+  'generate button must combine generation and application busy states',
+);
+assert.match(
+  modelModal,
+  /disabled=\{!modelJsonInput\.trim\(\)\s*\|\|\s*applyingModelPayload\s*\|\|\s*generatingModelJson\}/,
+  'model JSON apply button must disable while applying or generating',
+);
+assert.match(
+  modelModal,
+  /disabled=\{!jsonInput\.trim\(\)\s*\|\|\s*applyingModelPayload\}/,
+  'legacy JSON apply button must disable while applying',
+);
+assert.match(modelModal, /applyingModelPayload\s*\?\s*['"]Aplicando\.\.\.['"]/, 'apply buttons must show applying state');
 assert.match(
   modelModal,
   /action:\s*\{\s*label:\s*['"]Editar['"]/,

@@ -456,6 +456,8 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [modelPromptCopied, setModelPromptCopied] = useState(false);
     const [showModelPrompt, setShowModelPrompt] = useState(false);
     const [generatingModelJson, setGeneratingModelJson] = useState(false);
+    const [applyingModelPayload, setApplyingModelPayload] = useState(false);
+    const applyingModelPayloadRef = useRef(false);
     const [trustedSourceLinksText, setTrustedSourceLinksText] = useState(() => {
         if (typeof window === 'undefined') return DEFAULT_TRUSTED_SOURCE_LINKS;
         return window.localStorage.getItem(TRUSTED_SOURCE_LINKS_STORAGE_KEY) || DEFAULT_TRUSTED_SOURCE_LINKS;
@@ -768,12 +770,15 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     };
 
     const handleApplyModelJson = async () => {
-        try {
-            if (loading) {
-                toast.error('Aguarde marcas, categorias e campos carregarem antes de aplicar o JSON.');
-                return;
-            }
+        if (applyingModelPayloadRef.current) return;
+        if (loading) {
+            toast.error('Aguarde marcas, categorias e campos carregarem antes de aplicar o JSON.');
+            return;
+        }
 
+        applyingModelPayloadRef.current = true;
+        setApplyingModelPayload(true);
+        try {
             const data = parseModelImportJson(modelJsonInput);
             const normalized = normalizeModelImportPayload(data, {
                 brands,
@@ -799,15 +804,21 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         } catch (err) {
             console.error('Erro no parser do JSON do modelo', err);
             toast.error(err instanceof Error ? err.message : 'O formato JSON Ã© invÃ¡lido.');
+        } finally {
+            applyingModelPayloadRef.current = false;
+            setApplyingModelPayload(false);
         }
     };
 
     const handleGenerateModelJson = async () => {
+        if (applyingModelPayloadRef.current) return;
         if (loading) {
             toast.error('Aguarde marcas, categorias e campos carregarem antes de gerar o JSON.');
             return;
         }
 
+        applyingModelPayloadRef.current = true;
+        setApplyingModelPayload(true);
         setGeneratingModelJson(true);
         try {
             const result = await generateModelJsonWithAi({
@@ -833,16 +844,21 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             toast.error(err instanceof Error ? err.message : 'Nao foi possivel gerar o JSON com IA.');
         } finally {
             setGeneratingModelJson(false);
+            applyingModelPayloadRef.current = false;
+            setApplyingModelPayload(false);
         }
     };
 
     const handleApplyJson = async () => {
-        try {
-            if (!jsonInput.trim()) {
-                toast.error('Cole o JSON gerado pela IA primeiro.');
-                return;
-            }
+        if (applyingModelPayloadRef.current) return;
+        if (!jsonInput.trim()) {
+            toast.error('Cole o JSON gerado pela IA primeiro.');
+            return;
+        }
 
+        applyingModelPayloadRef.current = true;
+        setApplyingModelPayload(true);
+        try {
             let jsonText = jsonInput.replace(/```json\n?/g, '').replace(/```/g, '').trim();
             const start = jsonText.indexOf('{');
             const end = jsonText.lastIndexOf('}') + 1;
@@ -912,6 +928,9 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         } catch (err) {
             console.error('Erro no parser do JSON', err);
             toast.error('O formato JSON é inválido. Tente novamente ou cole apenas o código da resposta.');
+        } finally {
+            applyingModelPayloadRef.current = false;
+            setApplyingModelPayload(false);
         }
     };
 
@@ -1508,7 +1527,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         <button
                                             type="button"
                                             onClick={handleGenerateModelJson}
-                                            disabled={generatingModelJson || loading}
+                                            disabled={generatingModelJson || applyingModelPayload || loading}
                                             className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-700 text-white rounded-lg hover:bg-indigo-800 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {generatingModelJson ? 'Pesquisando...' : 'Pesquisar e preencher pelo sistema'}
@@ -1536,10 +1555,10 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     <button
                                         type="button"
                                         onClick={handleApplyModelJson}
-                                        disabled={!modelJsonInput.trim()}
+                                        disabled={!modelJsonInput.trim() || applyingModelPayload || generatingModelJson}
                                         className="mt-3 w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        Preencher modelo pelo JSON
+                                        {applyingModelPayload ? 'Aplicando...' : 'Preencher modelo pelo JSON'}
                                     </button>
                                     <p className="text-xs text-slate-500 mt-2">
                                         Campos desconhecidos dentro de template_values, specs, custom_fields ou campos serao preservados como valores padrao do modelo.
@@ -2076,9 +2095,10 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         <button
                                             type="button"
                                             onClick={handleApplyJson}
-                                            className="self-end px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg transition-colors shadow-md"
+                                            disabled={!jsonInput.trim() || applyingModelPayload}
+                                            className="self-end px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg transition-colors shadow-md disabled:cursor-not-allowed disabled:opacity-50"
                                         >
-                                            Preencher Campos Automaticamente ✨
+                                            {applyingModelPayload ? 'Aplicando...' : 'Preencher Campos Automaticamente ✨'}
                                         </button>
                                     </div>
                                 </div>

@@ -187,4 +187,59 @@ assert.throws(
   );
 }
 
+{
+  const field = {
+    id: 'protection',
+    key: 'protection',
+    label: 'Protecao',
+    field_type: 'select',
+    options: ['IP67'],
+  };
+  const createdValues = [];
+  const originalValues = ['IP67', 'IP70', 'IP69'];
+  const result = await resolveMissingListChoices({
+    missingChoices: [
+      {
+        fieldKey: 'protection',
+        fieldLabel: 'Protecao',
+        value: 'IP70',
+        options: ['IP67'],
+        originalValues,
+        arrayIndex: 1,
+      },
+      {
+        fieldKey: 'protection',
+        fieldLabel: 'Protecao',
+        value: 'IP69',
+        options: ['IP67'],
+        originalValues,
+        arrayIndex: 2,
+      },
+    ],
+    fields: [field],
+    choiceOptions: {
+      protection: [{ value: 'ip67-id', label: 'IP67' }],
+    },
+    createOption: async ({ field: currentField, value }) => {
+      createdValues.push(value);
+      const updatedField = {
+        ...currentField,
+        options: [...(currentField.options || []), value],
+      };
+      return {
+        field: updatedField,
+        option: { value: `${value.toLowerCase()}-id`, label: value },
+      };
+    },
+  });
+
+  assert.deepEqual(createdValues, ['IP70', 'IP69']);
+  assert.deepEqual(
+    result.resolvedValues,
+    { protection: ['ip67-id', 'ip70-id', 'ip69-id'] },
+    'mixed arrays must preserve normalized existing values and insert each created value by index',
+  );
+  assert.equal(result.created.length, 2);
+}
+
 console.log('model list option core tests passed');

@@ -137,6 +137,43 @@ const choiceOptions = {
 }
 
 {
+  const normalized = normalizeModelImportPayload({
+    specs: {
+      Protecao: ['IP67', 'IP70', 'IP69'],
+    },
+  }, {
+    brands,
+    categories,
+    customFields,
+    choiceOptions,
+  });
+
+  assert.equal(
+    normalized.templateValues.water_resistance,
+    undefined,
+    'mixed arrays with missing choices must wait for asynchronous resolution as a whole',
+  );
+  assert.deepEqual(normalized.missingChoices, [
+    {
+      fieldKey: 'water_resistance',
+      fieldLabel: 'Protecao',
+      value: 'IP70',
+      options: ['IP67', 'IP68'],
+      originalValues: ['IP67', 'IP70', 'IP69'],
+      arrayIndex: 1,
+    },
+    {
+      fieldKey: 'water_resistance',
+      fieldLabel: 'Protecao',
+      value: 'IP69',
+      options: ['IP67', 'IP68'],
+      originalValues: ['IP67', 'IP70', 'IP69'],
+      arrayIndex: 2,
+    },
+  ]);
+}
+
+{
   const prompt = buildModelImportPrompt({
     name: 'Galaxy A15',
     brand: 'Samsung',

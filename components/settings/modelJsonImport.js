@@ -226,20 +226,28 @@ export function normalizeModelImportPayload(data, context = {}) {
 
         if (Array.isArray(value)) {
             const normalizedItems = [];
-            value.forEach((item) => {
+            let hasMissingChoice = false;
+            value.forEach((item, arrayIndex) => {
                 const result = getChoiceMatch(item, choices);
                 if (result.missing && shouldWarnMissingChoice) {
+                    hasMissingChoice = true;
                     missingChoices.push({
                         fieldKey: key,
                         fieldLabel: field?.label || key,
                         value: String(item),
                         options: choices.map((choice) => choice.label || choice.value),
+                        originalValues: [...value],
+                        arrayIndex,
                     });
                     return;
                 }
                 normalizedItems.push(result.value);
             });
-            templateValues[key] = normalizedItems;
+            if (hasMissingChoice) {
+                delete templateValues[key];
+            } else {
+                templateValues[key] = normalizedItems;
+            }
         } else {
             const result = getChoiceMatch(value, choices);
             if (result.missing && shouldWarnMissingChoice) {
