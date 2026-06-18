@@ -29,5 +29,9 @@ export function findEquivalentOption(value, options = []) {
 }
 
 export function isCreatableAiOption(value) {
-  return !GENERIC_AI_OPTIONS.has(normalizeOptionText(value));
+  const genericCandidate = normalizeOptionText(value)
+    .replace(/[.,!?;:\u2026]+$/u, '')
+    .trimEnd();
+
+  return !GENERIC_AI_OPTIONS.has(genericCandidate);
 }

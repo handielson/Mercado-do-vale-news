@@ -12,6 +12,18 @@ assert.equal(
   'normalizes casing and repeated whitespace',
 );
 
+assert.equal(
+  normalizeOptionText('Wi-Fi 6 (802.11ax)'),
+  'wi-fi 6 (802.11ax)',
+  'preserves technical punctuation',
+);
+
+assert.equal(
+  normalizeOptionText('Gorilla Glass 3+'),
+  'gorilla glass 3+',
+  'preserves technical suffixes',
+);
+
 const existingOptions = [
   { id: 'victus', label: 'Gorilla Glass Victus' },
   { id: 'ceramica', label: 'Proteção Cerâmica' },
@@ -32,9 +44,12 @@ assert.equal(
 for (const value of [
   '',
   'Nao informado',
+  'Não informado.',
   'Desconhecido',
   'Consulte',
+  'Consulte...',
   'N/A',
+  'N/A.',
   'null',
   'undefined',
 ]) {
