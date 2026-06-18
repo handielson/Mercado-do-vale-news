@@ -69,6 +69,20 @@ function getDeliveryLedgerDescription(item: CustomerDeliveryLedgerEntry): string
     );
 }
 
+function getDeliveryAdminCompleteErrorMessage(error: unknown): string {
+    const rawMessage = error instanceof Error ? error.message : String(error || '');
+    const jsonMatch = rawMessage.match(/\{.*\}$/);
+    if (jsonMatch) {
+        try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (typeof parsed?.error === 'string' && parsed.error.trim()) return parsed.error;
+        } catch {
+            // Keep the original transport message when the body is not JSON.
+        }
+    }
+    return rawMessage || 'Erro ao baixar entrega pelo admin';
+}
+
 export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, mode = 'viewer' }) => {
     const isAdminMode = mode === 'admin';
     const [ledger, setLedger] = useState<CustomerDeliveryLedgerEntry[]>([]);
@@ -157,6 +171,8 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
             toast.success('Entrega baixada pelo admin');
             setAdminReasonByToken((current) => ({ ...current, [job.token]: '' }));
             await reload();
+        } catch (error) {
+            toast.error(getDeliveryAdminCompleteErrorMessage(error));
         } finally {
             setSaving(false);
         }

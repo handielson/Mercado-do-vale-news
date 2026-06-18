@@ -1,8 +1,8 @@
-{
-    "version":  "v1.1.65-pdv-mp-auto-response",
+﻿{
+    "version":  "v1.1.66-delivery-admin-complete-toast",
     "date":  "2026-06-18",
     "status":  "published",
-    "release_vps":  "/var/www/mdv-site/releases/20260618-171838-v1165-pdv-mp-auto-response",
+    "release_vps":  "/var/www/mdv-site/releases/20260618-174244-v1166-delivery-admin-complete-toast",
     "branch":  "codex/publish-delivery-ops-20260614",
-    "summary":  "Ajusta a resposta automatica do PDV para identificar Pix aprovado como Pago via Mercado Pago com data e hora."
+    "summary":  "Mostra a mensagem de erro da VPS quando a baixa administrativa de entrega nao pode ser concluida."
 }
