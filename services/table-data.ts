@@ -5,7 +5,7 @@ export interface TableOption {
     label: string;
 }
 
-type TableRow = Record<string, unknown>;
+export type TableRow = Record<string, unknown>;
 
 interface TableDataResponse {
     rows?: TableRow[];
@@ -49,6 +49,28 @@ async function loadRows(tableName: string): Promise<TableRow[]> {
  * Loads options from database tables for table_relation fields through the VPS.
  */
 export const tableDataService = {
+    async createRow(
+        tableName: string,
+        values: TableRow
+    ): Promise<TableRow> {
+        return vpsClient.post<TableRow>(
+            `/table-data/${encodeURIComponent(tableName)}`,
+            values
+        );
+    },
+
+    async updateRow(
+        tableName: string,
+        primaryKey: string,
+        primaryValue: string | number,
+        values: TableRow
+    ): Promise<TableRow> {
+        return vpsClient.patch<TableRow>(
+            `/table-data/${encodeURIComponent(tableName)}/${encodeURIComponent(String(primaryValue))}?pk=${encodeURIComponent(primaryKey)}`,
+            values
+        );
+    },
+
     async loadOptions(
         tableName: string,
         valueColumn: string = 'id',
