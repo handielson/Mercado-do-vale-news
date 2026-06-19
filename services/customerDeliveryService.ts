@@ -39,7 +39,17 @@ export interface CustomerDeliveryLedgerResponse {
         settled_cents: number;
     };
 }
-
+export interface CustomerDeliveryPaymentResponse {
+    id?: string | null;
+    customer_id: string;
+    type: 'payment';
+    amount: number;
+    settlement_amount: number;
+    overpayment_amount: number;
+    paid_at: string;
+    description: string;
+    overpayment_debt_id?: string | null;
+}
 export interface CustomerDeliveryJob {
     id: string;
     token: string;
@@ -166,8 +176,8 @@ export async function createCustomerDeliveryAdjustment(customerId: string, input
     return vpsClient.post<CustomerDeliveryLedgerEntry>(`/customers/${customerId}/delivery-adjustments`, input);
 }
 
-export async function registerCustomerDeliveryPayment(customerId: string, input: { amount: number; description: string; paid_at?: string }) {
-    return vpsClient.post(`/customers/${customerId}/delivery-payments`, input);
+export async function registerCustomerDeliveryPayment(customerId: string, input: { amount: number; description: string; paid_at?: string }): Promise<CustomerDeliveryPaymentResponse> {
+    return vpsClient.post<CustomerDeliveryPaymentResponse>(`/customers/${customerId}/delivery-payments`, input);
 }
 
 export async function offsetCustomerDeliveryBalance(customerId: string, input: { debt_id: string; amount: number; description: string }) {

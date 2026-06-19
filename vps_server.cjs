@@ -21496,14 +21496,65 @@ fastify.post('/customers/:customerId/delivery-payments', { preHandler: requireSy
   if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
   if (amount <= 0) return reply.code(400).send({ error: 'valor invalido' });
   if (!description) return reply.code(400).send({ error: 'descricao obrigatoria' });
-  const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
-  await pool.query(
-    `INSERT INTO customer_delivery_settlements
-      (id, customer_id, type, amount, paid_at, description)
-     VALUES (?, ?, 'payment', ?, ?, ?)`,
-    [id, customerId, amount, paidAt, description]
-  );
-  return reply.code(201).send({ id, customer_id: customerId, type: 'payment', amount, paid_at: paidAt, description });
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [ledgerRows] = await connection.query(
+      'SELECT amount FROM customer_delivery_ledger WHERE customer_id = ? FOR UPDATE',
+      [customerId]
+    );
+    const [settlementRows] = await connection.query(
+      'SELECT amount FROM customer_delivery_settlements WHERE customer_id = ? FOR UPDATE',
+      [customerId]
+    );
+    const earned = (ledgerRows || []).reduce((sum, item) => sum + normalizeDeliveryLedgerAmount(item.amount), 0);
+    const settled = (settlementRows || []).reduce((sum, item) => sum + normalizeDeliveryLedgerAmount(item.amount), 0);
+    const payableAmount = Math.max(0, earned - settled);
+    const settlementAmount = Math.min(amount, payableAmount);
+    const overpaymentAmount = Math.max(0, amount - settlementAmount);
+
+    let id = null;
+    if (settlementAmount > 0) {
+      id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+      await connection.query(
+        `INSERT INTO customer_delivery_settlements
+          (id, customer_id, type, amount, paid_at, description)
+         VALUES (?, ?, 'payment', ?, ?, ?)`,
+        [id, customerId, settlementAmount, paidAt, description]
+      );
+    }
+
+    let overpaymentDebtId = null;
+    if (overpaymentAmount > 0) {
+      overpaymentDebtId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+      const debtDescription = `Debito por pagamento excedente ao entregador - ${description}`.slice(0, 1000);
+      await connection.query(
+        `INSERT INTO customer_debts (id, customer_id, sale_id, valor_total, saldo_devedor, descricao, data_vencimento, status)
+         VALUES (?, ?, NULL, ?, ?, ?, ?, 'pending')`,
+        [overpaymentDebtId, customerId, overpaymentAmount, overpaymentAmount, debtDescription, formatDateOnly(paidAt)]
+      );
+    }
+
+    await connection.commit();
+    return reply.code(201).send({
+      id,
+      customer_id: customerId,
+      type: 'payment',
+      amount,
+      settlement_amount: settlementAmount,
+      overpayment_amount: overpaymentAmount,
+      paid_at: paidAt,
+      description,
+      overpayment_debt_id: overpaymentDebtId,
+    });
+  } catch (err) {
+    await connection.rollback().catch(() => {});
+    return reply.code(err.statusCode || 500).send({ error: err.message || 'Erro ao registrar pagamento do entregador' });
+  } finally {
+    connection.release();
+  }
 });
 
 fastify.post('/customers/:customerId/delivery-offsets', { preHandler: requireSyncKey }, async (req, reply) => {

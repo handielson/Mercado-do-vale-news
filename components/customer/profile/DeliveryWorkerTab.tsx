@@ -134,12 +134,12 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
 
     const submitPayment = async () => {
         const amount = Math.round(Number(paymentAmount.replace(',', '.')) * 100);
-        if (amount <= 0 || amount > payable) return toast.error('Valor de pagamento invalido');
+        if (amount <= 0) return toast.error('Valor de pagamento invalido');
         if (!paymentDescription.trim()) return toast.error('Informe a descricao do pagamento');
         setSaving(true);
         try {
-            await registerCustomerDeliveryPayment(customer.id, { amount, description: paymentDescription.trim(), paid_at: paidAt });
-            toast.success('Pagamento do entregador registrado');
+            const result = await registerCustomerDeliveryPayment(customer.id, { amount, description: paymentDescription.trim(), paid_at: paidAt });
+            toast.success(result.overpayment_debt_id ? 'Pagamento registrado e debito do excedente criado' : 'Pagamento do entregador registrado');
             setPaymentAmount('');
             await reload();
         } finally {
@@ -276,7 +276,7 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
                     <input className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} placeholder="Valor em reais" />
                     <input className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2" type="datetime-local" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
                     <textarea className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2" value={paymentDescription} onChange={(e) => setPaymentDescription(e.target.value)} />
-                    <button className="mt-3 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving || payable <= 0} onClick={submitPayment}>Registrar pagamento</button>
+                    <button className="mt-3 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving} onClick={submitPayment}>Registrar pagamento</button>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h3 className="font-semibold text-slate-800">Abater em debito do cliente</h3>
