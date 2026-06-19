@@ -1,7 +1,7 @@
 {
     "version":  "v1.1.71-delivery-overpayment-debt",
     "date":  "2026-06-19",
-    "status":  "pending",
+    "status":  "published",
     "release_vps":  "/var/www/mdv-site/releases/20260619-173828-v1171-delivery-overpayment-debt",
     "branch":  "codex/publish-delivery-ops-20260614",
     "summary":  "Permite pagamento ao entregador acima do saldo, baixa o saldo disponivel e cria debito do excedente na conta do entregador."
