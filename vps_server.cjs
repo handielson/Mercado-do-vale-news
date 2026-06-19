@@ -13142,6 +13142,35 @@ async function callEvolutionApi(endpoint, method = 'GET', body = null) {
   return result.body;
 }
 
+function getAutoresponderEvolutionTypingDelayMs(text) {
+  const length = String(text || '').trim().length;
+  if (!length) return 0;
+  return Math.max(900, Math.min(3500, 500 + length * 18));
+}
+
+async function sleepAutoresponderEvolutionTypingPresence(ms) {
+  const delay = Number(ms || 0);
+  if (!Number.isFinite(delay) || delay <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, delay));
+}
+
+async function sendAutoresponderEvolutionTypingPresence(sender, text) {
+  const number = normalizeAutoresponderSender(sender);
+  if (!number) return;
+  const delayMs = getAutoresponderEvolutionTypingDelayMs(text);
+  if (!delayMs) return;
+  try {
+    await callEvolutionApiDetailed(`/chat/sendPresence/${EVOLUTION_INSTANCE_NAME}`, 'POST', {
+      number,
+      presence: 'composing',
+      delay: delayMs,
+    });
+    await sleepAutoresponderEvolutionTypingPresence(delayMs);
+  } catch (err) {
+    console.warn('[autoresponder-evolution] typing presence skipped:', err?.message || err);
+  }
+}
+
 async function sendAutoresponderEvolutionTextMessage(sender, text) {
   const number = normalizeAutoresponderSender(sender);
   if (!number) {
@@ -14813,6 +14842,7 @@ async function sendAutoresponderEvolutionReplies(sender, replies) {
   for (const replyItem of replyItems) {
     const text = String(replyItem?.message || replyItem || '').trim();
     if (!text) continue;
+    await sendAutoresponderEvolutionTypingPresence(sender, text);
     results.push(await sendAutoresponderEvolutionTextMessage(sender, text));
   }
   return results;
