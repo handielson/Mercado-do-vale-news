@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.68-sales-cost-customer-specs",
-  "date": "2026-06-18",
+  "version": "v1.1.69-evolution-typing-presence",
+  "date": "2026-06-19",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260618-201014-v1168-sales-cost-customer-specs",
+  "release_vps": "/var/www/mdv-site/releases/20260619-090350-v1169-evolution-typing-presence",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Atualiza custos de vendas pelos valores atuais, normaliza nomes de clientes e oculta metadado interno do Bling na pagina publica."
+  "summary": "Mostra presenca digitando na Evolution API antes das respostas automaticas do bot."
 }
