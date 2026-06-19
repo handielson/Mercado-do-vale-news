@@ -38,6 +38,18 @@ interface SaleDetailsModalProps {
     onStatusChange: () => void; // Triggered after cancel or refund to reload lists
 }
 
+function parseSaleFinalizationWarnings(logValue: string): string[] {
+    if (!logValue.trim()) return [];
+    try {
+        const parsed = JSON.parse(logValue) as { finalization_warnings?: Array<{ message?: unknown }> };
+        return (parsed.finalization_warnings || [])
+            .map((warning) => String(warning?.message || '').trim())
+            .filter(Boolean);
+    } catch {
+        return [];
+    }
+}
+
 function buildCurrentSaleProfitData(updated: SaleWithItems): NonNullable<SaleProfitData> {
     return {
         sale_id: updated.id,
@@ -83,6 +95,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     const [isAdminCompletingDelivery, setIsAdminCompletingDelivery] = useState(false);
     const saleNeedsReview = sale?.finalization_status === 'needs_review';
     const saleFinalizationLog = sale?.finalization_log || '';
+    const saleFinalizationWarnings = parseSaleFinalizationWarnings(saleFinalizationLog);
     const deliveryType = sale?.delivery_type;
     const isDeliverySale = Boolean(deliveryType && !['store_pickup', 'pickup'].includes(deliveryType));
     const deliveryPublicUrl = deliveryJob?.token
@@ -690,6 +703,13 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                 </p>
                                 {sale.finalization_error_summary && (
                                     <p className="mt-1 text-xs whitespace-pre-line">{sale.finalization_error_summary}</p>
+                                )}
+                                {saleFinalizationWarnings.length > 0 && (
+                                    <div className="mt-2 space-y-1 text-xs font-medium">
+                                        {saleFinalizationWarnings.map((warning, index) => (
+                                            <p key={`${warning}-${index}`}>{warning}</p>
+                                        ))}
+                                    </div>
                                 )}
                             </div>
                             {saleFinalizationLog && (

@@ -25,12 +25,13 @@ import { vpsClient } from './vpsClient';
 import { deliveryCreditService } from './deliveryCreditService';
 import { moneyReaisToCents, moneyToCents } from '../utils/money';
 import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../utils/salePresentation';
+import type { StockLocationPriorityDecrementResult } from '../types/stock-location';
 
-const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Promise<void> => {
-    if (!item.product_id) return;
+const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Promise<StockLocationPriorityDecrementResult[]> => {
+    if (!item.product_id) return [];
 
     try {
-        await stockLocationService.decrementStockByPriority({
+        return await stockLocationService.decrementStockByPriority({
             product_id: item.product_id,
             quantity: item.quantity,
             reason: `Venda PDV #${saleId}`,
@@ -38,12 +39,11 @@ const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Pro
             reference_id: saleId,
             notes: 'Baixa automatica por prioridade: Loja Principal antes dos demais depositos.',
         });
-        return;
     } catch (priorityError) {
         console.error(`[saleService] Falha na baixa por prioridade do produto ${item.product_id}:`, priorityError);
+        throw priorityError;
     }
 };
-
 type SaleStockRestoreItem = {
     product_id: string | null;
     quantity: number;
@@ -109,6 +109,13 @@ type SaleFinalizationIssue = {
     timestamp: string;
 };
 
+type SaleFinalizationWarning = {
+    step: string;
+    message: string;
+    details?: unknown;
+    timestamp: string;
+};
+
 function normalizeFinalizationError(error: unknown, step: string): SaleFinalizationIssue {
     const record = error && typeof error === 'object' ? error as any : null;
     return {
@@ -120,7 +127,13 @@ function normalizeFinalizationError(error: unknown, step: string): SaleFinalizat
     };
 }
 
-function appendIssueToFinalizationLog(logValue: unknown, saleId: string, status: 'success' | 'needs_review', issues: SaleFinalizationIssue[]): string {
+function appendIssueToFinalizationLog(
+    logValue: unknown,
+    saleId: string,
+    status: 'success' | 'needs_review',
+    issues: SaleFinalizationIssue[],
+    warnings: SaleFinalizationWarning[] = []
+): string {
     const base = typeof logValue === 'string' && logValue.trim()
         ? parseJsonField<Record<string, unknown>>(logValue, { raw_log: logValue })
         : (logValue && typeof logValue === 'object' ? logValue as Record<string, unknown> : {});
@@ -129,10 +142,20 @@ function appendIssueToFinalizationLog(logValue: unknown, saleId: string, status:
         sale_id: saleId,
         finalization_status: status,
         finalization_issues: issues,
+        finalization_warnings: warnings,
         updated_at: new Date().toISOString(),
     }, null, 2);
 }
 
+function isMainStoreStockDecrement(row: StockLocationPriorityDecrementResult): boolean {
+    return Boolean(row.deposit_is_default && row.location_is_default);
+}
+
+function formatStockLocationLabel(row: StockLocationPriorityDecrementResult): string {
+    const deposit = row.deposit_name || row.deposit_code || row.deposit_id || 'Deposito sem nome';
+    const location = row.location_name || row.location_code || row.location_id || 'Local sem nome';
+    return `${deposit} / ${location}`;
+}
 function serializeJsonValue(value: unknown): unknown {
     if (value == null || value === '') return null;
     if (typeof value === 'string') return value;
@@ -494,11 +517,18 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         const saleTotal = paymentCollectedTotal > 0 ? paymentCollectedTotal : computedSaleTotal;
         const realProfit = saleTotal - totals.cost_total - paymentOperatorFeeTotal - (saleInput.delivery_total || 0);
         const finalizationIssues: SaleFinalizationIssue[] = [];
+        const finalizationWarnings: SaleFinalizationWarning[] = [];
         const recordFinalizationIssue = (step: string, error: unknown) => {
             const issue = normalizeFinalizationError(error, step);
             finalizationIssues.push(issue);
             console.error(`[saleService] Venda registrada com erro em ${step}:`, error);
             return issue;
+        };
+        const recordFinalizationWarning = (step: string, message: string, details?: unknown) => {
+            const warning = { step, message, details, timestamp: new Date().toISOString() };
+            finalizationWarnings.push(warning);
+            console.warn(`[saleService] Venda registrada com aviso em ${step}: ${message}`);
+            return warning;
         };
 
         const saleId = createLocalId();
@@ -589,7 +619,16 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         ) : [];
         for (const item of itemsWithInventory) {
             try {
-                await decrementSaleStockByPriority(item, sale.id);
+                const decrements = await decrementSaleStockByPriority(item, sale.id);
+                const fallbackSources = decrements.filter(row => !isMainStoreStockDecrement(row));
+                if (fallbackSources.length > 0) {
+                    const locations = Array.from(new Set(fallbackSources.map(formatStockLocationLabel))).join(', ');
+                    recordFinalizationWarning(
+                        'stock_location_fallback',
+                        `Produto ${item.product_sku || item.product_name} tirado do local ${locations}.`,
+                        { product_id: item.product_id, quantity: item.quantity, sources: fallbackSources }
+                    );
+                }
             } catch (stockError) {
                 recordFinalizationIssue('stock_decrement', stockError);
             }
@@ -677,7 +716,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
                 return await patchSale(sale.id, {
                     finalization_status,
                     finalization_error_summary: finalizationIssues.map(issue => `${issue.step}: ${issue.message}`).join('\n') || null as any,
-                    finalization_log: appendIssueToFinalizationLog(saleInput.finalization_log, sale.id, finalization_status, finalizationIssues),
+                    finalization_log: appendIssueToFinalizationLog(saleInput.finalization_log, sale.id, finalization_status, finalizationIssues, finalizationWarnings),
                 });
             } catch (finalizationPatchError) {
                 console.error(`[saleService] Falha ao atualizar auditoria da venda ${sale.id}:`, finalizationPatchError);
@@ -688,7 +727,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             ...sale,
             finalization_status,
             finalization_error_summary: finalizationIssues.map(issue => `${issue.step}: ${issue.message}`).join('\n') || undefined,
-            finalization_log: appendIssueToFinalizationLog(saleInput.finalization_log, sale.id, finalization_status, finalizationIssues),
+            finalization_log: appendIssueToFinalizationLog(saleInput.finalization_log, sale.id, finalization_status, finalizationIssues, finalizationWarnings),
         };
     } catch (error) {
         console.error('Error creating sale:', error);

@@ -205,6 +205,13 @@ export interface StockLocationPriorityDecrementResult {
   stock_location_id: string;
   deposit_id: string;
   location_id: string;
+  deposit_name?: string | null;
+  deposit_code?: string | null;
+  deposit_type?: StockDepositType | null;
+  deposit_is_default?: boolean;
+  location_name?: string | null;
+  location_code?: string | null;
+  location_is_default?: boolean;
   quantity_decremented: number;
   previous_quantity: number;
   new_quantity: number;

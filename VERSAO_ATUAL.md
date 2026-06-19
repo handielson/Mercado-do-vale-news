@@ -1,22 +1,23 @@
 # Versao Atual
 
 ```text
-version: v1.1.69-evolution-typing-presence
+version: v1.1.70-pdv-stock-location-fallback
 date: 2026-06-19
 status: published
-release_vps: /var/www/mdv-site/releases/20260619-090350-v1169-evolution-typing-presence
+release_vps: /var/www/mdv-site/releases/20260619-120736-v1170-pdv-stock-location-fallback
 branch: codex/publish-delivery-ops-20260614
 ```
 
 ## O Que Tem Nesta Versao
 
-- O bot automatico do WhatsApp envia presenca `digitando` pela Evolution API antes de cada resposta.
-- A simulacao fica restrita ao fluxo automatico do webhook Evolution e nao afeta mensagens manuais de atendentes.
-- Falhas no envio de presenca sao tratadas como nao criticas, mantendo o envio da resposta normal.
-- Guarda de regressao cobre o endpoint de presenca, a ordem antes do envio de texto e a exclusao do fluxo manual.
+- Vendas PDV de produtos com estoque manual agora propagam falha de baixa por local para a auditoria da venda.
+- Quando a loja/local principal nao tem saldo e a baixa sai de outro local, a venda registra o aviso `Produto ... tirado do local ...`.
+- O detalhe da venda exibe os avisos de baixa fora da loja principal sem marcar a venda como erro.
+- A API de baixa por prioridade retorna nomes/codigos de deposito e local usados para permitir auditoria humana.
+- Guarda de regressao cobre a baixa por local, propagacao de erro e exibicao do aviso na venda.
 
 ## Como Recuperar
 
-Use a tag/versao `v1.1.69-evolution-typing-presence` ou o arquivo:
+Use a tag/versao $version ou o arquivo:
 
-`docs/versoes/2026-06-19-v1.1.69-evolution-typing-presence.md`
+`docs/versoes/2026-06-19-v1.1.70-pdv-stock-location-fallback.md`
