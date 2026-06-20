@@ -3,8 +3,8 @@
 ```text
 version: v1.1.73-whatsapp-test-button
 date: 2026-06-20
-status: pending
-release_vps: /var/www/mdv-site/releases/20260620-132000-v1173-whatsapp-test-button
+status: published
+release_vps: /var/www/mdv-site/releases/20260620-133000-v1173-whatsapp-test-button
 branch: codex/publish-delivery-ops-20260614
 ```
 
