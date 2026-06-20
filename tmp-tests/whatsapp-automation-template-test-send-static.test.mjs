@@ -16,7 +16,9 @@ for (const source of [server, deployedServer]) {
 
 assert.ok(service.includes('sendWhatsAppAutomationTemplateTest'), 'template service must expose test send function');
 assert.ok(service.includes("/whatsapp/automation/test-send"), 'template service must call the VPS test endpoint');
-assert.ok(panel.includes('sendWhatsAppAutomationTemplateTest'), 'panel must call the test send service');
+assert.match(panel, /sendWhatsAppAutomationTemplateTest,\s*\n\s*type WhatsAppAutomationTemplate/, 'panel must import the test send service');
+assert.ok(panel.includes('sendWhatsAppAutomationTemplateTest(draft)'), 'panel must call the test send service');
+assert.ok(panel.includes('toast.error(message)'), 'panel must surface the browser/API error message when test send throws');
 assert.ok(panel.includes('Enviar teste'), 'panel must expose a send test button');
 assert.ok(panel.includes('87988032612'), 'panel must show the fallback store test phone');
 

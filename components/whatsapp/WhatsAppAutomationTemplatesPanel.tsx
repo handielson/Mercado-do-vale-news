@@ -6,6 +6,7 @@ import {
   previewWhatsAppAutomationTemplate,
   resetWhatsAppAutomationTemplate,
   saveWhatsAppAutomationTemplate,
+  sendWhatsAppAutomationTemplateTest,
   type WhatsAppAutomationTemplate,
   type WhatsAppAutomationTemplateCategory,
 } from '../../services/whatsappAutomationTemplateService';
@@ -102,7 +103,8 @@ export function WhatsAppAutomationTemplatesPanel() {
       }
     } catch (error) {
       console.error('Erro ao enviar teste do template automatico:', error);
-      toast.error('Erro ao enviar teste');
+      const message = error instanceof Error && error.message ? error.message : 'Erro ao enviar teste';
+      toast.error(message);
     } finally {
       setTesting(false);
     }
