@@ -1011,6 +1011,13 @@ fastify.post('/auth/register', async (request, reply) => {
     [customer.id, email, cpfCnpj, hash, salt]
   );
 
+  notifyCustomerRegisteredWhatsApp(customer.id, 'site').catch((notifyError) => {
+    console.error('[whatsapp-automation] Site registration notification failed:', buildCopyableDebug('whatsapp-automation', {
+      step: 'notify customer registered from site',
+      customer_id: customer.id,
+      rawMessage: notifyError?.message || String(notifyError),
+    }));
+  });
   return reply.code(201).send(authResponseForCustomer(customer));
 });
 
@@ -1996,6 +2003,502 @@ async function notifyCustomerDeliveryCompleted(job) {
   }
 }
 
+
+const WHATSAPP_AUTOMATION_TEMPLATE_DEFAULTS_VPS = {
+  customer_registered_site: {
+    template_key: 'customer_registered_site',
+    category: 'transactional',
+    title: 'Cadastro realizado pelo site',
+    enabled: true,
+    content: [
+      '\uD83C\uDF89 Cadastro realizado com sucesso!',
+      '',
+      'Que bom ter voce como cliente, {nome}! Seja bem-vindo(a) ao Mercado do Vale. \uD83D\uDC9A',
+      '',
+      'CPF: {cpf}',
+      '',
+      '\uD83D\uDCCD Endereco cadastrado:',
+      '{endereco}',
+      '{maps_link}',
+      '',
+      '\u2728 Agora voce ja pode acompanhar suas compras, garantias e beneficios pelo nosso sistema:',
+      '{portal_link}',
+    ].join('\n'),
+  },
+  customer_registered_admin: {
+    template_key: 'customer_registered_admin',
+    category: 'transactional',
+    title: 'Cadastro via admin com senha temporaria',
+    enabled: true,
+    content: [
+      '\uD83C\uDF89 Cadastro realizado com sucesso!',
+      '',
+      'Que bom ter voce como cliente, {nome}! Seja bem-vindo(a) ao Mercado do Vale. \uD83D\uDC9A',
+      '',
+      'CPF: {cpf}',
+      '',
+      '\uD83D\uDCCD Endereco cadastrado:',
+      '{endereco}',
+      '{maps_link}',
+      '',
+      '\uD83D\uDD10 Acesso ao sistema:',
+      'Link: {portal_link}',
+      'Senha temporaria: {senha_temporaria}',
+      '',
+      'Por seguranca, troque sua senha no primeiro acesso. \u2728',
+    ].join('\n'),
+  },
+  sale_completed: {
+    template_key: 'sale_completed',
+    category: 'transactional',
+    title: 'Compra realizada com sucesso',
+    enabled: true,
+    content: [
+      '\uD83D\uDED2 Compra realizada com sucesso!',
+      '',
+      'Obrigado pela preferencia, {nome}! Seu pedido {pedido} ja esta registrado com a gente. \uD83D\uDE80',
+      '',
+      'Data: {data}',
+      '',
+      '\uD83D\uDCE6 Itens:',
+      '{itens}',
+      '',
+      '\uD83D\uDCB3 Pagamento:',
+      '{pagamento}',
+      '',
+      'Subtotal: {subtotal}',
+      'Desconto: {desconto}',
+      'Entrega/Frete: {frete}',
+      'Total: {total}',
+      '',
+      '\uD83D\uDD0E Seriais/IMEIs:',
+      '{serializados}',
+      '',
+      '\uD83D\uDCCD Entrega:',
+      '{endereco_entrega}',
+      '{maps_link}',
+      '{observacao_entrega}',
+      '',
+      'Qualquer duvida, estamos por aqui. \uD83D\uDC9A',
+    ].join('\n'),
+  },
+  birthday_greeting: {
+    template_key: 'birthday_greeting',
+    category: 'transactional',
+    title: 'Feliz aniversario',
+    enabled: true,
+    content: [
+      '\uD83E\uDD73 Feliz aniversario, {nome}!',
+      '',
+      'Hoje e seu dia e toda a equipe Mercado do Vale deseja muita alegria, saude e conquistas. \uD83D\uDC9A',
+      '',
+      '\uD83C\uDF81 Cupom especial: {cupom}',
+      'Validade: {validade_cupom}',
+      '',
+      'Quando quiser escolher seu presente, estamos te esperando. \u2728',
+    ].join('\n'),
+  },
+  delivery_out_for_delivery: {
+    template_key: 'delivery_out_for_delivery',
+    category: 'transactional',
+    title: 'Pedido saiu para entrega',
+    enabled: true,
+    content: [
+      'Obaa! \uD83D\uDE9A\u2728',
+      '',
+      '{nome}, seu pedido saiu para entrega e ja esta na rota.',
+      '',
+      'Data: {data}',
+      'Numero do pedido: {pedido}',
+      'Entregador: {entregador}',
+      '',
+      '\uD83D\uDCCD Endereco:',
+      '{endereco_entrega}',
+      '{maps_link}',
+      '',
+      'Fique de olho no telefone. \uD83D\uDC9A',
+    ].join('\n'),
+  },
+};
+
+async function getWhatsAppAutomationTemplateVps(templateKey) {
+  const key = String(templateKey || '').trim();
+  const fallback = WHATSAPP_AUTOMATION_TEMPLATE_DEFAULTS_VPS[key] || null;
+  try {
+    const [rows] = await pool.query('SELECT * FROM whatsapp_automation_templates WHERE template_key = ? LIMIT 1', [key]);
+    const row = rows?.[0] || null;
+    if (!row) return fallback;
+    return {
+      ...fallback,
+      ...row,
+      enabled: row.enabled === true || Number(row.enabled) === 1,
+      content: row.content || fallback?.content || '',
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function renderWhatsAppAutomationTemplateVps(template, variables = {}) {
+  const content = String(template?.content || '');
+  return content.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+    const value = variables[key];
+    return value == null || value === '' ? '' : String(value);
+  });
+}
+
+async function logWhatsAppAutomationEventVps(input) {
+  try {
+    await pool.query(
+      `INSERT INTO whatsapp_automation_logs
+        (id, template_key, entity_type, entity_id, customer_id, phone, status, message, rendered_text, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID(),
+        String(input.templateKey || '').slice(0, 120),
+        input.entityType || null,
+        input.entityId || null,
+        input.customerId || null,
+        input.phone || null,
+        input.status || 'failed',
+        String(input.message || '').slice(0, 1000),
+        input.renderedText || null,
+        input.errorMessage ? String(input.errorMessage).slice(0, 1000) : null,
+      ]
+    );
+  } catch (err) {
+    console.warn('[whatsapp-automation-log] failed:', err.message);
+  }
+}
+
+async function loadWhatsAppAutomationTestPhoneVps() {
+  const fallbackPhone = '87988032612';
+  try {
+    const [rows] = await pool.query(
+      `SELECT phone FROM company_settings
+        WHERE phone IS NOT NULL AND TRIM(phone) <> ''
+        ORDER BY updated_at DESC, created_at DESC
+        LIMIT 1`
+    );
+    return String(rows?.[0]?.phone || fallbackPhone).trim();
+  } catch (err) {
+    console.warn('[whatsapp-automation] failed to load company test phone:', err.message);
+    return fallbackPhone;
+  }
+}
+
+function getWhatsAppAutomationSampleVariablesVps() {
+  return {
+    nome: 'Maria Silva',
+    cpf: '***.***.**0-00',
+    telefone: '(87) 99999-9999',
+    endereco: 'Rua Exemplo, 123 - Centro, Petrolina/PE - CEP 56300-000',
+    maps_link: 'https://maps.google.com/?q=Rua%20Exemplo%20123',
+    portal_link: 'https://mv.mercadodovale.com.br/',
+    senha_temporaria: '12345',
+    pedido: '#A1B2C3D4',
+    data: new Date().toLocaleString('pt-BR'),
+    itens: '- Smartphone Exemplo x1 - R$ 1.999,00',
+    pagamento: 'Pix - R$ 1.999,00',
+    subtotal: 'R$ 1.999,00',
+    desconto: 'R$ 0,00',
+    frete: 'R$ 30,00',
+    total: 'R$ 2.029,00',
+    serializados: 'IMEI1: ***********1234',
+    endereco_entrega: 'Rua Exemplo, 123 - Centro, Petrolina/PE',
+    observacao_entrega: 'Complemento: casa azul',
+    cupom: 'ANIVER10',
+    validade_cupom: '30/06/2026',
+    entregador: 'Joao Entregas',
+    titulo_promocao: 'Oferta relampago Mercado do Vale',
+    oferta: 'Smartphones selecionados com condicao especial hoje.',
+    validade: 'Hoje ate 18h',
+    link: 'https://mercadodovale.com.br',
+    titulo: 'Comunicado Mercado do Vale',
+    mensagem: 'Hoje teremos atendimento em horario especial.',
+    produto: 'Smartphone Exemplo',
+    link_avaliacao: 'https://mercadodovale.com.br/avaliar',
+    garantia_ate: '20/06/2027',
+  };
+}
+
+async function sendWhatsAppAutomationTemplateTestVps(input = {}) {
+  const templateKey = String(input.template_key || input.templateKey || '').trim();
+  const storedTemplate = await getWhatsAppAutomationTemplateVps(templateKey);
+  const template = {
+    ...(storedTemplate || {}),
+    template_key: templateKey,
+    content: input.content || storedTemplate?.content || '',
+  };
+  const renderedText = renderWhatsAppAutomationTemplateVps(template, getWhatsAppAutomationSampleVariablesVps());
+  const rawPhone = await loadWhatsAppAutomationTestPhoneVps();
+  const phone = normalizeDeliveryWhatsAppNumber(rawPhone);
+
+  if (!templateKey || !renderedText.trim()) {
+    await logWhatsAppAutomationEventVps({ templateKey, phone, status: 'failed', renderedText, message: 'whatsapp_automation_test_failed', errorMessage: 'template_test_invalid' });
+    return { status: 'failed', error: 'Template de teste invalido', phone };
+  }
+
+  try {
+    const result = await sendDeliveryWhatsappText(phone, renderedText);
+    if (!result?.ok) throw new Error(`WhatsApp API retornou HTTP ${result?.status || 'desconhecido'}`);
+    await logWhatsAppAutomationEventVps({ templateKey, phone, status: 'sent', renderedText, message: 'whatsapp_automation_test_sent', entityType: 'whatsapp_automation_test', entityId: templateKey });
+    return { status: 'sent', phone, template_key: templateKey };
+  } catch (err) {
+    const errorMessage = err?.message || 'Falha ao enviar teste WhatsApp';
+    await logWhatsAppAutomationEventVps({ templateKey, phone, status: 'failed', renderedText, message: 'whatsapp_automation_test_failed', errorMessage, entityType: 'whatsapp_automation_test', entityId: templateKey });
+    return { status: 'failed', error: errorMessage, phone, template_key: templateKey };
+  }
+}
+async function sendWhatsAppAutomationMessageVps(input) {
+  const templateKey = String(input.templateKey || '').trim();
+  const template = await getWhatsAppAutomationTemplateVps(templateKey);
+  const renderedText = renderWhatsAppAutomationTemplateVps(template, input.variables || {});
+  const phone = normalizeDeliveryWhatsAppNumber(input.phone);
+
+  if (!template) {
+    await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'failed', renderedText, message: 'Template automatico nao encontrado', errorMessage: 'template_not_found' });
+    return { status: 'failed', error: 'template_not_found' };
+  }
+
+  if (!template.enabled) {
+    await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'skipped', renderedText, message: 'automation_whatsapp_skipped: template pausado' });
+    return { status: 'skipped', reason: 'template_disabled' };
+  }
+
+  if (!phone) {
+    await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'skipped', renderedText, message: 'automation_whatsapp_skipped: telefone ausente' });
+    return { status: 'skipped', reason: 'missing_phone' };
+  }
+
+  try {
+    const result = await sendDeliveryWhatsappText(phone, renderedText);
+    if (!result?.ok) throw new Error(`WhatsApp API retornou HTTP ${result?.status || 'desconhecido'}`);
+    await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'sent', renderedText, message: 'automation_whatsapp_sent' });
+    return { status: 'sent', result };
+  } catch (err) {
+    const errorMessage = err?.message || 'Falha ao enviar WhatsApp automatico';
+    await logWhatsAppAutomationEventVps({ ...input, templateKey, phone, status: 'failed', renderedText, message: 'automation_whatsapp_failed', errorMessage });
+    return { status: 'failed', error: errorMessage };
+  }
+}
+
+
+function maskAutomationCpf(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length !== 11) return String(value || 'Nao informado');
+  const masked = '*'.repeat(8) + digits.slice(8);
+  return `${masked.slice(0, 3)}.${masked.slice(3, 6)}.${masked.slice(6, 9)}-${masked.slice(9)}`;
+}
+
+function maskAutomationSerial(value) {
+  const raw = String(value || '').replace(/\s+/g, '');
+  if (!raw) return '';
+  if (raw.length <= 4) return raw;
+  return `${'*'.repeat(Math.max(4, raw.length - 4))}${raw.slice(-4)}`;
+}
+
+function formatAutomationMoney(value) {
+  const cents = Number(value) || 0;
+  return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function parseAutomationJson(value, fallback = null) {
+  if (value == null || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function buildAutomationAddressText(address) {
+  if (!address || typeof address !== 'object') return 'Endereco nao informado';
+  const street = address.street || address.logradouro || '';
+  const number = address.number || address.numero || '';
+  const complement = address.complement || address.complemento || '';
+  const neighborhood = address.neighborhood || address.bairro || '';
+  const city = address.city || address.cidade || '';
+  const state = address.state || address.uf || '';
+  const zipCode = address.zipCode || address.cep || '';
+  const line1 = [street, number].filter(Boolean).join(', ');
+  const line2 = [neighborhood, city && state ? `${city}/${state}` : city || state].filter(Boolean).join(' - ');
+  return [line1, complement, line2, zipCode ? `CEP ${zipCode}` : ''].filter(Boolean).join('\n') || 'Endereco nao informado';
+}
+
+function buildAutomationMapsLink(addressText) {
+  const value = String(addressText || '').trim();
+  return value && value !== 'Endereco nao informado' ? `https://maps.google.com/?q=${encodeURIComponent(value)}` : '';
+}
+
+function formatAutomationPaymentMethods(value) {
+  const methods = parseAutomationJson(value, value);
+  if (!Array.isArray(methods) || methods.length === 0) return 'Pagamento registrado';
+  const labels = { money: 'Dinheiro', credit: 'Credito', debit: 'Debito', pix: 'Pix', a_prazo: 'A prazo' };
+  return methods.map((method) => `${labels[method.method] || method.method || 'Pagamento'} - ${formatAutomationMoney(method.total_with_fee ?? method.amount)}`).join('\n');
+}
+
+async function notifyCustomerRegisteredWhatsApp(customerId, source = 'admin') {
+  const [rows] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [customerId]);
+  const customer = rows?.[0] || null;
+  if (!customer) return { status: 'failed', error: 'customer_not_found' };
+  const addressText = buildAutomationAddressText(parseAutomationJson(customer.address, null));
+  const templateKey = source === 'site' ? 'customer_registered_site' : 'customer_registered_admin';
+  return sendWhatsAppAutomationMessageVps({
+    templateKey,
+    phone: customer.phone,
+    entityType: 'customer',
+    entityId: customer.id,
+    customerId: customer.id,
+    variables: {
+      nome: customer.name || 'Cliente',
+      cpf: maskAutomationCpf(customer.cpf_cnpj),
+      telefone: customer.phone || '',
+      endereco: addressText,
+      maps_link: buildAutomationMapsLink(addressText),
+      portal_link: 'https://mv.mercadodovale.com.br/',
+      senha_temporaria: String(customer.cpf_cnpj || '').replace(/\D/g, '').slice(0, 5) || 'temporaria',
+    },
+  });
+}
+
+async function notifySaleCompletedWhatsApp(saleId) {
+  const [sales] = await pool.query('SELECT * FROM sales WHERE id = ? LIMIT 1', [saleId]);
+  const sale = sales?.[0] || null;
+  if (!sale) return { status: 'failed', error: 'sale_not_found' };
+  const [customers] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [sale.customer_id]);
+  const customer = customers?.[0] || null;
+  const [items] = await pool.query('SELECT * FROM sale_items WHERE sale_id = ? ORDER BY created_at ASC LIMIT 200', [saleId]);
+  const addressText = buildAutomationAddressText(parseAutomationJson(customer?.address, null));
+  const itemLines = (items || []).map((item) => `- ${item.product_name || 'Item'} x${item.quantity || 1} - ${formatAutomationMoney(item.total || item.subtotal || item.unit_price || 0)}`).join('\n') || 'Itens registrados no recibo';
+  const serialLines = (items || [])
+    .map((item) => item.imei ? `- ${item.product_name || 'Item'}: ${maskAutomationSerial(item.imei)}` : '')
+    .filter(Boolean)
+    .join('\n') || 'Sem itens serializados informados';
+
+  return sendWhatsAppAutomationMessageVps({
+    templateKey: 'sale_completed',
+    phone: customer?.phone,
+    entityType: 'sale',
+    entityId: sale.id,
+    customerId: customer?.id || sale.customer_id || null,
+    variables: {
+      nome: customer?.name || 'Cliente',
+      pedido: sale.order_number || sale.id,
+      data: sale.created_at ? new Date(sale.created_at).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR'),
+      itens: itemLines,
+      pagamento: formatAutomationPaymentMethods(sale.payment_methods),
+      subtotal: formatAutomationMoney(sale.subtotal || 0),
+      desconto: formatAutomationMoney(sale.discount_total || sale.discount || 0),
+      frete: formatAutomationMoney(sale.delivery_total || 0),
+      total: formatAutomationMoney(sale.total || 0),
+      serializados: serialLines,
+      endereco_entrega: sale.delivery_type && sale.delivery_type !== 'store_pickup' ? addressText : 'Retirada na loja',
+      maps_link: sale.delivery_type && sale.delivery_type !== 'store_pickup' ? buildAutomationMapsLink(addressText) : '',
+      observacao_entrega: sale.notes ? `Observacao: ${sale.notes}` : '',
+    },
+  });
+}
+async function sendBirthdayGreetingsForToday(options = {}) {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' }).formatToParts(now);
+  const day = Number(parts.find((part) => part.type === 'day')?.value || now.getDate());
+  const month = Number(parts.find((part) => part.type === 'month')?.value || (now.getMonth() + 1));
+  const coupon = String(options.cupom || options.coupon || '').trim();
+  const couponValidUntil = String(options.validade_cupom || options.coupon_valid_until || '').trim();
+
+  const [customers] = await pool.query(
+    `SELECT id, name, phone, birth_date
+       FROM customers
+      WHERE birth_date IS NOT NULL
+        AND is_active = 1
+        AND DAY(birth_date) = ?
+        AND MONTH(birth_date) = ?
+      LIMIT 500`,
+    [day, month]
+  );
+
+  const summary = { birthdaySummary: true, checked: customers.length, sent: 0, skipped: 0, failed: 0 };
+  for (const customer of customers) {
+    const [alreadySent] = await pool.query(
+      `SELECT id
+         FROM whatsapp_automation_logs
+        WHERE template_key = 'birthday_greeting'
+          AND customer_id = ?
+          AND status IN ('sent', 'skipped')
+          AND DATE(created_at) = CURDATE()
+        LIMIT 1`,
+      [customer.id]
+    );
+    if (alreadySent?.[0]) {
+      summary.skipped += 1;
+      continue;
+    }
+
+    const result = await sendWhatsAppAutomationMessageVps({
+      templateKey: 'birthday_greeting',
+      phone: customer.phone,
+      entityType: 'customer_birthday',
+      entityId: `${customer.id}:${month}-${day}`,
+      customerId: customer.id,
+      variables: {
+        nome: customer.name || 'Cliente',
+        cupom: coupon || 'em breve',
+        validade_cupom: couponValidUntil || 'a definir',
+      },
+    });
+
+    if (result.status === 'sent') summary.sent += 1;
+    else if (result.status === 'skipped') summary.skipped += 1;
+    else summary.failed += 1;
+  }
+
+  return summary;
+}
+async function notifyCustomerDeliveryOutForDelivery(job) {
+  if (!job?.id) return { status: 'failed', error: 'missing_job' };
+  const [deliveryPeople] = await pool.query('SELECT name FROM customers WHERE id = ? LIMIT 1', [job.delivery_person_customer_id]);
+  const deliveryPersonName = deliveryPeople?.[0]?.name || 'Entregador Mercado do Vale';
+  const result = await sendWhatsAppAutomationMessageVps({
+    templateKey: 'delivery_out_for_delivery',
+    phone: job.buyer_phone,
+    entityType: 'customer_delivery_job',
+    entityId: job.id,
+    customerId: job.buyer_customer_id || null,
+    variables: {
+      nome: job.buyer_name || 'Cliente',
+      data: new Date().toLocaleString('pt-BR'),
+      pedido: job.order_number || job.sale_id || '',
+      entregador: deliveryPersonName,
+      endereco_entrega: job.delivery_address_text || '',
+      maps_link: job.delivery_route_url || '',
+    },
+  });
+
+  if (result.status === 'sent') {
+    await pool.query(
+      `UPDATE customer_delivery_jobs
+          SET route_whatsapp_sent_at = CURRENT_TIMESTAMP,
+              route_whatsapp_error = NULL,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [job.id]
+    );
+  } else if (result.status === 'failed') {
+    await pool.query(
+      `UPDATE customer_delivery_jobs
+          SET route_whatsapp_error = ?,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [String(result.error || 'Falha ao enviar mensagem de rota').slice(0, 1000), job.id]
+    );
+  }
+
+  await logCustomerDeliveryJobEvent(
+    job.id,
+    result.status === 'failed' ? 'error' : 'info',
+    result.status === 'sent' ? 'route_whatsapp_sent' : result.status === 'skipped' ? 'route_whatsapp_skipped' : 'route_whatsapp_failed',
+    result.status === 'sent' ? 'Mensagem de saida para entrega enviada ao cliente.' : result.reason || result.error || 'Mensagem de saida para entrega nao enviada.'
+  );
+  return result;
+}
 async function createCustomerDeliveryJobForSale(connection, sale) {
   const customerId = String(sale.delivery_person_customer_id || '').trim();
   const amount = normalizeDeliveryLedgerAmount(sale.delivery_total || sale.delivery_cost_store || 0);
@@ -7034,12 +7537,14 @@ async function handleCronDispatcherVps(request, reply) {
   }
 
   try {
+    const birthdaySummary = await sendBirthdayGreetingsForToday({ birthdaySummary: true }).catch((err) => ({ birthdaySummary: true, error: err.message || String(err) }));
     const rows = await vpsDbSelect('telegram_settings', 'select=*&limit=1');
     const settings = cronDispatcherFirstRowVps(rows);
     const hasConfiguredTelegramCredential = !!settings?.bot_token;
     if (!settings || !settings.active || !settings.bot_token || !settings.chat_id) {
       return reply.code(200).send({
         message: 'Telegram integration inactive or not fully configured',
+        birthdaySummary,
         debug: buildCopyableDebug('cron-dispatcher', {
           hasSettings: !!settings,
           isActive: !!settings?.active,
@@ -7050,7 +7555,7 @@ async function handleCronDispatcherVps(request, reply) {
     }
 
     const templates = parseCronDispatcherTemplatesVps(settings);
-    if (!templates.length) return reply.code(200).send({ message: 'No templates configured' });
+    if (!templates.length) return reply.code(200).send({ message: 'No templates configured', birthdaySummary });
 
     const now = new Date();
     const timeParts = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).formatToParts(now);
@@ -7100,6 +7605,7 @@ async function handleCronDispatcherVps(request, reply) {
       message: `Cron ran successfully. Dispatched ${dispatched} templates.`,
       dispatched,
       instagramReminderSent,
+      birthdaySummary,
     });
   } catch (err) {
     console.error('[cron-dispatcher] fatal error', err);
@@ -21166,6 +21672,24 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
   return { inserted: rows.length };
 });
 
+fastify.post('/whatsapp/automation/test-send', { preHandler: requireSyncKey }, async (req) => {
+  return sendWhatsAppAutomationTemplateTestVps(req.body || {});
+});
+fastify.post('/whatsapp/automation/customer-registered', { preHandler: requireSyncKey }, async (req, reply) => {
+  const customerId = String(req.body?.customer_id || '').trim();
+  if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
+  const source = String(req.body?.source || 'admin').trim().toLowerCase() === 'site' ? 'site' : 'admin';
+  return notifyCustomerRegisteredWhatsApp(customerId, source);
+});
+
+fastify.post('/whatsapp/automation/sale-completed', { preHandler: requireSyncKey }, async (req, reply) => {
+  const saleId = String(req.body?.sale_id || '').trim();
+  if (!saleId) return reply.code(400).send({ error: 'sale_id obrigatorio' });
+  return notifySaleCompletedWhatsApp(saleId);
+});
+fastify.post('/whatsapp/automation/birthdays/today', { preHandler: requireSyncKey }, async (req) => {
+  return sendBirthdayGreetingsForToday(req.body || {});
+});
 // UPDATE por PK
 fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, async (req, reply) => {
   const { name, pkValue } = req.params;
@@ -21347,6 +21871,47 @@ fastify.post('/delivery/jobs/:token/payment-status', { config: { rateLimit: { ma
   return mapCustomerDeliveryJob(updated?.[0] || null);
 });
 
+
+fastify.post('/delivery/jobs/:token/start-route', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
+  const token = String(req.params.token || '').trim();
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE token = ? FOR UPDATE', [token]);
+    const job = rows?.[0];
+    if (!job) throw Object.assign(new Error('Entrega nao encontrada'), { statusCode: 404 });
+    if (job.delivery_status === 'delivered' || job.delivery_status === 'cancelled') {
+      throw Object.assign(new Error('Entrega nao pode entrar em rota neste status'), { statusCode: 409 });
+    }
+    if (job.delivery_status !== 'in_route') {
+      await connection.query(
+        `UPDATE customer_delivery_jobs
+            SET delivery_status = 'in_route',
+                updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+        [job.id]
+      );
+      await logCustomerDeliveryJobEvent(job.id, 'info', 'delivery_in_route', 'Entregador marcou saida para entrega.');
+    }
+    const [updatedRows] = await connection.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
+    const updated = mapCustomerDeliveryJob(updatedRows?.[0] || job);
+    await connection.commit();
+
+    if (!updated.route_whatsapp_sent_at) {
+      await notifyCustomerDeliveryOutForDelivery(updated).catch((error) => {
+        console.warn('[customer-delivery] route whatsapp notification failed:', error.message);
+      });
+    }
+
+    const [finalRows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE id = ? LIMIT 1', [job.id]);
+    return mapCustomerDeliveryJob(finalRows?.[0] || updated);
+  } catch (error) {
+    await connection.rollback().catch(() => {});
+    return reply.code(error.statusCode || 500).send({ error: error.message || 'Erro ao iniciar rota da entrega' });
+  } finally {
+    connection.release();
+  }
+});
 fastify.post('/delivery/jobs/:token/proof', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
   const token = String(req.params.token || '').trim();
   const [rows] = await pool.query('SELECT * FROM customer_delivery_jobs WHERE token = ? LIMIT 1', [token]);
@@ -25729,6 +26294,8 @@ async function runMigrations() {
   await addColumnIfMissing('customer_delivery_jobs', 'completed_by_admin_at', 'DATETIME NULL');
   await addColumnIfMissing('customer_delivery_jobs', 'completion_whatsapp_sent_at', 'DATETIME NULL');
   await addColumnIfMissing('customer_delivery_jobs', 'completion_whatsapp_error', 'TEXT NULL');
+  await addColumnIfMissing('customer_delivery_jobs', 'route_whatsapp_sent_at', 'DATETIME NULL');
+  await addColumnIfMissing('customer_delivery_jobs', 'route_whatsapp_error', 'TEXT NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_delivery_settings (
@@ -25746,7 +26313,48 @@ async function runMigrations() {
     [DEFAULT_DELIVERY_COMPLETION_WHATSAPP_TEMPLATE]
   );
 
+
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_automation_templates (
+      id CHAR(36) PRIMARY KEY,
+      template_key VARCHAR(120) NOT NULL,
+      category VARCHAR(40) NOT NULL DEFAULT 'future',
+      title VARCHAR(180) NOT NULL,
+      description TEXT NULL,
+      content TEXT NOT NULL,
+      enabled TINYINT(1) NOT NULL DEFAULT 1,
+      variables_json JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_whatsapp_automation_templates_key (template_key),
+      INDEX idx_whatsapp_automation_templates_category (category),
+      INDEX idx_whatsapp_automation_templates_enabled (enabled)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('whatsapp_automation_templates', 'category', "VARCHAR(40) NOT NULL DEFAULT 'future'");
+  await addColumnIfMissing('whatsapp_automation_templates', 'enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
+  await addColumnIfMissing('whatsapp_automation_templates', 'variables_json', 'JSON NULL');
+
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_automation_logs (
+      id CHAR(36) PRIMARY KEY,
+      template_key VARCHAR(120) NOT NULL,
+      entity_type VARCHAR(80) NULL,
+      entity_id VARCHAR(120) NULL,
+      customer_id VARCHAR(120) NULL,
+      phone VARCHAR(32) NULL,
+      status ENUM('sent','skipped','failed') NOT NULL DEFAULT 'failed',
+      message TEXT NULL,
+      rendered_text TEXT NULL,
+      error_message TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_whatsapp_automation_logs_template (template_key),
+      INDEX idx_whatsapp_automation_logs_entity (entity_type, entity_id),
+      INDEX idx_whatsapp_automation_logs_status (status),
+      INDEX idx_whatsapp_automation_logs_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);  await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_delivery_job_logs (
       id CHAR(36) PRIMARY KEY,
       job_id CHAR(36) NOT NULL,

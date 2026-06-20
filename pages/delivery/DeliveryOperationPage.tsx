@@ -10,6 +10,7 @@ import {
     getDeliveryJob,
     refreshDeliveryPaymentStatus,
     saveDeliveryProof,
+    startDeliveryRoute,
     type CustomerDeliveryJob,
     type CustomerDeliveryProof,
 } from '../../services/customerDeliveryService';
@@ -75,6 +76,7 @@ const DeliveryOperationPage: React.FC = () => {
     const callUrl = buyerPhone ? `tel:${buyerPhone}` : '';
     const items = Array.isArray(job?.receipt_snapshot_json?.items) ? job.receipt_snapshot_json.items : [];
     const pixApproved = job?.payment_status === 'approved' || job?.payment_status === 'not_required';
+    const canStartRoute = Boolean(job && job.delivery_status !== 'in_route' && job.delivery_status !== 'delivered' && job.delivery_status !== 'cancelled');
     const canComplete = Boolean(job && pixApproved && proofs.length > 0 && job.delivery_status !== 'delivered');
     const pixExpired = useMemo(() => {
         if (!job?.pix_expires_at || job.payment_status === 'approved') return false;
@@ -175,6 +177,22 @@ const DeliveryOperationPage: React.FC = () => {
         }
     };
 
+    const handleStartRoute = async () => {
+        if (!canStartRoute) return;
+        setBusy(true);
+        setErrorMessage('');
+        try {
+            const updated = await startDeliveryRoute(token);
+            setJob(updated);
+            toast.success('Pedido saiu para entrega');
+        } catch (error) {
+            const message = getDeliveryErrorMessage(error, 'Erro ao marcar saida para entrega.');
+            setErrorMessage(message);
+            toast.error(message);
+        } finally {
+            setBusy(false);
+        }
+    };
     const handleComplete = async () => {
         if (!canComplete) return;
         setBusy(true);
@@ -288,6 +306,17 @@ const DeliveryOperationPage: React.FC = () => {
                     </label>
                 </section>
 
+
+                <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <h2 className="text-base font-semibold text-slate-900">Rota de entrega</h2>
+                    <p className="mt-1 text-sm text-slate-500">Avise o cliente automaticamente quando estiver saindo para entrega.</p>
+                    <button className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60" disabled={busy || !canStartRoute} onClick={handleStartRoute}>
+                        <Bike className="h-5 w-5" />
+                        {job.delivery_status === 'in_route' ? 'Pedido saiu para entrega' : 'Saindo para entrega'}
+                    </button>
+                    {job.route_whatsapp_sent_at && <p className="mt-2 text-xs font-semibold text-emerald-700">Mensagem enviada em {new Date(job.route_whatsapp_sent_at).toLocaleString('pt-BR')}</p>}
+                    {job.route_whatsapp_error && <p className="mt-2 text-xs font-semibold text-red-600">Falha no WhatsApp: {job.route_whatsapp_error}</p>}
+                </section>
                 <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <h2 className="text-base font-semibold text-slate-900">Finalizar</h2>
                     <textarea className="mt-3 w-full rounded-xl border border-slate-200 p-3 text-sm" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Observacao do entregador apenas para uso interno" />

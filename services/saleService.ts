@@ -578,6 +578,9 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         try {
             await vpsClient.post('/table-data/sale_items/bulk', saleItems);
             saleItemsPersisted = true;
+            vpsClient.post('/whatsapp/automation/sale-completed', { sale_id: sale.id }).catch(error => {
+                console.error('[whatsapp-automation] Falha ao disparar venda concluida', error);
+            });
             if (deliveryPersonCustomerId && saleInput.delivery_total && saleInput.delivery_total > 0) {
                 await vpsClient.post('/delivery/jobs/from-sale', { sale_id: sale.id });
             }

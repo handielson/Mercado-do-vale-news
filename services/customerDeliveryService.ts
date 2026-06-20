@@ -79,6 +79,8 @@ export interface CustomerDeliveryJob {
     completed_by_admin_at?: string | null;
     completion_whatsapp_sent_at?: string | null;
     completion_whatsapp_error?: string | null;
+    route_whatsapp_sent_at?: string | null;
+    route_whatsapp_error?: string | null;
 }
 
 export interface CustomerDeliverySettings {
@@ -194,6 +196,10 @@ export async function createDeliveryPixIntent(token: string): Promise<CustomerDe
 
 export async function refreshDeliveryPaymentStatus(token: string): Promise<CustomerDeliveryJob> {
     return vpsClient.post(`/delivery/jobs/${encodeURIComponent(token)}/payment-status`, {});
+}
+
+export async function startDeliveryRoute(token: string): Promise<CustomerDeliveryJob> {
+    return vpsClient.post(`/delivery/jobs/${encodeURIComponent(token)}/start-route`, {});
 }
 
 export async function saveDeliveryProof(token: string, input: {

@@ -293,6 +293,12 @@ class CustomerService {
             console.error('Falha ao disparar notification Telegram de cliente novo', e);
         }
 
+        vpsClient.post('/whatsapp/automation/customer-registered', {
+            customer_id: data.id,
+            source: 'admin',
+        }).catch(error => {
+            console.error('[whatsapp-automation] Falha ao disparar cadastro admin', error);
+        });
         return data;
     }
 
