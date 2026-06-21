@@ -9326,6 +9326,7 @@ async function buildAutoresponderAiToolDecision({ message, contactFirstName = ''
       'No Mercado do Vale, termos como "note 15" normalmente se referem a smartphones Redmi Note, nao a notebook. Para "tem note 15?", use catalog_search com query "note 15".',
       'Se o cliente perguntar somente por uma marca ampla, como "Xiaomi", "Samsung", "Motorola", "Realme" ou "Apple", use catalog_search com a marca. Para Xiaomi, pesquise a familia "Xiaomi Redmi Poco" porque celulares podem estar cadastrados como Redmi ou Poco. A resposta final deve organizar os tipos encontrados, como celulares, capinhas, fones, carregadores ou acessorios, e perguntar qual tipo ele deseja antes de despejar muitos itens.',
       'Se usar catalog_search, escolha uma query curta com o que deve ser buscado. Ex: "note 15", "smartphones", "redmi 15".',
+      'Para pedidos genericos de celular, celulares, smartphone ou smartphones, use catalog_search com query "smartphones" para consultar a categoria oficial Smartphones.',
       'Nao responda ao cliente aqui. Responda SOMENTE JSON valido, sem markdown.',
       'Formato: {"tool":"catalog_search","query":"texto"} ou {"tool":"none"}.',
     ].filter(Boolean).join('\n'),
@@ -12234,7 +12235,7 @@ function formatAutoresponderProductReplyInstructions(hasMore) {
 }
 
 function getAutoresponderInitialProductPageSize(keyword = '') {
-  return isAutoresponderCompleteProductListKeyword(keyword)
+  return isAutoresponderCompleteProductListKeyword(keyword) || detectAutoresponderGenericDeviceCatalogFamily(keyword)
     ? AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT
     : AUTORESPONDER_PRODUCT_PAGE_SIZE;
 }
@@ -13216,7 +13217,7 @@ async function buildAutoresponderCatalogToolSearchData({ query, message = '', co
   if (selectedCategory?.id && !isAutoresponderLikelyProductModelRequest(safeQuery)) {
     const effectiveCategory = await resolveAutoresponderEffectiveCatalogCategory(selectedCategory);
     if (!effectiveCategory?.id) return null;
-    const categorySearchText = String(safeQuery || effectiveCategory.name || '').trim();
+    const categorySearchText = String(message || safeQuery || effectiveCategory.name || '').trim();
     const pageSize = getAutoresponderInitialProductPageSize(categorySearchText);
     const fetchLimit = getAutoresponderCategoryProductFetchLimit(pageSize);
     const rows = await findAutoresponderProductsByCategory(effectiveCategory.id, fetchLimit);
@@ -15611,29 +15612,6 @@ fastify.route({
         }
       }
 
-      if (!hasActivePurchaseFlow && !isAutoresponderLikelyProductModelRequest(message) && isAutoresponderGenericPhoneCatalogRequest(message)) {
-        const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
-        if (catalogData) {
-          const replyText = catalogData.replyMessages.join('\n\n');
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'catalog_category',
-            replyText,
-            matchedCount: catalogData.products.length,
-            matchedProducts: catalogData.productOptions,
-          });
-          await upsertAutoresponderOptionsConversation(senderKey, catalogData.productOptions, {
-            source: 'category',
-            categoryId: catalogData.effectiveCategory.id,
-            offset: 0,
-            limit: catalogData.pageSize,
-            total: catalogData.total,
-            hasMore: catalogData.hasMore,
-          });
-          return { replies: formatAutoresponderProReplies(catalogData.replyMessages) };
-        }
-      }
 
       if (!hasActivePurchaseFlow && message) {
         const aiToolDecision = await buildAutoresponderAiToolDecision({
