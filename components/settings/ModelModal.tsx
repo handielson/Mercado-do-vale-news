@@ -29,7 +29,7 @@ interface ModelModalProps {
     model?: Model | null;
 }
 
-type TabType = 'basic' | 'json' | 'template' | 'seo' | 'photos' | 'tags';
+type TabType = 'basic' | 'json' | 'template' | 'seo' | 'photos' | 'tags' | 'shopee';
 
 const TRUSTED_SOURCE_LINKS_STORAGE_KEY = 'mdv.modelAi.trustedSourceLinks';
 
@@ -435,6 +435,18 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [categoryConfig, setCategoryConfig] = useState<any>(null);
     const [fieldChoiceOptions, setFieldChoiceOptions] = useState<Record<string, TableOption[]>>({});
     const fieldChoiceOptionsGenerationRef = useRef(0);
+
+    // Shopee fields (stored inside template_values with shopee_ prefix)
+    const [shopeeAutoPublishEnabled, setShopeeAutoPublishEnabled] = useState(false);
+    const [shopeeCategoryId, setShopeeCategoryId] = useState<number | null>(null);
+    const [shopeeCategoryName, setShopeeCategoryName] = useState('');
+    const [shopeeAttributeDefaults, setShopeeAttributeDefaults] = useState<Record<string, any>>({});
+    const [shopeeAttributeDefaultsText, setShopeeAttributeDefaultsText] = useState('');
+    const [shopeeAttributeDefaultsError, setShopeeAttributeDefaultsError] = useState('');
+    // Shopee category search UI state
+    const [shopeeSimilarSearch, setShopeeSimilarSearch] = useState('');
+    const [shopeeSimilarResults, setShopeeSimilarResults] = useState<any[]>([]);
+    const [shopeeSimilarLoading, setShopeeSimilarLoading] = useState(false);
 
     // UI State
     const [saving, setSaving] = useState(false);
@@ -994,8 +1006,17 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             setActive(model.active);
             setCategoryId(model.category_id || '');
             setDescription(model.description || '');
-            setTemplateValues(model.template_values || {});
+            const tv = model.template_values || {};
+            setTemplateValues(tv);
             setEans(model.eans || []);
+            // Load Shopee fields from template_values
+            setShopeeAutoPublishEnabled(Boolean(tv['shopee_auto_publish_enabled']));
+            setShopeeCategoryId(tv['shopee_category_id'] ? Number(tv['shopee_category_id']) : null);
+            setShopeeCategoryName(tv['shopee_category_name'] || '');
+            const attrDefaults = tv['shopee_attribute_defaults'] || {};
+            setShopeeAttributeDefaults(typeof attrDefaults === 'object' && !Array.isArray(attrDefaults) ? attrDefaults : {});
+            setShopeeAttributeDefaultsText(Object.keys(attrDefaults).length > 0 ? JSON.stringify(attrDefaults, null, 2) : '');
+            setShopeeAttributeDefaultsError('');
         } else {
             setName('');
             setBrandId('');
@@ -1005,9 +1026,17 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             setDescription('');
             setTemplateValues({});
             setEans([]);
+            setShopeeAutoPublishEnabled(false);
+            setShopeeCategoryId(null);
+            setShopeeCategoryName('');
+            setShopeeAttributeDefaults({});
+            setShopeeAttributeDefaultsText('');
+            setShopeeAttributeDefaultsError('');
         }
         setError('');
         setActiveTab('basic');
+        setShopeeSimilarSearch('');
+        setShopeeSimilarResults([]);
     }, [model, isOpen]);
 
     useEffect(() => {
@@ -1163,6 +1192,74 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         if (eanInputRef.current) eanInputRef.current.value = '';
     };
 
+    // Merge Shopee fields into templateValues before saving
+    const buildFinalTemplateValues = () => {
+        const merged = { ...templateValues };
+        merged['shopee_auto_publish_enabled'] = shopeeAutoPublishEnabled;
+        if (shopeeCategoryId) {
+            merged['shopee_category_id'] = shopeeCategoryId;
+            merged['shopee_category_name'] = shopeeCategoryName || '';
+        } else {
+            delete merged['shopee_category_id'];
+            delete merged['shopee_category_name'];
+        }
+        if (Object.keys(shopeeAttributeDefaults).length > 0) {
+            merged['shopee_attribute_defaults'] = shopeeAttributeDefaults;
+        } else {
+            delete merged['shopee_attribute_defaults'];
+        }
+        return merged;
+    };
+
+    const handleShopeeAttributeDefaultsChange = (text: string) => {
+        setShopeeAttributeDefaultsText(text);
+        if (!text.trim()) {
+            setShopeeAttributeDefaults({});
+            setShopeeAttributeDefaultsError('');
+            return;
+        }
+        try {
+            const parsed = JSON.parse(text);
+            if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+                setShopeeAttributeDefaults(parsed);
+                setShopeeAttributeDefaultsError('');
+            } else {
+                setShopeeAttributeDefaultsError('Deve ser um objeto JSON { "id": "valor" }');
+            }
+        } catch {
+            setShopeeAttributeDefaultsError('JSON inválido');
+        }
+    };
+
+    const handleSearchShopeeSimilar = async () => {
+        const query = shopeeSimilarSearch.trim() || name.trim();
+        if (!query) return;
+        setShopeeSimilarLoading(true);
+        setShopeeSimilarResults([]);
+        try {
+            const res = await fetch('/api/shopee-actions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'search_synced_products', query, limit: 8 }),
+            });
+            const data = await res.json();
+            const results = Array.isArray(data?.results) ? data.results : [];
+            setShopeeSimilarResults(results);
+        } catch (err) {
+            toast.error('Erro ao buscar produtos similares na Shopee.');
+        } finally {
+            setShopeeSimilarLoading(false);
+        }
+    };
+
+    const handleCopyCategoryFromSimilar = (product: any) => {
+        const catId = product.shopee_category_id ? Number(product.shopee_category_id) : null;
+        const catName = product.shopee_category_name || '';
+        setShopeeCategoryId(catId);
+        setShopeeCategoryName(catName);
+        toast.success(`Categoria copiada: ${catName || catId}`);
+    };
+
     const handleSave = async () => {
         // Validation
         if (!name.trim()) {
@@ -1196,13 +1293,15 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 eanInputRef.current.value = '';
             }
 
+            const finalTemplateValues = buildFinalTemplateValues();
+            const sanitized = getSanitizedTemplateValues(finalTemplateValues);
             const input: ModelInput = {
                 name: formatModelNameTitleCase(name).trim(),
                 brand_id: brandId,
                 active,
                 category_id: categoryId || undefined,
                 description: description || undefined,
-                template_values: Object.keys(getSanitizedTemplateValues(templateValues)).length > 0 ? getSanitizedTemplateValues(templateValues) : undefined,
+                template_values: Object.keys(sanitized).length > 0 ? sanitized : undefined,
                 eans: finalEans.length > 0 ? finalEans : undefined
             };
 
@@ -1312,6 +1411,22 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     >
                         <div className="flex items-center justify-center gap-2">
                             🏷️ Cross-Sell
+                        </div>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('shopee')}
+                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'shopee'
+                            ? 'text-orange-600 border-b-2 border-orange-500'
+                            : 'text-slate-600 hover:text-slate-800'
+                            }`}
+                    >
+                        <div className="flex items-center justify-center gap-2">
+                            🛒 Shopee
+                            {shopeeCategoryId && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs rounded-full font-semibold">
+                                    ✓
+                                </span>
+                            )}
                         </div>
                     </button>
                 </div>

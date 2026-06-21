@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.78-whatsapp-ai-first-catalog",
+  "version": "v1.1.79-shopee-model-fields",
   "date": "2026-06-21",
   "status": "published",
-  "release_vps": "/var/www/mdv-site/releases/20260621-091449-v1178-whatsapp-ai-first-catalog",
-  "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Faz o ChatGPT conduzir pedidos de catalogo primeiro e usar catalog_search com contexto completo de Smartphones para celulares."
+  "release_vps": "pendente",
+  "branch": "main",
+  "summary": "Adiciona aba Shopee no cadastro de modelos: categoria, trava de envio automático em lote e atributos padrão da categoria."
 }
