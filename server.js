@@ -2012,6 +2012,41 @@ async function resolveShopeeCatalogMediaInputVps(dataUrl, remoteUrl, expectedPre
   return null;
 }
 
+const SHOPEE_CATALOG_DIRECT_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png']);
+
+async function normalizeShopeeCatalogImageUploadInputVps(image) {
+  const mimeType = String(image?.mimeType || '').toLowerCase().split(';')[0].trim();
+  if (SHOPEE_CATALOG_DIRECT_IMAGE_MIME_TYPES.has(mimeType)) {
+    return {
+      ...image,
+      mimeType: mimeType === 'image/jpg' ? 'image/jpeg' : mimeType,
+    };
+  }
+
+  let sharp;
+  try {
+    sharp = require('sharp');
+  } catch (error) {
+    const err = new Error(`Formato de imagem ${mimeType || 'desconhecido'} precisa ser convertido antes de enviar para a Shopee, mas o sharp nao esta instalado.`);
+    err.cause = error;
+    throw err;
+  }
+
+  const buffer = await sharp(image.buffer)
+    .rotate()
+    .flatten({ background: '#ffffff' })
+    .jpeg({ quality: 92, mozjpeg: true })
+    .toBuffer();
+
+  return {
+    ...image,
+    buffer,
+    mimeType: 'image/jpeg',
+    fileNameHint: String(image.fileNameHint || image.filename || 'image.jpg').replace(/\.[^.]+$/, '.jpg'),
+    filename: String(image.filename || image.fileNameHint || 'image.jpg').replace(/\.[^.]+$/, '.jpg'),
+  };
+}
+
 function md5ShopeeCatalogHexVps(buffer) {
   return crypto.createHash('md5').update(buffer).digest('hex');
 }
@@ -2243,10 +2278,11 @@ async function handleShopeeCatalogVps(request, reply) {
         if (requireShopeeCatalogPostVps(request, reply)) return;
         const parsed = await resolveShopeeCatalogMediaInputVps(request.body?.image_data_url, request.body?.image_url, 'image/');
         if (!parsed) return reply.code(400).send({ error: 'invalid image_data_url' });
-        const ext = parsed.mimeType.split('/')[1] || 'jpg';
-        const fileName = String(request.body?.file_name || parsed.fileNameHint || `image_${Date.now()}.${ext}`);
+        const normalized = await normalizeShopeeCatalogImageUploadInputVps(parsed);
+        const ext = normalized.mimeType.split('/')[1] || 'jpg';
+        const fileName = String(request.body?.file_name || normalized.fileNameHint || `image_${Date.now()}.${ext}`).replace(/\.(webp|avif|gif|bmp|tiff?)$/i, '.jpg');
         const formData = new FormData();
-        formData.append('image', new Blob([new Uint8Array(parsed.buffer)], { type: parsed.mimeType }), fileName);
+        formData.append('image', new Blob([new Uint8Array(normalized.buffer)], { type: normalized.mimeType }), fileName);
         result = await shopeeCatalogMultipartVps('/api/v2/media_space/upload_image', creds, formData);
         break;
       }
@@ -2494,8 +2530,9 @@ async function uploadShopeeActionsProductImagesVps(product, creds) {
     try {
       const image = await resolveShopeeActionsImageInputVps(imageUrl);
       if (!image?.buffer?.length) continue;
+      const normalized = await normalizeShopeeCatalogImageUploadInputVps(image);
       const formData = new FormData();
-      formData.append('image', new Blob([new Uint8Array(image.buffer)], { type: image.mimeType }), image.filename);
+      formData.append('image', new Blob([new Uint8Array(normalized.buffer)], { type: normalized.mimeType }), normalized.filename);
       const upload = await shopeeCatalogMultipartVps('/api/v2/media_space/upload_image', creds, formData);
       const imageId = upload.data?.response?.image_info?.image_id;
       if (imageId) imageIds.push(imageId);
