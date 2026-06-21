@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.81-shopee-search-synced-products",
+  "version": "v1.1.82-shopee-model-auto-attributes",
   "date": "2026-06-21",
   "status": "pending",
   "release_vps": "pendente",
-  "branch": "main",
-  "summary": "Adiciona o handler de servidor search_synced_products usado pelo botao Buscar da aba Shopee (editar modelo), que antes caia em 'Acao desconhecida' e nao retornava nada."
+  "branch": "codex/publish-delivery-ops-20260614",
+  "summary": "Ao definir uma categoria Shopee no cadastro de modelos, busca automaticamente os atributos e preenche sugestoes (marca local, modelo do nome, defaults de template)."
 }

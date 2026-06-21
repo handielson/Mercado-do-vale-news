@@ -21,6 +21,24 @@ import { ModelListFieldInput } from './ModelListFieldInput';
 import { ModelListOptionModal } from './ModelListOptionModal';
 import { saveModelListOption, type ModelListOptionDraft } from '../../services/modelListOptions';
 import { resolveMissingListChoices } from './modelListOptionCore.js';
+import {
+    normalizeShopeeAttributes,
+    buildShopeeAttributeDefaultsPayload,
+    summarizeShopeeAttributes,
+} from '../../pages/admin/settings/shopeeAttributeResolver.js';
+
+// Atributo de categoria Shopee normalizado (mesmo formato retornado por
+// normalizeShopeeAttributes em shopeeAttributeResolver.js). Declarado localmente
+// porque o helper e .js (sem .d.ts) — mantemos em sync manualmente.
+type ShopeeAttributeField = {
+    attribute_id: number;
+    label: string;
+    mandatory: boolean;
+    input_kind: 'select' | 'multiselect' | 'text' | 'searchable';
+    attribute_value_list: Array<{ value_id: number; label: string; raw_name: string; original_value_name: string }>;
+    raw_input_type?: string | number;
+    support_search_value?: boolean;
+};
 
 interface ModelModalProps {
     isOpen: boolean;
@@ -447,6 +465,12 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [shopeeSimilarSearch, setShopeeSimilarSearch] = useState('');
     const [shopeeSimilarResults, setShopeeSimilarResults] = useState<any[]>([]);
     const [shopeeSimilarLoading, setShopeeSimilarLoading] = useState(false);
+    // Shopee attribute auto-loading state (busca atributos da categoria + sugestoes)
+    const [shopeeAttributeFields, setShopeeAttributeFields] = useState<ShopeeAttributeField[]>([]);
+    const [shopeeAttributesLoading, setShopeeAttributesLoading] = useState(false);
+    const [shopeeAttributesError, setShopeeAttributesError] = useState('');
+    // Ref para evitar race: descarta respostas de categorias antigas.
+    const shopeeAttributesRequestRef = useRef(0);
 
     // UI State
     const [saving, setSaving] = useState(false);
@@ -1236,6 +1260,70 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         } catch {
             setShopeeAttributeDefaultsError('JSON inválido');
         }
+    };
+
+    // ─── Auto-load Shopee attributes when category is set ─────────────────────
+    // Derive brand name from the brands list for suggestions.
+    const shopeeBrandName = brands.find(b => b.id === brandId)?.name || '';
+
+    const loadShopeeAttributes = async (categoryId: number) => {
+        const requestId = ++shopeeAttributesRequestRef.current;
+        setShopeeAttributesLoading(true);
+        setShopeeAttributesError('');
+        setShopeeAttributeFields([]);
+        try {
+            const res = await fetch(`/api/shopee-catalog?action=attributes&category_id=${categoryId}`);
+            const data = await res.json();
+            if (requestId !== shopeeAttributesRequestRef.current) return; // discarded
+
+            if (data?.error && !Array.isArray(data?.response)) {
+                setShopeeAttributesError(data.message || data.error || 'Erro ao buscar atributos.');
+                return;
+            }
+
+            const fields = normalizeShopeeAttributes(data);
+            setShopeeAttributeFields(fields);
+
+            // Build suggestions: brand + model name + template defaults
+            const productRef = { name, brand: shopeeBrandName };
+            const payload = buildShopeeAttributeDefaultsPayload(fields, productRef);
+
+            if (Object.keys(payload).length > 0) {
+                setShopeeAttributeDefaults(payload);
+                setShopeeAttributeDefaultsText(JSON.stringify(payload, null, 2));
+                setShopeeAttributeDefaultsError('');
+            } else {
+                setShopeeAttributeDefaults({});
+                setShopeeAttributeDefaultsText('');
+            }
+
+            const summary = summarizeShopeeAttributes(fields, payload);
+            if (summary.total > 0) {
+                toast.success(`Shopee: ${summary.total} atributos carregados, ${summary.filled} pré-preenchidos`, { id: 'shopee-attrs' });
+            }
+        } catch (err: any) {
+            if (requestId !== shopeeAttributesRequestRef.current) return;
+            setShopeeAttributesError(err?.message || 'Erro de conexão ao buscar atributos da Shopee.');
+        } finally {
+            if (requestId === shopeeAttributesRequestRef.current) {
+                setShopeeAttributesLoading(false);
+            }
+        }
+    };
+
+    // React to shopeeCategoryId changes: auto-load attributes.
+    useEffect(() => {
+        if (!shopeeCategoryId) {
+            setShopeeAttributeFields([]);
+            setShopeeAttributesError('');
+            return;
+        }
+        loadShopeeAttributes(shopeeCategoryId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [shopeeCategoryId]);
+
+    const handleReloadShopeeAttributes = () => {
+        if (shopeeCategoryId) loadShopeeAttributes(shopeeCategoryId);
     };
 
     const handleSearchShopeeSimilar = async () => {
@@ -2635,13 +2723,87 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
                             {/* Attribute Defaults */}
                             <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-3">
-                                <div>
-                                    <h4 className="text-sm font-semibold text-slate-800">⚙️ Atributos Padrão da Categoria</h4>
-                                    <p className="text-xs text-slate-500 mt-1">
-                                        JSON com os atributos obrigatórios da categoria Shopee. Formato: <code className="bg-slate-100 px-1 rounded">{'{"attribute_id": "valor"}'}</code>.
-                                        Esses valores serão usados no envio do produto.
-                                    </p>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-slate-800">⚙️ Atributos Padrão da Categoria</h4>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            JSON com os atributos obrigatórios da categoria Shopee. Formato: <code className="bg-slate-100 px-1 rounded">{'{"attribute_id": "valor"}'}</code>.
+                                            Esses valores serão usados no envio do produto.
+                                        </p>
+                                    </div>
+                                    {shopeeCategoryId && (
+                                        <button
+                                            type="button"
+                                            onClick={handleReloadShopeeAttributes}
+                                            disabled={shopeeAttributesLoading}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 disabled:opacity-50 transition-colors"
+                                            title="Recarregar atributos da categoria"
+                                        >
+                                            {shopeeAttributesLoading ? (
+                                                <>
+                                                    <span className="animate-spin">⏳</span> Buscando...
+                                                </>
+                                            ) : (
+                                                <>🔄 Recarregar</>
+                                            )}
+                                        </button>
+                                    )}
                                 </div>
+
+                                {/* Loading state */}
+                                {shopeeAttributesLoading && (
+                                    <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <span className="animate-spin text-blue-500">⏳</span>
+                                        <span className="text-xs text-blue-700 font-medium">Buscando atributos da categoria {shopeeCategoryId}...</span>
+                                    </div>
+                                )}
+
+                                {/* Error from API */}
+                                {shopeeAttributesError && (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                                        <p className="text-xs text-red-700 font-medium">Erro ao buscar atributos</p>
+                                        <p className="text-xs text-red-600 mt-0.5">{shopeeAttributesError}</p>
+                                    </div>
+                                )}
+
+                                {/* Attribute summary badges */}
+                                {shopeeAttributeFields.length > 0 && !shopeeAttributesLoading && (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-3 text-xs">
+                                            <span className="text-slate-500">{shopeeAttributeFields.length} atributos na categoria</span>
+                                            {shopeeAttributeFields.filter(a => a.mandatory).length > 0 && (
+                                                <span className="text-orange-600 font-semibold">
+                                                    {shopeeAttributeFields.filter(a => a.mandatory).length} obrigatórios
+                                                </span>
+                                            )}
+                                            {Object.keys(shopeeAttributeDefaults).length > 0 && (
+                                                <span className="text-green-600 font-semibold">
+                                                    {Object.entries(shopeeAttributeDefaults).filter(([, v]) => String(v).trim()).length} preenchidos
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {shopeeAttributeFields.map((attr) => {
+                                                const attrId = String(attr.attribute_id);
+                                                const val = shopeeAttributeDefaults[attrId];
+                                                const hasVal = typeof val === 'string' && val.trim().length > 0;
+                                                const mandatory = attr.mandatory;
+                                                const bgClass = mandatory
+                                                    ? hasVal ? 'bg-green-50 border-green-200 text-green-700' : 'bg-orange-50 border-orange-200 text-orange-700'
+                                                    : hasVal ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-500';
+                                                return (
+                                                    <span key={attrId} className={`inline-flex items-center gap-1 px-2 py-0.5 border text-xs rounded-full ${bgClass}`}>
+                                                        {mandatory && <span title="Obrigatório">*</span>}
+                                                        <span className="font-medium">{attr.label || attrId}</span>
+                                                        {hasVal && <span className="font-mono opacity-80">: {val}</span>}
+                                                        {!hasVal && mandatory && <span className="italic opacity-60">vazio</span>}
+                                                    </span>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <textarea
                                     rows={8}
                                     placeholder={'{\n  "100121": "3 Months",\n  "100134": "TPU"\n}'}
@@ -2653,15 +2815,6 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 />
                                 {shopeeAttributeDefaultsError && (
                                     <p className="text-xs text-red-600">{shopeeAttributeDefaultsError}</p>
-                                )}
-                                {Object.keys(shopeeAttributeDefaults).length > 0 && !shopeeAttributeDefaultsError && (
-                                    <div className="flex flex-wrap gap-2">
-                                        {Object.entries(shopeeAttributeDefaults).map(([attrId, attrVal]) => (
-                                            <span key={attrId} className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-50 border border-orange-200 text-orange-700 text-xs rounded-full">
-                                                <span className="font-mono font-semibold">{attrId}</span>: {String(attrVal)}
-                                            </span>
-                                        ))}
-                                    </div>
                                 )}
                             </div>
                         </div>
