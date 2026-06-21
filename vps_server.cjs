@@ -25389,6 +25389,31 @@ async function runMigrations() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopee_products (
+      id VARCHAR(80) PRIMARY KEY,
+      company_id VARCHAR(255) NULL,
+      product_id VARCHAR(255) NOT NULL,
+      shopee_item_id BIGINT NULL,
+      shopee_category_id BIGINT NULL,
+      shopee_category_name VARCHAR(255) NULL,
+      shopee_price BIGINT NULL,
+      shopee_model_id BIGINT NULL,
+      shopee_model_sku VARCHAR(255) NULL,
+      shopee_model_name VARCHAR(255) NULL,
+      shopee_tier_index JSON NULL,
+      status VARCHAR(40) NULL,
+      last_synced_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY idx_shopee_products_product (product_id),
+      INDEX idx_shopee_products_company (company_id),
+      INDEX idx_shopee_products_item (shopee_item_id),
+      INDEX idx_shopee_products_item_model (shopee_item_id, shopee_model_id),
+      INDEX idx_shopee_products_status (status),
+      INDEX idx_shopee_products_synced_at (last_synced_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_settings (
       id INT PRIMARY KEY,
       enabled TINYINT(1) NOT NULL DEFAULT 0,
