@@ -26,6 +26,11 @@ import {
     buildShopeeAttributeDefaultsPayload,
     summarizeShopeeAttributes,
 } from '../../pages/admin/settings/shopeeAttributeResolver.js';
+import {
+    buildCategoryTree,
+    getCategoryPathLabel,
+    searchShopeeCategories,
+} from '../../pages/admin/settings/shopeeCategoryHelpers.js';
 
 // Atributo de categoria Shopee normalizado (mesmo formato retornado por
 // normalizeShopeeAttributes em shopeeAttributeResolver.js). Declarado localmente
@@ -465,6 +470,12 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [shopeeSimilarSearch, setShopeeSimilarSearch] = useState('');
     const [shopeeSimilarResults, setShopeeSimilarResults] = useState<any[]>([]);
     const [shopeeSimilarLoading, setShopeeSimilarLoading] = useState(false);
+    const [shopeeCategorySearch, setShopeeCategorySearch] = useState('');
+    const [shopeeCategoryTree, setShopeeCategoryTree] = useState<any[]>([]);
+    const [shopeeCategoryResults, setShopeeCategoryResults] = useState<any[]>([]);
+    const [shopeeCategoriesLoading, setShopeeCategoriesLoading] = useState(false);
+    const [shopeeCategoriesLoaded, setShopeeCategoriesLoaded] = useState(false);
+    const [shopeeCategoriesError, setShopeeCategoriesError] = useState('');
     // Shopee attribute auto-loading state (busca atributos da categoria + sugestoes)
     const [shopeeAttributeFields, setShopeeAttributeFields] = useState<ShopeeAttributeField[]>([]);
     const [shopeeAttributesLoading, setShopeeAttributesLoading] = useState(false);
@@ -1326,6 +1337,53 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         if (shopeeCategoryId) loadShopeeAttributes(shopeeCategoryId);
     };
 
+    const loadShopeeCategories = async () => {
+        if (shopeeCategoriesLoaded || shopeeCategoriesLoading) return;
+
+        setShopeeCategoriesLoading(true);
+        setShopeeCategoriesError('');
+        try {
+            const res = await fetch('/api/shopee-catalog?action=categories');
+            const data = await res.json();
+            if (data?.error) {
+                throw new Error(data.message || data.error);
+            }
+            const tree = buildCategoryTree(data.response?.category_list || []);
+            setShopeeCategoryTree(tree);
+            setShopeeCategoriesLoaded(true);
+        } catch (err: any) {
+            setShopeeCategoriesError(err?.message || 'Erro ao carregar categorias da Shopee.');
+        } finally {
+            setShopeeCategoriesLoading(false);
+        }
+    };
+
+    const handleShopeeCategorySearchChange = (value: string) => {
+        setShopeeCategorySearch(value);
+        if (!value.trim()) {
+            setShopeeCategoryResults([]);
+            return;
+        }
+        if (shopeeCategoryTree.length === 0) {
+            loadShopeeCategories();
+            return;
+        }
+        setShopeeCategoryResults(searchShopeeCategories(shopeeCategoryTree, value, 8));
+    };
+
+    useEffect(() => {
+        if (!shopeeCategorySearch.trim() || shopeeCategoryTree.length === 0) return;
+        setShopeeCategoryResults(searchShopeeCategories(shopeeCategoryTree, shopeeCategorySearch, 8));
+    }, [shopeeCategorySearch, shopeeCategoryTree]);
+
+    const selectShopeeCategoryByName = (category: any) => {
+        setShopeeCategoryId(Number(category.category_id));
+        setShopeeCategoryName(category.__pathLabel || getCategoryPathLabel(category) || category.display_category_name || category.original_category_name || '');
+        setShopeeCategorySearch('');
+        setShopeeCategoryResults([]);
+        toast.success('Categoria Shopee selecionada: ' + (category.display_category_name || category.category_id));
+    };
+
     const handleSearchShopeeSimilar = async () => {
         const query = shopeeSimilarSearch.trim() || name.trim();
         if (!query) return;
@@ -1852,6 +1910,58 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                             value={categoryId}
                                             onChange={setCategoryId}
                                         />
+                                    </div>
+
+                                    <div className="lg:col-span-2 space-y-2">
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Categoria Shopee
+                                        </label>
+                                        {shopeeCategoryId && (
+                                            <div className="flex items-center justify-between gap-3 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-slate-800 truncate">{shopeeCategoryName || 'Categoria selecionada'}</p>
+                                                    <p className="text-xs text-slate-500">ID interno: {shopeeCategoryId}</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShopeeCategoryId(null); setShopeeCategoryName(''); }}
+                                                    className="shrink-0 text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-1 rounded transition-colors"
+                                                >
+                                                    Remover
+                                                </button>
+                                            </div>
+                                        )}
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar categoria Shopee pelo nome"
+                                                value={shopeeCategorySearch}
+                                                onFocus={loadShopeeCategories}
+                                                onChange={(e) => handleShopeeCategorySearchChange(e.target.value)}
+                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                            />
+                                            {shopeeCategoriesLoading && (
+                                                <p className="text-xs text-orange-600 mt-1">Carregando categorias da Shopee...</p>
+                                            )}
+                                            {shopeeCategoriesError && (
+                                                <p className="text-xs text-red-600 mt-1">{shopeeCategoriesError}</p>
+                                            )}
+                                            {shopeeCategoryResults.length > 0 && (
+                                                <div className="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-orange-200 bg-white shadow-lg">
+                                                    {shopeeCategoryResults.map((category: any) => (
+                                                        <button
+                                                            key={category.category_id}
+                                                            type="button"
+                                                            onClick={() => selectShopeeCategoryByName(category)}
+                                                            className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-slate-100 last:border-b-0 transition-colors"
+                                                        >
+                                                            <span className="block text-sm font-medium text-slate-800">{category.display_category_name || category.original_category_name}</span>
+                                                            <span className="block text-xs text-slate-500">{category.__pathLabel || category.category_id}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     <div className="lg:col-span-2">
@@ -2643,27 +2753,35 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">ID da Categoria Shopee</label>
-                                        <input
-                                            type="number"
-                                            placeholder="Ex: 100490"
-                                            value={shopeeCategoryId ?? ''}
-                                            onChange={(e) => setShopeeCategoryId(e.target.value ? Number(e.target.value) : null)}
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">Nome da Categoria</label>
+                                <div className="space-y-2">
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Buscar Categoria Shopee pelo nome</label>
+                                    <div className="relative">
                                         <input
                                             type="text"
-                                            placeholder="Ex: Capas de Celular"
-                                            value={shopeeCategoryName}
-                                            onChange={(e) => setShopeeCategoryName(e.target.value)}
+                                            placeholder="Ex: Fontes, Cabos USB, Capas de Celular"
+                                            value={shopeeCategorySearch}
+                                            onFocus={loadShopeeCategories}
+                                            onChange={(e) => handleShopeeCategorySearchChange(e.target.value)}
                                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
                                         />
+                                        {shopeeCategoryResults.length > 0 && (
+                                            <div className="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-orange-200 bg-white shadow-lg">
+                                                {shopeeCategoryResults.map((category: any) => (
+                                                    <button
+                                                        key={'shopee-tab-' + category.category_id}
+                                                        type="button"
+                                                        onClick={() => selectShopeeCategoryByName(category)}
+                                                        className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-slate-100 last:border-b-0 transition-colors"
+                                                    >
+                                                        <span className="block text-sm font-medium text-slate-800">{category.display_category_name || category.original_category_name}</span>
+                                                        <span className="block text-xs text-slate-500">{category.__pathLabel || category.category_id}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
+                                    {shopeeCategoriesLoading && <p className="text-xs text-orange-600">Carregando categorias da Shopee...</p>}
+                                    {shopeeCategoriesError && <p className="text-xs text-red-600">{shopeeCategoriesError}</p>}
                                 </div>
 
                                 <div className="border-t border-slate-100 pt-4">

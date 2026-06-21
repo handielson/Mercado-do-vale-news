@@ -1,8 +1,8 @@
 {
-  "version": "v1.1.82-shopee-model-auto-attributes",
+  "version": "v1.1.83-shopee-category-name-search",
   "date": "2026-06-21",
-  "status": "pending",
-  "release_vps": "pendente",
+  "status": "ready-for-deploy",
+  "release_vps": "/var/www/mdv-site/releases/20260621-143528-v1183-shopee-category-name-search",
   "branch": "codex/publish-delivery-ops-20260614",
-  "summary": "Ao definir uma categoria Shopee no cadastro de modelos, busca automaticamente os atributos e preenche sugestoes (marca local, modelo do nome, defaults de template)."
+  "summary": "Categoria Shopee no cadastro de modelos agora pode ser buscada pelo nome abaixo da Categoria Padrao, salvando o ID internamente e carregando atributos automaticamente."
 }
