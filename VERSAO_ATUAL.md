@@ -3,8 +3,8 @@
 ```text
 version: v1.1.83-shopee-category-name-search
 date: 2026-06-21
-status: ready-for-deploy
-release_vps: /var/www/mdv-site/releases/20260621-143528-v1183-shopee-category-name-search
+status: published
+release_vps: /var/www/mdv-site/releases/20260621-143855-v1183-shopee-category-name-search
 branch: codex/publish-delivery-ops-20260614
 summary: Categoria Shopee no cadastro de modelos agora pode ser buscada pelo nome abaixo da Categoria Padrao, salvando o ID internamente e carregando atributos automaticamente.
 ```
