@@ -46,7 +46,6 @@ export const CategoryEditPage: React.FC<CategoryEditPageProps> = ({
         storage: 'optional',
         ram: 'optional',
         version: 'optional',
-        battery_health: 'optional',
         custom_fields: [],
         ean_autofill_config: { enabled: true, exclude_fields: [] }
     });

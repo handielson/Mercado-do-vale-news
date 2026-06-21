@@ -170,6 +170,11 @@ const NON_TEMPLATE_CATEGORY_KEYS = new Set([
     'specs.storage',
 ]);
 
+const GLOBAL_SPEC_FIELD_BLOCKLIST = new Set([
+    'battery_health',
+    'specs.battery_health',
+]);
+
 const CATEGORY_FIELD_LABELS: Record<string, string> = {
     antutu: 'Antutu',
     audio: 'Audio',
@@ -355,6 +360,7 @@ const formatCategoryFieldLabel = (key: string) => {
 
 const shouldCreateTemplateFieldFromCategoryConfig = (key: string, value: unknown) => {
     if (NON_TEMPLATE_CATEGORY_KEYS.has(key)) return false;
+    if (GLOBAL_SPEC_FIELD_BLOCKLIST.has(key)) return false;
     if (isModelUnitFieldKey(key)) return false;
     if (isModelVariationFieldKey(key)) return false;
     if (value === 'off' || value === 'hidden') return false;
@@ -640,6 +646,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     };
     const visibleSpecFields = templateFields
         .filter(f => f.category === 'spec')
+        .filter(field => !GLOBAL_SPEC_FIELD_BLOCKLIST.has(field.key) && !GLOBAL_SPEC_FIELD_BLOCKLIST.has(`specs.${field.key}`))
         .filter(field => !isModelUnitFieldKey(field.key) && !isModelUnitFieldKey(field.label))
         .filter(field => !isModelVariationFieldKey(field.key) && !isModelVariationFieldKey(field.label))
         .filter(isFieldEnabledForCategory)
@@ -653,7 +660,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         return normalizeFieldAlias(alias) === normalizeFieldAlias(key);
     });
     const getSanitizedTemplateValues = (values: Record<string, any>) => Object.fromEntries(
-        Object.entries(values).filter(([key]) => !isHiddenSpecKey(key) && !isModelUnitFieldKey(key) && !isModelVariationFieldKey(key))
+        Object.entries(values).filter(([key]) => !GLOBAL_SPEC_FIELD_BLOCKLIST.has(key) && !isHiddenSpecKey(key) && !isModelUnitFieldKey(key) && !isModelVariationFieldKey(key))
     );
     const modelImportPrompt = buildModelImportPrompt({
         name,
@@ -1226,6 +1233,56 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         )
     );
 
+    const handleShopeeAttributeDefaultFieldChange = (attributeId: string, value: string) => {
+        setShopeeAttributeDefaults((previous) => {
+            const next = { ...previous };
+            if (value.trim()) {
+                next[attributeId] = value;
+            } else {
+                delete next[attributeId];
+            }
+            setShopeeAttributeDefaultsText(Object.keys(next).length > 0 ? JSON.stringify(next, null, 2) : '');
+            setShopeeAttributeDefaultsError('');
+            return next;
+        });
+    };
+
+    const renderShopeeAttributeField = (attr: ShopeeAttributeField) => {
+        const attrId = String(attr.attribute_id);
+        const value = String(shopeeAttributeDefaults[attrId] ?? '');
+        const label = attr.label || `Atributo ${attrId}`;
+        const hasOptions = attr.attribute_value_list.length > 0;
+        const commonClassName = 'w-full px-3 py-2 border border-orange-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400';
+
+        return (
+            <div key={`shopee-attribute-${attrId}`}>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                    {label} {attr.mandatory && <span className="text-orange-600">*</span>} <span className="text-slate-400 font-mono">(shopee:{attrId})</span>
+                </label>
+                {hasOptions && attr.input_kind !== 'multiselect' ? (
+                    <select
+                        value={value}
+                        onChange={(event) => handleShopeeAttributeDefaultFieldChange(attrId, event.target.value)}
+                        className={commonClassName}
+                    >
+                        <option value="">Selecione</option>
+                        {attr.attribute_value_list.map((option) => (
+                            <option key={`${attrId}-${option.value_id}-${option.label}`} value={option.label}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                ) : (
+                    <input
+                        value={value}
+                        onChange={(event) => handleShopeeAttributeDefaultFieldChange(attrId, event.target.value)}
+                        className={commonClassName}
+                        placeholder={hasOptions ? 'Digite uma ou mais opcoes da Shopee' : 'Valor padrao do atributo'}
+                    />
+                )}
+            </div>
+        );
+    };
     const handleAddEan = (value?: string) => {
         const nextEan = (value ?? eanInputRef.current?.value ?? '').trim();
         if (!nextEan || eans.includes(nextEan)) return;
@@ -1247,8 +1304,14 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         }
         if (Object.keys(shopeeAttributeDefaults).length > 0) {
             merged['shopee_attribute_defaults'] = shopeeAttributeDefaults;
+            const labels = Object.fromEntries(shopeeAttributeFields.map((attr) => [String(attr.attribute_id), attr.label || `Atributo ${attr.attribute_id}`]));
+            const required = Object.fromEntries(shopeeAttributeFields.map((attr) => [String(attr.attribute_id), Boolean(attr.mandatory)]));
+            if (Object.keys(labels).length > 0) merged['shopee_attribute_labels'] = labels;
+            if (Object.keys(required).length > 0) merged['shopee_attribute_required'] = required;
         } else {
             delete merged['shopee_attribute_defaults'];
+            delete merged['shopee_attribute_labels'];
+            delete merged['shopee_attribute_required'];
         }
         return merged;
     };
@@ -1299,16 +1362,14 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             const productRef = { name, brand: shopeeBrandName };
             const payload = buildShopeeAttributeDefaultsPayload(fields, productRef);
 
-            if (Object.keys(payload).length > 0) {
-                setShopeeAttributeDefaults(payload);
-                setShopeeAttributeDefaultsText(JSON.stringify(payload, null, 2));
-                setShopeeAttributeDefaultsError('');
-            } else {
-                setShopeeAttributeDefaults({});
-                setShopeeAttributeDefaultsText('');
-            }
+            const nextDefaults = Object.keys(payload).length > 0
+                ? { ...payload, ...shopeeAttributeDefaults }
+                : { ...shopeeAttributeDefaults };
+            setShopeeAttributeDefaults(nextDefaults);
+            setShopeeAttributeDefaultsText(Object.keys(nextDefaults).length > 0 ? JSON.stringify(nextDefaults, null, 2) : '');
+            setShopeeAttributeDefaultsError('');
 
-            const summary = summarizeShopeeAttributes(fields, payload);
+            const summary = summarizeShopeeAttributes(fields, nextDefaults);
             if (summary.total > 0) {
                 toast.success(`Shopee: ${summary.total} atributos carregados, ${summary.filled} pré-preenchidos`, { id: 'shopee-attrs' });
             }
@@ -2054,8 +2115,15 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     <h5 className="text-sm font-semibold text-slate-800 mb-3">Campos tecnicos editaveis</h5>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {visibleSpecFields.map((field) => renderTemplateField(field))}
+                                        {shopeeAttributeFields.map((attr) => renderShopeeAttributeField(attr))}
                                     </div>
-                                    {categoryId && categoryConfig && visibleSpecFields.length === 0 && (
+                                    {shopeeAttributesLoading && (
+                                        <p className="mt-3 text-xs text-orange-700">Buscando atributos da categoria Shopee...</p>
+                                    )}
+                                    {shopeeAttributesError && (
+                                        <p className="mt-3 text-xs text-red-600">{shopeeAttributesError}</p>
+                                    )}
+                                    {categoryId && categoryConfig && visibleSpecFields.length === 0 && shopeeAttributeFields.length === 0 && (
                                         <div className="text-center py-6 text-slate-500">
                                             <p className="text-sm">Nenhum campo tecnico configurado para esta categoria</p>
                                         </div>

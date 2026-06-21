@@ -32,8 +32,7 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
         color: 'optional',
         storage: 'optional',
         ram: 'optional',
-        version: 'optional',
-        battery_health: 'optional'
+        version: 'optional'
     });
 
     useEffect(() => {
@@ -74,8 +73,7 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
                 color: 'optional',
                 storage: 'optional',
                 ram: 'optional',
-                version: 'optional',
-                battery_health: 'optional'
+                version: 'optional'
             });
         } catch (error) {
             console.error('Error creating category:', error);
@@ -89,14 +87,13 @@ export const CategorySelect: React.FC<CategorySelectProps> = ({
         setConfig(prev => ({ ...prev, [field]: value }));
     };
 
-    const fieldLabels: Record<keyof CategoryConfig, string> = {
+    const fieldLabels: Record<string, string> = {
         imei: 'IMEI',
         serial: 'Serial',
         color: 'Cor',
         storage: 'Armazenamento',
         ram: 'RAM',
-        version: 'Versão',
-        battery_health: 'Saúde Bateria'
+        version: 'Versão'
     };
 
     return (

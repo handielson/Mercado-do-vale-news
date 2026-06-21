@@ -1,32 +1,28 @@
 # Versao Atual
 
-```text
-version: v1.1.83-shopee-category-name-search
+``text
+version: v1.1.84-shopee-attributes-specs
 date: 2026-06-21
 status: published
-release_vps: /var/www/mdv-site/releases/20260621-143855-v1183-shopee-category-name-search
+release_vps: /var/www/mdv-site/releases/20260621-145826-v1184-shopee-attributes-specs
 branch: codex/publish-delivery-ops-20260614
-summary: Categoria Shopee no cadastro de modelos agora pode ser buscada pelo nome abaixo da Categoria Padrao, salvando o ID internamente e carregando atributos automaticamente.
-```
+summary: Atributos Shopee aparecem como campos editaveis no JSON/IA, sao salvos com labels para a vitrine publica e Saude da Bateria deixa de ser campo tecnico global.
+``
 
-## O que entrou no v1.1.83
+## O que entrou no v1.1.84
 
-- Campo "Categoria Shopee" abaixo de "Categoria Padrao" na aba JSON / IA do cadastro de modelos.
-- Busca de categoria Shopee pelo nome usando a lista oficial retornada por `/api/shopee-catalog?action=categories`.
-- Selecao da categoria salva o ID Shopee internamente e dispara o carregamento dos atributos da categoria.
-- Aba Shopee mantida, mas o fluxo principal tambem passa a usar busca por nome em vez de digitar ID manualmente.
-- Protecao contra regressao em `tmp-tests/model-modal-shopee-category-name-search-static.test.mjs`.
+- Atributos da categoria Shopee agora aparecem como campos editaveis no bloco "Campos tecnicos editaveis" da aba JSON / IA do cadastro de modelos.
+- Cada atributo Shopee preenchido sincroniza com o JSON shopee_attribute_defaults, mantendo a aba Shopee compativel com edicao em massa.
+- O modelo salva tambem shopee_attribute_labels e shopee_attribute_required, permitindo exibir os atributos com nomes legiveis na pagina publica do produto.
+- A pagina publica transforma os atributos Shopee preenchidos em especificacoes visiveis e oculta as chaves internas de integracao.
+- attery_health deixou de ser fallback/spec tecnico global em modelos e categorias novas, e a vitrine publica oculta o campo legado generico.
+- Protecoes contra regressao em 	mp-tests/model-shopee-attributes-json-section-static.test.mjs e 	mp-tests/shopee-public-specs-and-battery-health-static.test.mjs.
 
-## O que entrou no v1.1.82 (incluido neste deploy)
+## Validacoes
 
-- Novo helper `pages/admin/settings/shopeeAttributeResolver.js` com logica de normalizacao de atributos + sugestoes de valores, reusavel por outros componentes.
-- `ModelModal.tsx`: useEffect reativo a `shopeeCategoryId` que busca atributos via `/api/shopee-catalog?action=attributes&category_id=<id>`.
-- Pre-preenchimento automatico do JSON de "Atributos Padrao" com sugestoes (marca local, modelo do nome, defaults do template de capa de celular).
-- Atributos obrigatorios sem sugestao entram como string vazia para o operador preencher.
-- UI: spinner de carregamento, mensagem de erro, botao "Recarregar", badges coloridos por atributo (obrigatorio/preenchido/vazio).
-- Protecao contra regressao com checks em `tmp-tests/shopee-model-modal-auto-attributes-static.test.mjs`.
-
-## O que entrou no v1.1.81 (incluido neste deploy)
-
-- Handler `search_synced_products` no servidor para o botao "Buscar" da aba Shopee do ModelModal.
-- Antes a acao caia no default "Acao desconhecida" e a busca de categoria similar nao retornava nada.
+- 
+ode tmp-tests\\model-shopee-attributes-json-section-static.test.mjs
+- 
+ode tmp-tests\\shopee-public-specs-and-battery-health-static.test.mjs
+- 
+pm.cmd run build fora do sandbox apos spawn EPERM no Vite dentro do sandbox.

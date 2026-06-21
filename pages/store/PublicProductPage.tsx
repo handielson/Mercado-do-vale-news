@@ -1898,7 +1898,8 @@ export const PublicProductPage: React.FC = () => {
                                             'weight_kg', 'width_cm', 'height_cm', 'depth_cm', 'peso_kg', 'largura_cm', 'altura_cm', 'profundidade_cm',
                                             'tags_venda', 'cross_sell_tags', 'tags',
                                             'bling_name_sync',
-                                            'slug', 'meta_title', 'meta_description', 'keywords', 'exclude_from_seo'
+                                            'slug', 'meta_title', 'meta_description', 'keywords', 'exclude_from_seo',
+                                            'shopee_attribute_defaults', 'shopee_attribute_labels', 'shopee_attribute_required'
                                         ]);
 
                                         // UUID regex — oculta valores que são IDs internos
@@ -2016,6 +2017,20 @@ export const PublicProductPage: React.FC = () => {
                                         ];
 
                                         const specs = product.specs as Record<string, unknown>;
+                                        const publicSpecs: Record<string, unknown> = { ...specs };
+                                        const publicSpecLabels: Record<string, string> = { ...customFieldNames };
+                                        HIDDEN_KEYS.add('battery_health');
+                                        const shopeeAttributeDefaults = specs.shopee_attribute_defaults && typeof specs.shopee_attribute_defaults === 'object' && !Array.isArray(specs.shopee_attribute_defaults)
+                                            ? specs.shopee_attribute_defaults as Record<string, unknown>
+                                            : {};
+                                        const shopeeAttributeLabels = specs.shopee_attribute_labels && typeof specs.shopee_attribute_labels === 'object' && !Array.isArray(specs.shopee_attribute_labels)
+                                            ? specs.shopee_attribute_labels as Record<string, unknown>
+                                            : {};
+                                        Object.entries(shopeeAttributeDefaults).forEach(([attributeId, value]) => {
+                                            const label = String(shopeeAttributeLabels[attributeId] || '').trim();
+                                            publicSpecs[`shopee_attribute_${attributeId}`] = value;
+                                            if (label) publicSpecLabels[`shopee_attribute_${attributeId}`] = label;
+                                        });
                                         const renderedKeys = new Set<string>();
                                         const allItems: { key: string, label: string, strVal: string }[] = [];
 
@@ -2037,19 +2052,19 @@ export const PublicProductPage: React.FC = () => {
                                                 const key: string = field.key || field.name?.toLowerCase().replace(/\s+/g, '_') || '';
                                                 if (!key) continue;
                                                 if (field.requirement === 'off' || field.requirement === 'hidden') continue;
-                                                const label: string = customFieldNames[key] || field.label || field.name || key.replace(/_/g, ' ');
-                                                tryAddItem(key, label, specs[key]);
+                                                const label: string = publicSpecLabels[key] || field.label || field.name || key.replace(/_/g, ' ');
+                                                tryAddItem(key, label, publicSpecs[key]);
                                             }
                                         }
 
                                         // ── 2. CAMPOS NATIVOS DA CATEGORIA ──
                                         for (const [nk, nl] of Object.entries(NATIVE_LABELS)) {
-                                            tryAddItem(nk, nl, specs[nk]);
+                                            tryAddItem(nk, nl, publicSpecs[nk]);
                                         }
 
                                         // ── 3. CAMPOS EXTRAS ──
-                                        for (const [key, value] of Object.entries(specs)) {
-                                            const label = customFieldNames[key] || key.replace(/_/g, ' ');
+                                        for (const [key, value] of Object.entries(publicSpecs)) {
+                                            const label = publicSpecLabels[key] || key.replace(/_/g, ' ');
                                             tryAddItem(key, label, value);
                                         }
 
