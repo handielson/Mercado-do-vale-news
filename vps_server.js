@@ -9558,9 +9558,21 @@ async function findAutoresponderPreferredPhoneCatalogCategory() {
   return rows[0] || null;
 }
 
+function isAutoresponderPhoneCatalogCategory(category) {
+  const text = normalizeAutoresponderText([category?.name, category?.slug].filter(Boolean).join(' ')).trim();
+  return /\b(celular|celulares|smartphone|smartphones)\b/.test(text);
+}
+
+async function resolveAutoresponderEffectiveCatalogCategory(category) {
+  if (!category?.id) return null;
+  if (!isAutoresponderPhoneCatalogCategory(category)) return category;
+  return await findAutoresponderPreferredPhoneCatalogCategory() || category;
+}
+
 async function resolveAutoresponderCatalogCategoryForMessage(message, categories) {
   const selectedCategory = findAutoresponderCatalogCategoryForMessage(message, categories);
-  if (selectedCategory?.id || !isAutoresponderPhoneCatalogCategoryMessage(message)) return selectedCategory;
+  if (selectedCategory?.id) return resolveAutoresponderEffectiveCatalogCategory(selectedCategory);
+  if (!isAutoresponderPhoneCatalogCategoryMessage(message)) return selectedCategory;
   return findAutoresponderPreferredPhoneCatalogCategory();
 }
 
@@ -9607,10 +9619,14 @@ async function resolveAutoresponderReplyTemplate(replyText, settings = null) {
       || categories.find((item) => normalizeAutoresponderText(item?.name || '').includes(normalizedName));
     let replacement = `Nao encontrei a categoria "${rawName}".`;
     if (category) {
-      const pageSize = getAutoresponderInitialProductPageSize(category.name);
-      const total = await countAutoresponderProductsByCategory(category.id);
-      const products = await findAutoresponderProductsByCategory(category.id, pageSize);
-      replacement = await formatAutoresponderProductSearchReply(products, category.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(category.name) });
+      const effectiveCategory = await resolveAutoresponderEffectiveCatalogCategory(category);
+      const categorySearchText = String(rawName || effectiveCategory?.name || '').trim();
+      const pageSize = getAutoresponderInitialProductPageSize(categorySearchText);
+      const fetchLimit = getAutoresponderCategoryProductFetchLimit(pageSize);
+      const rows = effectiveCategory?.id ? await findAutoresponderProductsByCategory(effectiveCategory.id, fetchLimit) : [];
+      const products = limitAutoresponderProductsByModelGroups(rows, pageSize);
+      const total = effectiveCategory?.id ? await countAutoresponderProductsByCategory(effectiveCategory.id) : 0;
+      replacement = await formatAutoresponderProductSearchReply(products, effectiveCategory?.name || category.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(rawName) || isAutoresponderCompleteProductListKeyword(effectiveCategory?.name || category.name) });
     }
     text = text.split(match[0]).join(replacement);
   }
@@ -11927,6 +11943,21 @@ function buildAutoresponderProductOptions(products) {
   });
 }
 
+function limitAutoresponderProductsByModelGroups(products, groupLimit) {
+  const safeProducts = filterAutoresponderAvailableProducts(products);
+  const safeLimit = Math.max(Number(groupLimit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1);
+  const selectedKeys = new Set();
+  const selectedProducts = [];
+  for (const product of safeProducts) {
+    const key = getAutoresponderProductGroupKey(product);
+    if (!key) continue;
+    if (!selectedKeys.has(key) && selectedKeys.size >= safeLimit) continue;
+    selectedKeys.add(key);
+    selectedProducts.push(product);
+  }
+  return selectedProducts;
+}
+
 function parseAutoresponderProductImages(value) {
   const parsed = parsePublicJson(value, []);
   if (Array.isArray(parsed)) return parsed.filter(Boolean);
@@ -12020,9 +12051,14 @@ function isAutoresponderCompleteProductListKeyword(keyword) {
 function getAutoresponderProductQueryLimit(limit) {
   const safeLimit = Math.max(Number(limit) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1);
   const maxLimit = safeLimit > AUTORESPONDER_PRODUCT_RESPONSE_LIMIT
-    ? AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT
+    ? Math.max(AUTORESPONDER_PRODUCT_RESPONSE_LIMIT, AUTORESPONDER_COMPLETE_PRODUCT_RESPONSE_LIMIT * 10)
     : AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
   return Math.min(safeLimit, maxLimit);
+}
+
+function getAutoresponderCategoryProductFetchLimit(pageSize) {
+  const safePageSize = Math.max(Number(pageSize) || AUTORESPONDER_PRODUCT_PAGE_SIZE, 1);
+  return Math.min(Math.max(safePageSize * 10, safePageSize + 1), 200);
 }
 
 const AUTORESPONDER_ACCESSORY_SEARCH_WORDS = [
@@ -12967,14 +13003,18 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   const selectedCategory = await resolveAutoresponderCatalogCategoryForMessage('smartphones', categories);
   if (!selectedCategory?.id) return null;
 
-  const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
-  const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
-  const products = rows.slice(0, pageSize);
-  const hasMore = rows.length > pageSize;
-  const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+  const effectiveCategory = await resolveAutoresponderEffectiveCatalogCategory(selectedCategory);
+  if (!effectiveCategory?.id) return null;
+  const categorySearchText = String(message || effectiveCategory.name || '').trim();
+  const pageSize = getAutoresponderInitialProductPageSize(categorySearchText);
+  const fetchLimit = getAutoresponderCategoryProductFetchLimit(pageSize);
+  const rows = await findAutoresponderProductsByCategory(effectiveCategory.id, fetchLimit);
+  const products = limitAutoresponderProductsByModelGroups(rows, pageSize);
+  const total = await countAutoresponderProductsByCategory(effectiveCategory.id);
+  const hasMore = rows.length >= fetchLimit || total > products.length;
   const productOptions = buildAutoresponderProductOptions(products);
   const productReplyMessages = appendAutoresponderReplyFooter(
-    await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name) }),
+    await formatAutoresponderProductSearchReplies(products, effectiveCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(message) || isAutoresponderCompleteProductListKeyword(effectiveCategory.name) }),
     formatAutoresponderProductReplyInstructions(hasMore)
   );
   const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
@@ -12990,13 +13030,13 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
   });
   await upsertAutoresponderOptionsConversation(sender, productOptions, {
     source: 'category',
-    categoryId: selectedCategory.id,
-    keyword: selectedCategory.name,
+    categoryId: effectiveCategory.id,
+    keyword: effectiveCategory.name,
     offset: 0,
     limit: pageSize,
     total,
     hasMore,
-    completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name),
+    completeList: isAutoresponderCompleteProductListKeyword(message) || isAutoresponderCompleteProductListKeyword(effectiveCategory.name),
   });
 
   return { replies: formatAutoresponderProReplies(replyMessages) };
@@ -13007,24 +13047,29 @@ async function buildAutoresponderCatalogCategoryReplyData(message, settings, sho
   const selectedCategory = await resolveAutoresponderCatalogCategoryForMessage(message, categories);
   if (!selectedCategory?.id) return null;
 
-  const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
-  const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
-  const products = rows.slice(0, pageSize);
-  const hasMore = rows.length > pageSize;
-  const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+  const effectiveCategory = await resolveAutoresponderEffectiveCatalogCategory(selectedCategory);
+  if (!effectiveCategory?.id) return null;
+  const categorySearchText = String(message || effectiveCategory.name || '').trim();
+  const pageSize = getAutoresponderInitialProductPageSize(categorySearchText);
+  const fetchLimit = getAutoresponderCategoryProductFetchLimit(pageSize);
+  const rows = await findAutoresponderProductsByCategory(effectiveCategory.id, fetchLimit);
+  const products = limitAutoresponderProductsByModelGroups(rows, pageSize);
+  const total = await countAutoresponderProductsByCategory(effectiveCategory.id);
+  const hasMore = rows.length >= fetchLimit || total > products.length;
   const productOptions = buildAutoresponderProductOptions(products);
   const productReplyMessages = appendAutoresponderReplyFooter(
-    await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, {
+    await formatAutoresponderProductSearchReplies(products, effectiveCategory.name, settings, {
       offset: 0,
       limit: pageSize,
       total,
-      completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name),
+      completeList: isAutoresponderCompleteProductListKeyword(message) || isAutoresponderCompleteProductListKeyword(effectiveCategory.name),
     }),
     formatAutoresponderProductReplyInstructions(hasMore)
   );
   const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
   return {
-    selectedCategory,
+    selectedCategory: effectiveCategory,
+    effectiveCategory,
     pageSize,
     products,
     hasMore,
@@ -13169,18 +13214,22 @@ async function buildAutoresponderCatalogToolSearchData({ query, message = '', co
   const categories = await findAutoresponderAvailableCategories(100);
   const selectedCategory = await resolveAutoresponderCatalogCategoryForMessage(safeQuery, categories);
   if (selectedCategory?.id && !isAutoresponderLikelyProductModelRequest(safeQuery)) {
-    const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
-    const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
-    const products = rows.slice(0, pageSize);
-    const hasMore = rows.length > pageSize;
-    const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+    const effectiveCategory = await resolveAutoresponderEffectiveCatalogCategory(selectedCategory);
+    if (!effectiveCategory?.id) return null;
+    const categorySearchText = String(safeQuery || effectiveCategory.name || '').trim();
+    const pageSize = getAutoresponderInitialProductPageSize(categorySearchText);
+    const fetchLimit = getAutoresponderCategoryProductFetchLimit(pageSize);
+    const rows = await findAutoresponderProductsByCategory(effectiveCategory.id, fetchLimit);
+    const products = limitAutoresponderProductsByModelGroups(rows, pageSize);
+    const total = await countAutoresponderProductsByCategory(effectiveCategory.id);
+    const hasMore = rows.length >= fetchLimit || total > products.length;
     const productOptions = buildAutoresponderProductOptions(products);
     const productReplyMessages = appendAutoresponderReplyFooter(
-      await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, {
+      await formatAutoresponderProductSearchReplies(products, effectiveCategory.name, settings, {
         offset: 0,
         limit: pageSize,
         total,
-        completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name),
+        completeList: isAutoresponderCompleteProductListKeyword(message) || isAutoresponderCompleteProductListKeyword(effectiveCategory.name),
       }),
       formatAutoresponderProductReplyInstructions(hasMore)
     );
@@ -13193,8 +13242,8 @@ async function buildAutoresponderCatalogToolSearchData({ query, message = '', co
     return {
       source: 'category',
       query: safeQuery,
-      searchKeyword: selectedCategory.name,
-      categoryId: selectedCategory.id,
+      searchKeyword: effectiveCategory.name,
+      categoryId: effectiveCategory.id,
       products,
       productOptions,
       pageSize,
@@ -15157,12 +15206,14 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     const categories = await findAutoresponderAvailableCategories(100);
     const budgetRequest = getAutoresponderBudgetCategoryRequest(message, categories);
     if (budgetRequest?.category?.id) {
-      const budgetKeyword = budgetRequest.category.name;
+      const effectiveBudgetCategory = await resolveAutoresponderEffectiveCatalogCategory(budgetRequest.category);
+      if (!effectiveBudgetCategory?.id) return null;
+      const budgetKeyword = effectiveBudgetCategory.name;
       const pageSize = getAutoresponderInitialProductPageSize(budgetKeyword);
-      const rows = await findAutoresponderProductsByCategoryBudget(budgetRequest.category.id, budgetRequest.budgetCents, pageSize + 1);
+      const rows = await findAutoresponderProductsByCategoryBudget(effectiveBudgetCategory.id, budgetRequest.budgetCents, pageSize + 1);
       const products = rows.slice(0, pageSize);
       const hasMore = rows.length > pageSize;
-      const total = await countAutoresponderProductsByCategoryBudget(budgetRequest.category.id, budgetRequest.budgetCents);
+      const total = await countAutoresponderProductsByCategoryBudget(effectiveBudgetCategory.id, budgetRequest.budgetCents);
       if (products.length > 0) {
         const keyword = `${budgetKeyword} ate ${formatAutoresponderCurrency(budgetRequest.budgetCents / 100)}`;
         const productReplyMessages = appendAutoresponderReplyFooter(
@@ -15199,13 +15250,17 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
     const categories = await findAutoresponderAvailableCategories(100);
     const selectedCategory = await resolveAutoresponderCatalogCategoryForMessage(message, categories);
     if (selectedCategory?.id) {
-      const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
-      const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
-      const products = rows.slice(0, pageSize);
-      const hasMore = rows.length > pageSize;
-      const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+      const effectiveCategory = await resolveAutoresponderEffectiveCatalogCategory(selectedCategory);
+      if (!effectiveCategory?.id) return null;
+      const categorySearchText = String(message || effectiveCategory.name || '').trim();
+      const pageSize = getAutoresponderInitialProductPageSize(categorySearchText);
+      const fetchLimit = getAutoresponderCategoryProductFetchLimit(pageSize);
+      const rows = await findAutoresponderProductsByCategory(effectiveCategory.id, fetchLimit);
+      const products = limitAutoresponderProductsByModelGroups(rows, pageSize);
+      const total = await countAutoresponderProductsByCategory(effectiveCategory.id);
+      const hasMore = rows.length >= fetchLimit || total > products.length;
       const productReplyMessages = appendAutoresponderReplyFooter(
-        await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name) }),
+        await formatAutoresponderProductSearchReplies(products, effectiveCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(message) || isAutoresponderCompleteProductListKeyword(effectiveCategory.name) }),
         formatAutoresponderProductReplyInstructions(hasMore)
       );
       const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
@@ -15570,7 +15625,7 @@ fastify.route({
           });
           await upsertAutoresponderOptionsConversation(senderKey, catalogData.productOptions, {
             source: 'category',
-            categoryId: catalogData.selectedCategory.id,
+            categoryId: catalogData.effectiveCategory.id,
             offset: 0,
             limit: catalogData.pageSize,
             total: catalogData.total,
@@ -15811,13 +15866,13 @@ fastify.route({
         });
         await upsertAutoresponderOptionsConversation(senderKey, greetingCatalogReply.productOptions, {
           source: 'category',
-          categoryId: greetingCatalogReply.selectedCategory.id,
-          keyword: greetingCatalogReply.selectedCategory.name,
+          categoryId: greetingCatalogReply.effectiveCategory.id,
+          keyword: greetingCatalogReply.effectiveCategory.name,
           offset: 0,
           limit: greetingCatalogReply.pageSize,
           total: greetingCatalogReply.total,
           hasMore: greetingCatalogReply.hasMore,
-          completeList: isAutoresponderCompleteProductListKeyword(greetingCatalogReply.selectedCategory.name),
+          completeList: isAutoresponderCompleteProductListKeyword(greetingCatalogReply.effectiveCategory.name),
         });
 
         return { replies: formatAutoresponderProReplies(greetingCatalogReply.replyMessages) };
@@ -16523,14 +16578,18 @@ fastify.route({
       if (categoryContext?.pagination?.source === 'category_list') {
         const selectedCategory = findAutoresponderSelectedCategoryFromMessage(message, categoryContext.items, detectedIntent.numberedChoice);
         if (selectedCategory?.id) {
-          const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
-          const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
-          const products = rows.slice(0, pageSize);
-          const hasMore = rows.length > pageSize;
-          const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+          const effectiveCategory = await resolveAutoresponderEffectiveCatalogCategory(selectedCategory);
+          if (!effectiveCategory?.id) return null;
+          const categorySearchText = String(message || effectiveCategory.name || '').trim();
+          const pageSize = getAutoresponderInitialProductPageSize(categorySearchText);
+          const fetchLimit = getAutoresponderCategoryProductFetchLimit(pageSize);
+          const rows = await findAutoresponderProductsByCategory(effectiveCategory.id, fetchLimit);
+          const products = limitAutoresponderProductsByModelGroups(rows, pageSize);
+          const total = await countAutoresponderProductsByCategory(effectiveCategory.id);
+          const hasMore = rows.length >= fetchLimit || total > products.length;
           const productOptions = buildAutoresponderProductOptions(products);
           const productReplyMessages = appendAutoresponderReplyFooter(
-            await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name) }),
+            await formatAutoresponderProductSearchReplies(products, effectiveCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(message) || isAutoresponderCompleteProductListKeyword(effectiveCategory.name) }),
             formatAutoresponderProductReplyInstructions(hasMore)
           );
           const replyMessages = buildAutoresponderReplyMessagesWithSeparateGreeting(productReplyMessages, {
@@ -16551,8 +16610,8 @@ fastify.route({
           });
           await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
             source: 'category',
-            categoryId: selectedCategory.id,
-            keyword: selectedCategory.name,
+            categoryId: effectiveCategory.id,
+            keyword: effectiveCategory.name,
             offset: 0,
             limit: pageSize,
             total,
@@ -17149,12 +17208,14 @@ fastify.route({
         const categories = await findAutoresponderAvailableCategories(100);
         const budgetRequest = getAutoresponderBudgetCategoryRequest(message, categories);
         if (budgetRequest?.category?.id) {
-          const budgetKeyword = budgetRequest.category.name;
+          const effectiveBudgetCategory = await resolveAutoresponderEffectiveCatalogCategory(budgetRequest.category);
+          if (!effectiveBudgetCategory?.id) return null;
+          const budgetKeyword = effectiveBudgetCategory.name;
           const pageSize = getAutoresponderInitialProductPageSize(budgetKeyword);
-          const rows = await findAutoresponderProductsByCategoryBudget(budgetRequest.category.id, budgetRequest.budgetCents, pageSize + 1);
+          const rows = await findAutoresponderProductsByCategoryBudget(effectiveBudgetCategory.id, budgetRequest.budgetCents, pageSize + 1);
           const products = rows.slice(0, pageSize);
           const hasMore = rows.length > pageSize;
-          const total = await countAutoresponderProductsByCategoryBudget(budgetRequest.category.id, budgetRequest.budgetCents);
+          const total = await countAutoresponderProductsByCategoryBudget(effectiveBudgetCategory.id, budgetRequest.budgetCents);
           if (products.length > 0) {
             const productOptions = buildAutoresponderProductOptions(products);
             const keyword = `${budgetKeyword} ate ${formatAutoresponderCurrency(budgetRequest.budgetCents / 100)}`;
@@ -17175,7 +17236,7 @@ fastify.route({
             });
             await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
               source: 'category_budget',
-              categoryId: budgetRequest.category.id,
+              categoryId: effectiveBudgetCategory.id,
               budgetCents: budgetRequest.budgetCents,
               keyword,
               offset: 0,
@@ -17214,14 +17275,18 @@ fastify.route({
         const categories = await findAutoresponderAvailableCategories(100);
         const selectedCategory = await resolveAutoresponderCatalogCategoryForMessage(message, categories);
         if (selectedCategory?.id) {
-          const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
-          const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
-          const products = rows.slice(0, pageSize);
-          const hasMore = rows.length > pageSize;
-          const total = await countAutoresponderProductsByCategory(selectedCategory.id);
+          const effectiveCategory = await resolveAutoresponderEffectiveCatalogCategory(selectedCategory);
+          if (!effectiveCategory?.id) return null;
+          const categorySearchText = String(message || effectiveCategory.name || '').trim();
+          const pageSize = getAutoresponderInitialProductPageSize(categorySearchText);
+          const fetchLimit = getAutoresponderCategoryProductFetchLimit(pageSize);
+          const rows = await findAutoresponderProductsByCategory(effectiveCategory.id, fetchLimit);
+          const products = limitAutoresponderProductsByModelGroups(rows, pageSize);
+          const total = await countAutoresponderProductsByCategory(effectiveCategory.id);
+          const hasMore = rows.length >= fetchLimit || total > products.length;
           const productOptions = buildAutoresponderProductOptions(products);
           const productReplyMessages = appendAutoresponderReplyFooter(
-            await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name) }),
+            await formatAutoresponderProductSearchReplies(products, effectiveCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(message) || isAutoresponderCompleteProductListKeyword(effectiveCategory.name) }),
             formatAutoresponderProductReplyInstructions(hasMore)
           );
           const replyMessages = buildAutoresponderReplyMessagesWithSeparateGreeting(productReplyMessages, {
@@ -17242,13 +17307,13 @@ fastify.route({
           });
           await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
             source: 'category',
-            categoryId: selectedCategory.id,
-            keyword: selectedCategory.name,
+            categoryId: effectiveCategory.id,
+            keyword: effectiveCategory.name,
             offset: 0,
             limit: pageSize,
             total,
             hasMore,
-            completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name),
+            completeList: isAutoresponderCompleteProductListKeyword(message) || isAutoresponderCompleteProductListKeyword(effectiveCategory.name),
           });
 
           return { replies: formatAutoresponderProReplies(replyMessages) };
