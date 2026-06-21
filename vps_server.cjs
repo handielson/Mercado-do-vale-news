@@ -4421,6 +4421,33 @@ async function handleShopeeActionsVps(request, reply) {
         return reply.code(result.status).send(result.data);
       }
 
+      case 'search_synced_products': {
+        const rawQuery = String(payload.query || '').trim();
+        if (!rawQuery) return reply.code(200).send({ results: [] });
+        const limit = Math.min(Math.max(Number(payload.limit) || 8, 1), 50);
+        const like = `%${rawQuery}%`;
+        const [rows] = await pool.query(
+          `SELECT sp.product_id AS id, p.name AS name, p.sku AS sku,
+                  sp.shopee_category_id AS shopee_category_id,
+                  sp.shopee_category_name AS shopee_category_name
+             FROM shopee_products sp
+             JOIN products p ON p.id = sp.product_id
+            WHERE sp.shopee_category_id IS NOT NULL
+              AND (p.name LIKE ? OR p.sku LIKE ?)
+            ORDER BY sp.last_synced_at IS NULL, sp.last_synced_at DESC
+            LIMIT ?`,
+          [like, like, limit]
+        );
+        const results = (Array.isArray(rows) ? rows : []).map((row) => ({
+          id: row.id,
+          name: row.name,
+          sku: row.sku,
+          shopee_category_id: row.shopee_category_id != null ? Number(row.shopee_category_id) : null,
+          shopee_category_name: row.shopee_category_name || '',
+        }));
+        return reply.code(200).send({ results });
+      }
+
       default:
         return reply.code(400).send({ error: 'Ação desconhecida' });
     }
