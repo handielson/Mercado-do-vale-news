@@ -22057,6 +22057,7 @@ fastify.post('/customers/:customerId/delivery-payments', { preHandler: requireSy
   const customerId = String(req.params.customerId || '').trim();
   const amount = normalizeDeliveryLedgerAmount(req.body?.amount);
   const description = String(req.body?.description || '').trim();
+  const paymentMethod = String(req.body?.payment_method || '').trim().slice(0, 40) || null;
   const paidAt = formatDateTimeSql(req.body?.paid_at || new Date());
   if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
   if (amount <= 0) return reply.code(400).send({ error: 'valor invalido' });
@@ -22085,9 +22086,9 @@ fastify.post('/customers/:customerId/delivery-payments', { preHandler: requireSy
       id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
       await connection.query(
         `INSERT INTO customer_delivery_settlements
-          (id, customer_id, type, amount, paid_at, description)
-         VALUES (?, ?, 'payment', ?, ?, ?)`,
-        [id, customerId, settlementAmount, paidAt, description]
+          (id, customer_id, type, amount, paid_at, payment_method, description)
+         VALUES (?, ?, 'payment', ?, ?, ?, ?)`,
+        [id, customerId, settlementAmount, paidAt, paymentMethod, description]
       );
     }
 
@@ -22111,6 +22112,7 @@ fastify.post('/customers/:customerId/delivery-payments', { preHandler: requireSy
       settlement_amount: settlementAmount,
       overpayment_amount: overpaymentAmount,
       paid_at: paidAt,
+      payment_method: paymentMethod,
       description,
       overpayment_debt_id: overpaymentDebtId,
     });
@@ -22149,8 +22151,8 @@ fastify.post('/customers/:customerId/delivery-offsets', { preHandler: requireSyn
     const novoSaldo = Math.max(0, Number(debt.saldo_devedor || 0) - amount);
     await connection.query('UPDATE customer_debts SET saldo_devedor = ?, status = ? WHERE id = ?', [novoSaldo, novoSaldo <= 0 ? 'paid' : 'partial', debtId]);
     await connection.query(
-      `INSERT INTO customer_delivery_settlements (id, customer_id, debt_id, type, amount, paid_at, description)
-       VALUES (?, ?, ?, 'debt_offset', ?, ?, ?)`,
+      `INSERT INTO customer_delivery_settlements (id, customer_id, debt_id, type, amount, paid_at, payment_method, description)
+       VALUES (?, ?, ?, 'debt_offset', ?, ?, 'saldo_entregas', ?)`,
       [settlementId, customerId, debtId, amount, paidAt, description]
     );
     await connection.commit();
@@ -25353,6 +25355,38 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   await seedDefaultEmailTemplates();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopee_templates (
+      id VARCHAR(80) PRIMARY KEY,
+      company_id VARCHAR(255) NULL,
+      name VARCHAR(180) NOT NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      priority INT NOT NULL DEFAULT 0,
+      rules JSON NULL,
+      title_template TEXT NULL,
+      description_template MEDIUMTEXT NULL,
+      shopee_category_id BIGINT NULL,
+      shopee_category_name VARCHAR(255) NULL,
+      attribute_defaults JSON NULL,
+      price_mode VARCHAR(20) NOT NULL DEFAULT 'product',
+      fixed_price DECIMAL(12,2) NULL,
+      price_percent DECIMAL(8,4) NULL,
+      stock_mode VARCHAR(20) NOT NULL DEFAULT 'product',
+      fixed_stock INT NULL,
+      dimension_mode VARCHAR(20) NOT NULL DEFAULT 'product',
+      weight_kg DECIMAL(10,3) NULL,
+      package_length DECIMAL(10,2) NULL,
+      package_width DECIMAL(10,2) NULL,
+      package_height DECIMAL(10,2) NULL,
+      gtin_mode VARCHAR(20) NOT NULL DEFAULT 'product',
+      dangerous_terms JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_shopee_templates_company (company_id),
+      INDEX idx_shopee_templates_active (active),
+      INDEX idx_shopee_templates_priority (priority)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_settings (
@@ -26435,6 +26469,7 @@ async function runMigrations() {
       type ENUM('payment','debt_offset') NOT NULL,
       amount BIGINT NOT NULL,
       paid_at DATETIME NOT NULL,
+      payment_method VARCHAR(40) NULL,
       description TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_customer_delivery_settlements_customer (customer_id),
@@ -26443,6 +26478,7 @@ async function runMigrations() {
       INDEX idx_customer_delivery_settlements_paid_at (paid_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await addColumnIfMissing('customer_delivery_settlements', 'payment_method', 'VARCHAR(40) NULL');
   await addColumnIfMissing('sales', 'delivery_person_customer_id', 'VARCHAR(255) NULL');
   await addIndexIfMissing('sales', 'idx_sales_delivery_person_customer', 'delivery_person_customer_id');
   console.log('[migration] customer delivery tables: OK');

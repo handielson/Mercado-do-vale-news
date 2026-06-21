@@ -12,8 +12,8 @@ assert.match(
 
 assert.match(
   source,
-  /if \(HIDDEN_KEYS\.has\(key\.toLowerCase\(\)\)\) return;/,
-  'all public specification paths must pass through the hidden-key barrier',
+  /if \([\s\S]*HIDDEN_KEYS\.has\(normalizePdpSpecText\(key\)\)[\s\S]*\|\|[\s\S]*HIDDEN_KEYS\.has\(normalizePdpSpecText\(label\)\)[\s\S]*\) return;/,
+  'all public specification paths must pass through the normalized hidden-key barrier',
 );
 
 assert.match(

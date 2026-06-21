@@ -1,8 +1,8 @@
 {
-    "version":  "v1.1.73-whatsapp-test-button",
-    "date":  "2026-06-20",
-    "status":  "published",
-    "release_vps":  "/var/www/mdv-site/releases/20260620-133000-v1173-whatsapp-test-button",
-    "branch":  "codex/publish-delivery-ops-20260614",
-    "summary":  "Corrige o botao Enviar teste dos templates automaticos de WhatsApp e mostra no toast a mensagem real de erro quando o navegador/API falhar."
+    "version": "v1.1.74-delivery-shopee-pdp",
+    "date": "2026-06-20",
+    "status": "published",
+    "release_vps": "/var/www/mdv-site/releases/20260620-235511-v1174-delivery-shopee-pdp",
+    "branch": "codex/publish-delivery-ops-20260614",
+    "summary": "Adiciona extrato bancario do entregador, corrige itens/listas e campos internos na pagina publica do produto e cria a tabela shopee_templates na VPS."
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Bike, CreditCard, ExternalLink, Loader2, MessageCircle, PlusCircle, ReceiptText } from 'lucide-react';
+import { AlertTriangle, Bike, CreditCard, ExternalLink, Loader2, MessageCircle, MinusCircle, PlusCircle, ReceiptText } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Customer } from '../../../types/customer';
 import { formatCurrencyCents, listCustomerDebts, toCents, type CustomerDebt } from '../../../services/customerDebtService';
@@ -69,6 +69,42 @@ function getDeliveryLedgerDescription(item: CustomerDeliveryLedgerEntry): string
     );
 }
 
+function formatDeliveryStatementDateTime(value?: string | null): string {
+    if (!value) return '-';
+    const normalized = String(value).includes('T') ? String(value) : String(value).replace(' ', 'T');
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function deliveryPaymentMethodLabel(value?: string | null): string {
+    const method = String(value || '').trim();
+    if (!method) return 'Nao informado';
+    const labels: Record<string, string> = {
+        pix: 'Pix',
+        cash: 'Dinheiro',
+        dinheiro: 'Dinheiro',
+        debit_card: 'Cartao de debito',
+        credit_card: 'Cartao de credito',
+        bank_transfer: 'Transferencia bancaria',
+        saldo_entregas: 'Abatimento em debito',
+    };
+    return labels[method] || method;
+}
+
+type DeliveryStatementEntry = {
+    id: string;
+    type: 'credit' | 'debit';
+    occurredAt: string;
+    title: string;
+    description: string;
+    amount: number;
+    balance: number;
+    orderNumber?: string;
+    customerName?: string;
+    paymentMethod?: string;
+};
+
 function getDeliveryAdminCompleteErrorMessage(error: unknown): string {
     const rawMessage = error instanceof Error ? error.message : String(error || '');
     const jsonMatch = rawMessage.match(/\{.*\}$/);
@@ -92,6 +128,7 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
     const [loading, setLoading] = useState(true);
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentDescription, setPaymentDescription] = useState('Pagamento de entregas');
+    const [paymentMethod, setPaymentMethod] = useState('pix');
     const [paidAt, setPaidAt] = useState(todayDateTimeLocal());
     const [offsetDebtId, setOffsetDebtId] = useState('');
     const [offsetAmount, setOffsetAmount] = useState('');
@@ -130,15 +167,49 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
     const earned = useMemo(() => ledger.reduce((sum, item) => sum + toCents(item.amount), 0), [ledger]);
     const settled = useMemo(() => settlements.reduce((sum, item) => sum + toCents(item.amount), 0), [settlements]);
     const payable = earned - settled;
+    const deliveryStatementEntries = useMemo<DeliveryStatementEntry[]>(() => {
+        const entries = [
+            ...ledger.map((item) => ({
+                id: `ledger-${item.id}`,
+                type: 'credit' as const,
+                occurredAt: item.delivered_at || item.created_at || '',
+                title: getDeliveryLedgerDescription(item),
+                description: item.delivery_address_text || 'Entrega registrada',
+                amount: toCents(item.amount),
+                orderNumber: getDeliveryLedgerOrderNumber(item),
+                customerName: item.buyer_name || 'Cliente',
+            })),
+            ...settlements.map((item) => ({
+                id: `settlement-${item.id}`,
+                type: 'debit' as const,
+                occurredAt: item.paid_at || item.created_at || '',
+                title: item.type === 'debt_offset' ? 'Abatimento em debito' : 'Pagamento admin',
+                description: item.description || 'Pagamento do admin ao entregador',
+                amount: toCents(item.amount),
+                paymentMethod: deliveryPaymentMethodLabel(item.payment_method || (item.type === 'debt_offset' ? 'saldo_entregas' : '')),
+            })),
+        ].sort((a, b) => {
+            const left = new Date(String(a.occurredAt || '').replace(' ', 'T')).getTime() || 0;
+            const right = new Date(String(b.occurredAt || '').replace(' ', 'T')).getTime() || 0;
+            return left - right;
+        });
+
+        let runningBalance = 0;
+        return entries.map((entry) => {
+            runningBalance += entry.type === 'credit' ? entry.amount : -entry.amount;
+            return { ...entry, balance: runningBalance };
+        }).reverse();
+    }, [ledger, settlements]);
     const openJobs = useMemo(() => jobs.filter((job) => job.delivery_status !== 'delivered'), [jobs]);
 
     const submitPayment = async () => {
         const amount = Math.round(Number(paymentAmount.replace(',', '.')) * 100);
         if (amount <= 0) return toast.error('Valor de pagamento invalido');
         if (!paymentDescription.trim()) return toast.error('Informe a descricao do pagamento');
+        if (!paymentMethod.trim()) return toast.error('Informe a forma de pagamento');
         setSaving(true);
         try {
-            const result = await registerCustomerDeliveryPayment(customer.id, { amount, description: paymentDescription.trim(), paid_at: paidAt });
+            const result = await registerCustomerDeliveryPayment(customer.id, { amount, description: paymentDescription.trim(), paid_at: paidAt, payment_method: paymentMethod });
             toast.success(result.overpayment_debt_id ? 'Pagamento registrado e debito do excedente criado' : 'Pagamento do entregador registrado');
             setPaymentAmount('');
             await reload();
@@ -275,6 +346,13 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
                     <h3 className="font-semibold text-slate-800">Registrar pagamento</h3>
                     <input className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} placeholder="Valor em reais" />
                     <input className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2" type="datetime-local" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+                    <select className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} aria-label="Forma de pagamento">
+                        <option value="pix">Pix</option>
+                        <option value="cash">Dinheiro</option>
+                        <option value="debit_card">Cartao de debito</option>
+                        <option value="credit_card">Cartao de credito</option>
+                        <option value="bank_transfer">Transferencia bancaria</option>
+                    </select>
                     <textarea className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2" value={paymentDescription} onChange={(e) => setPaymentDescription(e.target.value)} />
                     <button className="mt-3 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={saving} onClick={submitPayment}>Registrar pagamento</button>
                 </div>
@@ -337,6 +415,31 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
                 </div>
             </section>
             )}
+
+            <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 px-5 py-4">
+                    <h3 className="font-semibold text-slate-800">Extrato do entregador</h3>
+                    <p className="mt-1 text-sm text-slate-500">Entradas por entrega e pagamentos feitos pelo admin, com saldo acumulado.</p>
+                </div>
+                {deliveryStatementEntries.length === 0 ? <p className="px-5 py-6 text-sm text-slate-500">Nenhum lancamento no extrato deste entregador.</p> : deliveryStatementEntries.map((entry) => (
+                    <div key={entry.id} className="grid gap-3 border-b border-slate-100 px-5 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_180px_160px]">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                {entry.type === 'credit' ? <PlusCircle className="h-4 w-4 text-emerald-600" /> : <MinusCircle className="h-4 w-4 text-blue-600" />}
+                                <p className="truncate text-sm font-semibold text-slate-800">{entry.title}</p>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">{formatDeliveryStatementDateTime(entry.occurredAt)}</p>
+                            {entry.orderNumber && <p className="mt-1 text-xs text-slate-500">Pedido {entry.orderNumber} - Cliente: {entry.customerName || 'Cliente'}</p>}
+                            {entry.paymentMethod && <p className="mt-1 text-xs text-slate-500">Forma de pagamento: {entry.paymentMethod}</p>}
+                            <p className="mt-1 text-xs text-slate-500">{entry.description}</p>
+                        </div>
+                        <div className={entry.type === 'credit' ? 'font-semibold text-emerald-700' : 'font-semibold text-blue-700'}>
+                            {entry.type === 'credit' ? '+' : '-'} {formatCurrencyCents(entry.amount)}
+                        </div>
+                        <div className="text-sm font-semibold text-slate-700">Saldo {formatCurrencyCents(entry.balance)}</div>
+                    </div>
+                ))}
+            </section>
 
             <section className="rounded-2xl border border-amber-200 bg-amber-50 shadow-sm">
                 <div className="border-b border-amber-100 px-5 py-4">

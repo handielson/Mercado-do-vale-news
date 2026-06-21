@@ -2021,7 +2021,7 @@ export const PublicProductPage: React.FC = () => {
 
                                         // Auxiliar: processa o valor e adiciona na lista se for válido
                                         const tryAddItem = (key: string, label: string, value: unknown) => {
-                                            if (HIDDEN_KEYS.has(key.toLowerCase())) return;
+                                            if (HIDDEN_KEYS.has(normalizePdpSpecText(key)) || HIDDEN_KEYS.has(normalizePdpSpecText(label))) return;
                                             const strVal = String(value ?? '').trim();
                                             if (!strVal || strVal === '0') return;
                                             if (uuidRegex.test(strVal)) return;
@@ -2108,14 +2108,9 @@ export const PublicProductPage: React.FC = () => {
                                                                     <dt className="text-slate-500 text-xs font-semibold uppercase tracking-wide truncate pr-2" title={item.label}>{item.label}</dt>
                                                                     <dd className="font-medium text-slate-900 mt-0.5 break-words pr-2">
                                                                         {isListStyleSpecItem(item) ? (
-                                                                            <ul className="space-y-1.5">
+                                                                            <ul className="space-y-1.5 overflow-x-auto">
                                                                                 {normalizePdpListItems(item.strVal).map((line) => (
-                                                                                    <li key={line} className="flex items-start gap-2">
-                                                                                        <span className="mt-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded border border-slate-200 bg-slate-50 px-1 text-[11px] font-semibold text-slate-700">
-                                                                                            1
-                                                                                        </span>
-                                                                                        <span>{line}</span>
-                                                                                    </li>
+                                                                                    <li key={line} className="whitespace-nowrap text-sm leading-relaxed">1 {line}</li>
                                                                                 ))}
                                                                             </ul>
                                                                         ) : item.key === 'memoria_ram_virtual' ? `+ ${item.strVal}` : item.strVal}

@@ -26,6 +26,7 @@ export interface CustomerDeliverySettlement {
     type: 'payment' | 'debt_offset';
     amount: number | string;
     paid_at: string;
+    payment_method?: string | null;
     description: string;
     created_at?: string;
 }
@@ -47,6 +48,7 @@ export interface CustomerDeliveryPaymentResponse {
     settlement_amount: number;
     overpayment_amount: number;
     paid_at: string;
+    payment_method?: string | null;
     description: string;
     overpayment_debt_id?: string | null;
 }
@@ -178,7 +180,7 @@ export async function createCustomerDeliveryAdjustment(customerId: string, input
     return vpsClient.post<CustomerDeliveryLedgerEntry>(`/customers/${customerId}/delivery-adjustments`, input);
 }
 
-export async function registerCustomerDeliveryPayment(customerId: string, input: { amount: number; description: string; paid_at?: string }): Promise<CustomerDeliveryPaymentResponse> {
+export async function registerCustomerDeliveryPayment(customerId: string, input: { amount: number; description: string; paid_at?: string; payment_method?: string }): Promise<CustomerDeliveryPaymentResponse> {
     return vpsClient.post<CustomerDeliveryPaymentResponse>(`/customers/${customerId}/delivery-payments`, input);
 }
 

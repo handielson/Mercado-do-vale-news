@@ -43,8 +43,8 @@ assert.match(
 
 assert.match(
   pdpSource,
-  /<span className="[^"]*">\s*1\s*<\/span>/,
-  'PDP list rows must show quantity 1 for each package/gift item',
+  /<li key=\{line\} className="[^"]*whitespace-nowrap[^"]*">\s*1 \{line\}\s*<\/li>/,
+  'PDP list rows must show quantity 1 and the package/gift item in the same unbroken row',
 );
 
 assert.match(
