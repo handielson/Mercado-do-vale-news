@@ -1006,7 +1006,14 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             setActive(model.active);
             setCategoryId(model.category_id || '');
             setDescription(model.description || '');
-            const tv = model.template_values || {};
+            let tv = model.template_values || {};
+            if (typeof tv === 'string') {
+                try {
+                    tv = JSON.parse(tv);
+                } catch (e) {
+                    tv = {};
+                }
+            }
             setTemplateValues(tv);
             setEans(model.eans || []);
             // Load Shopee fields from template_values
@@ -2476,6 +2483,186 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                         );
                                     })}
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Shopee Tab */}
+                    {activeTab === 'shopee' && (
+                        <div className="space-y-6">
+                            {/* Info Banner */}
+                            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                                <p className="text-sm text-orange-900">
+                                    🛒 <strong>Configuração Shopee do Modelo</strong><br />
+                                    Defina a categoria da Shopee e os atributos padrão. Esses dados serão usados no envio automático em lote de todas as variações deste modelo.
+                                </p>
+                            </div>
+
+                            {/* Auto Publish Lock Toggle */}
+                            <div className="bg-white border border-slate-200 rounded-lg p-5">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-slate-800">🔒 Trava de Envio Automático em Lote</h4>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            Quando <strong>ativado</strong>, as variações deste modelo ficam liberadas para o envio automático em lote para a Shopee.
+                                            Quando <strong>desativado</strong>, as variações são sempre classificadas como <em>"Precisam de revisão"</em>.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShopeeAutoPublishEnabled(prev => !prev)}
+                                        className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400 ${
+                                            shopeeAutoPublishEnabled ? 'bg-orange-500' : 'bg-slate-300'
+                                        }`}
+                                        title={shopeeAutoPublishEnabled ? 'Desativar envio automático' : 'Ativar envio automático'}
+                                    >
+                                        <span
+                                            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                                                shopeeAutoPublishEnabled ? 'translate-x-6' : 'translate-x-1'
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
+                                <p className={`mt-2 text-xs font-medium ${shopeeAutoPublishEnabled ? 'text-orange-600' : 'text-slate-400'}`}>
+                                    {shopeeAutoPublishEnabled
+                                        ? '✅ Envio automático ATIVADO para este modelo'
+                                        : '⛔ Envio automático DESATIVADO – variações serão marcadas para revisão'}
+                                </p>
+                            </div>
+
+                            {/* Category Section */}
+                            <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-4">
+                                <h4 className="text-sm font-semibold text-slate-800">📂 Categoria Shopee</h4>
+
+                                {shopeeCategoryId ? (
+                                    <div className="flex items-center justify-between gap-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                                        <div>
+                                            <span className="text-xs text-orange-500 font-semibold uppercase">Categoria Atual</span>
+                                            <p className="text-sm font-medium text-slate-800">{shopeeCategoryName || `ID: ${shopeeCategoryId}`}</p>
+                                            <p className="text-xs text-slate-500">ID: {shopeeCategoryId}</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShopeeCategoryId(null); setShopeeCategoryName(''); }}
+                                            className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-1 rounded transition-colors"
+                                        >
+                                            Remover
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="p-3 bg-slate-50 border border-dashed border-slate-300 rounded-lg text-sm text-slate-500 text-center">
+                                        Nenhuma categoria Shopee definida
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">ID da Categoria Shopee</label>
+                                        <input
+                                            type="number"
+                                            placeholder="Ex: 100490"
+                                            value={shopeeCategoryId ?? ''}
+                                            onChange={(e) => setShopeeCategoryId(e.target.value ? Number(e.target.value) : null)}
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">Nome da Categoria</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Ex: Capas de Celular"
+                                            value={shopeeCategoryName}
+                                            onChange={(e) => setShopeeCategoryName(e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-slate-100 pt-4">
+                                    <p className="text-xs font-semibold text-slate-600 mb-2">🔍 Copiar Categoria de Produto Similar (já sincronizado)</p>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder={name || 'Buscar produto similar na Shopee...'}
+                                            value={shopeeSimilarSearch}
+                                            onChange={(e) => setShopeeSimilarSearch(e.target.value)}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchShopeeSimilar(); } }}
+                                            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleSearchShopeeSimilar}
+                                            disabled={shopeeSimilarLoading}
+                                            className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors disabled:opacity-60"
+                                        >
+                                            {shopeeSimilarLoading ? 'Buscando...' : 'Buscar'}
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-1">Busca produtos locais já enviados à Shopee para copiar a categoria correta.</p>
+
+                                    {shopeeSimilarResults.length > 0 && (
+                                        <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
+                                            {shopeeSimilarResults.map((product: any, idx: number) => (
+                                                <div
+                                                    key={product.id || idx}
+                                                    className="flex items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg hover:border-orange-300 transition-colors"
+                                                >
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-slate-800 truncate">{product.name || product.sku || `Produto ${idx + 1}`}</p>
+                                                        <p className="text-xs text-slate-500">
+                                                            {product.shopee_category_name || 'Categoria desconhecida'}
+                                                            {product.shopee_category_id && ` (ID: ${product.shopee_category_id})`}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCopyCategoryFromSimilar(product)}
+                                                        disabled={!product.shopee_category_id}
+                                                        className="shrink-0 px-3 py-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs font-medium rounded-lg transition-colors disabled:opacity-40"
+                                                    >
+                                                        Copiar Categoria
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {shopeeSimilarResults.length === 0 && !shopeeSimilarLoading && shopeeSimilarSearch && (
+                                        <p className="text-xs text-slate-400 mt-2 italic">Nenhum produto similar com categoria Shopee encontrado.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Attribute Defaults */}
+                            <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-3">
+                                <div>
+                                    <h4 className="text-sm font-semibold text-slate-800">⚙️ Atributos Padrão da Categoria</h4>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        JSON com os atributos obrigatórios da categoria Shopee. Formato: <code className="bg-slate-100 px-1 rounded">{'{"attribute_id": "valor"}'}</code>.
+                                        Esses valores serão usados no envio do produto.
+                                    </p>
+                                </div>
+                                <textarea
+                                    rows={8}
+                                    placeholder={'{\n  "100121": "3 Months",\n  "100134": "TPU"\n}'}
+                                    value={shopeeAttributeDefaultsText}
+                                    onChange={(e) => handleShopeeAttributeDefaultsChange(e.target.value)}
+                                    className={`w-full px-3 py-2 border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400 ${
+                                        shopeeAttributeDefaultsError ? 'border-red-400 bg-red-50' : 'border-slate-200'
+                                    }`}
+                                />
+                                {shopeeAttributeDefaultsError && (
+                                    <p className="text-xs text-red-600">{shopeeAttributeDefaultsError}</p>
+                                )}
+                                {Object.keys(shopeeAttributeDefaults).length > 0 && !shopeeAttributeDefaultsError && (
+                                    <div className="flex flex-wrap gap-2">
+                                        {Object.entries(shopeeAttributeDefaults).map(([attrId, attrVal]) => (
+                                            <span key={attrId} className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-50 border border-orange-200 text-orange-700 text-xs rounded-full">
+                                                <span className="font-mono font-semibold">{attrId}</span>: {String(attrVal)}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

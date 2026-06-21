@@ -1,11 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.1.79-shopee-model-fields
+version: v1.1.80-shopee-model-parsing
 date: 2026-06-21
 status: published
 release_vps: pendente
 branch: main
-summary: Adiciona aba Shopee no cadastro de modelos com categoria, trava de envio automático em lote e atributos padrão.
+summary: Corrige o carregamento de campos da aba Shopee no cadastro de modelos tratando template_values quando retornado como string.
 ```
-
