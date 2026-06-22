@@ -47,6 +47,12 @@ assert.match(
 
 assert.match(
   page,
+  /const SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS[\s\S]*100413[\s\S]*function shouldSkipShopeeAttributePayload[\s\S]*SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS\.has\(Number\(attr\.attribute_id\)\)[\s\S]*\.filter\(\(attr\) => !shouldSkipShopeeAttributePayload\(attr\)\)/,
+  'Shopee condition attribute 100413 must be omitted from attribute_list because add_item already sends the native condition field.'
+);
+
+assert.match(
+  page,
   /const customValuesAreAllowed = !hasShopeeOptionList \|\| \[3, 5\]\.includes\(Number\(field\?\.raw_input_type\)\);[\s\S]*mandatoryAttributeIds\.has\(attributeId\)/,
   'Attribute validation retry must preserve numeric/text custom values while pruning optional invalid enum values.'
 );

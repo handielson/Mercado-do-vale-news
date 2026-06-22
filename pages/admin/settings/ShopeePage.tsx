@@ -287,6 +287,7 @@ const SHOPEE_SUPPLIER_WARRANTY_OPTION: ShopeeAttributeOption = {
 const SHOPEE_ATTRIBUTE_FALLBACK_UNITS: Record<number, string> = {
     101029: 'Piece',
 };
+const SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS = new Set([100413]);
 const SHOPEE_ATTRIBUTE_FALLBACK_VALUES: Record<number, Array<{ match: string; value_id: number; original_value_name: string }>> = {
     100413: [
         { match: 'Novo', value_id: 2497, original_value_name: 'New' },
@@ -624,6 +625,10 @@ function buildShopeeAttributeValuePayload(attr: ShopeeAttributeField, entry: str
         value_id: 0,
         original_value_name: entry,
     };
+}
+
+function shouldSkipShopeeAttributePayload(attr: ShopeeAttributeField): boolean {
+    return SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS.has(Number(attr.attribute_id));
 }
 
 function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attributes: ShopeeAttributeField[]) {
@@ -3322,6 +3327,7 @@ export function ShopeeSyncModal({
 
     const buildAttributePayload = () => {
         return attributes
+            .filter((attr) => !shouldSkipShopeeAttributePayload(attr))
             .filter((attr) => hasFilledAttributeValue(attrValues[attr.attribute_id]))
             .map((attr) => {
                 const currentValue = attrValues[attr.attribute_id];

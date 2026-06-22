@@ -1,8 +1,8 @@
 {
-    "version": "v1.1.101-shopee-condition-enum",
+    "version": "v1.1.102-shopee-skip-native-condition-attr",
     "date": "2026-06-22",
     "status": "published",
-    "release_vps": "/var/www/mdv-site/releases/20260622-183225-v11101-shopee-condition-enum",
+    "release_vps": "/var/www/mdv-site/releases/20260622-184520-v11102-shopee-skip-native-condition-attr",
     "branch": "main",
-    "summary": "Converte Condicao Novo para o enum New/value_id 2497 aceito pela Shopee."
+    "summary": "Omitir o atributo Shopee 100413 do attribute_list porque add_item ja envia condition nativo."
 }
