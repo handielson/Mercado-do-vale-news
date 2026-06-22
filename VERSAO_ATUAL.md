@@ -1,24 +1,28 @@
 # Versao Atual
 
 ```text
-version: v1.1.86-shopee-model-defaults
+version: v1.1.87-model-ai-bling-search
 date: 2026-06-22
 status: published
-release_vps: /var/www/mdv-site/releases/20260622-003000-v1186-shopee-model-defaults
+release_vps: /var/www/mdv-site/releases/20260622-011500-v1187-model-ai-bling-search
 branch: codex/publish-delivery-ops-20260614
-summary: Defaults universais da Shopee tambem preenchem automaticamente os atributos da aba JSON/IA em Modelos.
+summary: JSON/IA de Modelos usa descricao do Bling como contexto prioritario, amplia busca externa e separa descricao comercial de atributos.
 ```
 
-## O que entrou no v1.1.86
+## O que entrou no v1.1.87
 
-- A tela de Modelos agora carrega os templates Shopee antes de montar os atributos da categoria.
-- Defaults universais por ID, como `100121 = 3 meses` e `100370 = Garantia do fornecedor`, tambem preenchem os campos da aba JSON / IA.
-- Placeholders dos defaults universais continuam sendo renderizados, incluindo `{package_dimensions}` quando houver dimensoes no modelo.
-- Valores dos defaults sao alinhados com as opcoes retornadas pela Shopee para que selects como garantia, tipo de garantia e condicao aparecam selecionados.
-- Protecao de regressao atualizada para impedir que o modal de modelos deixe de carregar `universal_defaults`.
+- O gerador JSON/IA da tela de Modelos busca produtos vinculados ao modelo e envia a descricao completa do Bling/local como contexto interno prioritario.
+- A rota `/models/generate-json` limpa esse contexto e usa a internet apenas para complementar ou confirmar lacunas.
+- Produtos fora de smartphone nao ficam limitados aos sites confiaveis de smartphone; a busca ampla consulta varias fontes independentes.
+- A geracao ganhou mais tempo e mais tokens para retornar descricoes completas.
+- A descricao comercial do modelo remove frases que pertencem a atributos/politicas, como garantia, condicao, SKU, estoque, preco ou "verificar vendedor".
+- Defaults Shopee dinamicos como `{sku}` usam o primeiro SKU real de produto vinculado ao modelo quando existir.
 
 ## Validacoes
 
+- `node tmp-tests\model-ai-generate-json-static.test.mjs`
+- `node tmp-tests\model-json-import.test.mjs`
 - `node tmp-tests\shopee-universal-attribute-defaults-static.test.mjs`
-- `node tmp-tests\model-shopee-attributes-json-section-static.test.mjs`
+- `node --check vps_server.js`
+- `node --check vps_server.cjs`
 - `npm.cmd run build`

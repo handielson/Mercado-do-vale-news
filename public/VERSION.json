@@ -1,8 +1,8 @@
 {
-    "version":  "v1.1.86-shopee-model-defaults",
+    "version":  "v1.1.87-model-ai-bling-search",
     "date":  "2026-06-22",
     "status":  "published",
-    "release_vps":  "/var/www/mdv-site/releases/20260622-003000-v1186-shopee-model-defaults",
+    "release_vps":  "/var/www/mdv-site/releases/20260622-011500-v1187-model-ai-bling-search",
     "branch":  "codex/publish-delivery-ops-20260614",
-    "summary":  "Defaults universais da Shopee tambem preenchem automaticamente os atributos da aba JSON/IA em Modelos."
+    "summary":  "JSON/IA de Modelos usa descricao do Bling como contexto prioritario, amplia busca externa e separa descricao comercial de atributos."
 }

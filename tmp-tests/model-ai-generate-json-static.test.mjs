@@ -29,6 +29,12 @@ assert.match(
 );
 
 assert.match(
+  service,
+  /sourceContext\?: string/,
+  'model AI service must accept internal source context such as Bling descriptions',
+);
+
+assert.match(
   modal,
   /import\s+\{\s*generateModelJsonWithAi\s*\}\s+from\s+['"]\.\.\/\.\.\/services\/modelAiService['"]/,
   'ModelModal must import the model AI generation service',
@@ -82,6 +88,24 @@ assert.match(
   'ModelModal must send trusted source links to the model AI endpoint',
 );
 
+assert.match(
+  modal,
+  /buildModelAiBlingSourceContext/,
+  'ModelModal must build source context from linked product/Bling descriptions',
+);
+
+assert.match(
+  modal,
+  /sourceContext,\s*\n\s*\}\)/,
+  'ModelModal must send Bling/local source context to the model AI endpoint',
+);
+
+assert.match(
+  modal,
+  /model_id:\s*model\.id[\s\S]*description/,
+  'ModelModal must fetch linked model products so their Bling descriptions can guide JSON generation',
+);
+
 for (const [label, source] of [['vps_server.js', server], ['vps_server.cjs', serverCjs]]) {
   assert.match(
     source,
@@ -115,8 +139,62 @@ for (const [label, source] of [['vps_server.js', server], ['vps_server.cjs', ser
 
   assert.match(
     source,
+    /isModelAiSmartphoneRequest/,
+    `${label} must only restrict searches to phone sites when the request is smartphone-related`,
+  );
+
+  assert.match(
+    source,
+    /useTrustedOnlyPass\s*=\s*trustedDomains\.length > 0 && isModelAiSmartphoneRequest\(req\.body\)/,
+    `${label} must avoid limiting non-smartphone products to smartphone trusted domains`,
+  );
+
+  assert.match(
+    source,
+    /consulte varias fontes independentes/,
+    `${label} must ask broad web search to use multiple independent sources`,
+  );
+
+  assert.match(
+    source,
     /allowed_domains/,
     `${label} must restrict the first web search to trusted domains`,
+  );
+
+  assert.match(
+    source,
+    /sanitizeModelAiSourceContext/,
+    `${label} must sanitize internal Bling/local source context before sending it to AI`,
+  );
+
+  assert.match(
+    source,
+    /Contexto interno prioritario do Bling\/local/,
+    `${label} must inject Bling/local source context into the model AI prompt`,
+  );
+
+  assert.match(
+    source,
+    /\$\{prompt\}\$\{sourceContextText\}\$\{trustedSourcesText\}/,
+    `${label} must send source context before trusted/external web search sources`,
+  );
+
+  assert.match(
+    source,
+    /max_output_tokens:\s*5000/,
+    `${label} must allow enough output tokens for complete model descriptions`,
+  );
+
+  assert.match(
+    source,
+    /AbortSignal\.timeout\(75000\)/,
+    `${label} must allow more time for broader model research`,
+  );
+
+  assert.match(
+    source,
+    /verbosity:\s*['"]medium['"]/,
+    `${label} must not force terse GPT-5 JSON descriptions`,
   );
 
   const generationRoute = source.match(/fastify\.post\('\/models\/generate-json'[\s\S]*?fastify\.get\('\/models\/:id'/)?.[0] || '';

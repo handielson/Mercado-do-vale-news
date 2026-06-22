@@ -6,6 +6,7 @@ export interface ModelAiGenerateInput {
     brand?: string;
     category?: string;
     trustedSourceLinks?: string[];
+    sourceContext?: string;
 }
 
 export interface ModelAiGenerateResult {

@@ -202,9 +202,25 @@ const choiceOptions = {
   assert.match(prompt, /Nao use dados genericos/i);
   assert.match(prompt, /na duvida nao preencha/i);
   assert.match(prompt, /dimensoes da caixa\/embalagem/i);
+  assert.match(prompt, /modelos e produtos para e-commerce/i);
+  assert.match(prompt, /180 a 300 palavras/i);
+  assert.match(prompt, /Nao coloque na "description" informacoes que pertencem a atributos/i);
+  assert.match(prompt, /garantia, condicao novo\/usado, quantidade por pacote/i);
   assert.match(prompt, /Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real/);
   assert.match(prompt, /screen_size/);
   assert.match(prompt, /Galaxy A15/);
+}
+
+{
+  const normalized = normalizeModelImportPayload({
+    description: 'Fonte chaveada para equipamentos 12V. Garantia comercial informada em alguns anuncios: 3 meses (verificar vendedor). Indicada para instalacoes que exigem alimentacao estavel.',
+  });
+
+  assert.equal(
+    normalized.description,
+    'Fonte chaveada para equipamentos 12V. Indicada para instalacoes que exigem alimentacao estavel.',
+    'model description must drop warranty/seller-check sentences because they belong in attributes'
+  );
 }
 
 console.log('model-json-import tests passed');

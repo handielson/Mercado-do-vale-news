@@ -48,11 +48,23 @@ if (!modelModal.includes('shopeeTemplateService.list()')) {
   throw new Error('ModelModal must load Shopee templates so universal defaults prefill model attributes.');
 }
 
+if (!modelModal.includes("import { vpsApiService } from '../../services/vpsApiService'")) {
+  throw new Error('ModelModal must import vpsApiService to resolve model product SKUs for Shopee defaults.');
+}
+
+if (!modelModal.includes('model_id: model.id')) {
+  throw new Error('ModelModal must fetch products linked to the model when rendering Shopee defaults.');
+}
+
+if (!modelModal.includes('context.sku = firstTextValue(productWithSku.sku, productWithSku.specs?.sku)')) {
+  throw new Error('ModelModal must pass a real linked product SKU to dynamic Shopee defaults such as {sku}.');
+}
+
 if (!modelModal.includes('resolveUniversalShopeeAttributeDefaults(shopeeTemplates)')) {
   throw new Error('ModelModal must merge universal defaults when category attributes are loaded.');
 }
 
-if (!modelModal.includes('renderShopeeAttributeDefaultValue(value as any, attributeProductContext)')) {
+if (!modelModal.includes('renderShopeeAttributeDefaultValue(value as any, productRef)')) {
   throw new Error('ModelModal must render dynamic universal defaults before filling model attributes.');
 }
 

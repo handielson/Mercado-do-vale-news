@@ -79,6 +79,20 @@ const numberOrValue = (value) => {
     return Number.isFinite(parsed) ? parsed : value;
 };
 
+const DESCRIPTION_ATTRIBUTE_ONLY_SENTENCE_RE = /\b(garantia\s+(?:comercial|do\s+fornecedor|do\s+vendedor)|verificar\s+vendedor|condi[cç][aã]o\s+(?:do\s+produto|novo|usado)|produto\s+personalizado|quantidade\s+por\s+pacote)\b/i;
+
+const sanitizeModelDescription = (value) => {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+
+    return text
+        .split(/(?<=[.!?])\s+/)
+        .map((sentence) => sentence.trim())
+        .filter((sentence) => sentence && !DESCRIPTION_ATTRIBUTE_ONLY_SENTENCE_RE.test(sentence))
+        .join(' ')
+        .trim();
+};
+
 const normalizeChoice = (value, choices = []) => {
     if (value === undefined || value === null || value === '') return value;
     if (!choices.length) return value;
@@ -163,7 +177,7 @@ export function normalizeModelImportPayload(data, context = {}) {
     const name = payload.name || payload.nome || payload.modelo || payload.model;
     const brandId = findExistingId(brands, payload.brand_id) || findByIdOrName(brands, payload.brand || payload.marca || payload.brand_name);
     const categoryId = findExistingId(categories, payload.category_id) || findByIdOrName(categories, payload.category || payload.categoria || payload.category_name);
-    const description = payload.description || payload.descricao || payload['descrição'] || payload.default_description;
+    const description = sanitizeModelDescription(payload.description || payload.descricao || payload['descrição'] || payload.default_description);
     const eans = Array.isArray(payload.eans)
         ? payload.eans.map(String).map((ean) => ean.trim()).filter(Boolean)
         : payload.ean
@@ -273,7 +287,7 @@ export function normalizeModelImportPayload(data, context = {}) {
             : typeof payload.ativo === 'boolean'
                 ? payload.ativo
                 : undefined,
-        description: description ? String(description) : '',
+        description,
         eans,
         templateValues,
         missingChoices,
@@ -310,7 +324,7 @@ export function buildModelImportPrompt({ name, brand, category, customFields = [
         })
         .join('\n');
 
-    return `Atue como especialista em cadastro de smartphones para e-commerce. Gere um JSON completo para criar/preencher um modelo de smartphone no painel do Mercado do Vale.
+    return `Atue como especialista em cadastro de modelos e produtos para e-commerce. Gere um JSON completo para criar/preencher um modelo no painel do Mercado do Vale.
 
 Regras:
 1. Retorne APENAS um objeto JSON valido. Sem markdown, sem explicacoes.
@@ -318,12 +332,14 @@ Regras:
 3. Use apenas dados reais do produto, confirmados em ficha tecnica, fabricante ou anuncio confiavel. Nao use dados genericos, aproximados ou inventados.
 4. Nao inclua IMEI, serial, cor unica de aparelho, memoria RAM, armazenamento, SKU/codigo ou quantidade de estoque. Esses dados pertencem ao cadastro individual/produto, nao ao modelo.
 5. Em textos, evite aspas duplas internas; use aspas simples se precisar.
-6. Preencha todas as informacoes basicas reais do smartphone quando existirem em fonte confiavel, especialmente slot para cartao/microSD/SIM, entrada de fone, biometria, rede, NFC, resistencia, tela, chipset, bateria e carregamento.
+6. Preencha todas as informacoes tecnicas reais quando existirem em fonte confiavel. Para smartphones, priorize slot para cartao/microSD/SIM, entrada de fone, biometria, rede, NFC, resistencia, tela, chipset, bateria e carregamento. Para outros produtos, priorize tensao, potencia, compatibilidade, dimensoes, material, capacidade e itens inclusos quando aplicavel.
 7. Na duvida nao preencha: se nao tiver certeza sobre um dado tecnico, deixe o campo ausente ou null para o painel avisar que faltou dado real. Nao crie nada.
 8. Para campos de escolha, use o valor real do produto. Se o valor real nao estiver nas opcoes validas listadas, mantenha o valor real no JSON para o painel avisar que a opcao precisa ser cadastrada. Nao adapte para uma opcao parecida.
 9. Em "logistics", preencha peso e dimensoes da caixa/embalagem quando a ficha tecnica/anuncio confiavel informar esses dados. Nao use dimensoes do aparelho nu como dimensoes da embalagem.
 10. Em "template_values.itens_que_acompanham", liste um item por linha no formato "1 item". Se a fonte disser que a unidade/regiao acompanha Adaptador de tomada, inclua "1 Adaptador de tomada"; se disser que pode variar por regiao, escreva "1 Adaptador de tomada (pode variar por regiao)".
 11. Em "template_values.brindes", liste somente os brindes da loja, um por linha no formato "1 item". Exemplo: capa protetora, capa extra, pelicula 3D aplicada.
+12. A "description" deve ser uma descricao comercial completa, em portugues, com 180 a 300 palavras quando houver dados suficientes. Fale de uso, beneficios, compatibilidade e diferenciais reais.
+13. Nao coloque na "description" informacoes que pertencem a atributos ou politicas comerciais, como garantia, condicao novo/usado, quantidade por pacote, produto personalizado, SKU, EAN, IMEI, serial, estoque, preco ou frases como "verificar vendedor". Coloque esses dados apenas em "template_values" quando existir campo tecnico correspondente.
 
 Contexto atual:
 - Nome do modelo: ${name || '[preencher]'}
@@ -338,7 +354,7 @@ Formato esperado:
   "name": "Redmi A7 Pro",
   "brand": "Xiaomi",
   "category": "Smartphones",
-  "description": "Descricao comercial completa do modelo, sem variacao de cor ou IMEI.",
+  "description": "Descricao comercial completa do modelo, com beneficios e usos reais, sem SKU, garantia, condicao do produto, estoque, preco, cor unica ou IMEI.",
   "eans": [],
   "seo": {
     "slug": "redmi-a7-pro",

@@ -18066,6 +18066,11 @@ function buildModelAiWebSearchTools({ allowedDomains = [] } = {}) {
   return [webSearchTool];
 }
 
+function isModelAiSmartphoneRequest(body = {}) {
+  const text = `${body?.name || ''} ${body?.category || ''} ${body?.prompt || ''}`.toLowerCase();
+  return /smartphone|celular|iphone|samsung galaxy|xiaomi|redmi|realme|motorola|moto g|poco|infinix|tecno/.test(text);
+}
+
 async function requestModelAiJson({ apiKey, requestBody }) {
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -18074,17 +18079,31 @@ async function requestModelAiJson({ apiKey, requestBody }) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(requestBody),
-    signal: AbortSignal.timeout(45000),
+    signal: AbortSignal.timeout(75000),
   });
   const payload = await response.json().catch(() => ({}));
   const text = extractAutoresponderOpenAiText(payload);
   return { response, payload, text };
 }
 
+function sanitizeModelAiSourceContext(value) {
+  return String(value || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 6000);
+}
+
 fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req, reply) => {
   const prompt = String(req.body?.prompt || '').trim();
   if (!prompt) return reply.code(400).send({ error: 'prompt obrigatorio' });
 
+  const sourceContext = sanitizeModelAiSourceContext(req.body?.sourceContext);
+  const sourceContextText = sourceContext
+    ? `\n\nContexto interno prioritario do Bling/local:\n${sourceContext}\n\nUse esse contexto como base principal da descricao e dos campos tecnicos. Reescreva de forma comercial e organizada, mas nao descarte dados reais daqui sem motivo. Pesquisa externa serve para complementar ou confirmar lacunas.`
+    : '';
   const trustedSources = sanitizeTrustedSourceLinks(req.body?.trustedSourceLinks);
   const trustedDomains = trustedSources.map((source) => source.domain);
   const trustedSourcesText = trustedSources.length > 0
@@ -18101,15 +18120,16 @@ fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req
     const requestBody = {
       model,
       instructions: 'Voce gera somente JSON valido para cadastro de modelos no Mercado do Vale. Nao use markdown.',
-      input: `${prompt}${trustedSourcesText}`,
-      max_output_tokens: 2500,
+      input: `${prompt}${sourceContextText}${trustedSourcesText}`,
+      max_output_tokens: 5000,
     };
     if (/^gpt-5/i.test(model)) {
       requestBody.reasoning = { effort: 'low' };
-      requestBody.text = { verbosity: 'low' };
+      requestBody.text = { verbosity: 'medium' };
     }
     let responseResult;
-    if (trustedDomains.length > 0) {
+    const useTrustedOnlyPass = trustedDomains.length > 0 && isModelAiSmartphoneRequest(req.body);
+    if (useTrustedOnlyPass) {
       const trustedRequestBody = {
         ...requestBody,
         instructions: `${requestBody.instructions} Pesquise primeiro somente nas fontes confiaveis informadas. Se elas nao trouxerem dados reais suficientes, responda apenas {"__trusted_sources_insufficient":true}.`,
@@ -18127,7 +18147,13 @@ fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req
         responseResult = await requestModelAiJson({ apiKey, requestBody: externalRequestBody });
       }
     } else {
-      responseResult = await requestModelAiJson({ apiKey, requestBody });
+      const externalRequestBody = {
+        ...requestBody,
+        instructions: `${requestBody.instructions} Use pesquisa externa ampla e consulte varias fontes independentes quando disponiveis antes de montar o JSON. Priorize o contexto interno do Bling/local quando existir; use a internet para complementar e confirmar dados reais.`,
+        tools: buildModelAiWebSearchTools({ allowedDomains: [] }),
+        tool_choice: 'auto',
+      };
+      responseResult = await requestModelAiJson({ apiKey, requestBody: externalRequestBody });
     }
     const { response, payload, text } = responseResult;
     await pool.query(
@@ -18140,7 +18166,7 @@ fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req
         req.body?.brand || null,
         req.body?.category || null,
         model,
-        `${prompt}${trustedSourcesText}`.slice(0, 12000),
+        `${prompt}${sourceContextText}${trustedSourcesText}`.slice(0, 12000),
         text ? text.slice(0, 16000) : null,
         response.ok && text ? 'success' : 'error',
         response.ok ? null : JSON.stringify(payload).slice(0, 2000),
@@ -18161,7 +18187,7 @@ fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req
         req.body?.brand || null,
         req.body?.category || null,
         model,
-        `${prompt}${trustedSourcesText}`.slice(0, 12000),
+        `${prompt}${sourceContextText}${trustedSourcesText}`.slice(0, 12000),
         String(error?.message || error).slice(0, 2000),
       ]
     ).catch((err) => console.warn('[model-ai-log] failed:', err.message));

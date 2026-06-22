@@ -9,6 +9,7 @@ import { brandService } from '../../services/brands';
 import { categoryService } from '../../services/categories';
 import { customFieldsService, type CustomField } from '../../services/custom-fields';
 import { crossSellTagsService, type CrossSellTag } from '../../services/cross-sell-tags';
+import { vpsApiService } from '../../services/vpsApiService';
 import { applyFieldFormat, getFieldDefinition } from '../../config/field-dictionary';
 import { UNIQUE_FIELDS } from '../../config/product-fields';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -50,6 +51,47 @@ type ShopeeAttributeField = {
     raw_input_type?: string | number;
     support_search_value?: boolean;
 };
+
+type ShopeeAttributeProductContext = Record<string, any>;
+
+function firstTextValue(...values: unknown[]): string {
+    for (const value of values) {
+        const text = String(value || '').trim();
+        if (text) return text;
+    }
+    return '';
+}
+
+function cleanBlingContextText(value: unknown): string {
+    return String(value || '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function buildModelAiBlingSourceContext(products: any[]): string {
+    const entries = (products || [])
+        .map((product: any) => {
+            const description = cleanBlingContextText(firstTextValue(
+                product?.description,
+                product?.descricaoComplementar,
+                product?.descricao,
+                product?.descricaoCurta,
+            ));
+            if (!description) return '';
+            const label = firstTextValue(product?.sku, product?.name, product?.id);
+            return `${label ? `Produto ${label}: ` : ''}${description}`;
+        })
+        .filter(Boolean);
+
+    return [...new Set(entries)].slice(0, 3).join('\n\n').slice(0, 6000);
+}
 
 function alignShopeeDefaultValuesToOptions(
     fields: ShopeeAttributeField[],
@@ -905,12 +947,25 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         setApplyingModelPayload(true);
         setGeneratingModelJson(true);
         try {
+            const linkedProducts = model?.id
+                ? await vpsApiService.getProducts({
+                    model_id: model.id,
+                    status: 'all',
+                    limit: 20,
+                    noCache: true,
+                }).catch((err) => {
+                    console.warn('[ModelModal] Nao foi possivel buscar descricao do Bling para IA', err);
+                    return null;
+                })
+                : null;
+            const sourceContext = buildModelAiBlingSourceContext(linkedProducts || []);
             const result = await generateModelJsonWithAi({
                 prompt: modelImportPrompt,
                 name,
                 brand: brandObj?.name || '',
                 category: categoryObj?.name || 'Smartphones',
                 trustedSourceLinks: parseTrustedSourceLinks(trustedSourceLinksText),
+                sourceContext,
             });
             setModelJsonInput(result.text);
             const data = parseModelImportJson(result.text);
@@ -1370,6 +1425,38 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
     // Derive brand name from the brands list for suggestions.
     const shopeeBrandName = brands.find(b => b.id === brandId)?.name || '';
 
+    const buildShopeeAttributeProductContext = async (): Promise<ShopeeAttributeProductContext> => {
+        const context: ShopeeAttributeProductContext = { name, brand: shopeeBrandName };
+
+        if (model?.id) {
+            try {
+                const products = await vpsApiService.getProducts({
+                    model_id: model.id,
+                    status: 'all',
+                    limit: 20,
+                    noCache: true,
+                });
+                const productWithSku = (products || []).find((product: any) => firstTextValue(product?.sku, product?.specs?.sku));
+                if (productWithSku) {
+                    context.sku = firstTextValue(productWithSku.sku, productWithSku.specs?.sku);
+                    context.price_retail = productWithSku.price_retail;
+                    context.price = productWithSku.price;
+                    context.stock_quantity = productWithSku.stock_quantity;
+                    context.stock = productWithSku.stock;
+                }
+            } catch (err) {
+                console.warn('[ModelModal] Nao foi possivel buscar produto do modelo para defaults Shopee', err);
+            }
+        }
+
+        return {
+            ...context,
+            package_length: templateValues['package_length'] ?? templateValues['dimensions.length_cm'] ?? templateValues['dimensions.depth_cm'],
+            package_width: templateValues['package_width'] ?? templateValues['dimensions.width_cm'],
+            package_height: templateValues['package_height'] ?? templateValues['dimensions.height_cm'],
+        };
+    };
+
     const loadShopeeAttributes = async (categoryId: number) => {
         const requestId = ++shopeeAttributesRequestRef.current;
         setShopeeAttributesLoading(true);
@@ -1388,20 +1475,15 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             const fields = normalizeShopeeAttributes(data);
             setShopeeAttributeFields(fields);
 
-            // Build suggestions: brand + model name + template defaults
-            const productRef = { name, brand: shopeeBrandName };
+            // Build suggestions: brand + model name + template defaults.
+            // For dynamic defaults like {sku}, use the first real product linked to this model.
+            const productRef = await buildShopeeAttributeProductContext();
             const payload = buildShopeeAttributeDefaultsPayload(fields, productRef);
             const shopeeTemplates = await shopeeTemplateService.list();
             const universalTemplateValues = resolveUniversalShopeeAttributeDefaults(shopeeTemplates);
-            const attributeProductContext = {
-                ...productRef,
-                package_length: templateValues['package_length'] ?? templateValues['dimensions.length_cm'] ?? templateValues['dimensions.depth_cm'],
-                package_width: templateValues['package_width'] ?? templateValues['dimensions.width_cm'],
-                package_height: templateValues['package_height'] ?? templateValues['dimensions.height_cm'],
-            };
             const renderedUniversalDefaults = Object.fromEntries(
                 Object.entries(universalTemplateValues)
-                    .map(([attributeId, value]) => [attributeId, renderShopeeAttributeDefaultValue(value as any, attributeProductContext)])
+                    .map(([attributeId, value]) => [attributeId, renderShopeeAttributeDefaultValue(value as any, productRef)])
                     .filter(([, value]) => Array.isArray(value) ? value.some((entry) => String(entry || '').trim()) : String(value || '').trim())
             );
 
