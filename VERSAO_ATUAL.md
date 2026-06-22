@@ -3,8 +3,8 @@
 ```text
 version: v1.1.85-shopee-universal-defaults
 date: 2026-06-22
-status: pending
-release_vps: pendente
+status: published
+release_vps: /var/www/mdv-site/releases/20260622-001500-v1185-shopee-universal-defaults
 branch: codex/publish-delivery-ops-20260614
 summary: Templates Shopee agora incluem defaults universais por ID, aplicados a qualquer categoria com placeholders de SKU e dimensoes da embalagem.
 ```
