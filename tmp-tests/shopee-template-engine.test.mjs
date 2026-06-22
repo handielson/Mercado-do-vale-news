@@ -171,9 +171,9 @@ assert.equal(appliedIphoneLongerNameModel.title, 'Capa compativel com IPhone 13 
 assert.deepEqual(
   resolveUniversalShopeeAttributeDefaults([
     { id: 'phone_case', active: true, attributeDefaults: { 100134: 'TPU' } },
-    { id: 'universal_defaults', active: true, attributeDefaults: { 101639: '{sku}', 101029: '{package_dimensions}' } },
+    { id: 'universal_defaults', active: true, attributeDefaults: { 101639: '{sku}', 101029: '1 Piece' } },
   ]),
-  { 101639: '{sku}', 101029: '{package_dimensions}' }
+  { 101639: '{sku}', 101029: '1 Piece' }
 );
 
 assert.equal(

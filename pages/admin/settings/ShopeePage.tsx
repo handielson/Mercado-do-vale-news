@@ -249,6 +249,7 @@ type ShopeeAttributeField = {
     attribute_value_list: ShopeeAttributeOption[];
     raw_input_type?: string | number;
     support_search_value?: boolean;
+    attribute_unit_list?: string[];
 };
 
 type ShopeeBrandOption = {
@@ -436,8 +437,11 @@ function extractShopeeAttributeTree(data: any): any[] {
 function normalizeShopeeAttributes(data: any): ShopeeAttributeField[] {
     return extractShopeeAttributeTree(data)
         .map((attr: any) => {
-            const rawInputType = attr?.input_type ?? attr?.attribute_type ?? '';
+            const rawInputType = attr?.attribute_info?.input_type ?? attr?.input_type ?? attr?.attribute_type ?? '';
             const inputTypeText = String(rawInputType).toUpperCase();
+            const attributeUnitList = Array.isArray(attr?.attribute_info?.attribute_unit_list)
+                ? attr.attribute_info.attribute_unit_list.map((unit: any) => String(unit || '').trim()).filter(Boolean)
+                : [];
             const options: ShopeeAttributeOption[] = Array.isArray(attr?.attribute_value_list)
                 ? attr.attribute_value_list
                     .map((option: any) => {
@@ -482,6 +486,7 @@ function normalizeShopeeAttributes(data: any): ShopeeAttributeField[] {
                 attribute_value_list: normalizedOptions,
                 raw_input_type: rawInputType,
                 support_search_value: supportSearchValue,
+                attribute_unit_list: attributeUnitList,
             } satisfies ShopeeAttributeField;
         })
         .filter((attr: ShopeeAttributeField) => Number.isFinite(attr.attribute_id) && attr.attribute_id > 0);
@@ -553,6 +558,55 @@ function getShopeeAttributeDisplayValue(value: unknown): string {
     return decoded?.value_name || String(value || '');
 }
 
+function buildShopeeAttributeValuePayload(attr: ShopeeAttributeField, entry: string): { value_id: number; original_value_name: string; value_unit?: string } {
+    const searchableValue = decodeShopeeSearchableAttributeValue(entry);
+    if (searchableValue) {
+        return {
+            value_id: searchableValue.value_id,
+            original_value_name: searchableValue.value_name,
+        };
+    }
+
+    const option = attr.attribute_value_list.find((candidate) =>
+        candidate.raw_name === entry ||
+        candidate.original_value_name === entry ||
+        candidate.label === entry ||
+        String(candidate.value_id) === entry
+    );
+    if (option) {
+        return {
+            value_id: option.value_id || 0,
+            original_value_name: option.original_value_name || option.raw_name || option.label || entry,
+        };
+    }
+
+    const units = Array.isArray(attr.attribute_unit_list) ? attr.attribute_unit_list.filter(Boolean) : [];
+    if (units.length > 0) {
+        const normalizedEntry = String(entry || '').trim();
+        const matchingUnit = units
+            .slice()
+            .sort((a, b) => b.length - a.length)
+            .find((unit) => {
+                const escaped = unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                return new RegExp(`(?:\\s|^)${escaped}\\s*$`, 'i').test(normalizedEntry);
+            }) || units[0];
+        const withoutUnit = normalizedEntry
+            .replace(new RegExp(`${matchingUnit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i'), '')
+            .trim();
+
+        return {
+            value_id: 0,
+            original_value_name: withoutUnit || normalizedEntry,
+            value_unit: matchingUnit,
+        };
+    }
+
+    return {
+        value_id: 0,
+        original_value_name: entry,
+    };
+}
+
 function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attributes: ShopeeAttributeField[]) {
     const mandatoryAttributeIds = new Set(
         (attributes || [])
@@ -563,8 +617,14 @@ function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attri
     const removedAttributes: any[] = [];
     const keptAttributes = attributeList.filter((attr: any) => {
         const attributeId = Number(attr?.attribute_id);
+        const field = (attributes || []).find((candidate) => Number(candidate.attribute_id) === attributeId);
         const values = Array.isArray(attr?.attribute_value_list) ? attr.attribute_value_list : [];
-        const hasCustomValueWithoutShopeeId = values.some((value: any) => Number(value?.value_id || 0) === 0);
+        const hasCustomValueWithoutShopeeId = values.some((value: any) =>
+            Number(value?.value_id || 0) === 0 && !String(value?.value_unit || '').trim()
+        );
+        const hasShopeeOptionList = Array.isArray(field?.attribute_value_list) && field.attribute_value_list.length > 0;
+        const customValuesAreAllowed = !hasShopeeOptionList || [3, 5].includes(Number(field?.raw_input_type));
+        if (customValuesAreAllowed) return true;
         if (!hasCustomValueWithoutShopeeId || mandatoryAttributeIds.has(attributeId)) return true;
         removedAttributes.push(attr);
         return false;
@@ -3252,27 +3312,7 @@ export function ShopeeSyncModal({
 
                 return {
                     attribute_id: attr.attribute_id,
-                    attribute_value_list: valueList.map((entry) => {
-                        const searchableValue = decodeShopeeSearchableAttributeValue(entry);
-                        if (searchableValue) {
-                            return {
-                                value_id: searchableValue.value_id,
-                                original_value_name: searchableValue.value_name,
-                            };
-                        }
-
-                        const option = attr.attribute_value_list.find((candidate) =>
-                            candidate.raw_name === entry ||
-                            candidate.original_value_name === entry ||
-                            candidate.label === entry ||
-                            String(candidate.value_id) === entry
-                        );
-
-                        return {
-                            value_id: option?.value_id || 0,
-                            original_value_name: option?.original_value_name || option?.raw_name || option?.label || entry,
-                        };
-                    }),
+                    attribute_value_list: valueList.map((entry) => buildShopeeAttributeValuePayload(attr, entry)),
                 };
             });
     };

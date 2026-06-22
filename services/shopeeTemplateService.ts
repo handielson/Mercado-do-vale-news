@@ -34,7 +34,7 @@ export const DEFAULT_SHOPEE_TEMPLATES: ShopeeTemplate[] = [
             100413: 'Novo',
             101219: 'Não',
             101639: '{sku}',
-            101029: '{package_dimensions}',
+            101029: '1 Piece',
         },
         priceMode: 'product',
         stockMode: 'product',

@@ -23,8 +23,20 @@ assert.match(
 
 assert.match(
   page,
-  /const hasCustomValueWithoutShopeeId = values\.some\(\(value: any\) => Number\(value\?\.value_id \|\| 0\) === 0\);[\s\S]*mandatoryAttributeIds\.has\(attributeId\)/,
-  'Attribute validation retry must remove optional custom values without Shopee IDs while preserving mandatory attributes.'
+  /const attributeUnitList = Array\.isArray\(attr\?\.attribute_info\?\.attribute_unit_list\)[\s\S]*attribute_unit_list: attributeUnitList,/,
+  'Shopee attributes must preserve attribute_info.attribute_unit_list so numeric unit fields can be sent with value_unit.'
+);
+
+assert.match(
+  page,
+  /function buildShopeeAttributeValuePayload[\s\S]*value_unit: matchingUnit,/,
+  'Shopee add_item attribute payload must split values with units into original_value_name plus value_unit.'
+);
+
+assert.match(
+  page,
+  /const customValuesAreAllowed = !hasShopeeOptionList \|\| \[3, 5\]\.includes\(Number\(field\?\.raw_input_type\)\);[\s\S]*mandatoryAttributeIds\.has\(attributeId\)/,
+  'Attribute validation retry must preserve numeric/text custom values while pruning optional invalid enum values.'
 );
 
 console.log('shopee searchable attribute value_id static checks passed');

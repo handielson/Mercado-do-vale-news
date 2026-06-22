@@ -15,7 +15,7 @@ for (const expected of [
   "100413: 'Novo'",
   "101219: 'Não'",
   "101639: '{sku}'",
-  "101029: '{package_dimensions}'",
+  "101029: '1 Piece'",
 ]) {
   if (!service.includes(expected)) throw new Error(`Missing universal default: ${expected}`);
 }
@@ -27,7 +27,6 @@ if (!service.includes('ensureRequiredDefaultTemplates(templates)')) {
 for (const expected of [
   'resolveUniversalShopeeAttributeDefaults',
   'renderShopeeAttributeDefaultValue',
-  'package_dimensions',
 ]) {
   if (!engine.includes(expected)) throw new Error(`Missing engine helper: ${expected}`);
 }
