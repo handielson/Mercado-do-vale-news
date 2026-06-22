@@ -10,6 +10,7 @@ import { categoryService } from '../../services/categories';
 import { customFieldsService, type CustomField } from '../../services/custom-fields';
 import { crossSellTagsService, type CrossSellTag } from '../../services/cross-sell-tags';
 import { vpsApiService } from '../../services/vpsApiService';
+import { blingService } from '../../services/blingService';
 import { applyFieldFormat, getFieldDefinition } from '../../config/field-dictionary';
 import { UNIQUE_FIELDS } from '../../config/product-fields';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -521,6 +522,8 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     const [brandSearch, setBrandSearch] = useState('');
     const [brandDropdownOpen, setBrandDropdownOpen] = useState(false);
     const [active, setActive] = useState(true);
+    const [blingSkuInput, setBlingSkuInput] = useState('');
+    const [fetchingBlingData, setFetchingBlingData] = useState(false);
 
     // Template fields
     const [categoryId, setCategoryId] = useState('');
@@ -746,6 +749,72 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         if (typeof window === 'undefined') return;
         window.localStorage.setItem(TRUSTED_SOURCE_LINKS_STORAGE_KEY, trustedSourceLinksText);
     }, [trustedSourceLinksText]);
+
+    const handleFetchBlingDataBySku = async () => {
+        const sku = blingSkuInput.trim();
+        if (!sku) return;
+
+        setFetchingBlingData(true);
+        try {
+            const product = await blingService.findBlingProductByExactSku(sku);
+            if (!product) {
+                toast.error(`Produto com o SKU "${sku}" não foi encontrado no Bling.`);
+                return;
+            }
+
+            // Descrição
+            const fetchedDesc = firstTextValue(
+                product.descricaoCurta,
+                product.descricaoComplementar,
+                product.nome
+            );
+            if (fetchedDesc) {
+                // Remove tags HTML se houver
+                const cleanDesc = cleanBlingContextText(fetchedDesc);
+                setDescription(cleanDesc);
+            }
+
+            // EAN/GTIN
+            if (product.gtin) {
+                const cleanedGtin = String(product.gtin).trim();
+                if (cleanedGtin && !eans.includes(cleanedGtin)) {
+                    setEans((prev) => [...prev, cleanedGtin]);
+                }
+            }
+
+            // Dimensões & Peso
+            const newTemplateValues = { ...templateValues };
+            let hasDimensions = false;
+
+            if (product.pesoBruto && !isNaN(Number(product.pesoBruto))) {
+                newTemplateValues['weight_kg'] = Number(product.pesoBruto);
+                hasDimensions = true;
+            }
+            if (product.largura && !isNaN(Number(product.largura))) {
+                newTemplateValues['dimensions.width_cm'] = Number(product.largura);
+                hasDimensions = true;
+            }
+            if (product.altura && !isNaN(Number(product.altura))) {
+                newTemplateValues['dimensions.height_cm'] = Number(product.altura);
+                hasDimensions = true;
+            }
+            if (product.profundidade && !isNaN(Number(product.profundidade))) {
+                newTemplateValues['dimensions.depth_cm'] = Number(product.profundidade);
+                hasDimensions = true;
+            }
+
+            if (hasDimensions) {
+                setTemplateValues(newTemplateValues);
+            }
+
+            toast.success(`Informações do SKU "${sku}" importadas com sucesso!`);
+        } catch (err) {
+            console.error('Erro ao buscar dados do Bling por SKU:', err);
+            toast.error(err instanceof Error ? err.message : 'Falha ao buscar dados do Bling.');
+        } finally {
+            setFetchingBlingData(false);
+        }
+    };
 
     const handleCopyModelPrompt = async () => {
         try {
@@ -1777,6 +1846,39 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     {/* Basic Tab */}
                     {activeTab === 'basic' && (
                         <>
+                            {/* Buscar do Bling por SKU */}
+                            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-4">
+                                <label className="block text-sm font-semibold text-blue-900 mb-2">
+                                    Preencher Dados via Bling (Opcional)
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Digite o SKU do Bling (Ex: 12345)"
+                                        value={blingSkuInput}
+                                        onChange={(e) => setBlingSkuInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                handleFetchBlingDataBySku();
+                                            }
+                                        }}
+                                        className="flex-1 px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleFetchBlingDataBySku}
+                                        disabled={fetchingBlingData || !blingSkuInput.trim()}
+                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+                                    >
+                                        {fetchingBlingData ? 'Buscando...' : 'Preencher'}
+                                    </button>
+                                </div>
+                                <p className="text-xs text-blue-700 mt-1">
+                                    Pesquisa o SKU no Bling e preenche automaticamente a Descrição, Dimensões, Peso e código GTIN/EAN.
+                                </p>
+                            </div>
+
                             {/* Brand Select */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -1849,6 +1951,70 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     autoFocus
                                 />
+                            </div>
+
+                            {/* Categoria Padrao */}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Categoria Padrão <span className="text-slate-400 font-mono text-xs">(models.category_id)</span>
+                                </label>
+                                <CategorySelect
+                                    value={categoryId}
+                                    onChange={setCategoryId}
+                                />
+                            </div>
+
+                            {/* Categoria Shopee */}
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Categoria Shopee
+                                </label>
+                                {shopeeCategoryId && (
+                                    <div className="flex items-center justify-between gap-3 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-slate-800 truncate">{shopeeCategoryName || 'Categoria selecionada'}</p>
+                                            <p className="text-xs text-slate-500">ID interno: {shopeeCategoryId}</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShopeeCategoryId(null); setShopeeCategoryName(''); }}
+                                            className="shrink-0 text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-1 rounded transition-colors"
+                                        >
+                                            Remover
+                                        </button>
+                                    </div>
+                                )}
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar categoria Shopee pelo nome"
+                                        value={shopeeCategorySearch}
+                                        onFocus={loadShopeeCategories}
+                                        onChange={(e) => handleShopeeCategorySearchChange(e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                    />
+                                    {shopeeCategoriesLoading && (
+                                        <p className="text-xs text-orange-600 mt-1">Carregando categorias da Shopee...</p>
+                                    )}
+                                    {shopeeCategoriesError && (
+                                        <p className="text-xs text-red-600 mt-1">{shopeeCategoriesError}</p>
+                                    )}
+                                    {shopeeCategoryResults.length > 0 && (
+                                        <div className="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-orange-200 bg-white shadow-lg">
+                                            {shopeeCategoryResults.map((category: any) => (
+                                                <button
+                                                    key={category.category_id}
+                                                    type="button"
+                                                    onClick={() => selectShopeeCategoryByName(category)}
+                                                    className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-slate-100 last:border-b-0 transition-colors"
+                                                >
+                                                    <span className="block text-sm font-medium text-slate-800">{category.display_category_name || category.original_category_name}</span>
+                                                    <span className="block text-xs text-slate-500">{category.__pathLabel || category.category_id}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* EAN Codes */}

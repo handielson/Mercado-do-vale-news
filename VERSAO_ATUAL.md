@@ -1,28 +1,20 @@
 # Versao Atual
 
 ```text
-version: v1.1.87-model-ai-bling-search
+version: v1.1.89-bling-sku-basic-tab-prefill
 date: 2026-06-22
 status: published
-release_vps: /var/www/mdv-site/releases/20260622-011500-v1187-model-ai-bling-search
+release_vps: pendente
 branch: codex/publish-delivery-ops-20260614
-summary: JSON/IA de Modelos usa descricao do Bling como contexto prioritario, amplia busca externa e separa descricao comercial de atributos.
+summary: Implementa importação rápida de descrição, dimensões, peso e GTIN/EAN do Bling por SKU direto na aba Básico do modal de modelos.
 ```
 
-## O que entrou no v1.1.87
+## O que entrou no v1.1.89
 
-- O gerador JSON/IA da tela de Modelos busca produtos vinculados ao modelo e envia a descricao completa do Bling/local como contexto interno prioritario.
-- A rota `/models/generate-json` limpa esse contexto e usa a internet apenas para complementar ou confirmar lacunas.
-- Produtos fora de smartphone nao ficam limitados aos sites confiaveis de smartphone; a busca ampla consulta varias fontes independentes.
-- A geracao ganhou mais tempo e mais tokens para retornar descricoes completas.
-- A descricao comercial do modelo remove frases que pertencem a atributos/politicas, como garantia, condicao, SKU, estoque, preco ou "verificar vendedor".
-- Defaults Shopee dinamicos como `{sku}` usam o primeiro SKU real de produto vinculado ao modelo quando existir.
+- Adicionada caixa de busca por SKU do Bling diretamente na aba Básico do modal de modelos. Ao buscar um SKU válido, a Descrição, Dimensões, Peso e EAN/GTIN do produto no Bling são preenchidos automaticamente na ficha.
 
 ## Validacoes
 
-- `node tmp-tests\model-ai-generate-json-static.test.mjs`
-- `node tmp-tests\model-json-import.test.mjs`
-- `node tmp-tests\shopee-universal-attribute-defaults-static.test.mjs`
-- `node --check vps_server.js`
-- `node --check vps_server.cjs`
-- `npm.cmd run build`
+- `npm.cmd run build` (Build de produção validado sem erros)
+
+
