@@ -174,12 +174,49 @@ function scoreRule(product: Record<string, any>, rule: ShopeeTemplateRule): numb
     return score;
 }
 
+function lastCategorySegment(value?: string | null): string {
+    return String(value || '')
+        .split('>')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .pop() || '';
+}
+
+function fallbackTemplateMatchScore(product: Record<string, any>, template: ShopeeTemplate): number {
+    if (String(template.id || '') === 'universal_defaults') return 0;
+
+    const productContext = [
+        product?.name,
+        product?.sku,
+        product?.brand,
+        product?.model,
+        product?.model_name,
+        product?.category_name,
+        product?.category_slug,
+        product?.category,
+    ].map(normalizeText).filter(Boolean).join(' ');
+
+    const candidates = [
+        template.name,
+        lastCategorySegment(template.shopeeCategoryName),
+    ]
+        .map(normalizeText)
+        .filter((candidate) => candidate.length >= 4 && !['novo template', 'defaults universais', 'todas as categorias'].includes(candidate));
+
+    return candidates.some((candidate) => productContext.includes(candidate)) ? 18 : 0;
+}
+
+function scoreTemplate(product: Record<string, any>, template: ShopeeTemplate): number {
+    const explicitScore = scoreRule(product, template.rules || {});
+    return explicitScore > 0 ? explicitScore : fallbackTemplateMatchScore(product, template);
+}
+
 export function resolveBestShopeeTemplate(product: Record<string, any>, templates: ShopeeTemplate[]): ShopeeTemplate | null {
     const ranked = (templates || [])
         .filter((template) => template.active)
         .map((template) => ({
             template,
-            score: scoreRule(product, template.rules || {}),
+            score: scoreTemplate(product, template),
         }))
         .filter((entry) => entry.score > 0)
         .sort((a, b) => b.score - a.score || b.template.priority - a.template.priority || a.template.name.localeCompare(b.template.name));

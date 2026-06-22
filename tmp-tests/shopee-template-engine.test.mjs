@@ -99,6 +99,35 @@ assert.equal(blockResult.hasBlocks, true);
 
 assert.equal(resolveBestShopeeTemplate(sampleProduct, templates)?.id, 'phone_case');
 
+const powerSupplyTemplate = {
+  id: 'power_supply',
+  name: 'Fonte de Alimentacao',
+  active: true,
+  priority: 20,
+  rules: {},
+  titleTemplate: '{nome}',
+  descriptionTemplate: '{descricao}',
+  shopeeCategoryId: 100644,
+  shopeeCategoryName: 'Computadores e Acessorios > Componentes > Fontes de Alimentacao',
+  attributeDefaults: { '100001': 'Bivolt' },
+  priceMode: 'product',
+  stockMode: 'product',
+  dimensionMode: 'product',
+  gtinMode: 'product',
+  dangerousTerms: [],
+};
+
+assert.equal(
+  resolveBestShopeeTemplate({
+    id: 'p-power',
+    name: 'Fonte De Alimentacao 12V 3.5A bivolt Flex Industries MSG-H3500WR120',
+    sku: 'MSG-H3500WR120',
+    category_name: 'Fonte de Alimentacao',
+    category_slug: 'fonte-de-alimentacao',
+  }, [powerSupplyTemplate])?.id,
+  'power_supply'
+);
+
 const applied = applyShopeeTemplateToProduct(sampleProduct, templates[1]);
 assert.equal(applied.title, 'Capa compativel com iPhone 13 Cor:Vermelho');
 assert.equal(applied.description, 'Descricao original do anuncio local.\n\nCom detalhes ja revisados.');
