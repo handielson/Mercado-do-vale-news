@@ -1,10 +1,10 @@
 {
-    "version": "v1.1.90-bling-sync-prefill-autosave",
+    "version": "v1.1.91-model-layout-clean-up-sync",
     "date": "2026-06-22",
     "status": "published",
     "release_vps": "pendente",
     "branch": "codex/publish-delivery-ops-20260614",
-    "summary": "Corrige importação de findBlingProductByExactSku na aba Básico e implementa preenchimento e sincronização automáticos de descrição, GTIN/EAN e dimensões ao importar produtos do Bling."
+    "summary": "Reorganiza o modal de modelos trazendo descrição, brindes e dimensões/peso para a aba Básico, remove duplicados do Template e da aba JSON, e executa migração de sincronização retroativa."
 }
 
 

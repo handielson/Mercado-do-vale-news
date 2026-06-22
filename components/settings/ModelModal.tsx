@@ -2068,8 +2068,116 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 </div>
                             </div>
 
+                            {/* Description */}
+                            <div className="border-t border-slate-200 pt-4">
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Descrição Padrão <span className="text-slate-400 font-mono text-xs">(models.description)</span>
+                                </label>
+                                <textarea
+                                    value={description}
+                                    onChange={(e) => {
+                                        setDescription(e.target.value);
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                    }}
+                                    onFocus={(e) => {
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                    }}
+                                    placeholder="Ex: Smartphone Apple com tela de 6.1 polegadas..."
+                                    rows={3}
+                                    style={{ minHeight: '80px' }}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-hidden resize-none bg-white text-sm"
+                                />
+                            </div>
+
+                            {/* Brindes */}
+                            <div>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <label className="block text-sm font-medium text-slate-700">
+                                        Brindes <span className="text-slate-400 font-mono text-xs">(template_values.brindes)</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleTemplateValueChange('brindes', SMARTPHONE_DEFAULT_GIFTS)}
+                                        className="text-xs px-2 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 font-medium"
+                                    >
+                                        Usar lista padrão
+                                    </button>
+                                </div>
+                                <textarea
+                                    value={templateValues['brindes'] || ''}
+                                    onChange={(e) => handleTemplateValueChange('brindes', e.target.value)}
+                                    rows={3}
+                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y bg-white"
+                                    placeholder={SMARTPHONE_DEFAULT_GIFTS}
+                                />
+                            </div>
+
+                            {/* Logistics Fields */}
+                            <div className="border-t border-slate-200 pt-4">
+                                <h4 className="font-medium text-slate-800 mb-3">Logística Padrão</h4>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Peso (kg)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.001"
+                                            value={templateValues['weight_kg'] || ''}
+                                            onChange={(e) => handleTemplateValueChange('weight_kg', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                            placeholder="0.000"
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            Ex: 0.250 (250g)
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Largura (cm)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            value={templateValues['dimensions.width_cm'] || ''}
+                                            onChange={(e) => handleTemplateValueChange('dimensions.width_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                            placeholder="0.0"
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Altura (cm)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            value={templateValues['dimensions.height_cm'] || ''}
+                                            onChange={(e) => handleTemplateValueChange('dimensions.height_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                            placeholder="0.0"
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                                            Profundidade (cm)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            value={templateValues['dimensions.depth_cm'] || ''}
+                                            onChange={(e) => handleTemplateValueChange('dimensions.depth_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
+                                            placeholder="0.0"
+                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Active Checkbox */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 border-t border-slate-200 pt-4">
                                 <input
                                     type="checkbox"
                                     id="model-active"
@@ -2187,288 +2295,6 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                     </p>
                                 </div>
                             </div>
-
-                            <div className="bg-white border border-slate-200 rounded-lg p-4">
-                                <div className="flex items-center justify-between gap-3 mb-4">
-                                    <div>
-                                        <h4 className="font-semibold text-slate-900">Revisar e editar antes de salvar</h4>
-                                        <p className="text-xs text-slate-500">
-                                            Tudo abaixo pode ser ajustado manualmente depois de aplicar o JSON.
-                                        </p>
-                                    </div>
-                                    <span className="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                        {eans.length} EAN{eans.length === 1 ? '' : 's'}
-                                    </span>
-                                </div>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Marca
-                                        </label>
-                                        <div className="relative">
-                                            <input
-                                                value={brandSearch}
-                                                onChange={(e) => handleBrandSearchChange(e.target.value)}
-                                                onFocus={() => setBrandDropdownOpen(true)}
-                                                onBlur={handleBrandSearchBlur}
-                                                placeholder="Digite para buscar a marca"
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                            />
-                                            {brandDropdownOpen && (
-                                                <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                                                    {filteredBrands.length > 0 ? (
-                                                        filteredBrands.map((brand) => (
-                                                            <button
-                                                                key={brand.id}
-                                                                type="button"
-                                                                onMouseDown={() => handleSelectBrand(brand)}
-                                                                className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"
-                                                            >
-                                                                {brand.name}
-                                                            </button>
-                                                        ))
-                                                    ) : (
-                                                        <div className="px-3 py-2 text-sm text-slate-500">
-                                                            Nenhuma marca encontrada
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                        {brandSearch && !brandId && (
-                                            <p className="mt-1 text-xs text-amber-600">
-                                                Selecione uma marca cadastrada da lista.
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Nome do Modelo
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={name}
-                                            onChange={(e) => setName(formatModelNameTitleCase(e.target.value))}
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                            placeholder="Ex: Redmi A7 Pro"
-                                        />
-                                    </div>
-
-                                    <div className="lg:col-span-2">
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Categoria Padrao
-                                        </label>
-                                        <CategorySelect
-                                            value={categoryId}
-                                            onChange={setCategoryId}
-                                        />
-                                    </div>
-
-                                    <div className="lg:col-span-2 space-y-2">
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Categoria Shopee
-                                        </label>
-                                        {shopeeCategoryId && (
-                                            <div className="flex items-center justify-between gap-3 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg">
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-medium text-slate-800 truncate">{shopeeCategoryName || 'Categoria selecionada'}</p>
-                                                    <p className="text-xs text-slate-500">ID interno: {shopeeCategoryId}</p>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => { setShopeeCategoryId(null); setShopeeCategoryName(''); }}
-                                                    className="shrink-0 text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-1 rounded transition-colors"
-                                                >
-                                                    Remover
-                                                </button>
-                                            </div>
-                                        )}
-                                        <div className="relative">
-                                            <input
-                                                type="text"
-                                                placeholder="Buscar categoria Shopee pelo nome"
-                                                value={shopeeCategorySearch}
-                                                onFocus={loadShopeeCategories}
-                                                onChange={(e) => handleShopeeCategorySearchChange(e.target.value)}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                                            />
-                                            {shopeeCategoriesLoading && (
-                                                <p className="text-xs text-orange-600 mt-1">Carregando categorias da Shopee...</p>
-                                            )}
-                                            {shopeeCategoriesError && (
-                                                <p className="text-xs text-red-600 mt-1">{shopeeCategoriesError}</p>
-                                            )}
-                                            {shopeeCategoryResults.length > 0 && (
-                                                <div className="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-orange-200 bg-white shadow-lg">
-                                                    {shopeeCategoryResults.map((category: any) => (
-                                                        <button
-                                                            key={category.category_id}
-                                                            type="button"
-                                                            onClick={() => selectShopeeCategoryByName(category)}
-                                                            className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-slate-100 last:border-b-0 transition-colors"
-                                                        >
-                                                            <span className="block text-sm font-medium text-slate-800">{category.display_category_name || category.original_category_name}</span>
-                                                            <span className="block text-xs text-slate-500">{category.__pathLabel || category.category_id}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="lg:col-span-2">
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            EANs de referencia
-                                        </label>
-                                        <div className="flex gap-2">
-                                            <input
-                                                ref={eanInputRef}
-                                                type="text"
-                                                placeholder="Digite um EAN e pressione Enter"
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        handleAddEan(e.currentTarget.value);
-                                                    }
-                                                }}
-                                                className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => handleAddEan()}
-                                                className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-bold"
-                                                title="Adicionar EAN"
-                                            >
-                                                +
-                                            </button>
-                                        </div>
-                                        {eans.length > 0 && (
-                                            <div className="flex flex-wrap gap-2 mt-2">
-                                                {eans.map((ean, index) => (
-                                                    <span
-                                                        key={`${ean}-${index}`}
-                                                        className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-sm border border-indigo-100"
-                                                    >
-                                                        {ean}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setEans(eans.filter((_, i) => i !== index))}
-                                                            className="hover:text-indigo-950"
-                                                        >
-                                                            x
-                                                        </button>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="lg:col-span-2">
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Descricao Padrao
-                                        </label>
-                                        <textarea
-                                            value={description}
-                                            onChange={(e) => setDescription(e.target.value)}
-                                            rows={4}
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
-                                            placeholder="Descricao comercial do modelo"
-                                        />
-                                    </div>
-
-                                    <div className="lg:col-span-2">
-                                        <div className="flex items-center justify-between gap-2 mb-1">
-                                            <label className="block text-xs font-medium text-slate-600">
-                                                Brindes
-                                            </label>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleTemplateValueChange('brindes', SMARTPHONE_DEFAULT_GIFTS)}
-                                                className="text-xs px-2 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100"
-                                            >
-                                                Usar lista padrão
-                                            </button>
-                                        </div>
-                                        <textarea
-                                            value={templateValues['brindes'] || ''}
-                                            onChange={(e) => handleTemplateValueChange('brindes', e.target.value)}
-                                            rows={3}
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
-                                            placeholder={SMARTPHONE_DEFAULT_GIFTS}
-                                        />
-                                        <p className="mt-1 text-xs text-slate-500">
-                                            Um item por linha. Aparece na pagina publica como lista.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="border-t border-slate-200 pt-4 mt-4">
-                                    <h5 className="text-sm font-semibold text-slate-800 mb-3">Campos tecnicos editaveis</h5>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {visibleSpecFields.map((field) => renderTemplateField(field))}
-                                        {shopeeAttributeFields.map((attr) => renderShopeeAttributeField(attr))}
-                                    </div>
-                                    {shopeeAttributesLoading && (
-                                        <p className="mt-3 text-xs text-orange-700">Buscando atributos da categoria Shopee...</p>
-                                    )}
-                                    {shopeeAttributesError && (
-                                        <p className="mt-3 text-xs text-red-600">{shopeeAttributesError}</p>
-                                    )}
-                                    {categoryId && categoryConfig && visibleSpecFields.length === 0 && shopeeAttributeFields.length === 0 && (
-                                        <div className="text-center py-6 text-slate-500">
-                                            <p className="text-sm">Nenhum campo tecnico configurado para esta categoria</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="border-t border-slate-200 pt-4 mt-4">
-                                    <h5 className="text-sm font-semibold text-slate-800 mb-3">Logistica editavel</h5>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Peso (kg)</label>
-                                            <input
-                                                type="number"
-                                                step="0.001"
-                                                value={templateValues['weight_kg'] || ''}
-                                                onChange={(e) => handleTemplateValueChange('weight_kg', e.target.value ? parseFloat(e.target.value) : undefined)}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Largura (cm)</label>
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                value={templateValues['dimensions.width_cm'] || ''}
-                                                onChange={(e) => handleTemplateValueChange('dimensions.width_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Altura (cm)</label>
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                value={templateValues['dimensions.height_cm'] || ''}
-                                                onChange={(e) => handleTemplateValueChange('dimensions.height_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-600 mb-1">Profundidade (cm)</label>
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                value={templateValues['dimensions.depth_cm'] || ''}
-                                                onChange={(e) => handleTemplateValueChange('dimensions.depth_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
-                                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     )}
 
@@ -2484,18 +2310,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 </p>
                             </div>
 
-                            {/* Category */}
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Categoria Padrão
-                                </label>
-                                <CategorySelect
-                                    value={categoryId}
-                                    onChange={setCategoryId}
-                                />
-                            </div>
-
-                            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                             <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                     <div>
                                         <h4 className="font-semibold text-indigo-950">Prompt dinamico para IA</h4>
@@ -2530,54 +2345,6 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 )}
                             </div>
 
-                            {/* Description */}
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Descrição Padrão
-                                </label>
-                                <textarea
-                                    value={description}
-                                    onChange={(e) => {
-                                        setDescription(e.target.value);
-                                        e.target.style.height = 'auto';
-                                        e.target.style.height = `${e.target.scrollHeight}px`;
-                                    }}
-                                    onFocus={(e) => {
-                                        e.target.style.height = 'auto';
-                                        e.target.style.height = `${e.target.scrollHeight}px`;
-                                    }}
-                                    placeholder="Ex: Smartphone Apple com tela de 6.1 polegadas..."
-                                    rows={3}
-                                    style={{ minHeight: '80px' }}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-hidden resize-none"
-                                />
-                            </div>
-
-                            <div>
-                                <div className="flex items-center justify-between gap-2 mb-2">
-                                    <label className="block text-sm font-medium text-slate-700">
-                                        Brindes
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleTemplateValueChange('brindes', SMARTPHONE_DEFAULT_GIFTS)}
-                                        className="text-xs px-2 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100"
-                                    >
-                                        Usar lista padrão
-                                    </button>
-                                </div>
-                                <textarea
-                                    value={templateValues['brindes'] || ''}
-                                    onChange={(e) => handleTemplateValueChange('brindes', e.target.value)}
-                                    rows={3}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                                    placeholder={SMARTPHONE_DEFAULT_GIFTS}
-                                />
-                                <p className="text-xs text-slate-500 mt-1">
-                                    Salvo em models.template_values.brindes e exibido como lista na pagina do produto.
-                                </p>
-                            </div>
-
                             {/* Dynamic Fields */}
                             <div className="border-t border-slate-200 pt-4">
                                 <h4 className="font-medium text-slate-800 mb-3">Valores Padrão</h4>
@@ -2602,77 +2369,6 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                             <p className="text-sm">Nenhum campo de especificação configurado para esta categoria</p>
                                         </div>
                                     )}
-                            </div>
-
-                            {/* Logistics Fields */}
-                            <div className="border-t border-slate-200 pt-4 mt-4">
-                                <h4 className="font-medium text-slate-800 mb-3">Logística Padrão</h4>
-
-                                {/* Info box with postal limits */}
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm mb-4">
-                                    <p className="font-medium text-blue-900 mb-1">📦 Limites dos Correios</p>
-                                    <p className="text-blue-700 text-xs">
-                                        Peso: até 30kg • Dimensões: 16-105cm (C), até 105cm (L+A), até 200cm (C+L+A)
-                                    </p>
-                                </div>
-
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Peso (kg)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="0.001"
-                                            value={templateValues['weight_kg'] || ''}
-                                            onChange={(e) => handleTemplateValueChange('weight_kg', e.target.value ? parseFloat(e.target.value) : undefined)}
-                                            placeholder="0.000"
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        />
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            Ex: 0.250 (250g)
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Largura (cm)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            value={templateValues['dimensions.width_cm'] || ''}
-                                            onChange={(e) => handleTemplateValueChange('dimensions.width_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
-                                            placeholder="0.0"
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Altura (cm)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            value={templateValues['dimensions.height_cm'] || ''}
-                                            onChange={(e) => handleTemplateValueChange('dimensions.height_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
-                                            placeholder="0.0"
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-600 mb-1">
-                                            Profundidade (cm)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            value={templateValues['dimensions.depth_cm'] || ''}
-                                            onChange={(e) => handleTemplateValueChange('dimensions.depth_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
-                                            placeholder="0.0"
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        />
-                                    </div>
-                                </div>
                             </div>
                         </>
                     )}
