@@ -524,6 +524,35 @@ function isShopeeAttributeValidationError(message: unknown): boolean {
         normalized.includes('correct attribute value');
 }
 
+const SHOPEE_SEARCHABLE_ATTRIBUTE_VALUE_PREFIX = '__shopee_searchable_value__:';
+
+function encodeShopeeSearchableAttributeValue(valueId: number, valueName: string): string {
+    return `${SHOPEE_SEARCHABLE_ATTRIBUTE_VALUE_PREFIX}${JSON.stringify({
+        value_id: Number(valueId) || 0,
+        value_name: String(valueName || '').trim(),
+    })}`;
+}
+
+function decodeShopeeSearchableAttributeValue(value: unknown): { value_id: number; value_name: string } | null {
+    const raw = String(value || '');
+    if (!raw.startsWith(SHOPEE_SEARCHABLE_ATTRIBUTE_VALUE_PREFIX)) return null;
+
+    try {
+        const parsed = JSON.parse(raw.slice(SHOPEE_SEARCHABLE_ATTRIBUTE_VALUE_PREFIX.length));
+        const valueId = Number(parsed?.value_id) || 0;
+        const valueName = String(parsed?.value_name || '').trim();
+        if (!valueId || !valueName) return null;
+        return { value_id: valueId, value_name: valueName };
+    } catch {
+        return null;
+    }
+}
+
+function getShopeeAttributeDisplayValue(value: unknown): string {
+    const decoded = decodeShopeeSearchableAttributeValue(value);
+    return decoded?.value_name || String(value || '');
+}
+
 function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attributes: ShopeeAttributeField[]) {
     const mandatoryAttributeIds = new Set(
         (attributes || [])
@@ -535,13 +564,8 @@ function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attri
     const keptAttributes = attributeList.filter((attr: any) => {
         const attributeId = Number(attr?.attribute_id);
         const values = Array.isArray(attr?.attribute_value_list) ? attr.attribute_value_list : [];
-        // Only consider a value "custom/problematic" if value_id is 0 AND original_value_name is also empty.
-        // Searchable/text attributes (e.g. Potência, Tensão de Entrada) legitimately have value_id=0
-        // with a filled original_value_name — those must NOT be pruned.
-        const hasInvalidCustomValue = values.some((value: any) =>
-            Number(value?.value_id || 0) === 0 && !String(value?.original_value_name || '').trim()
-        );
-        if (!hasInvalidCustomValue || mandatoryAttributeIds.has(attributeId)) return true;
+        const hasCustomValueWithoutShopeeId = values.some((value: any) => Number(value?.value_id || 0) === 0);
+        if (!hasCustomValueWithoutShopeeId || mandatoryAttributeIds.has(attributeId)) return true;
         removedAttributes.push(attr);
         return false;
     });
@@ -621,7 +645,7 @@ type SearchableAttributeComboboxProps = {
 };
 
 function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange }: SearchableAttributeComboboxProps) {
-    const [query, setQuery] = useState<string>(value || '');
+    const [query, setQuery] = useState<string>(getShopeeAttributeDisplayValue(value));
     const [options, setOptions] = useState<{ value_id: number; value_name: string }[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [open, setOpen] = useState<boolean>(false);
@@ -630,7 +654,7 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
 
     // Sincroniza o input quando o valor externo muda (ex.: reset entre produtos)
     useEffect(() => {
-        setQuery(value || '');
+        setQuery(getShopeeAttributeDisplayValue(value));
     }, [value]);
 
     // Fecha o dropdown ao clicar fora
@@ -695,9 +719,9 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
         scheduleFetch(next);
     };
 
-    const handleSelect = (optionName: string) => {
-        setQuery(optionName);
-        onChange(optionName);
+    const handleSelect = (option: { value_id: number; value_name: string }) => {
+        setQuery(option.value_name);
+        onChange(encodeShopeeSearchableAttributeValue(option.value_id, option.value_name));
         setOpen(false);
     };
 
@@ -727,7 +751,7 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
                         <button
                             type="button"
                             key={`${option.value_id}-${option.value_name}-${idx}`}
-                            onClick={() => handleSelect(option.value_name)}
+                            onClick={() => handleSelect(option)}
                             className="block w-full text-left px-3 py-2 text-sm hover:bg-orange-50"
                         >
                             {option.value_name}
@@ -3229,6 +3253,14 @@ export function ShopeeSyncModal({
                 return {
                     attribute_id: attr.attribute_id,
                     attribute_value_list: valueList.map((entry) => {
+                        const searchableValue = decodeShopeeSearchableAttributeValue(entry);
+                        if (searchableValue) {
+                            return {
+                                value_id: searchableValue.value_id,
+                                original_value_name: searchableValue.value_name,
+                            };
+                        }
+
                         const option = attr.attribute_value_list.find((candidate) =>
                             candidate.raw_name === entry ||
                             candidate.original_value_name === entry ||
