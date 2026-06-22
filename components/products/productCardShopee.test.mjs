@@ -51,6 +51,10 @@ const mapped = mapProductToShopeeLocalProduct({
   video_url: 'https://cdn/video.mp4',
   stock_quantity: 3,
   track_inventory: true,
+  category_id: 'cat-10',
+  category_name: 'Fonte de Alimentacao',
+  model: 'MSG-H3500WR120',
+  model_name: 'MSG-H3500WR120',
   eans: ['789', '', null],
   weight_kg: 0.4,
   shipping_weight: 400,
@@ -78,6 +82,11 @@ assert.deepEqual(mapped, {
   video_url: 'https://cdn/video.mp4',
   stock_quantity: 3,
   track_inventory: true,
+  category_id: 'cat-10',
+  category_name: 'Fonte de Alimentacao',
+  model: 'MSG-H3500WR120',
+  model_name: 'MSG-H3500WR120',
+  specs: { inmetro_certificate: 'CERT-1' },
   eans: ['789'],
   weight_kg: 0.4,
   shipping_weight: 400,
@@ -85,6 +94,7 @@ assert.deepEqual(mapped, {
   shipping_width: 9,
   shipping_height: 4,
   dimensions: { width_cm: 9, height_cm: 4, depth_cm: 18 },
+  model_id: null,
 });
 
 console.log('productCardShopee.test.mjs: ok');

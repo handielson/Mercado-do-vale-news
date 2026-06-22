@@ -61,11 +61,15 @@ export function mapProductToShopeeLocalProduct(product) {
     images: normalizeStringArray(product?.images),
     price_retail: Number(product?.price_retail) || 0,
     price_cost: Number(product?.price_cost) || 0,
+    category_id: product?.category_id ?? null,
+    category_name: normalizeString(product?.category_name),
     category_slug: normalizeString(product?.category_slug),
     inmetro_certificate: normalizeString(product?.inmetro_certificate || product?.specs?.inmetro_certificate),
     ncm: normalizeString(product?.ncm),
     description: normalizeString(product?.description),
     brand: normalizeString(product?.brand),
+    model: normalizeString(product?.model),
+    model_name: normalizeString(product?.model_name),
     bling_id: product?.bling_id ?? null,
     video_url: product?.video_url ?? null,
     stock_quantity: Number(product?.stock_quantity) || 0,
@@ -77,6 +81,7 @@ export function mapProductToShopeeLocalProduct(product) {
     shipping_width: product?.shipping_width,
     shipping_height: product?.shipping_height,
     dimensions: product?.dimensions || undefined,
+    specs: product?.specs || undefined,
     model_id: product?.model_id ?? null,
   };
 }
