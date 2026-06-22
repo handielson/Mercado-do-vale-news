@@ -278,6 +278,17 @@ export function normalizeModelImportPayload(data, context = {}) {
         }
     });
 
+    const shopeeAttributeDefaults = {};
+    const rawShopeeDefaults = payload.shopee_attribute_defaults || payload.shopeeAttributeDefaults || payload.shopee_attributes || {};
+    if (isPlainObject(rawShopeeDefaults)) {
+        Object.entries(rawShopeeDefaults).forEach(([key, val]) => {
+            const cleanKey = key.replace(/^shopee:/, '').trim();
+            if (cleanKey && val !== undefined && val !== null && val !== '') {
+                shopeeAttributeDefaults[cleanKey] = val;
+            }
+        });
+    }
+
     return {
         name: name ? String(name).trim() : '',
         brandId: brandId || '',
@@ -290,6 +301,7 @@ export function normalizeModelImportPayload(data, context = {}) {
         description,
         eans,
         templateValues,
+        shopeeAttributeDefaults,
         missingChoices,
         emptyFields,
     };
@@ -315,12 +327,22 @@ const describeChoices = (field, choices = []) => {
     return '';
 };
 
-export function buildModelImportPrompt({ name, brand, category, customFields = [], choiceOptions = {} }) {
+export function buildModelImportPrompt({ name, brand, category, customFields = [], choiceOptions = {}, shopeeFields = [] }) {
     const fieldLines = customFields
         .filter((field) => !isModelUnitFieldKey(field.key) && !isModelUnitFieldKey(field.label))
         .map((field) => {
             const type = field.field_type ? `, tipo ${field.field_type}` : '';
             return `- "${field.key}" (${field.label || field.key})${type}.${describeChoices(field, choiceOptions[field.key])}`;
+        })
+        .join('\n');
+
+    const shopeeLines = shopeeFields
+        .map((field) => {
+            const req = field.mandatory ? ' (OBRIGATÓRIO)' : '';
+            const opts = field.attribute_value_list.length > 0
+                ? ` Opções válidas: ${field.attribute_value_list.slice(0, 15).map(o => `"${o.label}"`).join(', ')}${field.attribute_value_list.length > 15 ? '...' : ''}.`
+                : '';
+            return `- shopee:${field.attribute_id} ("${field.label}")${req}.${opts}`;
         })
         .join('\n');
 
@@ -340,6 +362,7 @@ Regras:
 11. Em "template_values.brindes", liste somente os brindes da loja, um por linha no formato "1 item". Exemplo: capa protetora, capa extra, pelicula 3D aplicada.
 12. A "description" deve ser uma descricao comercial completa, em portugues, com 180 a 300 palavras quando houver dados suficientes. Fale de uso, beneficios, compatibilidade e diferenciais reais.
 13. Nao coloque na "description" informacoes que pertencem a atributos ou politicas comerciais, como garantia, condicao novo/usado, quantidade por pacote, produto personalizado, SKU, EAN, IMEI, serial, estoque, preco ou frases como "verificar vendedor". Coloque esses dados apenas em "template_values" quando existir campo tecnico correspondente.
+14. Em "shopee_attribute_defaults", você DEVE preencher os atributos de integração da Shopee listados abaixo usando o identificador numérico como chave e o respectivo valor. Se o atributo tiver opções válidas listadas abaixo, use EXATAMENTE uma das opções de texto (exemplo: "Bivolt", "12V"). Se for texto livre, encontre o valor correspondente na fonte confiável.
 
 Contexto atual:
 - Nome do modelo: ${name || '[preencher]'}
@@ -348,6 +371,9 @@ Contexto atual:
 
 Campos tecnicos disponiveis hoje:
 ${fieldLines || '- Nenhum campo tecnico carregado. Ainda assim use template_values para os campos do aparelho.'}
+
+Atributos obrigatórios e adicionais da Shopee para preencher em "shopee_attribute_defaults" (use as chaves exatas shopee:ID do campo):
+${shopeeLines || '- Nenhum atributo do catálogo Shopee carregado no momento.'}
 
 Formato esperado:
 {
@@ -369,6 +395,10 @@ Formato esperado:
       "height_cm": 17,
       "depth_cm": 5
     }
+  },
+  "shopee_attribute_defaults": {
+    "100105": "50W",
+    "100323": "Bivolt"
   },
   "template_values": {
     "version": "Global",

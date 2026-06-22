@@ -77,5 +77,6 @@ export function mapProductToShopeeLocalProduct(product) {
     shipping_width: product?.shipping_width,
     shipping_height: product?.shipping_height,
     dimensions: product?.dimensions || undefined,
+    model_id: product?.model_id ?? null,
   };
 }

@@ -38,6 +38,7 @@ import {
     resolveShopeeFieldTemplate,
 } from './shopeeFieldTemplates.js';
 import { shopeeTemplateService } from '../../../services/shopeeTemplateService';
+import { modelService } from '../../../services/models';
 import {
     analyzeShopeeTitleSafety,
     applyShopeeTemplateToProduct,
@@ -118,6 +119,7 @@ export interface ShopeeProduct {
         depth_cm?: number;
     } | string | null;
     shopee_item_id?: number | null;
+    model_id?: string | null;
 }
 
 export interface LocalProduct {
@@ -160,6 +162,7 @@ export interface LocalProduct {
         depth_cm?: number;
     } | string | null;
     shopee_item_id?: number | null;
+    model_id?: string | null;
 }
 
 type Tab = 'config' | 'products' | 'bulk' | 'orders' | 'finance' | 'printers';
@@ -877,6 +880,7 @@ function toLocalProduct(p: ShopeeProduct): LocalProduct {
         dimensions: normalizeProductDimensions(p.dimensions),
         ncm: p.ncm || '',
         shopee_item_id: p.shopee_item_id || null,
+        model_id: p.model_id ?? null,
     };
 }
 
@@ -916,6 +920,7 @@ function toLocalProductFromVpsProduct(p: any, shopeeItemId?: number | null): Loc
         dimensions: normalizeProductDimensions(p.dimensions),
         ncm: p.ncm || '',
         shopee_item_id: shopeeItemId || null,
+        model_id: p.model_id ?? null,
     };
 }
 
@@ -1040,6 +1045,7 @@ export default function ShopeePage() {
                     shipping_height: p.shipping_height,
                     dimensions: normalizeProductDimensions(p.dimensions),
                     ncm: p.ncm,
+                    model_id: p.model_id,
                 };
             });
 
@@ -3032,11 +3038,15 @@ export function ShopeeSyncModal({
                 category_id: String(cat.category_id),
                 brand_name: inferredBrandName,
             });
-            const [attrRes, brandRes] = await Promise.all([
-                fetch(`/api/shopee-catalog?action=attributes&category_id=${cat.category_id}`),
-                fetch(`/api/shopee-catalog?${brandParams.toString()}`),
-            ]);
-            const data = await attrRes.json();
+            const promises: Promise<any>[] = [
+                fetch(`/api/shopee-catalog?action=attributes&category_id=${cat.category_id}`).then(res => res.json()),
+                fetch(`/api/shopee-catalog?${brandParams.toString()}`).then(res => res.json()),
+            ];
+            if (product.model_id) {
+                promises.push(modelService.getById(product.model_id).catch(() => null));
+            }
+            const [data, brandDataRaw, modelData] = await Promise.all(promises);
+
             if (data.error && data.error !== '') {
                 throw new Error(data.message || data.error);
             }
@@ -3045,6 +3055,7 @@ export function ShopeeSyncModal({
             const templateValues = buildShopeeTemplateAttributeValues(normalizedAttributes, product, activeFieldTemplate);
             const universalTemplateValues = resolveUniversalShopeeAttributeDefaults(shopeeTemplates);
             const selectedTemplateValues = selectedShopeeTemplate?.attributeDefaults || {};
+            const modelDefaults = modelData?.shopee_attribute_defaults || modelData?.shopeeAttributeDefaults || {};
             const attributeProductContext = {
                 ...product,
                 package_length: packageDimension.package_length,
@@ -3052,14 +3063,14 @@ export function ShopeeSyncModal({
                 package_height: packageDimension.package_height,
             };
             const mergedTemplateValues = Object.fromEntries(
-                Object.entries({ ...universalTemplateValues, ...templateValues, ...selectedTemplateValues })
+                Object.entries({ ...universalTemplateValues, ...templateValues, ...selectedTemplateValues, ...modelDefaults })
                     .map(([attributeId, value]) => [attributeId, renderShopeeAttributeDefaultValue(value as any, attributeProductContext)])
                     .filter(([, value]) => Array.isArray(value) ? value.some((entry) => String(entry || '').trim()) : String(value || '').trim())
             );
             if (Object.keys(mergedTemplateValues).length > 0) {
                 setAttrValues(mergedTemplateValues as Record<number, string | string[]>);
             }
-            const brandData = await brandRes.json();
+            const brandData = brandDataRaw;
             if (brandData.error && brandData.error !== '') {
                 console.warn('[Shopee Sync] Failed to load brand list:', brandData);
             } else {

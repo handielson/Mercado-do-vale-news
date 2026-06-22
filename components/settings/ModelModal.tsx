@@ -528,6 +528,8 @@ export const ModelModal: React.FC<ModelModalProps> = ({ isOpen, onClose, onSave,
     // Template fields
     const [categoryId, setCategoryId] = useState('');
     const [description, setDescription] = useState('');
+    const [previewHtml, setPreviewHtml] = useState(false);
+    const [showRawJson, setShowRawJson] = useState(false);
     const [templateValues, setTemplateValues] = useState<Record<string, any>>({});
     const [eans, setEans] = useState<string[]>([]);
 
@@ -743,6 +745,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
         category: categoryObj?.name || 'Smartphones',
         customFields: visibleSpecFields,
         choiceOptions: fieldChoiceOptions,
+        shopeeFields: shopeeAttributeFields,
     });
 
     useEffect(() => {
@@ -902,9 +905,18 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             setActive(normalized.active);
             appliedFields.push('status');
         }
-        if (normalized.description) {
+        if (normalized.description && !description.trim()) {
             setDescription(normalized.description);
             appliedFields.push('descricao');
+        }
+        if (normalized.shopeeAttributeDefaults && Object.keys(normalized.shopeeAttributeDefaults).length > 0) {
+            setShopeeAttributeDefaults(prev => {
+                const next = { ...prev, ...normalized.shopeeAttributeDefaults };
+                setShopeeAttributeDefaultsText(JSON.stringify(next, null, 2));
+                return next;
+            });
+            setShopeeAttributeDefaultsError('');
+            appliedFields.push('atributos da Shopee');
         }
         if (normalized.eans?.length) {
             setEans(normalized.eans);
@@ -1750,10 +1762,10 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-slate-200">
+                <div className="flex border-b border-slate-200 overflow-x-auto scrollbar-thin whitespace-nowrap">
                     <button
                         onClick={() => setActiveTab('basic')}
-                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'basic'
+                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'basic'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1765,7 +1777,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     </button>
                     <button
                         onClick={() => setActiveTab('json')}
-                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'json'
+                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'json'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1777,7 +1789,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     </button>
                     <button
                         onClick={() => setActiveTab('template')}
-                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'template'
+                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'template'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1789,7 +1801,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     </button>
                     <button
                         onClick={() => setActiveTab('seo')}
-                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'seo'
+                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'seo'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1801,7 +1813,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     </button>
                     <button
                         onClick={() => setActiveTab('photos')}
-                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'photos'
+                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'photos'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1814,7 +1826,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     </button>
                     <button
                         onClick={() => setActiveTab('tags')}
-                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'tags'
+                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'tags'
                             ? 'text-blue-600 border-b-2 border-blue-600'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -1825,7 +1837,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                     </button>
                     <button
                         onClick={() => setActiveTab('shopee')}
-                        className={`flex-1 px-6 py-3 font-medium transition-colors ${activeTab === 'shopee'
+                        className={`flex-1 flex-shrink-0 whitespace-nowrap px-4 md:px-6 py-3 font-medium transition-colors ${activeTab === 'shopee'
                             ? 'text-orange-600 border-b-2 border-orange-500'
                             : 'text-slate-600 hover:text-slate-800'
                             }`}
@@ -2070,25 +2082,46 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
                             {/* Description */}
                             <div className="border-t border-slate-200 pt-4">
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Descrição Padrão <span className="text-slate-400 font-mono text-xs">(models.description)</span>
-                                </label>
-                                <textarea
-                                    value={description}
-                                    onChange={(e) => {
-                                        setDescription(e.target.value);
-                                        e.target.style.height = 'auto';
-                                        e.target.style.height = `${e.target.scrollHeight}px`;
-                                    }}
-                                    onFocus={(e) => {
-                                        e.target.style.height = 'auto';
-                                        e.target.style.height = `${e.target.scrollHeight}px`;
-                                    }}
-                                    placeholder="Ex: Smartphone Apple com tela de 6.1 polegadas..."
-                                    rows={3}
-                                    style={{ minHeight: '80px' }}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-hidden resize-none bg-white text-sm"
-                                />
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-sm font-medium text-slate-700">
+                                        Descrição Padrão <span className="text-slate-400 font-mono text-xs">(models.description)</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPreviewHtml(!previewHtml)}
+                                        className={`text-xs px-2 py-1 rounded border transition-colors ${
+                                            previewHtml
+                                                ? 'bg-blue-50 text-blue-600 border-blue-200 font-medium'
+                                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                        }`}
+                                    >
+                                        {previewHtml ? '👁️ Ver Código (HTML)' : '✨ Ver Formatado (HTML)'}
+                                    </button>
+                                </div>
+                                {previewHtml ? (
+                                    <div 
+                                        className="w-full px-3 py-3 border border-slate-200 rounded-lg bg-slate-50 text-slate-800 text-sm overflow-y-auto max-h-96 prose prose-sm max-w-none"
+                                        style={{ minHeight: '80px' }}
+                                        dangerouslySetInnerHTML={{ __html: description || '<p className="text-slate-400 italic">Nenhuma descrição cadastrada.</p>' }}
+                                    />
+                                ) : (
+                                    <textarea
+                                        value={description}
+                                        onChange={(e) => {
+                                            setDescription(e.target.value);
+                                            e.target.style.height = 'auto';
+                                            e.target.style.height = `${e.target.scrollHeight}px`;
+                                        }}
+                                        onFocus={(e) => {
+                                            e.target.style.height = 'auto';
+                                            e.target.style.height = `${e.target.scrollHeight}px`;
+                                        }}
+                                        placeholder="Ex: Smartphone Apple com tela de 6.1 polegadas..."
+                                        rows={3}
+                                        style={{ minHeight: '80px' }}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 overflow-hidden resize-none bg-white text-sm"
+                                    />
+                                )}
                             </div>
 
                             {/* Brindes */}
@@ -2380,105 +2413,6 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                 <p className="text-sm text-blue-900">
                                     🔍 <strong>SEO (Otimização de Buscas)</strong>: Configure as tags padrão para todos os produtos deste modelo.
                                 </p>
-                            </div>
-
-                            {/* Seção de Ajuda com Links para IAs */}
-                            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
-                                <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
-                                    <ExternalLink size={18} />
-                                    💡 Gerar Conteúdo SEO com IA
-                                </h4>
-                                <p className="text-sm text-blue-700 mb-3">
-                                    Use uma das ferramentas abaixo para gerar conteúdo SEO otimizado. Copie o prompt e cole na IA escolhida.
-                                </p>
-
-                                {/* Campo de Prompt Editável */}
-                                <div className="mb-3">
-                                    <div className="flex items-center justify-between mb-1">
-                                        <label className="text-xs font-medium text-blue-900">
-                                            Prompt para IA (editável)
-                                        </label>
-                                        <button
-                                            type="button"
-                                            onClick={handleCopyPrompt}
-                                            className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
-                                        >
-                                            {promptCopied ? '✓ Copiado!' : '📋 Copiar Prompt'}
-                                        </button>
-                                    </div>
-                                    <textarea
-                                        value={aiPrompt}
-                                        onChange={(e) => setAiPrompt(e.target.value)}
-                                        rows={12}
-                                        className="w-full px-3 py-2 text-xs font-mono border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white"
-                                        placeholder="Edite o prompt conforme necessário..."
-                                    />
-                                    <p className="text-xs text-blue-600 mt-1">
-                                        💡 Dica: O prompt é atualizado automaticamente quando você preenche Nome, Marca e Categoria.
-                                    </p>
-                                </div>
-
-                                {/* Botões de Links para IAs */}
-                                <div className="flex flex-wrap gap-2">
-                                    <a
-                                        href="https://gemini.google.com/"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm"
-                                    >
-                                        <ExternalLink size={16} /> Abrir Gemini
-                                    </a>
-                                    <a
-                                        href="https://www.perplexity.ai/"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium text-sm"
-                                    >
-                                        <ExternalLink size={16} /> Abrir Perplexity
-                                    </a>
-                                    <a
-                                        href="https://x.com/i/grok"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors font-medium text-sm"
-                                    >
-                                        <ExternalLink size={16} /> Abrir Grok
-                                    </a>
-                                    <a
-                                        href="https://chat.openai.com/"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
-                                    >
-                                        <ExternalLink size={16} /> Abrir ChatGPT
-                                    </a>
-                                </div>
-
-                                {/* Campo de Cola do JSON */}
-                                <div className="mt-4 pt-4 border-t border-blue-200">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <label className="text-sm font-semibold text-blue-900">
-                                            Colar Resposta da IA (JSON)
-                                        </label>
-                                    </div>
-                                    <div className="flex flex-col gap-2 relative">
-                                        <textarea
-                                            value={jsonInput}
-                                            onChange={(e) => setJsonInput(e.target.value)}
-                                            rows={4}
-                                            className="w-full px-3 py-2 text-xs font-mono border-2 border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
-                                            placeholder='Ex: { "description": "...", "slug": "...", "meta_title": "..." }'
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={handleApplyJson}
-                                            disabled={!jsonInput.trim() || applyingModelPayload}
-                                            className="self-end px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg transition-colors shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                            {applyingModelPayload ? 'Aplicando...' : 'Preencher Campos Automaticamente ✨'}
-                                        </button>
-                                    </div>
-                                </div>
                             </div>
 
                             <div>
@@ -2789,7 +2723,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                             <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-4">
                                 <h4 className="text-sm font-semibold text-slate-800">📂 Categoria Shopee</h4>
 
-                                {shopeeCategoryId ? (
+                                {shopeeCategoryId && (
                                     <div className="flex items-center justify-between gap-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                                         <div>
                                             <span className="text-xs text-orange-500 font-semibold uppercase">Categoria Atual</span>
@@ -2804,194 +2738,219 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
                                             Remover
                                         </button>
                                     </div>
-                                ) : (
-                                    <div className="p-3 bg-slate-50 border border-dashed border-slate-300 rounded-lg text-sm text-slate-500 text-center">
-                                        Nenhuma categoria Shopee definida
-                                    </div>
                                 )}
-
-                                <div className="space-y-2">
-                                    <label className="block text-xs font-medium text-slate-600 mb-1">Buscar Categoria Shopee pelo nome</label>
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            placeholder="Ex: Fontes, Cabos USB, Capas de Celular"
-                                            value={shopeeCategorySearch}
-                                            onFocus={loadShopeeCategories}
-                                            onChange={(e) => handleShopeeCategorySearchChange(e.target.value)}
-                                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                                        />
-                                        {shopeeCategoryResults.length > 0 && (
-                                            <div className="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-orange-200 bg-white shadow-lg">
-                                                {shopeeCategoryResults.map((category: any) => (
-                                                    <button
-                                                        key={'shopee-tab-' + category.category_id}
-                                                        type="button"
-                                                        onClick={() => selectShopeeCategoryByName(category)}
-                                                        className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-slate-100 last:border-b-0 transition-colors"
-                                                    >
-                                                        <span className="block text-sm font-medium text-slate-800">{category.display_category_name || category.original_category_name}</span>
-                                                        <span className="block text-xs text-slate-500">{category.__pathLabel || category.category_id}</span>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                    {shopeeCategoriesLoading && <p className="text-xs text-orange-600">Carregando categorias da Shopee...</p>}
-                                    {shopeeCategoriesError && <p className="text-xs text-red-600">{shopeeCategoriesError}</p>}
-                                </div>
-
-                                <div className="border-t border-slate-100 pt-4">
-                                    <p className="text-xs font-semibold text-slate-600 mb-2">🔍 Copiar Categoria de Produto Similar (já sincronizado)</p>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            placeholder={name || 'Buscar produto similar na Shopee...'}
-                                            value={shopeeSimilarSearch}
-                                            onChange={(e) => setShopeeSimilarSearch(e.target.value)}
-                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchShopeeSimilar(); } }}
-                                            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={handleSearchShopeeSimilar}
-                                            disabled={shopeeSimilarLoading}
-                                            className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors disabled:opacity-60"
-                                        >
-                                            {shopeeSimilarLoading ? 'Buscando...' : 'Buscar'}
-                                        </button>
-                                    </div>
-                                    <p className="text-xs text-slate-400 mt-1">Busca produtos locais já enviados à Shopee para copiar a categoria correta.</p>
-
-                                    {shopeeSimilarResults.length > 0 && (
-                                        <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
-                                            {shopeeSimilarResults.map((product: any, idx: number) => (
-                                                <div
-                                                    key={product.id || idx}
-                                                    className="flex items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg hover:border-orange-300 transition-colors"
-                                                >
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-medium text-slate-800 truncate">{product.name || product.sku || `Produto ${idx + 1}`}</p>
-                                                        <p className="text-xs text-slate-500">
-                                                            {product.shopee_category_name || 'Categoria desconhecida'}
-                                                            {product.shopee_category_id && ` (ID: ${product.shopee_category_id})`}
-                                                        </p>
+                                
+                                {!shopeeCategoryId && (
+                                    <>
+                                        <div className="space-y-2">
+                                            <label className="block text-xs font-medium text-slate-600 mb-1">Buscar Categoria Shopee pelo nome</label>
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Ex: Fontes, Cabos USB, Capas de Celular"
+                                                    value={shopeeCategorySearch}
+                                                    onFocus={loadShopeeCategories}
+                                                    onChange={(e) => handleShopeeCategorySearchChange(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                                />
+                                                {shopeeCategoryResults.length > 0 && (
+                                                    <div className="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-orange-200 bg-white shadow-lg">
+                                                        {shopeeCategoryResults.map((category: any) => (
+                                                            <button
+                                                                key={'shopee-tab-' + category.category_id}
+                                                                type="button"
+                                                                onClick={() => selectShopeeCategoryByName(category)}
+                                                                className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-slate-100 last:border-b-0 transition-colors"
+                                                            >
+                                                                <span className="block text-sm font-medium text-slate-800">{category.display_category_name || category.original_category_name}</span>
+                                                                <span className="block text-xs text-slate-500">{category.__pathLabel || category.category_id}</span>
+                                                            </button>
+                                                        ))}
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleCopyCategoryFromSimilar(product)}
-                                                        disabled={!product.shopee_category_id}
-                                                        className="shrink-0 px-3 py-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs font-medium rounded-lg transition-colors disabled:opacity-40"
-                                                    >
-                                                        Copiar Categoria
-                                                    </button>
+                                                )}
+                                            </div>
+                                            {shopeeCategoriesLoading && <p className="text-xs text-orange-600">Carregando categorias da Shopee...</p>}
+                                            {shopeeCategoriesError && <p className="text-xs text-red-600">{shopeeCategoriesError}</p>}
+                                        </div>
+
+                                        <div className="border-t border-slate-100 pt-4">
+                                            <p className="text-xs font-semibold text-slate-600 mb-2">🔍 Copiar Categoria de Produto Similar (já sincronizado)</p>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder={name || 'Buscar produto similar na Shopee...'}
+                                                    value={shopeeSimilarSearch}
+                                                    onChange={(e) => setShopeeSimilarSearch(e.target.value)}
+                                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchShopeeSimilar(); } }}
+                                                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSearchShopeeSimilar}
+                                                    disabled={shopeeSimilarLoading}
+                                                    className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors disabled:opacity-60"
+                                                >
+                                                    {shopeeSimilarLoading ? 'Buscando...' : 'Buscar'}
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-slate-400 mt-1">Busca produtos locais já enviados à Shopee para copiar a categoria correta.</p>
+
+                                            {shopeeSimilarResults.length > 0 && (
+                                                <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
+                                                    {shopeeSimilarResults.map((product: any, idx: number) => (
+                                                        <div
+                                                            key={product.id || idx}
+                                                            className="flex items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg hover:border-orange-300 transition-colors"
+                                                        >
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-medium text-slate-800 truncate">{product.name || product.sku || `Produto ${idx + 1}`}</p>
+                                                                <p className="text-xs text-slate-500">
+                                                                    {product.shopee_category_name || 'Categoria desconhecida'}
+                                                                    {product.shopee_category_id && ` (ID: ${product.shopee_category_id})`}
+                                                                </p>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleCopyCategoryFromSimilar(product)}
+                                                                disabled={!product.shopee_category_id}
+                                                                className="shrink-0 px-3 py-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200 text-xs font-medium rounded-lg transition-colors disabled:opacity-40"
+                                                            >
+                                                                Copiar Categoria
+                                                            </button>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                            )}
 
-                                    {shopeeSimilarResults.length === 0 && !shopeeSimilarLoading && shopeeSimilarSearch && (
-                                        <p className="text-xs text-slate-400 mt-2 italic">Nenhum produto similar com categoria Shopee encontrado.</p>
-                                    )}
-                                </div>
+                                            {shopeeSimilarResults.length === 0 && !shopeeSimilarLoading && shopeeSimilarSearch && (
+                                                <p className="text-xs text-slate-400 mt-2 italic">Nenhum produto similar com categoria Shopee encontrado.</p>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
                             </div>
 
-                            {/* Attribute Defaults */}
-                            <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h4 className="text-sm font-semibold text-slate-800">⚙️ Atributos Padrão da Categoria</h4>
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            JSON com os atributos obrigatórios da categoria Shopee. Formato: <code className="bg-slate-100 px-1 rounded">{'{"attribute_id": "valor"}'}</code>.
-                                            Esses valores serão usados no envio do produto.
-                                        </p>
-                                    </div>
-                                    {shopeeCategoryId && (
-                                        <button
-                                            type="button"
-                                            onClick={handleReloadShopeeAttributes}
-                                            disabled={shopeeAttributesLoading}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 disabled:opacity-50 transition-colors"
-                                            title="Recarregar atributos da categoria"
-                                        >
-                                            {shopeeAttributesLoading ? (
-                                                <>
-                                                    <span className="animate-spin">⏳</span> Buscando...
-                                                </>
-                                            ) : (
-                                                <>🔄 Recarregar</>
-                                            )}
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* Loading state */}
-                                {shopeeAttributesLoading && (
-                                    <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                        <span className="animate-spin text-blue-500">⏳</span>
-                                        <span className="text-xs text-blue-700 font-medium">Buscando atributos da categoria {shopeeCategoryId}...</span>
-                                    </div>
-                                )}
-
-                                {/* Error from API */}
-                                {shopeeAttributesError && (
-                                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                                        <p className="text-xs text-red-700 font-medium">Erro ao buscar atributos</p>
-                                        <p className="text-xs text-red-600 mt-0.5">{shopeeAttributesError}</p>
-                                    </div>
-                                )}
-
-                                {/* Attribute summary badges */}
-                                {shopeeAttributeFields.length > 0 && !shopeeAttributesLoading && (
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-3 text-xs">
-                                            <span className="text-slate-500">{shopeeAttributeFields.length} atributos na categoria</span>
-                                            {shopeeAttributeFields.filter(a => a.mandatory).length > 0 && (
-                                                <span className="text-orange-600 font-semibold">
-                                                    {shopeeAttributeFields.filter(a => a.mandatory).length} obrigatórios
-                                                </span>
-                                            )}
-                                            {Object.keys(shopeeAttributeDefaults).length > 0 && (
-                                                <span className="text-green-600 font-semibold">
-                                                    {Object.entries(shopeeAttributeDefaults).filter(([, v]) => String(v).trim()).length} preenchidos
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {shopeeAttributeFields.map((attr) => {
-                                                const attrId = String(attr.attribute_id);
-                                                const val = shopeeAttributeDefaults[attrId];
-                                                const hasVal = typeof val === 'string' && val.trim().length > 0;
-                                                const mandatory = attr.mandatory;
-                                                const bgClass = mandatory
-                                                    ? hasVal ? 'bg-green-50 border-green-200 text-green-700' : 'bg-orange-50 border-orange-200 text-orange-700'
-                                                    : hasVal ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-500';
-                                                return (
-                                                    <span key={attrId} className={`inline-flex items-center gap-1 px-2 py-0.5 border text-xs rounded-full ${bgClass}`}>
-                                                        {mandatory && <span title="Obrigatório">*</span>}
-                                                        <span className="font-medium">{attr.label || attrId}</span>
-                                                        {hasVal && <span className="font-mono opacity-80">: {val}</span>}
-                                                        {!hasVal && mandatory && <span className="italic opacity-60">vazio</span>}
-                                                    </span>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <textarea
-                                    rows={8}
-                                    placeholder={'{\n  "100121": "3 Months",\n  "100134": "TPU"\n}'}
-                                    value={shopeeAttributeDefaultsText}
-                                    onChange={(e) => handleShopeeAttributeDefaultsChange(e.target.value)}
-                                    className={`w-full px-3 py-2 border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400 ${
-                                        shopeeAttributeDefaultsError ? 'border-red-400 bg-red-50' : 'border-slate-200'
-                                    }`}
-                                />
-                                {shopeeAttributeDefaultsError && (
-                                    <p className="text-xs text-red-600">{shopeeAttributeDefaultsError}</p>
-                                )}
-                            </div>
+                             {/* Attribute Defaults */}
+                             <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-3">
+                                 <div className="flex items-center justify-between">
+                                     <div>
+                                         <h4 className="text-sm font-semibold text-slate-800">⚙️ Atributos Padrão da Categoria</h4>
+                                         <p className="text-xs text-slate-500 mt-1">
+                                             Defina os atributos específicos exigidos pela Shopee para esta categoria de produto.
+                                         </p>
+                                     </div>
+                                     {shopeeCategoryId && (
+                                         <div className="flex gap-2">
+                                             <button
+                                                 type="button"
+                                                 onClick={() => setShowRawJson(!showRawJson)}
+                                                 className={`text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                                                     showRawJson
+                                                         ? 'bg-orange-50 border-orange-200 text-orange-700 font-medium'
+                                                         : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                                 }`}
+                                             >
+                                                 {showRawJson ? '👁️ Ver Campos' : '🛠️ Modo JSON'}
+                                             </button>
+                                             <button
+                                                 type="button"
+                                                 onClick={handleReloadShopeeAttributes}
+                                                 disabled={shopeeAttributesLoading}
+                                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 disabled:opacity-50 transition-colors"
+                                                 title="Recarregar atributos da categoria"
+                                             >
+                                                 {shopeeAttributesLoading ? (
+                                                     <>
+                                                         <span className="animate-spin">⏳</span> Buscando...
+                                                     </>
+                                                 ) : (
+                                                     <>🔄 Recarregar</>
+                                                 )}
+                                             </button>
+                                         </div>
+                                     )}
+                                 </div>
+ 
+                                 {/* Loading state */}
+                                 {shopeeAttributesLoading && (
+                                     <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                         <span className="animate-spin text-blue-500">⏳</span>
+                                         <span className="text-xs text-blue-700 font-medium">Buscando atributos da categoria {shopeeCategoryId}...</span>
+                                     </div>
+                                 )}
+ 
+                                 {/* Error from API */}
+                                 {shopeeAttributesError && (
+                                     <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                                         <p className="text-xs text-red-700 font-medium">Erro ao buscar atributos</p>
+                                         <p className="text-xs text-red-600 mt-0.5">{shopeeAttributesError}</p>
+                                     </div>
+                                 )}
+ 
+                                 {/* Attribute summary badges */}
+                                 {shopeeAttributeFields.length > 0 && !shopeeAttributesLoading && (
+                                     <div className="space-y-2 pb-2">
+                                         <div className="flex items-center gap-3 text-xs">
+                                             <span className="text-slate-500">{shopeeAttributeFields.length} atributos na categoria</span>
+                                             {shopeeAttributeFields.filter(a => a.mandatory).length > 0 && (
+                                                 <span className="text-orange-600 font-semibold">
+                                                     {shopeeAttributeFields.filter(a => a.mandatory).length} obrigatórios
+                                                 </span>
+                                             )}
+                                             {Object.keys(shopeeAttributeDefaults).length > 0 && (
+                                                 <span className="text-green-600 font-semibold">
+                                                     {Object.entries(shopeeAttributeDefaults).filter(([, v]) => String(v).trim()).length} preenchidos
+                                                 </span>
+                                             )}
+                                         </div>
+                                         <div className="flex flex-wrap gap-1.5">
+                                             {shopeeAttributeFields.map((attr) => {
+                                                 const attrId = String(attr.attribute_id);
+                                                 const val = shopeeAttributeDefaults[attrId];
+                                                 const hasVal = typeof val === 'string' && val.trim().length > 0;
+                                                 const mandatory = attr.mandatory;
+                                                 const bgClass = mandatory
+                                                     ? hasVal ? 'bg-green-50 border-green-200 text-green-700' : 'bg-orange-50 border-orange-200 text-orange-700'
+                                                     : hasVal ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-slate-50 border-slate-200 text-slate-500';
+                                                 return (
+                                                     <span key={attrId} className={`inline-flex items-center gap-1 px-2 py-0.5 border text-xs rounded-full ${bgClass}`}>
+                                                         {mandatory && <span title="Obrigatório">*</span>}
+                                                         <span className="font-medium">{attr.label || attrId}</span>
+                                                         {hasVal && <span className="font-mono opacity-80">: {val}</span>}
+                                                         {!hasVal && mandatory && <span className="italic opacity-60">vazio</span>}
+                                                     </span>
+                                                 );
+                                             })}
+                                         </div>
+                                     </div>
+                                 )}
+ 
+                                 {/* Render dynamic inputs */}
+                                 {shopeeAttributeFields.length > 0 && !shopeeAttributesLoading && !showRawJson && (
+                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 pt-4 pb-2">
+                                         {shopeeAttributeFields.map(renderShopeeAttributeField)}
+                                     </div>
+                                 )}
+ 
+                                 {/* Raw JSON fallback text area */}
+                                 {(showRawJson || shopeeAttributeFields.length === 0) && (
+                                     <div className="space-y-2 border-t border-slate-100 pt-4">
+                                         <label className="block text-xs font-medium text-slate-600">JSON de Atributos (Avançado)</label>
+                                         <textarea
+                                             rows={8}
+                                             placeholder={'{\n  "100121": "3 Months",\n  "100134": "TPU"\n}'}
+                                             value={shopeeAttributeDefaultsText}
+                                             onChange={(e) => handleShopeeAttributeDefaultsChange(e.target.value)}
+                                             className={`w-full px-3 py-2 border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-400 ${
+                                                 shopeeAttributeDefaultsError ? 'border-red-400 bg-red-50' : 'border-slate-200'
+                                             }`}
+                                         />
+                                         {shopeeAttributeDefaultsError && (
+                                             <p className="text-xs text-red-600">{shopeeAttributeDefaultsError}</p>
+                                         )}
+                                     </div>
+                                 )}
+                             </div>
                         </div>
                     )}
 
