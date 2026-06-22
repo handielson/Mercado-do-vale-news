@@ -25,12 +25,18 @@ import {
     normalizeShopeeAttributes,
     buildShopeeAttributeDefaultsPayload,
     summarizeShopeeAttributes,
+    normalizeLookupText,
 } from '../../pages/admin/settings/shopeeAttributeResolver.js';
 import {
     buildCategoryTree,
     getCategoryPathLabel,
     searchShopeeCategories,
 } from '../../pages/admin/settings/shopeeCategoryHelpers.js';
+import { shopeeTemplateService } from '../../services/shopeeTemplateService';
+import {
+    renderShopeeAttributeDefaultValue,
+    resolveUniversalShopeeAttributeDefaults,
+} from '../../services/shopeeTemplateEngine';
 
 // Atributo de categoria Shopee normalizado (mesmo formato retornado por
 // normalizeShopeeAttributes em shopeeAttributeResolver.js). Declarado localmente
@@ -44,6 +50,30 @@ type ShopeeAttributeField = {
     raw_input_type?: string | number;
     support_search_value?: boolean;
 };
+
+function alignShopeeDefaultValuesToOptions(
+    fields: ShopeeAttributeField[],
+    defaults: Record<string, any>
+): Record<string, any> {
+    const aligned = { ...defaults };
+    for (const field of fields || []) {
+        const key = String(field.attribute_id);
+        const value = aligned[key];
+        if (value === undefined || value === null || Array.isArray(value)) continue;
+        if (!Array.isArray(field.attribute_value_list) || field.attribute_value_list.length === 0) continue;
+
+        const normalizedValue = normalizeLookupText(value);
+        const matchingOption = field.attribute_value_list.find((option) =>
+            normalizeLookupText(option.label) === normalizedValue ||
+            normalizeLookupText(option.raw_name) === normalizedValue ||
+            normalizeLookupText(option.original_value_name) === normalizedValue
+        );
+        if (matchingOption?.label) {
+            aligned[key] = matchingOption.label;
+        }
+    }
+    return aligned;
+}
 
 interface ModelModalProps {
     isOpen: boolean;
@@ -1361,10 +1391,25 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
             // Build suggestions: brand + model name + template defaults
             const productRef = { name, brand: shopeeBrandName };
             const payload = buildShopeeAttributeDefaultsPayload(fields, productRef);
+            const shopeeTemplates = await shopeeTemplateService.list();
+            const universalTemplateValues = resolveUniversalShopeeAttributeDefaults(shopeeTemplates);
+            const attributeProductContext = {
+                ...productRef,
+                package_length: templateValues['package_length'] ?? templateValues['dimensions.length_cm'] ?? templateValues['dimensions.depth_cm'],
+                package_width: templateValues['package_width'] ?? templateValues['dimensions.width_cm'],
+                package_height: templateValues['package_height'] ?? templateValues['dimensions.height_cm'],
+            };
+            const renderedUniversalDefaults = Object.fromEntries(
+                Object.entries(universalTemplateValues)
+                    .map(([attributeId, value]) => [attributeId, renderShopeeAttributeDefaultValue(value as any, attributeProductContext)])
+                    .filter(([, value]) => Array.isArray(value) ? value.some((entry) => String(entry || '').trim()) : String(value || '').trim())
+            );
 
-            const nextDefaults = Object.keys(payload).length > 0
-                ? { ...payload, ...shopeeAttributeDefaults }
-                : { ...shopeeAttributeDefaults };
+            const nextDefaults = alignShopeeDefaultValuesToOptions(fields, {
+                ...renderedUniversalDefaults,
+                ...payload,
+                ...shopeeAttributeDefaults,
+            });
             setShopeeAttributeDefaults(nextDefaults);
             setShopeeAttributeDefaultsText(Object.keys(nextDefaults).length > 0 ? JSON.stringify(nextDefaults, null, 2) : '');
             setShopeeAttributeDefaultsError('');

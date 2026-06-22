@@ -1,30 +1,24 @@
 # Versao Atual
 
 ```text
-version: v1.1.85-shopee-universal-defaults
+version: v1.1.86-shopee-model-defaults
 date: 2026-06-22
 status: published
-release_vps: /var/www/mdv-site/releases/20260622-001500-v1185-shopee-universal-defaults
+release_vps: /var/www/mdv-site/releases/20260622-003000-v1186-shopee-model-defaults
 branch: codex/publish-delivery-ops-20260614
-summary: Templates Shopee agora incluem defaults universais por ID, aplicados a qualquer categoria com placeholders de SKU e dimensoes da embalagem.
+summary: Defaults universais da Shopee tambem preenchem automaticamente os atributos da aba JSON/IA em Modelos.
 ```
 
-## O que entra no v1.1.85
+## O que entrou no v1.1.86
 
-- Template padrao `universal_defaults` para atributos Shopee recorrentes, como garantia, condicao, certificado, SKU e dimensoes da embalagem.
-- Envio para Shopee mescla defaults universais, defaults do template por categoria e preenchimento automatico da categoria, mantendo o template especifico com prioridade.
-- Placeholders em atributos Shopee, como `{sku}` e `{package_dimensions}`, sao resolvidos antes de preencher os campos da publicacao.
-- Tela de templates permite adicionar/remover defaults manuais por ID de atributo, inclusive atributos que ainda nao apareceram na categoria carregada.
-- O servico de templates preserva defaults obrigatorios mesmo quando a loja ja tem templates salvos na VPS.
+- A tela de Modelos agora carrega os templates Shopee antes de montar os atributos da categoria.
+- Defaults universais por ID, como `100121 = 3 meses` e `100370 = Garantia do fornecedor`, tambem preenchem os campos da aba JSON / IA.
+- Placeholders dos defaults universais continuam sendo renderizados, incluindo `{package_dimensions}` quando houver dimensoes no modelo.
+- Valores dos defaults sao alinhados com as opcoes retornadas pela Shopee para que selects como garantia, tipo de garantia e condicao aparecam selecionados.
+- Protecao de regressao atualizada para impedir que o modal de modelos deixe de carregar `universal_defaults`.
 
 ## Validacoes
 
 - `node tmp-tests\shopee-universal-attribute-defaults-static.test.mjs`
-- `node tmp-tests\shopee-template-engine.test.mjs`
-- `node tmp-tests\shopee-template-service-vps-static.test.mjs`
-- `node tmp-tests\shopee-templates-page-static.test.mjs`
+- `node tmp-tests\model-shopee-attributes-json-section-static.test.mjs`
 - `npm.cmd run build`
-
-## Observacoes
-
-- `node tmp-tests\shopee-template-service-static.test.mjs` continua dependendo de `supabase/add_shopee_templates.sql`, arquivo ausente neste checkout apos a migracao de templates Shopee para VPS table-data.

@@ -4,6 +4,7 @@ const service = fs.readFileSync('services/shopeeTemplateService.ts', 'utf8');
 const engine = fs.readFileSync('services/shopeeTemplateEngine.ts', 'utf8');
 const page = fs.readFileSync('pages/admin/settings/ShopeePage.tsx', 'utf8');
 const templatesPage = fs.readFileSync('pages/admin/settings/ShopeeTemplatesPage.tsx', 'utf8');
+const modelModal = fs.readFileSync('components/settings/ModelModal.tsx', 'utf8');
 
 for (const expected of [
   "id: 'universal_defaults'",
@@ -41,6 +42,18 @@ if (!page.includes('renderShopeeAttributeDefaultValue')) {
 
 if (!templatesPage.includes('Defaults universais por ID') || !templatesPage.includes('handleAddManualAttributeDefault')) {
   throw new Error('ShopeeTemplatesPage must expose manual attribute default editing by ID.');
+}
+
+if (!modelModal.includes('shopeeTemplateService.list()')) {
+  throw new Error('ModelModal must load Shopee templates so universal defaults prefill model attributes.');
+}
+
+if (!modelModal.includes('resolveUniversalShopeeAttributeDefaults(shopeeTemplates)')) {
+  throw new Error('ModelModal must merge universal defaults when category attributes are loaded.');
+}
+
+if (!modelModal.includes('renderShopeeAttributeDefaultValue(value as any, attributeProductContext)')) {
+  throw new Error('ModelModal must render dynamic universal defaults before filling model attributes.');
 }
 
 console.log('shopee universal attribute defaults static ok');
