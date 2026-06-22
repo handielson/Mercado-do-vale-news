@@ -42,7 +42,7 @@ import { modelService } from '../../../services/models';
 import {
     analyzeShopeeTitleSafety,
     applyShopeeTemplateToProduct,
-    renderShopeeAttributeDefaultValue,
+    mergeShopeeAttributeDefaults,
     resolveBestShopeeTemplate,
     resolveUniversalShopeeAttributeDefaults,
 } from '../../../services/shopeeTemplateEngine';
@@ -534,8 +534,13 @@ function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attri
     const keptAttributes = attributeList.filter((attr: any) => {
         const attributeId = Number(attr?.attribute_id);
         const values = Array.isArray(attr?.attribute_value_list) ? attr.attribute_value_list : [];
-        const hasCustomValue = values.some((value: any) => Number(value?.value_id || 0) === 0);
-        if (!hasCustomValue || mandatoryAttributeIds.has(attributeId)) return true;
+        // Only consider a value "custom/problematic" if value_id is 0 AND original_value_name is also empty.
+        // Searchable/text attributes (e.g. Potência, Tensão de Entrada) legitimately have value_id=0
+        // with a filled original_value_name — those must NOT be pruned.
+        const hasInvalidCustomValue = values.some((value: any) =>
+            Number(value?.value_id || 0) === 0 && !String(value?.original_value_name || '').trim()
+        );
+        if (!hasInvalidCustomValue || mandatoryAttributeIds.has(attributeId)) return true;
         removedAttributes.push(attr);
         return false;
     });
@@ -594,6 +599,17 @@ function hasFilledAttributeValue(value: string | string[] | undefined): boolean 
         return value.some((entry) => String(entry || '').trim().length > 0);
     }
     return String(value || '').trim().length > 0;
+}
+
+function extractModelShopeeAttributeDefaults(modelData: any): Record<string, string | string[]> {
+    const templateValues = modelData?.template_values || {};
+    const defaults =
+        templateValues?.shopee_attribute_defaults ||
+        templateValues?.shopeeAttributeDefaults ||
+        modelData?.shopee_attribute_defaults ||
+        modelData?.shopeeAttributeDefaults ||
+        {};
+    return defaults && typeof defaults === 'object' && !Array.isArray(defaults) ? defaults : {};
 }
 
 type SearchableAttributeComboboxProps = {
@@ -2539,11 +2555,11 @@ export function ShopeeSyncModal({
         blingDimensions?.altura ??
         0
     ) || 0;
-    const packageDimension = {
+    const packageDimension = useMemo(() => ({
         package_length: Math.max(1, Math.round(packageLength || 20)),
         package_width: Math.max(1, Math.round(packageWidth || 15)),
         package_height: Math.max(1, Math.round(packageHeight || 10)),
-    };
+    }), [packageHeight, packageLength, packageWidth]);
     const defaultVideoUrl = (() => {
         if (typeof product.video_url === 'string' && product.video_url.trim()) {
             return product.video_url.trim();
@@ -2585,6 +2601,7 @@ export function ShopeeSyncModal({
     const [shopeeTemplates, setShopeeTemplates] = useState<ShopeeTemplate[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
     const [suggestedTemplateId, setSuggestedTemplateId] = useState('');
+    const [modelShopeeAttributeDefaults, setModelShopeeAttributeDefaults] = useState<Record<string, string | string[]>>({});
     const selectedShopeeTemplate = useMemo(
         () => shopeeTemplates.find((template) => template.id === selectedTemplateId) || null,
         [selectedTemplateId, shopeeTemplates]
@@ -2766,9 +2783,26 @@ export function ShopeeSyncModal({
             setGtinInput('');
         }
 
-        setAttrValues((current) => ({ ...current, ...applied.attributeValues }));
+        const attributeProductContext = {
+            ...product,
+            package_length: packageDimension.package_length,
+            package_width: packageDimension.package_width,
+            package_height: packageDimension.package_height,
+        };
+        const fieldTemplateValues = attributes.length > 0
+            ? buildShopeeTemplateAttributeValues(attributes, product, activeFieldTemplate)
+            : {};
+        const mergedAttributeValues = mergeShopeeAttributeDefaults({
+            universalDefaults: resolveUniversalShopeeAttributeDefaults(shopeeTemplates),
+            fieldTemplateDefaults: fieldTemplateValues,
+            selectedTemplateDefaults: applied.attributeValues,
+            modelDefaults: modelShopeeAttributeDefaults,
+            product: attributeProductContext,
+        });
 
-    }, [product]);
+        setAttrValues((current) => ({ ...current, ...mergedAttributeValues }));
+
+    }, [activeFieldTemplate, attributes, modelShopeeAttributeDefaults, packageDimension, product, shopeeTemplates]);
 
     // Carrega toda a árvore de categorias ao abrir o modal
     useEffect(() => {
@@ -2815,6 +2849,7 @@ export function ShopeeSyncModal({
             if (!catId && product.model_id) {
                 try {
                     const modelData = await modelService.getById(product.model_id);
+                    setModelShopeeAttributeDefaults(extractModelShopeeAttributeDefaults(modelData));
                     const tmpl = modelData?.template_values;
                     if (tmpl?.shopee_category_id) {
                         catId = tmpl.shopee_category_id;
@@ -2823,6 +2858,8 @@ export function ShopeeSyncModal({
                 } catch (e) {
                     console.warn('[ShopeeSyncModal] Erro ao carregar categoria do modelo:', e);
                 }
+            } else if (!product.model_id) {
+                setModelShopeeAttributeDefaults({});
             }
 
             if (active && catId) {
@@ -3096,18 +3133,21 @@ export function ShopeeSyncModal({
             const templateValues = buildShopeeTemplateAttributeValues(normalizedAttributes, product, activeFieldTemplate);
             const universalTemplateValues = resolveUniversalShopeeAttributeDefaults(shopeeTemplates);
             const selectedTemplateValues = selectedShopeeTemplate?.attributeDefaults || {};
-            const modelDefaults = modelData?.template_values?.shopee_attribute_defaults || modelData?.template_values?.shopeeAttributeDefaults || modelData?.shopee_attribute_defaults || modelData?.shopeeAttributeDefaults || {};
+            const modelDefaults = extractModelShopeeAttributeDefaults(modelData);
+            setModelShopeeAttributeDefaults(modelDefaults);
             const attributeProductContext = {
                 ...product,
                 package_length: packageDimension.package_length,
                 package_width: packageDimension.package_width,
                 package_height: packageDimension.package_height,
             };
-            const mergedTemplateValues = Object.fromEntries(
-                Object.entries({ ...universalTemplateValues, ...templateValues, ...selectedTemplateValues, ...modelDefaults })
-                    .map(([attributeId, value]) => [attributeId, renderShopeeAttributeDefaultValue(value as any, attributeProductContext)])
-                    .filter(([, value]) => Array.isArray(value) ? value.some((entry) => String(entry || '').trim()) : String(value || '').trim())
-            );
+            const mergedTemplateValues = mergeShopeeAttributeDefaults({
+                universalDefaults: universalTemplateValues,
+                fieldTemplateDefaults: templateValues,
+                selectedTemplateDefaults: selectedTemplateValues,
+                modelDefaults,
+                product: attributeProductContext,
+            });
             if (Object.keys(mergedTemplateValues).length > 0) {
                 setAttrValues(mergedTemplateValues as Record<number, string | string[]>);
             }

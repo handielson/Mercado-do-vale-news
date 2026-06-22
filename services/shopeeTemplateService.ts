@@ -236,12 +236,18 @@ async function loadRows(companyId?: string | null): Promise<any[]> {
     }
 
     return allRows
-        .filter(row => !companyId || String(row.company_id) === String(companyId))
+        .filter(row => includeCompanyTemplateRow(row, companyId))
         .sort((a, b) => {
             const priorityDiff = Number(b.priority || 0) - Number(a.priority || 0);
             if (priorityDiff !== 0) return priorityDiff;
             return String(a.name || '').localeCompare(String(b.name || ''));
         });
+}
+
+function includeCompanyTemplateRow(row: any, companyId?: string | null): boolean {
+    if (!companyId) return true;
+    const rowCompanyId = String(row?.company_id || '').trim();
+    return !rowCompanyId || rowCompanyId === String(companyId);
 }
 
 async function list(): Promise<ShopeeTemplate[]> {

@@ -36,8 +36,8 @@ if (!page.includes('resolveUniversalShopeeAttributeDefaults(shopeeTemplates)')) 
   throw new Error('ShopeePage must merge editable universal defaults for every category.');
 }
 
-if (!page.includes('renderShopeeAttributeDefaultValue')) {
-  throw new Error('ShopeePage must resolve dynamic attribute placeholders such as SKU and package dimensions.');
+if (!page.includes('mergeShopeeAttributeDefaults')) {
+  throw new Error('ShopeePage must resolve dynamic attribute placeholders such as SKU and package dimensions through the shared merge helper.');
 }
 
 if (!templatesPage.includes('Defaults universais por ID') || !templatesPage.includes('handleAddManualAttributeDefault')) {

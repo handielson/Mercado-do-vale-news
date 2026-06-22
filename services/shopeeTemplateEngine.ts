@@ -275,6 +275,33 @@ export function resolveUniversalShopeeAttributeDefaults(templates: ShopeeTemplat
     return { ...(universal?.attributeDefaults || {}) };
 }
 
+export function mergeShopeeAttributeDefaults({
+    universalDefaults = {},
+    fieldTemplateDefaults = {},
+    selectedTemplateDefaults = {},
+    modelDefaults = {},
+    product = {},
+}: {
+    universalDefaults?: Record<string, string | string[]>;
+    fieldTemplateDefaults?: Record<string, string | string[]>;
+    selectedTemplateDefaults?: Record<string, string | string[]>;
+    modelDefaults?: Record<string, string | string[]>;
+    product?: Record<string, any>;
+}): Record<string, string | string[]> {
+    return Object.fromEntries(
+        Object.entries({
+            ...universalDefaults,
+            ...fieldTemplateDefaults,
+            ...selectedTemplateDefaults,
+            ...modelDefaults,
+        })
+            .map(([attributeId, value]) => [attributeId, renderShopeeAttributeDefaultValue(value as any, product)])
+            .filter(([, value]) => Array.isArray(value)
+                ? value.some((entry) => String(entry || '').trim())
+                : String(value || '').trim())
+    ) as Record<string, string | string[]>;
+}
+
 export function applyShopeeTemplateToProduct(product: Record<string, any>, template: ShopeeTemplate): ShopeeTemplateApplyResult {
     const title = renderShopeeTemplateText(template.titleTemplate || product?.name || '', product);
     const description = String(product?.description || '').trim()

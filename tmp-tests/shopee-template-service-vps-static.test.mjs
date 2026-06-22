@@ -10,5 +10,6 @@ assert.match(source, /CACHE_KEY/, 'Shopee templates must preserve local fallback
 assert.match(source, /DEFAULT_SHOPEE_TEMPLATES/, 'Shopee templates must preserve default seeding');
 assert.match(source, /seedDefaultsIfEmpty/, 'Shopee templates must preserve seedDefaultsIfEmpty');
 assert.match(source, /vpsClient\.delete/, 'Shopee template delete must use VPS DELETE');
+assert.match(source, /includeCompanyTemplateRow/, 'Shopee templates must include global/orphan templates without company_id');
 
 console.log('shopee template VPS static checks passed');

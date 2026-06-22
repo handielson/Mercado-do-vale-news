@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   analyzeShopeeTitleSafety,
   applyShopeeTemplateToProduct,
+  mergeShopeeAttributeDefaults,
   renderShopeeAttributeDefaultValue,
   renderShopeeTemplateText,
   resolveBestShopeeTemplate,
@@ -186,6 +187,24 @@ assert.equal(
     package_height: 2,
   }),
   '18 x 11 x 2 cm'
+);
+
+assert.deepEqual(
+  mergeShopeeAttributeDefaults({
+    universalDefaults: { 100121: '3 meses', 101639: '{sku}' },
+    fieldTemplateDefaults: { 100413: 'Novo', 100999: '1' },
+    selectedTemplateDefaults: { 100121: '6 meses', 100370: 'Garantia do fornecedor' },
+    modelDefaults: { 100121: '12 meses', 101219: 'Não' },
+    product: sampleProduct,
+  }),
+  {
+    100121: '12 meses',
+    101639: 'CAPA-IP13-VERM',
+    100413: 'Novo',
+    100999: '1',
+    100370: 'Garantia do fornecedor',
+    101219: 'Não',
+  }
 );
 
 console.log('shopee template engine tests passed');
