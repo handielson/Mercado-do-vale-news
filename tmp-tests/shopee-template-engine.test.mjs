@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   analyzeShopeeTitleSafety,
+  alignShopeeAttributeDefaultsToOptions,
   applyShopeeTemplateToProduct,
   mergeShopeeAttributeDefaults,
   renderShopeeAttributeDefaultValue,
@@ -204,6 +205,44 @@ assert.deepEqual(
     100999: '1',
     100370: 'Garantia do fornecedor',
     101219: 'Não',
+  }
+);
+
+assert.deepEqual(
+  alignShopeeAttributeDefaultsToOptions([
+    {
+      attribute_id: 100121,
+      label: 'Duração da Garantia',
+      input_kind: 'select',
+      attribute_value_list: [
+        { value_id: 11, label: '3 Meses', raw_name: '3 Months', original_value_name: '3 Months' },
+        { value_id: 12, label: '6 Meses', raw_name: '6 Months', original_value_name: '6 Months' },
+      ],
+    },
+    {
+      attribute_id: 101219,
+      label: 'Produto personalizado',
+      input_kind: 'select',
+      attribute_value_list: [
+        { value_id: 21, label: 'Não', raw_name: 'No', original_value_name: 'No' },
+        { value_id: 22, label: 'Sim', raw_name: 'Yes', original_value_name: 'Yes' },
+      ],
+    },
+    {
+      attribute_id: 100105,
+      label: 'Potência',
+      input_kind: 'searchable',
+      attribute_value_list: [],
+    },
+  ], {
+    100121: '3 meses',
+    101219: 'Não',
+    100105: '40W',
+  }),
+  {
+    100121: '3 Months',
+    101219: 'No',
+    100105: '40W',
   }
 );
 

@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.1.96-shopee-template-model-defaults
+version: v1.1.97-shopee-select-default-alignment
 date: 2026-06-22
 status: published
-release_vps: /var/www/mdv-site/releases/20260622-101836-v1196-shopee-template-model-defaults
+release_vps: /var/www/mdv-site/releases/20260622-103147-v1197-shopee-select-default-alignment
 branch: main
-summary: Corrige a listagem de templates da Shopee e aplica defaults cadastrados no modelo ao preencher atributos opcionais no modal.
+summary: Alinha defaults de selects da aba Shopee do modelo com os valores reais das opcoes no modal de sincronizacao.
 ```

@@ -41,6 +41,7 @@ import { shopeeTemplateService } from '../../../services/shopeeTemplateService';
 import { modelService } from '../../../services/models';
 import {
     analyzeShopeeTitleSafety,
+    alignShopeeAttributeDefaultsToOptions,
     applyShopeeTemplateToProduct,
     mergeShopeeAttributeDefaults,
     resolveBestShopeeTemplate,
@@ -2792,13 +2793,13 @@ export function ShopeeSyncModal({
         const fieldTemplateValues = attributes.length > 0
             ? buildShopeeTemplateAttributeValues(attributes, product, activeFieldTemplate)
             : {};
-        const mergedAttributeValues = mergeShopeeAttributeDefaults({
+        const mergedAttributeValues = alignShopeeAttributeDefaultsToOptions(attributes, mergeShopeeAttributeDefaults({
             universalDefaults: resolveUniversalShopeeAttributeDefaults(shopeeTemplates),
             fieldTemplateDefaults: fieldTemplateValues,
             selectedTemplateDefaults: applied.attributeValues,
             modelDefaults: modelShopeeAttributeDefaults,
             product: attributeProductContext,
-        });
+        }));
 
         setAttrValues((current) => ({ ...current, ...mergedAttributeValues }));
 
@@ -3141,13 +3142,13 @@ export function ShopeeSyncModal({
                 package_width: packageDimension.package_width,
                 package_height: packageDimension.package_height,
             };
-            const mergedTemplateValues = mergeShopeeAttributeDefaults({
+            const mergedTemplateValues = alignShopeeAttributeDefaultsToOptions(normalizedAttributes, mergeShopeeAttributeDefaults({
                 universalDefaults: universalTemplateValues,
                 fieldTemplateDefaults: templateValues,
                 selectedTemplateDefaults: selectedTemplateValues,
                 modelDefaults,
                 product: attributeProductContext,
-            });
+            }));
             if (Object.keys(mergedTemplateValues).length > 0) {
                 setAttrValues(mergedTemplateValues as Record<number, string | string[]>);
             }

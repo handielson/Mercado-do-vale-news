@@ -302,6 +302,41 @@ export function mergeShopeeAttributeDefaults({
     ) as Record<string, string | string[]>;
 }
 
+export function alignShopeeAttributeDefaultsToOptions(
+    fields: Array<{ attribute_id: number | string; attribute_value_list?: Array<{ value_id?: number | string; label?: string; raw_name?: string; original_value_name?: string }> }>,
+    defaults: Record<string, string | string[]>
+): Record<string, string | string[]> {
+    const aligned: Record<string, string | string[]> = { ...defaults };
+
+    for (const field of fields || []) {
+        const key = String(field?.attribute_id || '');
+        if (!key) continue;
+        const options = Array.isArray(field?.attribute_value_list) ? field.attribute_value_list : [];
+        if (options.length === 0) continue;
+
+        const alignOne = (value: string): string => {
+            const normalizedValue = normalizeText(value);
+            if (!normalizedValue) return value;
+            const matchingOption = options.find((option) =>
+                normalizeText(option.label) === normalizedValue ||
+                normalizeText(option.raw_name) === normalizedValue ||
+                normalizeText(option.original_value_name) === normalizedValue ||
+                normalizeText(option.value_id) === normalizedValue
+            );
+            return matchingOption ? String(matchingOption.raw_name || matchingOption.label || value) : value;
+        };
+
+        const value = aligned[key];
+        if (Array.isArray(value)) {
+            aligned[key] = value.map((entry) => alignOne(String(entry || '')));
+        } else if (value !== undefined && value !== null) {
+            aligned[key] = alignOne(String(value || ''));
+        }
+    }
+
+    return aligned;
+}
+
 export function applyShopeeTemplateToProduct(product: Record<string, any>, template: ShopeeTemplate): ShopeeTemplateApplyResult {
     const title = renderShopeeTemplateText(template.titleTemplate || product?.name || '', product);
     const description = String(product?.description || '').trim()
