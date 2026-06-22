@@ -3055,7 +3055,7 @@ export function ShopeeSyncModal({
             const templateValues = buildShopeeTemplateAttributeValues(normalizedAttributes, product, activeFieldTemplate);
             const universalTemplateValues = resolveUniversalShopeeAttributeDefaults(shopeeTemplates);
             const selectedTemplateValues = selectedShopeeTemplate?.attributeDefaults || {};
-            const modelDefaults = modelData?.shopee_attribute_defaults || modelData?.shopeeAttributeDefaults || {};
+            const modelDefaults = modelData?.template_values?.shopee_attribute_defaults || modelData?.template_values?.shopeeAttributeDefaults || modelData?.shopee_attribute_defaults || modelData?.shopeeAttributeDefaults || {};
             const attributeProductContext = {
                 ...product,
                 package_length: packageDimension.package_length,
