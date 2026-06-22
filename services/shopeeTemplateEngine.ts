@@ -103,6 +103,7 @@ function buildTemplateVariables(product: Record<string, any>): Record<string, st
         descricao: String(product?.description || '').trim(),
         preco: price,
         estoque: String(product?.stock_quantity ?? product?.stock ?? '').trim(),
+        package_dimensions: resolvePackageDimensionsText(product),
     };
 }
 
@@ -201,6 +202,40 @@ function resolveTemplateStock(product: Record<string, any>, template: ShopeeTemp
     if (template.stockMode === 'fixed') return Math.max(0, Math.trunc(Number(template.fixedStock ?? 0) || 0));
     const stock = Number(product?.stock_quantity ?? product?.stock ?? 0);
     return Number.isFinite(stock) ? Math.max(0, Math.trunc(stock)) : null;
+}
+
+function positiveDimension(value: unknown): number {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 0;
+}
+
+function readNestedDimension(product: Record<string, any>, keys: string[]): number {
+    for (const key of keys) {
+        const direct = positiveDimension(product?.[key]);
+        if (direct > 0) return direct;
+        const dimension = positiveDimension(product?.dimensions?.[key]);
+        if (dimension > 0) return dimension;
+        const spec = positiveDimension(product?.specs?.[key]);
+        if (spec > 0) return spec;
+    }
+    return 0;
+}
+
+function resolvePackageDimensionsText(product: Record<string, any>): string {
+    const length = readNestedDimension(product, ['package_length', 'shipping_length', 'depth_cm', 'depth', 'length_cm', 'length', 'comprimento', 'profundidade']);
+    const width = readNestedDimension(product, ['package_width', 'shipping_width', 'width_cm', 'width', 'largura']);
+    const height = readNestedDimension(product, ['package_height', 'shipping_height', 'height_cm', 'height', 'altura']);
+    return length > 0 && width > 0 && height > 0 ? `${length} x ${width} x ${height} cm` : '';
+}
+
+export function renderShopeeAttributeDefaultValue(value: string | string[], product: Record<string, any>): string | string[] {
+    if (Array.isArray(value)) return value.map((entry) => renderShopeeAttributeDefaultValue(entry, product) as string);
+    return renderShopeeTemplateText(String(value || ''), product);
+}
+
+export function resolveUniversalShopeeAttributeDefaults(templates: ShopeeTemplate[]): Record<string, string | string[]> {
+    const universal = (templates || []).find((template) => template.active && template.id === 'universal_defaults');
+    return { ...(universal?.attributeDefaults || {}) };
 }
 
 export function applyShopeeTemplateToProduct(product: Record<string, any>, template: ShopeeTemplate): ShopeeTemplateApplyResult {

@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import {
   analyzeShopeeTitleSafety,
   applyShopeeTemplateToProduct,
+  renderShopeeAttributeDefaultValue,
   renderShopeeTemplateText,
   resolveBestShopeeTemplate,
+  resolveUniversalShopeeAttributeDefaults,
 } from '../services/shopeeTemplateEngine.ts';
 
 const sampleProduct = {
@@ -134,5 +136,27 @@ const appliedIphoneLongerNameModel = applyShopeeTemplateToProduct({
   stock_quantity: 2,
 }, templates[1]);
 assert.equal(appliedIphoneLongerNameModel.title, 'Capa compativel com IPhone 13 Pro Max');
+
+assert.deepEqual(
+  resolveUniversalShopeeAttributeDefaults([
+    { id: 'phone_case', active: true, attributeDefaults: { 100134: 'TPU' } },
+    { id: 'universal_defaults', active: true, attributeDefaults: { 101639: '{sku}', 101029: '{package_dimensions}' } },
+  ]),
+  { 101639: '{sku}', 101029: '{package_dimensions}' }
+);
+
+assert.equal(
+  renderShopeeAttributeDefaultValue('{sku}', sampleProduct),
+  'CAPA-IP13-VERM'
+);
+
+assert.equal(
+  renderShopeeAttributeDefaultValue('{package_dimensions}', {
+    package_length: 18,
+    package_width: 11,
+    package_height: 2,
+  }),
+  '18 x 11 x 2 cm'
+);
 
 console.log('shopee template engine tests passed');

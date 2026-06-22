@@ -209,6 +209,8 @@ export default function ShopeeTemplatesPage() {
     const [loadingShopeeCategories, setLoadingShopeeCategories] = useState(false);
     const [shopeeAttributes, setShopeeAttributes] = useState<ShopeeTemplateAttributeField[]>([]);
     const [loadingShopeeAttributes, setLoadingShopeeAttributes] = useState(false);
+    const [manualAttributeId, setManualAttributeId] = useState('');
+    const [manualAttributeValue, setManualAttributeValue] = useState('');
 
     const selectedTemplate = useMemo(
         () => templates.find((template) => template.id === selectedId) || null,
@@ -407,6 +409,29 @@ export default function ShopeeTemplatesPage() {
                 [key]: value,
             },
         });
+    };
+
+    const handleAddManualAttributeDefault = () => {
+        const id = manualAttributeId.trim();
+        const value = manualAttributeValue.trim();
+        if (!/^\d+$/.test(id) || !value) {
+            toast.error('Informe o ID numerico do atributo e o valor padrao.');
+            return;
+        }
+        updateDraft({
+            attributeDefaults: {
+                ...draft.attributeDefaults,
+                [id]: value,
+            },
+        });
+        setManualAttributeId('');
+        setManualAttributeValue('');
+    };
+
+    const handleRemoveManualAttributeDefault = (attributeId: string) => {
+        const nextDefaults = { ...draft.attributeDefaults };
+        delete nextDefaults[attributeId];
+        updateDraft({ attributeDefaults: nextDefaults });
     };
 
     const renderShopeeAttributeField = (attr: ShopeeTemplateAttributeField) => {
@@ -632,6 +657,44 @@ export default function ShopeeTemplatesPage() {
                                     Nenhuma categoria encontrada. Voce ainda pode informar o ID manualmente.
                                 </div>
                             ) : null}
+                        </div>
+                        <div className="mt-5 border-t border-slate-100 pt-5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-800">Defaults universais por ID</h3>
+                                    <p className="text-xs text-slate-500">Adicione qualquer atributo Shopee pelo ID. Ele sera aplicado quando a categoria retornar esse campo.</p>
+                                </div>
+                            </div>
+                            <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[180px_1fr_120px]">
+                                <input
+                                    value={manualAttributeId}
+                                    onChange={(event) => setManualAttributeId(event.target.value)}
+                                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                    placeholder="ID do atributo"
+                                />
+                                <input
+                                    value={manualAttributeValue}
+                                    onChange={(event) => setManualAttributeValue(event.target.value)}
+                                    className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                    placeholder="Valor padrao, ex.: Garantia do fornecedor ou {sku}"
+                                />
+                                <button type="button" onClick={handleAddManualAttributeDefault} className="rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-600">
+                                    Adicionar
+                                </button>
+                            </div>
+                            {Object.keys(draft.attributeDefaults || {}).length > 0 && (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {Object.entries(draft.attributeDefaults || {}).map(([attributeId, value]) => (
+                                        <span key={attributeId} className="inline-flex items-center gap-2 rounded-full border border-orange-100 bg-orange-50 px-3 py-1 text-xs text-orange-800">
+                                            <span className="font-mono">#{attributeId}</span>
+                                            <span>{Array.isArray(value) ? value.join(', ') : String(value)}</span>
+                                            <button type="button" onClick={() => handleRemoveManualAttributeDefault(attributeId)} className="font-bold text-orange-500 hover:text-orange-800" title="Remover default">
+                                                x
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         <div className="mt-5 border-t border-slate-100 pt-5">
                             <div className="flex flex-wrap items-center justify-between gap-2">

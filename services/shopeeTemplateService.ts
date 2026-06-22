@@ -18,6 +18,33 @@ function makeId(): string {
 
 export const DEFAULT_SHOPEE_TEMPLATES: ShopeeTemplate[] = [
     {
+        id: 'universal_defaults',
+        name: 'Defaults universais',
+        active: true,
+        priority: 10000,
+        rules: {},
+        titleTemplate: '{nome}',
+        descriptionTemplate: '',
+        shopeeCategoryId: null,
+        shopeeCategoryName: 'Todas as categorias',
+        attributeDefaults: {
+            100121: '3 meses',
+            100370: 'Garantia do fornecedor',
+            100999: '1',
+            100413: 'Novo',
+            101219: 'Não',
+            101639: '{sku}',
+            101029: '{package_dimensions}',
+        },
+        priceMode: 'product',
+        stockMode: 'product',
+        dimensionMode: 'product',
+        gtinMode: 'product',
+        dangerousTerms: [],
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+    },
+    {
         id: 'phone_case',
         name: 'Capa de celular',
         active: true,
@@ -69,6 +96,24 @@ export const DEFAULT_SHOPEE_TEMPLATES: ShopeeTemplate[] = [
         updatedAt: nowIso(),
     },
 ];
+
+const REQUIRED_DEFAULT_TEMPLATE_IDS = new Set(['universal_defaults']);
+
+function sortTemplates(templates: ShopeeTemplate[]): ShopeeTemplate[] {
+    return [...templates].sort((a, b) => {
+        const priorityDiff = Number(b.priority || 0) - Number(a.priority || 0);
+        if (priorityDiff !== 0) return priorityDiff;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+}
+
+function ensureRequiredDefaultTemplates(templates: ShopeeTemplate[]): ShopeeTemplate[] {
+    const currentIds = new Set((templates || []).map((template) => String(template.id)));
+    const missingDefaults = DEFAULT_SHOPEE_TEMPLATES.filter((template) =>
+        REQUIRED_DEFAULT_TEMPLATE_IDS.has(String(template.id)) && !currentIds.has(String(template.id))
+    );
+    return missingDefaults.length > 0 ? sortTemplates([...missingDefaults, ...templates]) : templates;
+}
 
 interface TableDataResponse {
     rows?: any[];
@@ -163,7 +208,7 @@ function loadFallback(): ShopeeTemplate[] {
         const raw = localStorage.getItem(CACHE_KEY);
         if (!raw) return DEFAULT_SHOPEE_TEMPLATES;
         const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : DEFAULT_SHOPEE_TEMPLATES;
+        return Array.isArray(parsed) ? ensureRequiredDefaultTemplates(parsed) : DEFAULT_SHOPEE_TEMPLATES;
     } catch {
         return DEFAULT_SHOPEE_TEMPLATES;
     }
@@ -204,8 +249,9 @@ async function list(): Promise<ShopeeTemplate[]> {
         const companyId = await getCompanyId().catch(() => null);
         const templates = (await loadRows(companyId)).map(mapFromRow);
         if (templates.length > 0) {
-            saveFallback(templates);
-            return templates;
+            const templatesWithRequiredDefaults = ensureRequiredDefaultTemplates(templates);
+            saveFallback(templatesWithRequiredDefaults);
+            return templatesWithRequiredDefaults;
         }
 
         return seedDefaultsIfEmpty();

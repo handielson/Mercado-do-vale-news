@@ -41,7 +41,9 @@ import { shopeeTemplateService } from '../../../services/shopeeTemplateService';
 import {
     analyzeShopeeTitleSafety,
     applyShopeeTemplateToProduct,
+    renderShopeeAttributeDefaultValue,
     resolveBestShopeeTemplate,
+    resolveUniversalShopeeAttributeDefaults,
 } from '../../../services/shopeeTemplateEngine';
 import type { ShopeeTemplate } from '../../../types/shopee-template';
 import {
@@ -3041,10 +3043,21 @@ export function ShopeeSyncModal({
             const normalizedAttributes = normalizeShopeeAttributes(data);
             setAttributes(normalizedAttributes);
             const templateValues = buildShopeeTemplateAttributeValues(normalizedAttributes, product, activeFieldTemplate);
+            const universalTemplateValues = resolveUniversalShopeeAttributeDefaults(shopeeTemplates);
             const selectedTemplateValues = selectedShopeeTemplate?.attributeDefaults || {};
-            const mergedTemplateValues = { ...templateValues, ...selectedTemplateValues };
+            const attributeProductContext = {
+                ...product,
+                package_length: packageDimension.package_length,
+                package_width: packageDimension.package_width,
+                package_height: packageDimension.package_height,
+            };
+            const mergedTemplateValues = Object.fromEntries(
+                Object.entries({ ...universalTemplateValues, ...templateValues, ...selectedTemplateValues })
+                    .map(([attributeId, value]) => [attributeId, renderShopeeAttributeDefaultValue(value as any, attributeProductContext)])
+                    .filter(([, value]) => Array.isArray(value) ? value.some((entry) => String(entry || '').trim()) : String(value || '').trim())
+            );
             if (Object.keys(mergedTemplateValues).length > 0) {
-                setAttrValues(mergedTemplateValues);
+                setAttrValues(mergedTemplateValues as Record<number, string | string[]>);
             }
             const brandData = await brandRes.json();
             if (brandData.error && brandData.error !== '') {
