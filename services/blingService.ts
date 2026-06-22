@@ -1596,6 +1596,46 @@ export async function importBlingProducts(
                                 body: JSON.stringify({ model_id: existingModel.id, brand_name: brandName })
                             }).catch(e => console.warn('Failed to update model brand:', e));
                         }
+
+                        // Sync missing description, EANs, and dimensions on existing model
+                        const updates: Record<string, any> = {};
+                        if (!existingModel.description) {
+                            const desc = resolveBlingDescription(enriched);
+                            if (desc) updates.description = desc;
+                        }
+                        if (enriched.gtin) {
+                            const currentEans = existingModel.eans || [];
+                            if (!currentEans.includes(enriched.gtin)) {
+                                updates.eans = [...currentEans, enriched.gtin];
+                            }
+                        }
+                        const existingTv = existingModel.template_values || {};
+                        let tvUpdated = false;
+                        const newTv = { ...existingTv };
+                        if (enriched.pesoBruto && !newTv['weight_kg']) {
+                            newTv['weight_kg'] = enriched.pesoBruto;
+                            tvUpdated = true;
+                        }
+                        if (enriched.dimensoes?.largura && !newTv['dimensions.width_cm']) {
+                            newTv['dimensions.width_cm'] = enriched.dimensoes.largura;
+                            tvUpdated = true;
+                        }
+                        if (enriched.dimensoes?.altura && !newTv['dimensions.height_cm']) {
+                            newTv['dimensions.height_cm'] = enriched.dimensoes.altura;
+                            tvUpdated = true;
+                        }
+                        if (enriched.dimensoes?.profundidade && !newTv['dimensions.depth_cm']) {
+                            newTv['dimensions.depth_cm'] = enriched.dimensoes.profundidade;
+                            tvUpdated = true;
+                        }
+                        if (tvUpdated) {
+                            updates.template_values = newTv;
+                        }
+                        if (Object.keys(updates).length > 0) {
+                            modelService.update(existingModel.id, updates).catch(e => 
+                                console.warn('[BlingImport] Falha ao atualizar dados do modelo existente:', e)
+                            );
+                        }
                     } else {
                         // Create Cross-Sell Tag usando apenas o nome limpo
                         if (!crossSellTagCache.has(cleanTag.toLowerCase())) {
@@ -1605,12 +1645,14 @@ export async function importBlingProducts(
                             crossSellTagCache.add(cleanTag.toLowerCase());
                         }
 
-                        // Create Model with Dimensions and Tag
+                        // Create Model with Description, EANs, Dimensions and Tag
                         const newModel = await modelService.create({
                             name: newModelName,
                             brand_id: resolvedBrandId,
                             category_id: categoryId || undefined,
                             active: true,
+                            description: resolveBlingDescription(enriched) || undefined,
+                            eans: enriched.gtin ? [enriched.gtin] : [],
                             template_values: {
                                 'weight_kg': enriched.pesoBruto,
                                 'dimensions.width_cm': enriched.dimensoes?.largura,
@@ -1850,9 +1892,11 @@ export async function pullModelDimensionsFromBling(modelId: string): Promise<{ o
             brand_id: existingModel.brand_id,
             category_id: existingModel.category_id,
             active: existingModel.active,
-            description: existingModel.description,
+            description: existingModel.description || resolveBlingDescription(detail) || undefined,
             template_values: newTemplateValues,
-            eans: existingModel.eans,
+            eans: detail.gtin && !existingModel.eans?.includes(detail.gtin)
+                ? [...(existingModel.eans || []), detail.gtin]
+                : existingModel.eans,
         });
         const updateErr = null;
 

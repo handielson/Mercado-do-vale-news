@@ -10,7 +10,7 @@ import { categoryService } from '../../services/categories';
 import { customFieldsService, type CustomField } from '../../services/custom-fields';
 import { crossSellTagsService, type CrossSellTag } from '../../services/cross-sell-tags';
 import { vpsApiService } from '../../services/vpsApiService';
-import { blingService } from '../../services/blingService';
+import { blingService, findBlingProductByExactSku } from '../../services/blingService';
 import { applyFieldFormat, getFieldDefinition } from '../../config/field-dictionary';
 import { UNIQUE_FIELDS } from '../../config/product-fields';
 import { CurrencyInput } from '../ui/CurrencyInput';
@@ -756,7 +756,7 @@ Retorne APENAS um JSON válido no seguinte formato (sem markdown, sem explicaç�
 
         setFetchingBlingData(true);
         try {
-            const product = await blingService.findBlingProductByExactSku(sku);
+            const product = await findBlingProductByExactSku(sku);
             if (!product) {
                 toast.error(`Produto com o SKU "${sku}" não foi encontrado no Bling.`);
                 return;

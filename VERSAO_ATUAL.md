@@ -1,20 +1,21 @@
 # Versao Atual
 
 ```text
-version: v1.1.89-bling-sku-basic-tab-prefill
+version: v1.1.90-bling-sync-prefill-autosave
 date: 2026-06-22
 status: published
 release_vps: pendente
 branch: codex/publish-delivery-ops-20260614
-summary: Implementa importação rápida de descrição, dimensões, peso e GTIN/EAN do Bling por SKU direto na aba Básico do modal de modelos.
+summary: Corrige importação de findBlingProductByExactSku na aba Básico e implementa preenchimento e sincronização automáticos de descrição, GTIN/EAN e dimensões ao importar produtos do Bling.
 ```
 
-## O que entrou no v1.1.89
+## O que entrou no v1.1.90
 
-- Adicionada caixa de busca por SKU do Bling diretamente na aba Básico do modal de modelos. Ao buscar um SKU válido, a Descrição, Dimensões, Peso e EAN/GTIN do produto no Bling são preenchidos automaticamente na ficha.
+- Corrigida importação de `findBlingProductByExactSku` que causava falha ao tentar buscar SKU manualmente na aba Básico do modal de modelos.
+- Implementada rotina automática de sincronização: ao importar ou puxar dimensões de produtos do Bling, a descrição do produto e o GTIN/EAN são agora automaticamente preenchidos/sincronizados na ficha do Modelo do banco de dados (evitando a necessidade de preenchimento manual secundário).
 
 ## Validacoes
 
-- `npm.cmd run build` (Build de produção validado sem erros)
+- `npm run build` (Build de produção validado sem erros)
 
 
