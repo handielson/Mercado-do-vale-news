@@ -1,8 +1,8 @@
 {
-    "version": "v1.1.100-shopee-package-piece-unit",
+    "version": "v1.1.101-shopee-condition-enum",
     "date": "2026-06-22",
     "status": "published",
-    "release_vps": "/var/www/mdv-site/releases/20260622-163705-v11100-shopee-package-piece-unit",
+    "release_vps": "/var/www/mdv-site/releases/20260622-183225-v11101-shopee-condition-enum",
     "branch": "main",
-    "summary": "Prefere unidade Piece no atributo Tamanho do Pacote da Shopee quando o valor nao informa unidade."
+    "summary": "Converte Condicao Novo para o enum New/value_id 2497 aceito pela Shopee."
 }

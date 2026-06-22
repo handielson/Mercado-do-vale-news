@@ -41,6 +41,12 @@ assert.match(
 
 assert.match(
   page,
+  /const SHOPEE_ATTRIBUTE_FALLBACK_VALUES[\s\S]*100413:[\s\S]*value_id:\s*2497,[\s\S]*original_value_name:\s*'New'[\s\S]*normalizeLookupText\(candidate\.match\)\s*===\s*normalizeLookupText\(entry\)/,
+  'Shopee condition attribute 100413 must map Novo/New to the real Shopee enum value_id 2497.'
+);
+
+assert.match(
+  page,
   /const customValuesAreAllowed = !hasShopeeOptionList \|\| \[3, 5\]\.includes\(Number\(field\?\.raw_input_type\)\);[\s\S]*mandatoryAttributeIds\.has\(attributeId\)/,
   'Attribute validation retry must preserve numeric/text custom values while pruning optional invalid enum values.'
 );

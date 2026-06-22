@@ -287,6 +287,12 @@ const SHOPEE_SUPPLIER_WARRANTY_OPTION: ShopeeAttributeOption = {
 const SHOPEE_ATTRIBUTE_FALLBACK_UNITS: Record<number, string> = {
     101029: 'Piece',
 };
+const SHOPEE_ATTRIBUTE_FALLBACK_VALUES: Record<number, Array<{ match: string; value_id: number; original_value_name: string }>> = {
+    100413: [
+        { match: 'Novo', value_id: 2497, original_value_name: 'New' },
+        { match: 'New', value_id: 2497, original_value_name: 'New' },
+    ],
+};
 
 function normalizePositiveId(value: unknown): number | null {
     const parsed = Number(value);
@@ -567,6 +573,15 @@ function buildShopeeAttributeValuePayload(attr: ShopeeAttributeField, entry: str
         return {
             value_id: searchableValue.value_id,
             original_value_name: searchableValue.value_name,
+        };
+    }
+
+    const fallbackValue = (SHOPEE_ATTRIBUTE_FALLBACK_VALUES[Number(attr.attribute_id)] || [])
+        .find((candidate) => normalizeLookupText(candidate.match) === normalizeLookupText(entry));
+    if (fallbackValue) {
+        return {
+            value_id: fallbackValue.value_id,
+            original_value_name: fallbackValue.original_value_name,
         };
     }
 
