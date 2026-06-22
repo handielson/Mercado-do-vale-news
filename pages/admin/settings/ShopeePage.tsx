@@ -284,6 +284,9 @@ const SHOPEE_SUPPLIER_WARRANTY_OPTION: ShopeeAttributeOption = {
     raw_name: 'Supplier Warranty',
     original_value_name: 'Supplier Warranty',
 };
+const SHOPEE_ATTRIBUTE_FALLBACK_UNITS: Record<number, string> = {
+    101029: 'Piece',
+};
 
 function normalizePositiveId(value: unknown): number | null {
     const parsed = Number(value);
@@ -583,13 +586,14 @@ function buildShopeeAttributeValuePayload(attr: ShopeeAttributeField, entry: str
     const units = Array.isArray(attr.attribute_unit_list) ? attr.attribute_unit_list.filter(Boolean) : [];
     if (units.length > 0) {
         const normalizedEntry = String(entry || '').trim();
+        const preferredUnit = SHOPEE_ATTRIBUTE_FALLBACK_UNITS[Number(attr.attribute_id)];
         const matchingUnit = units
             .slice()
             .sort((a, b) => b.length - a.length)
             .find((unit) => {
                 const escaped = unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 return new RegExp(`(?:\\s|^)${escaped}\\s*$`, 'i').test(normalizedEntry);
-            }) || units[0];
+            }) || units.find((unit) => unit.toLowerCase() === String(preferredUnit || '').toLowerCase()) || units[0];
         const withoutUnit = normalizedEntry
             .replace(new RegExp(`${matchingUnit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i'), '')
             .trim();

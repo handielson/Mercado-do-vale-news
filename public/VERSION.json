@@ -1,8 +1,8 @@
 {
-    "version": "v1.1.99-shopee-unit-attributes",
+    "version": "v1.1.100-shopee-package-piece-unit",
     "date": "2026-06-22",
     "status": "published",
-    "release_vps": "/var/www/mdv-site/releases/20260622-110821-v1199-shopee-unit-attributes",
+    "release_vps": "/var/www/mdv-site/releases/20260622-163705-v11100-shopee-package-piece-unit",
     "branch": "main",
-    "summary": "Envia atributos numericos, texto livre e unidades da Shopee sem remove-los no retry."
+    "summary": "Prefere unidade Piece no atributo Tamanho do Pacote da Shopee quando o valor nao informa unidade."
 }

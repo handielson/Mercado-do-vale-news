@@ -35,6 +35,12 @@ assert.match(
 
 assert.match(
   page,
+  /const SHOPEE_ATTRIBUTE_FALLBACK_UNITS[\s\S]*101029:\s*'Piece'[\s\S]*SHOPEE_ATTRIBUTE_FALLBACK_UNITS\[Number\(attr\.attribute_id\)\]/,
+  'Shopee package size attribute 101029 must prefer Piece when the default value has no explicit unit.'
+);
+
+assert.match(
+  page,
   /const customValuesAreAllowed = !hasShopeeOptionList \|\| \[3, 5\]\.includes\(Number\(field\?\.raw_input_type\)\);[\s\S]*mandatoryAttributeIds\.has\(attributeId\)/,
   'Attribute validation retry must preserve numeric/text custom values while pruning optional invalid enum values.'
 );
