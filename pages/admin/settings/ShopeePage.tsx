@@ -120,6 +120,8 @@ export interface ShopeeProduct {
     } | string | null;
     shopee_item_id?: number | null;
     model_id?: string | null;
+    shopee_category_id?: number | null;
+    shopee_category_name?: string | null;
 }
 
 export interface LocalProduct {
@@ -163,6 +165,8 @@ export interface LocalProduct {
     } | string | null;
     shopee_item_id?: number | null;
     model_id?: string | null;
+    shopee_category_id?: number | null;
+    shopee_category_name?: string | null;
 }
 
 type Tab = 'config' | 'products' | 'bulk' | 'orders' | 'finance' | 'printers';
@@ -881,6 +885,8 @@ function toLocalProduct(p: ShopeeProduct): LocalProduct {
         ncm: p.ncm || '',
         shopee_item_id: p.shopee_item_id || null,
         model_id: p.model_id ?? null,
+        shopee_category_id: p.shopee_category_id || null,
+        shopee_category_name: p.shopee_category_name || null,
     };
 }
 
@@ -921,6 +927,8 @@ function toLocalProductFromVpsProduct(p: any, shopeeItemId?: number | null): Loc
         ncm: p.ncm || '',
         shopee_item_id: shopeeItemId || null,
         model_id: p.model_id ?? null,
+        shopee_category_id: p.shopee_category_id || null,
+        shopee_category_name: p.shopee_category_name || null,
     };
 }
 
@@ -2797,6 +2805,39 @@ export function ShopeeSyncModal({
     useEffect(() => {
         reloadShopeeTemplates({ applySuggestion: true });
     }, [reloadShopeeTemplates]);
+
+    useEffect(() => {
+        let active = true;
+        const resolveInitialCategory = async () => {
+            let catId = product.shopee_category_id;
+            let catName = product.shopee_category_name;
+
+            if (!catId && product.model_id) {
+                try {
+                    const modelData = await modelService.getById(product.model_id);
+                    const tmpl = modelData?.template_values;
+                    if (tmpl?.shopee_category_id) {
+                        catId = tmpl.shopee_category_id;
+                        catName = tmpl.shopee_category_name || 'Categoria do Modelo';
+                    }
+                } catch (e) {
+                    console.warn('[ShopeeSyncModal] Erro ao carregar categoria do modelo:', e);
+                }
+            }
+
+            if (active && catId) {
+                selectCategory({
+                    category_id: catId,
+                    display_category_name: catName || `Categoria #${catId}`
+                });
+            }
+        };
+
+        resolveInitialCategory();
+        return () => {
+            active = false;
+        };
+    }, [product.id, product.model_id, product.shopee_category_id, product.shopee_category_name]);
 
     useEffect(() => {
         if (!bulkAutoPreset?.templateId || shopeeTemplates.length === 0) return;

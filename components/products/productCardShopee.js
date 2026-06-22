@@ -83,5 +83,7 @@ export function mapProductToShopeeLocalProduct(product) {
     dimensions: product?.dimensions || undefined,
     specs: product?.specs || undefined,
     model_id: product?.model_id ?? null,
+    shopee_category_id: product?.shopee_category_id ?? null,
+    shopee_category_name: product?.shopee_category_name ?? null,
   };
 }
