@@ -209,6 +209,24 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
+  mergeShopeeAttributeDefaults({
+    universalDefaults: { 101029: '1 Piece' },
+    fieldTemplateDefaults: { 101029: '1 Piece' },
+    selectedTemplateDefaults: { 101029: '{package_dimensions}' },
+    modelDefaults: { 101029: '{package_dimensions}' },
+    product: {
+      package_length: 10,
+      package_width: 14,
+      package_height: 4,
+    },
+    protectedFieldTemplateAttributeIds: [101029],
+  }),
+  {
+    101029: '1 Piece',
+  }
+);
+
+assert.deepEqual(
   alignShopeeAttributeDefaultsToOptions([
     {
       attribute_id: 100121,

@@ -2912,6 +2912,7 @@ export function ShopeeSyncModal({
             selectedTemplateDefaults: applied.attributeValues,
             modelDefaults: modelShopeeAttributeDefaults,
             product: attributeProductContext,
+            protectedFieldTemplateAttributeIds: activeFieldTemplate?.strict_attribute_ids || [],
         }));
 
         setAttrValues((current) => ({ ...current, ...mergedAttributeValues }));
@@ -3261,6 +3262,7 @@ export function ShopeeSyncModal({
                 selectedTemplateDefaults: selectedTemplateValues,
                 modelDefaults,
                 product: attributeProductContext,
+                protectedFieldTemplateAttributeIds: activeFieldTemplate?.strict_attribute_ids || [],
             }));
             if (Object.keys(mergedTemplateValues).length > 0) {
                 setAttrValues(mergedTemplateValues as Record<number, string | string[]>);

@@ -98,4 +98,19 @@ assert.deepEqual(buildShopeeTemplateAttributeValues([
   102292: 'N/A - NBR nao aplicavel',
 });
 
+assert.deepEqual(buildShopeeTemplateAttributeValues([
+  {
+    attribute_id: 101029,
+    label: 'Tamanho do Pacote',
+    attribute_value_list: [],
+  },
+], {
+  ...powerSupplyProduct,
+  shipping_length: 10,
+  shipping_width: 14,
+  shipping_height: 4,
+}, powerSupplyTemplate), {
+  101029: '1 Piece',
+});
+
 console.log('shopeeFieldTemplates.test.mjs: ok');

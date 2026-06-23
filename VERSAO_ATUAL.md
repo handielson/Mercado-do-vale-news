@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.1.103-shopee-power-supply-template
+version: v1.1.104-shopee-power-supply-package-attr
 date: 2026-06-22
 status: published
-release_vps: /var/www/mdv-site/releases/20260622-185650-v11103-shopee-power-supply-template
+release_vps: /var/www/mdv-site/releases/20260622-224156-v11104-shopee-power-supply-package-attr
 branch: main
-summary: Espelha o template de capinhas para fontes e limita o payload da categoria 101803 a atributos seguros.
+summary: Protege os defaults do template de fontes para nao trocar Tamanho do Pacote por dimensoes logisticas no payload da Shopee.
 ```

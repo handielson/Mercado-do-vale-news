@@ -66,6 +66,12 @@ assert.match(
 
 assert.match(
   page,
+  /protectedFieldTemplateAttributeIds:\s*activeFieldTemplate\?\.strict_attribute_ids \|\| \[\]/,
+  'Strict Shopee field templates must protect their attribute defaults from selected template/model overrides.'
+);
+
+assert.match(
+  page,
   /const customValuesAreAllowed = !hasShopeeOptionList \|\| \[3, 5\]\.includes\(Number\(field\?\.raw_input_type\)\);[\s\S]*mandatoryAttributeIds\.has\(attributeId\)/,
   'Attribute validation retry must preserve numeric/text custom values while pruning optional invalid enum values.'
 );
