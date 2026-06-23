@@ -29,6 +29,8 @@ test('builds canonical original and PDF names', () => {
     imageName: 'termo-garantia-venda-AB12CD34-original.jpg',
     pdfName: 'termo-garantia-venda-AB12CD34.pdf',
   });
+  assert.throws(() => buildSignedWarrantyNames('AB12CD34X'), /invalid_sale_code/);
+  assert.throws(() => buildSignedWarrantyNames('AB12CD34-WRONG-SALE'), /invalid_sale_code/);
 });
 
 test('builds the approved screen-only disposal message', () => {

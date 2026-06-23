@@ -13,8 +13,8 @@ function parseSignedWarrantyFileName(fileName) {
 }
 
 function buildSignedWarrantyNames(saleCode) {
+  if (!/^[a-z0-9]{8}$/i.test(String(saleCode || ''))) throw new Error('invalid_sale_code');
   const code = normalizeSaleCode(saleCode);
-  if (code.length !== 8) throw new Error('invalid_sale_code');
   return {
     imageName: `termo-garantia-venda-${code}-original.jpg`,
     pdfName: `termo-garantia-venda-${code}.pdf`,
