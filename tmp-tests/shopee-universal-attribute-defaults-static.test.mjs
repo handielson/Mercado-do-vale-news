@@ -15,9 +15,16 @@ for (const expected of [
   "100413: 'Novo'",
   "101219: 'Não'",
   "101639: '{sku}'",
-  "101029: '1 Piece'",
 ]) {
   if (!service.includes(expected)) throw new Error(`Missing universal default: ${expected}`);
+}
+
+if (service.includes("101029: '1 Piece'")) {
+  throw new Error('Default Shopee templates must not inject 101029 as 1 Piece; model templates should own that value.');
+}
+
+if (!service.includes('sanitizeDefaultTemplateAttributeDefaults') || !service.includes("id !== 'universal_defaults' && id !== 'power_supply'")) {
+  throw new Error('Shopee template service must sanitize old persisted 101029=1 Piece defaults from universal/power_supply templates.');
 }
 
 if (!service.includes('ensureRequiredDefaultTemplates(templates)')) {
@@ -28,7 +35,6 @@ for (const expected of [
   "id: 'power_supply'",
   "shopeeCategoryId: 101803",
   "100121: '3 Months'",
-  "101029: '1 Piece'",
   "102292: 'N/A – NBR not applicable'",
   "new Set(['universal_defaults', 'power_supply'])",
 ]) {

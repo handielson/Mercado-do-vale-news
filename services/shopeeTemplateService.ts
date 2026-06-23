@@ -34,7 +34,6 @@ export const DEFAULT_SHOPEE_TEMPLATES: ShopeeTemplate[] = [
             100413: 'Novo',
             101219: 'Não',
             101639: '{sku}',
-            101029: '1 Piece',
         },
         priceMode: 'product',
         stockMode: 'product',
@@ -111,7 +110,6 @@ export const DEFAULT_SHOPEE_TEMPLATES: ShopeeTemplate[] = [
         attributeDefaults: {
             100121: '3 Months',
             100370: 'Supplier Warranty',
-            101029: '1 Piece',
             101219: 'No',
             102292: 'N/A – NBR not applicable',
         },
@@ -173,7 +171,21 @@ function parseArray(value: unknown): any[] {
     return [];
 }
 
+function sanitizeDefaultTemplateAttributeDefaults(templateId: unknown, defaults: Record<string, any>): Record<string, any> {
+    const id = String(templateId || '');
+    if (id !== 'universal_defaults' && id !== 'power_supply') return defaults;
+
+    const sanitized = { ...defaults };
+    if (String(sanitized[101029] || sanitized['101029'] || '').trim().toLowerCase() === '1 piece') {
+        delete sanitized[101029];
+        delete sanitized['101029'];
+    }
+    return sanitized;
+}
+
 function mapFromRow(row: any): ShopeeTemplate {
+    const attributeDefaults = sanitizeDefaultTemplateAttributeDefaults(row.id, parseObject(row.attribute_defaults));
+
     return {
         id: row.id,
         name: row.name,
@@ -184,7 +196,7 @@ function mapFromRow(row: any): ShopeeTemplate {
         descriptionTemplate: row.description_template || '',
         shopeeCategoryId: row.shopee_category_id ?? null,
         shopeeCategoryName: row.shopee_category_name ?? null,
-        attributeDefaults: parseObject(row.attribute_defaults),
+        attributeDefaults,
         priceMode: row.price_mode || 'product',
         fixedPrice: row.fixed_price ?? null,
         pricePercent: row.price_percent ?? null,

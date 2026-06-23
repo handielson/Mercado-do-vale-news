@@ -219,10 +219,20 @@ assert.deepEqual(
       package_width: 14,
       package_height: 4,
     },
-    protectedFieldTemplateAttributeIds: [101029],
   }),
   {
-    101029: '1 Piece',
+    101029: '10 x 14 x 4 cm',
+  }
+);
+
+assert.deepEqual(
+  mergeShopeeAttributeDefaults({
+    fieldTemplateDefaults: { 101029: '1 Piece' },
+    modelDefaults: { 101029: 'Valor do modelo' },
+    product: sampleProduct,
+  }),
+  {
+    101029: 'Valor do modelo',
   }
 );
 

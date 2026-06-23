@@ -83,7 +83,6 @@ const POWER_SUPPLY_TEMPLATE = {
   attribute_defaults: {
     100121: '3 Months',
     100370: 'Supplier Warranty',
-    101029: '1 Piece',
     101219: 'No',
     102292: 'N/A – NBR not applicable',
   },

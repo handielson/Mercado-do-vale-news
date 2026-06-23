@@ -281,16 +281,14 @@ export function mergeShopeeAttributeDefaults({
     selectedTemplateDefaults = {},
     modelDefaults = {},
     product = {},
-    protectedFieldTemplateAttributeIds = [],
 }: {
     universalDefaults?: Record<string, string | string[]>;
     fieldTemplateDefaults?: Record<string, string | string[]>;
     selectedTemplateDefaults?: Record<string, string | string[]>;
     modelDefaults?: Record<string, string | string[]>;
     product?: Record<string, any>;
-    protectedFieldTemplateAttributeIds?: Array<string | number>;
 }): Record<string, string | string[]> {
-    const merged = Object.fromEntries(
+    return Object.fromEntries(
         Object.entries({
             ...universalDefaults,
             ...fieldTemplateDefaults,
@@ -302,18 +300,6 @@ export function mergeShopeeAttributeDefaults({
                 ? value.some((entry) => String(entry || '').trim())
                 : String(value || '').trim())
     ) as Record<string, string | string[]>;
-
-    const protectedIds = new Set(protectedFieldTemplateAttributeIds.map((id) => String(id)));
-    for (const [attributeId, value] of Object.entries(fieldTemplateDefaults || {})) {
-        if (!protectedIds.has(String(attributeId))) continue;
-        const renderedValue = renderShopeeAttributeDefaultValue(value as any, product);
-        const hasValue = Array.isArray(renderedValue)
-            ? renderedValue.some((entry) => String(entry || '').trim())
-            : String(renderedValue || '').trim();
-        if (hasValue) merged[String(attributeId)] = renderedValue;
-    }
-
-    return merged;
 }
 
 export function alignShopeeAttributeDefaultsToOptions(

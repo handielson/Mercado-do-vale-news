@@ -93,7 +93,6 @@ assert.deepEqual(buildShopeeTemplateAttributeValues([
   },
 ], powerSupplyProduct, powerSupplyTemplate), {
   100121: '3 Meses',
-  101029: '1 Piece',
   101219: 'Nao',
   102292: 'N/A - NBR nao aplicavel',
 });
@@ -110,7 +109,6 @@ assert.deepEqual(buildShopeeTemplateAttributeValues([
   shipping_width: 14,
   shipping_height: 4,
 }, powerSupplyTemplate), {
-  101029: '1 Piece',
 });
 
 console.log('shopeeFieldTemplates.test.mjs: ok');
