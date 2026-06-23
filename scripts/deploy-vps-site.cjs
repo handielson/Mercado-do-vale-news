@@ -194,10 +194,21 @@ function uploadFile(sftp, localPath, remotePath) {
   });
 }
 
+function resolveTarBinary() {
+  // No Windows o GNU tar do Git/MSYS costuma ter precedencia no PATH e quebra
+  // paths "C:\..." (interpreta como host:path remoto). O bsdtar nativo em
+  // System32 aceita paths Windows normalmente. Prefira-o quando existir.
+  if (process.platform === 'win32') {
+    const systemTar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+    if (fs.existsSync(systemTar)) return systemTar;
+  }
+  return 'tar';
+}
+
 function createReleaseArchive(releaseName) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-site-'));
   const archivePath = path.join(tempDir, `${releaseName}.tar.gz`);
-  const result = spawnSync('tar', ['-czf', archivePath, '-C', DIST_DIR, '.'], {
+  const result = spawnSync(resolveTarBinary(), ['-czf', archivePath, '-C', DIST_DIR, '.'], {
     cwd: ROOT,
     stdio: 'inherit',
     shell: false,
