@@ -25361,6 +25361,38 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS signed_warranty_documents (
+      id CHAR(36) PRIMARY KEY,
+      company_id VARCHAR(255) NULL,
+      sale_id VARCHAR(255) NULL,
+      customer_id VARCHAR(255) NULL,
+      sale_code VARCHAR(8) NULL,
+      source ENUM('sale_screen','synology_direct') NOT NULL,
+      status ENUM('received','processing','available','error','replaced') NOT NULL DEFAULT 'received',
+      original_file_name VARCHAR(255) NOT NULL,
+      image_path VARCHAR(600) NULL,
+      pdf_path VARCHAR(600) NULL,
+      image_mime_type VARCHAR(80) NULL,
+      image_size_bytes BIGINT NULL,
+      image_sha256 CHAR(64) NULL,
+      pdf_sha256 CHAR(64) NULL,
+      error_code VARCHAR(80) NULL,
+      error_message TEXT NULL,
+      version_number INT NOT NULL DEFAULT 1,
+      is_active TINYINT(1) NOT NULL DEFAULT 0,
+      uploaded_by_customer_id VARCHAR(255) NULL,
+      processed_at DATETIME NULL,
+      discarded_at DATETIME NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_signed_warranty_sale_active (sale_id, is_active),
+      INDEX idx_signed_warranty_status (status, created_at),
+      INDEX idx_signed_warranty_sale_code (sale_code),
+      UNIQUE KEY uniq_signed_warranty_company_hash (company_id, image_sha256)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
   await addColumnIfMissing('company_settings', 'synology_video_base_url', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('company_settings', 'synology_video_extension', "VARCHAR(20) DEFAULT '.mp4'");
   await addColumnIfMissing('products', 'exclude_from_seo', "TINYINT(1) DEFAULT 0");
