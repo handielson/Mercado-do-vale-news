@@ -636,6 +636,18 @@ function shouldSkipShopeeAttributePayload(attr: ShopeeAttributeField, fieldTempl
     return false;
 }
 
+function shouldPruneShopeeOptionalCustomAttribute(
+    attr: any,
+    mandatoryAttributeIds: Set<number>
+): boolean {
+    const attributeId = Number(attr?.attribute_id);
+    if (mandatoryAttributeIds.has(attributeId)) return false;
+    const values = Array.isArray(attr?.attribute_value_list) ? attr.attribute_value_list : [];
+    const hasCustomValue = values.some((value: any) => Number(value?.value_id || 0) === 0);
+    if (!hasCustomValue) return false;
+    return true;
+}
+
 function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attributes: ShopeeAttributeField[]) {
     const mandatoryAttributeIds = new Set(
         (attributes || [])
@@ -645,16 +657,7 @@ function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attri
     const attributeList = Array.isArray(payload.attribute_list) ? payload.attribute_list : [];
     const removedAttributes: any[] = [];
     const keptAttributes = attributeList.filter((attr: any) => {
-        const attributeId = Number(attr?.attribute_id);
-        const field = (attributes || []).find((candidate) => Number(candidate.attribute_id) === attributeId);
-        const values = Array.isArray(attr?.attribute_value_list) ? attr.attribute_value_list : [];
-        const hasCustomValueWithoutShopeeId = values.some((value: any) =>
-            Number(value?.value_id || 0) === 0 && !String(value?.value_unit || '').trim()
-        );
-        const hasShopeeOptionList = Array.isArray(field?.attribute_value_list) && field.attribute_value_list.length > 0;
-        const customValuesAreAllowed = !hasShopeeOptionList || [3, 5].includes(Number(field?.raw_input_type));
-        if (customValuesAreAllowed) return true;
-        if (!hasCustomValueWithoutShopeeId || mandatoryAttributeIds.has(attributeId)) return true;
+        if (!shouldPruneShopeeOptionalCustomAttribute(attr, mandatoryAttributeIds)) return true;
         removedAttributes.push(attr);
         return false;
     });
@@ -682,6 +685,7 @@ function summarizeShopeeAttributePayloadForDebug(payload: Record<string, any>, a
         .filter((id: number) => Number.isFinite(id) && id > 0);
     const missingRequiredAttributeIds = requiredAttributeIds.filter((id) => !sentAttributeIds.includes(id));
     const customValueAttributeIds: number[] = [];
+    const optionalCustomAttributeIds: number[] = [];
     const enumCustomValueAttributeIds: number[] = [];
     const attributeDetails = attributeList.map((attr: any) => {
         const attributeId = Number(attr?.attribute_id);
@@ -695,6 +699,7 @@ function summarizeShopeeAttributePayloadForDebug(payload: Record<string, any>, a
         const customValuesAreAllowed = !hasShopeeOptionList || [3, 5].includes(Number(field?.raw_input_type));
 
         if (hasCustomValue) customValueAttributeIds.push(attributeId);
+        if (hasCustomValue && !field?.mandatory) optionalCustomAttributeIds.push(attributeId);
         if (hasShopeeOptionList && hasCustomValueWithoutUnit && !customValuesAreAllowed) {
             enumCustomValueAttributeIds.push(attributeId);
         }
@@ -712,6 +717,7 @@ function summarizeShopeeAttributePayloadForDebug(payload: Record<string, any>, a
 
     return {
         custom_value_attribute_ids: [...new Set(customValueAttributeIds)],
+        optional_custom_attribute_ids: [...new Set(optionalCustomAttributeIds)],
         enum_custom_value_attribute_ids: [...new Set(enumCustomValueAttributeIds)],
         required_attribute_ids: requiredAttributeIds,
         sent_attribute_ids: sentAttributeIds,

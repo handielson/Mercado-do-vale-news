@@ -66,8 +66,8 @@ assert.match(
 
 assert.match(
   page,
-  /const customValuesAreAllowed = !hasShopeeOptionList \|\| \[3, 5\]\.includes\(Number\(field\?\.raw_input_type\)\);[\s\S]*mandatoryAttributeIds\.has\(attributeId\)/,
-  'Attribute validation retry must preserve numeric/text custom values while pruning optional invalid enum values.'
+  /function shouldPruneShopeeOptionalCustomAttribute[\s\S]*mandatoryAttributeIds\.has\(attributeId\)[\s\S]*hasCustomValue/,
+  'Attribute validation retry must prune optional custom values after Shopee classification.attribute errors while preserving mandatory values.'
 );
 
 console.log('shopee searchable attribute value_id static checks passed');
