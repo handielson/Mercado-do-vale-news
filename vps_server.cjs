@@ -3901,8 +3901,11 @@ async function handleShopeeCatalogVps(request, reply) {
         });
         if (complete.data?.error) return reply.code(200).send(complete.data);
 
-        for (let attempt = 0; attempt < 12; attempt += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Budget estendido: 30 x 3s = ~90s. Videos maiores/mais lentos podiam
+        // estourar o limite anterior (12 x 2s = 24s) e o ID voltava "quase pronto",
+        // fazendo o add_item receber um vid ainda nao validado (invalid or expired vid).
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
           const poll = await shopeeCatalogGetVps('/api/v2/media_space/get_video_upload_result', creds, encodeShopeeCatalogParamsVps({ video_upload_id: uploadId }));
           const status = getShopeeCatalogVideoUploadStatusVps(poll.data);
           if (['success', 'succeeded', 'complete', 'completed'].includes(status) || poll.data?.response?.video_info) {

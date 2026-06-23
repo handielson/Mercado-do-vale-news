@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.1.106-shopee-video-timeout-recovery
-date: 2026-06-22
-status: published
-release_vps: /var/www/mdv-site/releases/20260622-233700-v11106-shopee-video-timeout-recovery
+version: v1.1.107-shopee-video-polling-retry-fix
+date: 2026-06-23
+status: pending
+release_vps: pendente
 branch: main
-summary: Quando o Shopee retorna 408 video_upload_timeout mas inclui o video_upload_id, o frontend agora usa esse ID para continuar a publicacao em vez de abortar com erro.
+summary: Correcao definitiva do erro invalid or expired vid: polling de video estendido para ~90s no servidor e retry no frontend (postShopeeDebugWithRetry) para reenviar upload_video quando Shopee retorna 408 video_upload_timeout.
 ```

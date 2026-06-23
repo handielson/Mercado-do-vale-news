@@ -952,6 +952,18 @@ function isUnsupportedVideoUploadMessage(message: unknown): boolean {
     return normalized.includes('upload_video') && normalized.includes('nao suporta');
 }
 
+// Identifica o estado em que a Shopee aceitou o upload do video mas ainda esta
+// transcodificando/validando (HTTP 408 video_upload_timeout / "ainda em processamento").
+// Nesse estado o video_upload_id retornado NAO deve ser usado no add_item/update_item,
+// sob risco de "invalid or expired vid". O chamador deve reenviar o upload_video.
+function isShopeeVideoStillProcessingMessage(message: unknown): boolean {
+    const normalized = String(message || '').toLowerCase();
+    return normalized.includes('video_upload_timeout')
+        || normalized.includes('ainda em processamento')
+        || normalized.includes('invalid or expired vid')
+        || normalized.includes('request vid is abnormal');
+}
+
 function isShopeeGtinValidationRateLimitError(message: unknown): boolean {
     const normalized = String(message || '').toLowerCase();
     return normalized.includes('rate limited') ||
@@ -3472,12 +3484,13 @@ export function ShopeeSyncModal({
         });
 
         if (!res.ok) {
-            // video_upload_timeout (408): Shopee ainda processa o video mas ja retornou o ID.
-            // Nao lancar erro — retornar o data para que o chamador use o video_upload_id.
-            if (res.status === 408 && data?.error === 'video_upload_timeout' && data?.response?.video_upload_id) {
-                return data;
-            }
             const rawMessage = data?.message || data?.error || text || `HTTP ${res.status}`;
+            // video_upload_timeout (408): a Shopee aceitou o upload mas ainda esta
+            // transcodificando/validando o video. O video_upload_id retornado nesse
+            // estado NAO esta pronto para uso no add_item — se for repassado, a Shopee
+            // rejeita com "invalid or expired vid". Por isso lancamos o erro aqui e
+            // deixamos o chamador (postShopeeDebugWithRetry) reenviar o upload_video
+            // ate obter um HTTP 200 limpo, em vez de usar um vid prematuro.
             const friendlyMessage =
                 action === 'upload_video' && String(rawMessage).includes('error_not_found')
                     ? 'O backend atual nao suporta upload_video. O localhost esta usando uma API remota sem essa rota.'
@@ -4229,7 +4242,15 @@ export function ShopeeSyncModal({
                             ...(video.video_url ? { video_url: video.video_url } : { video_data_url: resolvedVideoDataUrl }),
                             file_name: video.file_name || 'video.mp4',
                         };
-                        const uploadData = await postShopeeDebug('upload_video', videoUploadPayload);
+                        // Retry enquanto o video ainda estiver sendo processado pela Shopee:
+                        // o upload_video so devolve um video_upload_id valido para uso no add_item
+                        // quando retorna HTTP 200 limpo. Em 408 video_upload_timeout o ID retornado
+                        // ainda nao esta pronto, por isso reenviamos o upload ate ficar pronto.
+                        const uploadData = await postShopeeDebugWithRetry('upload_video', videoUploadPayload, 'upload_video', {
+                            retries: 3,
+                            delaysMs: [6000, 10000, 15000],
+                            shouldRetry: (error: any) => isShopeeVideoStillProcessingMessage(error?.message),
+                        });
                         const uploadedId = uploadData?.response?.video_upload_id || uploadData?.response?.video_id;
                         if (!uploadedId) {
                             throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de video');
@@ -5766,16 +5787,20 @@ function ExpandedItemPanel({
                     continue;
                 }
 
-                const uploadRes = await fetch('/api/shopee-catalog?action=upload_video', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
+                const uploadData = await postShopeeDebugWithRetry(
+                    'upload_video',
+                    {
                         ...(video.data_url ? { video_data_url: video.data_url } : {}),
                         ...(video.video_url ? { video_url: video.video_url } : {}),
                         file_name: video.file_name || 'video.mp4',
-                    }),
-                });
-                const uploadData = await uploadRes.json();
+                    },
+                    'upload_video',
+                    {
+                        retries: 3,
+                        delaysMs: [6000, 10000, 15000],
+                        shouldRetry: (error: any) => isShopeeVideoStillProcessingMessage(error?.message),
+                    },
+                );
                 const uploadedId = uploadData?.response?.video_upload_id || uploadData?.response?.video_id;
                 if (!uploadedId) {
                     throw new Error(uploadData?.message || uploadData?.error || 'Falha no upload de vídeo');
