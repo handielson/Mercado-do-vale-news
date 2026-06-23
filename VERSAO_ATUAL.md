@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.1.113-shopee-atributos-retry
+version: v1.1.114-shopee-package-size-correto
 date: 2026-06-23
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260623-155101-v11113-shopee-atributos-retry
+release_vps: /var/www/mdv-site/releases/20260623-163243-v11114-shopee-package-size-correto
 branch: main
-summary: Preserva atributos principais da Shopee no retry de publicacao para evitar anuncios com especificacoes vazias.
+summary: Corrige o atributo Shopee 101029 para nao receber dimensoes compostas e preserva a dimensao real do produto no retry.
 ```

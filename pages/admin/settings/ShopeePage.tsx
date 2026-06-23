@@ -294,7 +294,8 @@ const SHOPEE_ATTRIBUTE_FALLBACK_VALUES: Record<number, Array<{ match: string; va
     ],
 };
 const SHOPEE_ATTRIBUTE_RETRY_PROTECTED_OPTIONAL_IDS = new Set([
-    100121, // Dimensoes do Produto
+    100942, // Dimensoes do Produto
+    100121, // Duracao da Garantia
     101029, // Tamanho do Pacote
     100999, // Quantidade
     100134, // Material
@@ -571,6 +572,20 @@ function decodeShopeeSearchableAttributeValue(value: unknown): { value_id: numbe
 function getShopeeAttributeDisplayValue(value: unknown): string {
     const decoded = decodeShopeeSearchableAttributeValue(value);
     return decoded?.value_name || String(value || '');
+}
+
+function isDimensionText(value: unknown): boolean {
+    return /\d+\s*x\s*\d+(?:\s*x\s*\d+)?(?:\s*(?:cm|centimetro|centimetros))?/i.test(String(value || '').trim());
+}
+
+function normalizeShopeeAttributeEntryForPayload(attr: ShopeeAttributeField, entry: string): string {
+    const normalizedEntry = String(entry || '').trim();
+    const units = Array.isArray(attr.attribute_unit_list) ? attr.attribute_unit_list : [];
+    const acceptsPiece = units.some((unit) => String(unit || '').toLowerCase() === 'piece');
+    if (Number(attr.attribute_id) === 101029 && acceptsPiece && isDimensionText(normalizedEntry)) {
+        return '1 Piece';
+    }
+    return normalizedEntry;
 }
 
 function buildShopeeAttributeValuePayload(attr: ShopeeAttributeField, entry: string): { value_id: number; original_value_name: string; value_unit?: string } {
@@ -3482,11 +3497,17 @@ export function ShopeeSyncModal({
                     .map((entry) => String(entry || '').trim())
                     .filter(Boolean);
 
-                return {
+                const attributeValueList = valueList
+                    .map((entry) => normalizeShopeeAttributeEntryForPayload(attr, entry))
+                    .filter((entry) => String(entry || '').trim())
+                    .map((entry) => buildShopeeAttributeValuePayload(attr, entry));
+
+                return attributeValueList.length > 0 ? {
                     attribute_id: attr.attribute_id,
-                    attribute_value_list: valueList.map((entry) => buildShopeeAttributeValuePayload(attr, entry)),
-                };
-            });
+                    attribute_value_list: attributeValueList,
+                } : null;
+            })
+            .filter(Boolean);
     };
 
     const renderAttributeField = (attr: ShopeeAttributeField) => {

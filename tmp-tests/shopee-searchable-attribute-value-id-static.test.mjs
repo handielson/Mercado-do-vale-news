@@ -42,6 +42,18 @@ assert.match(
 
 assert.match(
   page,
+  /function normalizeShopeeAttributeEntryForPayload[\s\S]*Number\(attr\.attribute_id\)\s*===\s*101029[\s\S]*acceptsPiece[\s\S]*isDimensionText\(normalizedEntry\)[\s\S]*return '1 Piece'/,
+  'Shopee package size attribute 101029 must convert misplaced dimensions such as 11 x 6 x 6 cm into the valid one-piece package size when Piece is an allowed unit.'
+);
+
+assert.match(
+  page,
+  /\.map\(\(entry\)\s*=>\s*normalizeShopeeAttributeEntryForPayload\(attr,\s*entry\)\)[\s\S]*buildShopeeAttributeValuePayload\(attr,\s*entry\)[\s\S]*attributeValueList\.length > 0/,
+  'Shopee add_item attribute payload must normalize unsafe attribute entries before building attribute values.'
+);
+
+assert.match(
+  page,
   /const SHOPEE_ATTRIBUTE_FALLBACK_VALUES[\s\S]*100413:[\s\S]*value_id:\s*2497,[\s\S]*original_value_name:\s*'New'[\s\S]*normalizeLookupText\(candidate\.match\)\s*===\s*normalizeLookupText\(entry\)/,
   'Shopee condition attribute 100413 must map Novo/New to the real Shopee enum value_id 2497.'
 );
@@ -90,8 +102,8 @@ assert.match(
 
 assert.match(
   page,
-  /function shouldPruneShopeeOptionalCustomAttribute[\s\S]*mandatoryAttributeIds\.has\(attributeId\)[\s\S]*hasCustomValue/,
-  'Attribute validation retry must prune optional custom values after Shopee classification.attribute errors while preserving mandatory values.'
+  /const SHOPEE_ATTRIBUTE_RETRY_PROTECTED_OPTIONAL_IDS[\s\S]*100942[\s\S]*101029[\s\S]*100999[\s\S]*100134/,
+  'Attribute validation retry must preserve core optional Shopee fields including product dimensions, package size, quantity, and material.'
 );
 
 console.log('shopee searchable attribute value_id static checks passed');
