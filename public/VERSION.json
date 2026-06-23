@@ -1,8 +1,8 @@
 {
-    "version": "v1.1.109-shopee-optional-attribute-retry",
+    "version": "v1.1.110-shopee-condition-attribute",
     "date": "2026-06-23",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260623-113842-v11109-shopee-optional-attribute-retry",
+    "release_vps": "/var/www/mdv-site/releases/20260623-150219-v11110-shopee-condition-attribute",
     "branch": "main",
-    "summary": "Retry da publicacao Shopee remove atributos customizados opcionais apos erro classification.attribute, preservando obrigatorios e selects validos. Resolve rejeicao de categorias que nao aceitam campos opcionais de texto como dimensoes, quantidade ou material no add_item."
+    "summary": "Publicacao Shopee passa a enviar Condicao tambem como atributo 100413 quando a categoria retorna esse campo no get_attribute_tree, preservando o campo nativo condition NEW e o retry seguro para atributos opcionais customizados."
 }

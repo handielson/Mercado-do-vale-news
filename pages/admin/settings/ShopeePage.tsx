@@ -287,7 +287,6 @@ const SHOPEE_SUPPLIER_WARRANTY_OPTION: ShopeeAttributeOption = {
 const SHOPEE_ATTRIBUTE_FALLBACK_UNITS: Record<number, string> = {
     101029: 'Piece',
 };
-const SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS = new Set([100413]);
 const SHOPEE_ATTRIBUTE_FALLBACK_VALUES: Record<number, Array<{ match: string; value_id: number; original_value_name: string }>> = {
     100413: [
         { match: 'Novo', value_id: 2497, original_value_name: 'New' },
@@ -627,8 +626,12 @@ function buildShopeeAttributeValuePayload(attr: ShopeeAttributeField, entry: str
     };
 }
 
+function getShopeeNativeConditionAttributeValue(attr: ShopeeAttributeField): string | null {
+    if (Number(attr.attribute_id) !== 100413) return null;
+    return 'Novo';
+}
+
 function shouldSkipShopeeAttributePayload(attr: ShopeeAttributeField, fieldTemplate: any | null): boolean {
-    if (SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS.has(Number(attr.attribute_id))) return true;
     const strictAttributeIds = Array.isArray(fieldTemplate?.strict_attribute_ids)
         ? new Set(fieldTemplate.strict_attribute_ids.map((id: unknown) => Number(id)))
         : null;
@@ -3441,10 +3444,12 @@ export function ShopeeSyncModal({
     const buildAttributePayload = () => {
         return attributes
             .filter((attr) => !shouldSkipShopeeAttributePayload(attr, activeFieldTemplate))
-            .filter((attr) => hasFilledAttributeValue(attrValues[attr.attribute_id]))
+            .filter((attr) => hasFilledAttributeValue(attrValues[attr.attribute_id]) || getShopeeNativeConditionAttributeValue(attr))
             .map((attr) => {
                 const currentValue = attrValues[attr.attribute_id];
-                const valueList = (Array.isArray(currentValue) ? currentValue : [currentValue])
+                const nativeConditionValue = getShopeeNativeConditionAttributeValue(attr);
+                const rawValue = hasFilledAttributeValue(currentValue) ? currentValue : nativeConditionValue;
+                const valueList = (Array.isArray(rawValue) ? rawValue : [rawValue])
                     .map((entry) => String(entry || '').trim())
                     .filter(Boolean);
 

@@ -48,8 +48,14 @@ assert.match(
 
 assert.match(
   page,
-  /const SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS[\s\S]*100413[\s\S]*function shouldSkipShopeeAttributePayload[\s\S]*SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS\.has\(Number\(attr\.attribute_id\)\)[\s\S]*\.filter\(\(attr\) => !shouldSkipShopeeAttributePayload\(attr,\s*activeFieldTemplate\)\)/,
-  'Shopee condition attribute 100413 must be omitted from attribute_list because add_item already sends the native condition field.'
+  /function getShopeeNativeConditionAttributeValue[\s\S]*Number\(attr\.attribute_id\)\s*!==\s*100413[\s\S]*return 'Novo'[\s\S]*buildAttributePayload[\s\S]*getShopeeNativeConditionAttributeValue\(attr\)[\s\S]*buildShopeeAttributeValuePayload\(attr,\s*entry\)/,
+  'Shopee condition attribute 100413 must be sent in attribute_list when returned by get_attribute_tree, while add_item also sends the native condition field.'
+);
+
+assert.doesNotMatch(
+  page,
+  /SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS/,
+  'Shopee condition attribute 100413 must not be globally skipped from attribute_list.'
 );
 
 assert.match(
