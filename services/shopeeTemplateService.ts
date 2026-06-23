@@ -95,9 +95,37 @@ export const DEFAULT_SHOPEE_TEMPLATES: ShopeeTemplate[] = [
         createdAt: nowIso(),
         updatedAt: nowIso(),
     },
+    {
+        id: 'power_supply',
+        name: 'Fonte de alimentacao',
+        active: true,
+        priority: 90,
+        rules: {
+            nameIncludes: ['fonte', 'fonte de alimentacao', '12v', 'bivolt'],
+            skuIncludes: ['NBS', 'MSG'],
+        },
+        titleTemplate: '{nome}',
+        descriptionTemplate: '{descricao}',
+        shopeeCategoryId: 101803,
+        shopeeCategoryName: 'Fontes de Alimentacao',
+        attributeDefaults: {
+            100121: '3 Months',
+            100370: 'Supplier Warranty',
+            101029: '1 Piece',
+            101219: 'No',
+            102292: 'N/A – NBR not applicable',
+        },
+        priceMode: 'product',
+        stockMode: 'product',
+        dimensionMode: 'product',
+        gtinMode: 'product',
+        dangerousTerms: [],
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+    },
 ];
 
-const REQUIRED_DEFAULT_TEMPLATE_IDS = new Set(['universal_defaults']);
+const REQUIRED_DEFAULT_TEMPLATE_IDS = new Set(['universal_defaults', 'power_supply']);
 
 function sortTemplates(templates: ShopeeTemplate[]): ShopeeTemplate[] {
     return [...templates].sort((a, b) => {

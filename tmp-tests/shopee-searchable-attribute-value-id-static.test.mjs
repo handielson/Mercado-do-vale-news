@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const page = readFileSync('pages/admin/settings/ShopeePage.tsx', 'utf8');
+const fieldTemplates = readFileSync('pages/admin/settings/shopeeFieldTemplates.js', 'utf8');
 
 assert.match(
   page,
@@ -47,8 +48,20 @@ assert.match(
 
 assert.match(
   page,
-  /const SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS[\s\S]*100413[\s\S]*function shouldSkipShopeeAttributePayload[\s\S]*SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS\.has\(Number\(attr\.attribute_id\)\)[\s\S]*\.filter\(\(attr\) => !shouldSkipShopeeAttributePayload\(attr\)\)/,
+  /const SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS[\s\S]*100413[\s\S]*function shouldSkipShopeeAttributePayload[\s\S]*SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS\.has\(Number\(attr\.attribute_id\)\)[\s\S]*\.filter\(\(attr\) => !shouldSkipShopeeAttributePayload\(attr,\s*activeFieldTemplate\)\)/,
   'Shopee condition attribute 100413 must be omitted from attribute_list because add_item already sends the native condition field.'
+);
+
+assert.match(
+  fieldTemplates,
+  /id:\s*'power_supply'[\s\S]*category_id:\s*101803[\s\S]*strict_attribute_ids:\s*\[100121,\s*100370,\s*101029,\s*101219,\s*102292\]/,
+  'Power supply field template must mirror phone case behavior with a strict set of safe Shopee attributes.'
+);
+
+assert.match(
+  page,
+  /function shouldSkipShopeeAttributePayload\(attr: ShopeeAttributeField,\s*fieldTemplate:[\s\S]*strictAttributeIds[\s\S]*!strictAttributeIds\.has\(Number\(attr\.attribute_id\)\)[\s\S]*\.filter\(\(attr\) => !shouldSkipShopeeAttributePayload\(attr,\s*activeFieldTemplate\)\)/,
+  'Shopee add_item must omit attributes outside a strict field template allowlist.'
 );
 
 assert.match(

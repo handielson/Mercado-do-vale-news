@@ -45,6 +45,19 @@ function isPhoneCaseProduct(product) {
   );
 }
 
+function isPowerSupplyProduct(product) {
+  const text = normalizeTemplateText([
+    product?.name,
+    product?.sku,
+    product?.category_slug,
+  ].join(' '));
+
+  return (
+    /\b(fonte|fonte de alimentacao|power supply|adaptador)\b/.test(text) &&
+    /\b(12v|24v|bivolt|pino|agulha|alimentacao|alimentador)\b/.test(text)
+  );
+}
+
 const PHONE_CASE_TEMPLATE = {
   id: 'phone_case',
   label: 'Capa de celular',
@@ -62,8 +75,23 @@ const PHONE_CASE_TEMPLATE = {
   },
 };
 
+const POWER_SUPPLY_TEMPLATE = {
+  id: 'power_supply',
+  label: 'Fonte de alimentacao',
+  category_id: 101803,
+  strict_attribute_ids: [100121, 100370, 101029, 101219, 102292],
+  attribute_defaults: {
+    100121: '3 Months',
+    100370: 'Supplier Warranty',
+    101029: '1 Piece',
+    101219: 'No',
+    102292: 'N/A – NBR not applicable',
+  },
+};
+
 function resolveShopeeFieldTemplate(product) {
   if (isPhoneCaseProduct(product)) return PHONE_CASE_TEMPLATE;
+  if (isPowerSupplyProduct(product)) return POWER_SUPPLY_TEMPLATE;
   return null;
 }
 
@@ -136,5 +164,6 @@ export {
   extractPhoneModel,
   findShopeeTemplateCategory,
   isPhoneCaseProduct,
+  isPowerSupplyProduct,
   resolveShopeeFieldTemplate,
 };

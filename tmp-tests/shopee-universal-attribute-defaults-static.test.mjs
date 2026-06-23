@@ -25,6 +25,17 @@ if (!service.includes('ensureRequiredDefaultTemplates(templates)')) {
 }
 
 for (const expected of [
+  "id: 'power_supply'",
+  "shopeeCategoryId: 101803",
+  "100121: '3 Months'",
+  "101029: '1 Piece'",
+  "102292: 'N/A – NBR not applicable'",
+  "new Set(['universal_defaults', 'power_supply'])",
+]) {
+  if (!service.includes(expected)) throw new Error(`Missing power supply default template config: ${expected}`);
+}
+
+for (const expected of [
   'resolveUniversalShopeeAttributeDefaults',
   'renderShopeeAttributeDefaultValue',
 ]) {

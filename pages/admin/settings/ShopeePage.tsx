@@ -627,8 +627,13 @@ function buildShopeeAttributeValuePayload(attr: ShopeeAttributeField, entry: str
     };
 }
 
-function shouldSkipShopeeAttributePayload(attr: ShopeeAttributeField): boolean {
-    return SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS.has(Number(attr.attribute_id));
+function shouldSkipShopeeAttributePayload(attr: ShopeeAttributeField, fieldTemplate: any | null): boolean {
+    if (SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS.has(Number(attr.attribute_id))) return true;
+    const strictAttributeIds = Array.isArray(fieldTemplate?.strict_attribute_ids)
+        ? new Set(fieldTemplate.strict_attribute_ids.map((id: unknown) => Number(id)))
+        : null;
+    if (strictAttributeIds && !strictAttributeIds.has(Number(attr.attribute_id))) return true;
+    return false;
 }
 
 function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attributes: ShopeeAttributeField[]) {
@@ -3327,7 +3332,7 @@ export function ShopeeSyncModal({
 
     const buildAttributePayload = () => {
         return attributes
-            .filter((attr) => !shouldSkipShopeeAttributePayload(attr))
+            .filter((attr) => !shouldSkipShopeeAttributePayload(attr, activeFieldTemplate))
             .filter((attr) => hasFilledAttributeValue(attrValues[attr.attribute_id]))
             .map((attr) => {
                 const currentValue = attrValues[attr.attribute_id];

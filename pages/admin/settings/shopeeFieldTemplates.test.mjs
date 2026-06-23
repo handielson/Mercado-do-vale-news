@@ -18,6 +18,18 @@ assert.equal(template?.id, 'phone_case');
 assert.equal(template?.category_id, 100490);
 assert.equal(extractPhoneModel(product), 'Redmi Note 12 Pro Plus');
 
+const powerSupplyProduct = {
+  name: 'Fonte De Alimentacao 12V 2.5A bivolt 30W Pino agulha NBS30G120250VB',
+  sku: 'NBS30G120250VB',
+  brand: 'Importado',
+  category_slug: 'fontes-alimentacao',
+};
+
+const powerSupplyTemplate = resolveShopeeFieldTemplate(powerSupplyProduct);
+assert.equal(powerSupplyTemplate?.id, 'power_supply');
+assert.equal(powerSupplyTemplate?.category_id, 101803);
+assert.deepEqual(powerSupplyTemplate?.strict_attribute_ids, [100121, 100370, 101029, 101219, 102292]);
+
 const attrs = [
   {
     attribute_id: 100134,
@@ -52,5 +64,38 @@ assert.equal(
   findShopeeTemplateCategory([{ category_id: 1, children: [{ category_id: 100490, display_category_name: 'Capas' }] }], template)?.category_id,
   100490
 );
+
+assert.deepEqual(buildShopeeTemplateAttributeValues([
+  {
+    attribute_id: 100121,
+    label: 'Duracao da Garantia',
+    attribute_value_list: [{ label: '3 Meses', raw_name: '3 Months', original_value_name: '3 Months', value_id: 799 }],
+  },
+  {
+    attribute_id: 100105,
+    label: 'Potencia',
+    attribute_value_list: [],
+  },
+  {
+    attribute_id: 101029,
+    label: 'Tamanho do Pacote',
+    attribute_value_list: [],
+  },
+  {
+    attribute_id: 101219,
+    label: 'Produto personalizado',
+    attribute_value_list: [{ label: 'Nao', raw_name: 'No', original_value_name: 'No', value_id: 7222 }],
+  },
+  {
+    attribute_id: 102292,
+    label: 'Numero de registro INMETRO',
+    attribute_value_list: [{ label: 'N/A - NBR nao aplicavel', raw_name: 'N/A – NBR not applicable', original_value_name: 'N/A – NBR not applicable', value_id: 17633 }],
+  },
+], powerSupplyProduct, powerSupplyTemplate), {
+  100121: '3 Meses',
+  101029: '1 Piece',
+  101219: 'Nao',
+  102292: 'N/A - NBR nao aplicavel',
+});
 
 console.log('shopeeFieldTemplates.test.mjs: ok');
