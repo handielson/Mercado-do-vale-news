@@ -22,7 +22,9 @@ const extractSignedWarrantyDdl = (source) => {
 };
 
 const normalizeDdl = (ddl) => ddl
-  .replace(/CREATE TABLE IF NOT EXISTS/, 'CREATE TABLE')
+  .replace(/\bCREATE TABLE IF NOT EXISTS\b/, 'CREATE TABLE')
+  .trim()
+  .replace(/;$/, '')
   .replace(/\s+/g, ' ')
   .trim();
 
@@ -67,6 +69,7 @@ assert.equal(lock.packages[''].dependencies.sharp, '^0.34.0');
 assert.equal(lock.packages[''].dependencies['pdf-lib'], '^1.17.1');
 assert.equal(lock.packages['node_modules/sharp'].version, '0.34.0');
 assert.equal(lock.packages['node_modules/pdf-lib'].version, '1.17.1');
-assert.equal(normalizeDdl(serverDdl.js), normalizeDdl(serverDdl.cjs));
+assert.deepEqual(normalizeDdl(migrationDdl), normalizeDdl(serverDdl.js));
+assert.deepEqual(normalizeDdl(migrationDdl), normalizeDdl(serverDdl.cjs));
 
 console.log('signed warranty static checks passed');
