@@ -3472,6 +3472,11 @@ export function ShopeeSyncModal({
         });
 
         if (!res.ok) {
+            // video_upload_timeout (408): Shopee ainda processa o video mas ja retornou o ID.
+            // Nao lancar erro — retornar o data para que o chamador use o video_upload_id.
+            if (res.status === 408 && data?.error === 'video_upload_timeout' && data?.response?.video_upload_id) {
+                return data;
+            }
             const rawMessage = data?.message || data?.error || text || `HTTP ${res.status}`;
             const friendlyMessage =
                 action === 'upload_video' && String(rawMessage).includes('error_not_found')
