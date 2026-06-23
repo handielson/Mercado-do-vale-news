@@ -674,6 +674,14 @@ function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attri
     };
 }
 
+function omitShopeeNativeConditionAttributeForUpdateItem(payload: Record<string, any>) {
+    if (!Array.isArray(payload?.attribute_list)) return payload;
+    return {
+        ...payload,
+        attribute_list: payload.attribute_list.filter((attr: any) => Number(attr?.attribute_id) !== 100413),
+    };
+}
+
 function summarizeShopeeAttributePayloadForDebug(payload: Record<string, any>, attributes: ShopeeAttributeField[]) {
     const fieldsById = new Map(
         (attributes || []).map((field) => [Number(field.attribute_id), field])
@@ -4469,7 +4477,7 @@ export function ShopeeSyncModal({
                     }, parsedStock)
                 : resolvedExistingProductItemId
                     ? await postShopeeDebug('update_item', {
-                        ...finalPayload,
+                        ...omitShopeeNativeConditionAttributeForUpdateItem(finalPayload),
                         item_id: resolvedExistingProductItemId,
                     }, 'update_item:existing_item')
                     : await publishShopeeItemWithStockFallback(finalPayload, parsedStock);
