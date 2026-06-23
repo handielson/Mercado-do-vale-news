@@ -668,6 +668,58 @@ function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attri
     };
 }
 
+function summarizeShopeeAttributePayloadForDebug(payload: Record<string, any>, attributes: ShopeeAttributeField[]) {
+    const fieldsById = new Map(
+        (attributes || []).map((field) => [Number(field.attribute_id), field])
+    );
+    const attributeList = Array.isArray(payload?.attribute_list) ? payload.attribute_list : [];
+    const requiredAttributeIds = (attributes || [])
+        .filter((field) => field.mandatory)
+        .map((field) => Number(field.attribute_id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+    const sentAttributeIds = attributeList
+        .map((attr: any) => Number(attr?.attribute_id))
+        .filter((id: number) => Number.isFinite(id) && id > 0);
+    const missingRequiredAttributeIds = requiredAttributeIds.filter((id) => !sentAttributeIds.includes(id));
+    const customValueAttributeIds: number[] = [];
+    const enumCustomValueAttributeIds: number[] = [];
+    const attributeDetails = attributeList.map((attr: any) => {
+        const attributeId = Number(attr?.attribute_id);
+        const field = fieldsById.get(attributeId);
+        const values = Array.isArray(attr?.attribute_value_list) ? attr.attribute_value_list : [];
+        const hasCustomValue = values.some((value: any) => Number(value?.value_id || 0) === 0);
+        const hasCustomValueWithoutUnit = values.some((value: any) =>
+            Number(value?.value_id || 0) === 0 && !String(value?.value_unit || '').trim()
+        );
+        const hasShopeeOptionList = Array.isArray(field?.attribute_value_list) && field.attribute_value_list.length > 0;
+        const customValuesAreAllowed = !hasShopeeOptionList || [3, 5].includes(Number(field?.raw_input_type));
+
+        if (hasCustomValue) customValueAttributeIds.push(attributeId);
+        if (hasShopeeOptionList && hasCustomValueWithoutUnit && !customValuesAreAllowed) {
+            enumCustomValueAttributeIds.push(attributeId);
+        }
+
+        return {
+            attribute_id: attributeId,
+            label: field?.label || '',
+            mandatory: Boolean(field?.mandatory),
+            input_kind: field?.input_kind || '',
+            raw_input_type: field?.raw_input_type ?? null,
+            option_count: Array.isArray(field?.attribute_value_list) ? field.attribute_value_list.length : 0,
+            values,
+        };
+    });
+
+    return {
+        custom_value_attribute_ids: [...new Set(customValueAttributeIds)],
+        enum_custom_value_attribute_ids: [...new Set(enumCustomValueAttributeIds)],
+        required_attribute_ids: requiredAttributeIds,
+        sent_attribute_ids: sentAttributeIds,
+        missing_required_attribute_ids: missingRequiredAttributeIds,
+        attributes: attributeDetails,
+    };
+}
+
 function inferShopeeBrandName(product: Partial<LocalProduct> & Record<string, any>): string {
     const explicitBrand = String(product?.brand || '').trim();
     const genericBrands = new Set([
@@ -713,6 +765,44 @@ function hasFilledAttributeValue(value: string | string[] | undefined): boolean 
         return value.some((entry) => String(entry || '').trim().length > 0);
     }
     return String(value || '').trim().length > 0;
+}
+
+function getUnselectedShopeeSearchableAttributes(
+    attributes: ShopeeAttributeField[],
+    attrValues: Record<number, string | string[]>
+) {
+    return (attributes || [])
+        .filter((attr) => attr.input_kind === 'searchable')
+        .flatMap((attr) => {
+            const currentValue = attrValues[attr.attribute_id];
+            const values = (Array.isArray(currentValue) ? currentValue : [currentValue])
+                .map((entry) => String(entry || '').trim())
+                .filter(Boolean);
+            const unselectedValues = values.filter((entry) => !decodeShopeeSearchableAttributeValue(entry));
+            if (unselectedValues.length === 0) return [];
+            return [{
+                attribute_id: attr.attribute_id,
+                label: attr.label,
+                typed_values: unselectedValues,
+            }];
+        });
+}
+
+function assertShopeeSearchableAttributesSelected(
+    attributes: ShopeeAttributeField[],
+    attrValues: Record<number, string | string[]>,
+    pushSyncDebug: (stage: string, payload: unknown) => void
+) {
+    const unselectedAttributes = getUnselectedShopeeSearchableAttributes(attributes, attrValues);
+    if (unselectedAttributes.length === 0) return;
+
+    pushSyncDebug('attribute_validation:searchable_selection_required', {
+        message: 'Alguns atributos da Shopee exigem buscar e selecionar uma opcao da lista.',
+        unselected_attributes: unselectedAttributes,
+    });
+
+    const labels = unselectedAttributes.map((attr) => attr.label || `Atributo ${attr.attribute_id}`).join(', ');
+    throw new Error(`Selecione uma opcao da lista da Shopee para: ${labels}`);
 }
 
 function extractModelShopeeAttributeDefaults(modelData: any): Record<string, string | string[]> {
@@ -833,7 +923,7 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
                     )}
                     {!loading && options.length === 0 && (
                         <div className="px-3 py-2 text-xs text-slate-400">
-                            {query.trim() ? 'Nenhuma opcao encontrada. O texto sera enviado como digitado.' : 'Digite para buscar opcoes...'}
+                            {query.trim() ? 'Nenhuma opcao encontrada. Selecione uma opcao da lista da Shopee.' : 'Digite para buscar opcoes da Shopee...'}
                         </div>
                     )}
                     {!loading && options.map((option, idx) => (
@@ -3752,6 +3842,7 @@ export function ShopeeSyncModal({
                 image_count: Array.isArray(payload?.image?.image_id_list) ? payload.image.image_id_list.length : 0,
                 video_count: Array.isArray(payload?.video_upload_id) ? payload.video_upload_id.length : 0,
                 attribute_ids: Array.isArray(payload.attribute_list) ? payload.attribute_list.map((attr: any) => attr.attribute_id) : [],
+                attribute_debug: summarizeShopeeAttributePayloadForDebug(payload, attributes),
                 brand: payload.brand,
                 logistic_info: payload.logistic_info,
                 stock_fields: variant.stockFields,
@@ -3775,6 +3866,7 @@ export function ShopeeSyncModal({
                     variant: variant.key,
                     label: variant.label,
                     message: error?.message || error,
+                    attribute_debug: summarizeShopeeAttributePayloadForDebug(payload, attributes),
                 });
 
                 if (isShopeeAttributeValidationError(error?.message || error)) {
@@ -3784,6 +3876,8 @@ export function ShopeeSyncModal({
                             variant: variant.key,
                             label: variant.label,
                             removed_attribute_ids: sanitized.removedAttributes.map((attr: any) => attr.attribute_id),
+                            removed_attributes: sanitized.removedAttributes,
+                            attribute_debug: summarizeShopeeAttributePayloadForDebug(sanitized.payload, attributes),
                             message: error?.message || error,
                         });
 
@@ -3883,6 +3977,8 @@ export function ShopeeSyncModal({
                     pushSyncDebug('add_item:attribute_retry_without_optional_custom_values', {
                         variant: 'variation',
                         removed_attribute_ids: sanitized.removedAttributes.map((attr: any) => attr.attribute_id),
+                        removed_attributes: sanitized.removedAttributes,
+                        attribute_debug: summarizeShopeeAttributePayloadForDebug(sanitized.payload, attributes),
                         message: error?.message || error,
                     });
                     return await postShopeeDebugWithRetry('add_item', sanitized.payload, 'add_item:variation:without_optional_custom_attributes', {
@@ -4025,6 +4121,7 @@ export function ShopeeSyncModal({
         syncDebugEntriesRef.current = [];
         try {
             setSyncStepRunning('validate', 'Conferindo dados antes do envio');
+            assertShopeeSearchableAttributesSelected(attributes, attrValues, pushSyncDebug);
             const attributeList = buildAttributePayload();
             const cleanItemName = (itemName.trim() || product.name || '').slice(0, 120);
             const cleanItemSku = String(product.sku || '').trim().slice(0, 100);

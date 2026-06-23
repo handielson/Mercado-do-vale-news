@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.1.107-shopee-video-polling-retry-fix
+version: v1.1.108-shopee-attribute-selection-logs
 date: 2026-06-23
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260623-001500-v11107-shopee-video-polling-retry
+release_vps: /var/www/mdv-site/releases/20260623-112616-v11108-shopee-attribute-selection
 branch: main
-summary: Correcao definitiva do erro invalid or expired vid: polling de video estendido para ~90s no servidor e retry no frontend (postShopeeDebugWithRetry) para reenviar upload_video quando Shopee retorna 408 video_upload_timeout.
+summary: Correcao da sincronizacao Shopee quando atributos buscaveis sao digitados sem selecionar a opcao oficial; logs de erro agora mostram atributos enviados, removidos e obrigatorios para diagnosticar rejeicoes da Shopee. Inclui preflight inteligente da skill publish-vps.
 ```
