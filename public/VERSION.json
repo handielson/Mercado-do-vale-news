@@ -1,8 +1,8 @@
 {
     "version": "v1.1.107-shopee-video-polling-retry-fix",
     "date": "2026-06-23",
-    "status": "pending",
-    "release_vps": "pendente",
+    "status": "deployed",
+    "release_vps": "/var/www/mdv-site/releases/20260623-001500-v11107-shopee-video-polling-retry",
     "branch": "main",
     "summary": "Correcao definitiva do erro invalid or expired vid: polling de video estendido para ~90s no servidor e retry no frontend (postShopeeDebugWithRetry) para reenviar upload_video quando Shopee retorna 408 video_upload_timeout."
 }
