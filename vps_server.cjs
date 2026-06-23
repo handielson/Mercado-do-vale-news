@@ -25381,6 +25381,8 @@ async function runMigrations() {
       error_message TEXT NULL,
       version_number INT NOT NULL DEFAULT 1,
       is_active TINYINT(1) NOT NULL DEFAULT 0,
+      active_sale_key VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN is_active = 1 THEN sale_id ELSE NULL END) STORED,
+      dedupe_company_key VARCHAR(255) GENERATED ALWAYS AS (COALESCE(company_id, '__unassigned__')) STORED,
       uploaded_by_customer_id VARCHAR(255) NULL,
       processed_at DATETIME NULL,
       discarded_at DATETIME NULL,
@@ -25389,7 +25391,9 @@ async function runMigrations() {
       INDEX idx_signed_warranty_sale_active (sale_id, is_active),
       INDEX idx_signed_warranty_status (status, created_at),
       INDEX idx_signed_warranty_sale_code (sale_code),
-      UNIQUE KEY uniq_signed_warranty_company_hash (company_id, image_sha256)
+      UNIQUE KEY uniq_signed_warranty_active_sale (active_sale_key),
+      UNIQUE KEY uniq_signed_warranty_sale_version (sale_id, version_number),
+      UNIQUE KEY uniq_signed_warranty_company_hash (dedupe_company_key, image_sha256)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
