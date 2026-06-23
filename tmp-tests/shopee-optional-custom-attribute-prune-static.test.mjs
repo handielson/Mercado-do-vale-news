@@ -17,8 +17,14 @@ assert.match(
 
 assert.match(
   page,
-  /function shouldPruneShopeeOptionalCustomAttribute[\s\S]*mandatoryAttributeIds\.has\(attributeId\)[\s\S]*hasCustomValue[\s\S]*removedAttributes\.push\(attr\)/,
-  'Retry sanitizer must remove optional custom value attributes, including text attributes without Shopee value_id.'
+  /const SHOPEE_ATTRIBUTE_RETRY_PROTECTED_OPTIONAL_IDS[\s\S]*100121[\s\S]*101029[\s\S]*100999[\s\S]*100134/,
+  'Retry sanitizer must protect core optional Shopee attributes that should remain visible in Seller Center.'
+);
+
+assert.match(
+  page,
+  /function shouldPruneShopeeOptionalCustomAttribute[\s\S]*protectedAttributeIds:\s*Set<number>[\s\S]*protectedAttributeIds\.has\(attributeId\)[\s\S]*return false[\s\S]*hasCustomValue[\s\S]*removedAttributes\.push\(attr\)/,
+  'Retry sanitizer must remove only non-protected optional custom attributes after classification errors.'
 );
 
 assert.match(

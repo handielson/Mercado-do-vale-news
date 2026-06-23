@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.1.112-shopee-condicao-native
+version: v1.1.113-shopee-atributos-retry
 date: 2026-06-23
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260623-123513-v11112-shopee-condicao-native
+release_vps: /var/www/mdv-site/releases/20260623-155101-v11113-shopee-atributos-retry
 branch: main
-summary: Corrige add_item e update_item da Shopee mantendo Condicao como campo nativo condition NEW e omitindo o atributo 100413 do attribute_list.
+summary: Preserva atributos principais da Shopee no retry de publicacao para evitar anuncios com especificacoes vazias.
 ```

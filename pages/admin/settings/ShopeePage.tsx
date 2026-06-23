@@ -293,6 +293,12 @@ const SHOPEE_ATTRIBUTE_FALLBACK_VALUES: Record<number, Array<{ match: string; va
         { match: 'New', value_id: 2497, original_value_name: 'New' },
     ],
 };
+const SHOPEE_ATTRIBUTE_RETRY_PROTECTED_OPTIONAL_IDS = new Set([
+    100121, // Dimensoes do Produto
+    101029, // Tamanho do Pacote
+    100999, // Quantidade
+    100134, // Material
+]);
 
 function normalizePositiveId(value: unknown): number | null {
     const parsed = Number(value);
@@ -654,10 +660,12 @@ function shouldSkipShopeeAttributePayload(attr: ShopeeAttributeField, fieldTempl
 
 function shouldPruneShopeeOptionalCustomAttribute(
     attr: any,
-    mandatoryAttributeIds: Set<number>
+    mandatoryAttributeIds: Set<number>,
+    protectedAttributeIds: Set<number>
 ): boolean {
     const attributeId = Number(attr?.attribute_id);
     if (mandatoryAttributeIds.has(attributeId)) return false;
+    if (protectedAttributeIds.has(attributeId)) return false;
     const values = Array.isArray(attr?.attribute_value_list) ? attr.attribute_value_list : [];
     const hasCustomValue = values.some((value: any) => Number(value?.value_id || 0) === 0);
     if (!hasCustomValue) return false;
@@ -673,7 +681,7 @@ function pruneOptionalCustomAttributePayload(payload: Record<string, any>, attri
     const attributeList = Array.isArray(payload.attribute_list) ? payload.attribute_list : [];
     const removedAttributes: any[] = [];
     const keptAttributes = attributeList.filter((attr: any) => {
-        if (!shouldPruneShopeeOptionalCustomAttribute(attr, mandatoryAttributeIds)) return true;
+        if (!shouldPruneShopeeOptionalCustomAttribute(attr, mandatoryAttributeIds, SHOPEE_ATTRIBUTE_RETRY_PROTECTED_OPTIONAL_IDS)) return true;
         removedAttributes.push(attr);
         return false;
     });
