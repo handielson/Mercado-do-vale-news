@@ -289,8 +289,8 @@ const SHOPEE_ATTRIBUTE_FALLBACK_UNITS: Record<number, string> = {
 };
 const SHOPEE_ATTRIBUTE_FALLBACK_VALUES: Record<number, Array<{ match: string; value_id: number; original_value_name: string }>> = {
     100413: [
-        { match: 'Novo', value_id: 2497, original_value_name: 'New' },
-        { match: 'New', value_id: 2497, original_value_name: 'New' },
+        { match: 'Novo', value_id: 0, original_value_name: 'New' },
+        { match: 'New', value_id: 0, original_value_name: 'New' },
     ],
 };
 const SHOPEE_ATTRIBUTE_RETRY_PROTECTED_OPTIONAL_IDS = new Set([
@@ -665,7 +665,6 @@ function withShopeeNativeConditionAttributeDefault(
 }
 
 function shouldSkipShopeeAttributePayload(attr: ShopeeAttributeField, fieldTemplate: any | null): boolean {
-    if (Number(attr.attribute_id) === 100413) return true;
     const strictAttributeIds = Array.isArray(fieldTemplate?.strict_attribute_ids)
         ? new Set(fieldTemplate.strict_attribute_ids.map((id: unknown) => Number(id)))
         : null;

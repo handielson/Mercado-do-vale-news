@@ -54,8 +54,8 @@ assert.match(
 
 assert.match(
   page,
-  /const SHOPEE_ATTRIBUTE_FALLBACK_VALUES[\s\S]*100413:[\s\S]*value_id:\s*2497,[\s\S]*original_value_name:\s*'New'[\s\S]*normalizeLookupText\(candidate\.match\)\s*===\s*normalizeLookupText\(entry\)/,
-  'Shopee condition attribute 100413 must map Novo/New to the real Shopee enum value_id 2497.'
+  /const SHOPEE_ATTRIBUTE_FALLBACK_VALUES[\s\S]*100413:[\s\S]*value_id:\s*0,[\s\S]*original_value_name:\s*'New'[\s\S]*normalizeLookupText\(candidate\.match\)\s*===\s*normalizeLookupText\(entry\)/,
+  'Shopee condition attribute 100413 must map Novo/New to the original Shopee value name New without using the rejected enum value_id.'
 );
 
 assert.match(
@@ -84,8 +84,8 @@ assert.match(
 
 assert.match(
   page,
-  /function shouldSkipShopeeAttributePayload[\s\S]*Number\(attr\.attribute_id\)\s*===\s*100413[\s\S]*return true/,
-  'Shopee condition attribute 100413 must be omitted from attribute_list because condition is sent as a native field.'
+  /function shouldSkipShopeeAttributePayload[\s\S]*strictAttributeIds[\s\S]*!strictAttributeIds\.has\(Number\(attr\.attribute_id\)\)/,
+  'Shopee add_item must not globally skip condition attribute 100413; update_item still strips it separately.'
 );
 
 assert.match(
