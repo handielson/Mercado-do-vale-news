@@ -1,4 +1,4 @@
-const SOURCE_PATTERN = /^termo-garantia-venda-([a-z0-9-]{8,20})\.(jpe?g|png)$/i;
+const SOURCE_PATTERN = /^termo-garantia-venda-([a-z0-9]{8})\.(jpe?g|png)$/i;
 
 function normalizeSaleCode(value) {
   return String(value || '').replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase();

@@ -18,6 +18,9 @@ test('accepts only direct Synology source image names', () => {
     extension: 'png',
   });
   assert.equal(parseSignedWarrantyFileName('termo-garantia-venda-ab12cd34.pdf'), null);
+  assert.equal(parseSignedWarrantyFileName('termo-garantia-venda-abcdefghX.jpg'), null);
+  assert.equal(parseSignedWarrantyFileName('termo-garantia-venda-abcdefghij.png'), null);
+  assert.equal(parseSignedWarrantyFileName('termo-garantia-venda-ab12-cd34.jpeg'), null);
   assert.equal(parseSignedWarrantyFileName('foto.jpg'), null);
 });
 
