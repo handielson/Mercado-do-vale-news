@@ -48,14 +48,32 @@ assert.match(
 
 assert.match(
   page,
-  /function getShopeeNativeConditionAttributeValue[\s\S]*Number\(attr\.attribute_id\)\s*!==\s*100413[\s\S]*return 'Novo'[\s\S]*buildAttributePayload[\s\S]*getShopeeNativeConditionAttributeValue\(attr\)[\s\S]*buildShopeeAttributeValuePayload\(attr,\s*entry\)/,
-  'Shopee condition attribute 100413 must be sent in attribute_list when returned by get_attribute_tree, while add_item also sends the native condition field.'
+  /function getShopeeNativeConditionAttributeValue[\s\S]*Number\(attr\.attribute_id\)\s*!==\s*100413[\s\S]*return 'Novo'/,
+  'Shopee condition attribute 100413 must still have a UI default value.'
 );
 
-assert.doesNotMatch(
+assert.match(
   page,
-  /SHOPEE_NATIVE_CONDITION_ATTRIBUTE_IDS/,
-  'Shopee condition attribute 100413 must not be globally skipped from attribute_list.'
+  /function withShopeeNativeConditionAttributeDefault[\s\S]*Number\(attr\.attribute_id\)\s*===\s*100413[\s\S]*hasFilledAttributeValue\(values\[100413\]\)[\s\S]*100413:\s*'Novo'/,
+  'Shopee condition attribute 100413 must be prefilled in attrValues so the UI shows Condicao as Novo.'
+);
+
+assert.match(
+  page,
+  /setAttrValues\(\(current\)\s*=>\s*withShopeeNativeConditionAttributeDefault\(attributes,[\s\S]*mergedAttributeValues[\s\S]*\)\)/,
+  'Applying Shopee templates must keep the native Condition default visible in the attribute form.'
+);
+
+assert.match(
+  page,
+  /const mergedTemplateValues = withShopeeNativeConditionAttributeDefault\(normalizedAttributes,[\s\S]*mergeShopeeAttributeDefaults/,
+  'Selecting a Shopee category must initialize attrValues with the native Condition default when the category exposes it.'
+);
+
+assert.match(
+  page,
+  /function shouldSkipShopeeAttributePayload[\s\S]*Number\(attr\.attribute_id\)\s*===\s*100413[\s\S]*return true/,
+  'Shopee condition attribute 100413 must be omitted from attribute_list because condition is sent as a native field.'
 );
 
 assert.match(

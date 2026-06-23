@@ -631,7 +631,20 @@ function getShopeeNativeConditionAttributeValue(attr: ShopeeAttributeField): str
     return 'Novo';
 }
 
+function withShopeeNativeConditionAttributeDefault(
+    attributes: ShopeeAttributeField[],
+    values: Record<number, string | string[]>
+): Record<number, string | string[]> {
+    const hasNativeConditionAttribute = (attributes || []).some((attr) => Number(attr.attribute_id) === 100413);
+    if (!hasNativeConditionAttribute || hasFilledAttributeValue(values[100413])) return values;
+    return {
+        ...values,
+        100413: 'Novo',
+    };
+}
+
 function shouldSkipShopeeAttributePayload(attr: ShopeeAttributeField, fieldTemplate: any | null): boolean {
+    if (Number(attr.attribute_id) === 100413) return true;
     const strictAttributeIds = Array.isArray(fieldTemplate?.strict_attribute_ids)
         ? new Set(fieldTemplate.strict_attribute_ids.map((id: unknown) => Number(id)))
         : null;
@@ -3033,7 +3046,7 @@ export function ShopeeSyncModal({
             product: attributeProductContext,
         }));
 
-        setAttrValues((current) => ({ ...current, ...mergedAttributeValues }));
+        setAttrValues((current) => withShopeeNativeConditionAttributeDefault(attributes, { ...current, ...mergedAttributeValues }));
 
     }, [activeFieldTemplate, attributes, modelShopeeAttributeDefaults, packageDimension, product, shopeeTemplates]);
 
@@ -3374,13 +3387,13 @@ export function ShopeeSyncModal({
                 package_width: packageDimension.package_width,
                 package_height: packageDimension.package_height,
             };
-            const mergedTemplateValues = alignShopeeAttributeDefaultsToOptions(normalizedAttributes, mergeShopeeAttributeDefaults({
+            const mergedTemplateValues = withShopeeNativeConditionAttributeDefault(normalizedAttributes, alignShopeeAttributeDefaultsToOptions(normalizedAttributes, mergeShopeeAttributeDefaults({
                 universalDefaults: universalTemplateValues,
                 fieldTemplateDefaults: templateValues,
                 selectedTemplateDefaults: selectedTemplateValues,
                 modelDefaults,
                 product: attributeProductContext,
-            }));
+            })));
             if (Object.keys(mergedTemplateValues).length > 0) {
                 setAttrValues(mergedTemplateValues as Record<number, string | string[]>);
             }

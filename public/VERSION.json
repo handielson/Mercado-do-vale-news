@@ -1,8 +1,8 @@
 {
-    "version": "v1.1.111-shopee-update-condition",
+    "version": "v1.1.112-shopee-condicao-native",
     "date": "2026-06-23",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260623-151931-v11111-shopee-update-condition",
+    "release_vps": "/var/www/mdv-site/releases/20260623-123513-v11112-shopee-condicao-native",
     "branch": "main",
-    "summary": "Corrige update_item de produto existente na Shopee removendo o atributo Condition 100413 duplicado do attribute_list enquanto preserva o campo nativo condition NEW."
+    "summary": "Corrige add_item e update_item da Shopee mantendo Condicao como campo nativo condition NEW e omitindo o atributo 100413 do attribute_list."
 }
