@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.1.115-shopee-condicao-new
-date: 2026-06-23
+version: v1.1.116-termo-garantia-digitalizado
+date: 2026-06-24
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260623-175020-v11115-shopee-condicao-new
+release_vps: /var/www/mdv-site/releases/20260624-124225-v11116-termo-garantia-digitalizado
 branch: main
-summary: Corrige o atributo Condicao da Shopee para enviar o valor original New no add_item.
+summary: Digitaliza o termo de garantia assinado, salva imagem privada no Synology e disponibiliza PDF por venda.
 ```
