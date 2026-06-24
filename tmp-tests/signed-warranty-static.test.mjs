@@ -9,6 +9,8 @@ const frontendService = read('services/signedWarrantyDocumentService.ts');
 const captureModal = read('components/admin/sales/SignedWarrantyCaptureModal.tsx');
 const adminSection = read('components/admin/sales/SignedWarrantyDocumentSection.tsx');
 const saleDetailsModal = read('components/admin/sales/SaleDetailsModal.tsx');
+const customerCard = read('components/customer/profile/SignedWarrantyDocumentCard.tsx');
+const purchaseHistoryTab = read('components/customer/profile/PurchaseHistoryTab.tsx');
 const servers = {
   js: read('vps_server.js'),
   cjs: read('vps_server.cjs'),
@@ -210,5 +212,12 @@ assert.match(adminSection, /downloadSignedWarrantyOriginal/);
 assert.match(adminSection, /URL\.revokeObjectURL/);
 assert.match(saleDetailsModal, /SignedWarrantyDocumentSection/);
 assert.match(saleDetailsModal, /sale\.id\.slice\(0, 8\)\.toUpperCase\(\)/);
+assert.match(customerCard, /Termo de garantia assinado/);
+assert.match(customerCard, /Visualizar PDF/);
+assert.match(customerCard, /Baixar/);
+assert.match(customerCard, /Imprimir/);
+assert.match(customerCard, /discard_message/);
+assert.doesNotMatch(customerCard, /downloadSignedWarrantyOriginal|history|pending|image_path|pdf_path/i);
+assert.match(purchaseHistoryTab, /SignedWarrantyDocumentCard/);
 
 console.log('signed warranty static checks passed');

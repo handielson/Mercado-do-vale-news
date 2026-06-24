@@ -13,6 +13,7 @@ import { generateLegacySalePdf } from '../../../utils/legacySalePdfGenerator';
 import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { getLegacyCustomerPurchases, type LegacyCustomerPurchase } from '../../../services/legacyCustomerPurchasesService';
+import { SignedWarrantyDocumentCard } from './SignedWarrantyDocumentCard';
 import type { Customer } from '../../../types/customer';
 import {
     createCustomerDebtMercadoPagoIntent,
@@ -893,6 +894,8 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                                             })}
                                         </div>
                                     </div>
+
+                                    <SignedWarrantyDocumentCard saleId={sale.id} />
 
                                     {/* Timeline de progresso (somente pedidos online) */}
                                     {isOnlineOrder && (
