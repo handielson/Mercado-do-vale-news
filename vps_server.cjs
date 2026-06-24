@@ -25165,6 +25165,211 @@ const {
   deletePrivateSynologyFile,
 });
 
+// SIGNED_WARRANTY_API_START
+function createSignedWarrantyApi({
+  pool,
+  getVpsBearerAuthContext,
+  processSignedWarrantyImage,
+  maxImageBytes = 15 * 1024 * 1024,
+  downloadBufferFromSynologyPrivateFolder,
+}) {
+  function sanitizeDocument(row, { isAdmin = false } = {}) {
+    const document = { ...row };
+    delete document.image_path;
+    delete document.pdf_path;
+    if (!isAdmin) {
+      delete document.image_sha256;
+      delete document.pdf_sha256;
+    }
+    return document;
+  }
+
+  async function requireBearer(request, reply) {
+    const auth = await getVpsBearerAuthContext(request);
+    if (!auth?.customerId) {
+      return reply.code(401).send({ error: 'Bearer token required' });
+    }
+    request.signedWarrantyAccess = auth;
+  }
+
+  async function requireAdmin(request, reply) {
+    const auth = await getVpsBearerAuthContext(request);
+    if (!auth?.customerId) {
+      return reply.code(401).send({ error: 'Bearer token required' });
+    }
+    if (!auth.isAdmin) {
+      return reply.code(403).send({ error: 'Admin bearer token required' });
+    }
+    request.signedWarrantyAccess = auth;
+  }
+
+  async function uploadForSale(request, reply) {
+    const upload = await request.file({
+      limits: { fileSize: maxImageBytes },
+    });
+    if (!upload) return reply.code(400).send({ error: 'Image file required' });
+    if (!['image/jpeg', 'image/png'].includes(String(upload.mimetype || '').toLowerCase())) {
+      return reply.code(415).send({ error: 'Only JPEG and PNG images are accepted' });
+    }
+
+    const sourceBuffer = await upload.toBuffer();
+    if (upload.file?.truncated || sourceBuffer.length > maxImageBytes) {
+      return reply.code(413).send({ error: 'Image exceeds 15 MB limit' });
+    }
+
+    const saleId = String(request.params?.saleId || '').trim();
+    const [saleRows] = await pool.query(
+      'SELECT id, customer_id, company_id FROM sales WHERE id = ? LIMIT 1',
+      [saleId]
+    );
+    const sale = saleRows?.[0] || null;
+    if (!sale) return reply.code(404).send({ error: 'Sale not found' });
+
+    const document = await processSignedWarrantyImage({
+      sourceBuffer,
+      originalFileName: String(upload.filename || 'signed-warranty-image').slice(0, 255),
+      sale,
+      source: 'sale_screen',
+      uploadedByCustomerId: request.signedWarrantyAccess?.customerId || null,
+    });
+    reply.code(201);
+    return sanitizeDocument(document, { isAdmin: true });
+  }
+
+  async function listForSale(request, reply) {
+    const saleId = String(request.params?.saleId || '').trim();
+    const [saleRows] = await pool.query(
+      'SELECT id, customer_id FROM sales WHERE id = ? LIMIT 1',
+      [saleId]
+    );
+    const sale = saleRows?.[0] || null;
+    if (!sale) return reply.code(404).send({ error: 'Sale not found' });
+
+    const access = request.signedWarrantyAccess || {};
+    if (!access.isAdmin && String(sale.customer_id || '') !== String(access.customerId || '')) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    const customerFilter = access.isAdmin
+      ? ''
+      : " AND status = 'available' AND is_active = 1";
+    const [rows] = await pool.query(
+      `SELECT *
+         FROM signed_warranty_documents
+        WHERE sale_id = ?${customerFilter}
+        ORDER BY version_number DESC, created_at DESC`,
+      [saleId]
+    );
+    return {
+      sale_id: saleId,
+      documents: (rows || []).map((row) =>
+        sanitizeDocument(row, { isAdmin: access.isAdmin === true })
+      ),
+    };
+  }
+
+  function privateFileName(row, suffix) {
+    const saleCode = String(row?.sale_code || '')
+      .replace(/[^a-z0-9]/gi, '')
+      .slice(0, 8)
+      .toUpperCase();
+    return `termo-garantia-venda-${saleCode || 'DOCUMENTO'}${suffix}`;
+  }
+
+  async function sendPrivateFile(reply, {
+    filePath,
+    contentType,
+    fileName,
+  }) {
+    const buffer = await downloadBufferFromSynologyPrivateFolder(filePath);
+    reply.header('Cache-Control', 'private, no-store, max-age=0');
+    reply.header('Pragma', 'no-cache');
+    reply.header('Content-Type', contentType);
+    reply.header('Content-Disposition', `inline; filename="${fileName}"`);
+    return reply.send(buffer);
+  }
+
+  async function downloadPdf(request, reply) {
+    const documentId = String(request.params?.id || '').trim();
+    const [rows] = await pool.query(
+      `SELECT d.*, s.customer_id AS sale_customer_id
+         FROM signed_warranty_documents d
+         JOIN sales s ON s.id = d.sale_id
+        WHERE d.id = ?
+        LIMIT 1`,
+      [documentId]
+    );
+    const document = rows?.[0] || null;
+    if (!document?.pdf_path) return reply.code(404).send({ error: 'Document not found' });
+
+    const access = request.signedWarrantyAccess || {};
+    const customerCanRead =
+      String(document.sale_customer_id || '') === String(access.customerId || '') &&
+      document.status === 'available' &&
+      Number(document.is_active) === 1;
+    if (!access.isAdmin && !customerCanRead) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+
+    return sendPrivateFile(reply, {
+      filePath: document.pdf_path,
+      contentType: 'application/pdf',
+      fileName: privateFileName(document, '.pdf'),
+    });
+  }
+
+  async function downloadOriginal(request, reply) {
+    const access = request.signedWarrantyAccess || {};
+    if (!access.isAdmin) {
+      return reply.code(403).send({ error: 'Admin bearer token required' });
+    }
+    const documentId = String(request.params?.id || '').trim();
+    const [rows] = await pool.query(
+      'SELECT * FROM signed_warranty_documents WHERE id = ? LIMIT 1',
+      [documentId]
+    );
+    const document = rows?.[0] || null;
+    if (!document?.image_path) return reply.code(404).send({ error: 'Document not found' });
+    return sendPrivateFile(reply, {
+      filePath: document.image_path,
+      contentType: 'image/jpeg',
+      fileName: privateFileName(document, '-original.jpg'),
+    });
+  }
+
+  return {
+    requireBearer,
+    requireAdmin,
+    uploadForSale,
+    listForSale,
+    downloadPdf,
+    downloadOriginal,
+  };
+}
+// SIGNED_WARRANTY_API_END
+
+const signedWarrantyApi = createSignedWarrantyApi({
+  pool,
+  getVpsBearerAuthContext,
+  processSignedWarrantyImage,
+  maxImageBytes: SIGNED_WARRANTY_MAX_IMAGE_BYTES,
+  downloadBufferFromSynologyPrivateFolder,
+});
+
+fastify.post('/admin/sales/:saleId/signed-warranty', {
+  preHandler: signedWarrantyApi.requireAdmin,
+  bodyLimit: SIGNED_WARRANTY_MAX_IMAGE_BYTES + 1024 * 1024,
+}, signedWarrantyApi.uploadForSale);
+fastify.get('/sales/:saleId/signed-warranty', {
+  preHandler: signedWarrantyApi.requireBearer,
+}, signedWarrantyApi.listForSale);
+fastify.get('/signed-warranty/:id/pdf', {
+  preHandler: signedWarrantyApi.requireBearer,
+}, signedWarrantyApi.downloadPdf);
+fastify.get('/admin/signed-warranty/:id/original', {
+  preHandler: signedWarrantyApi.requireAdmin,
+}, signedWarrantyApi.downloadOriginal);
+
 async function uploadAutoresponderAttachmentToSynology({ fileName, fileBuf }) {
   const folder = AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER;
   if (!SYNO_FOLDERS[folder]) {

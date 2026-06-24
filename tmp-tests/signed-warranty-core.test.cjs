@@ -61,6 +61,491 @@ function loadSignedWarrantyPipelineFactory() {
   return Function(`${match[1]}\nreturn createSignedWarrantyPipeline;`)();
 }
 
+function loadSignedWarrantyApiFactory() {
+  const source = readFileSync('vps_server.cjs', 'utf8');
+  const match = source.match(
+    /\/\/ SIGNED_WARRANTY_API_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_API_END/
+  );
+  assert.ok(match, 'signed warranty API block must exist');
+  return Function(`${match[1]}\nreturn createSignedWarrantyApi;`)();
+}
+
+function createReply() {
+  return {
+    statusCode: 200,
+    headers: {},
+    payload: undefined,
+    code(statusCode) {
+      this.statusCode = statusCode;
+      return this;
+    },
+    header(name, value) {
+      this.headers[String(name).toLowerCase()] = value;
+      return this;
+    },
+    send(payload) {
+      this.payload = payload;
+      return payload;
+    },
+  };
+}
+
+test('signed warranty document auth rejects sync keys without a bearer identity', async () => {
+  const createSignedWarrantyApi = loadSignedWarrantyApiFactory();
+  const api = createSignedWarrantyApi({
+    pool: {},
+    getVpsBearerAuthContext: async () => ({
+      userId: null,
+      customerId: null,
+      isAdmin: false,
+    }),
+  });
+  const request = {
+    headers: {
+      'x-sync-key': 'otherwise-valid-sync-key',
+    },
+  };
+  const reply = createReply();
+
+  await api.requireBearer(request, reply);
+
+  assert.equal(reply.statusCode, 401);
+  assert.deepEqual(reply.payload, { error: 'Bearer token required' });
+  assert.equal(request.signedWarrantyAccess, undefined);
+});
+
+test('customer signed warranty listing is owner-only, active-only, and sanitized', async () => {
+  const createSignedWarrantyApi = loadSignedWarrantyApiFactory();
+  const queries = [];
+  const api = createSignedWarrantyApi({
+    pool: {
+      async query(sql, params) {
+        const normalized = sql.replace(/\s+/g, ' ').trim();
+        queries.push({ sql: normalized, params });
+        if (/FROM sales WHERE id = \? LIMIT 1/.test(normalized)) {
+          return [[{ id: 'AB12CD34-sale', customer_id: 'customer-1' }]];
+        }
+        if (/FROM signed_warranty_documents/.test(normalized)) {
+          return [[{
+            id: 'document-1',
+            sale_id: 'AB12CD34-sale',
+            customer_id: 'customer-1',
+            status: 'available',
+            is_active: 1,
+            image_path: '/private/original.jpg',
+            pdf_path: '/private/document.pdf',
+            image_sha256: 'image-hash',
+            pdf_sha256: 'pdf-hash',
+          }]];
+        }
+        throw new Error(`unexpected_query:${normalized}`);
+      },
+    },
+    getVpsBearerAuthContext: async () => ({
+      userId: 'user-1',
+      customerId: 'customer-1',
+      isAdmin: false,
+    }),
+  });
+  const request = {
+    headers: { authorization: 'Bearer customer-token' },
+    params: { saleId: 'AB12CD34-sale' },
+    signedWarrantyAccess: {
+      userId: 'user-1',
+      customerId: 'customer-1',
+      isAdmin: false,
+    },
+  };
+  const reply = createReply();
+
+  const result = await api.listForSale(request, reply);
+
+  assert.equal(reply.statusCode, 200);
+  assert.deepEqual(result, {
+    sale_id: 'AB12CD34-sale',
+    documents: [{
+      id: 'document-1',
+      sale_id: 'AB12CD34-sale',
+      customer_id: 'customer-1',
+      status: 'available',
+      is_active: 1,
+    }],
+  });
+  assert.match(queries[1].sql, /status = 'available'/);
+  assert.match(queries[1].sql, /is_active = 1/);
+});
+
+test('customer signed warranty listing rejects a different sale owner', async () => {
+  const createSignedWarrantyApi = loadSignedWarrantyApiFactory();
+  let documentQueryRan = false;
+  const api = createSignedWarrantyApi({
+    pool: {
+      async query(sql) {
+        const normalized = sql.replace(/\s+/g, ' ').trim();
+        if (/FROM sales WHERE id = \? LIMIT 1/.test(normalized)) {
+          return [[{ id: 'AB12CD34-sale', customer_id: 'customer-2' }]];
+        }
+        documentQueryRan = true;
+        return [[]];
+      },
+    },
+    getVpsBearerAuthContext: async () => ({
+      userId: 'user-1',
+      customerId: 'customer-1',
+      isAdmin: false,
+    }),
+  });
+  const reply = createReply();
+
+  await api.listForSale({
+    headers: { authorization: 'Bearer customer-token' },
+    params: { saleId: 'AB12CD34-sale' },
+    signedWarrantyAccess: {
+      userId: 'user-1',
+      customerId: 'customer-1',
+      isAdmin: false,
+    },
+  }, reply);
+
+  assert.equal(reply.statusCode, 403);
+  assert.deepEqual(reply.payload, { error: 'Forbidden' });
+  assert.equal(documentQueryRan, false);
+});
+
+test('admin signed warranty listing includes history and hashes but hides private paths', async () => {
+  const createSignedWarrantyApi = loadSignedWarrantyApiFactory();
+  const queries = [];
+  const api = createSignedWarrantyApi({
+    pool: {
+      async query(sql, params) {
+        const normalized = sql.replace(/\s+/g, ' ').trim();
+        queries.push({ sql: normalized, params });
+        if (/FROM sales WHERE id = \? LIMIT 1/.test(normalized)) {
+          return [[{ id: 'AB12CD34-sale', customer_id: 'customer-1' }]];
+        }
+        return [[{
+          id: 'document-error',
+          sale_id: 'AB12CD34-sale',
+          status: 'error',
+          is_active: 0,
+          image_path: '/private/original.jpg',
+          pdf_path: '/private/document.pdf',
+          image_sha256: 'image-hash',
+          pdf_sha256: 'pdf-hash',
+        }]];
+      },
+    },
+    getVpsBearerAuthContext: async () => ({
+      userId: 'admin-user',
+      customerId: 'admin-customer',
+      isAdmin: true,
+    }),
+  });
+
+  const result = await api.listForSale({
+    headers: { authorization: 'Bearer admin-token' },
+    params: { saleId: 'AB12CD34-sale' },
+    signedWarrantyAccess: {
+      userId: 'admin-user',
+      customerId: 'admin-customer',
+      isAdmin: true,
+    },
+  }, createReply());
+
+  assert.equal(queries.length, 2);
+  assert.doesNotMatch(queries[1].sql, /status = 'available'/);
+  assert.deepEqual(result.documents, [{
+    id: 'document-error',
+    sale_id: 'AB12CD34-sale',
+    status: 'error',
+    is_active: 0,
+    image_sha256: 'image-hash',
+    pdf_sha256: 'pdf-hash',
+  }]);
+});
+
+test('signed warranty admin auth requires an admin bearer and rejects sync-key fallback', async () => {
+  const createSignedWarrantyApi = loadSignedWarrantyApiFactory();
+  const api = createSignedWarrantyApi({
+    pool: {},
+    getVpsBearerAuthContext: async () => ({
+      userId: 'customer-user',
+      customerId: 'customer-1',
+      isAdmin: false,
+    }),
+  });
+  const request = {
+    headers: {
+      authorization: 'Bearer customer-token',
+      'x-sync-key': 'otherwise-valid-sync-key',
+    },
+  };
+  const reply = createReply();
+
+  await api.requireAdmin(request, reply);
+
+  assert.equal(reply.statusCode, 403);
+  assert.deepEqual(reply.payload, { error: 'Admin bearer token required' });
+  assert.equal(request.signedWarrantyAccess, undefined);
+});
+
+test('admin uploads a JPEG warranty through the hardened pipeline with a 15 MB limit', async () => {
+  const createSignedWarrantyApi = loadSignedWarrantyApiFactory();
+  const sourceBuffer = Buffer.from('jpeg-source');
+  const processCalls = [];
+  let fileOptions;
+  const api = createSignedWarrantyApi({
+    pool: {
+      async query(sql, params) {
+        assert.match(sql.replace(/\s+/g, ' ').trim(), /FROM sales WHERE id = \? LIMIT 1/);
+        assert.deepEqual(params, ['sale-1']);
+        return [[{
+          id: 'sale-1',
+          customer_id: 'customer-1',
+          company_id: 'company-1',
+        }]];
+      },
+    },
+    getVpsBearerAuthContext: async () => ({
+      userId: 'admin-user',
+      customerId: 'admin-customer',
+      isAdmin: true,
+    }),
+    maxImageBytes: 15 * 1024 * 1024,
+    processSignedWarrantyImage: async (input) => {
+      processCalls.push(input);
+      return {
+        id: 'document-1',
+        sale_id: 'sale-1',
+        status: 'available',
+        is_active: 1,
+        image_path: '/private/original.jpg',
+        pdf_path: '/private/document.pdf',
+        image_sha256: 'image-hash',
+        pdf_sha256: 'pdf-hash',
+      };
+    },
+  });
+  const request = {
+    headers: { authorization: 'Bearer admin-token' },
+    params: { saleId: 'sale-1' },
+    signedWarrantyAccess: {
+      userId: 'admin-user',
+      customerId: 'admin-customer',
+      isAdmin: true,
+    },
+    async file(options) {
+      fileOptions = options;
+      return {
+        filename: 'assinatura.png',
+        mimetype: 'image/png',
+        file: { truncated: false },
+        async toBuffer() {
+          return sourceBuffer;
+        },
+      };
+    },
+  };
+  const reply = createReply();
+
+  const result = await api.uploadForSale(request, reply);
+
+  assert.equal(reply.statusCode, 201);
+  assert.deepEqual(fileOptions, { limits: { fileSize: 15 * 1024 * 1024 } });
+  assert.deepEqual(processCalls, [{
+    sourceBuffer,
+    originalFileName: 'assinatura.png',
+    sale: {
+      id: 'sale-1',
+      customer_id: 'customer-1',
+      company_id: 'company-1',
+    },
+    source: 'sale_screen',
+    uploadedByCustomerId: 'admin-customer',
+  }]);
+  assert.deepEqual(result, {
+    id: 'document-1',
+    sale_id: 'sale-1',
+    status: 'available',
+    is_active: 1,
+    image_sha256: 'image-hash',
+    pdf_sha256: 'pdf-hash',
+  });
+});
+
+test('admin warranty upload rejects non-image multipart content before processing', async () => {
+  const createSignedWarrantyApi = loadSignedWarrantyApiFactory();
+  let processed = false;
+  const api = createSignedWarrantyApi({
+    pool: {},
+    getVpsBearerAuthContext: async () => ({
+      userId: 'admin-user',
+      customerId: 'admin-customer',
+      isAdmin: true,
+    }),
+    maxImageBytes: 15 * 1024 * 1024,
+    processSignedWarrantyImage: async () => {
+      processed = true;
+    },
+  });
+  const reply = createReply();
+
+  await api.uploadForSale({
+    params: { saleId: 'sale-1' },
+    signedWarrantyAccess: {
+      customerId: 'admin-customer',
+      isAdmin: true,
+    },
+    async file() {
+      return {
+        filename: 'manual.pdf',
+        mimetype: 'application/pdf',
+        file: { truncated: false },
+        async toBuffer() {
+          return Buffer.from('%PDF');
+        },
+      };
+    },
+  }, reply);
+
+  assert.equal(reply.statusCode, 415);
+  assert.deepEqual(reply.payload, { error: 'Only JPEG and PNG images are accepted' });
+  assert.equal(processed, false);
+});
+
+test('owner downloads only the active signed warranty PDF with private no-store headers', async () => {
+  const createSignedWarrantyApi = loadSignedWarrantyApiFactory();
+  const pdfBuffer = Buffer.from('%PDF-private');
+  const downloaded = [];
+  const api = createSignedWarrantyApi({
+    pool: {
+      async query(sql, params) {
+        assert.match(sql.replace(/\s+/g, ' ').trim(), /FROM signed_warranty_documents d JOIN sales s/);
+        assert.deepEqual(params, ['document-1']);
+        return [[{
+          id: 'document-1',
+          sale_id: 'sale-1',
+          sale_code: 'AB12CD34',
+          sale_customer_id: 'customer-1',
+          status: 'available',
+          is_active: 1,
+          pdf_path: '/private/document.pdf',
+        }]];
+      },
+    },
+    getVpsBearerAuthContext: async () => ({
+      userId: 'user-1',
+      customerId: 'customer-1',
+      isAdmin: false,
+    }),
+    downloadBufferFromSynologyPrivateFolder: async (filePath) => {
+      downloaded.push(filePath);
+      return pdfBuffer;
+    },
+  });
+  const request = {
+    params: { id: 'document-1' },
+    signedWarrantyAccess: {
+      customerId: 'customer-1',
+      isAdmin: false,
+    },
+  };
+  const reply = createReply();
+
+  await api.downloadPdf(request, reply);
+
+  assert.deepEqual(downloaded, ['/private/document.pdf']);
+  assert.equal(reply.headers['cache-control'], 'private, no-store, max-age=0');
+  assert.equal(reply.headers.pragma, 'no-cache');
+  assert.equal(reply.headers['content-type'], 'application/pdf');
+  assert.equal(
+    reply.headers['content-disposition'],
+    'inline; filename="termo-garantia-venda-AB12CD34.pdf"'
+  );
+  assert.equal(reply.payload, pdfBuffer);
+});
+
+test('non-owner cannot trigger a private signed warranty PDF download', async () => {
+  const createSignedWarrantyApi = loadSignedWarrantyApiFactory();
+  let downloaded = false;
+  const api = createSignedWarrantyApi({
+    pool: {
+      async query() {
+        return [[{
+          id: 'document-1',
+          sale_id: 'sale-1',
+          sale_code: 'AB12CD34',
+          sale_customer_id: 'customer-2',
+          status: 'available',
+          is_active: 1,
+          pdf_path: '/private/document.pdf',
+        }]];
+      },
+    },
+    getVpsBearerAuthContext: async () => ({
+      userId: 'user-1',
+      customerId: 'customer-1',
+      isAdmin: false,
+    }),
+    downloadBufferFromSynologyPrivateFolder: async () => {
+      downloaded = true;
+      return Buffer.from('should-not-download');
+    },
+  });
+  const reply = createReply();
+
+  await api.downloadPdf({
+    params: { id: 'document-1' },
+    signedWarrantyAccess: {
+      customerId: 'customer-1',
+      isAdmin: false,
+    },
+  }, reply);
+
+  assert.equal(reply.statusCode, 403);
+  assert.deepEqual(reply.payload, { error: 'Forbidden' });
+  assert.equal(downloaded, false);
+});
+
+test('admin downloads the original signed warranty image privately', async () => {
+  const createSignedWarrantyApi = loadSignedWarrantyApiFactory();
+  const imageBuffer = Buffer.from('private-jpeg');
+  const api = createSignedWarrantyApi({
+    pool: {
+      async query() {
+        return [[{
+          id: 'document-1',
+          sale_code: 'AB12CD34',
+          image_path: '/private/original.jpg',
+        }]];
+      },
+    },
+    getVpsBearerAuthContext: async () => ({
+      userId: 'admin-user',
+      customerId: 'admin-customer',
+      isAdmin: true,
+    }),
+    downloadBufferFromSynologyPrivateFolder: async () => imageBuffer,
+  });
+  const reply = createReply();
+
+  await api.downloadOriginal({
+    params: { id: 'document-1' },
+    signedWarrantyAccess: {
+      customerId: 'admin-customer',
+      isAdmin: true,
+    },
+  }, reply);
+
+  assert.equal(reply.headers['cache-control'], 'private, no-store, max-age=0');
+  assert.equal(reply.headers['content-type'], 'image/jpeg');
+  assert.equal(
+    reply.headers['content-disposition'],
+    'inline; filename="termo-garantia-venda-AB12CD34-original.jpg"'
+  );
+  assert.equal(reply.payload, imageBuffer);
+});
+
 function createConnection(queryHandler, events) {
   let commitCount = 0;
   return {

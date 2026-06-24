@@ -121,6 +121,26 @@ for (const server of Object.values(servers)) {
     server,
     /request\.setTimeout\(30000, \(\) => request\.destroy\(new Error\('synology_download_timeout'\)\)\)/
   );
+  assert.match(
+    server,
+    /fastify\.post\('\/admin\/sales\/:saleId\/signed-warranty',\s*\{\s*preHandler:\s*signedWarrantyApi\.requireAdmin/
+  );
+  assert.match(
+    server,
+    /fastify\.get\('\/sales\/:saleId\/signed-warranty',\s*\{\s*preHandler:\s*signedWarrantyApi\.requireBearer/
+  );
+  assert.match(
+    server,
+    /fastify\.get\('\/signed-warranty\/:id\/pdf',\s*\{\s*preHandler:\s*signedWarrantyApi\.requireBearer/
+  );
+  assert.match(
+    server,
+    /fastify\.get\('\/admin\/signed-warranty\/:id\/original',\s*\{\s*preHandler:\s*signedWarrantyApi\.requireAdmin/
+  );
+  assert.doesNotMatch(
+    server,
+    /(?:signed-warranty|signedWarranty)[\s\S]{0,160}requireSyncKey/
+  );
   assert.doesNotMatch(server, /SYNO_CDN\.termos_garantia/);
 }
 
@@ -132,5 +152,14 @@ const extractPipeline = (source) => {
   return match[1].trim().replace(/\r\n/g, '\n');
 };
 assert.equal(extractPipeline(servers.js), extractPipeline(servers.cjs));
+
+const extractApi = (source) => {
+  const match = source.match(
+    /\/\/ SIGNED_WARRANTY_API_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_API_END/
+  );
+  assert.ok(match, 'signed warranty API block must exist');
+  return match[1].trim().replace(/\r\n/g, '\n');
+};
+assert.equal(extractApi(servers.js), extractApi(servers.cjs));
 
 console.log('signed warranty static checks passed');
