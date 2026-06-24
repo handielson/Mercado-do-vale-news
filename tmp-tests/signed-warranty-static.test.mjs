@@ -5,6 +5,7 @@ const read = (file) => readFileSync(file, 'utf8');
 const migration = read('migrations/007_signed_warranty_documents.sql');
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
+const frontendService = read('services/signedWarrantyDocumentService.ts');
 const servers = {
   js: read('vps_server.js'),
   cjs: read('vps_server.cjs'),
@@ -184,5 +185,13 @@ const extractSync = (source) => {
   return match[1].trim().replace(/\r\n/g, '\n');
 };
 assert.equal(extractSync(servers.js), extractSync(servers.cjs));
+
+assert.match(frontendService, /uploadSignedWarranty/);
+assert.match(frontendService, /getSignedWarrantySnapshot/);
+assert.match(frontendService, /syncSignedWarrantyFolder/);
+assert.match(frontendService, /downloadSignedWarrantyPdf/);
+assert.match(frontendService, /downloadSignedWarrantyOriginal/);
+assert.match(frontendService, /Authorization: `Bearer \$\{token\}`/);
+assert.doesNotMatch(frontendService, /pdf_path|image_path/);
 
 console.log('signed warranty static checks passed');
