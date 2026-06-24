@@ -11,6 +11,8 @@ const adminSection = read('components/admin/sales/SignedWarrantyDocumentSection.
 const saleDetailsModal = read('components/admin/sales/SaleDetailsModal.tsx');
 const customerCard = read('components/customer/profile/SignedWarrantyDocumentCard.tsx');
 const purchaseHistoryTab = read('components/customer/profile/PurchaseHistoryTab.tsx');
+const guardedApiCheck = read('tmp-tests/signed-warranty-api-guarded-check.cjs');
+const versionNote = read('docs/versoes/2026-06-23-termo-garantia-digitalizado.md');
 const servers = {
   js: read('vps_server.js'),
   cjs: read('vps_server.cjs'),
@@ -219,5 +221,13 @@ assert.match(customerCard, /Imprimir/);
 assert.match(customerCard, /discard_message/);
 assert.doesNotMatch(customerCard, /downloadSignedWarrantyOriginal|history|pending|image_path|pdf_path/i);
 assert.match(purchaseHistoryTab, /SignedWarrantyDocumentCard/);
+assert.match(guardedApiCheck, /SIGNED_WARRANTY_API_BASE_URL/);
+assert.match(guardedApiCheck, /SIGNED_WARRANTY_CUSTOMER_TOKEN/);
+assert.match(guardedApiCheck, /SIGNED_WARRANTY_RUN_SYNC/);
+assert.match(guardedApiCheck, /signed warranty guarded API check skipped/);
+assert.match(versionNote, /termos-garantia/);
+assert.match(versionNote, /termo-garantia-venda-\{NUMERO\}\.jpg/);
+assert.match(versionNote, /Documento físico digitalizado, destruído e descartado/);
+assert.match(versionNote, /Rollback/);
 
 console.log('signed warranty static checks passed');
