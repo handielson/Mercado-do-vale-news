@@ -4,6 +4,8 @@ const path = require('path');
 
 require('dotenv').config({ path: path.join(__dirname, '.env.vps.local') });
 require('dotenv').config({ path: path.join(__dirname, '.env.local') });
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env.vps.local') });
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env.local') });
 
 const host = process.env.VPS_SITE_HOST || process.env.VPS_HOST;
 const username = process.env.VPS_SITE_USER || process.env.VPS_USER;
@@ -109,6 +111,13 @@ async function uploadAutoresponderEngineFiles(appDir) {
   }
 }
 
+async function uploadSignedWarrantyFiles(appDir) {
+  const relativePath = 'services/signedWarrantyDocumentCore.cjs';
+  await exec(`mkdir -p ${appDir}/services`);
+  await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
+  console.log(`Uploaded ${relativePath}`);
+}
+
 function upsertEnv(content, entries) {
   const lines = String(content || '').replace(/\r\n/g, '\n').split('\n');
   const seen = new Set();
@@ -144,17 +153,17 @@ async function ensureRemoteAdminEnv(appDir) {
   console.log(`Remote admin auth env synced at ${remoteEnv}`);
 }
 
-async function ensureRemoteSharpDependency(appDir) {
-  const checkCommand = `cd ${appDir} && node -e "require.resolve('sharp')"`;
+async function ensureRemoteImageDocumentDependencies(appDir) {
+  const checkCommand = `cd ${appDir} && node -e "require.resolve('sharp'); require.resolve('pdf-lib')"`;
   try {
     await exec(checkCommand);
-    console.log('Remote sharp dependency already available');
+    console.log('Remote image and PDF dependencies already available');
     return;
   } catch {
-    console.log('Installing remote sharp dependency for image derivatives');
+    console.log('Installing remote image and PDF dependencies');
   }
 
-  await exec(`cd ${appDir} && npm install sharp --omit=dev`);
+  await exec(`cd ${appDir} && npm install sharp pdf-lib --omit=dev`);
 }
 
 async function main() {
@@ -179,8 +188,9 @@ async function main() {
   await upload(localServerCjs, `${appDir}/vps_server.cjs`);
   await upload(localServer, `${appDir}/server.js`);
   await uploadAutoresponderEngineFiles(appDir);
+  await uploadSignedWarrantyFiles(appDir);
   await ensureRemoteAdminEnv(appDir);
-  await ensureRemoteSharpDependency(appDir);
+  await ensureRemoteImageDocumentDependencies(appDir);
   const restartOutput = await exec(`pm2 restart ${apiProc.name} --update-env`);
   console.log(restartOutput.trim());
   conn.end();
