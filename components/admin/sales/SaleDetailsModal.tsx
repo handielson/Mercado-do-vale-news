@@ -30,6 +30,7 @@ import {
     getSaleRealProfit,
     SaleProfitData
 } from '../../../utils/salePresentation';
+import { SignedWarrantyDocumentSection } from './SignedWarrantyDocumentSection';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -1118,6 +1119,15 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                         </div>
 
                 </div>
+
+                {sale && (
+                    <div className="px-6 pb-4">
+                        <SignedWarrantyDocumentSection
+                            saleId={sale.id}
+                            saleCode={sale.id.slice(0, 8).toUpperCase()}
+                        />
+                    </div>
+                )}
 
                 {/* Footer Actions */}
                 <div className="p-6 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex flex-col gap-3 shrink-0">

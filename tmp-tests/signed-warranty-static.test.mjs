@@ -6,6 +6,9 @@ const migration = read('migrations/007_signed_warranty_documents.sql');
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
 const frontendService = read('services/signedWarrantyDocumentService.ts');
+const captureModal = read('components/admin/sales/SignedWarrantyCaptureModal.tsx');
+const adminSection = read('components/admin/sales/SignedWarrantyDocumentSection.tsx');
+const saleDetailsModal = read('components/admin/sales/SaleDetailsModal.tsx');
 const servers = {
   js: read('vps_server.js'),
   cjs: read('vps_server.cjs'),
@@ -193,5 +196,19 @@ assert.match(frontendService, /downloadSignedWarrantyPdf/);
 assert.match(frontendService, /downloadSignedWarrantyOriginal/);
 assert.match(frontendService, /Authorization: `Bearer \$\{token\}`/);
 assert.doesNotMatch(frontendService, /pdf_path|image_path/);
+
+assert.match(captureModal, /navigator\.mediaDevices\.getUserMedia/);
+assert.match(captureModal, /facingMode: \{ ideal: 'environment' \}/);
+assert.match(captureModal, /capture="environment"/);
+assert.match(captureModal, /accept="image\/jpeg,image\/png"/);
+assert.match(captureModal, /track\.stop\(\)/);
+assert.match(adminSection, /Digitalizar termo assinado/);
+assert.match(adminSection, /Sincronizar agora/);
+assert.match(adminSection, /Documento físico digitalizado, destruído e descartado/);
+assert.match(adminSection, /Substituir/);
+assert.match(adminSection, /downloadSignedWarrantyOriginal/);
+assert.match(adminSection, /URL\.revokeObjectURL/);
+assert.match(saleDetailsModal, /SignedWarrantyDocumentSection/);
+assert.match(saleDetailsModal, /sale\.id\.slice\(0, 8\)\.toUpperCase\(\)/);
 
 console.log('signed warranty static checks passed');
