@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { readFileSync } = require('node:fs');
+const { EventEmitter } = require('node:events');
 const sharp = require('sharp');
 const { PDFDocument } = require('pdf-lib');
 const {
@@ -61,6 +62,7 @@ function loadSignedWarrantyPipelineFactory() {
 }
 
 function createConnection(queryHandler, events) {
+  let commitCount = 0;
   return {
     async beginTransaction() {
       events.push('begin');
@@ -71,7 +73,9 @@ function createConnection(queryHandler, events) {
       return queryHandler(normalized, params);
     },
     async commit() {
+      commitCount += 1;
       events.push('commit');
+      if (queryHandler.commit) return queryHandler.commit(commitCount);
     },
     async rollback() {
       events.push('rollback');
@@ -98,7 +102,81 @@ function buildPipeline(overrides = {}) {
     uploadBufferToSynologyPrivateFolder:
       overrides.uploadBufferToSynologyPrivateFolder ||
       (async () => { throw new Error('unexpected_upload'); }),
+    deletePrivateSynologyFile:
+      overrides.deletePrivateSynologyFile ||
+      (async () => { throw new Error('unexpected_delete'); }),
   });
+}
+
+function loadPrivateSynologyPathHelpers() {
+  const source = readFileSync('vps_server.cjs', 'utf8');
+  const match = source.match(
+    /(function normalizePrivateSynologyPath[\s\S]*?function joinPrivateSynologyPath[\s\S]*?\n})/
+  );
+  assert.ok(match, 'private Synology path helpers must exist');
+  return Function(
+    'SIGNED_WARRANTY_SYNOLOGY_FOLDER',
+    `${match[1]}\nreturn { normalizePrivateSynologyPath, joinPrivateSynologyPath };`
+  )('/home/termos-garantia');
+}
+
+function loadPrivateSynologyHttpHelpers(https, { maxJsonBytes = 16, maxDownloadBytes = 32 } = {}) {
+  const source = readFileSync('vps_server.cjs', 'utf8');
+  const match = source.match(
+    /(function synologyPrivateJsonRequest[\s\S]*?async function downloadBufferFromSynologyPrivateFolder[\s\S]*?\n})\n\nasync function uploadBufferToSynologyPrivateFolder/
+  );
+  assert.ok(match, 'private Synology HTTP helpers must exist');
+  return Function(
+    'require',
+    'SYNO_URL',
+    'getSynologyRequestPort',
+    'SIGNED_WARRANTY_MAX_JSON_BYTES',
+    'SIGNED_WARRANTY_MAX_DOWNLOAD_BYTES',
+    'synoLogin',
+    'normalizePrivateSynologyPath',
+    `${match[1]}\nreturn { synologyPrivateJsonRequest, downloadBufferFromSynologyPrivateFolder };`
+  )(
+    (name) => {
+      if (name === 'https') return https;
+      return require(name);
+    },
+    'https://synology.local',
+    () => 443,
+    maxJsonBytes,
+    maxDownloadBytes,
+    async () => 'sid',
+    (value) => value
+  );
+}
+
+function createFakeHttps(onEnd) {
+  return {
+    request(options, callback) {
+      const request = new EventEmitter();
+      request.setTimeout = (_milliseconds, handler) => {
+        request.timeoutHandler = handler;
+      };
+      request.destroy = (error) => {
+        request.destroyedWith = error || true;
+        if (error) queueMicrotask(() => request.emit('error', error));
+      };
+      request.end = (body) => onEnd({ options, callback, request, body });
+      return request;
+    },
+  };
+}
+
+function createFakeResponse(statusCode, headers = {}) {
+  const response = new EventEmitter();
+  response.statusCode = statusCode;
+  response.headers = headers;
+  response.resume = () => {
+    response.resumed = true;
+  };
+  response.destroy = () => {
+    response.destroyed = true;
+  };
+  return response;
 }
 
 test('converts signed warranty images deterministically into JPEG and one-page A4 PDF', async () => {
@@ -129,7 +207,7 @@ test('converts signed warranty images deterministically into JPEG and one-page A
   assert.ok(Math.abs(height - 841.89) < 0.01);
 });
 
-test('serializes a sale before uploads and replaces the active version transactionally', async () => {
+test('reserves and commits a processing version before Synology uploads, then activates it', async () => {
   const events = [];
   const insertedRow = {
     id: 'document-2',
@@ -138,15 +216,18 @@ test('serializes a sale before uploads and replaces the active version transacti
     status: 'available',
     is_active: 1,
   };
-  const connection = createConnection((sql) => {
+  const queryHandler = (sql) => {
+    if (/SELECT GET_LOCK/.test(sql)) return [[{ acquired: 1 }]];
+    if (/SELECT RELEASE_LOCK/.test(sql)) return [[{ released: 1 }]];
     if (/SELECT id FROM sales/.test(sql)) return [[{ id: 'ab12cd34-sale' }]];
-    if (/dedupe_company_key/.test(sql)) return [[]];
+    if (/WHERE sale_id = \? AND image_sha256 = \?/.test(sql)) return [[]];
     if (/SELECT MAX\(version_number\)/.test(sql)) return [[{ max_version: 1 }]];
     if (/^UPDATE signed_warranty_documents/.test(sql)) return [{ affectedRows: 1 }];
     if (/^INSERT INTO signed_warranty_documents/.test(sql)) return [{ affectedRows: 1 }];
     if (/SELECT \* FROM signed_warranty_documents WHERE id/.test(sql)) return [[insertedRow]];
     throw new Error(`unexpected_query:${sql}`);
-  }, events);
+  };
+  const connection = createConnection(queryHandler, events);
   const uploads = [];
   const pipeline = buildPipeline({
     pool: { getConnection: async () => connection },
@@ -179,34 +260,47 @@ test('serializes a sale before uploads and replaces the active version transacti
   assert.equal(uploads[1].fileName, 'termo-garantia-venda-AB12CD34.pdf');
   assert.equal(uploads.every((upload) => upload.options.overwrite === true), true);
 
-  const saleLockIndex = events.findIndex((event) => event.sql && /SELECT id FROM sales/.test(event.sql));
+  const advisoryLockIndex = events.findIndex((event) => event.sql && /SELECT GET_LOCK/.test(event.sql));
+  const reservationInsertIndex = events.findIndex(
+    (event) => event.sql && /^INSERT INTO signed_warranty_documents/.test(event.sql)
+  );
+  const reservationCommitIndex = events.indexOf('commit');
   const firstUploadIndex = events.findIndex((event) => typeof event === 'string' && event.startsWith('upload:'));
-  const replaceIndex = events.findIndex((event) => event.sql && /^UPDATE signed_warranty_documents/.test(event.sql));
-  const insertIndex = events.findIndex((event) => event.sql && /^INSERT INTO signed_warranty_documents/.test(event.sql));
-  const commitIndex = events.indexOf('commit');
-  assert.ok(saleLockIndex > events.indexOf('begin'));
-  assert.ok(firstUploadIndex > saleLockIndex);
+  const replaceIndex = events.findIndex(
+    (event) => event.sql && /status = 'replaced', is_active = 0/.test(event.sql)
+  );
+  const activateIndex = events.findIndex(
+    (event) => event.sql && /SET status = 'available'/.test(event.sql)
+  );
+  const releaseLockIndex = events.findIndex((event) => event.sql && /SELECT RELEASE_LOCK/.test(event.sql));
+  assert.ok(advisoryLockIndex >= 0);
+  assert.ok(reservationInsertIndex > advisoryLockIndex);
+  assert.ok(reservationCommitIndex > reservationInsertIndex);
+  assert.ok(firstUploadIndex > reservationCommitIndex);
   assert.ok(replaceIndex > firstUploadIndex);
-  assert.ok(insertIndex > replaceIndex);
-  assert.ok(commitIndex > insertIndex);
+  assert.ok(activateIndex > replaceIndex);
+  assert.ok(releaseLockIndex > activateIndex);
 
-  const insert = events[insertIndex];
-  assert.match(insert.sql, /status,[\s\S]*version_number, is_active/);
-  assert.match(insert.sql, /'available'/);
-  assert.match(insert.sql, /processed_at, discarded_at/);
-  assert.equal(insert.params.includes(2), true);
+  const reservation = events[reservationInsertIndex];
+  assert.match(reservation.sql, /'processing'/);
+  assert.equal(reservation.params.includes(2), true);
 });
 
-test('returns the company hash duplicate without uploading or replacing a version', async () => {
+test('returns the same-sale hash duplicate without uploading or reserving a version', async () => {
   const events = [];
   const duplicate = {
     id: 'existing-document',
     image_sha256: 'existing-hash',
     status: 'available',
   };
-  const connection = createConnection((sql) => {
+  const connection = createConnection((sql, params) => {
+    if (/SELECT GET_LOCK/.test(sql)) return [[{ acquired: 1 }]];
+    if (/SELECT RELEASE_LOCK/.test(sql)) return [[{ released: 1 }]];
     if (/SELECT id FROM sales/.test(sql)) return [[{ id: 'ab12cd34-sale' }]];
-    if (/dedupe_company_key/.test(sql)) return [[duplicate]];
+    if (/WHERE sale_id = \? AND image_sha256 = \?/.test(sql)) {
+      assert.equal(params[0], 'ab12cd34-sale');
+      return [[duplicate]];
+    }
     throw new Error(`unexpected_query:${sql}`);
   }, events);
   let uploads = 0;
@@ -234,28 +328,83 @@ test('returns the company hash duplicate without uploading or replacing a versio
   assert.ok(events.indexOf('commit') > 0);
 });
 
-test('records a non-active error version after upload failure and rethrows the processing error', async () => {
+test('allows the same image hash to create a separate document for another sale', async () => {
+  const events = [];
+  const insertedRow = {
+    id: 'other-sale-document',
+    sale_id: 'xy98zt76-sale',
+    version_number: 1,
+    status: 'available',
+    is_active: 1,
+  };
+  const connection = createConnection((sql, params) => {
+    if (/SELECT GET_LOCK/.test(sql)) return [[{ acquired: 1 }]];
+    if (/SELECT RELEASE_LOCK/.test(sql)) return [[{ released: 1 }]];
+    if (/SELECT id FROM sales/.test(sql)) return [[{ id: 'xy98zt76-sale' }]];
+    if (/WHERE sale_id = \? AND image_sha256 = \?/.test(sql)) {
+      assert.equal(params[0], 'xy98zt76-sale');
+      return [[]];
+    }
+    if (/SELECT MAX\(version_number\)/.test(sql)) return [[{ max_version: 0 }]];
+    if (/^INSERT INTO signed_warranty_documents/.test(sql)) return [{ affectedRows: 1 }];
+    if (/^UPDATE signed_warranty_documents/.test(sql)) return [{ affectedRows: 1 }];
+    if (/SELECT \* FROM signed_warranty_documents WHERE id/.test(sql)) return [[insertedRow]];
+    throw new Error(`unexpected_query:${sql}`);
+  }, events);
+  let uploads = 0;
+  const pipeline = buildPipeline({
+    pool: { getConnection: async () => connection },
+    uploadBufferToSynologyPrivateFolder: async (folderPath, fileName) => {
+      uploads += 1;
+      return `${folderPath}/${fileName}`;
+    },
+  });
+  const sourceBuffer = await sharp({
+    create: { width: 30, height: 30, channels: 3, background: '#ffffff' },
+  }).png().toBuffer();
+
+  const row = await pipeline.processSignedWarrantyImage({
+    sourceBuffer,
+    originalFileName: 'capture.png',
+    sale: { id: 'xy98zt76-sale', company_id: 'company-1', customer_id: 'customer-2' },
+    source: 'sale_screen',
+  });
+
+  assert.deepEqual(row, insertedRow);
+  assert.equal(uploads, 2);
+});
+
+test('best-effort deletes the intended JPEG path when the first upload fails', async () => {
   const primaryEvents = [];
   const errorEvents = [];
-  const primaryConnection = createConnection((sql) => {
+  let reservedId = null;
+  const primaryConnection = createConnection((sql, params) => {
+    if (/SELECT GET_LOCK/.test(sql)) return [[{ acquired: 1 }]];
+    if (/SELECT RELEASE_LOCK/.test(sql)) return [[{ released: 1 }]];
     if (/SELECT id FROM sales/.test(sql)) return [[{ id: 'ab12cd34-sale' }]];
-    if (/dedupe_company_key/.test(sql)) return [[]];
-    if (/SELECT MAX\(version_number\)/.test(sql)) return [[{ max_version: 3 }]];
+    if (/WHERE sale_id = \? AND image_sha256 = \?/.test(sql)) return [[]];
+    if (/SELECT MAX\(version_number\)/.test(sql)) return [[{ max_version: 0 }]];
+    if (/^INSERT INTO signed_warranty_documents/.test(sql)) {
+      reservedId = params[0];
+      return [{ affectedRows: 1 }];
+    }
     throw new Error(`unexpected_query:${sql}`);
   }, primaryEvents);
-  const errorConnection = createConnection((sql) => {
-    if (/SELECT id FROM sales/.test(sql)) return [[{ id: 'ab12cd34-sale' }]];
-    if (/SELECT id FROM signed_warranty_documents[\s\S]*status = 'error'/.test(sql)) return [[]];
-    if (/SELECT MAX\(version_number\)/.test(sql)) return [[{ max_version: 3 }]];
-    if (/^INSERT INTO signed_warranty_documents/.test(sql)) return [{ affectedRows: 1 }];
+  const errorConnection = createConnection((sql, params) => {
+    if (/^UPDATE signed_warranty_documents/.test(sql) && /status = 'error'/.test(sql)) {
+      assert.equal(params.at(-1), reservedId);
+      return [{ affectedRows: 1 }];
+    }
     throw new Error(`unexpected_query:${sql}`);
   }, errorEvents);
   const connections = [primaryConnection, errorConnection];
+  const deletedPaths = [];
   const pipeline = buildPipeline({
     pool: { getConnection: async () => connections.shift() },
     uploadBufferToSynologyPrivateFolder: async () => {
-      throw new Error('synology_unavailable');
+      throw new Error('jpeg_upload_failed');
     },
+    deletePrivateSynologyFile: async (path) => deletedPaths.push(path),
   });
   const sourceBuffer = await sharp({
     create: { width: 30, height: 30, channels: 3, background: '#ffffff' },
@@ -268,17 +417,252 @@ test('records a non-active error version after upload failure and rethrows the p
       sale: { id: 'ab12cd34-sale', company_id: 'company-1', customer_id: 'customer-1' },
       source: 'sale_screen',
     }),
-    /synology_unavailable/
+    /jpeg_upload_failed/
   );
 
-  assert.ok(primaryEvents.includes('rollback'));
-  const errorInsert = errorEvents.find(
-    (event) => event.sql && /^INSERT INTO signed_warranty_documents/.test(event.sql)
+  assert.deepEqual(deletedPaths, [
+    '/home/termos-garantia/AB12CD34/v1/termo-garantia-venda-AB12CD34-original.jpg',
+  ]);
+  assert.equal(
+    errorEvents.some((event) => event.sql && /status = 'error'/.test(event.sql)),
+    true
   );
-  assert.ok(errorInsert);
-  assert.match(errorInsert.sql, /'error'/);
-  assert.match(errorInsert.sql, /is_active/);
-  assert.equal(errorInsert.params.includes(0), true);
-  assert.equal(errorInsert.params.includes(4), true);
+});
+
+test('cleans up the JPEG and marks the reserved row error when PDF upload fails', async () => {
+  const primaryEvents = [];
+  const errorEvents = [];
+  let reservedId = null;
+  const primaryConnection = createConnection((sql, params) => {
+    if (/SELECT GET_LOCK/.test(sql)) return [[{ acquired: 1 }]];
+    if (/SELECT RELEASE_LOCK/.test(sql)) return [[{ released: 1 }]];
+    if (/SELECT id FROM sales/.test(sql)) return [[{ id: 'ab12cd34-sale' }]];
+    if (/WHERE sale_id = \? AND image_sha256 = \?/.test(sql)) return [[]];
+    if (/SELECT MAX\(version_number\)/.test(sql)) return [[{ max_version: 3 }]];
+    if (/^INSERT INTO signed_warranty_documents/.test(sql)) {
+      reservedId = params[0];
+      return [{ affectedRows: 1 }];
+    }
+    throw new Error(`unexpected_query:${sql}`);
+  }, primaryEvents);
+  const errorConnection = createConnection((sql, params) => {
+    if (/^UPDATE signed_warranty_documents/.test(sql) && /status = 'error'/.test(sql)) {
+      assert.equal(params.at(-1), reservedId);
+      return [{ affectedRows: 1 }];
+    }
+    throw new Error(`unexpected_query:${sql}`);
+  }, errorEvents);
+  const connections = [primaryConnection, errorConnection];
+  const uploadedPaths = [];
+  const deletedPaths = [];
+  const pipeline = buildPipeline({
+    pool: { getConnection: async () => connections.shift() },
+    uploadBufferToSynologyPrivateFolder: async (folderPath, fileName) => {
+      if (fileName.endsWith('.pdf')) throw new Error('pdf_upload_failed');
+      const path = `${folderPath}/${fileName}`;
+      uploadedPaths.push(path);
+      return path;
+    },
+    deletePrivateSynologyFile: async (path) => deletedPaths.push(path),
+  });
+  const sourceBuffer = await sharp({
+    create: { width: 30, height: 30, channels: 3, background: '#ffffff' },
+  }).png().toBuffer();
+
+  await assert.rejects(
+    pipeline.processSignedWarrantyImage({
+      sourceBuffer,
+      originalFileName: 'capture.png',
+      sale: { id: 'ab12cd34-sale', company_id: 'company-1', customer_id: 'customer-1' },
+      source: 'sale_screen',
+    }),
+    /pdf_upload_failed/
+  );
+
+  assert.deepEqual(deletedPaths, [
+    uploadedPaths[0],
+    '/home/termos-garantia/AB12CD34/v4/termo-garantia-venda-AB12CD34.pdf',
+  ]);
+  assert.equal(
+    errorEvents.some(
+      (event) => event.sql && /^UPDATE signed_warranty_documents/.test(event.sql) &&
+        /status = 'error'/.test(event.sql)
+    ),
+    true
+  );
+  assert.equal(
+    errorEvents.some((event) => event.sql && /^INSERT INTO signed_warranty_documents/.test(event.sql)),
+    false
+  );
   assert.ok(errorEvents.includes('commit'));
+  assert.equal(
+    primaryEvents.some((event) => event.sql && /SELECT RELEASE_LOCK/.test(event.sql)),
+    true
+  );
+});
+
+test('cleans up both uploads and marks the reserved row error when activation commit fails', async () => {
+  const primaryEvents = [];
+  const errorEvents = [];
+  let reservedId = null;
+  const queryHandler = (sql, params) => {
+    if (/SELECT GET_LOCK/.test(sql)) return [[{ acquired: 1 }]];
+    if (/SELECT RELEASE_LOCK/.test(sql)) return [[{ released: 1 }]];
+    if (/SELECT id FROM sales/.test(sql)) return [[{ id: 'ab12cd34-sale' }]];
+    if (/WHERE sale_id = \? AND image_sha256 = \?/.test(sql)) return [[]];
+    if (/SELECT MAX\(version_number\)/.test(sql)) return [[{ max_version: 0 }]];
+    if (/^INSERT INTO signed_warranty_documents/.test(sql)) {
+      reservedId = params[0];
+      return [{ affectedRows: 1 }];
+    }
+    if (/^UPDATE signed_warranty_documents/.test(sql)) return [{ affectedRows: 1 }];
+    if (/SELECT \* FROM signed_warranty_documents WHERE id/.test(sql)) {
+      return [[{ id: reservedId, status: 'available' }]];
+    }
+    throw new Error(`unexpected_query:${sql}`);
+  };
+  queryHandler.commit = (commitCount) => {
+    if (commitCount === 2) throw new Error('activation_commit_failed');
+  };
+  const primaryConnection = createConnection(queryHandler, primaryEvents);
+  const errorConnection = createConnection((sql, params) => {
+    if (/^UPDATE signed_warranty_documents/.test(sql) && /status = 'error'/.test(sql)) {
+      assert.equal(params.at(-1), reservedId);
+      return [{ affectedRows: 1 }];
+    }
+    throw new Error(`unexpected_query:${sql}`);
+  }, errorEvents);
+  const connections = [primaryConnection, errorConnection];
+  const uploadedPaths = [];
+  const deletedPaths = [];
+  const pipeline = buildPipeline({
+    pool: { getConnection: async () => connections.shift() },
+    uploadBufferToSynologyPrivateFolder: async (folderPath, fileName) => {
+      const path = `${folderPath}/${fileName}`;
+      uploadedPaths.push(path);
+      return path;
+    },
+    deletePrivateSynologyFile: async (path) => deletedPaths.push(path),
+  });
+  const sourceBuffer = await sharp({
+    create: { width: 30, height: 30, channels: 3, background: '#ffffff' },
+  }).png().toBuffer();
+
+  await assert.rejects(
+    pipeline.processSignedWarrantyImage({
+      sourceBuffer,
+      originalFileName: 'capture.png',
+      sale: { id: 'ab12cd34-sale', company_id: 'company-1', customer_id: 'customer-1' },
+      source: 'sale_screen',
+    }),
+    /activation_commit_failed/
+  );
+
+  assert.deepEqual(deletedPaths, uploadedPaths);
+  assert.equal(
+    errorEvents.some((event) => event.sql && /status = 'error'/.test(event.sql)),
+    true
+  );
+  assert.equal(
+    primaryEvents.some((event) => event.sql && /SELECT RELEASE_LOCK/.test(event.sql)),
+    true
+  );
+});
+
+test('confines private Synology helpers to the configured root and rejects traversal', () => {
+  const { normalizePrivateSynologyPath, joinPrivateSynologyPath } =
+    loadPrivateSynologyPathHelpers();
+
+  assert.equal(
+    normalizePrivateSynologyPath('/home/termos-garantia/AB12CD34/v1', 'folder'),
+    '/home/termos-garantia/AB12CD34/v1'
+  );
+  assert.equal(
+    joinPrivateSynologyPath('/home/termos-garantia/AB12CD34/v1', 'document.pdf'),
+    '/home/termos-garantia/AB12CD34/v1/document.pdf'
+  );
+  assert.throws(
+    () => normalizePrivateSynologyPath('/home/termos-garantia/../secret', 'folder'),
+    /invalid_synology_folder/
+  );
+  assert.throws(
+    () => normalizePrivateSynologyPath('/home/termos-garantia/./v1', 'folder'),
+    /invalid_synology_folder/
+  );
+  assert.throws(
+    () => normalizePrivateSynologyPath('/home/termos-garantia\\escape', 'folder'),
+    /invalid_synology_folder/
+  );
+  assert.throws(
+    () => normalizePrivateSynologyPath('/home/termos-garantia/\u0001bad', 'folder'),
+    /invalid_synology_folder/
+  );
+  assert.throws(
+    () => normalizePrivateSynologyPath('/home/other-folder/file.pdf', 'file_path'),
+    /invalid_synology_file_path/
+  );
+  assert.throws(
+    () => joinPrivateSynologyPath('/home/termos-garantia/AB12CD34/v1', 'bad\u0001name.pdf'),
+    /invalid_synology_file_name/
+  );
+});
+
+test('bounds private Synology HTTP responses and aborts timed out requests', async () => {
+  {
+    const https = createFakeHttps(({ callback }) => {
+      callback(createFakeResponse(503, { 'content-type': 'application/json' }));
+    });
+    const { synologyPrivateJsonRequest } = loadPrivateSynologyHttpHelpers(https);
+    await assert.rejects(
+      synologyPrivateJsonRequest('/webapi/entry.cgi'),
+      /synology_json_http_503/
+    );
+  }
+
+  {
+    const https = createFakeHttps(({ callback }) => {
+      const response = createFakeResponse(200, { 'content-type': 'application/json' });
+      callback(response);
+      response.emit('data', Buffer.alloc(17, 0x61));
+    });
+    const { synologyPrivateJsonRequest } = loadPrivateSynologyHttpHelpers(https);
+    await assert.rejects(
+      synologyPrivateJsonRequest('/webapi/entry.cgi'),
+      /synology_json_too_large/
+    );
+  }
+
+  {
+    const https = createFakeHttps(({ callback }) => {
+      const response = createFakeResponse(200, { 'content-type': 'application/pdf' });
+      callback(response);
+      response.emit('data', Buffer.alloc(33, 0x61));
+    });
+    const { downloadBufferFromSynologyPrivateFolder } =
+      loadPrivateSynologyHttpHelpers(https);
+    await assert.rejects(
+      downloadBufferFromSynologyPrivateFolder('/home/termos-garantia/document.pdf'),
+      /synology_download_too_large/
+    );
+  }
+
+  {
+    let destroyedWith = null;
+    const https = createFakeHttps(({ request }) => {
+      const originalDestroy = request.destroy;
+      request.destroy = (error) => {
+        destroyedWith = error;
+        originalDestroy(error);
+      };
+      request.timeoutHandler();
+    });
+    const { synologyPrivateJsonRequest } = loadPrivateSynologyHttpHelpers(https);
+    await assert.rejects(
+      synologyPrivateJsonRequest('/webapi/entry.cgi', {
+        timeoutCode: 'synology_upload_timeout',
+      }),
+      /synology_upload_timeout/
+    );
+    assert.match(destroyedWith.message, /synology_upload_timeout/);
+  }
 });

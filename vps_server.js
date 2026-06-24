@@ -22,8 +22,14 @@ if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const SIGNED_WARRANTY_SYNOLOGY_FOLDER =
   process.env.SIGNED_WARRANTY_SYNOLOGY_FOLDER || '/home/termos-garantia';
+const configuredSignedWarrantyMaxImageMb = Number(process.env.SIGNED_WARRANTY_MAX_IMAGE_MB);
 const SIGNED_WARRANTY_MAX_IMAGE_BYTES =
-  Math.max(1, Number(process.env.SIGNED_WARRANTY_MAX_IMAGE_MB || 15)) * 1024 * 1024;
+  (Number.isFinite(configuredSignedWarrantyMaxImageMb) && configuredSignedWarrantyMaxImageMb > 0
+    ? configuredSignedWarrantyMaxImageMb
+    : 15) * 1024 * 1024;
+const SIGNED_WARRANTY_MAX_JSON_BYTES = 1024 * 1024;
+const SIGNED_WARRANTY_MAX_DOWNLOAD_BYTES =
+  SIGNED_WARRANTY_MAX_IMAGE_BYTES + 5 * 1024 * 1024;
 const AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER = process.env.AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER || 'imagens';
 const AUTORESPONDER_SYNOLOGY_ARCHIVE_DIR = process.env.AUTORESPONDER_SYNOLOGY_ARCHIVE_DIR || '/volume1/backups/autoresponder';
 const AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS = 'Certo, vou chamar um especialista para te atender. Por favor aguarde um instante.';
@@ -24445,26 +24451,93 @@ async function synoApiGet(apiPath) {
 }
 
 function normalizePrivateSynologyPath(value, label) {
-  const normalized = String(value || '').trim().replace(/\\/g, '/').replace(/\/+/g, '/');
-  if (!normalized.startsWith('/') || normalized.includes('\0')) {
+  const normalizeAbsolutePath = (candidate) => {
+    const raw = String(candidate || '').trim();
+    if (!raw.startsWith('/') || /[\\\x00-\x1f\x7f]/.test(raw)) return null;
+    const segments = raw.split('/');
+    if (segments.some((segment, index) => index > 0 && (!segment || segment === '.' || segment === '..'))) {
+      return null;
+    }
+    return raw.length > 1 ? raw.replace(/\/+$/, '') : raw;
+  };
+  const root = normalizeAbsolutePath(SIGNED_WARRANTY_SYNOLOGY_FOLDER);
+  const normalized = normalizeAbsolutePath(value);
+  if (!root || !normalized || (normalized !== root && !normalized.startsWith(`${root}/`))) {
     throw new Error(`invalid_synology_${label}`);
   }
-  return normalized.length > 1 ? normalized.replace(/\/+$/, '') : normalized;
+  return normalized;
 }
 
 function joinPrivateSynologyPath(folderPath, fileName) {
   const folder = normalizePrivateSynologyPath(folderPath, 'folder');
   const name = String(fileName || '').trim();
-  if (!name || name === '.' || name === '..' || /[\\/\0]/.test(name)) {
+  if (!name || name === '.' || name === '..' || /[\\/\x00-\x1f\x7f]/.test(name)) {
     throw new Error('invalid_synology_file_name');
   }
   return `${folder}/${name}`;
 }
 
+function synologyPrivateJsonRequest(
+  requestPath,
+  { method = 'GET', body = null, headers = {}, timeoutCode = 'synology_json_timeout' } = {}
+) {
+  const urlObj = new URL(SYNO_URL);
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      callback(value);
+    };
+    const request = https.request({
+      hostname: urlObj.hostname,
+      port: getSynologyRequestPort(urlObj),
+      path: requestPath,
+      method,
+      rejectUnauthorized: false,
+      headers,
+    }, (response) => {
+      const statusCode = response.statusCode || 0;
+      if (statusCode < 200 || statusCode >= 300) {
+        response.resume();
+        finish(reject, new Error(`synology_json_http_${statusCode}`));
+        return;
+      }
+      const chunks = [];
+      let totalBytes = 0;
+      response.on('data', (chunk) => {
+        if (settled) return;
+        const buffer = Buffer.from(chunk);
+        totalBytes += buffer.length;
+        if (totalBytes > SIGNED_WARRANTY_MAX_JSON_BYTES) {
+          finish(reject, new Error('synology_json_too_large'));
+          response.destroy();
+          request.destroy();
+          return;
+        }
+        chunks.push(buffer);
+      });
+      response.on('end', () => {
+        if (settled) return;
+        try {
+          finish(resolve, JSON.parse(Buffer.concat(chunks).toString('utf8')));
+        } catch (error) {
+          finish(reject, new Error(`synology_json_invalid:${error.message}`));
+        }
+      });
+      response.on('error', (error) => finish(reject, error));
+    });
+    request.on('error', (error) => finish(reject, error));
+    request.setTimeout(30000, () => request.destroy(new Error(timeoutCode)));
+    request.end(body || undefined);
+  });
+}
+
 async function listPrivateSynologyFolder(folderPath, { limit = 1000, offset = 0 } = {}) {
   const folder = normalizePrivateSynologyPath(folderPath, 'folder');
   const sid = await synoLogin();
-  const result = await synoApiGet(
+  const result = await synologyPrivateJsonRequest(
     `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list` +
     `&folder_path=${encodeURIComponent(folder)}` +
     `&additional=${encodeURIComponent('["size","time"]')}` +
@@ -24491,6 +24564,12 @@ async function downloadBufferFromSynologyPrivateFolder(filePath) {
     `&path=${encodeURIComponent(normalizedPath)}&mode=download&_sid=${encodeURIComponent(sid)}`;
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      callback(value);
+    };
     const request = https.request({
       hostname: urlObj.hostname,
       port: getSynologyRequestPort(urlObj),
@@ -24498,9 +24577,36 @@ async function downloadBufferFromSynologyPrivateFolder(filePath) {
       method: 'GET',
       rejectUnauthorized: false,
     }, (response) => {
+      const statusCode = response.statusCode || 0;
+      if (statusCode < 200 || statusCode >= 300) {
+        response.resume();
+        finish(reject, new Error(`synology_download_http_${statusCode}`));
+        return;
+      }
       const chunks = [];
-      response.on('data', chunk => chunks.push(Buffer.from(chunk)));
+      let totalBytes = 0;
+      let responseLimit = String(response.headers['content-type'] || '')
+        .toLowerCase()
+        .includes('application/json')
+        ? SIGNED_WARRANTY_MAX_JSON_BYTES
+        : SIGNED_WARRANTY_MAX_DOWNLOAD_BYTES;
+      response.on('data', (chunk) => {
+        if (settled) return;
+        const buffer = Buffer.from(chunk);
+        if (totalBytes === 0 && buffer[0] === 0x7b) {
+          responseLimit = SIGNED_WARRANTY_MAX_JSON_BYTES;
+        }
+        totalBytes += buffer.length;
+        if (totalBytes > responseLimit) {
+          finish(reject, new Error('synology_download_too_large'));
+          response.destroy();
+          request.destroy();
+          return;
+        }
+        chunks.push(buffer);
+      });
       response.on('end', () => {
+        if (settled) return;
         const buffer = Buffer.concat(chunks);
         const contentType = String(response.headers['content-type'] || '').toLowerCase();
         const looksLikeJson = contentType.includes('application/json') || buffer[0] === 0x7b;
@@ -24508,22 +24614,19 @@ async function downloadBufferFromSynologyPrivateFolder(filePath) {
           try {
             const payload = JSON.parse(buffer.toString('utf8'));
             if (payload?.success === false || payload?.error) {
-              reject(new Error(`synology_download_failed:${JSON.stringify(payload.error || payload)}`));
+              finish(reject, new Error(`synology_download_failed:${JSON.stringify(payload.error || payload)}`));
               return;
             }
           } catch (error) {
-            reject(new Error(`synology_download_invalid_json:${error.message}`));
+            finish(reject, new Error(`synology_download_invalid_json:${error.message}`));
             return;
           }
         }
-        if ((response.statusCode || 500) >= 400) {
-          reject(new Error(`synology_download_http_${response.statusCode || 500}`));
-          return;
-        }
-        resolve(buffer);
+        finish(resolve, buffer);
       });
+      response.on('error', (error) => finish(reject, error));
     });
-    request.on('error', reject);
+    request.on('error', (error) => finish(reject, error));
     request.setTimeout(30000, () => request.destroy(new Error('synology_download_timeout')));
     request.end();
   });
@@ -24564,33 +24667,14 @@ async function uploadBufferToSynologyPrivateFolder(
     fileBuffer,
     Buffer.from(`\r\n--${boundary}--\r\n`),
   ]);
-  const urlObj = new URL(SYNO_URL);
-  const https = require('https');
-  const result = await new Promise((resolve, reject) => {
-    const request = https.request({
-      hostname: urlObj.hostname,
-      port: getSynologyRequestPort(urlObj),
-      path: '/webapi/entry.cgi',
-      method: 'POST',
-      rejectUnauthorized: false,
-      headers: {
+  const result = await synologyPrivateJsonRequest('/webapi/entry.cgi', {
+    method: 'POST',
+    body,
+    timeoutCode: 'synology_upload_timeout',
+    headers: {
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
         'Content-Length': body.length,
-      },
-    }, (response) => {
-      const chunks = [];
-      response.on('data', chunk => chunks.push(Buffer.from(chunk)));
-      response.on('end', () => {
-        try {
-          resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-        } catch (error) {
-          reject(new Error(`synology_upload_invalid_json:${error.message}`));
-        }
-      });
-    });
-    request.on('error', reject);
-    request.setTimeout(30000, () => request.destroy(new Error('synology_upload_timeout')));
-    request.end(body);
+    },
   });
   if (!result || result.success !== true) {
     throw new Error(`synology_upload_failed:${JSON.stringify(result?.error || result || null)}`);
@@ -24601,7 +24685,7 @@ async function uploadBufferToSynologyPrivateFolder(
 async function deletePrivateSynologyFile(filePath) {
   const normalizedPath = normalizePrivateSynologyPath(filePath, 'file_path');
   const sid = await synoLogin();
-  const result = await synoApiGet(
+  const result = await synologyPrivateJsonRequest(
     `/webapi/entry.cgi?api=SYNO.FileStation.Delete&version=2&method=start` +
     `&path=${encodeURIComponent(normalizedPath)}&accurate_progress=true&_sid=${encodeURIComponent(sid)}`
   );
@@ -24624,10 +24708,9 @@ function createSignedWarrantyPipeline({
   signedWarrantyFolder,
   maxImageBytes,
   uploadBufferToSynologyPrivateFolder,
+  deletePrivateSynologyFile,
 }) {
-  const A4_WIDTH = 595.28;
-  const A4_HEIGHT = 841.89;
-  const A4_MARGIN = 24;
+  const ADVISORY_LOCK_TIMEOUT_SECONDS = 30;
 
   function errorCode(error) {
     return String(error?.code || error?.message || 'signed_warranty_processing_failed')
@@ -24689,7 +24772,45 @@ function createSignedWarrantyPipeline({
     return Number(rows?.[0]?.max_version || 0) + 1;
   }
 
-  async function recordSignedWarrantyError({
+  async function markReservedVersionError(documentId, error) {
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.query(
+        `UPDATE signed_warranty_documents
+            SET status = 'error',
+                is_active = 0,
+                image_path = NULL,
+                pdf_path = NULL,
+                image_sha256 = NULL,
+                pdf_sha256 = NULL,
+                processed_at = NULL,
+                discarded_at = NULL,
+                discard_message = NULL,
+                error_code = ?,
+                error_message = ?
+          WHERE id = ?`,
+        [
+          errorCode(error),
+          String(error?.message || error || 'signed_warranty_processing_failed').slice(0, 4000),
+          documentId,
+        ]
+      );
+      if (Number(result?.affectedRows || 0) !== 1) {
+        throw new Error('signed_warranty_reserved_row_not_found');
+      }
+      await connection.commit();
+    } catch (updateError) {
+      try {
+        await connection.rollback();
+      } catch {}
+      throw updateError;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async function recordStandaloneError({
     sale,
     saleCode,
     source,
@@ -24702,73 +24823,31 @@ function createSignedWarrantyPipeline({
     try {
       await connection.beginTransaction();
       await connection.query('SELECT id FROM sales WHERE id = ? FOR UPDATE', [sale.id]);
-      const [existingRows] = await connection.query(
-        `SELECT id
-           FROM signed_warranty_documents
-          WHERE sale_id = ?
-            AND source = ?
-            AND original_file_name = ?
-            AND status = 'error'
-          ORDER BY version_number DESC
-          LIMIT 1
-          FOR UPDATE`,
-        [sale.id, source, originalFileName]
-      );
       const code = errorCode(error);
       const message = String(error?.message || error || code).slice(0, 4000);
-      let id = existingRows?.[0]?.id || null;
-      if (id) {
-        await connection.query(
-          `UPDATE signed_warranty_documents
-              SET company_id = ?,
-                  customer_id = ?,
-                  sale_code = ?,
-                  error_code = ?,
-                  error_message = ?,
-                  uploaded_by_customer_id = ?,
-                  image_path = NULL,
-                  pdf_path = NULL,
-                  image_sha256 = NULL,
-                  pdf_sha256 = NULL,
-                  processed_at = NULL,
-                  discarded_at = NULL,
-                  is_active = 0
-            WHERE id = ?`,
-          [
-            sale.company_id || null,
-            sale.customer_id || null,
-            saleCode || null,
-            code,
-            message,
-            uploadedByCustomerId || null,
-            id,
-          ]
-        );
-      } else {
-        const versionNumber = await readNextVersion(connection, sale.id);
-        id = crypto.randomUUID();
-        await connection.query(
-          `INSERT INTO signed_warranty_documents
-            (id, company_id, sale_id, customer_id, sale_code, source, status,
-             original_file_name, error_code, error_message, version_number, is_active,
-             uploaded_by_customer_id)
-           VALUES (?, ?, ?, ?, ?, ?, 'error', ?, ?, ?, ?, ?, ?)`,
-          [
-            id,
-            sale.company_id || null,
-            sale.id,
-            sale.customer_id || null,
-            saleCode || null,
-            source,
-            originalFileName,
-            code,
-            message,
-            versionNumber,
-            0,
-            uploadedByCustomerId || null,
-          ]
-        );
-      }
+      const versionNumber = await readNextVersion(connection, sale.id);
+      const id = crypto.randomUUID();
+      await connection.query(
+        `INSERT INTO signed_warranty_documents
+          (id, company_id, sale_id, customer_id, sale_code, source, status,
+           original_file_name, error_code, error_message, version_number, is_active,
+           uploaded_by_customer_id)
+         VALUES (?, ?, ?, ?, ?, ?, 'error', ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          sale.company_id || null,
+          sale.id,
+          sale.customer_id || null,
+          saleCode || null,
+          source,
+          originalFileName,
+          code,
+          message,
+          versionNumber,
+          0,
+          uploadedByCustomerId || null,
+        ]
+      );
       await connection.commit();
       return { id, status: 'error', is_active: 0 };
     } catch (recordError) {
@@ -24788,8 +24867,11 @@ function createSignedWarrantyPipeline({
     source,
     uploadedByCustomerId = null,
   }) {
-    let connection = null;
+    let lockConnection = null;
+    let lockAcquired = false;
+    let reservedId = null;
     let saleCode = null;
+    const uploadedPaths = [];
     try {
       if (!sale?.id) throw new Error('sale_required');
       if (!['sale_screen', 'synology_direct'].includes(source)) {
@@ -24801,119 +24883,183 @@ function createSignedWarrantyPipeline({
       saleCode = normalizeSaleCode(sale.id);
       if (saleCode.length !== 8) throw new Error('invalid_sale_code');
 
+      const lockName = `signed-warranty:${sale.id}`;
+      lockConnection = await pool.getConnection();
+      const [lockRows] = await lockConnection.query(
+        'SELECT GET_LOCK(?, ?) AS acquired',
+        [lockName, ADVISORY_LOCK_TIMEOUT_SECONDS]
+      );
+      if (Number(lockRows?.[0]?.acquired) !== 1) {
+        throw new Error('signed_warranty_lock_timeout');
+      }
+      lockAcquired = true;
+
       const converted = await convertSignedWarrantyImage(sourceBuffer);
-      connection = await pool.getConnection();
-      await connection.beginTransaction();
+      await lockConnection.beginTransaction();
+      let versionNumber;
+      try {
+        const [saleRows] = await lockConnection.query(
+          'SELECT id FROM sales WHERE id = ? FOR UPDATE',
+          [sale.id]
+        );
+        if (!saleRows?.length) throw new Error('sale_not_found');
 
-      const [saleRows] = await connection.query(
-        'SELECT id FROM sales WHERE id = ? FOR UPDATE',
-        [sale.id]
-      );
-      if (!saleRows?.length) throw new Error('sale_not_found');
+        const [duplicateRows] = await lockConnection.query(
+          `SELECT *
+             FROM signed_warranty_documents
+            WHERE sale_id = ?
+              AND image_sha256 = ?
+            LIMIT 1
+            FOR UPDATE`,
+          [sale.id, converted.imageSha256]
+        );
+        if (duplicateRows?.[0]) {
+          await lockConnection.commit();
+          return duplicateRows[0];
+        }
 
-      const [duplicateRows] = await connection.query(
-        `SELECT *
-           FROM signed_warranty_documents
-          WHERE dedupe_company_key = COALESCE(?, '__unassigned__')
-            AND image_sha256 = ?
-          LIMIT 1
-          FOR UPDATE`,
-        [sale.company_id || null, converted.imageSha256]
-      );
-      if (duplicateRows?.[0]) {
-        await connection.commit();
-        return duplicateRows[0];
+        versionNumber = await readNextVersion(lockConnection, sale.id);
+        reservedId = crypto.randomUUID();
+        await lockConnection.query(
+          `INSERT INTO signed_warranty_documents
+            (id, company_id, sale_id, customer_id, sale_code, source, status,
+             original_file_name, image_mime_type, image_size_bytes, image_sha256,
+             pdf_sha256, version_number, is_active, uploaded_by_customer_id)
+           VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, 'image/jpeg', ?, ?, ?, ?, 0, ?)`,
+          [
+            reservedId,
+            sale.company_id || null,
+            sale.id,
+            sale.customer_id || null,
+            saleCode,
+            source,
+            String(originalFileName).slice(0, 255),
+            converted.imageBuffer.length,
+            converted.imageSha256,
+            converted.pdfSha256,
+            versionNumber,
+            uploadedByCustomerId || null,
+          ]
+        );
+        await lockConnection.commit();
+      } catch (reservationError) {
+        try {
+          await lockConnection.rollback();
+        } catch {}
+        throw reservationError;
       }
 
-      const versionNumber = await readNextVersion(connection, sale.id);
       const names = buildSignedWarrantyNames(saleCode);
       const versionFolder = `${String(signedWarrantyFolder).replace(/\/+$/, '')}/${saleCode}/v${versionNumber}`;
+      uploadedPaths.push(`${versionFolder}/${names.imageName}`);
       const imagePath = await uploadBufferToSynologyPrivateFolder(
         versionFolder,
         names.imageName,
         converted.imageBuffer,
         { overwrite: true, contentType: 'image/jpeg' }
       );
+      uploadedPaths[0] = imagePath;
+      uploadedPaths.push(`${versionFolder}/${names.pdfName}`);
       const pdfPath = await uploadBufferToSynologyPrivateFolder(
         versionFolder,
         names.pdfName,
         converted.pdfBuffer,
         { overwrite: true, contentType: 'application/pdf' }
       );
+      uploadedPaths[1] = pdfPath;
 
-      await connection.query(
-        `UPDATE signed_warranty_documents
-            SET status = 'replaced', is_active = 0
-          WHERE sale_id = ? AND is_active = 1`,
-        [sale.id]
-      );
-
-      const id = crypto.randomUUID();
       const discardedAt = new Date();
       const discardMessage = buildDiscardMessage(
         discardedAt,
         'pt-BR',
         'America/Sao_Paulo'
       );
-      await connection.query(
-        `INSERT INTO signed_warranty_documents
-          (id, company_id, sale_id, customer_id, sale_code, source, status,
-           original_file_name, image_path, pdf_path, image_mime_type, image_size_bytes,
-           image_sha256, pdf_sha256, version_number, is_active, uploaded_by_customer_id,
-           processed_at, discarded_at, discard_message)
-         VALUES (?, ?, ?, ?, ?, ?, 'available', ?, ?, ?, 'image/jpeg', ?, ?, ?, ?, 1, ?, NOW(), ?, ?)`,
-        [
-          id,
-          sale.company_id || null,
-          sale.id,
-          sale.customer_id || null,
-          saleCode,
-          source,
-          String(originalFileName).slice(0, 255),
-          imagePath,
-          pdfPath,
-          converted.imageBuffer.length,
-          converted.imageSha256,
-          converted.pdfSha256,
-          versionNumber,
-          uploadedByCustomerId || null,
-          discardedAt,
-          discardMessage,
-        ]
-      );
-      const [rows] = await connection.query(
-        'SELECT * FROM signed_warranty_documents WHERE id = ? LIMIT 1',
-        [id]
-      );
-      await connection.commit();
-      return rows?.[0] || {
-        id,
-        sale_id: sale.id,
-        version_number: versionNumber,
-        status: 'available',
-        is_active: 1,
-      };
-    } catch (error) {
-      if (connection) {
+      await lockConnection.beginTransaction();
+      try {
+        await lockConnection.query(
+          'SELECT id FROM sales WHERE id = ? FOR UPDATE',
+          [sale.id]
+        );
+        await lockConnection.query(
+          `UPDATE signed_warranty_documents
+              SET status = 'replaced', is_active = 0
+            WHERE sale_id = ? AND is_active = 1 AND id <> ?`,
+          [sale.id, reservedId]
+        );
+        const [activationResult] = await lockConnection.query(
+          `UPDATE signed_warranty_documents
+              SET status = 'available',
+                  is_active = 1,
+                  image_path = ?,
+                  pdf_path = ?,
+                  processed_at = NOW(),
+                  discarded_at = ?,
+                  discard_message = ?,
+                  error_code = NULL,
+                  error_message = NULL
+            WHERE id = ? AND status = 'processing'`,
+          [imagePath, pdfPath, discardedAt, discardMessage, reservedId]
+        );
+        if (Number(activationResult?.affectedRows || 0) !== 1) {
+          throw new Error('signed_warranty_activation_failed');
+        }
+        const [rows] = await lockConnection.query(
+          'SELECT * FROM signed_warranty_documents WHERE id = ? LIMIT 1',
+          [reservedId]
+        );
+        await lockConnection.commit();
+        return rows?.[0] || {
+          id: reservedId,
+          sale_id: sale.id,
+          version_number: versionNumber,
+          status: 'available',
+          is_active: 1,
+        };
+      } catch (activationError) {
         try {
-          await connection.rollback();
+          await lockConnection.rollback();
         } catch {}
+        throw activationError;
+      }
+    } catch (error) {
+      for (const uploadedPath of uploadedPaths) {
+        try {
+          await deletePrivateSynologyFile(uploadedPath);
+        } catch (cleanupError) {
+          console.error('[signed-warranty] failed to clean uploaded file:', cleanupError.message);
+        }
       }
       try {
-        await recordSignedWarrantyError({
-          sale,
-          saleCode,
-          source,
-          originalFileName: String(originalFileName || 'unknown').slice(0, 255),
-          uploadedByCustomerId,
-          error,
-        });
+        if (reservedId) {
+          await markReservedVersionError(reservedId, error);
+        } else if (lockAcquired) {
+          await recordStandaloneError({
+            sale,
+            saleCode,
+            source,
+            originalFileName: String(originalFileName || 'unknown').slice(0, 255),
+            uploadedByCustomerId,
+            error,
+          });
+        }
       } catch (recordError) {
         console.error('[signed-warranty] failed to record processing error:', recordError.message);
       }
       throw error;
     } finally {
-      if (connection) connection.release();
+      if (lockConnection) {
+        if (lockAcquired) {
+          try {
+            await lockConnection.query(
+              'SELECT RELEASE_LOCK(?) AS released',
+              [`signed-warranty:${sale.id}`]
+            );
+          } catch (releaseError) {
+            console.error('[signed-warranty] failed to release advisory lock:', releaseError.message);
+          }
+        }
+        lockConnection.release();
+      }
     }
   }
 
@@ -24939,6 +25085,7 @@ const {
   signedWarrantyFolder: SIGNED_WARRANTY_SYNOLOGY_FOLDER,
   maxImageBytes: SIGNED_WARRANTY_MAX_IMAGE_BYTES,
   uploadBufferToSynologyPrivateFolder,
+  deletePrivateSynologyFile,
 });
 
 async function uploadAutoresponderAttachmentToSynology({ fileName, fileBuf }) {
@@ -25891,7 +26038,6 @@ async function runMigrations() {
       version_number INT NOT NULL DEFAULT 1,
       is_active TINYINT(1) NOT NULL DEFAULT 0,
       active_sale_key VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN is_active = 1 THEN sale_id ELSE NULL END) STORED,
-      dedupe_company_key VARCHAR(255) GENERATED ALWAYS AS (COALESCE(company_id, '__unassigned__')) STORED,
       uploaded_by_customer_id VARCHAR(255) NULL,
       processed_at DATETIME NULL,
       discarded_at DATETIME NULL,
@@ -25902,7 +26048,7 @@ async function runMigrations() {
       INDEX idx_signed_warranty_sale_code (sale_code),
       UNIQUE KEY uniq_signed_warranty_active_sale (active_sale_key),
       UNIQUE KEY uniq_signed_warranty_sale_version (sale_id, version_number),
-      UNIQUE KEY uniq_signed_warranty_company_hash (dedupe_company_key, image_sha256)
+      UNIQUE KEY uniq_signed_warranty_sale_hash (sale_id, image_sha256)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 

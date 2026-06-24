@@ -47,20 +47,10 @@ for (const ddl of [migrationDdl, ...Object.values(serverDdl)]) {
     ddl,
     /active_sale_key VARCHAR\(255\) GENERATED ALWAYS AS \(CASE WHEN is_active = 1 THEN sale_id ELSE NULL END\) STORED/
   );
-  assert.match(
-    ddl,
-    /dedupe_company_key VARCHAR\(255\) GENERATED ALWAYS AS \(COALESCE\(company_id, '__unassigned__'\)\) STORED/
-  );
   assert.match(ddl, /UNIQUE KEY uniq_signed_warranty_active_sale \(active_sale_key\)/);
   assert.match(ddl, /UNIQUE KEY uniq_signed_warranty_sale_version \(sale_id, version_number\)/);
-  assert.match(
-    ddl,
-    /UNIQUE KEY uniq_signed_warranty_company_hash \(dedupe_company_key, image_sha256\)/
-  );
-  assert.doesNotMatch(
-    ddl,
-    /UNIQUE KEY uniq_signed_warranty_company_hash \(company_id, image_sha256\)/
-  );
+  assert.match(ddl, /UNIQUE KEY uniq_signed_warranty_sale_hash \(sale_id, image_sha256\)/);
+  assert.doesNotMatch(ddl, /dedupe_company_key|uniq_signed_warranty_company_hash/);
 }
 
 assert.equal(pkg.dependencies.sharp, '^0.34.0');
@@ -94,10 +84,32 @@ for (const server of Object.values(servers)) {
     /fitImageInsideA4\(\s*metadata\.width,\s*metadata\.height,\s*595\.28,\s*841\.89,\s*24\s*\)/
   );
   assert.match(server, /crypto\.createHash\('sha256'\)/);
+  assert.match(server, /GET_LOCK\(\?, \?\)/);
+  assert.match(server, /RELEASE_LOCK\(\?\)/);
   assert.match(server, /SELECT id FROM sales WHERE id = \? FOR UPDATE/);
   assert.match(server, /SELECT MAX\(version_number\)[\s\S]*FOR UPDATE/);
-  assert.match(server, /dedupe_company_key = COALESCE\(\?, '__unassigned__'\)/);
+  assert.match(server, /WHERE sale_id = \?\s+AND image_sha256 = \?/);
+  assert.match(server, /'processing'/);
   assert.match(server, /status = 'replaced', is_active = 0/);
+  assert.match(server, /status = 'error'[\s\S]*error_code = \?[\s\S]*error_message = \?/);
+  assert.match(server, /deletePrivateSynologyFile/);
+  assert.match(server, /SIGNED_WARRANTY_MAX_JSON_BYTES/);
+  assert.match(server, /SIGNED_WARRANTY_MAX_DOWNLOAD_BYTES/);
+  assert.match(
+    server,
+    /Number\.isFinite\(configuredSignedWarrantyMaxImageMb\)[\s\S]*\? configuredSignedWarrantyMaxImageMb[\s\S]*: 15\) \* 1024 \* 1024/
+  );
+  assert.match(server, /synology_(?:json|download)_too_large/);
+  assert.ok(
+    (server.match(/statusCode < 200 \|\| statusCode >= 300/g) || []).length >= 2,
+    'JSON and download responses must reject non-2xx status codes'
+  );
+  assert.match(server, /request\.destroy\(new Error\(timeoutCode\)\)/);
+  assert.match(server, /timeoutCode: 'synology_upload_timeout'/);
+  assert.match(
+    server,
+    /request\.setTimeout\(30000, \(\) => request\.destroy\(new Error\('synology_download_timeout'\)\)\)/
+  );
   assert.doesNotMatch(server, /SYNO_CDN\.termos_garantia/);
 }
 
