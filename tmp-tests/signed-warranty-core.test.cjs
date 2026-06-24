@@ -120,6 +120,15 @@ function loadPrivateSynologyPathHelpers() {
   )('/home/termos-garantia');
 }
 
+function loadSignedWarrantyIndexUpgrade() {
+  const source = readFileSync('vps_server.cjs', 'utf8');
+  const match = source.match(
+    /(async function upgradeSignedWarrantyDocumentIndexes[\s\S]*?\n})\n\nasync function seedAutoresponderRuleTemplates/
+  );
+  assert.ok(match, 'signed warranty index upgrade helper must exist');
+  return Function(`${match[1]}\nreturn upgradeSignedWarrantyDocumentIndexes;`)();
+}
+
 function loadPrivateSynologyHttpHelpers(https, { maxJsonBytes = 16, maxDownloadBytes = 32 } = {}) {
   const source = readFileSync('vps_server.cjs', 'utf8');
   const match = source.match(
@@ -292,6 +301,7 @@ test('returns the same-sale hash duplicate without uploading or reserving a vers
     id: 'existing-document',
     image_sha256: 'existing-hash',
     status: 'available',
+    is_active: 1,
   };
   const connection = createConnection((sql, params) => {
     if (/SELECT GET_LOCK/.test(sql)) return [[{ acquired: 1 }]];
@@ -326,6 +336,91 @@ test('returns the same-sale hash duplicate without uploading or reserving a vers
   assert.equal(events.some((event) => event.sql && /^UPDATE signed_warranty_documents/.test(event.sql)), false);
   assert.equal(events.some((event) => event.sql && /^INSERT INTO signed_warranty_documents/.test(event.sql)), false);
   assert.ok(events.indexOf('commit') > 0);
+});
+
+async function runInterruptedVersionRecoveryTest(existingStatus) {
+  const events = [];
+  const existingRow = {
+    id: `${existingStatus}-document`,
+    sale_id: 'ab12cd34-sale',
+    version_number: existingStatus === 'processing' ? 3 : 4,
+    status: existingStatus,
+    is_active: 0,
+    error_code: existingStatus === 'error' ? 'pdf_upload_failed' : null,
+    error_message: existingStatus === 'error' ? 'PDF upload failed' : null,
+  };
+  const activatedRow = {
+    ...existingRow,
+    status: 'available',
+    is_active: 1,
+    error_code: null,
+    error_message: null,
+  };
+  let rowReads = 0;
+  const connection = createConnection((sql) => {
+    if (/SELECT GET_LOCK/.test(sql)) return [[{ acquired: 1 }]];
+    if (/SELECT RELEASE_LOCK/.test(sql)) return [[{ released: 1 }]];
+    if (/SELECT id FROM sales/.test(sql)) return [[{ id: 'ab12cd34-sale' }]];
+    if (/WHERE sale_id = \? AND image_sha256 = \?/.test(sql)) return [[existingRow]];
+    if (/SET status = 'processing'/.test(sql)) return [{ affectedRows: 1 }];
+    if (/status = 'replaced', is_active = 0/.test(sql)) return [{ affectedRows: 1 }];
+    if (/SET status = 'available'/.test(sql)) return [{ affectedRows: 1 }];
+    if (/SELECT \* FROM signed_warranty_documents WHERE id/.test(sql)) {
+      rowReads += 1;
+      return [[activatedRow]];
+    }
+    throw new Error(`unexpected_query:${sql}`);
+  }, events);
+  const uploads = [];
+  const pipeline = buildPipeline({
+    pool: { getConnection: async () => connection },
+    uploadBufferToSynologyPrivateFolder: async (folderPath, fileName) => {
+      uploads.push({ folderPath, fileName });
+      return `${folderPath}/${fileName}`;
+    },
+  });
+  const sourceBuffer = await sharp({
+    create: { width: 30, height: 30, channels: 3, background: '#ffffff' },
+  }).png().toBuffer();
+
+  const row = await pipeline.processSignedWarrantyImage({
+    sourceBuffer,
+    originalFileName: 'capture.png',
+    sale: { id: 'ab12cd34-sale', company_id: 'company-1', customer_id: 'customer-1' },
+    source: 'sale_screen',
+  });
+
+  assert.deepEqual(row, activatedRow);
+  assert.equal(uploads.length, 2);
+  assert.equal(
+    uploads.every(({ folderPath }) => folderPath.endsWith(`/v${existingRow.version_number}`)),
+    true
+  );
+  assert.equal(
+    events.some((event) => event.sql && /SELECT MAX\(version_number\)/.test(event.sql)),
+    false
+  );
+  assert.equal(
+    events.some((event) => event.sql && /^INSERT INTO signed_warranty_documents/.test(event.sql)),
+    false
+  );
+  const reset = events.find(
+    (event) => event.sql && /^UPDATE signed_warranty_documents/.test(event.sql) &&
+      /SET status = 'processing'/.test(event.sql)
+  );
+  assert.ok(reset);
+  assert.match(reset.sql, /error_code = NULL/);
+  assert.match(reset.sql, /error_message = NULL/);
+  assert.equal(reset.params.at(-1), existingRow.id);
+  assert.equal(rowReads, 1);
+}
+
+test('recovers an abandoned processing row with the same version and document id', async () => {
+  await runInterruptedVersionRecoveryTest('processing');
+});
+
+test('retries an error row with the same version and document id', async () => {
+  await runInterruptedVersionRecoveryTest('error');
 });
 
 test('allows the same image hash to create a separate document for another sale', async () => {
@@ -490,6 +585,11 @@ test('cleans up the JPEG and marks the reserved row error when PDF upload fails'
     ),
     true
   );
+  const errorUpdate = errorEvents.find(
+    (event) => event.sql && /^UPDATE signed_warranty_documents/.test(event.sql) &&
+      /status = 'error'/.test(event.sql)
+  );
+  assert.doesNotMatch(errorUpdate.sql, /image_sha256 = NULL|pdf_sha256 = NULL/);
   assert.equal(
     errorEvents.some((event) => event.sql && /^INSERT INTO signed_warranty_documents/.test(event.sql)),
     false
@@ -501,11 +601,11 @@ test('cleans up the JPEG and marks the reserved row error when PDF upload fails'
   );
 });
 
-test('cleans up both uploads and marks the reserved row error when activation commit fails', async () => {
+test('cleans up both uploads and marks the reserved row error on a precommit activation failure', async () => {
   const primaryEvents = [];
   const errorEvents = [];
   let reservedId = null;
-  const queryHandler = (sql, params) => {
+  const primaryConnection = createConnection((sql, params) => {
     if (/SELECT GET_LOCK/.test(sql)) return [[{ acquired: 1 }]];
     if (/SELECT RELEASE_LOCK/.test(sql)) return [[{ released: 1 }]];
     if (/SELECT id FROM sales/.test(sql)) return [[{ id: 'ab12cd34-sale' }]];
@@ -515,16 +615,12 @@ test('cleans up both uploads and marks the reserved row error when activation co
       reservedId = params[0];
       return [{ affectedRows: 1 }];
     }
-    if (/^UPDATE signed_warranty_documents/.test(sql)) return [{ affectedRows: 1 }];
-    if (/SELECT \* FROM signed_warranty_documents WHERE id/.test(sql)) {
-      return [[{ id: reservedId, status: 'available' }]];
+    if (/SET status = 'available'/.test(sql)) {
+      throw new Error('activation_update_failed');
     }
+    if (/^UPDATE signed_warranty_documents/.test(sql)) return [{ affectedRows: 1 }];
     throw new Error(`unexpected_query:${sql}`);
-  };
-  queryHandler.commit = (commitCount) => {
-    if (commitCount === 2) throw new Error('activation_commit_failed');
-  };
-  const primaryConnection = createConnection(queryHandler, primaryEvents);
+  }, primaryEvents);
   const errorConnection = createConnection((sql, params) => {
     if (/^UPDATE signed_warranty_documents/.test(sql) && /status = 'error'/.test(sql)) {
       assert.equal(params.at(-1), reservedId);
@@ -555,7 +651,7 @@ test('cleans up both uploads and marks the reserved row error when activation co
       sale: { id: 'ab12cd34-sale', company_id: 'company-1', customer_id: 'customer-1' },
       source: 'sale_screen',
     }),
-    /activation_commit_failed/
+    /activation_update_failed/
   );
 
   assert.deepEqual(deletedPaths, uploadedPaths);
@@ -567,6 +663,153 @@ test('cleans up both uploads and marks the reserved row error when activation co
     primaryEvents.some((event) => event.sql && /SELECT RELEASE_LOCK/.test(event.sql)),
     true
   );
+});
+
+test('returns success and keeps uploads when activation commits but COMMIT throws', async () => {
+  const primaryEvents = [];
+  const reconciliationEvents = [];
+  let reservedId = null;
+  let committedRow = null;
+  const queryHandler = (sql, params) => {
+    if (/SELECT GET_LOCK/.test(sql)) return [[{ acquired: 1 }]];
+    if (/SELECT RELEASE_LOCK/.test(sql)) return [[{ released: 1 }]];
+    if (/SELECT id FROM sales/.test(sql)) return [[{ id: 'ab12cd34-sale' }]];
+    if (/WHERE sale_id = \? AND image_sha256 = \?/.test(sql)) return [[]];
+    if (/SELECT MAX\(version_number\)/.test(sql)) return [[{ max_version: 0 }]];
+    if (/^INSERT INTO signed_warranty_documents/.test(sql)) {
+      reservedId = params[0];
+      committedRow = {
+        id: reservedId,
+        sale_id: 'ab12cd34-sale',
+        version_number: 1,
+        status: 'processing',
+        is_active: 0,
+        image_sha256: params[8],
+        pdf_sha256: params[9],
+        image_path: null,
+        pdf_path: null,
+      };
+      return [{ affectedRows: 1 }];
+    }
+    if (/status = 'replaced', is_active = 0/.test(sql)) return [{ affectedRows: 1 }];
+    if (/SET status = 'available'/.test(sql)) {
+      committedRow = {
+        ...committedRow,
+        status: 'available',
+        is_active: 1,
+        image_path: params[0],
+        pdf_path: params[1],
+      };
+      return [{ affectedRows: 1 }];
+    }
+    if (/SELECT \* FROM signed_warranty_documents WHERE id/.test(sql)) {
+      return [[committedRow]];
+    }
+    throw new Error(`unexpected_query:${sql}`);
+  };
+  queryHandler.commit = (commitCount) => {
+    if (commitCount === 2) throw new Error('activation_commit_outcome_unknown');
+  };
+  const primaryConnection = createConnection(queryHandler, primaryEvents);
+  const reconciliationConnection = createConnection((sql, params) => {
+    if (/SELECT \* FROM signed_warranty_documents WHERE id/.test(sql)) {
+      assert.equal(params[0], reservedId);
+      return [[committedRow]];
+    }
+    throw new Error(`unexpected_reconciliation_query:${sql}`);
+  }, reconciliationEvents);
+  const connections = [primaryConnection, reconciliationConnection];
+  const uploadedPaths = [];
+  const deletedPaths = [];
+  const pipeline = buildPipeline({
+    pool: { getConnection: async () => connections.shift() },
+    uploadBufferToSynologyPrivateFolder: async (folderPath, fileName) => {
+      const path = `${folderPath}/${fileName}`;
+      uploadedPaths.push(path);
+      return path;
+    },
+    deletePrivateSynologyFile: async (path) => deletedPaths.push(path),
+  });
+  const sourceBuffer = await sharp({
+    create: { width: 30, height: 30, channels: 3, background: '#ffffff' },
+  }).png().toBuffer();
+
+  const row = await pipeline.processSignedWarrantyImage({
+    sourceBuffer,
+    originalFileName: 'capture.png',
+    sale: { id: 'ab12cd34-sale', company_id: 'company-1', customer_id: 'customer-1' },
+    source: 'sale_screen',
+  });
+
+  assert.deepEqual(row, committedRow);
+  assert.deepEqual(deletedPaths, []);
+  assert.equal(uploadedPaths.length, 2);
+  assert.equal(connections.length, 0);
+  assert.equal(
+    reconciliationEvents.some(
+      (event) => event.sql && /SELECT \* FROM signed_warranty_documents WHERE id/.test(event.sql)
+    ),
+    true
+  );
+  assert.equal(
+    reconciliationEvents.some(
+      (event) => event.sql && /UPDATE signed_warranty_documents/.test(event.sql)
+    ),
+    false
+  );
+});
+
+test('upgrades the older company-hash warranty index before dropping its unused generated column', async () => {
+  const upgradeSignedWarrantyDocumentIndexes = loadSignedWarrantyIndexUpgrade();
+  const events = [];
+  const database = {
+    async query(sql, params = []) {
+      const normalized = sql.replace(/\s+/g, ' ').trim();
+      events.push({ sql: normalized, params });
+      if (/^SHOW INDEX FROM `signed_warranty_documents`/.test(normalized)) {
+        return [[
+          {
+            Key_name: 'uniq_signed_warranty_company_hash',
+            Column_name: 'dedupe_company_key',
+          },
+          {
+            Key_name: 'uniq_signed_warranty_company_hash',
+            Column_name: 'image_sha256',
+          },
+          {
+            Key_name: 'uniq_signed_warranty_active_sale',
+            Column_name: 'active_sale_key',
+          },
+        ]];
+      }
+      if (/INFORMATION_SCHEMA\.COLUMNS/.test(normalized)) return [[{ cnt: 1 }]];
+      if (/^ALTER TABLE `signed_warranty_documents`/.test(normalized)) {
+        return [{ affectedRows: 0 }];
+      }
+      throw new Error(`unexpected_query:${normalized}`);
+    },
+  };
+
+  await upgradeSignedWarrantyDocumentIndexes(database);
+
+  const statements = events.map(({ sql }) => sql);
+  const dropOldIndex = statements.findIndex(
+    (sql) => /DROP INDEX `uniq_signed_warranty_company_hash`/.test(sql)
+  );
+  const addSaleHash = statements.findIndex(
+    (sql) => /ADD UNIQUE KEY `uniq_signed_warranty_sale_hash` \(`sale_id`, `image_sha256`\)/.test(sql)
+  );
+  const inspectColumn = statements.findIndex(
+    (sql) => /INFORMATION_SCHEMA\.COLUMNS/.test(sql) &&
+      events[statements.indexOf(sql)].params.includes('dedupe_company_key')
+  );
+  const dropColumn = statements.findIndex(
+    (sql) => /DROP COLUMN `dedupe_company_key`/.test(sql)
+  );
+  assert.ok(dropOldIndex >= 0);
+  assert.ok(addSaleHash > dropOldIndex);
+  assert.ok(inspectColumn > addSaleHash);
+  assert.ok(dropColumn > inspectColumn);
 });
 
 test('confines private Synology helpers to the configured root and rejects traversal', () => {

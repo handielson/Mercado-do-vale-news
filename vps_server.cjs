@@ -24782,8 +24782,6 @@ function createSignedWarrantyPipeline({
                 is_active = 0,
                 image_path = NULL,
                 pdf_path = NULL,
-                image_sha256 = NULL,
-                pdf_sha256 = NULL,
                 processed_at = NULL,
                 discarded_at = NULL,
                 discard_message = NULL,
@@ -24860,6 +24858,36 @@ function createSignedWarrantyPipeline({
     }
   }
 
+  async function reconcileActivatedVersion({
+    documentId,
+    imageSha256,
+    pdfSha256,
+    imagePath,
+    pdfPath,
+  }) {
+    const connection = await pool.getConnection();
+    try {
+      const [rows] = await connection.query(
+        'SELECT * FROM signed_warranty_documents WHERE id = ? LIMIT 1',
+        [documentId]
+      );
+      const row = rows?.[0] || null;
+      if (
+        row?.status === 'available' &&
+        Number(row.is_active) === 1 &&
+        row.image_sha256 === imageSha256 &&
+        row.pdf_sha256 === pdfSha256 &&
+        row.image_path === imagePath &&
+        row.pdf_path === pdfPath
+      ) {
+        return row;
+      }
+      return null;
+    } finally {
+      connection.release();
+    }
+  }
+
   async function processSignedWarrantyImage({
     sourceBuffer,
     originalFileName,
@@ -24913,35 +24941,61 @@ function createSignedWarrantyPipeline({
             FOR UPDATE`,
           [sale.id, converted.imageSha256]
         );
-        if (duplicateRows?.[0]) {
+        const duplicate = duplicateRows?.[0] || null;
+        if (duplicate?.status === 'available' && Number(duplicate.is_active) === 1) {
           await lockConnection.commit();
-          return duplicateRows[0];
+          return duplicate;
         }
-
-        versionNumber = await readNextVersion(lockConnection, sale.id);
-        reservedId = crypto.randomUUID();
-        await lockConnection.query(
-          `INSERT INTO signed_warranty_documents
-            (id, company_id, sale_id, customer_id, sale_code, source, status,
-             original_file_name, image_mime_type, image_size_bytes, image_sha256,
-             pdf_sha256, version_number, is_active, uploaded_by_customer_id)
-           VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, 'image/jpeg', ?, ?, ?, ?, 0, ?)`,
-          [
-            reservedId,
-            sale.company_id || null,
-            sale.id,
-            sale.customer_id || null,
-            saleCode,
-            source,
-            String(originalFileName).slice(0, 255),
-            converted.imageBuffer.length,
-            converted.imageSha256,
-            converted.pdfSha256,
-            versionNumber,
-            uploadedByCustomerId || null,
-          ]
-        );
-        await lockConnection.commit();
+        if (duplicate && ['processing', 'error'].includes(duplicate.status)) {
+          reservedId = duplicate.id;
+          versionNumber = Number(duplicate.version_number);
+          const [resetResult] = await lockConnection.query(
+            `UPDATE signed_warranty_documents
+                SET status = 'processing',
+                    is_active = 0,
+                    image_path = NULL,
+                    pdf_path = NULL,
+                    processed_at = NULL,
+                    discarded_at = NULL,
+                    discard_message = NULL,
+                    error_code = NULL,
+                    error_message = NULL
+              WHERE id = ? AND status IN ('processing', 'error')`,
+            [reservedId]
+          );
+          if (Number(resetResult?.affectedRows || 0) !== 1) {
+            throw new Error('signed_warranty_recovery_failed');
+          }
+          await lockConnection.commit();
+        } else if (duplicate) {
+          await lockConnection.commit();
+          return duplicate;
+        } else {
+          versionNumber = await readNextVersion(lockConnection, sale.id);
+          reservedId = crypto.randomUUID();
+          await lockConnection.query(
+            `INSERT INTO signed_warranty_documents
+              (id, company_id, sale_id, customer_id, sale_code, source, status,
+               original_file_name, image_mime_type, image_size_bytes, image_sha256,
+               pdf_sha256, version_number, is_active, uploaded_by_customer_id)
+             VALUES (?, ?, ?, ?, ?, ?, 'processing', ?, 'image/jpeg', ?, ?, ?, ?, 0, ?)`,
+            [
+              reservedId,
+              sale.company_id || null,
+              sale.id,
+              sale.customer_id || null,
+              saleCode,
+              source,
+              String(originalFileName).slice(0, 255),
+              converted.imageBuffer.length,
+              converted.imageSha256,
+              converted.pdfSha256,
+              versionNumber,
+              uploadedByCustomerId || null,
+            ]
+          );
+          await lockConnection.commit();
+        }
       } catch (reservationError) {
         try {
           await lockConnection.rollback();
@@ -25007,14 +25061,32 @@ function createSignedWarrantyPipeline({
           'SELECT * FROM signed_warranty_documents WHERE id = ? LIMIT 1',
           [reservedId]
         );
-        await lockConnection.commit();
-        return rows?.[0] || {
+        const activatedRow = rows?.[0] || {
           id: reservedId,
           sale_id: sale.id,
           version_number: versionNumber,
           status: 'available',
           is_active: 1,
         };
+        try {
+          await lockConnection.commit();
+        } catch (commitError) {
+          try {
+            const reconciledRow = await reconcileActivatedVersion({
+              documentId: reservedId,
+              imageSha256: converted.imageSha256,
+              pdfSha256: converted.pdfSha256,
+              imagePath,
+              pdfPath,
+            });
+            if (reconciledRow) return reconciledRow;
+          } catch (reconciliationError) {
+            commitError.signedWarrantyCommitOutcomeUnknown = true;
+            commitError.reconciliationError = reconciliationError;
+          }
+          throw commitError;
+        }
+        return activatedRow;
       } catch (activationError) {
         try {
           await lockConnection.rollback();
@@ -25022,28 +25094,33 @@ function createSignedWarrantyPipeline({
         throw activationError;
       }
     } catch (error) {
-      for (const uploadedPath of uploadedPaths) {
-        try {
-          await deletePrivateSynologyFile(uploadedPath);
-        } catch (cleanupError) {
-          console.error('[signed-warranty] failed to clean uploaded file:', cleanupError.message);
+      const commitOutcomeUnknown = error?.signedWarrantyCommitOutcomeUnknown === true;
+      if (!commitOutcomeUnknown) {
+        for (const uploadedPath of uploadedPaths) {
+          try {
+            await deletePrivateSynologyFile(uploadedPath);
+          } catch (cleanupError) {
+            console.error('[signed-warranty] failed to clean uploaded file:', cleanupError.message);
+          }
         }
       }
-      try {
-        if (reservedId) {
-          await markReservedVersionError(reservedId, error);
-        } else if (lockAcquired) {
-          await recordStandaloneError({
-            sale,
-            saleCode,
-            source,
-            originalFileName: String(originalFileName || 'unknown').slice(0, 255),
-            uploadedByCustomerId,
-            error,
-          });
+      if (!commitOutcomeUnknown) {
+        try {
+          if (reservedId) {
+            await markReservedVersionError(reservedId, error);
+          } else if (lockAcquired) {
+            await recordStandaloneError({
+              sale,
+              saleCode,
+              source,
+              originalFileName: String(originalFileName || 'unknown').slice(0, 255),
+              uploadedByCustomerId,
+              error,
+            });
+          }
+        } catch (recordError) {
+          console.error('[signed-warranty] failed to record processing error:', recordError.message);
         }
-      } catch (recordError) {
-        console.error('[signed-warranty] failed to record processing error:', recordError.message);
       }
       throw error;
     } finally {
@@ -25827,6 +25904,47 @@ async function dropIndexIfExists(table, indexName) {
   }
 }
 
+async function upgradeSignedWarrantyDocumentIndexes(database = pool) {
+  const [indexRows] = await database.query(
+    'SHOW INDEX FROM `signed_warranty_documents`'
+  );
+  const indexName = (row) => String(row?.Key_name || row?.key_name || row?.INDEX_NAME || '');
+  const columnName = (row) =>
+    String(row?.Column_name || row?.column_name || row?.COLUMN_NAME || '');
+  const existingIndexNames = new Set((indexRows || []).map(indexName));
+
+  if (existingIndexNames.has('uniq_signed_warranty_company_hash')) {
+    await database.query(
+      'ALTER TABLE `signed_warranty_documents` DROP INDEX `uniq_signed_warranty_company_hash`'
+    );
+  }
+
+  if (!existingIndexNames.has('uniq_signed_warranty_sale_hash')) {
+    await database.query(
+      'ALTER TABLE `signed_warranty_documents` ADD UNIQUE KEY `uniq_signed_warranty_sale_hash` (`sale_id`, `image_sha256`)'
+    );
+  }
+
+  const [[columnRow]] = await database.query(
+    `SELECT COUNT(*) AS cnt
+       FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?`,
+    ['signed_warranty_documents', 'dedupe_company_key']
+  );
+  const dedupeColumnStillIndexed = (indexRows || []).some(
+    (row) =>
+      indexName(row) !== 'uniq_signed_warranty_company_hash' &&
+      columnName(row) === 'dedupe_company_key'
+  );
+  if (Number(columnRow?.cnt || 0) > 0 && !dedupeColumnStillIndexed) {
+    await database.query(
+      'ALTER TABLE `signed_warranty_documents` DROP COLUMN `dedupe_company_key`'
+    );
+  }
+}
+
 async function seedAutoresponderRuleTemplates() {
   for (const template of AUTORESPONDER_RULE_TEMPLATES) {
     await pool.query(
@@ -26051,6 +26169,7 @@ async function runMigrations() {
       UNIQUE KEY uniq_signed_warranty_sale_hash (sale_id, image_sha256)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await upgradeSignedWarrantyDocumentIndexes();
 
   await addColumnIfMissing('company_settings', 'synology_video_base_url', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('company_settings', 'synology_video_extension', "VARCHAR(20) DEFAULT '.mp4'");

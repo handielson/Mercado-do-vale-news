@@ -92,6 +92,17 @@ for (const server of Object.values(servers)) {
   assert.match(server, /'processing'/);
   assert.match(server, /status = 'replaced', is_active = 0/);
   assert.match(server, /status = 'error'[\s\S]*error_code = \?[\s\S]*error_message = \?/);
+  assert.match(server, /SHOW INDEX FROM `signed_warranty_documents`/);
+  assert.match(server, /DROP INDEX `uniq_signed_warranty_company_hash`/);
+  assert.match(
+    server,
+    /ADD UNIQUE KEY `uniq_signed_warranty_sale_hash` \(`sale_id`, `image_sha256`\)/
+  );
+  assert.match(server, /DROP COLUMN `dedupe_company_key`/);
+  assert.match(
+    server,
+    /CREATE TABLE IF NOT EXISTS signed_warranty_documents[\s\S]*?await upgradeSignedWarrantyDocumentIndexes\(\);/
+  );
   assert.match(server, /deletePrivateSynologyFile/);
   assert.match(server, /SIGNED_WARRANTY_MAX_JSON_BYTES/);
   assert.match(server, /SIGNED_WARRANTY_MAX_DOWNLOAD_BYTES/);
