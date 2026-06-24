@@ -12,6 +12,7 @@ const sharp = require('sharp');
 const { PDFDocument } = require('pdf-lib');
 const {
   normalizeSaleCode,
+  parseSignedWarrantyFileName,
   buildSignedWarrantyNames,
   buildDiscardMessage,
   fitImageInsideA4,
@@ -30,6 +31,8 @@ const SIGNED_WARRANTY_MAX_IMAGE_BYTES =
 const SIGNED_WARRANTY_MAX_JSON_BYTES = 1024 * 1024;
 const SIGNED_WARRANTY_MAX_DOWNLOAD_BYTES =
   SIGNED_WARRANTY_MAX_IMAGE_BYTES + 5 * 1024 * 1024;
+const SIGNED_WARRANTY_SYNC_INTERVAL_MS =
+  Math.max(60_000, Number(process.env.SIGNED_WARRANTY_SYNC_INTERVAL_MS || 300_000));
 const AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER = process.env.AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER || 'imagens';
 const AUTORESPONDER_SYNOLOGY_ARCHIVE_DIR = process.env.AUTORESPONDER_SYNOLOGY_ARCHIVE_DIR || '/volume1/backups/autoresponder';
 const AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS = 'Certo, vou chamar um especialista para te atender. Por favor aguarde um instante.';
@@ -25370,6 +25373,246 @@ fastify.get('/admin/signed-warranty/:id/original', {
   preHandler: signedWarrantyApi.requireAdmin,
 }, signedWarrantyApi.downloadOriginal);
 
+// SIGNED_WARRANTY_SYNC_START
+function createSignedWarrantySync({
+  pool,
+  crypto,
+  parseSignedWarrantyFileName,
+  signedWarrantyFolder,
+  listPrivateSynologyFolder,
+  downloadBufferFromSynologyPrivateFolder,
+  deletePrivateSynologyFile,
+  processSignedWarrantyImage,
+  maxFiles = 100,
+  maxResultItems = 20,
+}) {
+  let inProgress = false;
+  const boundedMaxFiles = Math.max(1, Math.min(500, Number(maxFiles) || 100));
+  const boundedMaxResultItems = Math.max(1, Math.min(100, Number(maxResultItems) || 20));
+
+  function isIgnoredFile(fileName) {
+    const name = String(fileName || '');
+    return /\.pdf$/i.test(name) || /-original\.jpg$/i.test(name);
+  }
+
+  function syncErrorCode(error) {
+    return String(error?.code || error?.message || error || 'signed_warranty_sync_failed')
+      .replace(/[^a-z0-9_:-]/gi, '_')
+      .slice(0, 80);
+  }
+
+  function sourceFingerprint(file, sourceBuffer = null) {
+    const sourceHash = Buffer.isBuffer(sourceBuffer)
+      ? crypto.createHash('sha256').update(sourceBuffer).digest('hex')
+      : '';
+    const identity = JSON.stringify([
+      String(file?.name || ''),
+      Number(file?.size || 0),
+      file?.time?.mtime ?? file?.mtime ?? file?.modified ?? '',
+      sourceHash,
+    ]);
+    return crypto.createHash('sha256').update(identity).digest('hex');
+  }
+
+  async function recordUnassociatedError({ file, saleCode = null, error, sourceBuffer = null }) {
+    const fileName = String(file?.name || 'unknown').slice(0, 255);
+    const fingerprint = sourceFingerprint(file, sourceBuffer);
+    const [existingRows] = await pool.query(
+      `SELECT id
+         FROM signed_warranty_documents
+        WHERE sale_id IS NULL
+          AND source = 'synology_direct'
+          AND original_file_name = ?
+          AND image_sha256 = ?
+        LIMIT 1`,
+      [fileName, fingerprint]
+    );
+    if (existingRows?.[0]) return existingRows[0];
+
+    const id = crypto.randomUUID();
+    const code = syncErrorCode(error);
+    await pool.query(
+      `INSERT INTO signed_warranty_documents
+        (id, sale_code, source, status, original_file_name, image_size_bytes,
+         image_sha256, error_code, error_message, version_number, is_active)
+       VALUES (?, ?, 'synology_direct', 'error', ?, ?, ?, ?, ?, 1, 0)`,
+      [
+        id,
+        saleCode || null,
+        fileName,
+        Number(file?.size || 0) || null,
+        fingerprint,
+        code,
+        String(error?.message || error || code).slice(0, 4000),
+      ]
+    );
+    return { id };
+  }
+
+  async function findSaleByVisibleCode(saleCode) {
+    const [rows] = await pool.query(
+      `SELECT id, customer_id, company_id
+         FROM sales
+        WHERE UPPER(LEFT(REPLACE(id, '-', ''), 8)) = ?
+        LIMIT 2`,
+      [saleCode]
+    );
+    if (rows.length !== 1) {
+      throw new Error(rows.length ? 'ambiguous_sale_code' : 'sale_not_found');
+    }
+    return rows[0];
+  }
+
+  async function confirmActiveDocument(documentId) {
+    const [rows] = await pool.query(
+      'SELECT * FROM signed_warranty_documents WHERE id = ? LIMIT 1',
+      [documentId]
+    );
+    const row = rows?.[0] || null;
+    if (
+      row?.status !== 'available' ||
+      Number(row.is_active) !== 1 ||
+      !row.image_path ||
+      !row.pdf_path
+    ) {
+      throw new Error('signed_warranty_active_confirmation_failed');
+    }
+    return row;
+  }
+
+  async function scan(trigger) {
+    const startedAt = Date.now();
+    const listing = await listPrivateSynologyFolder(signedWarrantyFolder, {
+      limit: boundedMaxFiles,
+      offset: 0,
+    });
+    const files = (listing.files || []).slice(0, boundedMaxFiles);
+    const result = {
+      started: true,
+      trigger,
+      scanned: files.length,
+      ignored: 0,
+      processed: 0,
+      deleted: 0,
+      failed: 0,
+      items: [],
+    };
+
+    for (const file of files) {
+      const fileName = String(file?.name || '');
+      if (file?.isdir || isIgnoredFile(fileName) || !/\.(?:jpe?g|png)$/i.test(fileName)) {
+        result.ignored += 1;
+        continue;
+      }
+      let parsed = null;
+      let sourceBuffer = null;
+      let processingAttempted = false;
+      try {
+        parsed = parseSignedWarrantyFileName(fileName);
+        if (!parsed) throw new Error('invalid_signed_warranty_file_name');
+        const sale = await findSaleByVisibleCode(parsed.saleCode);
+        const sourcePath = `${String(signedWarrantyFolder).replace(/\/+$/, '')}/${fileName}`;
+        sourceBuffer = await downloadBufferFromSynologyPrivateFolder(sourcePath);
+        processingAttempted = true;
+        const document = await processSignedWarrantyImage({
+          sourceBuffer,
+          originalFileName: fileName,
+          sale,
+          source: 'synology_direct',
+          uploadedByCustomerId: null,
+          recordProcessingError: true,
+          errorFingerprint: sourceFingerprint(file, sourceBuffer),
+        });
+        await confirmActiveDocument(document.id);
+        await deletePrivateSynologyFile(sourcePath);
+        result.processed += 1;
+        result.deleted += 1;
+        if (result.items.length < boundedMaxResultItems) {
+          result.items.push({ file_name: fileName, status: 'processed', document_id: document.id });
+        }
+      } catch (error) {
+        if (!processingAttempted) {
+          try {
+            await recordUnassociatedError({
+              file,
+              saleCode: parsed?.saleCode || null,
+              error,
+              sourceBuffer,
+            });
+          } catch (recordError) {
+            console.error('[signed-warranty-sync] failed to record source error:', recordError.message);
+          }
+        }
+        result.failed += 1;
+        if (result.items.length < boundedMaxResultItems) {
+          result.items.push({
+            file_name: fileName,
+            status: 'error',
+            error_code: String(error?.message || error || 'signed_warranty_sync_failed').slice(0, 80),
+          });
+        }
+      }
+    }
+    result.duration_ms = Date.now() - startedAt;
+    result.truncated = Number(listing.total || files.length) > files.length;
+    return result;
+  }
+
+  async function run({ trigger = 'manual' } = {}) {
+    if (inProgress) {
+      return { started: false, in_progress: true };
+    }
+    inProgress = true;
+    try {
+      return await scan(trigger);
+    } finally {
+      inProgress = false;
+    }
+  }
+
+  return {
+    run,
+    recordUnassociatedError,
+  };
+}
+// SIGNED_WARRANTY_SYNC_END
+
+const signedWarrantySync = createSignedWarrantySync({
+  pool,
+  crypto,
+  parseSignedWarrantyFileName,
+  signedWarrantyFolder: SIGNED_WARRANTY_SYNOLOGY_FOLDER,
+  listPrivateSynologyFolder,
+  downloadBufferFromSynologyPrivateFolder,
+  deletePrivateSynologyFile,
+  processSignedWarrantyImage,
+  maxFiles: Number(process.env.SIGNED_WARRANTY_SYNC_MAX_FILES || 100),
+  maxResultItems: Number(process.env.SIGNED_WARRANTY_SYNC_MAX_RESULT_ITEMS || 20),
+});
+
+fastify.post('/admin/signed-warranty/sync', {
+  preHandler: signedWarrantyApi.requireAdmin,
+}, async (req, reply) => {
+  const result = await signedWarrantySync.run({ trigger: 'manual' });
+  if (!result.started && result.in_progress) {
+    return reply.code(409).send({
+      error: 'Ja existe uma sincronizacao de termos de garantia em andamento',
+      ...result,
+    });
+  }
+  return result;
+});
+
+function scheduleSignedWarrantySync() {
+  const timer = setInterval(() => {
+    signedWarrantySync.run({ trigger: 'scheduled' }).catch((error) => {
+      console.error('[signed-warranty-sync] scheduled run failed:', error.message);
+    });
+  }, SIGNED_WARRANTY_SYNC_INTERVAL_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+  return timer;
+}
+
 async function uploadAutoresponderAttachmentToSynology({ fileName, fileBuf }) {
   const folder = AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER;
   if (!SYNO_FOLDERS[folder]) {
@@ -28569,6 +28812,7 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {
+  scheduleSignedWarrantySync();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);

@@ -137,6 +137,20 @@ for (const server of Object.values(servers)) {
     server,
     /fastify\.get\('\/admin\/signed-warranty\/:id\/original',\s*\{\s*preHandler:\s*signedWarrantyApi\.requireAdmin/
   );
+  assert.match(server, /SIGNED_WARRANTY_SYNC_INTERVAL_MS/);
+  assert.match(server, /Math\.max\(60_000, Number\(process\.env\.SIGNED_WARRANTY_SYNC_INTERVAL_MS \|\| 300_000\)\)/);
+  assert.match(server, /createSignedWarrantySync/);
+  assert.match(server, /parseSignedWarrantyFileName/);
+  assert.match(server, /UPPER\(LEFT\(REPLACE\(id, '-', ''\), 8\)\) = \?/);
+  assert.match(
+    server,
+    /fastify\.post\('\/admin\/signed-warranty\/sync',\s*\{\s*preHandler:\s*signedWarrantyApi\.requireAdmin/
+  );
+  assert.match(server, /reply\.code\(409\)\.send\(\{[\s\S]*sincronizacao de termos de garantia em andamento/);
+  assert.match(server, /function scheduleSignedWarrantySync\(\)/);
+  assert.match(server, /signedWarrantySync\.run\(\{ trigger: 'scheduled' \}\)/);
+  assert.match(server, /if \(typeof timer\.unref === 'function'\) timer\.unref\(\)/);
+  assert.match(server, /runMigrations\(\)\.then\(\(\) => \{\s*scheduleSignedWarrantySync\(\);/);
   assert.doesNotMatch(
     server,
     /(?:signed-warranty|signedWarranty)[\s\S]{0,160}requireSyncKey/
@@ -161,5 +175,14 @@ const extractApi = (source) => {
   return match[1].trim().replace(/\r\n/g, '\n');
 };
 assert.equal(extractApi(servers.js), extractApi(servers.cjs));
+
+const extractSync = (source) => {
+  const match = source.match(
+    /\/\/ SIGNED_WARRANTY_SYNC_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_SYNC_END/
+  );
+  assert.ok(match, 'signed warranty sync block must exist');
+  return match[1].trim().replace(/\r\n/g, '\n');
+};
+assert.equal(extractSync(servers.js), extractSync(servers.cjs));
 
 console.log('signed warranty static checks passed');

@@ -70,6 +70,15 @@ function loadSignedWarrantyApiFactory() {
   return Function(`${match[1]}\nreturn createSignedWarrantyApi;`)();
 }
 
+function loadSignedWarrantySyncFactory() {
+  const source = readFileSync('vps_server.cjs', 'utf8');
+  const match = source.match(
+    /\/\/ SIGNED_WARRANTY_SYNC_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_SYNC_END/
+  );
+  assert.ok(match, 'signed warranty sync block must exist');
+  return Function(`${match[1]}\nreturn createSignedWarrantySync;`)();
+}
+
 function createReply() {
   return {
     statusCode: 200,
@@ -544,6 +553,277 @@ test('admin downloads the original signed warranty image privately', async () =>
     'inline; filename="termo-garantia-venda-AB12CD34-original.jpg"'
   );
   assert.equal(reply.payload, imageBuffer);
+});
+
+test('Synology scanner processes a direct image and deletes it only after active DB confirmation', async () => {
+  const createSignedWarrantySync = loadSignedWarrantySyncFactory();
+  const sourceBuffer = Buffer.from('valid-source-image');
+  const processCalls = [];
+  const deleted = [];
+  const queries = [];
+  const sync = createSignedWarrantySync({
+    pool: {
+      async query(sql, params) {
+        const normalized = sql.replace(/\s+/g, ' ').trim();
+        queries.push({ sql: normalized, params });
+        if (/FROM sales/.test(normalized)) {
+          return [[{
+            id: 'AB12CD34-sale',
+            customer_id: 'customer-1',
+            company_id: 'company-1',
+          }]];
+        }
+        if (/FROM signed_warranty_documents WHERE id = \? LIMIT 1/.test(normalized)) {
+          return [[{
+            id: 'document-1',
+            status: 'available',
+            is_active: 1,
+            image_path: '/home/termos-garantia/AB12CD34/v1/original.jpg',
+            pdf_path: '/home/termos-garantia/AB12CD34/v1/document.pdf',
+          }]];
+        }
+        throw new Error(`unexpected_query:${normalized}`);
+      },
+    },
+    crypto,
+    parseSignedWarrantyFileName: (fileName) => {
+      if (fileName === 'termo-garantia-venda-AB12CD34.png') {
+        return { saleCode: 'AB12CD34', extension: 'png' };
+      }
+      return null;
+    },
+    signedWarrantyFolder: '/home/termos-garantia',
+    listPrivateSynologyFolder: async () => ({
+      files: [
+        { name: 'termo-garantia-venda-AB12CD34-original.jpg', size: 20 },
+        { name: 'termo-garantia-venda-AB12CD34.pdf', size: 30 },
+        { name: 'termo-garantia-venda-AB12CD34.png', size: sourceBuffer.length, time: { mtime: 123 } },
+      ],
+      total: 3,
+    }),
+    downloadBufferFromSynologyPrivateFolder: async (filePath) => {
+      assert.equal(filePath, '/home/termos-garantia/termo-garantia-venda-AB12CD34.png');
+      return sourceBuffer;
+    },
+    deletePrivateSynologyFile: async (filePath) => {
+      deleted.push(filePath);
+    },
+    processSignedWarrantyImage: async (input) => {
+      processCalls.push(input);
+      assert.equal(deleted.length, 0);
+      return {
+        id: 'document-1',
+        status: 'available',
+        is_active: 1,
+      };
+    },
+    maxFiles: 100,
+    maxResultItems: 20,
+  });
+
+  const result = await sync.run({ trigger: 'manual' });
+
+  assert.equal(result.started, true);
+  assert.equal(result.scanned, 3);
+  assert.equal(result.ignored, 2);
+  assert.equal(result.processed, 1);
+  assert.equal(result.deleted, 1);
+  assert.equal(result.failed, 0);
+  assert.match(
+    queries[0].sql,
+    /UPPER\(LEFT\(REPLACE\(id, '-', ''\), 8\)\) = \?/
+  );
+  assert.deepEqual(queries[0].params, ['AB12CD34']);
+  assert.deepEqual(processCalls, [{
+    sourceBuffer,
+    originalFileName: 'termo-garantia-venda-AB12CD34.png',
+    sale: {
+      id: 'AB12CD34-sale',
+      customer_id: 'customer-1',
+      company_id: 'company-1',
+    },
+    source: 'synology_direct',
+    uploadedByCustomerId: null,
+    recordProcessingError: true,
+    errorFingerprint: processCalls[0].errorFingerprint,
+  }]);
+  assert.match(processCalls[0].errorFingerprint, /^[a-f0-9]{64}$/);
+  assert.deepEqual(deleted, [
+    '/home/termos-garantia/termo-garantia-venda-AB12CD34.png',
+  ]);
+});
+
+test('Synology scanner records invalid and missing-sale files idempotently and continues the batch', async () => {
+  const createSignedWarrantySync = loadSignedWarrantySyncFactory();
+  const errorRows = [];
+  const inserted = [];
+  const deleted = [];
+  let listingCall = 0;
+  const files = [
+    { name: 'foto-solta.jpg', size: 10, time: { mtime: 100 } },
+    { name: 'termo-garantia-venda-DEADBEAF.jpeg', size: 20, time: { mtime: 200 } },
+    { name: 'termo-garantia-venda-AB12CD34.png', size: 30, time: { mtime: 300 } },
+  ];
+  const sync = createSignedWarrantySync({
+    pool: {
+      async query(sql, params) {
+        const normalized = sql.replace(/\s+/g, ' ').trim();
+        if (/FROM sales/.test(normalized)) {
+          if (params[0] === 'DEADBEAF') return [[]];
+          return [[{
+            id: 'AB12CD34-sale',
+            customer_id: 'customer-1',
+            company_id: 'company-1',
+          }]];
+        }
+        if (/SELECT id FROM signed_warranty_documents/.test(normalized)) {
+          const existing = errorRows.find((row) =>
+            row.original_file_name === params[0] && row.image_sha256 === params[1]
+          );
+          return [existing ? [{ id: existing.id }] : []];
+        }
+        if (/^INSERT INTO signed_warranty_documents/.test(normalized)) {
+          const row = {
+            id: params[0],
+            sale_code: params[1],
+            original_file_name: params[2],
+            image_size_bytes: params[3],
+            image_sha256: params[4],
+            error_code: params[5],
+            error_message: params[6],
+          };
+          errorRows.push(row);
+          inserted.push(row);
+          return [{ affectedRows: 1 }];
+        }
+        if (/FROM signed_warranty_documents WHERE id = \? LIMIT 1/.test(normalized)) {
+          return [[{
+            id: 'document-1',
+            status: 'available',
+            is_active: 1,
+            image_path: '/private/original.jpg',
+            pdf_path: '/private/document.pdf',
+          }]];
+        }
+        throw new Error(`unexpected_query:${normalized}`);
+      },
+    },
+    crypto,
+    parseSignedWarrantyFileName: (fileName) => {
+      const match = fileName.match(/^termo-garantia-venda-([A-Z0-9]{8})\.(?:jpe?g|png)$/);
+      return match ? { saleCode: match[1], extension: 'jpg' } : null;
+    },
+    signedWarrantyFolder: '/home/termos-garantia',
+    listPrivateSynologyFolder: async () => {
+      listingCall += 1;
+      const listedFiles = listingCall === 1 ? files : files.slice(0, 2);
+      return { files: listedFiles, total: listedFiles.length };
+    },
+    downloadBufferFromSynologyPrivateFolder: async (filePath) => {
+      assert.match(filePath, /AB12CD34\.png$/);
+      return Buffer.from('valid-source');
+    },
+    deletePrivateSynologyFile: async (filePath) => {
+      deleted.push(filePath);
+    },
+    processSignedWarrantyImage: async () => ({
+      id: 'document-1',
+      status: 'available',
+      is_active: 1,
+    }),
+    maxFiles: 100,
+    maxResultItems: 20,
+  });
+
+  const first = await sync.run({ trigger: 'manual' });
+  const second = await sync.run({ trigger: 'scheduled' });
+
+  assert.equal(first.failed, 2);
+  assert.equal(first.processed, 1);
+  assert.equal(first.deleted, 1);
+  assert.equal(second.failed, 2);
+  assert.equal(inserted.length, 2);
+  assert.deepEqual(
+    inserted.map((row) => ({
+      sale_code: row.sale_code,
+      original_file_name: row.original_file_name,
+      error_code: row.error_code,
+    })),
+    [
+      {
+        sale_code: null,
+        original_file_name: 'foto-solta.jpg',
+        error_code: 'invalid_signed_warranty_file_name',
+      },
+      {
+        sale_code: 'DEADBEAF',
+        original_file_name: 'termo-garantia-venda-DEADBEAF.jpeg',
+        error_code: 'sale_not_found',
+      },
+    ]
+  );
+  assert.deepEqual(deleted, [
+    '/home/termos-garantia/termo-garantia-venda-AB12CD34.png',
+  ]);
+});
+
+test('Synology scanner delegates corrupt-image error recording to the per-sale pipeline', async () => {
+  const createSignedWarrantySync = loadSignedWarrantySyncFactory();
+  const sourceBuffer = Buffer.from('corrupt-image-source');
+  const processCalls = [];
+  let unassociatedQueryRan = false;
+  let deleted = false;
+  const sync = createSignedWarrantySync({
+    pool: {
+      async query(sql) {
+        const normalized = sql.replace(/\s+/g, ' ').trim();
+        if (/FROM sales/.test(normalized)) {
+          return [[{
+            id: 'AB12CD34-sale',
+            customer_id: 'customer-1',
+            company_id: 'company-1',
+          }]];
+        }
+        if (/sale_id IS NULL/.test(normalized)) {
+          unassociatedQueryRan = true;
+          return [[]];
+        }
+        throw new Error(`unexpected_query:${normalized}`);
+      },
+    },
+    crypto,
+    parseSignedWarrantyFileName: () => ({
+      saleCode: 'AB12CD34',
+      extension: 'jpg',
+    }),
+    signedWarrantyFolder: '/home/termos-garantia',
+    listPrivateSynologyFolder: async () => ({
+      files: [{
+        name: 'termo-garantia-venda-AB12CD34.jpg',
+        size: sourceBuffer.length,
+        time: { mtime: 999 },
+      }],
+      total: 1,
+    }),
+    downloadBufferFromSynologyPrivateFolder: async () => sourceBuffer,
+    deletePrivateSynologyFile: async () => {
+      deleted = true;
+    },
+    processSignedWarrantyImage: async (input) => {
+      processCalls.push(input);
+      throw new Error('Input buffer contains unsupported image format');
+    },
+  });
+
+  const result = await sync.run({ trigger: 'manual' });
+
+  assert.equal(result.failed, 1);
+  assert.equal(result.deleted, 0);
+  assert.equal(deleted, false);
+  assert.equal(unassociatedQueryRan, false);
+  assert.equal(processCalls.length, 1);
+  assert.equal(processCalls[0].recordProcessingError, true);
+  assert.match(processCalls[0].errorFingerprint, /^[a-f0-9]{64}$/);
 });
 
 function createConnection(queryHandler, events) {
