@@ -72,4 +72,42 @@ assert.equal(lock.packages['node_modules/pdf-lib'].version, '1.17.1');
 assert.deepEqual(normalizeDdl(migrationDdl), normalizeDdl(serverDdl.js));
 assert.deepEqual(normalizeDdl(migrationDdl), normalizeDdl(serverDdl.cjs));
 
+for (const server of Object.values(servers)) {
+  assert.match(server, /SIGNED_WARRANTY_SYNOLOGY_FOLDER/);
+  assert.match(server, /SIGNED_WARRANTY_MAX_IMAGE_BYTES/);
+  assert.match(server, /listPrivateSynologyFolder/);
+  assert.match(server, /downloadBufferFromSynologyPrivateFolder/);
+  assert.match(server, /uploadBufferToSynologyPrivateFolder/);
+  assert.match(server, /deletePrivateSynologyFile/);
+  assert.match(server, /SYNO\.FileStation\.List/);
+  assert.match(server, /SYNO\.FileStation\.Download/);
+  assert.match(server, /SYNO\.FileStation\.Upload/);
+  assert.match(server, /SYNO\.FileStation\.Delete/);
+  assert.match(server, /processSignedWarrantyImage/);
+  assert.match(server, /sharp\(sourceBuffer\)\s*\.rotate\(\)/);
+  assert.match(server, /\.flatten\(\{ background: '#ffffff' \}\)/);
+  assert.match(server, /\.jpeg\(\{ quality: 88, mozjpeg: true \}\)/);
+  assert.match(server, /PDFDocument\.create\(\)/);
+  assert.match(server, /pdf\.addPage\(\[595\.28, 841\.89\]\)/);
+  assert.match(
+    server,
+    /fitImageInsideA4\(\s*metadata\.width,\s*metadata\.height,\s*595\.28,\s*841\.89,\s*24\s*\)/
+  );
+  assert.match(server, /crypto\.createHash\('sha256'\)/);
+  assert.match(server, /SELECT id FROM sales WHERE id = \? FOR UPDATE/);
+  assert.match(server, /SELECT MAX\(version_number\)[\s\S]*FOR UPDATE/);
+  assert.match(server, /dedupe_company_key = COALESCE\(\?, '__unassigned__'\)/);
+  assert.match(server, /status = 'replaced', is_active = 0/);
+  assert.doesNotMatch(server, /SYNO_CDN\.termos_garantia/);
+}
+
+const extractPipeline = (source) => {
+  const match = source.match(
+    /\/\/ SIGNED_WARRANTY_PIPELINE_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_PIPELINE_END/
+  );
+  assert.ok(match, 'signed warranty pipeline block must exist');
+  return match[1].trim().replace(/\r\n/g, '\n');
+};
+assert.equal(extractPipeline(servers.js), extractPipeline(servers.cjs));
+
 console.log('signed warranty static checks passed');

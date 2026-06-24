@@ -8,10 +8,22 @@ const zlib = require('zlib');
 const { spawn } = require('child_process');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
 const crypto = require('crypto');
+const sharp = require('sharp');
+const { PDFDocument } = require('pdf-lib');
+const {
+  normalizeSaleCode,
+  buildSignedWarrantyNames,
+  buildDiscardMessage,
+  fitImageInsideA4,
+} = require('./services/signedWarrantyDocumentCore.cjs');
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+const SIGNED_WARRANTY_SYNOLOGY_FOLDER =
+  process.env.SIGNED_WARRANTY_SYNOLOGY_FOLDER || '/home/termos-garantia';
+const SIGNED_WARRANTY_MAX_IMAGE_BYTES =
+  Math.max(1, Number(process.env.SIGNED_WARRANTY_MAX_IMAGE_MB || 15)) * 1024 * 1024;
 const AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER = process.env.AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER || 'imagens';
 const AUTORESPONDER_SYNOLOGY_ARCHIVE_DIR = process.env.AUTORESPONDER_SYNOLOGY_ARCHIVE_DIR || '/volume1/backups/autoresponder';
 const AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS = 'Certo, vou chamar um especialista para te atender. Por favor aguarde um instante.';
@@ -24431,6 +24443,503 @@ async function synoApiGet(apiPath) {
   const urlObj = new URL(SYNO_URL);
   return synoHttpGet(urlObj, apiPath);
 }
+
+function normalizePrivateSynologyPath(value, label) {
+  const normalized = String(value || '').trim().replace(/\\/g, '/').replace(/\/+/g, '/');
+  if (!normalized.startsWith('/') || normalized.includes('\0')) {
+    throw new Error(`invalid_synology_${label}`);
+  }
+  return normalized.length > 1 ? normalized.replace(/\/+$/, '') : normalized;
+}
+
+function joinPrivateSynologyPath(folderPath, fileName) {
+  const folder = normalizePrivateSynologyPath(folderPath, 'folder');
+  const name = String(fileName || '').trim();
+  if (!name || name === '.' || name === '..' || /[\\/\0]/.test(name)) {
+    throw new Error('invalid_synology_file_name');
+  }
+  return `${folder}/${name}`;
+}
+
+async function listPrivateSynologyFolder(folderPath, { limit = 1000, offset = 0 } = {}) {
+  const folder = normalizePrivateSynologyPath(folderPath, 'folder');
+  const sid = await synoLogin();
+  const result = await synoApiGet(
+    `/webapi/entry.cgi?api=SYNO.FileStation.List&version=2&method=list` +
+    `&folder_path=${encodeURIComponent(folder)}` +
+    `&additional=${encodeURIComponent('["size","time"]')}` +
+    `&limit=${Math.max(1, Number(limit) || 1000)}` +
+    `&offset=${Math.max(0, Number(offset) || 0)}` +
+    `&_sid=${encodeURIComponent(sid)}`
+  );
+  if (!result || result.success !== true) {
+    throw new Error(`synology_list_failed:${JSON.stringify(result?.error || result || null)}`);
+  }
+  return {
+    files: Array.isArray(result.data?.files) ? result.data.files : [],
+    total: Number(result.data?.total || 0),
+  };
+}
+
+async function downloadBufferFromSynologyPrivateFolder(filePath) {
+  const normalizedPath = normalizePrivateSynologyPath(filePath, 'file_path');
+  const sid = await synoLogin();
+  const urlObj = new URL(SYNO_URL);
+  const https = require('https');
+  const requestPath =
+    `/webapi/entry.cgi?api=SYNO.FileStation.Download&version=2&method=download` +
+    `&path=${encodeURIComponent(normalizedPath)}&mode=download&_sid=${encodeURIComponent(sid)}`;
+
+  return new Promise((resolve, reject) => {
+    const request = https.request({
+      hostname: urlObj.hostname,
+      port: getSynologyRequestPort(urlObj),
+      path: requestPath,
+      method: 'GET',
+      rejectUnauthorized: false,
+    }, (response) => {
+      const chunks = [];
+      response.on('data', chunk => chunks.push(Buffer.from(chunk)));
+      response.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        const contentType = String(response.headers['content-type'] || '').toLowerCase();
+        const looksLikeJson = contentType.includes('application/json') || buffer[0] === 0x7b;
+        if (looksLikeJson) {
+          try {
+            const payload = JSON.parse(buffer.toString('utf8'));
+            if (payload?.success === false || payload?.error) {
+              reject(new Error(`synology_download_failed:${JSON.stringify(payload.error || payload)}`));
+              return;
+            }
+          } catch (error) {
+            reject(new Error(`synology_download_invalid_json:${error.message}`));
+            return;
+          }
+        }
+        if ((response.statusCode || 500) >= 400) {
+          reject(new Error(`synology_download_http_${response.statusCode || 500}`));
+          return;
+        }
+        resolve(buffer);
+      });
+    });
+    request.on('error', reject);
+    request.setTimeout(30000, () => request.destroy(new Error('synology_download_timeout')));
+    request.end();
+  });
+}
+
+async function uploadBufferToSynologyPrivateFolder(
+  folderPath,
+  fileName,
+  fileBuffer,
+  { overwrite = true, contentType = 'application/octet-stream' } = {}
+) {
+  const folder = normalizePrivateSynologyPath(folderPath, 'folder');
+  const fullPath = joinPrivateSynologyPath(folder, fileName);
+  if (!Buffer.isBuffer(fileBuffer) || fileBuffer.length === 0) {
+    throw new Error('empty_synology_upload');
+  }
+
+  const sid = await synoLogin();
+  const boundary = `MDVSignedWarrantyBoundary${crypto.randomBytes(12).toString('hex')}`;
+  const fields = [
+    ['api', 'SYNO.FileStation.Upload'],
+    ['version', '2'],
+    ['method', 'upload'],
+    ['path', folder],
+    ['create_parents', 'true'],
+    ['overwrite', overwrite ? 'true' : 'false'],
+    ['_sid', sid],
+  ].map(([key, value]) =>
+    `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`
+  ).join('');
+  const safeFileName = String(fileName).replace(/["\r\n]/g, '_');
+  const fileHeader =
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${safeFileName}"\r\n` +
+    `Content-Type: ${contentType}\r\n\r\n`;
+  const body = Buffer.concat([
+    Buffer.from(fields),
+    Buffer.from(fileHeader),
+    fileBuffer,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  const urlObj = new URL(SYNO_URL);
+  const https = require('https');
+  const result = await new Promise((resolve, reject) => {
+    const request = https.request({
+      hostname: urlObj.hostname,
+      port: getSynologyRequestPort(urlObj),
+      path: '/webapi/entry.cgi',
+      method: 'POST',
+      rejectUnauthorized: false,
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length,
+      },
+    }, (response) => {
+      const chunks = [];
+      response.on('data', chunk => chunks.push(Buffer.from(chunk)));
+      response.on('end', () => {
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+        } catch (error) {
+          reject(new Error(`synology_upload_invalid_json:${error.message}`));
+        }
+      });
+    });
+    request.on('error', reject);
+    request.setTimeout(30000, () => request.destroy(new Error('synology_upload_timeout')));
+    request.end(body);
+  });
+  if (!result || result.success !== true) {
+    throw new Error(`synology_upload_failed:${JSON.stringify(result?.error || result || null)}`);
+  }
+  return fullPath;
+}
+
+async function deletePrivateSynologyFile(filePath) {
+  const normalizedPath = normalizePrivateSynologyPath(filePath, 'file_path');
+  const sid = await synoLogin();
+  const result = await synoApiGet(
+    `/webapi/entry.cgi?api=SYNO.FileStation.Delete&version=2&method=start` +
+    `&path=${encodeURIComponent(normalizedPath)}&accurate_progress=true&_sid=${encodeURIComponent(sid)}`
+  );
+  if (!result || result.success !== true) {
+    throw new Error(`synology_delete_failed:${JSON.stringify(result?.error || result || null)}`);
+  }
+  return { ok: true, path: normalizedPath };
+}
+
+// SIGNED_WARRANTY_PIPELINE_START
+function createSignedWarrantyPipeline({
+  pool,
+  sharp,
+  PDFDocument,
+  crypto,
+  normalizeSaleCode,
+  buildSignedWarrantyNames,
+  buildDiscardMessage,
+  fitImageInsideA4,
+  signedWarrantyFolder,
+  maxImageBytes,
+  uploadBufferToSynologyPrivateFolder,
+}) {
+  const A4_WIDTH = 595.28;
+  const A4_HEIGHT = 841.89;
+  const A4_MARGIN = 24;
+
+  function errorCode(error) {
+    return String(error?.code || error?.message || 'signed_warranty_processing_failed')
+      .replace(/[^a-z0-9_:-]/gi, '_')
+      .slice(0, 80);
+  }
+
+  async function convertSignedWarrantyImage(sourceBuffer) {
+    if (!Buffer.isBuffer(sourceBuffer) || sourceBuffer.length === 0) {
+      throw new Error('empty_image');
+    }
+    if (sourceBuffer.length > maxImageBytes) {
+      throw new Error('image_too_large');
+    }
+
+    const imageBuffer = await sharp(sourceBuffer)
+      .rotate()
+      .flatten({ background: '#ffffff' })
+      .jpeg({ quality: 88, mozjpeg: true })
+      .toBuffer();
+    const metadata = await sharp(imageBuffer).metadata();
+    if (!metadata.width || !metadata.height) {
+      throw new Error('invalid_image_dimensions');
+    }
+
+    const pdf = await PDFDocument.create();
+    pdf.setProducer('Mercado do Vale');
+    pdf.setCreator('Mercado do Vale');
+    pdf.setCreationDate(new Date(0));
+    pdf.setModificationDate(new Date(0));
+    const page = pdf.addPage([595.28, 841.89]);
+    const embedded = await pdf.embedJpg(imageBuffer);
+    const placement = fitImageInsideA4(
+      metadata.width,
+      metadata.height,
+      595.28,
+      841.89,
+      24
+    );
+    page.drawImage(embedded, placement);
+    const pdfBuffer = Buffer.from(await pdf.save({ useObjectStreams: false }));
+
+    return {
+      imageBuffer,
+      pdfBuffer,
+      imageSha256: crypto.createHash('sha256').update(imageBuffer).digest('hex'),
+      pdfSha256: crypto.createHash('sha256').update(pdfBuffer).digest('hex'),
+    };
+  }
+
+  async function readNextVersion(connection, saleId) {
+    const [rows] = await connection.query(
+      `SELECT MAX(version_number) AS max_version
+         FROM signed_warranty_documents
+        WHERE sale_id = ?
+        FOR UPDATE`,
+      [saleId]
+    );
+    return Number(rows?.[0]?.max_version || 0) + 1;
+  }
+
+  async function recordSignedWarrantyError({
+    sale,
+    saleCode,
+    source,
+    originalFileName,
+    uploadedByCustomerId,
+    error,
+  }) {
+    if (!sale?.id) return null;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query('SELECT id FROM sales WHERE id = ? FOR UPDATE', [sale.id]);
+      const [existingRows] = await connection.query(
+        `SELECT id
+           FROM signed_warranty_documents
+          WHERE sale_id = ?
+            AND source = ?
+            AND original_file_name = ?
+            AND status = 'error'
+          ORDER BY version_number DESC
+          LIMIT 1
+          FOR UPDATE`,
+        [sale.id, source, originalFileName]
+      );
+      const code = errorCode(error);
+      const message = String(error?.message || error || code).slice(0, 4000);
+      let id = existingRows?.[0]?.id || null;
+      if (id) {
+        await connection.query(
+          `UPDATE signed_warranty_documents
+              SET company_id = ?,
+                  customer_id = ?,
+                  sale_code = ?,
+                  error_code = ?,
+                  error_message = ?,
+                  uploaded_by_customer_id = ?,
+                  image_path = NULL,
+                  pdf_path = NULL,
+                  image_sha256 = NULL,
+                  pdf_sha256 = NULL,
+                  processed_at = NULL,
+                  discarded_at = NULL,
+                  is_active = 0
+            WHERE id = ?`,
+          [
+            sale.company_id || null,
+            sale.customer_id || null,
+            saleCode || null,
+            code,
+            message,
+            uploadedByCustomerId || null,
+            id,
+          ]
+        );
+      } else {
+        const versionNumber = await readNextVersion(connection, sale.id);
+        id = crypto.randomUUID();
+        await connection.query(
+          `INSERT INTO signed_warranty_documents
+            (id, company_id, sale_id, customer_id, sale_code, source, status,
+             original_file_name, error_code, error_message, version_number, is_active,
+             uploaded_by_customer_id)
+           VALUES (?, ?, ?, ?, ?, ?, 'error', ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            sale.company_id || null,
+            sale.id,
+            sale.customer_id || null,
+            saleCode || null,
+            source,
+            originalFileName,
+            code,
+            message,
+            versionNumber,
+            0,
+            uploadedByCustomerId || null,
+          ]
+        );
+      }
+      await connection.commit();
+      return { id, status: 'error', is_active: 0 };
+    } catch (recordError) {
+      try {
+        await connection.rollback();
+      } catch {}
+      throw recordError;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async function processSignedWarrantyImage({
+    sourceBuffer,
+    originalFileName,
+    sale,
+    source,
+    uploadedByCustomerId = null,
+  }) {
+    let connection = null;
+    let saleCode = null;
+    try {
+      if (!sale?.id) throw new Error('sale_required');
+      if (!['sale_screen', 'synology_direct'].includes(source)) {
+        throw new Error('invalid_signed_warranty_source');
+      }
+      if (!String(originalFileName || '').trim()) {
+        throw new Error('original_file_name_required');
+      }
+      saleCode = normalizeSaleCode(sale.id);
+      if (saleCode.length !== 8) throw new Error('invalid_sale_code');
+
+      const converted = await convertSignedWarrantyImage(sourceBuffer);
+      connection = await pool.getConnection();
+      await connection.beginTransaction();
+
+      const [saleRows] = await connection.query(
+        'SELECT id FROM sales WHERE id = ? FOR UPDATE',
+        [sale.id]
+      );
+      if (!saleRows?.length) throw new Error('sale_not_found');
+
+      const [duplicateRows] = await connection.query(
+        `SELECT *
+           FROM signed_warranty_documents
+          WHERE dedupe_company_key = COALESCE(?, '__unassigned__')
+            AND image_sha256 = ?
+          LIMIT 1
+          FOR UPDATE`,
+        [sale.company_id || null, converted.imageSha256]
+      );
+      if (duplicateRows?.[0]) {
+        await connection.commit();
+        return duplicateRows[0];
+      }
+
+      const versionNumber = await readNextVersion(connection, sale.id);
+      const names = buildSignedWarrantyNames(saleCode);
+      const versionFolder = `${String(signedWarrantyFolder).replace(/\/+$/, '')}/${saleCode}/v${versionNumber}`;
+      const imagePath = await uploadBufferToSynologyPrivateFolder(
+        versionFolder,
+        names.imageName,
+        converted.imageBuffer,
+        { overwrite: true, contentType: 'image/jpeg' }
+      );
+      const pdfPath = await uploadBufferToSynologyPrivateFolder(
+        versionFolder,
+        names.pdfName,
+        converted.pdfBuffer,
+        { overwrite: true, contentType: 'application/pdf' }
+      );
+
+      await connection.query(
+        `UPDATE signed_warranty_documents
+            SET status = 'replaced', is_active = 0
+          WHERE sale_id = ? AND is_active = 1`,
+        [sale.id]
+      );
+
+      const id = crypto.randomUUID();
+      const discardedAt = new Date();
+      const discardMessage = buildDiscardMessage(
+        discardedAt,
+        'pt-BR',
+        'America/Sao_Paulo'
+      );
+      await connection.query(
+        `INSERT INTO signed_warranty_documents
+          (id, company_id, sale_id, customer_id, sale_code, source, status,
+           original_file_name, image_path, pdf_path, image_mime_type, image_size_bytes,
+           image_sha256, pdf_sha256, version_number, is_active, uploaded_by_customer_id,
+           processed_at, discarded_at, discard_message)
+         VALUES (?, ?, ?, ?, ?, ?, 'available', ?, ?, ?, 'image/jpeg', ?, ?, ?, ?, 1, ?, NOW(), ?, ?)`,
+        [
+          id,
+          sale.company_id || null,
+          sale.id,
+          sale.customer_id || null,
+          saleCode,
+          source,
+          String(originalFileName).slice(0, 255),
+          imagePath,
+          pdfPath,
+          converted.imageBuffer.length,
+          converted.imageSha256,
+          converted.pdfSha256,
+          versionNumber,
+          uploadedByCustomerId || null,
+          discardedAt,
+          discardMessage,
+        ]
+      );
+      const [rows] = await connection.query(
+        'SELECT * FROM signed_warranty_documents WHERE id = ? LIMIT 1',
+        [id]
+      );
+      await connection.commit();
+      return rows?.[0] || {
+        id,
+        sale_id: sale.id,
+        version_number: versionNumber,
+        status: 'available',
+        is_active: 1,
+      };
+    } catch (error) {
+      if (connection) {
+        try {
+          await connection.rollback();
+        } catch {}
+      }
+      try {
+        await recordSignedWarrantyError({
+          sale,
+          saleCode,
+          source,
+          originalFileName: String(originalFileName || 'unknown').slice(0, 255),
+          uploadedByCustomerId,
+          error,
+        });
+      } catch (recordError) {
+        console.error('[signed-warranty] failed to record processing error:', recordError.message);
+      }
+      throw error;
+    } finally {
+      if (connection) connection.release();
+    }
+  }
+
+  return {
+    convertSignedWarrantyImage,
+    processSignedWarrantyImage,
+  };
+}
+// SIGNED_WARRANTY_PIPELINE_END
+
+const {
+  convertSignedWarrantyImage,
+  processSignedWarrantyImage,
+} = createSignedWarrantyPipeline({
+  pool,
+  sharp,
+  PDFDocument,
+  crypto,
+  normalizeSaleCode,
+  buildSignedWarrantyNames,
+  buildDiscardMessage,
+  fitImageInsideA4,
+  signedWarrantyFolder: SIGNED_WARRANTY_SYNOLOGY_FOLDER,
+  maxImageBytes: SIGNED_WARRANTY_MAX_IMAGE_BYTES,
+  uploadBufferToSynologyPrivateFolder,
+});
 
 async function uploadAutoresponderAttachmentToSynology({ fileName, fileBuf }) {
   const folder = AUTORESPONDER_ATTACHMENT_SYNOLOGY_FOLDER;
