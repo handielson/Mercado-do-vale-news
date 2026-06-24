@@ -172,13 +172,15 @@ test('customer signed warranty listing is owner-only, active-only, and sanitized
   assert.equal(reply.statusCode, 200);
   assert.deepEqual(result, {
     sale_id: 'AB12CD34-sale',
-    documents: [{
+    active: {
       id: 'document-1',
       sale_id: 'AB12CD34-sale',
       customer_id: 'customer-1',
       status: 'available',
       is_active: 1,
-    }],
+    },
+    history: [],
+    pending: [],
   });
   assert.match(queries[1].sql, /status = 'available'/);
   assert.match(queries[1].sql, /is_active = 1/);
@@ -263,7 +265,9 @@ test('admin signed warranty listing includes history and hashes but hides privat
 
   assert.equal(queries.length, 2);
   assert.doesNotMatch(queries[1].sql, /status = 'available'/);
-  assert.deepEqual(result.documents, [{
+  assert.deepEqual(result.active, null);
+  assert.deepEqual(result.history, []);
+  assert.deepEqual(result.pending, [{
     id: 'document-error',
     sale_id: 'AB12CD34-sale',
     status: 'error',

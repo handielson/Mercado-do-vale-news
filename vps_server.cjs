@@ -25263,12 +25263,24 @@ function createSignedWarrantyApi({
         ORDER BY version_number DESC, created_at DESC`,
       [saleId]
     );
-    return {
-      sale_id: saleId,
-      documents: (rows || []).map((row) =>
-        sanitizeDocument(row, { isAdmin: access.isAdmin === true })
-      ),
-    };
+    const documents = (rows || []).map((row) =>
+      sanitizeDocument(row, { isAdmin: access.isAdmin === true })
+    );
+    const active = documents.find((row) =>
+      row.status === 'available' && Number(row.is_active) === 1
+    ) || null;
+    const history = access.isAdmin
+      ? documents.filter((row) =>
+        row.status === 'replaced' ||
+        (row.status === 'available' && Number(row.is_active) !== 1)
+      )
+      : [];
+    const pending = access.isAdmin
+      ? documents.filter((row) =>
+        row.status !== 'available' && row.status !== 'replaced'
+      )
+      : [];
+    return { sale_id: saleId, active, history, pending };
   }
 
   function privateFileName(row, suffix) {
