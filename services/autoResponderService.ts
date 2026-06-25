@@ -289,6 +289,14 @@ export const autoResponderService = {
         return vpsClient.post<AutoResponderOk & { sender: string }>('/autoresponder/internal-chat/reset', input);
     },
 
+    sendSandboxMessage: (input: { message: string; channel: string; sender: string; options?: { mockMode?: boolean; activeSkills?: Record<string, boolean> } }): Promise<any> => {
+        return vpsClient.post<any>('/autoresponder/sandbox/message', input);
+    },
+
+    resetSandboxChat: (input: { channel: string; sender: string }): Promise<any> => {
+        return vpsClient.post<any>('/autoresponder/sandbox/reset', input);
+    },
+
     simulateBotMapFlow: (flow: AutoResponderBotMapFlow, input: { sender?: string; contactFirstName?: string } = {}): Promise<AutoResponderTestFlowResult> => {
         const safeSender = input.sender?.startsWith('mapa-') ? input.sender : `mapa-${flow.id}-${Date.now()}`;
         return vpsClient.post<AutoResponderTestFlowResult>('/autoresponder/test-flow', {
@@ -317,7 +325,19 @@ export const autoResponderService = {
         return vpsClient.get<{ base64?: string; pairingCode?: string; instance?: { state: string } }>('/autoresponder/whatsapp/connect');
     },
 
-    disconnectWhatsApp: (): Promise<any> => {
+    disconnectWhatsApp: () => {
         return vpsClient.post<any>('/autoresponder/whatsapp/disconnect', {});
+    },
+
+    getOperationalSettings: (): Promise<any> => {
+        return vpsClient.get<any>('/autoresponder/settings/operational');
+    },
+
+    updateOperationalSettings: (settings: any): Promise<any> => {
+        return vpsClient.patch<any>('/autoresponder/settings/operational', settings);
+    },
+
+    getOperationalIndicators: (): Promise<any> => {
+        return vpsClient.get<any>('/autoresponder/operational/indicators');
     },
 };

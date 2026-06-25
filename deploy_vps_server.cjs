@@ -20,6 +20,10 @@ const FILES = [
     local: path.join(__dirname, 'services', 'vpsUploadPathPolicy.cjs'),
     remote: `${APP_DIR}/services/vpsUploadPathPolicy.cjs`,
   },
+  {
+    local: path.join(__dirname, 'fix-expired-images.cjs'),
+    remote: `${APP_DIR}/fix-expired-images.cjs`,
+  },
 ];
 
 function uploadFilesSequentially(sftp, files, done) {

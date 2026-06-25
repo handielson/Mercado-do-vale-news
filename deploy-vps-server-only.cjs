@@ -178,12 +178,12 @@ async function main() {
   await upload(localServer, `${appDir}/vps_server.js`);
   await upload(localServerCjs, `${appDir}/vps_server.cjs`);
   await upload(localServer, `${appDir}/server.js`);
+  await upload(path.join(__dirname, 'fix-expired-images.cjs'), `${appDir}/fix-expired-images.cjs`);
   await uploadAutoresponderEngineFiles(appDir);
   await ensureRemoteAdminEnv(appDir);
   await ensureRemoteSharpDependency(appDir);
   const restartOutput = await exec(`pm2 restart ${apiProc.name} --update-env`);
   console.log(restartOutput.trim());
-  conn.end();
 }
 
 main().catch((err) => {

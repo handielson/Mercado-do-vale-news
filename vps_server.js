@@ -18668,6 +18668,57 @@ function comboStockSql(productAlias = 'products') {
   ), 0) ELSE ${productAlias}.stock_quantity END)`;
 }
 
+function isExpiredSignedS3Url(url) {
+  if (typeof url !== 'string' || !url.startsWith('https://orgbling.s3.amazonaws.com')) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url);
+    const expiresParam = parsed.searchParams.get('Expires');
+    if (expiresParam && /^\d+$/.test(expiresParam)) {
+      return Number(expiresParam) * 1000 <= Date.now();
+    }
+    const amzExpires = parsed.searchParams.get('X-Amz-Expires');
+    const amzDate = parsed.searchParams.get('X-Amz-Date');
+    if (amzExpires && amzDate && /^\d+$/.test(amzExpires)) {
+      const match = amzDate.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/i);
+      if (match) {
+        const [, year, month, day, hour, minute, second] = match;
+        const issuedAt = Date.UTC(
+          Number(year),
+          Number(month) - 1,
+          Number(day),
+          Number(hour),
+          Number(minute),
+          Number(second)
+        );
+        return (issuedAt + Number(amzExpires) * 1000) <= Date.now();
+      }
+    }
+  } catch (err) {
+    // ignore URL parsing errors
+  }
+  return false;
+}
+
+function normalizeAndFilterProductImages(r) {
+  let images = [];
+  try {
+    images = typeof r.images === 'string' ? JSON.parse(r.images) : (r.images ?? []);
+  } catch {
+    images = [];
+  }
+  if (!Array.isArray(images)) images = [];
+
+  const activeImages = images.filter(img => !isExpiredSignedS3Url(img));
+
+  return {
+    images: activeImages,
+    image_url: activeImages[0] || null
+  };
+}
+
+
 fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 100);
   const search = normalizeCatalogProductSearchText(req.query.search);
@@ -18885,14 +18936,18 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
     console.log(`[VPS GET /products] Returned ${rows.length} rows for search="${search || ''}"`);
   }
 
-  const result = rows.map(r => ({
-    ...r,
-    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
-    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
-    custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
-    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
-  }));
+  const result = rows.map(r => {
+    const filtered = normalizeAndFilterProductImages(r);
+    return {
+      ...r,
+      images:           filtered.images,
+      image_url:        filtered.image_url,
+      specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+      alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+      custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+      kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+    };
+  });
 
   // Sem cache para admin (status=all) ou buscas dinâmicas (search)
   // search requests NUNCA devem ser cacheados pelo CDN, pois o resultado
@@ -18925,14 +18980,18 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
     [...ids, ...ids]
   );
 
-  return rows.map(r => ({
-    ...r,
-    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
-    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
-    custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
-    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
-  }));
+  return rows.map(r => {
+    const filtered = normalizeAndFilterProductImages(r);
+    return {
+      ...r,
+      images:           filtered.images,
+      image_url:        filtered.image_url,
+      specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+      alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+      custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+      kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+    };
+  });
 });
 
 fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -18944,9 +19003,11 @@ fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 m
   );
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
   const r = rows[0];
+  const filtered = normalizeAndFilterProductImages(r);
   return {
     ...r,
-    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    images:           filtered.images,
+    image_url:        filtered.image_url,
     specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
@@ -19005,9 +19066,11 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
     return { error: 'No available variants for this parent' };
   }
 
+  const filtered = normalizeAndFilterProductImages(r);
   return {
     ...r,
-    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    images:           filtered.images,
+    image_url:        filtered.image_url,
     specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
@@ -19024,13 +19087,17 @@ fastify.get('/products/by-ean/:ean', async (req, reply) => {
      WHERE ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?))`,
     [ean, ean]
   );
-  return rows.map(r => ({
-    ...r,
-    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
-    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
-    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
-  }));
+  return rows.map(r => {
+    const filtered = normalizeAndFilterProductImages(r);
+    return {
+      ...r,
+      images:           filtered.images,
+      image_url:        filtered.image_url,
+      specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+      alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+      kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+    };
+  });
 });
 
 fastify.get('/products/:id/combo', async (req, reply) => {
@@ -19045,11 +19112,15 @@ fastify.get('/products/:id/combo', async (req, reply) => {
      WHERE pc.combo_product_id = ?`,
     [req.params.id]
   );
-  return rows.map(r => ({
-    ...r,
-    images: typeof r.images === 'string' ? JSON.parse(r.images) : r.images,
-    dimensions: typeof r.dimensions === 'string' ? JSON.parse(r.dimensions || '{}') : r.dimensions
-  }));
+  return rows.map(r => {
+    const filtered = normalizeAndFilterProductImages(r);
+    return {
+      ...r,
+      images: filtered.images,
+      image_url: filtered.image_url,
+      dimensions: typeof r.dimensions === 'string' ? JSON.parse(r.dimensions || '{}') : r.dimensions
+    };
+  });
 });
 
 

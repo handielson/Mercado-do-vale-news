@@ -10366,7 +10366,23 @@ async function logAutoresponderReply({
       aiMeta?.ai_model || null,
       aiMeta?.ai_input_tokens == null ? null : Number(aiMeta.ai_input_tokens),
       aiMeta?.ai_output_tokens == null ? null : Number(aiMeta.ai_output_tokens),
-      aiMeta?.ai_estimated_cost_usd == null ? null : Number(aiMeta.ai_estimated_cost_usd),
+      aiMeta?.ai_estimated_cost_usd == null ? null : Number(aiMeta.ai_estimated_cost_usd)
+    ]
+  );
+}
+
+async function logOperationalEvent(sender, eventType, details = {}) {
+  await pool.query(
+    `INSERT INTO autoresponder_logs
+      (sender, question, intent, reply_text, response_time_ms, is_group)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      sender || 'system',
+      'OPERATIONAL_EVENT',
+      'OPERATIONAL_EVENT',
+      JSON.stringify({ type: eventType, ...details }),
+      0,
+      0
     ]
   );
 }
@@ -10926,6 +10942,107 @@ fastify.patch('/autoresponder/settings', { preHandler: requireSyncKey }, async (
   return sanitizeAutoresponderSettings(rows[0] || null);
 });
 
+// ─── Operational settings endpoints for AI Framework ──────────────────────────────────────
+fastify.get('/autoresponder/settings/operational', { preHandler: requireSyncKey }, async () => {
+  const settingsKeys = [
+    'automation.enabled',
+    'automation.handoff_enabled',
+    'automation.typing_enabled',
+    'automation.typing_profile',
+    'automation.resume_mode',
+    'automation.pause_timeout'
+  ];
+
+  const SettingsService = await import('./services/autoresponder/framework/SettingsService.js');
+  const responseObj = {};
+  for (const key of settingsKeys) {
+    responseObj[key] = SettingsService.get(key);
+  }
+  return responseObj;
+});
+
+fastify.patch('/autoresponder/settings/operational', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const SettingsService = await import('./services/autoresponder/framework/SettingsService.js');
+
+  const allowedKeys = [
+    'automation.enabled',
+    'automation.handoff_enabled',
+    'automation.typing_enabled',
+    'automation.typing_profile',
+    'automation.resume_mode',
+    'automation.pause_timeout'
+  ];
+
+  const updatedBy = req.user?.name || req.user?.email || 'admin';
+
+  for (const key of allowedKeys) {
+    if (body[key] !== undefined) {
+      await SettingsService.set(key, body[key], updatedBy);
+    }
+  }
+
+  // Reload cache explicitly
+  await SettingsService.reload();
+
+  // Log OPERATIONAL_EVENT for settings change
+  const enabledVal = SettingsService.get('automation.enabled');
+  await logOperationalEvent('system', enabledVal ? 'BOT_ENABLED' : 'BOT_DISABLED', { updated_by: updatedBy });
+
+  const responseObj = {};
+  for (const key of allowedKeys) {
+    responseObj[key] = SettingsService.get(key);
+  }
+  return responseObj;
+});
+
+fastify.get('/autoresponder/operational/indicators', { preHandler: requireSyncKey }, async () => {
+  const SettingsService = await import('./services/autoresponder/framework/SettingsService.js');
+  const botEnabled = SettingsService.get('automation.enabled', true);
+
+  const [rows] = await pool.query('SELECT conversation_context FROM autoresponder_ai_context');
+  let aiCount = 0;
+  let humanCount = 0;
+  let mixedCount = 0;
+  let pausedCount = 0;
+  
+  for (const row of rows) {
+    let convContext = {};
+    try {
+      convContext = typeof row.conversation_context === 'string' 
+        ? JSON.parse(row.conversation_context) 
+        : row.conversation_context || {};
+    } catch {}
+    const auto = convContext.automation || {};
+    if (auto.paused === true || auto.paused === 'true' || auto.paused === 1) {
+      pausedCount++;
+    }
+    if (auto.mode === 'HUMAN') {
+      humanCount++;
+    } else if (auto.mode === 'MIXED') {
+      mixedCount++;
+    } else {
+      aiCount++;
+    }
+  }
+
+  const [[avgRow]] = await pool.query("SELECT AVG(response_time_ms) as avg_time FROM autoresponder_logs WHERE response_time_ms IS NOT NULL AND intent != 'OPERATIONAL_EVENT' AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
+  const avgResponseTime = Math.round(Number(avgRow?.avg_time || 0));
+
+  const [lastHandoffRows] = await pool.query("SELECT created_at FROM autoresponder_logs WHERE intent = 'OPERATIONAL_EVENT' AND reply_text LIKE '%HANDOFF_STARTED%' ORDER BY id DESC LIMIT 1");
+  const lastHandoff = lastHandoffRows[0]?.created_at || null;
+
+  return {
+    botEnabled,
+    aiCount,
+    humanCount,
+    mixedCount,
+    pausedCount,
+    avgResponseTime,
+    lastHandoff
+  };
+});
+
 fastify.get('/autoresponder/ai-training', { preHandler: requireSyncKey }, async (request) => {
   const type = String(request.query?.type || '').trim();
   const active = request.query?.active;
@@ -11347,12 +11464,37 @@ fastify.post('/autoresponder/conversations/:sender/pause', { preHandler: require
 });
 
 fastify.post('/autoresponder/conversations/:sender/resume', { preHandler: requireSyncKey }, async (req) => {
+  const sender = req.params.sender;
   await pool.query(
     `UPDATE autoresponder_conversations
      SET paused_until = NULL, pause_reason = NULL
      WHERE sender = ?`,
-    [req.params.sender]
+    [sender]
   );
+  
+  if (contextManagerRef) {
+    try {
+      const context = await contextManagerRef.loadContext('whatsapp', sender);
+      if (context && context.conversation_context) {
+        if (!context.conversation_context.automation) {
+          context.conversation_context.automation = {};
+        }
+        context.conversation_context.automation.paused = false;
+        context.conversation_context.automation.pausedAt = null;
+        context.conversation_context.automation.pauseReason = null;
+        context.conversation_context.automation.pausedBy = null;
+        context.conversation_context.automation.autoResumeAt = null;
+        context.conversation_context.automation.mode = 'AI';
+        
+        await contextManagerRef.saveContext('whatsapp', sender, context);
+      }
+    } catch (err) {
+      console.error('[server] Failed to resume framework context:', err);
+    }
+  }
+
+  await logOperationalEvent(sender, 'AI_RESUMED', { paused_by: 'admin' });
+
   return { ok: true };
 });
 
@@ -12008,13 +12150,8 @@ fastify.route({
       const message = String(payload.message || payload.text || payload.query || payload.body || payload.received_message || '').trim();
       const isGroup = payload.isGroup === true || String(payload.isGroup || '').toLowerCase() === 'true';
       const senderKey = normalizeAutoresponderSender(sender) || sender || 'unknown';
-      const detectedIntent = detectAutoresponderIntent(message);
-      const shouldPrefixGreeting = detectedIntent.greeting;
-      const contactFirstName = getAutoresponderContactFirstName(payload);
 
-      const [settingsRows] = await pool.query('SELECT * FROM autoresponder_settings WHERE id = 1 LIMIT 1');
-      const settings = settingsRows[0];
-      if (!settings || Number(settings.enabled) !== 1) {
+      if (isGroup) {
         return { replies: [] };
       }
 
@@ -12022,1536 +12159,41 @@ fastify.route({
         return { replies: [] };
       }
 
-      if (isGroup) {
+      if (!kernelHandle) {
         return { replies: [] };
       }
 
-      const isAudioPayload = isAutoresponderAudioPayload(payload, message);
-      if (!message && !isAudioPayload) {
-        await touchAutoresponderConversation(senderKey);
-        return { replies: [] };
-      }
-
-      if (isAudioPayload) {
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'audio_unsupported',
-          replyText: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY,
-          matchedCount: 0,
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: AUTORESPONDER_AUDIO_UNSUPPORTED_REPLY }] };
-      }
-
-      const [conversationRows] = await pool.query(
-        'SELECT paused_until, pause_reason FROM autoresponder_conversations WHERE sender = ? LIMIT 1',
-        [senderKey]
-      );
-      const pausedUntil = conversationRows[0]?.paused_until ? new Date(conversationRows[0].paused_until) : null;
-      if (pausedUntil && pausedUntil.getTime() > Date.now()) {
-        if (String(conversationRows[0]?.pause_reason || '') === 'human_request') {
-          await pool.query(
-            `UPDATE autoresponder_conversations
-             SET paused_until = NULL, pause_reason = NULL
-             WHERE sender = ?`,
-            [senderKey]
-          );
-        } else {
-          await touchAutoresponderConversation(senderKey);
-          return { replies: [] };
-        }
-      }
-
-      const purchaseFlow = await getAutoresponderPurchaseFlow(senderKey);
-      const hasActivePurchaseFlow = hasAutoresponderCartItems(purchaseFlow);
-
-      const replyLimit = Number(settings.max_replies_per_conversation) > 0
-        ? Number(settings.max_replies_per_conversation)
-        : 20;
-      const replyWindowHours = Number(settings.max_replies_window_hours) > 0
-        ? Number(settings.max_replies_window_hours)
-        : 24;
-      const recentReplyCount = await getAutoresponderReplyCount(senderKey, replyWindowHours);
-      if (!hasActivePurchaseFlow && !detectedIntent.storeStatusRequest && recentReplyCount >= replyLimit) {
-        await touchAutoresponderConversation(senderKey);
-        return { replies: [] };
-      }
-
-      const engineDeliveryReply = await handleAutoresponderEngineDeliveryFlowV2({
-        senderKey,
-        message,
-        settings,
+      // Execute Kernel
+      const result = await kernelHandle(message, 'whatsapp', senderKey, {
+        rawPayload: payload
       });
-      if (engineDeliveryReply) return engineDeliveryReply;
 
-      const engineProductSearchReply = await handleAutoresponderEngineProductSearchFlowV2({
-        senderKey,
-        message,
-        settings,
-      });
-      if (engineProductSearchReply) return engineProductSearchReply;
-
-      const enginePurchaseReply = await handleAutoresponderEnginePurchaseFlowV2({
-        senderKey,
-        message,
-        settings,
-        purchaseFlow,
-      });
-      if (enginePurchaseReply) return enginePurchaseReply;
-
-      const contactFlowReply = await handleAutoresponderContactNameFlow({ sender: senderKey, message, contactFirstName });
-      if (contactFlowReply) {
-        const contactFlowReplies = Array.isArray(contactFlowReply) ? contactFlowReply : [contactFlowReply];
-        const formattedContactFlowReplies = formatAutoresponderReplies(contactFlowReplies, settings, false);
-        const contactFlowReplyText = formattedContactFlowReplies.join('\n\n');
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'contact_name',
-          replyText: contactFlowReplyText,
-          matchedCount: formattedContactFlowReplies.length,
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: formattedContactFlowReplies.map((replyMessage) => ({ message: replyMessage })) };
-      }
-
-      if (detectedIntent.storeStatusRequest) {
-        const storeStatus = await getCachedAutoresponderStoreStatus();
-        const replyText = formatAutoresponderReply(
-          buildAutoresponderStoreStatusReply(storeStatus),
-          settings,
-          shouldPrefixGreeting
-        );
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'store_status',
-          replyText,
-          matchedCount: 0,
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (detectedIntent.greetingOnly) {
-        const contactState = await getAutoresponderContactNameState(senderKey);
-        const contactNameStatus = String(contactState?.contact_name_status || '');
-        const shouldConfirmContactName = contactFirstName
-          && !['awaiting_name_confirmation', 'awaiting_name_input', 'saved_to_google', 'google_pending'].includes(contactNameStatus);
-        const shouldAskContactName = !contactFirstName
-          && !['awaiting_name_confirmation', 'awaiting_name_input', 'saved_to_google', 'google_pending'].includes(contactNameStatus);
-        if (shouldConfirmContactName) {
-          await startAutoresponderContactNameConfirmation(senderKey, contactFirstName);
-        } else if (shouldAskContactName) {
-          await markAutoresponderContactNameAwaitingInput(senderKey);
-        }
-        const contactPrompt = shouldConfirmContactName
-          ? `\n\nSeu nome e ${contactFirstName}? \u{1F60A}\nResponda "sim" para confirmar ou "nao" para informar outro nome.`
-          : shouldAskContactName
-            ? '\n\nQual seu nome para seguirmos com o atendimento?'
-          : '';
-        const greetingText = getAutoresponderGreetingReply(message, contactFirstName, settings);
-        if (shouldConfirmContactName || shouldAskContactName) {
-          const replyText = [greetingText, contactPrompt.trim()].filter(Boolean).join('\n\n');
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'contact_name_prompt',
-            replyText,
-            matchedCount: 0,
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: greetingText }, { message: contactPrompt.trim() }] };
-        }
-
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'greeting',
-          replyText: greetingText,
-          matchedCount: 0,
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: greetingText }] };
-      }
-
-      if (detectedIntent.warrantyRequest) {
-        return handleAutoresponderWarrantyRequest({
-          sender: senderKey,
-          message,
-          settings,
-          purchaseFlow,
-          shouldPrefixGreeting,
-        });
-      }
-
-      if (hasAutoresponderCartItems(purchaseFlow) && isAutoresponderPurchaseCancelRequest(message)) {
-        const replyText = formatAutoresponderReply(buildAutoresponderCartCancelledReply(), settings, false);
-        await clearAutoresponderPurchaseFlow(senderKey);
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'purchase_cancelled',
-          replyText,
-          matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-          matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (hasAutoresponderCartItems(purchaseFlow) && isAutoresponderPurchaseFinalizeRequest(message)) {
-        const items = Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [];
-        const cartTotals = calculateAutoresponderCartTotals(items);
-        const replyText = formatAutoresponderReply(await formatAutoresponderCartSummaryReply(items), settings, false);
-        await saveAutoresponderPurchaseFlow(senderKey, {
-          ...purchaseFlow,
-          status: 'summary_ready',
-          selected_product: null,
-          requested_quantity: null,
-          totals: cartTotals,
-        });
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'purchase_summary',
-          replyText,
-          matchedCount: items.length,
-          matchedProducts: items,
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (purchaseFlow.status === 'summary_ready' && hasAutoresponderCartItems(purchaseFlow)) {
-        const fulfillmentChoice = getAutoresponderPurchaseFulfillmentChoice(message);
-        if (fulfillmentChoice === 'pickup') {
-          const nextFlow = {
-            ...purchaseFlow,
-            status: 'awaiting_payment_method',
-            fulfillment: 'pickup',
-            delivery_address: null,
-          };
-          const replyText = formatAutoresponderReply(
-            `${buildAutoresponderPickupConfirmationReply(settings)}\n\n${buildAutoresponderPaymentMethodPrompt(nextFlow)}`,
-            settings,
-            false
-          );
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...nextFlow,
-            totals: calculateAutoresponderCartTotalsWithShipping(nextFlow.items, nextFlow),
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_fulfillment_pickup',
-            replyText,
-            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-
-        if (fulfillmentChoice === 'delivery') {
-          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(settings), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...purchaseFlow,
-            status: 'awaiting_delivery_address',
-            fulfillment: 'delivery',
-            delivery_address: null,
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_fulfillment_delivery',
-            replyText,
-            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-      }
-
-      if (purchaseFlow.status === 'awaiting_delivery_address' && hasAutoresponderCartItems(purchaseFlow)) {
-        const cep = normalizeAutoresponderCep(message);
-        if (cep) {
-          return await handleAutoresponderDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep });
-        }
-        const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(settings), settings, false);
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (purchaseFlow.status === 'awaiting_delivery_cep_confirmation' && hasAutoresponderCartItems(purchaseFlow)) {
-        const replacementCep = normalizeAutoresponderCep(message);
-        if (replacementCep) {
-          return await handleAutoresponderDeliveryCepLookup({ senderKey, message, purchaseFlow, settings, cep: replacementCep });
-        }
-        const directNumberReply = await handleAutoresponderDeliveryNumberInput({ senderKey, message, purchaseFlow, settings });
-        if (directNumberReply) return directNumberReply;
-        if (isAutoresponderNo(message)) {
-          const nextFlow = {
-            ...purchaseFlow,
-            status: 'awaiting_delivery_address',
-            delivery_address_lookup: null,
-            shipping_options: [],
-            shipping_quote: null,
-          };
-          await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
-          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryAddressPrompt(settings), settings, false);
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-        if (isAutoresponderYes(message)) {
-          const replyText = formatAutoresponderReply(buildAutoresponderDeliveryNumberPrompt(), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...purchaseFlow,
-            status: 'awaiting_delivery_number',
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_delivery_cep_confirmed',
-            replyText,
-            matchedCount: purchaseFlow.shipping_quote ? 1 : 0,
-            matchedProducts: purchaseFlow.shipping_quote ? [purchaseFlow.shipping_quote] : [],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-      }
-
-      if (purchaseFlow.status === 'awaiting_delivery_number' && hasAutoresponderCartItems(purchaseFlow)) {
-        const numberReply = await handleAutoresponderDeliveryNumberInput({ senderKey, message, purchaseFlow, settings });
-        if (numberReply) return numberReply;
-      }
-
-      if (purchaseFlow.status === 'awaiting_payment_method' && hasAutoresponderCartItems(purchaseFlow)) {
-        const paymentMethod = getAutoresponderPaymentMethodChoice(message);
-        const cartTotals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
-        if (paymentMethod && ['pix', 'cash', 'debit'].includes(paymentMethod)) {
-          const selectedPayment = {
-            method: paymentMethod,
-            label: paymentMethod === 'pix' ? 'Pix' : paymentMethod === 'cash' ? 'Dinheiro' : 'Debito',
-            total_cents: cartTotals.total_cents,
-            base_total_cents: cartTotals.total_cents,
-          };
-          const nextFlow = {
-            ...purchaseFlow,
-            status: 'customer_data_pending',
-            totals: cartTotals,
-            selected_payment: selectedPayment,
-          };
-          const replyText = formatAutoresponderReply(buildAutoresponderCashPaymentSelectedReply(paymentMethod, nextFlow), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_payment_cash_selected',
-            replyText,
-            matchedCount: 1,
-            matchedProducts: [selectedPayment],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-
-        if (paymentMethod === 'credit') {
-          const nextFlow = {
-            ...purchaseFlow,
-            status: 'awaiting_card_entry',
-            totals: cartTotals,
-            payment_method: 'credit',
-          };
-          const replyText = formatAutoresponderReply(buildAutoresponderCardEntryPrompt(nextFlow), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_payment_card_entry_prompt',
-            replyText,
-            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-
-        return await promptAutoresponderPaymentMethod({ senderKey, message, purchaseFlow, settings });
-      }
-
-      if (purchaseFlow.status === 'awaiting_card_entry' && hasAutoresponderCartItems(purchaseFlow)) {
-        const cartTotals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
-        const entryCents = parseAutoresponderPaymentEntryCents(message, cartTotals.total_cents);
-        if (entryCents === null) {
-          const replyText = formatAutoresponderReply(buildAutoresponderCardEntryPrompt(purchaseFlow), settings, false);
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-        const cardBaseCents = Math.max(Number(cartTotals.total_cents || 0) - Number(entryCents || 0), 0);
-        const installmentOptions = attachAutoresponderEntryToInstallments(
-          await calculateAutoresponderInstallmentOptions(cardBaseCents, 12),
-          entryCents,
-          cardBaseCents
-        );
-        const nextFlow = {
-          ...purchaseFlow,
-          status: 'awaiting_card_installments',
-          totals: cartTotals,
-          card_entry_cents: entryCents,
-          card_base_cents: cardBaseCents,
-          installment_options: installmentOptions,
-        };
-        const replyText = formatAutoresponderReply(
-          buildAutoresponderInstallmentTableReply(installmentOptions, cartTotals.total_cents, entryCents),
-          settings,
-          false
-        );
-        await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'purchase_payment_card_installments',
-          replyText,
-          matchedCount: installmentOptions.length,
-          matchedProducts: installmentOptions,
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (purchaseFlow.status === 'awaiting_card_installments' && hasAutoresponderCartItems(purchaseFlow)) {
-        const requestedInstallments = getAutoresponderRequestedInstallments(message);
-        const cartTotals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
-        const entryCents = Number(purchaseFlow.card_entry_cents || 0);
-        const cardBaseCents = Math.max(Number(cartTotals.total_cents || 0) - entryCents, 0);
-        const installmentOptions = Array.isArray(purchaseFlow.installment_options) && purchaseFlow.installment_options.length > 0
-          ? purchaseFlow.installment_options
-          : attachAutoresponderEntryToInstallments(
-            await calculateAutoresponderInstallmentOptions(cardBaseCents, 12),
-            entryCents,
-            cardBaseCents
-          );
-        const selectedPayment = requestedInstallments
-          ? buildAutoresponderSelectedInstallmentPayment(requestedInstallments, installmentOptions, cardBaseCents)
-          : null;
-        if (selectedPayment) {
-          const nextFlow = {
-            ...purchaseFlow,
-            status: 'customer_data_pending',
-            totals: cartTotals,
-            selected_payment: selectedPayment,
-          };
-          const replyText = formatAutoresponderReply(buildAutoresponderSelectedInstallmentReply(selectedPayment), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_payment_card_selected',
-            replyText,
-            matchedCount: 1,
-            matchedProducts: [selectedPayment],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-        const replyText = formatAutoresponderReply(
-          buildAutoresponderInstallmentTableReply(installmentOptions, cartTotals.total_cents, entryCents),
-          settings,
-          false
-        );
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (purchaseFlow.status === 'awaiting_customer_full_name' && hasAutoresponderCartItems(purchaseFlow)) {
-        const fullName = normalizeAutoresponderContactName(message);
-        if (isAutoresponderFullName(fullName)) {
-          const nextFlow = {
-            ...purchaseFlow,
-            status: 'customer_data_pending',
-            customer_data: {
-              ...(purchaseFlow.customer_data || {}),
-              name: fullName,
-            },
-          };
-          await saveAutoresponderPurchaseFlow(senderKey, nextFlow);
-          const customerData = await getAutoresponderCustomerDataSnapshot(senderKey, payload, nextFlow);
-          const existingCustomer = await findAutoresponderExistingCustomer(customerData);
-          const mergedCustomerData = mergeAutoresponderExistingCustomerData(customerData, existingCustomer);
-          const replyText = formatAutoresponderReply(buildAutoresponderCustomerDataConfirmationReply(mergedCustomerData), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...nextFlow,
-            status: 'awaiting_customer_confirmation',
-            customer_data: mergedCustomerData,
-            existing_customer: existingCustomer,
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_customer_full_name_saved',
-            replyText,
-            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-          });
-          if (existingCustomer) {
-            await logAutoresponderReply({
-              sender: senderKey,
-              message,
-              intent: 'purchase_existing_customer_found',
-              replyText,
-              matchedCount: 1,
-              matchedProducts: [existingCustomer],
-            });
-          } else {
-            await logAutoresponderReply({
-              sender: senderKey,
-              message,
-              intent: 'purchase_existing_customer_not_found',
-              replyText,
-              matchedCount: 0,
-              matchedProducts: [],
-            });
-          }
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-        const replyText = formatAutoresponderReply(buildAutoresponderFullNamePrompt(settings), settings, false);
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (purchaseFlow.status === 'customer_data_pending' && hasAutoresponderCartItems(purchaseFlow)) {
-        let customerData = await getAutoresponderCustomerDataSnapshot(senderKey, payload, purchaseFlow);
-        if (!isAutoresponderFullName(customerData.name)) {
-          const replyText = formatAutoresponderReply(buildAutoresponderFullNamePrompt(settings), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...purchaseFlow,
-            status: 'awaiting_customer_full_name',
-            customer_data: {
-              ...(purchaseFlow.customer_data || {}),
-              ...customerData,
-            },
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_customer_full_name_prompt',
-            replyText,
-            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-        const existingCustomer = await findAutoresponderExistingCustomer(customerData);
-        customerData = mergeAutoresponderExistingCustomerData(customerData, existingCustomer);
-        const replyText = formatAutoresponderReply(buildAutoresponderCustomerDataConfirmationReply(customerData), settings, false);
-        await saveAutoresponderPurchaseFlow(senderKey, {
-          ...purchaseFlow,
-          status: 'awaiting_customer_confirmation',
-          customer_data: customerData,
-          existing_customer: existingCustomer,
-        });
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'purchase_customer_data_confirmation',
-          replyText,
-          matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-          matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-        });
-        if (existingCustomer) {
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_existing_customer_found',
-            replyText,
-            matchedCount: 1,
-            matchedProducts: [existingCustomer],
-          });
-        } else {
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_existing_customer_not_found',
-            replyText,
-            matchedCount: 0,
-            matchedProducts: [],
-          });
-        }
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (purchaseFlow.status === 'awaiting_customer_confirmation' && hasAutoresponderCartItems(purchaseFlow)) {
-        if (isAutoresponderYes(message)) {
-          const customerDocument = normalizeAutoresponderCustomerDocument(purchaseFlow?.customer_data?.cpf_cnpj);
-          if (!customerDocument) {
-            const replyText = formatAutoresponderReply(buildAutoresponderCustomerDocumentPrompt(), settings, false);
-            await saveAutoresponderPurchaseFlow(senderKey, {
-              ...purchaseFlow,
-              status: 'awaiting_customer_document',
-              customer_data_confirmed: true,
-            });
-            await logAutoresponderReply({
-              sender: senderKey,
-              message,
-              intent: 'purchase_customer_document_prompt',
-              replyText,
-              matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-              matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-            });
-            await upsertAutoresponderSuccessConversation(senderKey);
-            return { replies: [{ message: replyText }] };
-          }
-
-          const nextPurchaseFlow = {
-            ...purchaseFlow,
-            status: 'customer_registration_ready',
-            customer_data_confirmed: true,
-          };
-          const customerRecord = await createOrUpdateAutoresponderCustomer(
-            nextPurchaseFlow.customer_data || {},
-            nextPurchaseFlow,
-            senderKey
-          );
-          const linkedPurchaseFlow = buildAutoresponderCustomerLinkedPurchaseFlow(nextPurchaseFlow, customerRecord);
-          const attendantSummary = formatAutoresponderAttendantOrderSummary(linkedPurchaseFlow, senderKey);
-          const handoffPurchaseFlow = {
-            ...linkedPurchaseFlow,
-            attendant_summary: attendantSummary,
-            status: 'pedido_em_andamento',
-            handoff_created_at: new Date().toISOString(),
-          };
-          const replyText = formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply(), settings, false);
-          const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
-          await saveAutoresponderPurchaseFlow(senderKey, handoffPurchaseFlow);
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_customer_upserted',
-            replyText,
-            matchedCount: customerRecord ? 1 : 0,
-            matchedProducts: customerRecord ? [customerRecord] : [],
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_request',
-            replyText,
-            matchedCount: 1,
-            matchedProducts: [handoffPurchaseFlow],
-          });
-          await pauseAutoresponderConversationForPurchase(senderKey, pauseMinutes);
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-
-        if (isAutoresponderNo(message)) {
-          const replyText = formatAutoresponderReply(buildAutoresponderCustomerDataNeedsUpdateReply(), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...purchaseFlow,
-            status: 'customer_data_update_needed',
-            customer_data_confirmed: false,
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_customer_data_needs_update',
-            replyText,
-            matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-            matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-      }
-
-      if (purchaseFlow.status === 'awaiting_customer_document' && hasAutoresponderCartItems(purchaseFlow)) {
-        const customerDocument = normalizeAutoresponderCustomerDocument(message);
-        if (customerDocument) {
-          const documentCustomerData = {
-            ...(purchaseFlow.customer_data || {}),
-            cpf_cnpj: customerDocument,
-          };
-          const existingCustomer = await findAutoresponderExistingCustomer(documentCustomerData);
-          const nextPurchaseFlow = {
-            ...purchaseFlow,
-            status: 'customer_registration_ready',
-            customer_data: mergeAutoresponderExistingCustomerData(documentCustomerData, existingCustomer),
-            existing_customer: existingCustomer,
-            cpf_cnpj: customerDocument,
-          };
-          const customerRecord = await createOrUpdateAutoresponderCustomer(
-            nextPurchaseFlow.customer_data || {},
-            nextPurchaseFlow,
-            senderKey
-          );
-          const linkedPurchaseFlow = buildAutoresponderCustomerLinkedPurchaseFlow(nextPurchaseFlow, customerRecord);
-          const attendantSummary = formatAutoresponderAttendantOrderSummary(linkedPurchaseFlow, senderKey);
-          const handoffPurchaseFlow = {
-            ...linkedPurchaseFlow,
-            attendant_summary: attendantSummary,
-            status: 'pedido_em_andamento',
-            handoff_created_at: new Date().toISOString(),
-          };
-          const replyText = formatAutoresponderReply(buildAutoresponderCustomerOrderHandoffReply(), settings, false);
-          const pauseMinutes = Number(settings.human_pause_minutes) > 0 ? Number(settings.human_pause_minutes) : 60;
-          await saveAutoresponderPurchaseFlow(senderKey, handoffPurchaseFlow);
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_customer_upserted',
-            replyText,
-            matchedCount: customerRecord ? 1 : 0,
-            matchedProducts: customerRecord ? [customerRecord] : [],
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_request',
-            replyText,
-            matchedCount: 1,
-            matchedProducts: [handoffPurchaseFlow],
-          });
-          await pauseAutoresponderConversationForPurchase(senderKey, pauseMinutes);
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-      }
-
-      const requestedInstallments = getAutoresponderRequestedInstallments(message);
-      if (requestedInstallments && hasAutoresponderCartItems(purchaseFlow)) {
-        const cartTotals = calculateAutoresponderCartTotalsWithShipping(purchaseFlow.items, purchaseFlow);
-        const installmentOptions = await calculateAutoresponderInstallmentOptions(cartTotals.total_cents, 12);
-        if (isAutoresponderInstallmentChoiceRequest(message)) {
-          const selectedPayment = buildAutoresponderSelectedInstallmentPayment(
-            requestedInstallments,
-            installmentOptions,
-            cartTotals.total_cents
-          );
-          const replyText = formatAutoresponderReply(
-            buildAutoresponderSelectedInstallmentReply(selectedPayment),
-            settings,
-            false
-          );
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...purchaseFlow,
-            selected_payment: selectedPayment,
-            totals: cartTotals,
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_installment_selected',
-            replyText,
-            matchedCount: selectedPayment ? 1 : 0,
-            matchedProducts: selectedPayment ? [selectedPayment] : [],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-        const replyText = formatAutoresponderReply(
-          formatAutoresponderSpecificInstallmentReply(requestedInstallments, installmentOptions, cartTotals.total_cents),
-          settings,
-          false
-        );
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'purchase_specific_installment_quote',
-          replyText,
-          matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-          matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      const categoryContext = normalizeAutoresponderOptionsContext(
-        (await pool.query(
-          `SELECT last_options_offered
-           FROM autoresponder_conversations
-           WHERE sender = ?
-             AND last_options_offered IS NOT NULL
-             AND last_options_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
-           LIMIT 1`,
-          [senderKey, Number(settings.numbered_list_validity_minutes) > 0 ? Number(settings.numbered_list_validity_minutes) : 30]
-        ))[0][0]?.last_options_offered
-      );
-      if (categoryContext?.pagination?.source === 'category_list') {
-        const selectedCategory = findAutoresponderSelectedCategoryFromMessage(message, categoryContext.items, detectedIntent.numberedChoice);
-        if (selectedCategory?.id) {
-          const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
-          const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
-          const products = rows.slice(0, pageSize);
-          const hasMore = rows.length > pageSize;
-          const total = await countAutoresponderProductsByCategory(selectedCategory.id);
-          const productOptions = buildAutoresponderProductOptions(products);
-          const productReplyMessages = appendAutoresponderReplyFooter(
-            await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name) }),
-            formatAutoresponderProductReplyInstructions(hasMore)
-          );
-          const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
-          const replyText = replyMessages.join('\n\n');
-
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'category_selected',
-            replyText,
-            matchedCount: products.length,
-            matchedProducts: productOptions,
-          });
-          await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
-            source: 'category',
-            categoryId: selectedCategory.id,
-            keyword: selectedCategory.name,
-            offset: 0,
-            limit: pageSize,
-            total,
-            hasMore,
-          });
-
-          return { replies: formatAutoresponderProReplies(replyMessages) };
-        }
-      }
-
-      const removeItemIndex = getAutoresponderPurchaseRemoveItemIndex(message);
-      if (hasAutoresponderCartItems(purchaseFlow) && removeItemIndex !== null) {
-        const currentItems = Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [];
-        const removedItem = currentItems[removeItemIndex] || null;
-        if (removedItem) {
-          const remainingItems = currentItems.filter((_, index) => index !== removeItemIndex);
-          const replyText = formatAutoresponderReply(buildAutoresponderItemRemovedReply(removedItem, remainingItems), settings, false);
-          if (remainingItems.length === 0) {
-            await clearAutoresponderPurchaseFlow(senderKey);
-          } else {
-            await saveAutoresponderPurchaseFlow(senderKey, {
-              ...purchaseFlow,
-              status: 'item_added',
-              items: remainingItems,
-            });
-          }
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_item_removed',
-            replyText,
-            matchedCount: remainingItems.length,
-            matchedProducts: remainingItems,
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-      }
-
-      if (purchaseFlow.status === 'awaiting_product_action' && purchaseFlow.selected_product?.id) {
-        if (isAutoresponderPurchaseBuyRequest(message)) {
-          const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
-          const selectedProduct = product || purchaseFlow.selected_product;
-          const variations = await findAutoresponderProductVariations(selectedProduct);
-          if (shouldAutoresponderAskVariation(variations)) {
-            const replyText = formatAutoresponderReply(buildAutoresponderVariationPrompt(variations), settings, false);
-            await saveAutoresponderPurchaseFlow(senderKey, {
-              ...purchaseFlow,
-              status: 'awaiting_variation',
-              variation_options: variations.map((variation) => ({
-                id: variation.id,
-                name: variation.name,
-                sku: variation.sku,
-                slug: variation.slug,
-                color: getAutoresponderProductColor(variation),
-                price_cents: getAutoresponderProductPriceCents(variation),
-                stock_quantity: variation.stock_quantity == null ? null : Number(variation.stock_quantity),
-              })),
-            });
-            await logAutoresponderReply({
-              sender: senderKey,
-              message,
-              intent: 'purchase_variation_prompt',
-              replyText,
-              matchedCount: variations.length,
-              matchedProducts: variations,
-            });
-            await upsertAutoresponderSuccessConversation(senderKey);
-            return { replies: [{ message: replyText }] };
-          }
-          const replyText = formatAutoresponderReply(buildAutoresponderQuantityPrompt(selectedProduct), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...purchaseFlow,
-            status: 'awaiting_quantity',
-            selected_product: {
-              ...purchaseFlow.selected_product,
-              name: selectedProduct?.name || purchaseFlow.selected_product.name || null,
-              sku: selectedProduct?.sku || purchaseFlow.selected_product.sku || null,
-              slug: selectedProduct?.slug || purchaseFlow.selected_product.slug || null,
-              price_cents: product ? getAutoresponderProductPriceCents(product) : purchaseFlow.selected_product.price_cents || null,
-              stock_quantity: selectedProduct?.stock_quantity == null ? purchaseFlow.selected_product.stock_quantity || null : Number(selectedProduct.stock_quantity),
-            },
-            requested_quantity: null,
-          });
-
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_quantity_prompt',
-            replyText,
-            matchedCount: 1,
-            matchedProducts: [purchaseFlow.selected_product],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-
-          return { replies: [{ message: replyText }] };
-        }
-
-        if (isAutoresponderPurchaseDetailsRequest(message)) {
-          const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
-          const replyText = formatAutoresponderReply(
-            await buildAutoresponderPurchaseActionPrompt(product, purchaseFlow.selected_product),
-            settings,
-            false
-          );
-
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_product_details',
-            replyText,
-            matchedCount: product ? 1 : 0,
-            matchedProducts: [purchaseFlow.selected_product],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-
-          return { replies: [{ message: replyText }] };
-        }
-      }
-
-      if (purchaseFlow.status === 'awaiting_variation' && purchaseFlow.selected_product?.id) {
-        const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
-        const variations = Array.isArray(purchaseFlow.variation_options) && purchaseFlow.variation_options.length > 0
-          ? purchaseFlow.variation_options
-          : await findAutoresponderProductVariations(product || purchaseFlow.selected_product);
-        const selectedVariation = findAutoresponderSelectedVariation(message, variations);
-        if (!selectedVariation) {
-          const replyText = formatAutoresponderReply(buildAutoresponderVariationPrompt(variations), settings, false);
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-        const fullVariation = await findAutoresponderProductById(selectedVariation.id) || selectedVariation;
-        const replyText = formatAutoresponderReply(buildAutoresponderQuantityPrompt(fullVariation), settings, false);
-        await saveAutoresponderPurchaseFlow(senderKey, {
-          ...purchaseFlow,
-          status: 'awaiting_quantity',
-          selected_product: {
-            id: fullVariation.id,
-            name: fullVariation.name || selectedVariation.name || null,
-            sku: fullVariation.sku || selectedVariation.sku || null,
-            slug: fullVariation.slug || selectedVariation.slug || null,
-            color: getAutoresponderProductColor(fullVariation) || selectedVariation.color || null,
-            price_cents: getAutoresponderProductPriceCents(fullVariation),
-            stock_quantity: fullVariation.stock_quantity == null ? selectedVariation.stock_quantity || null : Number(fullVariation.stock_quantity),
-          },
-          requested_quantity: null,
-        });
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'purchase_variation_selected',
-          replyText,
-          matchedCount: 1,
-          matchedProducts: [fullVariation],
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (purchaseFlow.status === 'awaiting_quantity' && purchaseFlow.selected_product?.id) {
-        const requestedQuantity = parseAutoresponderRequestedQuantity(message);
-        const product = await findAutoresponderProductById(purchaseFlow.selected_product.id);
-        const selectedProduct = product || purchaseFlow.selected_product;
-
-        if (!requestedQuantity || requestedQuantity < 1) {
-          const replyText = formatAutoresponderReply(buildAutoresponderQuantityPrompt(selectedProduct), settings, false);
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_quantity_invalid',
-            replyText,
-            matchedCount: 1,
-            matchedProducts: [purchaseFlow.selected_product],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-
-        const availableStock = Math.max(Number(selectedProduct?.stock_quantity || 0), 0);
-        if (availableStock <= 0) {
-          const replyText = formatAutoresponderReply(buildAutoresponderOutOfStockReply(selectedProduct), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...purchaseFlow,
-            status: 'stock_blocked',
-            requested_quantity: requestedQuantity,
-            selected_product: {
-              ...purchaseFlow.selected_product,
-              stock_quantity: 0,
-            },
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_stock_blocked',
-            replyText,
-            matchedCount: 0,
-            matchedProducts: [purchaseFlow.selected_product],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-
-        if (requestedQuantity > availableStock) {
-          const replyText = formatAutoresponderReply(
-            buildAutoresponderInsufficientStockReply(selectedProduct, requestedQuantity, availableStock),
-            settings,
-            false
-          );
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            ...purchaseFlow,
-            status: 'awaiting_quantity',
-            requested_quantity: null,
-            selected_product: {
-              ...purchaseFlow.selected_product,
-              stock_quantity: availableStock,
-            },
-          });
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_stock_limited',
-            replyText,
-            matchedCount: 1,
-            matchedProducts: [purchaseFlow.selected_product],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-
-        const unitPriceCents = product ? getAutoresponderProductPriceCents(product) : Number(purchaseFlow.selected_product.price_cents || 0);
-        const item = {
-          product_id: purchaseFlow.selected_product.id,
-          name: selectedProduct?.name || purchaseFlow.selected_product.name || null,
-          sku: selectedProduct?.sku || purchaseFlow.selected_product.sku || null,
-          slug: selectedProduct?.slug || purchaseFlow.selected_product.slug || null,
-          quantity: requestedQuantity,
-          unit_price_cents: unitPriceCents,
-          subtotal_cents: unitPriceCents * requestedQuantity,
-        };
-        const replyText = formatAutoresponderReply(buildAutoresponderItemAddedPrompt(item), settings, false);
-        await saveAutoresponderPurchaseFlow(senderKey, {
-          ...purchaseFlow,
-          status: 'item_added',
-          requested_quantity: requestedQuantity,
-          selected_product: {
-            ...purchaseFlow.selected_product,
-            stock_quantity: availableStock,
-          },
-          items: [...(Array.isArray(purchaseFlow.items) ? purchaseFlow.items : []), item],
-        });
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'purchase_item_added',
-          replyText,
-          matchedCount: 1,
-          matchedProducts: [item],
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (purchaseFlow.status === 'item_added' && isAutoresponderPurchaseAddMoreRequest(message)) {
-        const replyText = formatAutoresponderReply(buildAutoresponderAddMorePrompt(), settings, false);
-        await saveAutoresponderPurchaseFlow(senderKey, {
-          ...purchaseFlow,
-          status: 'adding_more',
-          selected_product: null,
-          requested_quantity: null,
-          items: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-        });
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'purchase_add_more_prompt',
-          replyText,
-          matchedCount: Array.isArray(purchaseFlow.items) ? purchaseFlow.items.length : 0,
-          matchedProducts: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      const numberedChoice = detectedIntent.numberedChoice;
-      if (Number(settings.use_numbered_lists) === 1) {
-        const options = await getAutoresponderNumberedChoiceContext(senderKey, settings.numbered_list_validity_minutes);
-        const selectedOption = findAutoresponderSelectedOptionFromMessage(message, options, numberedChoice);
-        const ambiguousSelectionReply = await handleAutoresponderAmbiguousSelection({ senderKey, message, settings, selectedOption });
-        if (ambiguousSelectionReply) return ambiguousSelectionReply;
-        if (selectedOption?.id) {
-          const product = await findAutoresponderProductById(selectedOption.id);
-          const replyText = formatAutoresponderReply(await buildAutoresponderPurchaseActionPrompt(product, selectedOption), settings, false);
-          await saveAutoresponderPurchaseFlow(senderKey, {
-            status: 'awaiting_product_action',
-            selected_product: {
-              id: selectedOption.id,
-              name: product?.name || selectedOption.name || null,
-              sku: product?.sku || selectedOption.sku || null,
-              slug: product?.slug || selectedOption.slug || null,
-              price_cents: product ? getAutoresponderProductPriceCents(product) : null,
-              stock_quantity: product?.stock_quantity == null ? null : Number(product.stock_quantity),
-            },
-            items: Array.isArray(purchaseFlow.items) ? purchaseFlow.items : [],
-          });
-
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'purchase_product_selected',
-            replyText,
-            matchedCount: product ? 1 : 0,
-            matchedProducts: [selectedOption],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-
-          return { replies: [{ message: replyText }] };
-        }
-      }
-
-      if (detectedIntent.moreRequest && Number(settings.use_numbered_lists) === 1) {
-        const context = await getAutoresponderOptionsContext(senderKey, settings.numbered_list_validity_minutes);
-        const pagination = context.pagination;
-        if (pagination?.source && pagination.hasMore) {
-          const pageSize = Number(pagination.limit) > 0 ? Number(pagination.limit) : AUTORESPONDER_PRODUCT_RESPONSE_LIMIT;
-          const nextOffset = Number(pagination.offset || 0) + pageSize;
-          const rows = pagination.source === 'tag'
-            ? await findAutoresponderProductsByTag(pagination.tagId, pageSize + 1, nextOffset)
-            : pagination.source === 'category'
-              ? await findAutoresponderProductsByCategory(pagination.categoryId, pageSize + 1, nextOffset)
-              : pagination.source === 'category_budget'
-                ? await findAutoresponderProductsByCategoryBudget(pagination.categoryId, pagination.budgetCents, pageSize + 1, nextOffset)
-              : await findAutoresponderProductsByTokens(pagination.tokens || [], pageSize + 1, nextOffset);
-          const products = rows.slice(0, pageSize);
-          const hasMore = rows.length > pageSize;
-          if (products.length > 0) {
-            const productOptions = buildAutoresponderProductOptions(products);
-            const keyword = pagination.source === 'tag'
-              ? (pagination.keyword || 'mais produtos')
-              : pagination.source === 'category'
-                ? (pagination.keyword || 'produtos')
-                : pagination.source === 'category_budget'
-                  ? (pagination.keyword || 'produtos')
-                : (pagination.tokens || []).join(' ');
-            const total = Number(pagination.total || 0) > 0
-              ? Number(pagination.total)
-              : (pagination.source === 'tag'
-                ? await countAutoresponderProductsByTag(pagination.tagId)
-                : pagination.source === 'category'
-                  ? await countAutoresponderProductsByCategory(pagination.categoryId)
-                  : pagination.source === 'category_budget'
-                    ? await countAutoresponderProductsByCategoryBudget(pagination.categoryId, pagination.budgetCents)
-                : await countAutoresponderProductsByTokens(pagination.tokens || []));
-            const productReplyMessages = appendAutoresponderReplyFooter(
-              await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: nextOffset, limit: pageSize, total }),
-              formatAutoresponderProductReplyInstructions(hasMore)
-            );
-            const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, false);
-            const replyText = replyMessages.join('\n\n');
-
-            await logAutoresponderReply({
-              sender: senderKey,
-              message,
-              intent: 'more_products',
-              replyText,
-              matchedCount: products.length,
-              matchedProducts: productOptions,
-            });
-            await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
-              ...pagination,
-              offset: nextOffset,
-              limit: pageSize,
-              total,
-              hasMore,
-            });
-
-            return { replies: formatAutoresponderProReplies(replyMessages) };
-          }
-        }
-        if (pagination?.source && !pagination.hasMore) {
-          const replyText = formatAutoresponderReply(
-            'Ja te mostrei as opcoes disponiveis dessa lista. Responda com o numero ou nome do produto que eu te mando os detalhes.',
-            settings,
-            false
-          );
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'more_products_exhausted',
-            replyText,
-            matchedCount: Array.isArray(context.items) ? context.items.length : 0,
-            matchedProducts: Array.isArray(context.items) ? context.items : [],
-          });
-          await upsertAutoresponderSuccessConversation(senderKey);
-          return { replies: [{ message: replyText }] };
-        }
-      }
-
-      if (detectedIntent.humanRequest) {
-        const storeStatus = await getCachedAutoresponderStoreStatus();
-        const humanReplyText = isAutoresponderStoreInHumanHours(storeStatus)
-          ? (settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_IN_HOURS)
-          : (settings.human_message_out_of_hours || settings.human_message_in_hours || AUTORESPONDER_DEFAULT_HUMAN_OUT_OF_HOURS);
-        const replyText = formatAutoresponderReply(humanReplyText, settings, shouldPrefixGreeting);
-
+      if (result && result.response) {
+        // Save conversation stats in legacy table to keep dashboard stats working
         await pool.query(
-          `INSERT INTO autoresponder_logs
-            (sender, question, intent, matched_count, reply_text, response_time_ms, is_group)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [senderKey, message || null, 'human_request', 0, replyText, 0, 0]
+          `INSERT INTO autoresponder_conversations (sender, last_message_at, last_bot_reply_at, total_messages, consecutive_fallbacks)
+           VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, 0)
+           ON DUPLICATE KEY UPDATE
+             last_message_at = CURRENT_TIMESTAMP,
+             last_bot_reply_at = CURRENT_TIMESTAMP,
+             total_messages = total_messages + 1,
+             consecutive_fallbacks = 0`,
+          [senderKey]
         );
 
-        await upsertAutoresponderSuccessConversation(senderKey);
-
-        return { replies: [{ message: replyText }] };
-      }
-
-      const phoneListOptInReply = await handleAutoresponderPhoneListOptIn({
-        sender: senderKey,
-        message,
-        settings,
-        shouldPrefixGreeting,
-      });
-      if (phoneListOptInReply) return phoneListOptInReply;
-
-      const matchedRule = await findAutoresponderRuleMatch(message);
-      if (matchedRule) {
-        await pool.query(
-          'UPDATE autoresponder_rules SET hits = hits + 1 WHERE id = ?',
-          [matchedRule.id]
-        );
-
-        if (String(matchedRule.reply_type || 'text') === 'product_by_tag') {
-          const keyword = matchedRule.reply_text || matchedRule.name || 'produtos';
-          const pageSize = getAutoresponderInitialProductPageSize(keyword);
-          const rows = await findAutoresponderProductsByTag(matchedRule.reply_tag_id, pageSize + 1);
-          const products = rows.slice(0, pageSize);
-          const hasMore = rows.length > pageSize;
-          const total = await countAutoresponderProductsByTag(matchedRule.reply_tag_id);
-          const productOptions = buildAutoresponderProductOptions(products);
-          const productReplyMessages = appendAutoresponderRuleAttachmentToReplies(
-            appendAutoresponderReplyFooter(
-              await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(keyword) }),
-              formatAutoresponderProductReplyInstructions(hasMore)
-            ),
-            matchedRule
-          );
-          const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
-          const replyText = replyMessages.join('\n\n');
-
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'rule_product_tag',
-            replyText,
-            matchedCount: products.length,
-            matchedRuleId: matchedRule.id,
-            matchedProducts: productOptions,
-          });
-          await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
-            source: 'tag',
-            tagId: matchedRule.reply_tag_id,
-            keyword,
-            offset: 0,
-            limit: pageSize,
-            total,
-            hasMore,
-          });
-          await applyAutoresponderRuleConversationTag(senderKey, matchedRule.auto_apply_tag_id);
-
-          return { replies: formatAutoresponderProReplies(replyMessages) };
-        }
-
-        if (String(matchedRule.reply_type || 'text') === 'product_search') {
-          const keyword = matchedRule.reply_search_query;
-          const pageSize = getAutoresponderInitialProductPageSize(keyword);
-          const ruleSearchTokens = extractAutoresponderProductSearchTokens(matchedRule.reply_search_query);
-          const rows = await findAutoresponderProductsByTokens(ruleSearchTokens, pageSize + 1);
-          const products = rows.slice(0, pageSize);
-          const hasMore = rows.length > pageSize;
-          const total = await countAutoresponderProductsByTokens(ruleSearchTokens);
-          const productOptions = buildAutoresponderProductOptions(products);
-          const productReplyMessages = appendAutoresponderRuleAttachmentToReplies(
-            appendAutoresponderReplyFooter(
-              await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(keyword) }),
-              formatAutoresponderProductReplyInstructions(hasMore)
-            ),
-            matchedRule
-          );
-          const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
-          const replyText = replyMessages.join('\n\n');
-
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'rule_product_search',
-            replyText,
-            matchedCount: products.length,
-            matchedRuleId: matchedRule.id,
-            matchedProducts: productOptions,
-          });
-          await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
-            source: 'search',
-            tokens: ruleSearchTokens,
-            offset: 0,
-            limit: pageSize,
-            total,
-            hasMore,
-          });
-          await applyAutoresponderRuleConversationTag(senderKey, matchedRule.auto_apply_tag_id);
-
-          return { replies: formatAutoresponderProReplies(replyMessages) };
-        }
-
-        const resolvedRuleText = await resolveAutoresponderReplyTemplate(
-          appendAutoresponderRuleAttachment(matchedRule.reply_text, matchedRule),
-          settings
-        );
-        const replyText = formatAutoresponderReply(
-          resolvedRuleText,
-          settings,
-          shouldPrefixGreeting
-        );
-
+        // Log AI responses in legacy log table
         await logAutoresponderReply({
           sender: senderKey,
           message,
-          intent: 'rule_text',
-          replyText,
+          intent: result.routing?.last_intent || 'ai_framework',
+          replyText: result.response,
           matchedCount: 1,
-          matchedRuleId: matchedRule.id,
-        });
-        await applyRuleNextState(senderKey, matchedRule, purchaseFlow);
-        await upsertAutoresponderSuccessConversation(senderKey);
-        await applyAutoresponderRuleConversationTag(senderKey, matchedRule.auto_apply_tag_id);
-
-        return { replies: [{ message: replyText }] };
-      }
-
-      const productTagMatch = findAutoresponderProductTagKeyword(message, settings);
-      if (productTagMatch) {
-        const pageSize = getAutoresponderInitialProductPageSize(productTagMatch.keyword);
-        const rows = await findAutoresponderProductsByTag(productTagMatch.tagId, pageSize + 1);
-        const products = rows.slice(0, pageSize);
-        const hasMore = rows.length > pageSize;
-        const total = await countAutoresponderProductsByTag(productTagMatch.tagId);
-        const productOptions = buildAutoresponderProductOptions(products);
-        const productReplyMessages = appendAutoresponderReplyFooter(
-          await formatAutoresponderProductSearchReplies(products, productTagMatch.keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(productTagMatch.keyword) }),
-          formatAutoresponderProductReplyInstructions(hasMore)
-        );
-        const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
-        const replyText = replyMessages.join('\n\n');
-
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'product_tag',
-          replyText,
-          matchedCount: products.length,
-          matchedProducts: productOptions,
-        });
-        await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
-          source: 'tag',
-          tagId: productTagMatch.tagId,
-          keyword: productTagMatch.keyword,
-          offset: 0,
-          limit: pageSize,
-          total,
-          hasMore,
-          completeList: isAutoresponderCompleteProductListKeyword(productTagMatch.keyword),
         });
 
-        return { replies: formatAutoresponderProReplies(replyMessages) };
+        return { replies: [{ message: result.response }] };
       }
 
-      {
-        const categories = await findAutoresponderAvailableCategories(20);
-        const budgetRequest = getAutoresponderBudgetCategoryRequest(message, categories);
-        if (budgetRequest?.category?.id) {
-          const budgetKeyword = budgetRequest.category.name;
-          const pageSize = getAutoresponderInitialProductPageSize(budgetKeyword);
-          const rows = await findAutoresponderProductsByCategoryBudget(budgetRequest.category.id, budgetRequest.budgetCents, pageSize + 1);
-          const products = rows.slice(0, pageSize);
-          const hasMore = rows.length > pageSize;
-          const total = await countAutoresponderProductsByCategoryBudget(budgetRequest.category.id, budgetRequest.budgetCents);
-          if (products.length > 0) {
-            const productOptions = buildAutoresponderProductOptions(products);
-            const keyword = `${budgetKeyword} ate ${formatAutoresponderCurrency(budgetRequest.budgetCents / 100)}`;
-            const productReplyMessages = appendAutoresponderReplyFooter(
-              await formatAutoresponderProductSearchReplies(products, keyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(budgetKeyword) }),
-              formatAutoresponderProductReplyInstructions(hasMore)
-            );
-            const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
-            const replyText = replyMessages.join('\n\n');
-
-            await logAutoresponderReply({
-              sender: senderKey,
-              message,
-              intent: 'catalog_budget',
-              replyText,
-              matchedCount: products.length,
-              matchedProducts: productOptions,
-            });
-            await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
-              source: 'category_budget',
-              categoryId: budgetRequest.category.id,
-              budgetCents: budgetRequest.budgetCents,
-              keyword,
-              offset: 0,
-              limit: pageSize,
-              total,
-              hasMore,
-              completeList: isAutoresponderCompleteProductListKeyword(budgetKeyword),
-            });
-
-            return { replies: formatAutoresponderProReplies(replyMessages) };
-          }
-        }
-      }
-
-      const genericDeviceCatalogFamily = detectAutoresponderGenericDeviceCatalogFamily(message);
-      if (genericDeviceCatalogFamily) {
-        const replyText = formatAutoresponderReply(
-          buildAutoresponderDeviceCatalogRefinementPrompt(genericDeviceCatalogFamily),
-          settings,
-          shouldPrefixGreeting
-        );
-
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: genericDeviceCatalogFamily === 'smartphone' ? 'catalog_phone_refinement' : 'catalog_device_refinement',
-          replyText,
-          matchedCount: 0,
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-
-        return { replies: [{ message: replyText }] };
-      }
-
-      if (isAutoresponderCatalogRequest(message)) {
-        const categories = await findAutoresponderAvailableCategories(20);
-        const selectedCategory = findAutoresponderCatalogCategoryForMessage(message, categories);
-        if (selectedCategory?.id) {
-          const pageSize = getAutoresponderInitialProductPageSize(selectedCategory.name);
-          const rows = await findAutoresponderProductsByCategory(selectedCategory.id, pageSize + 1);
-          const products = rows.slice(0, pageSize);
-          const hasMore = rows.length > pageSize;
-          const total = await countAutoresponderProductsByCategory(selectedCategory.id);
-          const productOptions = buildAutoresponderProductOptions(products);
-          const productReplyMessages = appendAutoresponderReplyFooter(
-            await formatAutoresponderProductSearchReplies(products, selectedCategory.name, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name) }),
-            formatAutoresponderProductReplyInstructions(hasMore)
-          );
-          const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
-          const replyText = replyMessages.join('\n\n');
-
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'catalog_category',
-            replyText,
-            matchedCount: products.length,
-            matchedProducts: productOptions,
-          });
-          await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
-            source: 'category',
-            categoryId: selectedCategory.id,
-            keyword: selectedCategory.name,
-            offset: 0,
-            limit: pageSize,
-            total,
-            hasMore,
-            completeList: isAutoresponderCompleteProductListKeyword(selectedCategory.name),
-          });
-
-          return { replies: formatAutoresponderProReplies(replyMessages) };
-        }
-      }
-
-      const productSearchTokens = extractAutoresponderProductSearchTokens(message);
-      if (productSearchTokens.length > 0) {
-        const searchKeyword = productSearchTokens.join(' ');
-        const pageSize = getAutoresponderInitialProductPageSize(searchKeyword);
-        const rows = await findAutoresponderProductsByTokens(productSearchTokens, pageSize + 1);
-        const products = rows.slice(0, pageSize);
-        const hasMore = rows.length > pageSize;
-        if (products.length > 0) {
-          const total = await countAutoresponderProductsByTokens(productSearchTokens);
-          const productOptions = buildAutoresponderProductOptions(products);
-          const productReplyMessages = appendAutoresponderReplyFooter(
-            await formatAutoresponderProductSearchReplies(products, searchKeyword, settings, { offset: 0, limit: pageSize, total, completeList: isAutoresponderCompleteProductListKeyword(searchKeyword) }),
-            formatAutoresponderProductReplyInstructions(hasMore)
-          );
-          const replyMessages = formatAutoresponderReplies(productReplyMessages, settings, shouldPrefixGreeting);
-          const replyText = replyMessages.join('\n\n');
-
-          await logAutoresponderReply({
-            sender: senderKey,
-            message,
-            intent: 'product_search',
-            replyText,
-            matchedCount: products.length,
-            matchedProducts: productOptions,
-          });
-          await upsertAutoresponderOptionsConversation(senderKey, productOptions, {
-            source: 'search',
-            tokens: productSearchTokens,
-            offset: 0,
-            limit: pageSize,
-            total,
-            hasMore,
-            completeList: isAutoresponderCompleteProductListKeyword(searchKeyword),
-          });
-
-          return { replies: formatAutoresponderProReplies(replyMessages) };
-        }
-      }
-
-      const aiFallback = await buildAutoresponderAiFallbackReply({ message, contactFirstName, settings });
-      if (aiFallback?.text) {
-        const replyText = formatAutoresponderReply(aiFallback.text, settings, shouldPrefixGreeting);
-        await logAutoresponderReply({
-          sender: senderKey,
-          message,
-          intent: 'ai_fallback',
-          replyText,
-          matchedCount: 0,
-          aiMeta: aiFallback.aiMeta,
-        });
-        await upsertAutoresponderSuccessConversation(senderKey);
-        return { replies: [{ message: replyText }] };
-      }
-
-      return await handleAutoresponderGlobalFallbackCuration({
-        senderKey,
-        message,
-        settings,
-        contactFirstName,
-        shouldPrefixGreeting,
-      });
+      return { replies: [] };
     } catch (err) {
       console.error('[autoresponder] webhook failed:', err);
       return {
@@ -13665,6 +12307,63 @@ fastify.post('/autoresponder/test-flow', { preHandler: requireSyncKey }, async (
     contactFirstName: body.contactFirstName || body.contact_first_name || '',
     cleanup: body.cleanup !== false,
   });
+});
+
+// ─── AI Sandbox endpoints & Kernel Integration ──────────────────────────────────
+let kernelHandle = null;
+let contextManagerRef = null;
+
+import('./services/autoresponder/framework/00-kernel/Kernel.js').then((module) => {
+  module.init(pool);
+  kernelHandle = module.handle;
+  return import('./services/autoresponder/framework/01-context/contextManager.js');
+}).then((cm) => {
+  contextManagerRef = cm;
+  console.log('[Kernel] Universal Kernel initialized successfully.');
+}).catch((err) => {
+  console.error('[Kernel] Failed to initialize Kernel:', err);
+});
+
+fastify.post('/autoresponder/sandbox/message', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const body = req.body || {};
+  const { message, channel, sender, options } = body;
+  
+  if (!message || !channel || !sender) {
+    return reply.code(400).send({ error: 'message, channel and sender are required fields' });
+  }
+
+  if (!kernelHandle) {
+    return reply.code(503).send({ error: 'Kernel is not initialized yet' });
+  }
+
+  try {
+    const result = await kernelHandle(message, channel, sender, options);
+    return result;
+  } catch (err) {
+    return reply.code(500).send({ error: err.message });
+  }
+});
+
+fastify.post('/autoresponder/sandbox/reset', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const body = req.body || {};
+  const { channel, sender } = body;
+
+  if (!channel || !sender) {
+    return reply.code(400).send({ error: 'channel and sender are required fields' });
+  }
+
+  if (!contextManagerRef) {
+    return reply.code(503).send({ error: 'Context Manager is not initialized yet' });
+  }
+
+  try {
+    await contextManagerRef.clearConversationContext(channel, sender);
+    await contextManagerRef.clearOrderContext(channel, sender);
+    await contextManagerRef.clearCustomerContext(channel, sender);
+    return { success: true };
+  } catch (err) {
+    return reply.code(500).send({ error: err.message });
+  }
 });
 
 // POST /products/:id/upload-image  (multipart/form-data, campo "file")
@@ -14516,6 +13215,57 @@ function comboStockSql(productAlias = 'products') {
   ), 0) ELSE ${productAlias}.stock_quantity END)`;
 }
 
+function isExpiredSignedS3Url(url) {
+  if (typeof url !== 'string' || !url.startsWith('https://orgbling.s3.amazonaws.com')) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url);
+    const expiresParam = parsed.searchParams.get('Expires');
+    if (expiresParam && /^\d+$/.test(expiresParam)) {
+      return Number(expiresParam) * 1000 <= Date.now();
+    }
+    const amzExpires = parsed.searchParams.get('X-Amz-Expires');
+    const amzDate = parsed.searchParams.get('X-Amz-Date');
+    if (amzExpires && amzDate && /^\d+$/.test(amzExpires)) {
+      const match = amzDate.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/i);
+      if (match) {
+        const [, year, month, day, hour, minute, second] = match;
+        const issuedAt = Date.UTC(
+          Number(year),
+          Number(month) - 1,
+          Number(day),
+          Number(hour),
+          Number(minute),
+          Number(second)
+        );
+        return (issuedAt + Number(amzExpires) * 1000) <= Date.now();
+      }
+    }
+  } catch (err) {
+    // ignore URL parsing errors
+  }
+  return false;
+}
+
+function normalizeAndFilterProductImages(r) {
+  let images = [];
+  try {
+    images = typeof r.images === 'string' ? JSON.parse(r.images) : (r.images ?? []);
+  } catch {
+    images = [];
+  }
+  if (!Array.isArray(images)) images = [];
+
+  const activeImages = images.filter(img => !isExpiredSignedS3Url(img));
+
+  return {
+    images: activeImages,
+    image_url: activeImages[0] || null
+  };
+}
+
+
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
   const limit  = Math.min(parseInt(req.query.limit)  || 500, 2000);
   const offset = parseInt(req.query.offset) || 0;
@@ -14636,14 +13386,18 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
     console.log(`[VPS GET /products] Returned ${rows.length} rows for search="${search || ''}"`);
   }
 
-  const result = rows.map(r => ({
-    ...r,
-    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
-    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
-    custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
-    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
-  }));
+  const result = rows.map(r => {
+    const filtered = normalizeAndFilterProductImages(r);
+    return {
+      ...r,
+      images:           filtered.images,
+      image_url:        filtered.image_url,
+      specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+      alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+      custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+      kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+    };
+  });
 
   // Sem cache para admin (status=all) ou buscas dinâmicas (search)
   // search requests NUNCA devem ser cacheados pelo CDN, pois o resultado
@@ -14676,14 +13430,18 @@ fastify.get('/products/by-ids', { config: { rateLimit: { max: 900, timeWindow: '
     [...ids, ...ids]
   );
 
-  return rows.map(r => ({
-    ...r,
-    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
-    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
-    custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
-    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
-  }));
+  return rows.map(r => {
+    const filtered = normalizeAndFilterProductImages(r);
+    return {
+      ...r,
+      images:           filtered.images,
+      image_url:        filtered.image_url,
+      specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+      alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+      custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
+      kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+    };
+  });
 });
 
 fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -14695,9 +13453,11 @@ fastify.get('/products/:id', { config: { rateLimit: { max: 900, timeWindow: '1 m
   );
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }
   const r = rows[0];
+  const filtered = normalizeAndFilterProductImages(r);
   return {
     ...r,
-    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    images:           filtered.images,
+    image_url:        filtered.image_url,
     specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
@@ -14756,9 +13516,11 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
     return { error: 'No available variants for this parent' };
   }
 
+  const filtered = normalizeAndFilterProductImages(r);
   return {
     ...r,
-    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
+    images:           filtered.images,
+    image_url:        filtered.image_url,
     specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
     alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
     custom_fields:    typeof r.custom_fields === 'string'    ? JSON.parse(r.custom_fields)    : r.custom_fields,
@@ -14775,13 +13537,17 @@ fastify.get('/products/by-ean/:ean', async (req, reply) => {
      WHERE ean = ? OR JSON_CONTAINS(alternative_eans, JSON_QUOTE(?))`,
     [ean, ean]
   );
-  return rows.map(r => ({
-    ...r,
-    images:           typeof r.images === 'string'           ? JSON.parse(r.images)           : (r.images ?? []),
-    specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
-    alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
-    kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
-  }));
+  return rows.map(r => {
+    const filtered = normalizeAndFilterProductImages(r);
+    return {
+      ...r,
+      images:           filtered.images,
+      image_url:        filtered.image_url,
+      specs:            typeof r.specs === 'string'            ? JSON.parse(r.specs)            : r.specs,
+      alternative_eans: typeof r.alternative_eans === 'string' ? JSON.parse(r.alternative_eans) : r.alternative_eans,
+      kits:             typeof r.kits === 'string'             ? JSON.parse(r.kits)             : r.kits,
+    };
+  });
 });
 
 fastify.get('/products/:id/combo', async (req, reply) => {
@@ -14796,11 +13562,15 @@ fastify.get('/products/:id/combo', async (req, reply) => {
      WHERE pc.combo_product_id = ?`,
     [req.params.id]
   );
-  return rows.map(r => ({
-    ...r,
-    images: typeof r.images === 'string' ? JSON.parse(r.images) : r.images,
-    dimensions: typeof r.dimensions === 'string' ? JSON.parse(r.dimensions || '{}') : r.dimensions
-  }));
+  return rows.map(r => {
+    const filtered = normalizeAndFilterProductImages(r);
+    return {
+      ...r,
+      images: filtered.images,
+      image_url: filtered.image_url,
+      dimensions: typeof r.dimensions === 'string' ? JSON.parse(r.dimensions || '{}') : r.dimensions
+    };
+  });
 });
 
 
@@ -19639,6 +18409,17 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   await seedDefaultEmailTemplates();
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      setting_key VARCHAR(255) PRIMARY KEY,
+      setting_value TEXT,
+      version INT DEFAULT 1,
+      updated_by VARCHAR(255) DEFAULT 'system',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS autoresponder_settings (

@@ -76,6 +76,7 @@ const SystemTagsPage = lazy(() => import('../pages/admin/settings/SystemTagsPage
 const WhatsAppPage = lazy(() => import('../pages/admin/settings/WhatsAppPage'));
 const WhatsAppMessagesPage = lazy(() => import('../pages/admin/whatsapp/MessagesPage'));
 const WhatsAppAiMemoryPage = lazy(() => import('../pages/admin/whatsapp/AiMemoryPage'));
+const AiSandboxPage = lazy(() => import('../pages/admin/whatsapp/AiSandboxPage'));
 const PaymentIntegrationsPage = lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
 const DisplaysPage = lazy(() => import('../pages/admin/settings/DisplaysPage'));
 const DisplayPage = lazy(() => import('../pages/display/DisplayPage'));
@@ -630,6 +631,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><WhatsAppAiMemoryPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/whatsapp/sandbox",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><AiSandboxPage /></AdminLayout>
       </ProtectedRoute>
     )
   },
