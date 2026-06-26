@@ -143,7 +143,7 @@ export function generateCatalogMessage(
     paymentFees: PaymentFee[] = [],
     pixDiscountPercent: number = 0
 ): string {
-    products = filterCatalogVisibleProducts(products);
+    products = normalizeProducts(products);
 
     if (products.length === 0) {
         return 'Nenhum produto disponível no momento.';
