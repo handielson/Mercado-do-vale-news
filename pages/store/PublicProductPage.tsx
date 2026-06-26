@@ -794,6 +794,12 @@ export const PublicProductPage: React.FC = () => {
     });
     uniqueVariants.sort((a, b) => ((a as any)._displayLabel || '').localeCompare((b as any)._displayLabel || ''));
 
+    const isSellableCatalogProduct = (item: CatalogProduct): boolean => {
+        if (item.track_inventory === false) return true;
+        return Number(item.stock_quantity || 0) > 0;
+    };
+    const sellableVariantOptions = uniqueVariants.filter(isSellableCatalogProduct);
+
     const readVariantSpec = (item: CatalogProduct, keys: string[]): string => {
         const specs = (item.specs || {}) as Record<string, unknown>;
         for (const key of keys) {
@@ -932,7 +938,7 @@ export const PublicProductPage: React.FC = () => {
         };
     };
 
-    const groupedVariantOptions = Array.from(uniqueVariants.reduce((groups, item) => {
+    const groupedVariantOptions = Array.from(sellableVariantOptions.reduce((groups, item) => {
         const parts = getVariantParts(item);
         const key = getMemoryGroupLabel(parts);
         if (!groups.has(key)) groups.set(key, []);
@@ -957,13 +963,14 @@ export const PublicProductPage: React.FC = () => {
             };
             return parse(a.storage) - parse(b.storage) || a.storage.localeCompare(b.storage);
         });
-    const shouldShowVariantOptions = uniqueVariants.length > 1 || uniqueVariants.some((item) => {
+    const shouldShowVariantOptions = sellableVariantOptions.length > 1 || sellableVariantOptions.some((item) => {
         const parts = getVariantParts(item);
         return parts.storage !== 'Outras opções' || parts.color !== 'Padrão' || Boolean(parts.ram);
     });
 
     const getShareText = () => {
-        const variantNames = uniqueVariants.map(v => (v as any)._displayLabel).join(', ');
+        const shareableVariants = sellableVariantOptions;
+        const variantNames = shareableVariants.map(v => (v as any)._displayLabel).join(', ');
         
         let text = `*${publicProductTitle}*\n`;
         if (variantNames) {
