@@ -175,7 +175,7 @@ export async function generateCatalogPDF(
     customerType: CustomerType = 'retail',
     categoryName?: string
 ): Promise<void> {
-    products = filterCatalogVisibleProducts(products);
+    products = normalizeProducts(products);
 
     // Create PDF
     const doc = new jsPDF({

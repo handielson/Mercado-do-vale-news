@@ -325,16 +325,14 @@ function CatalogContent() {
         }, { replace: true });
     }, [filterStats?.categories, setSearchParams]);
 
-    const isAdmin = customer?.customer_type === 'ADMIN';
     const hasActiveSearch = searchQuery.trim().length > 0;
 
     // Group products by variants (Brand + Model + RAM + Storage)
-    // Admin só pode ver esgotados quando a configuração global permitir.
+    // A vitrine publica deve mostrar apenas grupos com produtos vendaveis em estoque.
     const productGroups = useMemo(() => {
-        const includeOutOfStockForView = isAdmin && !catalogSettings.hide_out_of_stock;
-        const groups = groupProductsByVariants(products, includeOutOfStockForView);
+        const groups = groupProductsByVariants(products, false);
         return groups;
-    }, [products, isAdmin, catalogSettings.hide_out_of_stock]);
+    }, [products]);
 
     const categoryNavCategories = useMemo(() => {
         const baseCategories = filterStats?.categories || [];
