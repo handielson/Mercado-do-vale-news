@@ -1,8 +1,8 @@
 {
-    "version": "v1.2.4-serialized-stock-active-api",
+    "version": "v1.2.5-admin-card-sold-status",
     "date": "2026-06-27",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260627-151500-v124-serialized-stock-active-api",
+    "release_vps": "/var/www/mdv-site/releases/20260627-153000-v125-admin-card-sold-status",
     "branch": "main",
-    "summary": "Aplica estoque efetivo serializado tambem no arquivo de API usado pelo PM2."
+    "summary": "Mostra Vendido no card admin de produto serializado ativo com estoque efetivo zero."
 }

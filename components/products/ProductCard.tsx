@@ -18,6 +18,7 @@ import { stockLocationService } from '../../services/stockLocationService';
 import { unitService } from '../../services/units';
 import { deleteImageFromBank, uploadImagesToBank } from '../../services/productImageBank';
 import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct, validateShopeeItemForProduct } from './productCardShopee.js';
+import { getAdminProductCardStatus } from './productCardStatus.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
 import type { ProductStockLocation } from '../../types/stock-location';
 
@@ -1015,38 +1016,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         }).format(centavos / 100);
     };
 
-    // Status badge colors
-    const getStatusColor = (status: ProductStatus): string => {
-        switch (status) {
-            case ProductStatus.ACTIVE:
-                return 'bg-green-100 text-green-800 border-green-200';
-            case ProductStatus.INACTIVE:
-                return 'bg-red-100 text-red-800 border-red-200';
-            case ProductStatus.OUT_OF_STOCK:
-                return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-            case ProductStatus.DISCONTINUED:
-                return 'bg-gray-100 text-gray-800 border-gray-200';
-            default:
-                return 'bg-gray-100 text-gray-800 border-gray-200';
-        }
-    };
-
-    const getStatusLabel = (status: ProductStatus): string => {
-        switch (status) {
-            case ProductStatus.ACTIVE:
-                return 'Ativo';
-            case ProductStatus.INACTIVE:
-                return 'Inativo';
-            case ProductStatus.OUT_OF_STOCK:
-                return 'Sem Estoque';
-            case ProductStatus.DISCONTINUED:
-                return 'Descontinuado';
-            default:
-                return status;
-        }
-    };
-
     const isParentProduct = Number(product.is_parent) === 1;
+    const adminCardStatus = getAdminProductCardStatus({
+        ...product,
+        status: currentStatus,
+        stock_quantity: currentStock,
+    });
 
     return (
         <div
@@ -1687,9 +1662,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 <div className="flex flex-wrap items-center gap-1.5">
                     <span className={cn(
                         'inline-block px-2 py-1 text-xs font-medium rounded-md border',
-                        getStatusColor(currentStatus)
+                        adminCardStatus.color
                     )}>
-                        {getStatusLabel(currentStatus)}
+                        {adminCardStatus.label}
                     </span>
                     {isHiddenFromCatalog && (
                         <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
