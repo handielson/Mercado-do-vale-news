@@ -3311,6 +3311,23 @@ export function ShopeeSyncModal({
     const setSyncStepSkipped = (key: SyncStepKey, detail?: string) => updateSyncStep(key, 'skipped', detail);
     const setSyncStepError = (key: SyncStepKey, detail?: string) => updateSyncStep(key, 'error', detail);
 
+    const persistShopeeProductLink = async (shopeeItemId: number | string | null | undefined) => {
+        const itemId = normalizePositiveId(shopeeItemId);
+        if (!itemId) return null;
+
+        await shopeeProductService.upsert({
+            product_id: product.id,
+            shopee_item_id: itemId,
+            shopee_category_id: selectedCat?.category_id ?? product.shopee_category_id ?? null,
+            shopee_category_name: selectedCat?.display_category_name || product.shopee_category_name || null,
+            shopee_price: Math.round(parsedPrice * 100),
+            status: 'active',
+            last_synced_at: new Date().toISOString(),
+        });
+
+        return itemId;
+    };
+
     const updateAttributeValue = (attributeId: number, value: string | string[]) => {
         setAttrValues((prev) => ({ ...prev, [attributeId]: value }));
     };
@@ -4213,6 +4230,15 @@ export function ShopeeSyncModal({
                 duplicate_item_name: proactiveDuplicateItem?.item_name || null,
             });
 
+            if (resolvedExistingProductItemId && !existingProductItemId) {
+                await persistShopeeProductLink(resolvedExistingProductItemId);
+                pushSyncDebug('duplicate_lookup:local_link_saved', {
+                    item_id: resolvedExistingProductItemId,
+                    product_id: product.id,
+                    reason: 'proactive duplicate match',
+                });
+            }
+
             const imageIdList: string[] = [];
             const videoUploadIdList: string[] = [];
             let videoUploadSkipped = false;
@@ -4633,15 +4659,7 @@ export function ShopeeSyncModal({
                 // Best-effort debug recovery only.
             }
             setSyncStepRunning('save_link', 'Gravando vinculo Shopee no sistema');
-            await shopeeProductService.upsert({
-                product_id: product.id,
-                shopee_item_id: shopeeItemId,
-                shopee_category_id: selectedCat.category_id,
-                shopee_category_name: selectedCat.display_category_name,
-                shopee_price: Math.round(parsedPrice * 100),
-                status: 'active',
-                last_synced_at: new Date().toISOString(),
-            });
+            await persistShopeeProductLink(shopeeItemId);
 
             if (publishWithVariations && selectedVariationGroup) {
                 const modelMatches = matchShopeeModelsBySku(selectedVariationGroup.children, publishedModelList);
