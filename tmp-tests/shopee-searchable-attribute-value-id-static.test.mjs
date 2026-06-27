@@ -90,8 +90,8 @@ assert.match(
 
 assert.match(
   fieldTemplates,
-  /id:\s*'power_supply'[\s\S]*category_id:\s*101803[\s\S]*strict_attribute_ids:\s*\[100121,\s*100370,\s*101029,\s*101219,\s*102292\]/,
-  'Power supply field template must mirror phone case behavior with a strict set of safe Shopee attributes.'
+  /id:\s*'power_supply'[\s\S]*category_id:\s*101803[\s\S]*strict_attribute_ids:\s*\[[\s\S]*100105[\s\S]*100323[\s\S]*100999[\s\S]*100413[\s\S]*101639[\s\S]*\]/,
+  'Power supply field template must keep the Seller Center attributes in its strict allowlist: power, input voltage, quantity, condition, and model.'
 );
 
 assert.match(

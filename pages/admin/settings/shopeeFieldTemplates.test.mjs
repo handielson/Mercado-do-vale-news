@@ -28,7 +28,18 @@ const powerSupplyProduct = {
 const powerSupplyTemplate = resolveShopeeFieldTemplate(powerSupplyProduct);
 assert.equal(powerSupplyTemplate?.id, 'power_supply');
 assert.equal(powerSupplyTemplate?.category_id, 101803);
-assert.deepEqual(powerSupplyTemplate?.strict_attribute_ids, [100121, 100370, 101029, 101219, 102292]);
+assert.deepEqual(powerSupplyTemplate?.strict_attribute_ids, [
+  100121,
+  100370,
+  100105,
+  100323,
+  101029,
+  100999,
+  100413,
+  101219,
+  101639,
+  102292,
+]);
 
 const attrs = [
   {

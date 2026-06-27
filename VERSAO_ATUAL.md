@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.6-admin-smartphone-sold-status
+version: v1.2.7-shopee-power-attributes
 date: 2026-06-27
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260627-154500-v126-admin-smartphone-sold-status
+release_vps: /var/www/mdv-site/releases/20260627-185500-v127-shopee-power-attributes
 branch: main
-summary: Mostra Vendido em smartphones ativos com estoque efetivo zero mesmo sem IMEI no cadastro do produto.
+summary: Permite enviar atributos de fonte de alimentacao para a Shopee que apareciam preenchidos no modal, mas eram filtrados antes do payload.
 ```
