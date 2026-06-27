@@ -6,6 +6,8 @@ const PRODUCT_STATUS = {
   SOLD: 'sold',
 };
 
+const SMARTPHONE_CATEGORY_ID = '8b7c4852-c195-4527-8fd7-c3cc2debda42';
+
 const STATUS_VIEW = {
   [PRODUCT_STATUS.ACTIVE]: {
     label: 'Ativo',
@@ -42,6 +44,10 @@ function hasSerializedIdentifier(product) {
   );
 }
 
+function isSerializedProduct(product) {
+  return hasSerializedIdentifier(product) || String(product?.category_id || '') === SMARTPHONE_CATEGORY_ID;
+}
+
 export function getAdminProductCardStatus(product) {
   const status = String(product?.status || PRODUCT_STATUS.ACTIVE);
   const view = STATUS_VIEW[status] || {
@@ -55,7 +61,7 @@ export function getAdminProductCardStatus(product) {
     Number(product?.is_parent || 0) !== 1 &&
     Number(product?.stock_quantity || 0) <= 0
   ) {
-    const nextStatus = hasSerializedIdentifier(product)
+    const nextStatus = isSerializedProduct(product)
       ? PRODUCT_STATUS.SOLD
       : PRODUCT_STATUS.OUT_OF_STOCK;
     return {

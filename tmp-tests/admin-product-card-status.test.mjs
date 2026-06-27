@@ -29,6 +29,22 @@ assert.deepEqual(
     status: 'active',
     track_inventory: true,
     stock_quantity: 0,
+    category_id: '8b7c4852-c195-4527-8fd7-c3cc2debda42',
+    specs: { color: 'Preto', ram: '12GB', storage: '512GB' },
+  }),
+  {
+    status: 'sold',
+    label: 'Vendido',
+    color: 'bg-slate-100 text-slate-700 border-slate-200',
+  },
+  'tracked active smartphones with zero effective stock must render as sold even when IMEI is only in units',
+);
+
+assert.deepEqual(
+  getAdminProductCardStatus({
+    status: 'active',
+    track_inventory: true,
+    stock_quantity: 0,
     specs: {},
   }),
   {
