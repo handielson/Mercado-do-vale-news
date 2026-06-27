@@ -14493,15 +14493,28 @@ function normalizeCatalogProductSearchText(value) {
     .trim();
 }
 
+function effectiveProductStockSql(productAlias = 'products') {
+  return `(CASE WHEN EXISTS (
+    SELECT 1 FROM units stock_units_any
+    WHERE stock_units_any.product_id = ${productAlias}.id
+  ) THEN (
+    SELECT COUNT(*) FROM units stock_units_available
+    WHERE stock_units_available.product_id = ${productAlias}.id
+      AND stock_units_available.status = 'available'
+  ) ELSE ${productAlias}.stock_quantity END)`;
+}
+
 function comboStockSql(productAlias = 'products') {
+  const productStock = effectiveProductStockSql(productAlias);
+  const childStock = effectiveProductStockSql('child');
   return `(CASE WHEN ${productAlias}.is_combo = 1 THEN COALESCE((
     SELECT MIN(component_stock)
     FROM (
       SELECT pc.combo_product_id,
         CASE
           WHEN MAX(COALESCE(pc.component_type, 'fixed')) = 'choice_group'
-            THEN FLOOR(SUM(child.stock_quantity) / NULLIF(MAX(pc.quantity), 0))
-          ELSE MIN(FLOOR(child.stock_quantity / NULLIF(pc.quantity, 0)))
+            THEN FLOOR(SUM(${childStock}) / NULLIF(MAX(pc.quantity), 0))
+          ELSE MIN(FLOOR(${childStock} / NULLIF(pc.quantity, 0)))
         END AS component_stock
       FROM product_combos pc
       JOIN products child ON child.id = pc.child_product_id
@@ -14513,7 +14526,7 @@ function comboStockSql(productAlias = 'products') {
         END
     ) combo_components
     WHERE combo_components.combo_product_id = ${productAlias}.id
-  ), 0) ELSE ${productAlias}.stock_quantity END)`;
+  ), 0) ELSE ${productStock} END)`;
 }
 
 fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minute' } } }, async (req, reply) => {

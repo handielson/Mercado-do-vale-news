@@ -1,8 +1,8 @@
 {
-    "version": "v1.2.2-pdp-stock-share",
-    "date": "2026-06-26",
+    "version": "v1.2.3-serialized-stock-effective",
+    "date": "2026-06-27",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260626-153400-pdp-stock-share",
+    "release_vps": "/var/www/mdv-site/releases/20260627-145500-v123-serialized-stock-effective",
     "branch": "main",
-    "summary": "Remove variacoes sem estoque das opcoes disponiveis e do compartilhamento da pagina de produto."
+    "summary": "Calcula estoque efetivo de produtos serializados a partir das unidades disponiveis."
 }
