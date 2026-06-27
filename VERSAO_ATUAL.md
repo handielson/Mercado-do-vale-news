@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.3-serialized-stock-effective
+version: v1.2.4-serialized-stock-active-api
 date: 2026-06-27
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260627-145500-v123-serialized-stock-effective
+release_vps: /var/www/mdv-site/releases/20260627-151500-v124-serialized-stock-active-api
 branch: main
-summary: Calcula estoque efetivo de produtos serializados a partir das unidades disponiveis.
+summary: Aplica estoque efetivo serializado tambem no arquivo de API usado pelo PM2.
 ```
