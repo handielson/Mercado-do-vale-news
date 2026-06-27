@@ -1,8 +1,8 @@
 {
-    "version": "v1.2.7-shopee-power-attributes",
+    "version": "v1.2.8-shopee-package-size-default",
     "date": "2026-06-27",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260627-185500-v127-shopee-power-attributes",
+    "release_vps": "/var/www/mdv-site/releases/20260627-190500-v128-shopee-package-size-default",
     "branch": "main",
-    "summary": "Permite enviar atributos de fonte de alimentacao para a Shopee que apareciam preenchidos no modal, mas eram filtrados antes do payload."
+    "summary": "Preenche Tamanho do Pacote como 1 Piece no template Shopee de fonte de alimentacao."
 }
