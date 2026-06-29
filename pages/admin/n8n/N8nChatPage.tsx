@@ -2,6 +2,7 @@ import React from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
+  Download,
   ExternalLink,
   GitBranch,
   MessageCircle,
@@ -14,6 +15,8 @@ import {
 const N8N_URL = 'https://n8n.mercadodovale.com.br';
 const EVOLUTION_URL = 'https://api-wa-test.mercadodovale.com.br';
 const WEBHOOK_PATH = '/webhook/whatsapp-chat-test';
+const WORKFLOW_ASSET_PATH = '/n8n-whatsapp-chat/n8n-chat-workflow.json';
+const CHECKLIST_ASSET_PATH = '/n8n-whatsapp-chat/manual-test-checklist.md';
 
 const statusItems = [
   {
@@ -72,6 +75,21 @@ function ExternalButton({ href, children }: { href: string; children: React.Reac
   );
 }
 
+function AssetButton({ href, download, children }: { href: string; download?: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      download={download}
+      target={download ? undefined : '_blank'}
+      rel={download ? undefined : 'noreferrer'}
+      className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+    >
+      {children}
+      {download ? <Download size={14} /> : <ExternalLink size={14} />}
+    </a>
+  );
+}
+
 function StatusCard({ item }: { item: (typeof statusItems)[number] }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -103,6 +121,10 @@ export default function N8nChatPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <AssetButton href={WORKFLOW_ASSET_PATH} download="mercado-do-vale-n8n-chat-workflow.json">
+            Baixar workflow
+          </AssetButton>
+          <AssetButton href={CHECKLIST_ASSET_PATH}>Checklist</AssetButton>
           <ExternalButton href={N8N_URL}>Abrir n8n</ExternalButton>
           <ExternalButton href={EVOLUTION_URL}>Abrir Evolution</ExternalButton>
         </div>
@@ -189,6 +211,19 @@ export default function N8nChatPage() {
             <p className="mt-1 text-sm text-blue-800">
               O numero oficial so entra depois dos testes manuais passarem. As mensagens automaticas atuais continuam separadas do chat n8n.
             </p>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+            <p className="text-sm font-bold text-slate-900">Arquivos operacionais</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Baixe o workflow para importar no n8n e use o checklist para validar a conversa no numero de teste.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AssetButton href={WORKFLOW_ASSET_PATH} download="mercado-do-vale-n8n-chat-workflow.json">
+                Workflow JSON
+              </AssetButton>
+              <AssetButton href={CHECKLIST_ASSET_PATH}>Checklist manual</AssetButton>
+            </div>
           </div>
         </section>
       </div>

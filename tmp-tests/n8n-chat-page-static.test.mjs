@@ -4,10 +4,15 @@ import { existsSync, readFileSync } from 'node:fs';
 const routes = readFileSync('routes/index.tsx', 'utf8');
 const layout = readFileSync('layouts/AdminLayout.tsx', 'utf8');
 const pagePath = 'pages/admin/n8n/N8nChatPage.tsx';
+const workflowAssetPath = 'public/n8n-whatsapp-chat/n8n-chat-workflow.json';
+const checklistAssetPath = 'public/n8n-whatsapp-chat/manual-test-checklist.md';
 
 assert.ok(existsSync(pagePath), 'n8n chat page file must exist');
+assert.ok(existsSync(workflowAssetPath), 'n8n workflow public asset must exist');
+assert.ok(existsSync(checklistAssetPath), 'n8n checklist public asset must exist');
 
 const page = readFileSync(pagePath, 'utf8');
+const workflowAsset = readFileSync(workflowAssetPath, 'utf8');
 
 assert.ok(
   routes.includes("const N8nChatPage") &&
@@ -35,8 +40,10 @@ assert.ok(
 assert.ok(
   page.includes('https://n8n.mercadodovale.com.br') &&
     page.includes('https://api-wa-test.mercadodovale.com.br') &&
-    page.includes('/webhook/whatsapp-chat-test'),
-  'page must show n8n, Evolution, and webhook targets'
+    page.includes('/webhook/whatsapp-chat-test') &&
+    page.includes('/n8n-whatsapp-chat/n8n-chat-workflow.json') &&
+    page.includes('/n8n-whatsapp-chat/manual-test-checklist.md'),
+  'page must show n8n, Evolution, webhook targets, and operational assets'
 );
 
 assert.ok(
@@ -46,6 +53,11 @@ assert.ok(
     page.includes('faz entrega?') &&
     page.includes('quero falar com atendente'),
   'page must include the manual chat test cases'
+);
+
+assert.doesNotThrow(
+  () => JSON.parse(workflowAsset),
+  'public workflow asset must be valid JSON'
 );
 
 console.log('n8n chat page static checks passed');

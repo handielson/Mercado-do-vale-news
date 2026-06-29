@@ -1,0 +1,148 @@
+{
+  "name": "Mercado do Vale WhatsApp Chat Test",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-chat-test",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "WebhookWhatsAppChatTest",
+      "name": "Webhook WhatsApp Chat Test",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nconst data = body.data || body;\nconst message = data.message || data.messages?.[0] || data;\nconst key = message.key || data.key || {};\nconst fromMe = Boolean(key.fromMe || message.fromMe || data.fromMe || body.fromMe || body.sent);\nconst remoteJid = key.remoteJid || message.remoteJid || data.remoteJid || data.from || body.from || '';\nconst text = message.message?.conversation || message.message?.extendedTextMessage?.text || data.text || body.text || '';\nconst normalized = String(text).trim().toLowerCase();\nlet intent = 'fallback';\nlet reply = 'Recebi sua mensagem. Um atendente do Mercado do Vale vai continuar por aqui.';\nif (fromMe) {\n  intent = 'human_outbound';\n  reply = '';\n} else if (/^(oi|ola|olá|bom dia|boa tarde|boa noite)\\b/.test(normalized)) {\n  intent = 'saudacao';\n  reply = 'Oi! Sou o assistente de teste do Mercado do Vale. Posso ajudar com produto, horario, entrega ou chamar um atendente.';\n} else if (/(iphone|celular|produto|preco|preço|valor|tem )/.test(normalized)) {\n  intent = 'produto_preco';\n  reply = 'Me diga o modelo ou produto que voce procura que eu verifico as opcoes para atendimento.';\n} else if (/(horario|horário|endereco|endereço|abre|fecha|localizacao|localização)/.test(normalized)) {\n  intent = 'horario_endereco';\n  reply = 'Nosso atendimento pode confirmar horario e endereco atualizados. Vou encaminhar sua mensagem para conferencia.';\n} else if (/(entrega|frete|delivery|motoboy|enviar)/.test(normalized)) {\n  intent = 'entrega';\n  reply = 'Fazemos atendimento para entrega conforme disponibilidade e endereco. Me envie seu bairro para verificar.';\n} else if (/(atendente|humano|pessoa|vendedor|falar com alguem|falar com alguém)/.test(normalized)) {\n  intent = 'falar_atendente';\n  reply = 'Certo, vou deixar sua conversa marcada para atendimento humano.';\n}\nreturn [{ json: { fromMe, remoteJid, text, normalized, intent, reply, shouldReply: !fromMe && Boolean(reply) } }];"
+      },
+      "id": "ClassifyChatIntent",
+      "name": "Classify Chat Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.shouldReply}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "ShouldReply",
+      "name": "Should Reply",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [780, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.EVOLUTION_SERVER_URL + '/message/sendText/mercado-do-vale-chat-test'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{$json.remoteJid.replace('@s.whatsapp.net', '')}}"
+            },
+            {
+              "name": "text",
+              "value": "={{$json.reply}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "SendEvolutionReply",
+      "name": "Send Evolution Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1040, 140]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, intent: $json.intent, replied: $json.shouldReply } }}",
+        "options": {}
+      },
+      "id": "WebhookResponse",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1300, 240]
+    }
+  ],
+  "connections": {
+    "Webhook WhatsApp Chat Test": {
+      "main": [
+        [
+          {
+            "node": "Classify Chat Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Chat Intent": {
+      "main": [
+        [
+          {
+            "node": "Should Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Evolution Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Evolution Reply": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
