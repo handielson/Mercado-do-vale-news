@@ -2863,6 +2863,7 @@ export function ShopeeSyncModal({
     const imageInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
     const templateAutoAppliedRef = useRef(false);
+    const explicitCategoryLockedRef = useRef(false);
     const autoPublishAdvancedRef = useRef(false);
     const autoPublishStartedRef = useRef(false);
     const activeFieldTemplate = useMemo(() => resolveShopeeFieldTemplate(product), [product]);
@@ -3110,6 +3111,7 @@ export function ShopeeSyncModal({
 
     useEffect(() => {
         let active = true;
+        explicitCategoryLockedRef.current = false;
         const resolveInitialCategory = async () => {
             let catId = product.shopee_category_id;
             let catName = product.shopee_category_name;
@@ -3134,7 +3136,7 @@ export function ShopeeSyncModal({
                 selectCategory({
                     category_id: catId,
                     display_category_name: catName || `Categoria #${catId}`
-                });
+                }, { lockCategory: true });
             }
         };
 
@@ -3382,11 +3384,14 @@ export function ShopeeSyncModal({
             setCatSearch('');
         } else {
             // Categoria folha — seleciona
-            selectCategory(cat);
+            selectCategory(cat, { lockCategory: true });
         }
     };
 
-    const selectCategory = async (cat: any) => {
+    const selectCategory = async (cat: any, options: { lockCategory?: boolean } = { lockCategory: true }) => {
+        if (options.lockCategory) {
+            explicitCategoryLockedRef.current = true;
+        }
         setSelectedCat(cat);
         setStep(2);
         setLoadingAttrs(true);
@@ -3458,10 +3463,11 @@ export function ShopeeSyncModal({
         if (!selectedShopeeTemplate?.shopeeCategoryId || allCatTree.length === 0) return;
         if (selectedCat && Number(selectedCat.category_id) === Number(selectedShopeeTemplate.shopeeCategoryId)) return;
         if (bulkAutoPreset?.categoryId && Number(selectedShopeeTemplate.shopeeCategoryId) !== Number(bulkAutoPreset.categoryId)) return;
+        if (explicitCategoryLockedRef.current && !bulkAutoPreset?.categoryId) return;
 
         const templateCategory = findTemplateCategoryNode(selectedShopeeTemplate.shopeeCategoryId);
         if (templateCategory) {
-            selectCategory(templateCategory);
+            selectCategory(templateCategory, { lockCategory: false });
         }
     }, [allCatTree, bulkAutoPreset, findTemplateCategoryNode, selectedCat, selectedShopeeTemplate]);
 
@@ -3471,7 +3477,7 @@ export function ShopeeSyncModal({
 
         const presetCategory = findTemplateCategoryNode(bulkAutoPreset.categoryId);
         if (presetCategory) {
-            selectCategory(presetCategory);
+            selectCategory(presetCategory, { lockCategory: false });
         }
     }, [allCatTree, bulkAutoPreset, findTemplateCategoryNode, selectedCat]);
 
@@ -3483,7 +3489,7 @@ export function ShopeeSyncModal({
         if (!templateCategory) return;
 
         templateAutoAppliedRef.current = true;
-        selectCategory(templateCategory);
+        selectCategory(templateCategory, { lockCategory: false });
     }, [activeFieldTemplate, allCatTree, selectedCat, selectedShopeeTemplate]);
 
     const collectShopeeBrandInfo = async () => {

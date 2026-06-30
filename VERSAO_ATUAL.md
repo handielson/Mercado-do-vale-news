@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.9-shopee-duplicate-link
-date: 2026-06-27
+version: v1.2.10-shopee-category-lock
+date: 2026-06-30
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260627-225221-v129-shopee-duplicate-link
+release_vps: /var/www/mdv-site/releases/20260630-200305-v1210-shopee-category-lock
 branch: main
-summary: Grava o vinculo local quando a Shopee encontra anuncio duplicado antes da atualizacao.
+summary: Preserva a categoria Shopee definida no modelo/produto ao abrir o envio, sem deixar template sugerido sobrescrever.
 ```
