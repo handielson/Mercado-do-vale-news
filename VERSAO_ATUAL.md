@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.14-shopee-ads-voucher-finance
+version: v1.2.15-shopee-bulk-proxy-load
 date: 2026-07-01
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260701-162859-v1214-shopee-ads-voucher-finance
+release_vps: /var/www/mdv-site/releases/20260701-164136-v1215-shopee-bulk-proxy-load
 branch: main
-summary: Adiciona suporte ao campo Ads Smart Voucher no financeiro da Shopee.
+summary: Evita espera de timeout direto no carregamento de produtos do envio em massa Shopee.
 ```
