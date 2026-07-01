@@ -15,6 +15,7 @@ interface EscrowItem {
     shipping_fee: number;        // Frete pago pelo comprador
     product_value: number;       // Bruto SEM frete (base tributária)
     escrow_amount: number;       // Líquido recebido
+    ads_voucher_discount: number; // Ads Smart Voucher
     fee: number;                 // Taxas Shopee
 }
 
@@ -172,29 +173,31 @@ async function fetchEscrowDetail(order: { order_sn: string; create_time: number;
         const income = d.response?.order_income;
         if (!income) {
             // Cancelled / returned orders — no financial transfer
-            return { order_sn: order.order_sn, create_time: order.create_time, order_status: order.order_status, buyer_total_amount: 0, shipping_fee: 0, product_value: 0, escrow_amount: 0, fee: 0 };
+            return { order_sn: order.order_sn, create_time: order.create_time, order_status: order.order_status, buyer_total_amount: 0, shipping_fee: 0, product_value: 0, escrow_amount: 0, ads_voucher_discount: 0, fee: 0 };
         }
         const buyer_total = income.buyer_total_amount || 0;
         const shipping_fee = income.buyer_paid_shipping_fee || 0;
         const product_value = buyer_total - shipping_fee;
         const escrow = income.escrow_amount || 0;
-        return { order_sn: order.order_sn, create_time: order.create_time, order_status: order.order_status, buyer_total_amount: buyer_total, shipping_fee, product_value, escrow_amount: escrow, fee: buyer_total - escrow };
+        const adsVoucherDiscount = income?.buyer_payment_info?.ads_voucher_discount || 0;
+        return { order_sn: order.order_sn, create_time: order.create_time, order_status: order.order_status, buyer_total_amount: buyer_total, shipping_fee, product_value, escrow_amount: escrow, ads_voucher_discount: adsVoucherDiscount, fee: buyer_total - escrow };
     } catch {
-        return { order_sn: order.order_sn, create_time: order.create_time, order_status: order.order_status, buyer_total_amount: 0, shipping_fee: 0, product_value: 0, escrow_amount: 0, fee: 0 };
+        return { order_sn: order.order_sn, create_time: order.create_time, order_status: order.order_status, buyer_total_amount: 0, shipping_fee: 0, product_value: 0, escrow_amount: 0, ads_voucher_discount: 0, fee: 0 };
     }
 }
 
 function exportCSV(items: EscrowItem[], dateRange: number) {
     const fmtDate = (ts: number) => ts ? new Date(ts * 1000).toLocaleDateString('pt-BR') : '-';
-    const header = 'Pedido,Data,Status,Vendas Brutas (R$),Frete (R$),Base Tributária s/ Frete (R$),Taxas Shopee (R$),Líquido Recebido (R$)\n';
+    const header = 'Pedido,Data,Status,Vendas Brutas (R$),Frete (R$),Base Tributária s/ Frete (R$),Ads Smart Voucher (R$),Taxas Shopee (R$),Líquido Recebido (R$)\n';
     const rows = items.map(i =>
-        `${i.order_sn},${fmtDate(i.create_time)},${i.order_status},${i.buyer_total_amount.toFixed(2)},${i.shipping_fee.toFixed(2)},${i.product_value.toFixed(2)},${i.fee.toFixed(2)},${i.escrow_amount.toFixed(2)}`
+        `${i.order_sn},${fmtDate(i.create_time)},${i.order_status},${i.buyer_total_amount.toFixed(2)},${i.shipping_fee.toFixed(2)},${i.product_value.toFixed(2)},${i.ads_voucher_discount.toFixed(2)},${i.fee.toFixed(2)},${i.escrow_amount.toFixed(2)}`
     ).join('\n');
     const totals = [
         'TOTAL',
         items.reduce((a, i) => a + i.buyer_total_amount, 0).toFixed(2),
         items.reduce((a, i) => a + i.shipping_fee, 0).toFixed(2),
         items.reduce((a, i) => a + i.product_value, 0).toFixed(2),
+        items.reduce((a, i) => a + i.ads_voucher_discount, 0).toFixed(2),
         items.reduce((a, i) => a + i.fee, 0).toFixed(2),
         items.reduce((a, i) => a + i.escrow_amount, 0).toFixed(2),
     ].join(',');
@@ -366,6 +369,7 @@ export default function ShopeeFinanceTab() {
     const totalBruto = items.reduce((acc, i) => acc + i.buyer_total_amount, 0);
     const totalFrete = items.reduce((acc, i) => acc + i.shipping_fee, 0);
     const totalSemFrete = items.reduce((acc, i) => acc + i.product_value, 0);
+    const totalAdsVoucherDiscount = items.reduce((acc, i) => acc + i.ads_voucher_discount, 0);
     const totalFees = items.reduce((acc, i) => acc + i.fee, 0);
     const totalLiquido = items.reduce((acc, i) => acc + i.escrow_amount, 0);
     const totalImposto = items.reduce((acc, i) => acc + calcOrderTax(i), 0);
@@ -519,7 +523,7 @@ export default function ShopeeFinanceTab() {
             </div>
 
             {/* Summary Cards */}
-            <div className={`grid grid-cols-1 sm:grid-cols-2 ${taxResult ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4`}>
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${taxResult ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-4`}>
 
                 {/* Vendas Brutas */}
                 <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
@@ -559,6 +563,18 @@ export default function ShopeeFinanceTab() {
                     </div>
                     <div className="text-2xl font-black text-red-600">{fmt(totalFees)}</div>
                     <div className="text-xs text-slate-400 mt-1">Comissão + Serviço + Transação</div>
+                </div>
+
+                {/* Ads Smart Voucher */}
+                <div className="bg-white rounded-2xl p-5 border border-purple-100 shadow-sm">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center">
+                            <DollarSign className="w-4 h-4 text-purple-600" />
+                        </div>
+                        <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wide">Ads Smart Voucher</h3>
+                    </div>
+                    <div className="text-2xl font-black text-purple-600">{fmt(totalAdsVoucherDiscount)}</div>
+                    <div className="text-xs text-slate-400 mt-1">Desconto coberto pelo voucher de anúncio</div>
                 </div>
 
                 {/* Líquido */}
@@ -603,6 +619,7 @@ export default function ShopeeFinanceTab() {
                                 <th className="py-3 px-4 font-bold text-slate-600 text-right">Bruto</th>
                                 <th className="py-3 px-4 font-bold text-slate-600 text-right">Frete</th>
                                 <th className="py-3 px-4 font-bold text-blue-700 text-right">Sem Frete ★</th>
+                                <th className="py-3 px-4 font-bold text-purple-600 text-right">Ads Voucher</th>
                                 <th className="py-3 px-4 font-bold text-slate-600 text-right">Taxas</th>
                                 <th className="py-3 px-4 font-bold text-slate-600 text-right">Líquido</th>
                                 {taxResult && <th className="py-3 px-4 font-bold text-orange-600 text-right">Imposto 🧾</th>}
@@ -612,14 +629,14 @@ export default function ShopeeFinanceTab() {
                         <tbody className="divide-y divide-slate-100">
                             {loading && items.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="py-12 text-center text-slate-500">
+                                    <td colSpan={taxResult ? 10 : 9} className="py-12 text-center text-slate-500">
                                         <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                                         {progress || 'Buscando dados...'}
                                     </td>
                                 </tr>
                             ) : items.length === 0 && !apiError ? (
                                 <tr>
-                                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                                    <td colSpan={taxResult ? 10 : 9} className="py-12 text-center text-slate-400">
                                         Nenhum pedido encontrado neste período.
                                     </td>
                                 </tr>
@@ -661,6 +678,7 @@ export default function ShopeeFinanceTab() {
                                                     <td className="py-3 px-4 text-right text-slate-700">{fmt(item.buyer_total_amount)}</td>
                                                     <td className="py-3 px-4 text-right text-slate-500">{fmt(item.shipping_fee)}</td>
                                                     <td className="py-3 px-4 text-right font-bold text-blue-700">{fmt(item.product_value)}</td>
+                                                    <td className="py-3 px-4 text-right text-purple-600 font-medium">{item.ads_voucher_discount > 0 ? fmt(item.ads_voucher_discount) : '—'}</td>
                                                     <td className="py-3 px-4 text-right text-red-600 font-medium">{item.fee > 0 ? `-${fmt(item.fee)}` : '—'}</td>
                                                     <td className="py-3 px-4 text-right font-bold text-green-600">{item.escrow_amount > 0 ? fmt(item.escrow_amount) : '—'}</td>
                                                     {taxResult && (
@@ -674,7 +692,7 @@ export default function ShopeeFinanceTab() {
                                         })}
                                     {loading && (
                                         <tr>
-                                            <td colSpan={taxResult ? 9 : 8} className="py-3 text-center text-slate-400 text-xs">
+                                            <td colSpan={taxResult ? 10 : 9} className="py-3 text-center text-slate-400 text-xs">
                                                 <Loader2 className="w-3 h-3 animate-spin inline mr-1" />
                                                 {progress}
                                             </td>

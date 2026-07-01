@@ -1,8 +1,8 @@
 {
-    "version": "v1.2.13-shopee-searchable-input-edit",
+    "version": "v1.2.14-shopee-ads-voucher-finance",
     "date": "2026-07-01",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260701-160832-v1213-shopee-searchable-input-edit",
+    "release_vps": "/var/www/mdv-site/releases/20260701-162859-v1214-shopee-ads-voucher-finance",
     "branch": "main",
-    "summary": "Libera a edicao do texto em atributos pesquisaveis da Shopee sem perder a selecao da lista."
+    "summary": "Adiciona suporte ao campo Ads Smart Voucher no financeiro da Shopee."
 }

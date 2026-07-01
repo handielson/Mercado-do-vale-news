@@ -555,11 +555,17 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
                                             As taxas e o lucro líquido só ficam disponíveis após o repasse/conclusão do pedido pela Shopee. O valor de venda registrado é de <strong>R$ {order.total_amount?.toFixed(2)}</strong>.
                                         </div>
                                     ) : (
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                                                 <div className="text-xs font-semibold text-slate-500 mb-1">Preço de Venda</div>
                                                 <div className="text-lg font-bold text-slate-800">
                                                     R$ {(escrowData[order.order_sn].buyer_total_amount || order.total_amount || 0).toFixed(2)}
+                                                </div>
+                                            </div>
+                                            <div className="bg-white p-4 rounded-xl border border-purple-100 shadow-sm">
+                                                <div className="text-xs font-semibold text-purple-600 mb-1">Ads Smart Voucher</div>
+                                                <div className="text-lg font-bold text-purple-600">
+                                                    R$ {(escrowData[order.order_sn].buyer_payment_info?.ads_voucher_discount || 0).toFixed(2)}
                                                 </div>
                                             </div>
                                             <div className="bg-white p-4 rounded-xl border border-rose-100 shadow-sm">
