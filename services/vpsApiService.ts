@@ -168,7 +168,7 @@ class VpsApiService {
     }
   }
 
-  private async fetchSafe<T>(path: string, noCache = false, options: { preferProxy?: boolean } = {}): Promise<T | null> {
+  private async fetchSafe<T>(path: string, noCache = false, options: { preferProxy?: boolean; proxyOnly?: boolean } = {}): Promise<T | null> {
     if (!noCache) {
       const cached = this.isCached<T>(path);
       if (cached !== null) return cached;
@@ -182,7 +182,10 @@ class VpsApiService {
     const primaryUrl = proxyUrl(fullPath, 'GET');
     const fallbackUrl = forcedProxyUrl(fullPath);
     const preferProxy = Boolean(options.preferProxy);
-    const urls = preferProxy
+    const proxyOnly = Boolean(options.proxyOnly);
+    const urls = proxyOnly
+      ? [fallbackUrl]
+      : preferProxy
       ? (primaryUrl === fallbackUrl ? [primaryUrl] : [fallbackUrl, primaryUrl])
       : (primaryUrl === fallbackUrl ? [primaryUrl] : [primaryUrl, fallbackUrl]);
     const failures: Array<Record<string, unknown>> = [];
@@ -390,7 +393,7 @@ class VpsApiService {
   }
 
 
-  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; noCache?: boolean; preferProxy?: boolean; parent_id?: string; sku?: string; ean?: string; model_id?: string; bling_id?: string; favoritesOnly?: boolean; customerId?: string }): Promise<any[] | null> {
+  async getProducts(params?: { category?: string; status?: string; limit?: number; offset?: number; search?: string; compact?: boolean; noCache?: boolean; preferProxy?: boolean; proxyOnly?: boolean; parent_id?: string; sku?: string; ean?: string; model_id?: string; bling_id?: string; favoritesOnly?: boolean; customerId?: string }): Promise<any[] | null> {
     const qs = new URLSearchParams();
     if (params?.category)  qs.set('category',  params.category);
     if (params?.status)    qs.set('status',     params.status);
@@ -412,7 +415,10 @@ class VpsApiService {
       console.log(`[vpsApiService] getProducts sending search query: "${query}"`);
     }
 
-    const result = await this.fetchSafe<any[]>(`/products${query}`, params?.noCache, { preferProxy: params?.preferProxy });
+    const result = await this.fetchSafe<any[]>(`/products${query}`, params?.noCache, {
+      preferProxy: params?.preferProxy,
+      proxyOnly: params?.proxyOnly,
+    });
     
     if (params?.search) {
       console.log(`[vpsApiService] getProducts returned ${result ? result.length : 0} items for search: "${params.search}"`);

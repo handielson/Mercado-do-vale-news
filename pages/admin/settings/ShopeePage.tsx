@@ -1305,7 +1305,7 @@ export default function ShopeePage() {
         setLoadingProducts(true);
         try {
             // Fetch products from VPS (source of truth for catalog), bypassing 5-min cache to ensure Bling cost is fresh
-            const localProds = await fetchAllVpsProducts({ status: 'all', noCache: true, preferProxy: true });
+            const localProds = await fetchAllVpsProducts({ status: 'all', noCache: true, preferProxy: true, proxyOnly: true });
 
             // Fetch Shopee sync records from VPS (integration metadata)
             const shopeeRecords = await shopeeProductService.list();
@@ -1474,7 +1474,7 @@ export default function ShopeePage() {
             }
 
             // 2. Fetch VPS products for matching
-            const localProds = await fetchAllVpsProducts({ noCache: true, preferProxy: true });
+            const localProds = await fetchAllVpsProducts({ noCache: true, preferProxy: true, proxyOnly: true });
             // Build SKU map: both exact and cleaned (no hyphens/spaces) → works for "RMP-12P" vs "RMP12P"
             const cleanSku = (s: string) => s.toLowerCase().replace(/[-\s]/g, '');
             const skuMap    = new Map<string, any>();
