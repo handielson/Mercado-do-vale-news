@@ -34,4 +34,10 @@ assert.match(
   'Shopee import matching must also use only the proxy for full catalog downloads.'
 );
 
+assert.match(
+  page,
+  /const pageSize\s*=\s*500;/,
+  'Shopee full product pagination must keep page size below the slow 2000-row response.'
+);
+
 console.log('shopee bulk products prefer proxy static checks passed');

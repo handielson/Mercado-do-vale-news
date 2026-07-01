@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.16-shopee-bulk-proxy-only
+version: v1.2.17-shopee-bulk-products-page-500
 date: 2026-07-01
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260701-164613-v1216-shopee-bulk-proxy-only
+release_vps: /var/www/mdv-site/releases/20260701-164946-v1217-shopee-bulk-products-page-500
 branch: main
-summary: Carrega produtos do envio em massa Shopee somente pelo proxy para evitar fallback direto demorado.
+summary: Carrega produtos do envio em massa Shopee pelo proxy em paginas de 500 para evitar timeout.
 ```

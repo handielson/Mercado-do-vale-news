@@ -307,7 +307,7 @@ function normalizePositiveId(value: unknown): number | null {
 }
 
 async function fetchAllVpsProducts(params: Parameters<typeof vpsApiService.getProducts>[0] = {}): Promise<any[]> {
-    const pageSize = 2000;
+    const pageSize = 500;
     const maxProducts = 20000;
     const byId = new Map<string, any>();
 
