@@ -53,7 +53,7 @@ assert.match(page, /publishedProductIds/, 'bulk runner should advance all produc
 assert.match(page, /findExistingShopeeItemForDuplicate/, 'variation fallback should recover from duplicate base items');
 assert.match(page, /duplicate_lookup:match/, 'duplicate recovery should log the reused Shopee item');
 assert.match(page, /add_item:variation_fallback_duplicate_reused/, 'variation fallback should reuse duplicate items before init_tier_variation');
-assert.match(page, /proactiveDuplicateItem[\s\S]*findExistingShopeeItemForDuplicate\(\{[\s\S]*item_sku: cleanItemSku/, 'publish flow should proactively look up an existing Shopee item before add_item can create a duplicate');
+assert.match(page, /proactiveDuplicateItem[\s\S]*findExistingShopeeItemForDuplicate\(\{[\s\S]*item_sku: publishItemSku[\s\S]*item_name: publishItemName/, 'publish flow should proactively look up an existing Shopee parent item before add_item can create a duplicate');
 assert.match(page, /existing_variation_item_id_source/, 'variation publish should log whether it reused local or remote duplicate linkage');
 assert.match(page, /handleDeleteShopeeProductAndLink/, 'Shopee page should expose a focused delete-and-unlink action for bad Shopee items');
 assert.match(page, /action=delete_item[\s\S]*item_id:\s*p\.shopee_item_id/, 'delete action should remove the selected item from Shopee before unlinking locally');

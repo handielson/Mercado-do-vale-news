@@ -1,8 +1,8 @@
 {
-    "version": "v1.2.18-shopee-phone-case-attrs",
+    "version": "v1.2.19-shopee-variation-parent-title",
     "date": "2026-07-01",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260701-170306-v1218-shopee-phone-case-attrs",
+    "release_vps": "/var/www/mdv-site/releases/20260701-172833-v1219-shopee-variation-parent-title",
     "branch": "main",
-    "summary": "Corrige Quantidade e Produto personalizado nos atributos Shopee de capas."
+    "summary": "Corrige titulo/SKU pai de variacoes Shopee e payload update_model."
 }

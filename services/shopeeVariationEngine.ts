@@ -60,6 +60,13 @@ function variationNameBase(value: unknown): string {
     .trim();
 }
 
+function stripVariationOptionFromTitle(value: unknown): string {
+  return text(value)
+    .replace(/\s*(?:[-|,]\s*)?Cor\s*:\s*[^-|,;/]+$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function colorFromName(value: unknown): string {
   const raw = text(value);
   const match = raw.match(/\bCor\s*:?\s*([^\-|/]+)$/i);
@@ -82,6 +89,59 @@ function withInferredColor(product: ShopeeVariationProduct): ShopeeVariationProd
 function firstEan(product: ShopeeVariationProduct): string {
   const eans = Array.isArray(product.eans) ? product.eans : [];
   return text(eans.find((ean) => text(ean)));
+}
+
+function longestCommonPrefix(values: string[]): string {
+  if (values.length === 0) return '';
+  let prefix = values[0] || '';
+  for (const value of values.slice(1)) {
+    while (prefix && !value.startsWith(prefix)) {
+      prefix = prefix.slice(0, -1);
+    }
+  }
+  return prefix;
+}
+
+function deriveParentSku(group: ShopeeVariationGroup, fallbackSku?: string): string {
+  const childIds = new Set(group.children.map((child) => child.id));
+  const childSkus = group.children.map((child) => text(child.sku)).filter(Boolean);
+  const parentSku = text(group.parent.sku);
+
+  if (parentSku && !childIds.has(group.parent.id) && !childSkus.includes(parentSku)) {
+    return parentSku.slice(0, 100);
+  }
+
+  const commonPrefix = longestCommonPrefix(childSkus).replace(/[-_\s]+$/g, '').trim();
+  if (commonPrefix && !childSkus.includes(commonPrefix)) {
+    return commonPrefix.slice(0, 100);
+  }
+
+  return text(fallbackSku).slice(0, 100);
+}
+
+export function buildShopeeVariationParentIdentity(
+  group: ShopeeVariationGroup,
+  fallback?: { fallbackName?: string; fallbackSku?: string },
+): { item_name: string; item_sku?: string } {
+  const strippedParentName = stripVariationOptionFromTitle(group.parent.name);
+  const strippedFallbackName = stripVariationOptionFromTitle(fallback?.fallbackName);
+  const childBaseNames = Array.from(new Set(
+    group.children
+      .map((child) => stripVariationOptionFromTitle(child.name))
+      .filter(Boolean)
+  ));
+  const itemName = (
+    strippedParentName ||
+    (childBaseNames.length === 1 ? childBaseNames[0] : '') ||
+    strippedFallbackName ||
+    text(group.parent.name)
+  ).slice(0, 120);
+  const itemSku = deriveParentSku(group, fallback?.fallbackSku);
+
+  return {
+    item_name: itemName,
+    ...(itemSku ? { item_sku: itemSku } : {}),
+  };
 }
 
 export function normalizeShopeeVariationGroupForPublish(group: ShopeeVariationGroup): ShopeeVariationGroup {

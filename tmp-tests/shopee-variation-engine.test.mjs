@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildShopeeVariationModels,
+  buildShopeeVariationParentIdentity,
   detectShopeeVariationDimensions,
   groupShopeeVariationCandidates,
   normalizeShopeeVariationGroupForPublish,
@@ -139,6 +140,24 @@ assert.ok(suggestedGroup, 'missing Shopee variation groups should be suggested f
 assert.equal(suggestedGroup.id, 'rn14-azul');
 assert.equal(suggestedGroup.parent.id, 'rn14-azul');
 assert.deepEqual(suggestedGroup.children.map((child) => child.sku), ['CSRN145GAZL', 'CSRN145GROX', 'CSRN145GSAL']);
+
+const suggestedParentIdentity = buildShopeeVariationParentIdentity(suggestedGroup, {
+  fallbackName: 'Capa de Silicone para Redmi Note 14 5G Cor:Azul',
+  fallbackSku: 'CSRN145GAZL',
+});
+assert.deepEqual(suggestedParentIdentity, {
+  item_name: 'Capa de Silicone para Redmi Note 14 5G',
+  item_sku: 'CSRN145G',
+});
+
+const explicitParentIdentity = buildShopeeVariationParentIdentity(groups[0], {
+  fallbackName: 'Capa Redmi Note 13 Cor:Azul',
+  fallbackSku: 'CAPA-RN13-BLUE',
+});
+assert.deepEqual(explicitParentIdentity, {
+  item_name: 'Capa Redmi Note 13',
+  item_sku: 'CAPA-RN13',
+});
 
 const groupReloadedFromVpsWithoutColorSpecs = {
   id: 'redmi13-azul-claro',

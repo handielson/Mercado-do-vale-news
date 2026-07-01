@@ -54,6 +54,7 @@ import {
 } from '../../../services/shopeeAutoPublishReadiness';
 import type { ShopeeAutoPublishReadiness } from '../../../services/shopeeAutoPublishReadiness';
 import {
+    buildShopeeVariationParentIdentity,
     buildShopeeVariationModels,
     detectShopeeVariationDimensions,
     groupShopeeVariationCandidates,
@@ -4171,7 +4172,7 @@ export function ShopeeSyncModal({
                 const updateData = await postShopeeDebug('update_model', {
                     item_id: itemId,
                     tier_variation: variationPayloadParts.tier_variation,
-                    model_list: modelListForUpdate,
+                    model: modelListForUpdate,
                 }, 'duplicate_variation:update_model');
 
                 return {
@@ -4248,14 +4249,22 @@ export function ShopeeSyncModal({
             const attributeList = buildAttributePayload();
             const cleanItemName = (itemName.trim() || product.name || '').slice(0, 120);
             const cleanItemSku = String(product.sku || '').trim().slice(0, 100);
+            const variationParentIdentity = publishWithVariations && selectedVariationGroup
+                ? buildShopeeVariationParentIdentity(selectedVariationGroup, {
+                    fallbackName: cleanItemName,
+                    fallbackSku: cleanItemSku,
+                })
+                : null;
+            const publishItemName = (variationParentIdentity?.item_name || cleanItemName).slice(0, 120);
+            const publishItemSku = (variationParentIdentity?.item_sku || cleanItemSku || '').slice(0, 100) || undefined;
             const cleanDescription = (normalizeShopeeDescription(itemDescription) || cleanItemName).slice(0, 3000);
             const existingProductItemId = normalizePositiveId(product.shopee_item_id);
             let proactiveDuplicateItem: any = null;
             let proactiveDuplicateItemId: number | null = null;
             if (!existingVariationItemId && !existingProductItemId) {
                 proactiveDuplicateItem = await findExistingShopeeItemForDuplicate({
-                    item_sku: cleanItemSku || undefined,
-                    item_name: cleanItemName,
+                    item_sku: publishItemSku,
+                    item_name: publishItemName,
                 });
                 proactiveDuplicateItemId = normalizePositiveId(proactiveDuplicateItem?.item_id);
             }
@@ -4316,7 +4325,7 @@ export function ShopeeSyncModal({
                     has_data_url: Boolean(video.data_url),
                     file_name: video.file_name || null,
                 })),
-                item_sku: cleanItemSku || null,
+                item_sku: publishItemSku || null,
                 gtin_mode: gtinMode,
                 gtin_value: gtinPayloadValue || null,
             });
@@ -4506,8 +4515,8 @@ export function ShopeeSyncModal({
             const basePayload = {
                 original_price: parsedPrice,
                 description: cleanDescription,
-                item_name: cleanItemName,
-                item_sku: cleanItemSku || undefined,
+                item_name: publishItemName,
+                item_sku: publishItemSku,
                 category_id: selectedCat.category_id,
                 attribute_list: attributeList,
                 logistic_info: logisticInfo,
@@ -4582,7 +4591,7 @@ export function ShopeeSyncModal({
                         : await postShopeeDebug('update_model', {
                             item_id: resolvedExistingVariationItemId,
                             tier_variation: variationPayloadParts.tier_variation,
-                            model_list: variationModelListForPublish,
+                            model: variationModelListForPublish,
                         }, 'add_item:existing_variation')
                     : await publishShopeeVariationItem(basePayload, finalPayload, {
                         tier_variation: variationPayloadParts.tier_variation,
