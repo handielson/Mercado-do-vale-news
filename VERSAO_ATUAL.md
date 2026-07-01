@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.17-shopee-bulk-products-page-500
+version: v1.2.18-shopee-phone-case-attrs
 date: 2026-07-01
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260701-164946-v1217-shopee-bulk-products-page-500
+release_vps: /var/www/mdv-site/releases/20260701-170306-v1218-shopee-phone-case-attrs
 branch: main
-summary: Carrega produtos do envio em massa Shopee pelo proxy em paginas de 500 para evitar timeout.
+summary: Corrige Quantidade e Produto personalizado nos atributos Shopee de capas.
 ```

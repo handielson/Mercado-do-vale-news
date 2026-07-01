@@ -70,8 +70,8 @@ const PHONE_CASE_TEMPLATE = {
     100470: 'Water Resistant',
     100471: 'Others',
     100503: 'Others',
-    100999: 'Others',
-    101219: 'Soft',
+    100999: '1',
+    101219: 'No',
   },
 };
 

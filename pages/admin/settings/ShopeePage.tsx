@@ -574,6 +574,22 @@ function getShopeeAttributeDisplayValue(value: unknown): string {
     return decoded?.value_name || String(value || '');
 }
 
+function getShopeeOptionFormValue(option: ShopeeAttributeOption): string {
+    return option.original_value_name || option.raw_name || option.label || String(option.value_id || '');
+}
+
+function getShopeeSelectFormValue(attr: ShopeeAttributeField, value: string): string {
+    const normalizedValue = normalizeLookupText(value);
+    if (!normalizedValue) return '';
+    const option = attr.attribute_value_list.find((candidate) =>
+        normalizeLookupText(candidate.original_value_name) === normalizedValue ||
+        normalizeLookupText(candidate.raw_name) === normalizedValue ||
+        normalizeLookupText(candidate.label) === normalizedValue ||
+        normalizeLookupText(candidate.value_id) === normalizedValue
+    );
+    return option ? getShopeeOptionFormValue(option) : value;
+}
+
 function isDimensionText(value: unknown): boolean {
     return /\d+\s*x\s*\d+(?:\s*x\s*\d+)?(?:\s*(?:cm|centimetro|centimetros))?/i.test(String(value || '').trim());
 }
@@ -3568,11 +3584,14 @@ export function ShopeeSyncModal({
         }
 
         if (attr.input_kind === 'multiselect') {
+            const selectedValues = Array.isArray(currentValue)
+                ? currentValue.map((value) => getShopeeSelectFormValue(attr, String(value || ''))).filter(Boolean)
+                : [];
             return (
                 <div className="space-y-2">
                     <select
                         multiple
-                        value={Array.isArray(currentValue) ? currentValue : []}
+                        value={selectedValues}
                         onChange={(event) => {
                             const values = Array.from(event.currentTarget.selectedOptions).map((option) => option.value);
                             updateAttributeValue(attr.attribute_id, values);
@@ -3580,7 +3599,7 @@ export function ShopeeSyncModal({
                         className="w-full min-h-[120px] px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white"
                     >
                         {attr.attribute_value_list.map((option) => (
-                            <option key={`${attr.attribute_id}-${option.value_id}-${option.raw_name}`} value={option.raw_name || option.label}>
+                            <option key={`${attr.attribute_id}-${option.value_id}-${option.raw_name}`} value={getShopeeOptionFormValue(option)}>
                                 {option.label}
                             </option>
                         ))}
@@ -3591,15 +3610,16 @@ export function ShopeeSyncModal({
         }
 
         if (attr.input_kind === 'select') {
+            const flatValue = Array.isArray(currentValue) ? currentValue[0] || '' : currentValue || '';
             return (
                 <select
-                    value={Array.isArray(currentValue) ? currentValue[0] || '' : currentValue || ''}
+                    value={getShopeeSelectFormValue(attr, String(flatValue || ''))}
                     onChange={(event) => updateAttributeValue(attr.attribute_id, event.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white"
                 >
                     <option value="">Selecione...</option>
                     {attr.attribute_value_list.map((option) => (
-                        <option key={`${attr.attribute_id}-${option.value_id}-${option.raw_name}`} value={option.raw_name || option.label}>
+                        <option key={`${attr.attribute_id}-${option.value_id}-${option.raw_name}`} value={getShopeeOptionFormValue(option)}>
                             {option.label}
                         </option>
                     ))}
