@@ -909,7 +909,10 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
                 limit: '100',
             });
             const trimmed = term.trim();
-            if (trimmed) params.set('value_name', trimmed);
+            if (trimmed) {
+                params.set('value_name', trimmed);
+                params.set('keyword', trimmed);
+            }
             const res = await fetch(`/api/shopee-catalog?action=search_attribute_values&${params}`);
             const data = await res.json();
             if (data?.error) {
@@ -919,7 +922,13 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
                 const list = Array.isArray(data?.response?.value_list) ? data.response.value_list : [];
                 setOptions(list.map((entry: any) => ({
                     value_id: Number(entry?.value_id) || 0,
-                    value_name: String(entry?.value_name || '').trim(),
+                    value_name: String(
+                        entry?.value_name ||
+                        entry?.display_value_name ||
+                        entry?.original_value_name ||
+                        entry?.name ||
+                        ''
+                    ).trim(),
                 })).filter((entry: { value_name: string }) => entry.value_name));
             }
         } catch (err) {

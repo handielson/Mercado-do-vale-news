@@ -2205,9 +2205,11 @@ async function handleShopeeCatalogVps(request, reply) {
         result = await shopeeCatalogGetVps('/api/v2/product/get_attribute_tree', creds, encodeShopeeCatalogParamsVps({ category_id_list: query.category_id, language: query.language || 'pt-BR' }));
         break;
       case 'search_attribute_values':
+        const attributeSearchValueName = query.value_name || query.keyword || '';
         result = await shopeeCatalogPostVps('/api/v2/product/search_attribute_value_list', creds, {}, encodeShopeeCatalogParamsVps({
           attribute_id: query.attribute_id,
-          keyword: query.keyword,
+          value_name: attributeSearchValueName,
+          keyword: attributeSearchValueName,
           cursor: clampShopeeCatalogIntVps(query.cursor, 0, 0, 999999),
           limit: clampShopeeCatalogIntVps(query.limit, 20, 1, 100),
         }));
