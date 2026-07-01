@@ -882,11 +882,16 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
     const [open, setOpen] = useState<boolean>(false);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const focusedRef = useRef(false);
+    const previousAttributeIdRef = useRef<number | null>(null);
 
     // Sincroniza o input quando o valor externo muda (ex.: reset entre produtos)
     useEffect(() => {
+        const attributeChanged = previousAttributeIdRef.current !== attributeId;
+        previousAttributeIdRef.current = attributeId;
+        if (focusedRef.current && !attributeChanged) return;
         setQuery(getShopeeAttributeDisplayValue(value));
-    }, [value]);
+    }, [attributeId, value]);
 
     // Fecha o dropdown ao clicar fora
     useEffect(() => {
@@ -945,10 +950,15 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
     }, [fetchOptions]);
 
     const handleFocus = () => {
+        focusedRef.current = true;
         setOpen(true);
         if (options.length === 0 && !loading) {
             fetchOptions(query);
         }
+    };
+
+    const handleBlur = () => {
+        focusedRef.current = false;
     };
 
     const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -973,6 +983,7 @@ function SearchableAttributeCombobox({ attributeId, value, placeholder, onChange
                 placeholder={placeholder}
                 onChange={handleInputChange}
                 onFocus={handleFocus}
+                onBlur={handleBlur}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 bg-white"
             />
             {open && (

@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.12-shopee-fabricante-search
+version: v1.2.13-shopee-searchable-input-edit
 date: 2026-07-01
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260701-182356-v1212-shopee-fabricante-search
+release_vps: /var/www/mdv-site/releases/20260701-160832-v1213-shopee-searchable-input-edit
 branch: main
-summary: Corrige a busca e selecao de Fabricante em atributos pesquisaveis da Shopee.
+summary: Libera a edicao do texto em atributos pesquisaveis da Shopee sem perder a selecao da lista.
 ```
