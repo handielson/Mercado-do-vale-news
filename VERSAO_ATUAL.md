@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.10-shopee-category-lock
-date: 2026-06-30
+version: v1.2.11-model-json-route
+date: 2026-07-01
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260630-200305-v1210-shopee-category-lock
+release_vps: /var/www/mdv-site/releases/20260701-094839-v1211-model-json-route
 branch: main
-summary: Preserva a categoria Shopee definida no modelo/produto ao abrir o envio, sem deixar template sugerido sobrescrever.
+summary: Restaura a rota de geracao JSON de modelos na API e melhora diagnostico de erro upstream.
 ```

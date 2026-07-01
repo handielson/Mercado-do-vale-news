@@ -18105,9 +18105,15 @@ async function requestModelAiJson({ apiKey, requestBody }) {
     body: JSON.stringify(requestBody),
     signal: AbortSignal.timeout(75000),
   });
-  const payload = await response.json().catch(() => ({}));
+  const rawText = await response.text().catch(() => '');
+  let payload = {};
+  try {
+    payload = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    payload = { raw_error: rawText.slice(0, 2000) };
+  }
   const text = extractAutoresponderOpenAiText(payload);
-  return { response, payload, text };
+  return { response, payload, rawText, text };
 }
 
 function sanitizeModelAiSourceContext(value) {
@@ -18179,7 +18185,7 @@ fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req
       };
       responseResult = await requestModelAiJson({ apiKey, requestBody: externalRequestBody });
     }
-    const { response, payload, text } = responseResult;
+    const { response, payload, rawText, text } = responseResult;
     await pool.query(
       `INSERT INTO model_ai_generation_logs
         (id, model_name, brand_name, category_name, ai_model, prompt_text, response_text, status, error_message)
@@ -18197,7 +18203,12 @@ fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req
       ]
     ).catch((error) => console.warn('[model-ai-log] failed:', error.message));
     if (!response.ok || !text) {
-      return reply.code(502).send({ error: 'IA nao retornou JSON para o modelo' });
+      return reply.code(502).send({
+        error: 'IA nao retornou JSON para o modelo',
+        upstream_status: response.status,
+        upstream_error: payload?.error?.message || payload?.raw_error || rawText?.slice(0, 500) || null,
+        log_id: logId,
+      });
     }
     return { text, model };
   } catch (error) {

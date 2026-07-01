@@ -14056,6 +14056,176 @@ fastify.get('/models', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
   return rows.map(mapVpsModel);
 });
 
+function sanitizeTrustedSourceLinks(rawLinks) {
+  const links = Array.isArray(rawLinks) ? rawLinks : [];
+  const seen = new Set();
+  const sanitized = [];
+  for (const raw of links) {
+    const value = String(raw || '').trim();
+    if (!value) continue;
+    const urlValue = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const parsed = new URL(urlValue);
+      if (!/^https?:$/i.test(parsed.protocol)) continue;
+      const hostname = parsed.hostname.replace(/^www\./i, 'www.').toLowerCase();
+      if (!hostname || seen.has(hostname)) continue;
+      seen.add(hostname);
+      sanitized.push({ url: parsed.href, domain: hostname });
+    } catch {
+      // Ignore invalid source lines from the UI.
+    }
+  }
+  return sanitized.slice(0, 12);
+}
+
+function buildModelAiWebSearchTools({ allowedDomains = [] } = {}) {
+  const webSearchTool = { type: 'web_search' };
+  if (allowedDomains.length > 0) {
+    webSearchTool.filters = { allowed_domains: allowedDomains };
+  }
+  return [webSearchTool];
+}
+
+function isModelAiSmartphoneRequest(body = {}) {
+  const text = `${body?.name || ''} ${body?.category || ''} ${body?.prompt || ''}`.toLowerCase();
+  return /smartphone|celular|iphone|samsung galaxy|xiaomi|redmi|realme|motorola|moto g|poco|infinix|tecno/.test(text);
+}
+
+async function requestModelAiJson({ apiKey, requestBody }) {
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(75000),
+  });
+  const rawText = await response.text().catch(() => '');
+  let payload = {};
+  try {
+    payload = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    payload = { raw_error: rawText.slice(0, 2000) };
+  }
+  const text = extractAutoresponderOpenAiText(payload);
+  return { response, payload, rawText, text };
+}
+
+function sanitizeModelAiSourceContext(value) {
+  return String(value || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 6000);
+}
+
+fastify.post('/models/generate-json', { preHandler: requireSyncKey }, async (req, reply) => {
+  const prompt = String(req.body?.prompt || '').trim();
+  if (!prompt) return reply.code(400).send({ error: 'prompt obrigatorio' });
+
+  const sourceContext = sanitizeModelAiSourceContext(req.body?.sourceContext);
+  const sourceContextText = sourceContext
+    ? `\n\nContexto interno prioritario do Bling/local:\n${sourceContext}\n\nUse esse contexto como base principal da descricao e dos campos tecnicos. Reescreva de forma comercial e organizada, mas nao descarte dados reais daqui sem motivo. Pesquisa externa serve para complementar ou confirmar lacunas.`
+    : '';
+  const trustedSources = sanitizeTrustedSourceLinks(req.body?.trustedSourceLinks);
+  const trustedDomains = trustedSources.map((source) => source.domain);
+  const trustedSourcesText = trustedSources.length > 0
+    ? `\n\nFontes confiaveis priorizadas:\n${trustedSources.map((source) => `- ${source.url}`).join('\n')}`
+    : '';
+  const [settingsRows] = await pool.query('SELECT ai_model, openai_api_key FROM autoresponder_settings WHERE id = 1 LIMIT 1');
+  const settings = settingsRows?.[0] || {};
+  const apiKey = String(settings.openai_api_key || process.env.OPENAI_API_KEY || '').trim();
+  const model = String(settings.ai_model || process.env.AUTORESPONDER_AI_MODEL || 'gpt-5-nano').trim() || 'gpt-5-nano';
+  if (!apiKey) return reply.code(400).send({ error: 'Chave OpenAI nao configurada no VPS' });
+
+  const logId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+  try {
+    const requestBody = {
+      model,
+      instructions: 'Voce gera somente JSON valido para cadastro de modelos no Mercado do Vale. Nao use markdown.',
+      input: `${prompt}${sourceContextText}${trustedSourcesText}`,
+      max_output_tokens: 5000,
+    };
+    if (/^gpt-5/i.test(model)) {
+      requestBody.reasoning = { effort: 'low' };
+      requestBody.text = { verbosity: 'medium' };
+    }
+    let responseResult;
+    const useTrustedOnlyPass = trustedDomains.length > 0 && isModelAiSmartphoneRequest(req.body);
+    if (useTrustedOnlyPass) {
+      const trustedRequestBody = {
+        ...requestBody,
+        instructions: `${requestBody.instructions} Pesquise primeiro somente nas fontes confiaveis informadas. Se elas nao trouxerem dados reais suficientes, responda apenas {"__trusted_sources_insufficient":true}.`,
+        tools: buildModelAiWebSearchTools({ allowedDomains: trustedDomains }),
+        tool_choice: 'auto',
+      };
+      responseResult = await requestModelAiJson({ apiKey, requestBody: trustedRequestBody });
+      if (!responseResult.response.ok || /"__trusted_sources_insufficient"\s*:\s*true/.test(responseResult.text || '')) {
+        const externalRequestBody = {
+          ...requestBody,
+          instructions: `${requestBody.instructions} As fontes confiaveis informadas nao foram suficientes. Use pesquisa externa ampla, mas mantenha a regra: dados reais confirmados; na duvida, deixe ausente ou null.`,
+          tools: buildModelAiWebSearchTools({ allowedDomains: [] }),
+          tool_choice: 'auto',
+        };
+        responseResult = await requestModelAiJson({ apiKey, requestBody: externalRequestBody });
+      }
+    } else {
+      const externalRequestBody = {
+        ...requestBody,
+        instructions: `${requestBody.instructions} Use pesquisa externa ampla e consulte varias fontes independentes quando disponiveis antes de montar o JSON. Priorize o contexto interno do Bling/local quando existir; use a internet para complementar e confirmar dados reais.`,
+        tools: buildModelAiWebSearchTools({ allowedDomains: [] }),
+        tool_choice: 'auto',
+      };
+      responseResult = await requestModelAiJson({ apiKey, requestBody: externalRequestBody });
+    }
+    const { response, payload, rawText, text } = responseResult;
+    await pool.query(
+      `INSERT INTO model_ai_generation_logs
+        (id, model_name, brand_name, category_name, ai_model, prompt_text, response_text, status, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        logId,
+        req.body?.name || null,
+        req.body?.brand || null,
+        req.body?.category || null,
+        model,
+        `${prompt}${sourceContextText}${trustedSourcesText}`.slice(0, 12000),
+        text ? text.slice(0, 16000) : null,
+        response.ok && text ? 'success' : 'error',
+        response.ok ? null : JSON.stringify(payload).slice(0, 2000),
+      ]
+    ).catch((error) => console.warn('[model-ai-log] failed:', error.message));
+    if (!response.ok || !text) {
+      return reply.code(502).send({
+        error: 'IA nao retornou JSON para o modelo',
+        upstream_status: response.status,
+        upstream_error: payload?.error?.message || payload?.raw_error || rawText?.slice(0, 500) || null,
+        log_id: logId,
+      });
+    }
+    return { text, model };
+  } catch (error) {
+    await pool.query(
+      `INSERT INTO model_ai_generation_logs
+        (id, model_name, brand_name, category_name, ai_model, prompt_text, status, error_message)
+       VALUES (?, ?, ?, ?, ?, ?, 'error', ?)`,
+      [
+        logId,
+        req.body?.name || null,
+        req.body?.brand || null,
+        req.body?.category || null,
+        model,
+        `${prompt}${sourceContextText}${trustedSourcesText}`.slice(0, 12000),
+        String(error?.message || error).slice(0, 2000),
+      ]
+    ).catch((err) => console.warn('[model-ai-log] failed:', err.message));
+    return reply.code(502).send({ error: error?.message || 'Erro ao gerar JSON com IA', log_id: logId });
+  }
+});
+
 fastify.get('/models/:id', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const companyId = await resolveModelCompanyId(req.query?.company_id);
   const rows = await vpsDbSelect(
