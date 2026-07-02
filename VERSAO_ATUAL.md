@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.20-novo-bot-controle
+version: v1.2.21-novo-bot-live
 date: 2026-07-02
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260702-143952-v1220-novo-bot-controle
+release_vps: /var/www/mdv-site/releases/20260702-152159-novo-bot-live
 branch: main
-summary: Adiciona controle administrativo do novo bot n8n com reset de conversa e bloqueio de fluxo por cliente.
+summary: Adiciona acompanhamento em tempo real das conversas do Novo Bot n8n.
 ```

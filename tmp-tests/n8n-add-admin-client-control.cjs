@@ -79,6 +79,27 @@ if (!syncKey) {
 
 let payload = null;
 try {
+  const inboundText = String(source.conversation || source.text || source.message || '').trim();
+  if (inboundText) {
+    await fetch('${MDV_API_URL}/n8n-bot/messages/log', {
+      method: 'POST',
+      headers: {
+        'x-sync-key': syncKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        remoteJid,
+        direction: 'inbound',
+        message: inboundText,
+        messageType: source.messageType || 'text',
+        sourceNode: 'Controle Bot - Verificar Cliente',
+        waMessageId: source.messageId || source.id || source.key?.id || '',
+      }),
+    });
+  }
+} catch (error) {}
+
+try {
   const response = await fetch('${MDV_API_URL}/n8n-bot/client-control?remoteJid=' + encodeURIComponent(remoteJid), {
     headers: { 'x-sync-key': syncKey },
   });
@@ -116,6 +137,39 @@ if (payload.resetPending) {
 }
 
 return [{ json: output }];`;
+
+const outboundLoggerCode = `const syncKey = $env.SYNC_SECRET || '';
+if (!syncKey) return $input.all();
+
+const items = $input.all();
+for (const item of items) {
+  const data = item.json || {};
+  const remoteJid = String(data.remoteJid || $('Controle Bot - Verificar Cliente').first().json.remoteJid || '');
+  const text = String(data.message || data.text || data.output || '').trim();
+  if (!remoteJid || !text) continue;
+  try {
+    await fetch('${MDV_API_URL}/n8n-bot/messages/log', {
+      method: 'POST',
+      headers: {
+        'x-sync-key': syncKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        remoteJid,
+        direction: 'outbound',
+        message: text,
+        messageType: 'text',
+        sourceNode: 'Controle Bot - Registrar Saida',
+        payload: {
+          messageIndex: data.messageIndex || null,
+          totalMessages: data.totalMessages || null,
+        },
+      }),
+    });
+  } catch (error) {}
+}
+
+return items;`;
 
 function makeIfNode() {
   return {
@@ -175,6 +229,15 @@ function patchGraph(nodes, connections) {
 
   upsertNode(nodes, makeIfNode());
 
+  upsertNode(nodes, {
+    id: 'n8n-admin-client-outbound-log-001',
+    name: 'Controle Bot - Registrar Saida',
+    type: 'n8n-nodes-base.code',
+    typeVersion: 2,
+    position: [1472, 80],
+    parameters: { jsCode: outboundLoggerCode },
+  });
+
   for (const node of nodes) {
     if (node.name === 'Memoria de contexto postggress' || node.name === 'Memoria Vendas') {
       patchMemoryNode(node);
@@ -193,6 +256,15 @@ function patchGraph(nodes, connections) {
       [{ node: 'Handoff - Verificar pausa', type: 'main', index: 0 }],
     ],
   };
+
+  if (connections['Dividir mensagens']?.main?.[0]) {
+    connections['Dividir mensagens'] = {
+      main: [[{ node: 'Controle Bot - Registrar Saida', type: 'main', index: 0 }]],
+    };
+    connections['Controle Bot - Registrar Saida'] = {
+      main: [[{ node: 'Enviar WhatsApp', type: 'main', index: 0 }]],
+    };
+  }
 }
 
 async function ensureN8nSyncSecretEnv(conn) {
@@ -265,6 +337,7 @@ COPY (
     'switchTarget', connections::jsonb #> '{"switc Mensagens",main,0,0,node}',
     'controlBlockedTarget', connections::jsonb #> '{"Controle Bot - Bloqueado?",main,0}',
     'controlContinueTarget', connections::jsonb #> '{"Controle Bot - Bloqueado?",main,1,0,node}',
+    'outboundLoggerTarget', connections::jsonb #> '{"Dividir mensagens",main,0,0,node}',
     'memoryNodes', (
       SELECT json_agg(node->>'name')
       FROM jsonb_array_elements(nodes::jsonb) AS node

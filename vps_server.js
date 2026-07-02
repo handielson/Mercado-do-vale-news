@@ -2013,6 +2013,59 @@ async function upsertN8nBotClientControl(identity, patch = {}) {
   return getN8nBotClientControl(identity);
 }
 
+function normalizeN8nBotMessageDirection(value) {
+  const direction = String(value || '').trim().toLowerCase();
+  if (direction === 'outbound' || direction === 'bot' || direction === 'sent') return 'outbound';
+  if (direction === 'internal' || direction === 'admin') return 'internal';
+  return 'inbound';
+}
+
+async function insertN8nBotMessage(input = {}) {
+  const identity = normalizeN8nBotClientIdentity(input);
+  if (!identity) {
+    const error = new Error('phone ou remoteJid obrigatorio');
+    error.statusCode = 400;
+    throw error;
+  }
+  const text = String(input.message || input.text || input.message_text || '').trim();
+  if (!text) {
+    const error = new Error('message obrigatoria');
+    error.statusCode = 400;
+    throw error;
+  }
+  const direction = normalizeN8nBotMessageDirection(input.direction);
+  const payload = input.payload && typeof input.payload === 'object' ? JSON.stringify(input.payload) : null;
+  await pool.query(
+    `INSERT INTO n8n_bot_messages
+      (remote_jid, phone, direction, message_text, message_type, source_node, wa_message_id, payload_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      identity.remoteJid,
+      identity.phone,
+      direction,
+      text,
+      String(input.messageType || input.message_type || 'text').slice(0, 80),
+      String(input.sourceNode || input.source_node || 'n8n').slice(0, 120),
+      String(input.waMessageId || input.wa_message_id || '').slice(0, 160) || null,
+      payload,
+    ]
+  );
+  await pool.query(
+    `INSERT INTO n8n_bot_client_controls (id, remote_jid, phone, last_seen_at)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       phone = VALUES(phone),
+       last_seen_at = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID(),
+      identity.remoteJid,
+      identity.phone,
+    ]
+  );
+  return { ok: true };
+}
+
 async function logCustomerDeliveryJobEvent(jobId, level, eventType, message, details = null) {
   if (!jobId) return;
   try {
@@ -22004,6 +22057,84 @@ fastify.post('/n8n-bot/client-control/consume-reset', { preHandler: requireSyncK
   return getN8nBotClientControl(identity);
 });
 
+fastify.post('/n8n-bot/messages/log', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    return await insertN8nBotMessage(req.body || {});
+  } catch (error) {
+    return reply.code(error.statusCode || 500).send({ error: error.message || 'Falha ao registrar mensagem' });
+  }
+});
+
+fastify.get('/n8n-bot/conversations', { preHandler: requireSyncKey }, async (req) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 40, 1), 100);
+  const [rows] = await pool.query(
+    `SELECT
+        latest.remote_jid,
+        latest.phone,
+        latest.last_message_at,
+        latest.last_message,
+        latest.last_direction,
+        latest.total_messages,
+        latest.inbound_count,
+        latest.outbound_count,
+        controls.blocked,
+        controls.block_reason,
+        controls.reset_count,
+        controls.reset_requested_at,
+        controls.reset_consumed_at,
+        controls.updated_at AS control_updated_at
+     FROM (
+       SELECT
+          agg.remote_jid,
+          agg.phone,
+          agg.last_message_at,
+          agg.total_messages,
+          agg.inbound_count,
+          agg.outbound_count,
+          msg.message_text AS last_message,
+          msg.direction AS last_direction
+       FROM (
+         SELECT
+            remote_jid,
+            MAX(phone) AS phone,
+            MAX(created_at) AS last_message_at,
+            COUNT(*) AS total_messages,
+            SUM(direction = 'inbound') AS inbound_count,
+            SUM(direction = 'outbound') AS outbound_count,
+            MAX(id) AS last_id
+         FROM n8n_bot_messages
+         GROUP BY remote_jid
+       ) AS agg
+       JOIN n8n_bot_messages msg ON msg.id = agg.last_id
+     ) latest
+     LEFT JOIN n8n_bot_client_controls controls ON controls.remote_jid = latest.remote_jid
+     ORDER BY latest.last_message_at DESC
+     LIMIT ?`,
+    [limit]
+  );
+  return { rows };
+});
+
+fastify.get('/n8n-bot/messages', { preHandler: requireSyncKey }, async (req, reply) => {
+  const identity = normalizeN8nBotClientIdentity(req.query || {});
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 200);
+  const afterId = Math.max(Number(req.query.afterId) || 0, 0);
+  const params = afterId > 0
+    ? [identity.remoteJid, afterId, limit]
+    : [identity.remoteJid, limit];
+  const [rows] = await pool.query(
+    `SELECT id, remote_jid, phone, direction, message_text, message_type, source_node, wa_message_id, created_at
+     FROM n8n_bot_messages
+     WHERE remote_jid = ?
+       ${afterId > 0 ? 'AND id > ?' : ''}
+     ORDER BY id DESC
+     LIMIT ?`,
+    params
+  );
+  return { rows: rows.reverse() };
+});
+
 fastify.post('/whatsapp/automation/customer-registered', { preHandler: requireSyncKey }, async (req, reply) => {
   const customerId = String(req.body?.customer_id || '').trim();
   if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
@@ -28016,6 +28147,26 @@ async function runMigrations() {
   `);
   await addColumnIfMissing('n8n_bot_client_controls', 'reset_count', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('n8n_bot_client_controls', 'last_seen_at', 'DATETIME NULL');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS n8n_bot_messages (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      remote_jid VARCHAR(120) NOT NULL,
+      phone VARCHAR(32) NOT NULL,
+      direction VARCHAR(24) NOT NULL DEFAULT 'inbound',
+      message_text MEDIUMTEXT NOT NULL,
+      message_type VARCHAR(80) NULL,
+      source_node VARCHAR(120) NULL,
+      wa_message_id VARCHAR(160) NULL,
+      payload_json JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_n8n_bot_messages_remote_created (remote_jid, created_at),
+      INDEX idx_n8n_bot_messages_created (created_at),
+      INDEX idx_n8n_bot_messages_phone (phone)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('n8n_bot_messages', 'payload_json', 'JSON NULL');
+  await addColumnIfMissing('n8n_bot_messages', 'wa_message_id', 'VARCHAR(160) NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_delivery_job_logs (
