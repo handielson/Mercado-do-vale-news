@@ -70,5 +70,9 @@ assert.match(patch, /salesFlowAction/, 'post-list executor must consume AI flow 
 assert.match(patch, /aiAction === 'informar_quantidade'/, 'quantity must come from AI-classified intent before fallback parsing');
 assert.match(patch, /aiAction === 'nova_busca'/, 'customer can start a new search even with active sales state');
 assert.match(patch, /Parse Classificacao[\s\S]*Vendas - Verificar Pos Lista/, 'post-list executor must run after AI classification');
+assert.match(patch, /withGreeting/, 'post-list executor must preserve detected greetings in operational replies');
+assert.match(patch, /periodGreeting/, 'post-list media replies must be able to send greeting before photos');
+assert.match(patch, /No link tem mais fotos, video e as caracteristicas dele/, 'photo replies must include product link for complete media and characteristics');
+assert.match(patch, /slice\(0, 3\)/, 'photo replies should send a small WhatsApp preview instead of flooding all media');
 
 console.log('n8n admin client control static checks passed');

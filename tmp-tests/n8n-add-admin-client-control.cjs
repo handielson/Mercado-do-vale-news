@@ -405,6 +405,30 @@ const selectedNumber = requestedQuantity ? Number(activeState?.selectedOptionNum
     nextCode = nextCode.replace(currentIntentBlock, newIntentBlock);
   }
 
+  const joinPtBlock = `const joinPt = (values) => {
+  const list = values.filter(Boolean);
+  if (list.length <= 1) return list.join('');
+  if (list.length === 2) return list.join(' e ');
+  return list.slice(0, -1).join(', ') + ' e ' + list[list.length - 1];
+};`;
+  const greetingHelpersBlock = `${joinPtBlock}
+
+const periodGreeting = () => {
+  if (source.saudacaoDetectada !== true) return '';
+  if (normalized.includes('bom dia')) return 'Bom dia! 😊';
+  if (normalized.includes('boa tarde')) return 'Boa tarde! 😊';
+  if (normalized.includes('boa noite')) return 'Boa noite! 😊';
+  const hour = Number(new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }));
+  if (hour >= 5 && hour < 12) return 'Bom dia! 😊';
+  if (hour >= 12 && hour < 18) return 'Boa tarde! 😊';
+  return 'Boa noite! 😊';
+};
+
+const withGreeting = (message) => [periodGreeting(), message].filter(Boolean).join('|||');`;
+  if (nextCode.includes(joinPtBlock) && !nextCode.includes('const periodGreeting =')) {
+    nextCode = nextCode.replace(joinPtBlock, greetingHelpersBlock);
+  }
+
   const findMentionedColorBlock = `const findMentionedColor = (availableColors) => {
   const normalizedColors = availableColors.map((color) => ({
     raw: color,
@@ -473,6 +497,72 @@ const mentionedColor = aiColor || findMentionedColor(option ? allColors : unique
   nextCode = nextCode.replace(
     `if (wantsPhoto) {\n  return [{`,
     `if (wantsPhoto || wantsPhotoFromAI) {\n  return [{`
+  );
+  nextCode = nextCode
+    .replace(
+      `output: 'Consigo te mandar a foto sim 😊 Me confirma o numero do item ou o modelo que voce quer ver?',`,
+      `output: withGreeting('Consigo te mandar a foto sim 😊 Me confirma o numero do item ou o modelo que voce quer ver?'),`
+    )
+    .replace(
+      `output: 'Certo 😊 Separei ' + requestedQuantity + ' ' + unidade + '. Voce prefere retirada na loja ou entrega?',`,
+      `output: withGreeting('Certo 😊 Separei ' + requestedQuantity + ' ' + unidade + '. Voce prefere retirada na loja ou entrega?'),`
+    )
+    .replace(
+      `output: 'Nao encontrei esse numero na lista. Pode escolher uma opcao de 1 a ' + activeState.options.length + '? 😊',`,
+      `output: withGreeting('Nao encontrei esse numero na lista. Pode escolher uma opcao de 1 a ' + activeState.options.length + '? 😊'),`
+    )
+    .replace(
+      `output: 'Perfeito 😊 Temos ' + colorsText + '. Qual cor voce prefere?',`,
+      `output: withGreeting('Perfeito 😊 Temos ' + colorsText + '. Qual cor voce prefere?'),`
+    )
+    .replace(
+      `output: 'Perfeito 😊 Separei o ' + option.name + (option.memory ? ' ' + option.memory : '') + ' na cor ' + titleCase(variant.color) + '. Quantas unidades voce deseja?',`,
+      `output: withGreeting('Perfeito 😊 Separei o ' + option.name + (option.memory ? ' ' + option.memory : '') + ' na cor ' + titleCase(variant.color) + '. Quantas unidades voce deseja?'),`
+    );
+  nextCode = nextCode.replace(
+    `const buildPhotoMessages = (item) => {
+  const images = Array.isArray(item.images) ? item.images.filter((url) => String(url).includes('api.xiaomipetrolina.com.br/images/')).slice(0, 3) : [];
+  if (images.length === 0) {
+    return [
+      { type: 'text', text: 'Ainda nao tenho foto cadastrada dessa cor. Voce pode ver pelo link: ' + (option.url || 'produto sem link cadastrado') },
+    ];
+  }
+  const captionBase = [option.name, option.memory, titleCase(item.color)].filter(Boolean).join(' - ');
+  return [
+    { type: 'text', text: titleCase(item.color) },
+    ...images.map((mediaUrl, index) => ({
+      type: 'image',
+      mediaUrl,
+      caption: index === 0 ? captionBase : '',
+      mimetype: 'image/jpeg',
+      fileName: 'produto-' + normalize(item.color).replace(/\\s+/g, '-') + '-' + (index + 1) + '.jpg',
+    })),
+    { type: 'text', text: 'Gostou desse modelo? Posso separar ele para voce? 😊' },
+  ];
+};`,
+    `const buildPhotoMessages = (item) => {
+  const images = Array.isArray(item.images) ? item.images.filter((url) => String(url).includes('api.xiaomipetrolina.com.br/images/')).slice(0, 3) : [];
+  const linkText = option.url ? 'No link tem mais fotos, video e as caracteristicas dele: ' + option.url : '';
+  if (images.length === 0) {
+    return [
+      { type: 'text', text: withGreeting('Ainda nao tenho foto cadastrada dessa cor. ' + (linkText || 'Esse produto esta sem link cadastrado no momento.')) },
+    ];
+  }
+  const captionBase = [option.name, option.memory, titleCase(item.color)].filter(Boolean).join(' - ');
+  return [
+    ...[periodGreeting()].filter(Boolean).map((text) => ({ type: 'text', text })),
+    { type: 'text', text: titleCase(item.color) },
+    ...images.map((mediaUrl, index) => ({
+      type: 'image',
+      mediaUrl,
+      caption: index === 0 ? captionBase : '',
+      mimetype: 'image/jpeg',
+      fileName: 'produto-' + normalize(item.color).replace(/\\s+/g, '-') + '-' + (index + 1) + '.jpg',
+    })),
+    ...[linkText].filter(Boolean).map((text) => ({ type: 'text', text })),
+    { type: 'text', text: 'Gostou desse modelo? Posso separar ele para voce? 😊' },
+  ];
+};`
   );
 
   if (nextCode !== code) {
