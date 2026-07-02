@@ -126,6 +126,111 @@ const restoreClientControlCode = `return [{ json: $('Controle Bot - Aplicar Cont
 
 const restoreOutboundCode = `return $('Dividir mensagens').all();`;
 
+const salesAIContextCode = `const source = $json;
+const staticData = $getWorkflowStaticData('global');
+staticData.salesPostList = staticData.salesPostList || {};
+
+const remoteJid = String(source.remoteJid || '');
+const state = remoteJid ? staticData.salesPostList[remoteJid] : null;
+const now = Date.now();
+
+if (state && Number(state.expiresAt || 0) <= now) {
+  delete staticData.salesPostList[remoteJid];
+}
+
+const activeState = remoteJid ? staticData.salesPostList[remoteJid] : null;
+const summarizeOption = (option) => ({
+  numero: Number(option?.number || 0),
+  nome: option?.name || '',
+  memoria: option?.memory || '',
+  cores: Array.from(new Set((option?.colors || []).map((item) => item?.color).filter(Boolean))),
+});
+
+return [{
+  json: {
+    ...source,
+    salesConversationState: activeState ? {
+      ativo: true,
+      etapa: activeState.step || '',
+      itemSelecionado: activeState.selectedOptionNumber || null,
+      corSelecionada: activeState.selectedColor || '',
+      pedidoEmMontagem: activeState.orderDraft || null,
+      opcoes: Array.isArray(activeState.options) ? activeState.options.map(summarizeOption) : [],
+    } : { ativo: false },
+  },
+}];`;
+
+const classifierSystemMessage = `Voce e o Agente Inicial e Roteador da Mercado do Vale.
+
+Sua funcao e entender a mensagem inteira do cliente, considerando o estado atual do atendimento, e devolver somente JSON valido. Nao responda o cliente.
+
+Voce nao e um bot de frases prontas. Interprete linguagem natural, girias, mensagens misturadas e mudancas de assunto.
+
+Intencoes principais possiveis:
+- saudacao
+- vendas_produtos
+- cadastro_contato
+- pos_venda
+- pedido_humano
+- fallback
+
+Regras de prioridade:
+- Leia a mensagem inteira antes de decidir. Nunca trate um numero isolado dentro de uma frase como quantidade sem entender a intencao.
+- Se houver saudacao junto com pergunta/pedido de produto, a intencao principal deve ser vendas_produtos e saudacao_detectada deve ser true.
+- Se houver saudacao junto com pedido de humano, a intencao principal deve ser pedido_humano e saudacao_detectada deve ser true.
+- Use saudacao somente quando a mensagem for apenas cumprimento, sem pedido claro.
+- Perguntas sobre preco, produto, estoque, modelo, cor, memoria, acessorios, disponibilidade, foto, imagem, catalogo ou opcoes: vendas_produtos.
+- Garantia, defeito, troca, assistencia ou problema com compra: pos_venda.
+- Pedido para falar com atendente, vendedor ou humano: pedido_humano.
+- Se nao entender: fallback.
+
+Quando houver Estado de venda ativo, tambem classifique fluxo_venda. A IA deve decidir a acao do fluxo, nao os nos por palavras fixas.
+
+Acoes de fluxo_venda:
+- escolher_item: cliente escolheu item da lista por numero ou nome.
+- pedir_foto: cliente pediu foto/imagem de item, produto, cor ou do item ja selecionado.
+- escolher_cor: cliente escolheu cor.
+- informar_quantidade: cliente informou quantidade desejada.
+- escolha_entrega_retirada: cliente respondeu entrega ou retirada.
+- nova_busca: cliente mudou de assunto e pediu outro produto/categoria/lista.
+- pergunta_sobre_item: cliente perguntou algo sobre item selecionado sem escolher quantidade/cor/foto.
+- indefinido: nao ficou claro.
+
+Regras do fluxo de venda:
+- Se a etapa atual for aguardando quantidade e a mensagem for "tem foto do 22", "foto do 22", "manda imagem do item 22" ou similar, a acao e pedir_foto e item_numero=22. Nao e quantidade.
+- Se a etapa atual for aguardando quantidade e a mensagem for somente "22", ou "quero 22", ou "22 unidades", a acao e informar_quantidade e quantidade=22.
+- Se a mensagem mistura pergunta e numero, priorize a pergunta. Ex: "tem foto do 22?" => pedir_foto.
+- Se o cliente pedir "quais celulares", "smartphones", "aparelhos" ou "modelos" mesmo havendo estado ativo, use nova_busca para mostrar uma nova lista.
+- Se o cliente escolhe numero e cor na mesma mensagem, preencha item_numero e cor.
+
+Para vendas_produtos fora do pos-lista:
+- Se o cliente pede celulares/smartphones/aparelhos de forma geral, use venda.tipo="categoria", venda.categoria="smartphones", venda.categoria_id="8b7c4852-c195-4527-8fd7-c3cc2debda42", venda.busca="".
+- Se o cliente menciona modelo/marca/produto especifico, use venda.tipo="busca", venda.busca com o termo limpo. Ex: "tem poco x8 pro?" => "poco x8 pro".
+- Se for acessorio, use venda.tipo="busca" e mantenha o termo do acessorio. Ex: "capa para redmi 15".
+
+Retorne somente neste formato:
+{
+  "intencao": "vendas_produtos",
+  "mensagem": "mensagem original",
+  "confianca": 0.95,
+  "saudacao_detectada": true,
+  "venda": {
+    "tipo": "categoria",
+    "busca": "",
+    "categoria": "smartphones",
+    "categoria_id": "8b7c4852-c195-4527-8fd7-c3cc2debda42"
+  },
+  "fluxo_venda": {
+    "acao": "pedir_foto",
+    "item_numero": 22,
+    "cor": "",
+    "quantidade": null,
+    "termo_nova_busca": ""
+  }
+}`;
+
+const classifierTextExpression = `={{($json.clienteNome ? 'Nome do cliente salvo: ' + $json.clienteNome + '.\\n' : '') + 'Mensagem do cliente: ' + $json.conversation + '\\n\\nEstado de venda atual em JSON:\\n' + JSON.stringify($json.salesConversationState || { ativo: false })}}`;
+
 function makeIfNode() {
   return {
     id: 'n8n-admin-control-blocked-if-001',
@@ -180,6 +285,60 @@ function patchTransientHttpNode(node) {
   node.waitBetweenTries = 2000;
 }
 
+function patchClassifierAgent(node) {
+  if (!node?.parameters) node.parameters = {};
+  node.parameters.text = classifierTextExpression;
+  node.parameters.promptType = 'define';
+  node.parameters.options = {
+    ...(node.parameters.options || {}),
+    systemMessage: classifierSystemMessage,
+  };
+}
+
+function patchParseClassification(node) {
+  if (!node?.parameters) node.parameters = {};
+  node.parameters.jsCode = `const source = $('Vendas - Preparar Contexto IA').first().json;
+const raw = $json.output || $json.text || $json.response || '';
+
+let parsed;
+try {
+  parsed = typeof raw === 'string' ? JSON.parse(raw.replace(/^\\\`\\\`\\\`json\\s*/i, '').replace(/^\\\`\\\`\\\`\\s*/i, '').replace(/\\\`\\\`\\\`$/i, '').trim()) : raw;
+} catch (error) {
+  parsed = {
+    intencao: 'fallback',
+    mensagem: source.conversation,
+    confianca: 0,
+    saudacao_detectada: false,
+    venda: {},
+    fluxo_venda: {},
+  };
+}
+
+const allowed = new Set(['saudacao', 'vendas_produtos', 'cadastro_contato', 'pos_venda', 'pedido_humano', 'fallback']);
+const intencao = allowed.has(String(parsed.intencao || '').trim()) ? String(parsed.intencao).trim() : 'fallback';
+const venda = parsed && typeof parsed.venda === 'object' && !Array.isArray(parsed.venda) ? parsed.venda : {};
+const fluxoVenda = parsed && typeof parsed.fluxo_venda === 'object' && !Array.isArray(parsed.fluxo_venda) ? parsed.fluxo_venda : {};
+
+return [{
+  json: {
+    ...source,
+    intencao,
+    classificacaoMensagem: parsed.mensagem || source.conversation,
+    classificacaoConfianca: Number(parsed.confianca || 0),
+    saudacaoDetectada: parsed.saudacao_detectada === true,
+    salesRequestKind: String(venda.tipo || '').trim(),
+    salesSearchQuery: String(venda.busca || '').trim(),
+    salesCategoryName: String(venda.categoria || '').trim(),
+    salesCategoryId: String(venda.categoria_id || '').trim(),
+    salesFlowAction: String(fluxoVenda.acao || '').trim(),
+    salesFlowItemNumber: Number(fluxoVenda.item_numero || 0),
+    salesFlowColor: String(fluxoVenda.cor || '').trim(),
+    salesFlowQuantity: Number(fluxoVenda.quantidade || 0),
+    salesFlowNewSearchTerm: String(fluxoVenda.termo_nova_busca || '').trim(),
+  },
+}];`;
+}
+
 function patchPostListPhotoFallback(node) {
   const code = String(node?.parameters?.jsCode || '');
   let nextCode = code;
@@ -187,7 +346,7 @@ function patchPostListPhotoFallback(node) {
   return buildContinueItem();
 }`;
   const newBlock = `if (!activeState || !Array.isArray(activeState.options) || activeState.options.length === 0) {
-  if (wantsPhoto) {
+  if (wantsPhoto || wantsPhotoFromAI) {
     return [{
       json: {
         ...source,
@@ -200,6 +359,50 @@ function patchPostListPhotoFallback(node) {
 }`;
   if (nextCode.includes(oldBlock) && !nextCode.includes('Me confirma o numero do item ou o modelo')) {
     nextCode = nextCode.replace(oldBlock, newBlock);
+  }
+  nextCode = nextCode.replace('if (wantsPhoto) {\n    return [{\n      json: {\n        ...source,\n        salesPostListHandled: true,\n        output: \'Consigo te mandar a foto sim 😊 Me confirma o numero do item ou o modelo que voce quer ver?\',', 'if (wantsPhoto || wantsPhotoFromAI) {\n    return [{\n      json: {\n        ...source,\n        salesPostListHandled: true,\n        output: \'Consigo te mandar a foto sim 😊 Me confirma o numero do item ou o modelo que voce quer ver?\',');
+
+  const oldIntentBlock = `const wantsPhoto = /\\b(foto|fotos|imagem|imagens|manda foto|ver foto|mostrar foto)\\b/.test(normalized);
+const numberMatch = normalized.match(/\\b(?:opcao|opcao numero|numero|n|produto)?\\s*(\\d{1,3})\\b/);
+const hasOrderDraft = Boolean(activeState?.orderDraft?.productId);
+const isQuantityStep = hasOrderDraft && ['awaiting_quantity', 'awaiting_photo_confirmation'].includes(String(activeState?.step || ''));
+const requestedQuantity = isQuantityStep && numberMatch ? Number(numberMatch[1]) : 0;
+const selectedNumber = requestedQuantity ? Number(activeState?.selectedOptionNumber || 0) : (numberMatch ? Number(numberMatch[1]) : Number(activeState?.selectedOptionNumber || 0));`;
+  const newIntentBlock = `const wantsPhoto = /\\b(foto|fotos|imagem|imagens|manda foto|ver foto|mostrar foto)\\b/.test(normalized);
+const numberMatch = normalized.match(/\\b(?:opcao|opcao numero|numero|n|produto|item|do|da)?\\s*(\\d{1,3})\\b/);
+const hasOrderDraft = Boolean(activeState?.orderDraft?.productId);
+const isQuantityStep = hasOrderDraft && ['awaiting_quantity', 'awaiting_photo_confirmation'].includes(String(activeState?.step || ''));
+const aiAction = String(source.salesFlowAction || '').trim();
+const aiSelectedNumber = Number(source.salesFlowItemNumber || 0);
+const aiQuantity = Number(source.salesFlowQuantity || 0);
+const aiColor = String(source.salesFlowColor || '').trim();
+if (aiAction === 'nova_busca') {
+  return buildContinueItem();
+}
+const quantityIntent = /^\\d{1,3}$/.test(normalized)
+  || /^\\s*(quero|queria|vou querer|pode separar|separa|separe)\\s+\\d{1,3}\\b/.test(normalized)
+  || /\\b\\d{1,3}\\s*(unidade|unidades|peca|pecas|und|unds|un|x)\\b/.test(normalized);
+const requestedQuantity = isQuantityStep && aiAction === 'informar_quantidade' && aiQuantity > 0
+  ? aiQuantity
+  : (isQuantityStep && !wantsPhoto && quantityIntent && numberMatch ? Number(numberMatch[1]) : 0);
+const selectedNumber = requestedQuantity
+  ? Number(activeState?.selectedOptionNumber || 0)
+  : (aiSelectedNumber || (numberMatch ? Number(numberMatch[1]) : Number(activeState?.selectedOptionNumber || 0)));
+const wantsPhotoFromAI = aiAction === 'pedir_foto';`;
+  if (nextCode.includes(oldIntentBlock)) {
+    nextCode = nextCode.replace(oldIntentBlock, newIntentBlock);
+  }
+  const currentIntentBlock = `const wantsPhoto = /\\b(foto|fotos|imagem|imagens|manda foto|ver foto|mostrar foto)\\b/.test(normalized);
+const numberMatch = normalized.match(/\\b(?:opcao|opcao numero|numero|n|produto|item|do|da)?\\s*(\\d{1,3})\\b/);
+const hasOrderDraft = Boolean(activeState?.orderDraft?.productId);
+const isQuantityStep = hasOrderDraft && ['awaiting_quantity', 'awaiting_photo_confirmation'].includes(String(activeState?.step || ''));
+const quantityIntent = /^\\d{1,3}$/.test(normalized)
+  || /^\\s*(quero|queria|vou querer|pode separar|separa|separe)\\s+\\d{1,3}\\b/.test(normalized)
+  || /\\b\\d{1,3}\\s*(unidade|unidades|peca|pecas|und|unds|un|x)\\b/.test(normalized);
+const requestedQuantity = isQuantityStep && !wantsPhoto && quantityIntent && numberMatch ? Number(numberMatch[1]) : 0;
+const selectedNumber = requestedQuantity ? Number(activeState?.selectedOptionNumber || 0) : (numberMatch ? Number(numberMatch[1]) : Number(activeState?.selectedOptionNumber || 0));`;
+  if (nextCode.includes(currentIntentBlock)) {
+    nextCode = nextCode.replace(currentIntentBlock, newIntentBlock);
   }
 
   const findMentionedColorBlock = `const findMentionedColor = (availableColors) => {
@@ -239,10 +442,14 @@ const mentionedColor = findMentionedColor(option ? allColors : activeState.optio
   const newColorsBlock = `const option = activeState.options.find((item) => Number(item.number) === selectedNumber);
 const optionColorItems = uniqueColorItems(option?.colors || []);
 const allColors = optionColorItems.map((item) => item.color).filter(Boolean);
-const mentionedColor = findMentionedColor(option ? allColors : uniqueColorItems(activeState.options.flatMap((item) => item.colors || [])).map((item) => item.color).filter(Boolean));`;
+const mentionedColor = aiColor || findMentionedColor(option ? allColors : uniqueColorItems(activeState.options.flatMap((item) => item.colors || [])).map((item) => item.color).filter(Boolean));`;
   if (nextCode.includes(oldColorsBlock)) {
     nextCode = nextCode.replace(oldColorsBlock, newColorsBlock);
   }
+  nextCode = nextCode.replace(
+    `const mentionedColor = findMentionedColor(option ? allColors : uniqueColorItems(activeState.options.flatMap((item) => item.colors || [])).map((item) => item.color).filter(Boolean));`,
+    `const mentionedColor = aiColor || findMentionedColor(option ? allColors : uniqueColorItems(activeState.options.flatMap((item) => item.colors || [])).map((item) => item.color).filter(Boolean));`
+  );
 
   const oldSelectedVariantBlock = `const selectedVariant = mentionedColor
   ? option.colors.find((item) => normalize(item.color) === normalize(mentionedColor))
@@ -259,6 +466,14 @@ const mentionedColor = findMentionedColor(option ? allColors : uniqueColorItems(
   if (nextCode.includes(oldVariantBlock)) {
     nextCode = nextCode.replace(oldVariantBlock, newVariantBlock);
   }
+  nextCode = nextCode.replace(
+    `if (!selectedNumber && !wantsPhoto && !mentionedColor) {`,
+    `if (!selectedNumber && !wantsPhoto && !wantsPhotoFromAI && !mentionedColor) {`
+  );
+  nextCode = nextCode.replace(
+    `if (wantsPhoto) {\n  return [{`,
+    `if (wantsPhoto || wantsPhotoFromAI) {\n  return [{`
+  );
 
   if (nextCode !== code) {
     node.parameters.jsCode = nextCode;
@@ -420,6 +635,15 @@ function patchGraph(nodes, connections) {
     parameters: { jsCode: restoreOutboundCode },
   });
 
+  upsertNode(nodes, {
+    id: 'sales-ai-context-001',
+    name: 'Vendas - Preparar Contexto IA',
+    type: 'n8n-nodes-base.code',
+    typeVersion: 2,
+    position: [1760, 448],
+    parameters: { jsCode: salesAIContextCode },
+  });
+
   for (const node of nodes) {
     if (node.name === 'Memoria de contexto postggress' || node.name === 'Memoria Vendas') {
       patchMemoryNode(node);
@@ -429,6 +653,12 @@ function patchGraph(nodes, connections) {
     }
     if (node.name === 'Vendas - Verificar Pos Lista') {
       patchPostListPhotoFallback(node);
+    }
+    if (node.name === 'Agente Inicial - Classificador') {
+      patchClassifierAgent(node);
+    }
+    if (node.name === 'Parse Classificacao') {
+      patchParseClassification(node);
     }
   }
 
@@ -463,6 +693,30 @@ function patchGraph(nodes, connections) {
     main: [
       [],
       [{ node: 'Handoff - Verificar pausa', type: 'main', index: 0 }],
+    ],
+  };
+
+  if (connections['Contato encontrado?']?.main) {
+    connections['Contato encontrado?'] = {
+      main: [
+        [{ node: 'Vendas - Preparar Contexto IA', type: 'main', index: 0 }],
+        [{ node: 'Mensagem parece nome?', type: 'main', index: 0 }],
+      ],
+    };
+  }
+  connections['Vendas - Preparar Contexto IA'] = {
+    main: [[{ node: 'Agente Inicial - Classificador', type: 'main', index: 0 }]],
+  };
+  connections['Agente Inicial - Classificador'] = {
+    main: [[{ node: 'Parse Classificacao', type: 'main', index: 0 }]],
+  };
+  connections['Parse Classificacao'] = {
+    main: [[{ node: 'Vendas - Verificar Pos Lista', type: 'main', index: 0 }]],
+  };
+  connections['Vendas - Pos Lista resolvido?'] = {
+    main: [
+      [{ node: 'Dividir mensagens', type: 'main', index: 0 }],
+      [{ node: 'Switch Especialistas', type: 'main', index: 0 }],
     ],
   };
 

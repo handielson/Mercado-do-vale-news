@@ -59,5 +59,16 @@ assert.match(patch, /Me confirma o numero do item ou o modelo/, 'photo requests 
 assert.match(patch, /uniqueColorItems/, 'post-list color choices must dedupe repeated stock variations');
 assert.match(patch, /optionColorItems\.length === 1/, 'single unique color must be selected even when stock has duplicate rows');
 assert.match(patch, /optionColorItems\.find/, 'mentioned color must resolve against deduped color options');
+assert.match(patch, /quantityIntent/, 'post-list quantity step must classify full message before consuming a number');
+assert.match(patch, /!wantsPhoto && quantityIntent/, 'photo requests with numbers must not be consumed as quantity');
+assert.match(patch, /produto\|item\|do\|da/, 'post-list selection must understand contextual number references like foto do 22');
+assert.match(patch, /Vendas - Preparar Contexto IA/, 'sales flow must prepare state context before the classifier');
+assert.match(patch, /salesConversationState/, 'classifier must receive the active sales state');
+assert.match(patch, /Agente Inicial e Roteador/, 'initial AI agent must own routing and flow intent decisions');
+assert.match(patch, /fluxo_venda/, 'classifier JSON must include sales flow action');
+assert.match(patch, /salesFlowAction/, 'post-list executor must consume AI flow action');
+assert.match(patch, /aiAction === 'informar_quantidade'/, 'quantity must come from AI-classified intent before fallback parsing');
+assert.match(patch, /aiAction === 'nova_busca'/, 'customer can start a new search even with active sales state');
+assert.match(patch, /Parse Classificacao[\s\S]*Vendas - Verificar Pos Lista/, 'post-list executor must run after AI classification');
 
 console.log('n8n admin client control static checks passed');
