@@ -564,6 +564,11 @@ const mentionedColor = aiColor || findMentionedColor(option ? allColors : unique
   ];
 };`
   );
+  nextCode = nextCode.replace(
+    `    { type: 'text', text: titleCase(item.color) },
+`,
+    ''
+  );
 
   if (nextCode !== code) {
     node.parameters.jsCode = nextCode;

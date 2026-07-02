@@ -74,5 +74,6 @@ assert.match(patch, /withGreeting/, 'post-list executor must preserve detected g
 assert.match(patch, /periodGreeting/, 'post-list media replies must be able to send greeting before photos');
 assert.match(patch, /No link tem mais fotos, video e as caracteristicas dele/, 'photo replies must include product link for complete media and characteristics');
 assert.match(patch, /slice\(0, 3\)/, 'photo replies should send a small WhatsApp preview instead of flooding all media');
+assert.match(patch, /nextCode = nextCode\.replace\([\s\S]*titleCase\(item\.color\)[\s\S]*,\s*''\s*\)/, 'photo replies must remove the standalone color text because the caption already includes it');
 
 console.log('n8n admin client control static checks passed');
