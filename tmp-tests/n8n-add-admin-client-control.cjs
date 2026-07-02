@@ -569,6 +569,105 @@ const mentionedColor = aiColor || findMentionedColor(option ? allColors : unique
 `,
     ''
   );
+  nextCode = nextCode.replace(
+    `const buildPhotoMessages = (item) => {
+  const images = Array.isArray(item.images) ? item.images.filter((url) => String(url).includes('api.xiaomipetrolina.com.br/images/')).slice(0, 3) : [];
+  const linkText = option.url ? 'No link tem mais fotos, video e as caracteristicas dele: ' + option.url : '';
+  if (images.length === 0) {
+    return [
+      { type: 'text', text: withGreeting('Ainda nao tenho foto cadastrada dessa cor. ' + (linkText || 'Esse produto esta sem link cadastrado no momento.')) },
+    ];
+  }
+  const captionBase = [option.name, option.memory, titleCase(item.color)].filter(Boolean).join(' - ');
+  return [
+    ...[periodGreeting()].filter(Boolean).map((text) => ({ type: 'text', text })),
+    ...images.map((mediaUrl, index) => ({
+      type: 'image',
+      mediaUrl,
+      caption: index === 0 ? captionBase : '',
+      mimetype: 'image/jpeg',
+      fileName: 'produto-' + normalize(item.color).replace(/\\s+/g, '-') + '-' + (index + 1) + '.jpg',
+    })),
+    ...[linkText].filter(Boolean).map((text) => ({ type: 'text', text })),
+    { type: 'text', text: 'Gostou desse modelo? Posso separar ele para voce? 😊' },
+  ];
+};`,
+    `const buildPhotoMessages = (item) => {
+  const images = Array.isArray(item.images) ? item.images.filter((url) => String(url).includes('api.xiaomipetrolina.com.br/images/')).slice(0, 3) : [];
+  const linkText = option.url ? 'No link tem mais fotos, video e as caracteristicas dele: ' + option.url : '';
+  if (images.length === 0) {
+    return [
+      { type: 'text', text: withGreeting('Ainda nao tenho foto cadastrada dessa cor. ' + (linkText || 'Esse produto esta sem link cadastrado no momento.')) },
+    ];
+  }
+  const captionBase = [option.name, option.memory, titleCase(item.color)].filter(Boolean).join(' - ');
+  return [
+    ...[periodGreeting()].filter(Boolean).map((text) => ({ type: 'text', text })),
+    ...images.map((mediaUrl, index) => ({
+      type: 'image',
+      mediaUrl,
+      caption: index === 0 ? captionBase : '',
+      mimetype: 'image/jpeg',
+      fileName: 'produto-' + normalize(item.color).replace(/\\s+/g, '-') + '-' + (index + 1) + '.jpg',
+    })),
+    ...[linkText].filter(Boolean).map((text) => ({ type: 'text', text })),
+    { type: 'text', text: 'Gostou desse modelo? Posso separar ele para voce? 😊' },
+  ];
+};
+
+const buildAllPhotoMessages = (items) => {
+  const variants = uniqueColorItems(items || []);
+  const linkText = option.url ? 'No link tem mais fotos, video e as caracteristicas dele: ' + option.url : '';
+  const messages = [];
+  const greeting = periodGreeting();
+  if (greeting) messages.push({ type: 'text', text: greeting });
+
+  for (const item of variants) {
+    const images = Array.isArray(item.images) ? item.images.filter((url) => String(url).includes('api.xiaomipetrolina.com.br/images/')).slice(0, 1) : [];
+    const captionBase = [option.name, option.memory, titleCase(item.color)].filter(Boolean).join(' - ');
+    for (const mediaUrl of images) {
+      messages.push({
+        type: 'image',
+        mediaUrl,
+        caption: captionBase,
+        mimetype: 'image/jpeg',
+        fileName: 'produto-' + normalize(item.color).replace(/\\s+/g, '-') + '-1.jpg',
+      });
+    }
+  }
+
+  const sentImages = messages.some((message) => message.type === 'image');
+  if (!sentImages) {
+    messages.push({ type: 'text', text: linkText || 'Ainda nao tenho foto cadastrada dessas cores.' });
+  } else if (linkText) {
+    messages.push({ type: 'text', text: linkText });
+  }
+  messages.push({ type: 'text', text: 'Gostou de alguma dessas cores? Posso separar para voce? 😊' });
+  return messages;
+};`
+  );
+  nextCode = nextCode.replace(
+    `if (!variant) {
+  return askColor();
+}`,
+    `if (!variant && (wantsPhoto || wantsPhotoFromAI)) {
+  activeState.step = 'awaiting_quantity';
+  activeState.selectedOptionNumber = option.number;
+  activeState.updatedAt = new Date(now).toISOString();
+  return [{
+    json: {
+      ...source,
+      salesPostListHandled: true,
+      salesPostListStep: activeState.step,
+      messages: buildAllPhotoMessages(optionColorItems),
+    },
+  }];
+}
+
+if (!variant) {
+  return askColor();
+}`
+  );
 
   if (nextCode !== code) {
     node.parameters.jsCode = nextCode;

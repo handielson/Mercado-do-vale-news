@@ -75,5 +75,8 @@ assert.match(patch, /periodGreeting/, 'post-list media replies must be able to s
 assert.match(patch, /No link tem mais fotos, video e as caracteristicas dele/, 'photo replies must include product link for complete media and characteristics');
 assert.match(patch, /slice\(0, 3\)/, 'photo replies should send a small WhatsApp preview instead of flooding all media');
 assert.match(patch, /nextCode = nextCode\.replace\([\s\S]*titleCase\(item\.color\)[\s\S]*,\s*''\s*\)/, 'photo replies must remove the standalone color text because the caption already includes it');
+assert.match(patch, /buildAllPhotoMessages/, 'photo requests for multi-color products must send previews instead of asking color first');
+assert.match(patch, /if \(!variant && \(wantsPhoto \|\| wantsPhotoFromAI\)\)/, 'photo intent must bypass the color-question branch when no color was chosen');
+assert.match(patch, /Gostou de alguma dessas cores\? Posso separar para voce/, 'multi-color photo preview must continue the sale after showing variations');
 
 console.log('n8n admin client control static checks passed');
