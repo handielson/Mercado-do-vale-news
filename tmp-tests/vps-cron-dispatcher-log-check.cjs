@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const { readLegacyVpsConst: readConst } = require('./vps-ssh-config.cjs');
+const { getVpsSshConfig } = require('./vps-ssh-config.cjs');
 
 const WRAPPER = '/var/www/mdv-api/cron/cron-dispatcher.sh';
 const LOG_PATH = '/var/log/mdv-cron-dispatcher.log';
@@ -42,13 +42,7 @@ async function main() {
     conn
       .on('ready', resolve)
       .on('error', reject)
-      .connect({
-        host: readConst('VpsHost'),
-        port: 22,
-        username: readConst('VpsUser'),
-        password: readConst('VpsPass'),
-        readyTimeout: 15000,
-      });
+      .connect({ ...getVpsSshConfig(), readyTimeout: 15000 });
   });
 
   const command = `

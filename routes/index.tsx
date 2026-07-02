@@ -77,6 +77,7 @@ const WhatsAppPage = lazy(() => import('../pages/admin/settings/WhatsAppPage'));
 const WhatsAppMessagesPage = lazy(() => import('../pages/admin/whatsapp/MessagesPage'));
 const WhatsAppAiMemoryPage = lazy(() => import('../pages/admin/whatsapp/AiMemoryPage'));
 const AiSandboxPage = lazy(() => import('../pages/admin/whatsapp/AiSandboxPage'));
+const NovoBotPage = lazy(() => import('../pages/admin/whatsapp/NovoBotPage'));
 const N8nChatPage = lazy(() => import('../pages/admin/n8n/N8nChatPage'));
 const PaymentIntegrationsPage = lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
 const DisplaysPage = lazy(() => import('../pages/admin/settings/DisplaysPage'));
@@ -640,6 +641,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><AiSandboxPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/whatsapp/novo-bot",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><NovoBotPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

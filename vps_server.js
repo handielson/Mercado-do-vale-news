@@ -1906,6 +1906,92 @@ function normalizeDeliveryWhatsAppNumber(value) {
   return digits;
 }
 
+function normalizeN8nBotClientIdentity(input = {}) {
+  const rawRemoteJid = String(input.remoteJid || input.remote_jid || '').trim();
+  const rawPhone = String(input.phone || input.number || '').trim();
+  const raw = rawRemoteJid || rawPhone;
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return null;
+  const phone = digits.startsWith('55') ? digits : ((digits.length === 10 || digits.length === 11) ? `55${digits}` : digits);
+  return {
+    phone,
+    remoteJid: raw.includes('@s.whatsapp.net') ? raw : `${phone}@s.whatsapp.net`,
+  };
+}
+
+function buildN8nBotMemorySessionKey(remoteJid, resetCount) {
+  const count = Number(resetCount || 0);
+  return count > 0 ? `${remoteJid}:r${count}` : remoteJid;
+}
+
+function mapN8nBotControlRow(row, identity) {
+  const resetCount = Number(row?.reset_count || 0);
+  const remoteJid = row?.remote_jid || identity?.remoteJid || '';
+  const phone = row?.phone || identity?.phone || '';
+  const resetPending = Boolean(
+    row?.reset_requested_at &&
+    (!row?.reset_consumed_at || new Date(row.reset_requested_at).getTime() > new Date(row.reset_consumed_at).getTime())
+  );
+  return {
+    control: {
+      id: row?.id || null,
+      remote_jid: remoteJid,
+      phone,
+      blocked: Number(row?.blocked || 0) === 1,
+      block_reason: row?.block_reason || null,
+      blocked_at: row?.blocked_at || null,
+      blocked_by: row?.blocked_by || null,
+      reset_requested_at: row?.reset_requested_at || null,
+      reset_consumed_at: row?.reset_consumed_at || null,
+      reset_count: resetCount,
+      last_seen_at: row?.last_seen_at || null,
+      updated_at: row?.updated_at || null,
+    },
+    memorySessionKey: remoteJid ? buildN8nBotMemorySessionKey(remoteJid, resetCount) : '',
+    resetPending,
+  };
+}
+
+async function getN8nBotClientControl(identity) {
+  const [rows] = await pool.query(
+    'SELECT * FROM n8n_bot_client_controls WHERE remote_jid = ? LIMIT 1',
+    [identity.remoteJid]
+  );
+  return mapN8nBotControlRow(rows?.[0] || null, identity);
+}
+
+async function upsertN8nBotClientControl(identity, patch = {}) {
+  const id = patch.id || (crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID());
+  await pool.query(
+    `INSERT INTO n8n_bot_client_controls
+      (id, remote_jid, phone, blocked, block_reason, blocked_at, blocked_by, reset_requested_at, reset_count, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       phone = VALUES(phone),
+       blocked = VALUES(blocked),
+       block_reason = VALUES(block_reason),
+       blocked_at = VALUES(blocked_at),
+       blocked_by = VALUES(blocked_by),
+       reset_requested_at = COALESCE(VALUES(reset_requested_at), reset_requested_at),
+       reset_count = GREATEST(reset_count, VALUES(reset_count)),
+       last_seen_at = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      id,
+      identity.remoteJid,
+      identity.phone,
+      patch.blocked == null ? 0 : (patch.blocked ? 1 : 0),
+      patch.block_reason || null,
+      patch.blocked_at || null,
+      patch.blocked_by || null,
+      patch.reset_requested_at || null,
+      Number(patch.reset_count || 0),
+    ]
+  );
+  return getN8nBotClientControl(identity);
+}
+
 async function logCustomerDeliveryJobEvent(jobId, level, eventType, message, details = null) {
   if (!jobId) return;
   try {
@@ -21884,6 +21970,66 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
 fastify.post('/whatsapp/automation/test-send', { preHandler: requireSyncKey }, async (req) => {
   return sendWhatsAppAutomationTemplateTestVps(req.body || {});
 });
+fastify.get('/n8n-bot/client-control', { preHandler: requireSyncKey }, async (req, reply) => {
+  const identity = normalizeN8nBotClientIdentity(req.query || {});
+  if (!identity) {
+    const [rows] = await pool.query(
+      'SELECT * FROM n8n_bot_client_controls ORDER BY updated_at DESC LIMIT 50'
+    );
+    return { rows };
+  }
+  return getN8nBotClientControl(identity);
+});
+
+fastify.post('/n8n-bot/client-control/block', { preHandler: requireSyncKey }, async (req, reply) => {
+  const identity = normalizeN8nBotClientIdentity(req.body || {});
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  const blocked = req.body?.blocked !== false;
+  const [existingRows] = await pool.query(
+    'SELECT reset_count FROM n8n_bot_client_controls WHERE remote_jid = ? LIMIT 1',
+    [identity.remoteJid]
+  );
+  return upsertN8nBotClientControl(identity, {
+    blocked,
+    block_reason: blocked ? String(req.body?.reason || '').slice(0, 500) : null,
+    blocked_at: blocked ? new Date() : null,
+    blocked_by: String(req.body?.blockedBy || 'admin').slice(0, 120),
+    reset_count: Number(existingRows?.[0]?.reset_count || 0),
+  });
+});
+
+fastify.post('/n8n-bot/client-control/reset', { preHandler: requireSyncKey }, async (req, reply) => {
+  const identity = normalizeN8nBotClientIdentity(req.body || {});
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  const [existingRows] = await pool.query(
+    'SELECT blocked, block_reason, blocked_at, blocked_by, reset_count FROM n8n_bot_client_controls WHERE remote_jid = ? LIMIT 1',
+    [identity.remoteJid]
+  );
+  const existing = existingRows?.[0] || {};
+  return upsertN8nBotClientControl(identity, {
+    blocked: Number(existing.blocked || 0) === 1,
+    block_reason: existing.block_reason || null,
+    blocked_at: existing.blocked_at || null,
+    blocked_by: existing.blocked_by || String(req.body?.blockedBy || 'admin').slice(0, 120),
+    reset_requested_at: new Date(),
+    reset_count: Number(existing.reset_count || 0) + 1,
+  });
+});
+
+fastify.post('/n8n-bot/client-control/consume-reset', { preHandler: requireSyncKey }, async (req, reply) => {
+  const identity = normalizeN8nBotClientIdentity(req.body || {});
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  await pool.query(
+    `UPDATE n8n_bot_client_controls
+        SET reset_consumed_at = CURRENT_TIMESTAMP,
+            last_seen_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE remote_jid = ?`,
+    [identity.remoteJid]
+  );
+  return getN8nBotClientControl(identity);
+});
+
 fastify.post('/whatsapp/automation/customer-registered', { preHandler: requireSyncKey }, async (req, reply) => {
   const customerId = String(req.body?.customer_id || '').trim();
   if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
@@ -26622,7 +26768,33 @@ async function runMigrations() {
       INDEX idx_whatsapp_automation_logs_status (status),
       INDEX idx_whatsapp_automation_logs_created (created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);  await pool.query(`
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS n8n_bot_client_controls (
+      id CHAR(36) PRIMARY KEY,
+      remote_jid VARCHAR(120) NOT NULL,
+      phone VARCHAR(32) NOT NULL,
+      blocked TINYINT(1) NOT NULL DEFAULT 0,
+      block_reason TEXT NULL,
+      blocked_at DATETIME NULL,
+      blocked_by VARCHAR(120) NULL,
+      reset_requested_at DATETIME NULL,
+      reset_consumed_at DATETIME NULL,
+      reset_count INT NOT NULL DEFAULT 0,
+      last_seen_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_n8n_bot_client_controls_remote_jid (remote_jid),
+      INDEX idx_n8n_bot_client_controls_phone (phone),
+      INDEX idx_n8n_bot_client_controls_blocked (blocked),
+      INDEX idx_n8n_bot_client_controls_updated (updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('n8n_bot_client_controls', 'reset_count', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('n8n_bot_client_controls', 'last_seen_at', 'DATETIME NULL');
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_delivery_job_logs (
       id CHAR(36) PRIMARY KEY,
       job_id CHAR(36) NOT NULL,

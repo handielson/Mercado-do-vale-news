@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.3-shopee-fabricante-search
-date: 2026-07-01
+version: v1.2.4-novo-bot-controle
+date: 2026-07-02
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260701-182356-v123-shopee-fabricante-search
+release_vps: /var/www/mdv-site/releases/20260702-143952-v124-novo-bot-controle
 branch: main
-summary: Corrige a busca e selecao de Fabricante em atributos pesquisaveis da Shopee.
+summary: Adiciona controle administrativo do novo bot n8n com reset de conversa e bloqueio de fluxo por cliente.
 ```
