@@ -40,5 +40,11 @@ assert.match(patch, /SYNC_SECRET/, 'n8n patch must provide sync secret to workfl
 assert.match(patch, /delete staticData\.salesPostList\[remoteJid\]/, 'n8n reset must clear post-list state');
 assert.match(patch, /Controle Bot - Registrar Saida/, 'n8n patch must add outbound message logger');
 assert.match(patch, /\/n8n-bot\/messages\/log/, 'n8n patch must log messages to VPS');
+assert.match(patch, /fetchWithRetry/, 'n8n log/control calls must retry transient API failures');
+assert.match(patch, /patchTransientHttpNode/, 'n8n patch must make transient HTTP nodes resilient');
+assert.match(patch, /Vendas - Buscar Taxas/, 'n8n patch must protect payment fees lookup');
+assert.match(patch, /Vendas - Buscar Produtos/, 'n8n patch must protect product lookup');
+assert.match(patch, /continueRegularOutput/, 'n8n HTTP failures must not abort the sales flow');
+assert.match(patch, /maxTries = 3/, 'n8n transient HTTP nodes must retry before continuing');
 
 console.log('n8n admin client control static checks passed');

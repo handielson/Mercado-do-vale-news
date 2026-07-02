@@ -77,11 +77,30 @@ if (!syncKey) {
   return [{ json: baseOutput }];
 }
 
+async function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url, options = {}, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) return response;
+      lastError = new Error('HTTP ' + response.status);
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts) await wait(350 * attempt);
+  }
+  throw lastError || new Error('Request failed');
+}
+
 let payload = null;
 try {
   const inboundText = String(source.conversation || source.text || source.message || '').trim();
   if (inboundText) {
-    await fetch('${MDV_API_URL}/n8n-bot/messages/log', {
+    await fetchWithRetry('${MDV_API_URL}/n8n-bot/messages/log', {
       method: 'POST',
       headers: {
         'x-sync-key': syncKey,
@@ -100,10 +119,10 @@ try {
 } catch (error) {}
 
 try {
-  const response = await fetch('${MDV_API_URL}/n8n-bot/client-control?remoteJid=' + encodeURIComponent(remoteJid), {
+  const response = await fetchWithRetry('${MDV_API_URL}/n8n-bot/client-control?remoteJid=' + encodeURIComponent(remoteJid), {
     headers: { 'x-sync-key': syncKey },
   });
-  if (response.ok) payload = await response.json();
+  payload = await response.json();
 } catch (error) {
   payload = null;
 }
@@ -125,7 +144,7 @@ if (payload.resetPending) {
   delete staticData.salesPostList[remoteJid];
   output.n8nBotResetApplied = true;
   try {
-    await fetch('${MDV_API_URL}/n8n-bot/client-control/consume-reset', {
+    await fetchWithRetry('${MDV_API_URL}/n8n-bot/client-control/consume-reset', {
       method: 'POST',
       headers: {
         'x-sync-key': syncKey,
@@ -141,6 +160,25 @@ return [{ json: output }];`;
 const outboundLoggerCode = `const syncKey = $env.SYNC_SECRET || '';
 if (!syncKey) return $input.all();
 
+async function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url, options = {}, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) return response;
+      lastError = new Error('HTTP ' + response.status);
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts) await wait(350 * attempt);
+  }
+  throw lastError || new Error('Request failed');
+}
+
 const items = $input.all();
 for (const item of items) {
   const data = item.json || {};
@@ -148,7 +186,7 @@ for (const item of items) {
   const text = String(data.message || data.text || data.output || '').trim();
   if (!remoteJid || !text) continue;
   try {
-    await fetch('${MDV_API_URL}/n8n-bot/messages/log', {
+    await fetchWithRetry('${MDV_API_URL}/n8n-bot/messages/log', {
       method: 'POST',
       headers: {
         'x-sync-key': syncKey,
@@ -217,6 +255,14 @@ function patchMemoryNode(node) {
   node.parameters.sessionKey = "={{ $('Controle Bot - Verificar Cliente').first().json.memorySessionKey || $('switc Mensagens').first().json.remoteJid }}";
 }
 
+function patchTransientHttpNode(node) {
+  node.onError = 'continueRegularOutput';
+  node.continueOnFail = true;
+  node.retryOnFail = true;
+  node.maxTries = 3;
+  node.waitBetweenTries = 2000;
+}
+
 function patchGraph(nodes, connections) {
   upsertNode(nodes, {
     id: 'n8n-admin-client-control-001',
@@ -241,6 +287,9 @@ function patchGraph(nodes, connections) {
   for (const node of nodes) {
     if (node.name === 'Memoria de contexto postggress' || node.name === 'Memoria Vendas') {
       patchMemoryNode(node);
+    }
+    if (node.name === 'Vendas - Buscar Taxas' || node.name === 'Vendas - Buscar Produtos') {
+      patchTransientHttpNode(node);
     }
   }
 
@@ -338,6 +387,16 @@ COPY (
     'controlBlockedTarget', connections::jsonb #> '{"Controle Bot - Bloqueado?",main,0}',
     'controlContinueTarget', connections::jsonb #> '{"Controle Bot - Bloqueado?",main,1,0,node}',
     'outboundLoggerTarget', connections::jsonb #> '{"Dividir mensagens",main,0,0,node}',
+    'transientHttpNodes', (
+      SELECT json_agg(json_build_object(
+        'name', node->>'name',
+        'onError', node->>'onError',
+        'retryOnFail', node->>'retryOnFail',
+        'maxTries', node->>'maxTries'
+      ))
+      FROM jsonb_array_elements(nodes::jsonb) AS node
+      WHERE node->>'name' IN ('Vendas - Buscar Taxas', 'Vendas - Buscar Produtos')
+    ),
     'memoryNodes', (
       SELECT json_agg(node->>'name')
       FROM jsonb_array_elements(nodes::jsonb) AS node
