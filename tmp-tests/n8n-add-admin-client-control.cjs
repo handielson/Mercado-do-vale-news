@@ -33,6 +33,23 @@ async function psql(conn, dbContainer, sql) {
   return runRemote(conn, `docker exec -i ${shQuote(dbContainer)} psql -U postgres -d n8n -X -q -t -A <<'SQL'\n${sql}\nSQL`);
 }
 
+async function psqlFile(conn, dbContainer, sql) {
+  return new Promise((resolve, reject) => {
+    conn.exec(`docker exec -i ${shQuote(dbContainer)} psql -U postgres -d n8n -X -q -t -A`, (err, stream) => {
+      if (err) return reject(err);
+      let stdout = '';
+      let stderr = '';
+      stream.on('close', (code) => {
+        if (code === 0) resolve(stdout);
+        else reject(new Error(stderr || stdout || `Remote psql failed: ${code}`));
+      });
+      stream.on('data', (chunk) => { stdout += chunk; });
+      stream.stderr.on('data', (chunk) => { stderr += chunk; });
+      stream.end(sql);
+    });
+  });
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -307,12 +324,22 @@ function patchGraph(nodes, connections) {
   };
 
   if (connections['Dividir mensagens']?.main?.[0]) {
+    const hasImageRouter = nodes.some((node) => node.name === 'Enviar WhatsApp - Tipo imagem?');
+    const sendAfterLogger = hasImageRouter ? 'Enviar WhatsApp - Tipo imagem?' : 'Enviar WhatsApp';
     connections['Dividir mensagens'] = {
       main: [[{ node: 'Controle Bot - Registrar Saida', type: 'main', index: 0 }]],
     };
     connections['Controle Bot - Registrar Saida'] = {
-      main: [[{ node: 'Enviar WhatsApp', type: 'main', index: 0 }]],
+      main: [[{ node: sendAfterLogger, type: 'main', index: 0 }]],
     };
+    if (hasImageRouter) {
+      connections['Enviar WhatsApp - Tipo imagem?'] = {
+        main: [
+          [{ node: 'Enviar WhatsApp - Imagem', type: 'main', index: 0 }],
+          [{ node: 'Enviar WhatsApp', type: 'main', index: 0 }],
+        ],
+      };
+    }
   }
 }
 
@@ -387,6 +414,9 @@ COPY (
     'controlBlockedTarget', connections::jsonb #> '{"Controle Bot - Bloqueado?",main,0}',
     'controlContinueTarget', connections::jsonb #> '{"Controle Bot - Bloqueado?",main,1,0,node}',
     'outboundLoggerTarget', connections::jsonb #> '{"Dividir mensagens",main,0,0,node}',
+    'outboundAfterLoggerTarget', connections::jsonb #> '{"Controle Bot - Registrar Saida",main,0,0,node}',
+    'imageTrueTarget', connections::jsonb #> '{"Enviar WhatsApp - Tipo imagem?",main,0,0,node}',
+    'imageFalseTarget', connections::jsonb #> '{"Enviar WhatsApp - Tipo imagem?",main,1,0,node}',
     'transientHttpNodes', (
       SELECT json_agg(json_build_object(
         'name', node->>'name',
@@ -407,7 +437,7 @@ COPY (
   WHERE id = ${shQuote(WORKFLOW_ID)}
 ) TO STDOUT;
 `;
-    const result = await psql(conn, dbContainer, updateSql);
+    const result = await psqlFile(conn, dbContainer, updateSql);
 
     await runRemote(conn, 'docker service scale n8n_n8n=1 >/dev/null');
     await waitServiceReplicas(conn, 'n8n_n8n', 1);

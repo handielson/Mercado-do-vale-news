@@ -46,5 +46,9 @@ assert.match(patch, /Vendas - Buscar Taxas/, 'n8n patch must protect payment fee
 assert.match(patch, /Vendas - Buscar Produtos/, 'n8n patch must protect product lookup');
 assert.match(patch, /continueRegularOutput/, 'n8n HTTP failures must not abort the sales flow');
 assert.match(patch, /maxTries = 3/, 'n8n transient HTTP nodes must retry before continuing');
+assert.match(patch, /Enviar WhatsApp - Tipo imagem\?/, 'outbound logger must preserve the image/text router');
+assert.match(patch, /Enviar WhatsApp - Imagem/, 'image messages must route to the media send node');
+assert.match(patch, /imageTrueTarget/, 'patch result must report image true routing');
+assert.match(patch, /imageFalseTarget/, 'patch result must report image false routing');
 
 console.log('n8n admin client control static checks passed');
