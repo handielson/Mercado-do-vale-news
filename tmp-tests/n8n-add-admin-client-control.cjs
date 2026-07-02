@@ -76,7 +76,6 @@ async function readJson(conn, dbContainer, sql) {
 
 const clientControlCode = `const source = $json;
 const remoteJid = String(source.remoteJid || '');
-const staticData = $getWorkflowStaticData('global');
 const baseOutput = {
   ...source,
   n8nBotBlocked: false,
@@ -89,60 +88,19 @@ if (!remoteJid) {
   return [{ json: baseOutput }];
 }
 
-const syncKey = $env.SYNC_SECRET || '';
-if (!syncKey) {
-  return [{ json: baseOutput }];
-}
+return [{ json: baseOutput }];`;
 
-async function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function fetchWithRetry(url, options = {}, attempts = 3) {
-  let lastError = null;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetch(url, options);
-      if (response.ok) return response;
-      lastError = new Error('HTTP ' + response.status);
-    } catch (error) {
-      lastError = error;
-    }
-    if (attempt < attempts) await wait(350 * attempt);
-  }
-  throw lastError || new Error('Request failed');
-}
-
-let payload = null;
-try {
-  const inboundText = String(source.conversation || source.text || source.message || '').trim();
-  if (inboundText) {
-    await fetchWithRetry('${MDV_API_URL}/n8n-bot/messages/log', {
-      method: 'POST',
-      headers: {
-        'x-sync-key': syncKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        remoteJid,
-        direction: 'inbound',
-        message: inboundText,
-        messageType: source.messageType || 'text',
-        sourceNode: 'Controle Bot - Verificar Cliente',
-        waMessageId: source.messageId || source.id || source.key?.id || '',
-      }),
-    });
-  }
-} catch (error) {}
-
-try {
-  const response = await fetchWithRetry('${MDV_API_URL}/n8n-bot/client-control?remoteJid=' + encodeURIComponent(remoteJid), {
-    headers: { 'x-sync-key': syncKey },
-  });
-  payload = await response.json();
-} catch (error) {
-  payload = null;
-}
+const applyClientControlCode = `const source = $('Controle Bot - Verificar Cliente').first().json || {};
+const payload = $json || {};
+const remoteJid = String(source.remoteJid || '');
+const staticData = $getWorkflowStaticData('global');
+const baseOutput = {
+  ...source,
+  n8nBotBlocked: false,
+  n8nBotResetApplied: false,
+  n8nBotControl: null,
+  memorySessionKey: remoteJid,
+};
 
 if (!payload || !payload.control) {
   return [{ json: baseOutput }];
@@ -160,71 +118,13 @@ if (payload.resetPending) {
   staticData.salesPostList = staticData.salesPostList || {};
   delete staticData.salesPostList[remoteJid];
   output.n8nBotResetApplied = true;
-  try {
-    await fetchWithRetry('${MDV_API_URL}/n8n-bot/client-control/consume-reset', {
-      method: 'POST',
-      headers: {
-        'x-sync-key': syncKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ remoteJid }),
-    });
-  } catch (error) {}
 }
 
 return [{ json: output }];`;
 
-const outboundLoggerCode = `const syncKey = $env.SYNC_SECRET || '';
-if (!syncKey) return $input.all();
+const restoreClientControlCode = `return [{ json: $('Controle Bot - Aplicar Controle').first().json }];`;
 
-async function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function fetchWithRetry(url, options = {}, attempts = 3) {
-  let lastError = null;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetch(url, options);
-      if (response.ok) return response;
-      lastError = new Error('HTTP ' + response.status);
-    } catch (error) {
-      lastError = error;
-    }
-    if (attempt < attempts) await wait(350 * attempt);
-  }
-  throw lastError || new Error('Request failed');
-}
-
-const items = $input.all();
-for (const item of items) {
-  const data = item.json || {};
-  const remoteJid = String(data.remoteJid || $('Controle Bot - Verificar Cliente').first().json.remoteJid || '');
-  const text = String(data.message || data.text || data.output || '').trim();
-  if (!remoteJid || !text) continue;
-  try {
-    await fetchWithRetry('${MDV_API_URL}/n8n-bot/messages/log', {
-      method: 'POST',
-      headers: {
-        'x-sync-key': syncKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        remoteJid,
-        direction: 'outbound',
-        message: text,
-        messageType: 'text',
-        sourceNode: 'Controle Bot - Registrar Saida',
-        payload: {
-          messageIndex: data.messageIndex || null,
-          totalMessages: data.totalMessages || null,
-        },
-      }),
-    });
-  } catch (error) {}
-}
-
-return items;`;
+const restoreOutboundCode = `return $('Dividir mensagens').all();`;
 
 function makeIfNode() {
   return {
@@ -280,6 +180,91 @@ function patchTransientHttpNode(node) {
   node.waitBetweenTries = 2000;
 }
 
+function patchPostListPhotoFallback(node) {
+  const code = String(node?.parameters?.jsCode || '');
+  const oldBlock = `if (!activeState || !Array.isArray(activeState.options) || activeState.options.length === 0) {
+  return buildContinueItem();
+}`;
+  const newBlock = `if (!activeState || !Array.isArray(activeState.options) || activeState.options.length === 0) {
+  if (wantsPhoto) {
+    return [{
+      json: {
+        ...source,
+        salesPostListHandled: true,
+        output: 'Consigo te mandar a foto sim 😊 Me confirma o numero do item ou o modelo que voce quer ver?',
+      },
+    }];
+  }
+  return buildContinueItem();
+}`;
+  if (code.includes(oldBlock) && !code.includes('Me confirma o numero do item ou o modelo')) {
+    node.parameters.jsCode = code.replace(oldBlock, newBlock);
+  }
+}
+
+function makeHttpNode({ id, name, position, method = 'GET', url, bodyParameters = [] }) {
+  const node = {
+    id,
+    name,
+    type: 'n8n-nodes-base.httpRequest',
+    typeVersion: 4.2,
+    position,
+    onError: 'continueRegularOutput',
+    continueOnFail: true,
+    retryOnFail: true,
+    maxTries: 3,
+    waitBetweenTries: 1500,
+    parameters: {
+      method,
+      url,
+      options: {},
+      sendHeaders: true,
+      headerParameters: {
+        parameters: [{ name: 'x-sync-key', value: '={{$env.SYNC_SECRET}}' }],
+      },
+    },
+  };
+  if (method !== 'GET') {
+    node.parameters.sendBody = true;
+    node.parameters.bodyParameters = { parameters: bodyParameters };
+  }
+  return node;
+}
+
+function makeResetPendingIfNode() {
+  return {
+    id: 'n8n-admin-control-reset-if-001',
+    name: 'Controle Bot - Reset pendente?',
+    type: 'n8n-nodes-base.if',
+    typeVersion: 2.2,
+    position: [816, 80],
+    parameters: {
+      conditions: {
+        options: {
+          caseSensitive: true,
+          leftValue: '',
+          typeValidation: 'strict',
+          version: 2,
+        },
+        conditions: [
+          {
+            id: 'n8n-admin-control-reset-condition',
+            leftValue: '={{$json.n8nBotResetApplied}}',
+            rightValue: true,
+            operator: {
+              type: 'boolean',
+              operation: 'true',
+              singleValue: true,
+            },
+          },
+        ],
+        combinator: 'and',
+      },
+      options: {},
+    },
+  };
+}
+
 function patchGraph(nodes, connections) {
   upsertNode(nodes, {
     id: 'n8n-admin-client-control-001',
@@ -290,15 +275,86 @@ function patchGraph(nodes, connections) {
     parameters: { jsCode: clientControlCode },
   });
 
-  upsertNode(nodes, makeIfNode());
+  upsertNode(nodes, makeHttpNode({
+    id: 'n8n-admin-client-inbound-log-001',
+    name: 'Controle Bot - Registrar Entrada',
+    position: [528, -112],
+    method: 'POST',
+    url: `${MDV_API_URL}/n8n-bot/messages/log`,
+    bodyParameters: [
+      { name: 'remoteJid', value: "={{ $('Controle Bot - Verificar Cliente').first().json.remoteJid }}" },
+      { name: 'direction', value: 'inbound' },
+      { name: 'message', value: "={{ $('Controle Bot - Verificar Cliente').first().json.conversation || $('Controle Bot - Verificar Cliente').first().json.text || $('Controle Bot - Verificar Cliente').first().json.message || '' }}" },
+      { name: 'messageType', value: "={{ $('Controle Bot - Verificar Cliente').first().json.messageType || 'text' }}" },
+      { name: 'sourceNode', value: 'Controle Bot - Registrar Entrada' },
+      { name: 'waMessageId', value: "={{ $('Controle Bot - Verificar Cliente').first().json.messageId || $('Controle Bot - Verificar Cliente').first().json.id || $('Controle Bot - Verificar Cliente').first().json.key?.id || '' }}" },
+    ],
+  }));
+
+  upsertNode(nodes, makeHttpNode({
+    id: 'n8n-admin-client-control-fetch-001',
+    name: 'Controle Bot - Buscar Controle',
+    position: [672, -112],
+    method: 'GET',
+    url: `={{'${MDV_API_URL}/n8n-bot/client-control?remoteJid=' + encodeURIComponent($('Controle Bot - Verificar Cliente').first().json.remoteJid)}}`,
+  }));
 
   upsertNode(nodes, {
-    id: 'n8n-admin-client-outbound-log-001',
-    name: 'Controle Bot - Registrar Saida',
+    id: 'n8n-admin-client-control-apply-001',
+    name: 'Controle Bot - Aplicar Controle',
     type: 'n8n-nodes-base.code',
     typeVersion: 2,
+    position: [816, -112],
+    parameters: { jsCode: applyClientControlCode },
+  });
+
+  upsertNode(nodes, makeResetPendingIfNode());
+
+  upsertNode(nodes, makeHttpNode({
+    id: 'n8n-admin-client-control-reset-consume-001',
+    name: 'Controle Bot - Consumir Reset',
+    position: [960, -208],
+    method: 'POST',
+    url: `${MDV_API_URL}/n8n-bot/client-control/consume-reset`,
+    bodyParameters: [
+      { name: 'remoteJid', value: "={{ $('Controle Bot - Aplicar Controle').first().json.remoteJid }}" },
+    ],
+  }));
+
+  upsertNode(nodes, {
+    id: 'n8n-admin-client-control-restore-001',
+    name: 'Controle Bot - Restaurar Controle',
+    type: 'n8n-nodes-base.code',
+    typeVersion: 2,
+    position: [1104, -208],
+    parameters: { jsCode: restoreClientControlCode },
+  });
+
+  upsertNode(nodes, makeIfNode());
+
+  upsertNode(nodes, makeHttpNode({
+    id: 'n8n-admin-client-outbound-log-001',
+    name: 'Controle Bot - Registrar Saida',
     position: [1472, 80],
-    parameters: { jsCode: outboundLoggerCode },
+    method: 'POST',
+    url: `${MDV_API_URL}/n8n-bot/messages/log`,
+    bodyParameters: [
+      { name: 'remoteJid', value: "={{$json.remoteJid || $('Controle Bot - Verificar Cliente').first().json.remoteJid}}" },
+      { name: 'direction', value: 'outbound' },
+      { name: 'message', value: '={{$json.message || $json.caption || $json.text || $json.output || ""}}' },
+      { name: 'messageType', value: '={{$json.messageType || "text"}}' },
+      { name: 'sourceNode', value: 'Controle Bot - Registrar Saida' },
+      { name: 'payload', value: '={{JSON.stringify({ messageIndex: $json.messageIndex || null, totalMessages: $json.totalMessages || null, mediaUrl: $json.mediaUrl || "" })}}' },
+    ],
+  }));
+
+  upsertNode(nodes, {
+    id: 'n8n-admin-client-outbound-restore-001',
+    name: 'Controle Bot - Restaurar Saida',
+    type: 'n8n-nodes-base.code',
+    typeVersion: 2,
+    position: [1600, 80],
+    parameters: { jsCode: restoreOutboundCode },
   });
 
   for (const node of nodes) {
@@ -308,12 +364,36 @@ function patchGraph(nodes, connections) {
     if (node.name === 'Vendas - Buscar Taxas' || node.name === 'Vendas - Buscar Produtos') {
       patchTransientHttpNode(node);
     }
+    if (node.name === 'Vendas - Verificar Pos Lista') {
+      patchPostListPhotoFallback(node);
+    }
   }
 
   connections['switc Mensagens'] = {
     main: [[{ node: 'Controle Bot - Verificar Cliente', type: 'main', index: 0 }]],
   };
   connections['Controle Bot - Verificar Cliente'] = {
+    main: [[{ node: 'Controle Bot - Registrar Entrada', type: 'main', index: 0 }]],
+  };
+  connections['Controle Bot - Registrar Entrada'] = {
+    main: [[{ node: 'Controle Bot - Buscar Controle', type: 'main', index: 0 }]],
+  };
+  connections['Controle Bot - Buscar Controle'] = {
+    main: [[{ node: 'Controle Bot - Aplicar Controle', type: 'main', index: 0 }]],
+  };
+  connections['Controle Bot - Aplicar Controle'] = {
+    main: [[{ node: 'Controle Bot - Reset pendente?', type: 'main', index: 0 }]],
+  };
+  connections['Controle Bot - Reset pendente?'] = {
+    main: [
+      [{ node: 'Controle Bot - Consumir Reset', type: 'main', index: 0 }],
+      [{ node: 'Controle Bot - Bloqueado?', type: 'main', index: 0 }],
+    ],
+  };
+  connections['Controle Bot - Consumir Reset'] = {
+    main: [[{ node: 'Controle Bot - Restaurar Controle', type: 'main', index: 0 }]],
+  };
+  connections['Controle Bot - Restaurar Controle'] = {
     main: [[{ node: 'Controle Bot - Bloqueado?', type: 'main', index: 0 }]],
   };
   connections['Controle Bot - Bloqueado?'] = {
@@ -330,6 +410,9 @@ function patchGraph(nodes, connections) {
       main: [[{ node: 'Controle Bot - Registrar Saida', type: 'main', index: 0 }]],
     };
     connections['Controle Bot - Registrar Saida'] = {
+      main: [[{ node: 'Controle Bot - Restaurar Saida', type: 'main', index: 0 }]],
+    };
+    connections['Controle Bot - Restaurar Saida'] = {
       main: [[{ node: sendAfterLogger, type: 'main', index: 0 }]],
     };
     if (hasImageRouter) {

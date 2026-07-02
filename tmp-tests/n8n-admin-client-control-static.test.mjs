@@ -38,9 +38,14 @@ assert.match(patch, /Controle Bot - Bloqueado\?/, 'n8n patch must add blocked IF
 assert.match(patch, /memorySessionKey/, 'n8n patch must use versioned memory session key');
 assert.match(patch, /SYNC_SECRET/, 'n8n patch must provide sync secret to workflow runtime');
 assert.match(patch, /delete staticData\.salesPostList\[remoteJid\]/, 'n8n reset must clear post-list state');
+assert.match(patch, /Controle Bot - Registrar Entrada/, 'n8n patch must add inbound message logger');
+assert.match(patch, /Controle Bot - Buscar Controle/, 'n8n patch must use HTTP node for client control lookup');
+assert.match(patch, /Controle Bot - Aplicar Controle/, 'n8n patch must restore source data after control lookup');
+assert.match(patch, /Controle Bot - Reset pendente\?/, 'n8n patch must consume admin resets after applying them');
 assert.match(patch, /Controle Bot - Registrar Saida/, 'n8n patch must add outbound message logger');
+assert.match(patch, /Controle Bot - Restaurar Saida/, 'n8n patch must restore outbound items after logging');
 assert.match(patch, /\/n8n-bot\/messages\/log/, 'n8n patch must log messages to VPS');
-assert.match(patch, /fetchWithRetry/, 'n8n log/control calls must retry transient API failures');
+assert.match(patch, /n8n-nodes-base\.httpRequest/, 'n8n log/control calls must use HTTP Request nodes');
 assert.match(patch, /patchTransientHttpNode/, 'n8n patch must make transient HTTP nodes resilient');
 assert.match(patch, /Vendas - Buscar Taxas/, 'n8n patch must protect payment fees lookup');
 assert.match(patch, /Vendas - Buscar Produtos/, 'n8n patch must protect product lookup');
@@ -50,5 +55,6 @@ assert.match(patch, /Enviar WhatsApp - Tipo imagem\?/, 'outbound logger must pre
 assert.match(patch, /Enviar WhatsApp - Imagem/, 'image messages must route to the media send node');
 assert.match(patch, /imageTrueTarget/, 'patch result must report image true routing');
 assert.match(patch, /imageFalseTarget/, 'patch result must report image false routing');
+assert.match(patch, /Me confirma o numero do item ou o modelo/, 'photo requests without active state must ask for selection instead of reopening the catalog');
 
 console.log('n8n admin client control static checks passed');
