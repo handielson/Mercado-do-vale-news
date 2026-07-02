@@ -56,5 +56,8 @@ assert.match(patch, /Enviar WhatsApp - Imagem/, 'image messages must route to th
 assert.match(patch, /imageTrueTarget/, 'patch result must report image true routing');
 assert.match(patch, /imageFalseTarget/, 'patch result must report image false routing');
 assert.match(patch, /Me confirma o numero do item ou o modelo/, 'photo requests without active state must ask for selection instead of reopening the catalog');
+assert.match(patch, /uniqueColorItems/, 'post-list color choices must dedupe repeated stock variations');
+assert.match(patch, /optionColorItems\.length === 1/, 'single unique color must be selected even when stock has duplicate rows');
+assert.match(patch, /optionColorItems\.find/, 'mentioned color must resolve against deduped color options');
 
 console.log('n8n admin client control static checks passed');

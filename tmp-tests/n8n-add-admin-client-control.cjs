@@ -182,6 +182,7 @@ function patchTransientHttpNode(node) {
 
 function patchPostListPhotoFallback(node) {
   const code = String(node?.parameters?.jsCode || '');
+  let nextCode = code;
   const oldBlock = `if (!activeState || !Array.isArray(activeState.options) || activeState.options.length === 0) {
   return buildContinueItem();
 }`;
@@ -197,8 +198,70 @@ function patchPostListPhotoFallback(node) {
   }
   return buildContinueItem();
 }`;
-  if (code.includes(oldBlock) && !code.includes('Me confirma o numero do item ou o modelo')) {
-    node.parameters.jsCode = code.replace(oldBlock, newBlock);
+  if (nextCode.includes(oldBlock) && !nextCode.includes('Me confirma o numero do item ou o modelo')) {
+    nextCode = nextCode.replace(oldBlock, newBlock);
+  }
+
+  const findMentionedColorBlock = `const findMentionedColor = (availableColors) => {
+  const normalizedColors = availableColors.map((color) => ({
+    raw: color,
+    key: normalize(colorAliases.get(normalize(color)) || color),
+  }));
+  const words = normalized.split(' ').filter(Boolean);
+  for (const word of words) {
+    const alias = colorAliases.get(word) || word;
+    const found = normalizedColors.find((color) => color.key === normalize(alias));
+    if (found) return found.raw;
+  }
+  for (const color of normalizedColors) {
+    if (normalized.includes(color.key)) return color.raw;
+  }
+  return '';
+};`;
+  const findMentionedColorWithDedupeBlock = `${findMentionedColorBlock}
+
+const uniqueColorItems = (items = []) => {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = normalize(item?.color);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};`;
+  if (nextCode.includes(findMentionedColorBlock) && !nextCode.includes('const uniqueColorItems =')) {
+    nextCode = nextCode.replace(findMentionedColorBlock, findMentionedColorWithDedupeBlock);
+  }
+
+  const oldColorsBlock = `const option = activeState.options.find((item) => Number(item.number) === selectedNumber);
+const allColors = option?.colors?.map((item) => item.color).filter(Boolean) || [];
+const mentionedColor = findMentionedColor(option ? allColors : activeState.options.flatMap((item) => item.colors || []).map((item) => item.color).filter(Boolean));`;
+  const newColorsBlock = `const option = activeState.options.find((item) => Number(item.number) === selectedNumber);
+const optionColorItems = uniqueColorItems(option?.colors || []);
+const allColors = optionColorItems.map((item) => item.color).filter(Boolean);
+const mentionedColor = findMentionedColor(option ? allColors : uniqueColorItems(activeState.options.flatMap((item) => item.colors || [])).map((item) => item.color).filter(Boolean));`;
+  if (nextCode.includes(oldColorsBlock)) {
+    nextCode = nextCode.replace(oldColorsBlock, newColorsBlock);
+  }
+
+  const oldSelectedVariantBlock = `const selectedVariant = mentionedColor
+  ? option.colors.find((item) => normalize(item.color) === normalize(mentionedColor))
+  : null;`;
+  const newSelectedVariantBlock = `const selectedVariant = mentionedColor
+  ? optionColorItems.find((item) => normalize(item.color) === normalize(mentionedColor))
+  : null;`;
+  if (nextCode.includes(oldSelectedVariantBlock)) {
+    nextCode = nextCode.replace(oldSelectedVariantBlock, newSelectedVariantBlock);
+  }
+
+  const oldVariantBlock = `const variant = selectedVariant || (option.colors.length === 1 ? option.colors[0] : null);`;
+  const newVariantBlock = `const variant = selectedVariant || (optionColorItems.length === 1 ? optionColorItems[0] : null);`;
+  if (nextCode.includes(oldVariantBlock)) {
+    nextCode = nextCode.replace(oldVariantBlock, newVariantBlock);
+  }
+
+  if (nextCode !== code) {
+    node.parameters.jsCode = nextCode;
   }
 }
 
