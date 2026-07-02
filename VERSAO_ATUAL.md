@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.19-shopee-variation-parent-title
-date: 2026-07-01
+version: v1.2.20-novo-bot-controle
+date: 2026-07-02
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260701-172833-v1219-shopee-variation-parent-title
+release_vps: /var/www/mdv-site/releases/20260702-143952-v1220-novo-bot-controle
 branch: main
-summary: Corrige titulo/SKU pai de variacoes Shopee e payload update_model.
+summary: Adiciona controle administrativo do novo bot n8n com reset de conversa e bloqueio de fluxo por cliente.
 ```
