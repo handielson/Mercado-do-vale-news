@@ -2038,6 +2038,83 @@ function normalizeN8nBotContactName(input = {}) {
   return name.slice(0, 160);
 }
 
+const N8N_BOT_EVOLUTION_INSTANCE_NAME = process.env.N8N_BOT_EVOLUTION_INSTANCE_NAME || 'botmercadodovale';
+const N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES = Math.max(5, Number(process.env.N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES || 20));
+const N8N_BOT_IDLE_CLOSE_AFTER_MINUTES = Math.max(
+  N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES + 5,
+  Number(process.env.N8N_BOT_IDLE_CLOSE_AFTER_MINUTES || 60)
+);
+const N8N_BOT_IDLE_FOLLOWUP_MESSAGE = String(
+  process.env.N8N_BOT_IDLE_FOLLOWUP_MESSAGE
+  || 'Oi! Ainda posso te ajudar a escolher seu produto? 😊\nSe quiser, me fala o modelo ou acessorio que voce esta procurando.'
+).trim();
+
+async function getN8nBotEvolutionSettings() {
+  let row = null;
+  try {
+    const [rows] = await pool.query('SELECT * FROM whatsapp_settings WHERE is_active = 1 ORDER BY updated_at DESC, created_at DESC LIMIT 1');
+    row = rows?.[0] || null;
+  } catch {
+    row = null;
+  }
+  return {
+    baseUrl: String(process.env.EVOLUTION_SERVER_URL || row?.api_url || EVOLUTION_BASE_URL).replace(/\/+$/, ''),
+    apiKey: String(process.env.EVOLUTION_API_KEY || row?.api_key || EVOLUTION_GLOBAL_API_KEY),
+    instanceName: String(process.env.N8N_BOT_EVOLUTION_INSTANCE_NAME || N8N_BOT_EVOLUTION_INSTANCE_NAME),
+  };
+}
+
+function buildN8nBotQuotedPayload(message = {}) {
+  const id = String(message.wa_message_id || message.replyToWaMessageId || '').trim();
+  const text = String(message.message_text || message.replyToText || '').trim();
+  if (!id || !text) return null;
+  return {
+    key: {
+      id,
+      remoteJid: message.remote_jid || message.remoteJid || undefined,
+      fromMe: false,
+    },
+    message: {
+      conversation: text,
+    },
+  };
+}
+
+async function sendN8nBotEvolutionTextMessage(identity, text, options = {}) {
+  const settings = await getN8nBotEvolutionSettings();
+  const payload = {
+    number: identity.phone,
+    text,
+  };
+  const quoted = buildN8nBotQuotedPayload(options.quoted || {});
+  if (quoted) payload.quoted = quoted;
+
+  const response = await fetch(`${settings.baseUrl}/message/sendText/${encodeURIComponent(settings.instanceName)}`, {
+    method: 'POST',
+    headers: {
+      apikey: settings.apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(20000),
+  });
+  const bodyText = await response.text();
+  let body = bodyText;
+  try { body = JSON.parse(bodyText); } catch {}
+  return { ok: response.ok, status: response.status, body, quoted: Boolean(quoted) };
+}
+
+async function logN8nBotInternalMessage(identity, text, sourceNode = 'admin') {
+  return insertN8nBotMessage({
+    remoteJid: identity.remoteJid,
+    phone: identity.phone,
+    direction: 'internal',
+    message: text,
+    messageType: 'system',
+    sourceNode,
+  });
+}
+
 async function insertN8nBotMessage(input = {}) {
   const identity = normalizeN8nBotClientIdentity(input);
   if (!identity) {
@@ -2081,11 +2158,15 @@ async function insertN8nBotMessage(input = {}) {
      ON DUPLICATE KEY UPDATE
        phone = VALUES(phone),
        last_seen_at = CURRENT_TIMESTAMP,
+       idle_followup_sent_at = IF(? = 'inbound', NULL, idle_followup_sent_at),
+       idle_closed_at = IF(? = 'inbound', NULL, idle_closed_at),
        updated_at = CURRENT_TIMESTAMP`,
     [
       crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID(),
       identity.remoteJid,
       identity.phone,
+      direction,
+      direction,
     ]
   );
   return { ok: true };
@@ -22167,6 +22248,186 @@ fastify.get('/n8n-bot/messages', { preHandler: requireSyncKey }, async (req, rep
   return { rows: rows.reverse() };
 });
 
+fastify.post('/n8n-bot/messages/manual', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const identity = normalizeN8nBotClientIdentity(body);
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  const text = String(body.message || body.text || '').trim();
+  if (!text) return reply.code(400).send({ error: 'message obrigatoria' });
+
+  let quotedSource = null;
+  const replyToMessageId = Number(body.replyToMessageId || body.reply_to_message_id || 0);
+  if (replyToMessageId > 0) {
+    const [rows] = await pool.query(
+      `SELECT id, remote_jid, message_text, wa_message_id
+       FROM n8n_bot_messages
+       WHERE id = ? AND remote_jid = ? AND direction = 'inbound'
+       LIMIT 1`,
+      [replyToMessageId, identity.remoteJid]
+    );
+    quotedSource = rows?.[0] || null;
+  }
+  if (!quotedSource && String(body.replyToWaMessageId || body.reply_to_wa_message_id || '').trim()) {
+    quotedSource = {
+      remote_jid: identity.remoteJid,
+      wa_message_id: String(body.replyToWaMessageId || body.reply_to_wa_message_id || '').trim(),
+      message_text: String(body.replyToText || body.reply_to_text || '').trim(),
+    };
+  }
+
+  const evolutionResult = await sendN8nBotEvolutionTextMessage(identity, text, { quoted: quotedSource });
+  if (!evolutionResult.ok || evolutionResult.body?.error === true) {
+    return reply.code(502).send({
+      error: true,
+      message: formatEvolutionMessage(evolutionResult.body?.message || evolutionResult.body?.response || evolutionResult.body) || 'Evolution API failed to send the WhatsApp message.',
+      evolutionStatus: evolutionResult.status,
+      evolution: evolutionResult.body,
+    });
+  }
+
+  const waMessageId = String(evolutionResult.body?.key?.id || evolutionResult.body?.messageId || '').slice(0, 160) || null;
+  await insertN8nBotMessage({
+    remoteJid: identity.remoteJid,
+    phone: identity.phone,
+    direction: 'outbound',
+    message: text,
+    messageType: 'text',
+    sourceNode: 'admin-manual',
+    waMessageId,
+    payload: {
+      manual: true,
+      quoted: evolutionResult.quoted,
+      replyToMessageId: quotedSource?.id || null,
+      replyToWaMessageId: quotedSource?.wa_message_id || null,
+    },
+  });
+
+  const pauseBot = body.pauseBot !== false && body.pause_bot !== false;
+  if (pauseBot) {
+    await upsertN8nBotClientControl(identity, {
+      blocked: true,
+      block_reason: 'Atendimento manual assumido',
+      blocked_at: new Date(),
+      blocked_by: 'admin-manual',
+    });
+  }
+
+  return {
+    ok: true,
+    remoteJid: identity.remoteJid,
+    phone: identity.phone,
+    message: text,
+    quoted: evolutionResult.quoted,
+    paused: pauseBot,
+    evolution: evolutionResult.body,
+  };
+});
+
+async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
+  const maxRows = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const [followupRows] = await pool.query(
+    `SELECT latest.remote_jid, latest.phone, latest.created_at AS last_message_at, latest.direction AS last_direction
+     FROM (
+       SELECT msg.remote_jid, MAX(msg.id) AS last_id
+       FROM n8n_bot_messages msg
+       GROUP BY msg.remote_jid
+     ) agg
+     JOIN n8n_bot_messages latest ON latest.id = agg.last_id
+     LEFT JOIN n8n_bot_client_controls controls ON controls.remote_jid = latest.remote_jid
+     WHERE latest.direction = 'inbound'
+       AND latest.created_at <= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+       AND (controls.blocked IS NULL OR controls.blocked = 0)
+       AND (controls.idle_followup_sent_at IS NULL OR controls.idle_followup_sent_at < latest.created_at)
+       AND (controls.idle_closed_at IS NULL OR controls.idle_closed_at < latest.created_at)
+     ORDER BY latest.created_at ASC
+     LIMIT ?`,
+    [N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES, maxRows]
+  );
+
+  const sent = [];
+  for (const row of followupRows) {
+    const identity = normalizeN8nBotClientIdentity(row);
+    if (!identity) continue;
+    if (!dryRun) {
+      const result = await sendN8nBotEvolutionTextMessage(identity, N8N_BOT_IDLE_FOLLOWUP_MESSAGE);
+      if (!result.ok || result.body?.error === true) {
+        await logN8nBotInternalMessage(identity, `Falha no lembrete de inatividade: ${formatEvolutionMessage(result.body?.message || result.body?.response || result.body) || result.status}`, 'idle-followup');
+        continue;
+      }
+      await insertN8nBotMessage({
+        remoteJid: identity.remoteJid,
+        phone: identity.phone,
+        direction: 'outbound',
+        message: N8N_BOT_IDLE_FOLLOWUP_MESSAGE,
+        messageType: 'text',
+        sourceNode: 'idle-followup',
+        waMessageId: String(result.body?.key?.id || result.body?.messageId || '').slice(0, 160) || null,
+      });
+      await pool.query(
+        `UPDATE n8n_bot_client_controls
+         SET idle_followup_sent_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE remote_jid = ?`,
+        [identity.remoteJid]
+      );
+    }
+    sent.push(identity.remoteJid);
+  }
+
+  const [closeRows] = await pool.query(
+    `SELECT latest.remote_jid, latest.phone
+     FROM (
+       SELECT msg.remote_jid, MAX(msg.id) AS last_id
+       FROM n8n_bot_messages msg
+       GROUP BY msg.remote_jid
+     ) agg
+     JOIN n8n_bot_messages latest ON latest.id = agg.last_id
+     JOIN n8n_bot_client_controls controls ON controls.remote_jid = latest.remote_jid
+     WHERE latest.direction = 'outbound'
+       AND latest.source_node = 'idle-followup'
+       AND latest.created_at <= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+       AND (controls.blocked IS NULL OR controls.blocked = 0)
+       AND controls.idle_followup_sent_at IS NOT NULL
+       AND (controls.idle_closed_at IS NULL OR controls.idle_closed_at < controls.idle_followup_sent_at)
+     ORDER BY latest.created_at ASC
+     LIMIT ?`,
+    [N8N_BOT_IDLE_CLOSE_AFTER_MINUTES - N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES, maxRows]
+  );
+
+  const closed = [];
+  for (const row of closeRows) {
+    const identity = normalizeN8nBotClientIdentity(row);
+    if (!identity) continue;
+    if (!dryRun) {
+      await pool.query(
+        `UPDATE n8n_bot_client_controls
+         SET idle_closed_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE remote_jid = ?`,
+        [identity.remoteJid]
+      );
+      await logN8nBotInternalMessage(identity, 'Atendimento finalizado por inatividade. Se o cliente voltar a falar, o bot retoma o fluxo.', 'idle-close');
+    }
+    closed.push(identity.remoteJid);
+  }
+
+  return {
+    ok: true,
+    dryRun,
+    followupAfterMinutes: N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES,
+    closeAfterMinutes: N8N_BOT_IDLE_CLOSE_AFTER_MINUTES,
+    sent,
+    closed,
+  };
+}
+
+fastify.post('/n8n-bot/idle-followups/run', { preHandler: requireSyncKey }, async (req) => {
+  return runN8nBotIdleFollowups({
+    dryRun: req.body?.dryRun === true,
+    limit: req.body?.limit,
+  });
+});
+
 fastify.post('/whatsapp/automation/customer-registered', { preHandler: requireSyncKey }, async (req, reply) => {
   const customerId = String(req.body?.customer_id || '').trim();
   if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
@@ -28179,6 +28440,8 @@ async function runMigrations() {
   `);
   await addColumnIfMissing('n8n_bot_client_controls', 'reset_count', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('n8n_bot_client_controls', 'last_seen_at', 'DATETIME NULL');
+  await addColumnIfMissing('n8n_bot_client_controls', 'idle_followup_sent_at', 'DATETIME NULL');
+  await addColumnIfMissing('n8n_bot_client_controls', 'idle_closed_at', 'DATETIME NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS n8n_bot_messages (
@@ -29203,10 +29466,20 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
   }
 });
 
+function scheduleN8nBotIdleFollowups() {
+  const intervalMs = Math.max(60_000, Number(process.env.N8N_BOT_IDLE_JOB_INTERVAL_MS || 300_000));
+  setInterval(() => {
+    runN8nBotIdleFollowups({ limit: 50 }).catch((error) => {
+      console.warn('[n8n-bot-idle] scheduled run failed:', error?.message || error);
+    });
+  }, intervalMs).unref?.();
+}
+
 // Start
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {
+  scheduleN8nBotIdleFollowups();
   scheduleSignedWarrantySync();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }

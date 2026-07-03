@@ -7,6 +7,7 @@ const page = readFileSync('pages/admin/whatsapp/NovoBotPage.tsx', 'utf8');
 const service = readFileSync('services/n8nBotControlService.ts', 'utf8');
 const routes = readFileSync('routes/index.tsx', 'utf8');
 const layout = readFileSync('layouts/AdminLayout.tsx', 'utf8');
+const paymentSpecialistPatch = readFileSync('tmp-tests/n8n-add-payment-specialist-flow.cjs', 'utf8');
 const patch = [
   readFileSync('tmp-tests/n8n-add-admin-client-control.cjs', 'utf8'),
   readFileSync('tmp-tests/n8n-add-delivery-payment-flow.cjs', 'utf8'),
@@ -15,6 +16,10 @@ const patch = [
   readFileSync('tmp-tests/n8n-fix-cep-lookup-fallback.cjs', 'utf8'),
   readFileSync('tmp-tests/n8n-fix-delivery-cep-http-node.cjs', 'utf8'),
   readFileSync('tmp-tests/n8n-fix-delivery-address-extra-pipe.cjs', 'utf8'),
+  paymentSpecialistPatch,
+  readFileSync('tmp-tests/n8n-add-store-location-specialist-flow.cjs', 'utf8'),
+  readFileSync('tmp-tests/n8n-fix-global-identity-handoff.cjs', 'utf8'),
+  readFileSync('tmp-tests/n8n-add-delivery-freight-policy.cjs', 'utf8'),
 ].join('\n');
 
 for (const source of [server, serverCjs]) {
@@ -29,6 +34,13 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /fastify\.get\('\/n8n-bot\/conversations'/, 'server must expose n8n bot conversations endpoint');
   assert.match(source, /fastify\.get\('\/n8n-bot\/messages'/, 'server must expose n8n bot messages endpoint');
   assert.match(source, /fastify\.post\('\/n8n-bot\/messages\/log'/, 'server must expose n8n bot message log endpoint');
+  assert.match(source, /fastify\.post\('\/n8n-bot\/messages\/manual'/, 'server must expose n8n manual reply endpoint');
+  assert.match(source, /payload\.quoted = quoted/, 'manual n8n replies must support WhatsApp quoted replies');
+  assert.match(source, /N8N_BOT_EVOLUTION_INSTANCE_NAME \|\| 'botmercadodovale'/, 'manual n8n replies must target the current n8n Evolution instance by default');
+  assert.match(source, /idle_followup_sent_at/, 'server must persist n8n idle follow-up state');
+  assert.match(source, /idle_closed_at/, 'server must persist n8n idle close state');
+  assert.match(source, /runN8nBotIdleFollowups/, 'server must run n8n idle follow-ups');
+  assert.match(source, /scheduleN8nBotIdleFollowups/, 'server must schedule n8n idle follow-ups automatically');
   assert.match(source, /buildN8nBotMemorySessionKey\(remoteJid, resetCount\)/, 'server must return versioned memory session key');
 }
 
@@ -36,11 +48,17 @@ assert.match(service, /\/n8n-bot\/client-control\/block/, 'front service must ca
 assert.match(service, /\/n8n-bot\/client-control\/reset/, 'front service must call reset endpoint');
 assert.match(service, /\/n8n-bot\/conversations/, 'front service must list n8n conversations');
 assert.match(service, /\/n8n-bot\/messages/, 'front service must list n8n messages');
+assert.match(service, /sendManualMessage/, 'front service must send n8n manual replies');
+assert.match(service, /replyToWaMessageId/, 'front service must pass WhatsApp message ids for quoted replies');
 assert.match(service, /contact_name\?: string \| null/, 'front service must type contact names');
 assert.match(page, /Bloquear fluxo/, 'new bot page must expose block action');
 assert.match(page, /Limpar atendimento/, 'new bot page must expose admin reset action');
 assert.match(page, /Ao vivo/, 'new bot page must expose live refresh mode');
 assert.match(page, /messageTone/, 'new bot page must render a message timeline');
+assert.match(page, /selectedReplyMessage/, 'new bot page must track the marked message being replied to');
+assert.match(page, /Responder/, 'new bot page must expose reply actions on inbound messages');
+assert.match(page, /Pausar bot depois/, 'manual reply UI must let the attendant pause the bot after answering');
+assert.match(page, /sendManualReply/, 'new bot page must send manual replies');
 assert.match(page, /displayContactName/, 'new bot page must display contact names when available');
 assert.match(page, /ChevronDown/, 'conversation list must expose an expandable arrow icon');
 assert.match(page, /expandedRemoteJid/, 'conversation list must track the expanded conversation');
@@ -98,6 +116,13 @@ assert.match(patch, /buildAllPhotoMessages/, 'photo requests for multi-color pro
 assert.match(patch, /if \(!variant && \(wantsPhoto \|\| wantsPhotoFromAI\)\)/, 'photo intent must bypass the color-question branch when no color was chosen');
 assert.match(patch, /Gostou de alguma dessas cores\? Posso separar para voce/, 'multi-color photo preview must continue the sale after showing variations');
 assert.match(patch, /awaiting_delivery_zip/, 'sales flow must ask for delivery CEP before address details');
+assert.match(patch, /entrega_frete/, 'entry classifier must recognize random delivery freight questions');
+assert.match(patch, /Entrega - Politica/, 'workflow must route delivery freight questions to a dedicated specialist');
+assert.match(patch, /DELIVERY_FREIGHT_TABLE/, 'delivery freight policy must keep an editable n8n table');
+assert.match(patch, /defaultMotoboyFeeCents:\s*5000/, 'delivery freight table must start with R$ 50 default motoboy fee');
+assert.match(patch, /customerShareCents:\s*2500/, 'delivery freight table must split R$ 25 to the customer by default');
+assert.match(patch, /Petrolina/, 'delivery freight table must include Petrolina urban free delivery');
+assert.match(patch, /Juazeiro/, 'delivery freight table must include Juazeiro urban free delivery');
 assert.match(patch, /brasilapi\.com\.br\/api\/cep\/v2/, 'sales flow must look up delivery address by CEP with Brasil API');
 assert.match(patch, /brasilapi\.com\.br\/api\/cep\/v1/, 'sales flow must fallback to BrasilAPI v1 when CEP v2 lookup fails');
 assert.match(patch, /viacep\.com\.br\/ws/, 'sales flow must fallback to ViaCEP when BrasilAPI lookup fails');
@@ -109,10 +134,38 @@ assert.match(patch, /awaiting_pickup_time/, 'sales flow must ask pickup customer
 assert.match(patch, /business_hours/, 'pickup validation must use dynamic company business hours');
 assert.match(patch, /awaiting_payment_method/, 'sales flow must continue to payment after delivery or pickup data');
 assert.match(patch, /pix_key/, 'payment flow must be able to use the company Pix key');
+assert.match(patch, /formas_pagamento/, 'entry classifier must recognize random payment-policy questions');
+assert.match(patch, /Pagamento - Politica/, 'workflow must route payment-policy questions to a dedicated payment specialist');
+assert.match(patch, /nao aceitamos aparelho usado como entrada/, 'payment policy must politely reject used products as trade-in');
+assert.match(patch, /No boleto a gente nao trabalha/, 'payment policy must politely reject boleto payments');
+assert.match(patch, /ate 12x/, 'payment policy must answer how many installments are available');
+assert.match(patch, /pagamento por link/, 'payment policy must explain card payment is only in person');
+assert.match(patch, /paymentPolicyReply/, 'payment policy must answer by specific payment topic');
+assert.doesNotMatch(
+  paymentSpecialistPatch.match(/const paymentPolicyHelpersCode = `[\s\S]*?`;/)?.[0] || '',
+  /\\\\uD83D|\\\\uDE0A|\\\\uDCB3|\\\\uDE4F/,
+  'customer-facing payment policy must not send raw unicode escape text'
+);
+assert.match(patch, /Vendas - Buscar Taxas Parcelamento/, 'card installment flow must fetch the real payment fee table');
+assert.match(patch, /awaiting_card_installment/, 'card payment flow must wait for the customer installment choice');
+assert.match(patch, /parseDownPayment/, 'payment specialist must identify Pix or cash down payments');
+assert.match(patch, /buildInstallmentOptions/, 'payment specialist must build installment options from 1x to 12x');
+assert.match(patch, /paymentInstallments\s*=\s*12/, 'payment specialist must include 12x card options');
+assert.match(patch, /localizacao_loja/, 'entry classifier must recognize random store-location questions');
+assert.match(patch, /Loja - Buscar Dados Empresa/, 'store location flow must fetch public company settings');
+assert.match(patch, /Loja - Localizacao/, 'workflow must route store-location questions to a dedicated specialist');
+assert.match(patch, /address_lat/, 'store location specialist must use company latitude when available');
+assert.match(patch, /address_lng/, 'store location specialist must use company longitude when available');
+assert.match(patch, /maps\.google\.com/, 'store location specialist must build a Google Maps link');
 assert.match(patch, /chunkSize = 5/, 'smartphone quote messages must be chunked in blocks of 5 products');
 assert.match(patch, /horario_loja/, 'entry classifier must recognize random store-hours questions');
 assert.match(patch, /Loja - Horario Atendimento/, 'workflow must route store-hours questions to a dedicated specialist');
 assert.match(patch, /business_hours/, 'store-hours specialist must use dynamic company business hours');
+assert.match(patch, /identidade_bot/, 'entry classifier must recognize bot identity questions');
+assert.match(patch, /Sou Nina, sua agente virtual/, 'bot identity specialist must answer with Nina');
+assert.match(patch, /Atendente - Horario/, 'human handoff must use a dynamic hours-aware specialist');
+assert.match(patch, /atendimento online/, 'human handoff must explain online availability');
+assert.doesNotMatch(patch, /Claro!\s*😊\|\|\|Vou chamar um atendente/, 'human handoff must not force a generic Claro greeting');
 assert.match(patch, /lunchEnd/, 'store-hours specialist must explain lunch return time when needed');
 assert.match(patch, /parsed\.venda && typeof parsed\.venda === 'object'/, 'classifier parser must tolerate venda null');
 assert.match(patch, /digits\.length === 8/, 'delivery CEP parsing must accept exactly 8 digits after removing punctuation');

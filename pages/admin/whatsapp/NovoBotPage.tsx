@@ -7,12 +7,15 @@ import {
   Clock,
   Loader2,
   MessageCircle,
+  Reply,
   RefreshCcw,
   RotateCcw,
   Search,
+  Send,
   ShieldCheck,
   Smartphone,
   Workflow,
+  X,
 } from 'lucide-react';
 import {
   n8nBotControlService,
@@ -74,6 +77,9 @@ export default function NovoBotPage() {
   const [loading, setLoading] = useState(false);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [manualReply, setManualReply] = useState('');
+  const [manualPauseBot, setManualPauseBot] = useState(true);
+  const [selectedReplyMessage, setSelectedReplyMessage] = useState<N8nBotMessage | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -146,10 +152,38 @@ export default function NovoBotPage() {
     }
   }
 
+  async function sendManualReply() {
+    const text = manualReply.trim();
+    if (!selectedRemoteJid || !text || loading) return;
+    setLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      const result = await n8nBotControlService.sendManualMessage({
+        ...actionIdentity,
+        message: text,
+        replyToMessageId: selectedReplyMessage?.id,
+        replyToWaMessageId: selectedReplyMessage?.wa_message_id || '',
+        replyToText: selectedReplyMessage?.message_text || '',
+        pauseBot: manualPauseBot,
+      });
+      setManualReply('');
+      setSelectedReplyMessage(null);
+      setMessage(result.quoted ? 'Resposta enviada citando a pergunta marcada.' : 'Resposta enviada. A mensagem marcada antiga nao tinha ID do WhatsApp para citar.');
+      await refreshAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao enviar resposta manual.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function selectConversation(conversation: N8nBotConversation) {
     setSelectedRemoteJid(conversation.remote_jid);
     setPhone(conversation.phone || conversation.remote_jid);
     setControl(null);
+    setSelectedReplyMessage(null);
+    setManualReply('');
   }
 
   async function toggleConversationExpansion(conversation: N8nBotConversation) {
@@ -509,11 +543,77 @@ export default function NovoBotPage() {
                       <span>{formatDate(item.created_at, true)}</span>
                     </div>
                     <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{item.message_text}</p>
+                    {item.direction === 'inbound' && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReplyMessage(item)}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                      >
+                        <Reply size={13} />
+                        Responder
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
+
+          {selectedRemoteJid && (
+            <div className="border-t border-slate-200 bg-white p-4">
+              {selectedReplyMessage && (
+                <div className="mb-3 flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3">
+                  <Reply className="mt-0.5 shrink-0 text-blue-600" size={16} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold uppercase text-blue-700">Respondendo pergunta marcada</p>
+                    <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-sm text-blue-950">{selectedReplyMessage.message_text}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedReplyMessage(null)}
+                    aria-label="Remover mensagem marcada"
+                    title="Remover mensagem marcada"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-blue-700 transition-colors hover:bg-blue-100"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                <label className="min-w-0 flex-1 text-xs font-bold uppercase text-slate-500">
+                  Resposta manual
+                  <textarea
+                    value={manualReply}
+                    onChange={(event) => setManualReply(event.target.value)}
+                    placeholder="Digite a resposta para o cliente"
+                    rows={3}
+                    className="mt-2 w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm normal-case text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+                <div className="flex flex-col gap-2 lg:w-56">
+                  <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={manualPauseBot}
+                      onChange={(event) => setManualPauseBot(event.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    Pausar bot depois
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!manualReply.trim() || !selectedRemoteJid || loading}
+                    onClick={() => void sendManualReply()}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                    Enviar resposta
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
       </div>
     </div>

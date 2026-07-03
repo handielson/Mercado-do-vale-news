@@ -12,6 +12,8 @@ export type N8nBotClientControl = {
   reset_consumed_at?: string | null;
   reset_count: number;
   last_seen_at?: string | null;
+  idle_followup_sent_at?: string | null;
+  idle_closed_at?: string | null;
   updated_at?: string | null;
 };
 
@@ -50,6 +52,16 @@ export type N8nBotMessage = {
   source_node?: string | null;
   wa_message_id?: string | null;
   created_at?: string | null;
+};
+
+export type N8nBotManualMessageResult = {
+  ok: boolean;
+  remoteJid: string;
+  phone: string;
+  message: string;
+  quoted: boolean;
+  paused: boolean;
+  evolution?: unknown;
 };
 
 function buildQuery(params: Record<string, string>): string {
@@ -108,5 +120,25 @@ export const n8nBotControlService = {
         afterId: params.afterId ? String(params.afterId) : '',
       })}`,
     );
+  },
+
+  sendManualMessage(params: {
+    phone?: string;
+    remoteJid?: string;
+    message: string;
+    replyToMessageId?: number;
+    replyToWaMessageId?: string;
+    replyToText?: string;
+    pauseBot?: boolean;
+  }) {
+    return vpsClient.post<N8nBotManualMessageResult>('/n8n-bot/messages/manual', {
+      phone: params.phone,
+      remoteJid: params.remoteJid,
+      message: params.message,
+      replyToMessageId: params.replyToMessageId,
+      replyToWaMessageId: params.replyToWaMessageId,
+      replyToText: params.replyToText,
+      pauseBot: params.pauseBot,
+    });
   },
 };
