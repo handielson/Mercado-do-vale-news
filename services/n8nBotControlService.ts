@@ -24,6 +24,7 @@ export type N8nBotControlLookup = {
 export type N8nBotConversation = {
   remote_jid: string;
   phone: string;
+  contact_name?: string | null;
   last_message_at?: string | null;
   last_message?: string | null;
   last_direction?: 'inbound' | 'outbound' | 'internal' | string | null;
@@ -42,6 +43,7 @@ export type N8nBotMessage = {
   id: number;
   remote_jid: string;
   phone: string;
+  contact_name?: string | null;
   direction: 'inbound' | 'outbound' | 'internal' | string;
   message_text: string;
   message_type?: string | null;

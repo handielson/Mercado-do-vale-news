@@ -7,7 +7,15 @@ const page = readFileSync('pages/admin/whatsapp/NovoBotPage.tsx', 'utf8');
 const service = readFileSync('services/n8nBotControlService.ts', 'utf8');
 const routes = readFileSync('routes/index.tsx', 'utf8');
 const layout = readFileSync('layouts/AdminLayout.tsx', 'utf8');
-const patch = readFileSync('tmp-tests/n8n-add-admin-client-control.cjs', 'utf8');
+const patch = [
+  readFileSync('tmp-tests/n8n-add-admin-client-control.cjs', 'utf8'),
+  readFileSync('tmp-tests/n8n-add-delivery-payment-flow.cjs', 'utf8'),
+  readFileSync('tmp-tests/n8n-add-store-hours-intent.cjs', 'utf8'),
+  readFileSync('tmp-tests/n8n-fix-null-classifier-and-cep.cjs', 'utf8'),
+  readFileSync('tmp-tests/n8n-fix-cep-lookup-fallback.cjs', 'utf8'),
+  readFileSync('tmp-tests/n8n-fix-delivery-cep-http-node.cjs', 'utf8'),
+  readFileSync('tmp-tests/n8n-fix-delivery-address-extra-pipe.cjs', 'utf8'),
+].join('\n');
 
 for (const source of [server, serverCjs]) {
   assert.match(source, /CREATE TABLE IF NOT EXISTS n8n_bot_client_controls/, 'server must create n8n bot controls table');
@@ -15,6 +23,9 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /fastify\.post\('\/n8n-bot\/client-control\/block'/, 'server must expose block endpoint');
   assert.match(source, /fastify\.post\('\/n8n-bot\/client-control\/reset'/, 'server must expose reset endpoint');
   assert.match(source, /CREATE TABLE IF NOT EXISTS n8n_bot_messages/, 'server must create n8n bot messages table');
+  assert.match(source, /contact_name VARCHAR\(160\) NULL/, 'server must persist n8n bot contact names');
+  assert.match(source, /normalizeN8nBotContactName/, 'server must normalize contact names from n8n logs');
+  assert.match(source, /SELECT id, remote_jid, phone, contact_name/, 'server must return contact name in message history');
   assert.match(source, /fastify\.get\('\/n8n-bot\/conversations'/, 'server must expose n8n bot conversations endpoint');
   assert.match(source, /fastify\.get\('\/n8n-bot\/messages'/, 'server must expose n8n bot messages endpoint');
   assert.match(source, /fastify\.post\('\/n8n-bot\/messages\/log'/, 'server must expose n8n bot message log endpoint');
@@ -25,10 +36,18 @@ assert.match(service, /\/n8n-bot\/client-control\/block/, 'front service must ca
 assert.match(service, /\/n8n-bot\/client-control\/reset/, 'front service must call reset endpoint');
 assert.match(service, /\/n8n-bot\/conversations/, 'front service must list n8n conversations');
 assert.match(service, /\/n8n-bot\/messages/, 'front service must list n8n messages');
+assert.match(service, /contact_name\?: string \| null/, 'front service must type contact names');
 assert.match(page, /Bloquear fluxo/, 'new bot page must expose block action');
 assert.match(page, /Limpar atendimento/, 'new bot page must expose admin reset action');
 assert.match(page, /Ao vivo/, 'new bot page must expose live refresh mode');
 assert.match(page, /messageTone/, 'new bot page must render a message timeline');
+assert.match(page, /displayContactName/, 'new bot page must display contact names when available');
+assert.match(page, /ChevronDown/, 'conversation list must expose an expandable arrow icon');
+assert.match(page, /expandedRemoteJid/, 'conversation list must track the expanded conversation');
+assert.match(page, /expandedMessagesByJid/, 'conversation list must cache compact expanded histories by conversation');
+assert.match(page, /toggleConversationExpansion/, 'conversation list must expand and collapse a conversation inline');
+assert.match(page, /limit: 10/, 'expanded conversation preview must fetch a compact history instead of the full timeline');
+assert.match(page, /Conversas recentes/, 'expanded conversation preview must label the inline history block');
 assert.match(routes, /NovoBotPage/, 'routes must include new bot page');
 assert.match(routes, /\/admin\/whatsapp\/novo-bot/, 'routes must expose separated new bot path');
 assert.match(layout, /Novo Bot/, 'admin menu must include Novo Bot');
@@ -78,5 +97,29 @@ assert.match(patch, /nextCode = nextCode\.replace\([\s\S]*titleCase\(item\.color
 assert.match(patch, /buildAllPhotoMessages/, 'photo requests for multi-color products must send previews instead of asking color first');
 assert.match(patch, /if \(!variant && \(wantsPhoto \|\| wantsPhotoFromAI\)\)/, 'photo intent must bypass the color-question branch when no color was chosen');
 assert.match(patch, /Gostou de alguma dessas cores\? Posso separar para voce/, 'multi-color photo preview must continue the sale after showing variations');
+assert.match(patch, /awaiting_delivery_zip/, 'sales flow must ask for delivery CEP before address details');
+assert.match(patch, /brasilapi\.com\.br\/api\/cep\/v2/, 'sales flow must look up delivery address by CEP with Brasil API');
+assert.match(patch, /brasilapi\.com\.br\/api\/cep\/v1/, 'sales flow must fallback to BrasilAPI v1 when CEP v2 lookup fails');
+assert.match(patch, /viacep\.com\.br\/ws/, 'sales flow must fallback to ViaCEP when BrasilAPI lookup fails');
+assert.match(patch, /Vendas - Precisa buscar CEP\?/, 'delivery CEP lookup must branch to a real HTTP node');
+assert.match(patch, /Vendas - Buscar CEP ViaCEP/, 'delivery CEP lookup must use an n8n HTTP Request node');
+assert.match(patch, /needsDeliveryCepLookup: true/, 'post-list code must mark CEP lookup instead of doing fetch directly');
+assert.match(patch, /lineBreak \+ addressText\(found\) \+ lineBreak \+ 'Agora me manda/, 'delivery address follow-up must not leave an extra pipe before asking number/complement');
+assert.match(patch, /awaiting_pickup_time/, 'sales flow must ask pickup customers for the estimated pickup time');
+assert.match(patch, /business_hours/, 'pickup validation must use dynamic company business hours');
+assert.match(patch, /awaiting_payment_method/, 'sales flow must continue to payment after delivery or pickup data');
+assert.match(patch, /pix_key/, 'payment flow must be able to use the company Pix key');
+assert.match(patch, /chunkSize = 5/, 'smartphone quote messages must be chunked in blocks of 5 products');
+assert.match(patch, /horario_loja/, 'entry classifier must recognize random store-hours questions');
+assert.match(patch, /Loja - Horario Atendimento/, 'workflow must route store-hours questions to a dedicated specialist');
+assert.match(patch, /business_hours/, 'store-hours specialist must use dynamic company business hours');
+assert.match(patch, /lunchEnd/, 'store-hours specialist must explain lunch return time when needed');
+assert.match(patch, /parsed\.venda && typeof parsed\.venda === 'object'/, 'classifier parser must tolerate venda null');
+assert.match(patch, /digits\.length === 8/, 'delivery CEP parsing must accept exactly 8 digits after removing punctuation');
+assert.match(patch, /patchSplitMessagesNode/, 'split node must preserve custom per-message delay metadata');
+assert.match(patch, /delayMs: Number\(message\.delayMs \|\| 0\)/, 'array messages must carry delayMs into send nodes');
+assert.match(patch, /patchSendDelayNode/, 'send nodes must prefer custom delayMs when present');
+assert.match(patch, /Number\(\$json\.delayMs \|\| 0\) > 0/, 'Evolution send payload must use custom delay to preserve media block order');
+assert.match(patch, /1200 \+ messages\.length \* 4500/, 'multi-color media flow must delay final text until after previews and link');
 
 console.log('n8n admin client control static checks passed');

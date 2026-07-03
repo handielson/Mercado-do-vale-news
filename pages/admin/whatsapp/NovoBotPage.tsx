@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Ban,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Clock,
   Loader2,
   MessageCircle,
@@ -46,6 +48,11 @@ function displayPhone(value?: string | null) {
   return digits || String(value || '-');
 }
 
+function displayContactName(value?: string | null) {
+  const name = String(value || '').trim();
+  return name && !/^\+?\d{8,}$/.test(name.replace(/\s+/g, '')) ? name : '';
+}
+
 function messageTone(direction: string) {
   if (direction === 'outbound') return 'ml-auto border-blue-100 bg-blue-600 text-white';
   if (direction === 'internal') return 'mx-auto border-amber-200 bg-amber-50 text-amber-900';
@@ -59,6 +66,9 @@ export default function NovoBotPage() {
   const [conversations, setConversations] = useState<N8nBotConversation[]>([]);
   const [messages, setMessages] = useState<N8nBotMessage[]>([]);
   const [selectedRemoteJid, setSelectedRemoteJid] = useState('');
+  const [expandedRemoteJid, setExpandedRemoteJid] = useState('');
+  const [expandedMessagesByJid, setExpandedMessagesByJid] = useState<Record<string, N8nBotMessage[]>>({});
+  const [expandedMessagesLoadingJid, setExpandedMessagesLoadingJid] = useState('');
   const [search, setSearch] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -142,6 +152,30 @@ export default function NovoBotPage() {
     setControl(null);
   }
 
+  async function toggleConversationExpansion(conversation: N8nBotConversation) {
+    if (expandedRemoteJid === conversation.remote_jid) {
+      setExpandedRemoteJid('');
+      return;
+    }
+
+    setExpandedRemoteJid(conversation.remote_jid);
+    if (expandedMessagesByJid[conversation.remote_jid]?.length) return;
+
+    setExpandedMessagesLoadingJid(conversation.remote_jid);
+    setError('');
+    try {
+      const data = await n8nBotControlService.listMessages({ remoteJid: conversation.remote_jid, limit: 10 });
+      setExpandedMessagesByJid((current) => ({
+        ...current,
+        [conversation.remote_jid]: data.rows || [],
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao carregar previa da conversa.');
+    } finally {
+      setExpandedMessagesLoadingJid('');
+    }
+  }
+
   useEffect(() => {
     void loadConversations(false);
   }, []);
@@ -164,6 +198,7 @@ export default function NovoBotPage() {
     return conversations.filter((item) => (
       item.remote_jid.toLowerCase().includes(term)
       || displayPhone(item.phone).includes(term)
+      || displayContactName(item.contact_name).toLowerCase().includes(term)
       || String(item.last_message || '').toLowerCase().includes(term)
     ));
   }, [conversations, search]);
@@ -270,29 +305,86 @@ export default function NovoBotPage() {
               </div>
             ) : filteredConversations.map((conversation) => {
               const selected = conversation.remote_jid === selectedRemoteJid;
+              const expanded = conversation.remote_jid === expandedRemoteJid;
+              const expandedMessages = expandedMessagesByJid[conversation.remote_jid] || [];
+              const expandedLoading = expandedMessagesLoadingJid === conversation.remote_jid;
               const blocked = isBlocked(conversation.blocked);
+              const contactName = displayContactName(conversation.contact_name);
               return (
-                <button
+                <div
                   key={conversation.remote_jid}
-                  type="button"
-                  onClick={() => selectConversation(conversation)}
-                  className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition-colors ${selected ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
+                  className={`border-b border-slate-100 transition-colors ${selected ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-slate-900">{displayPhone(conversation.phone)}</p>
-                      <p className="mt-0.5 truncate font-mono text-[11px] text-slate-500">{conversation.remote_jid}</p>
+                  <div className="flex items-start gap-2 px-3 py-3">
+                    <button
+                      type="button"
+                      onClick={() => void toggleConversationExpansion(conversation)}
+                      aria-label={expanded ? 'Fechar conversa' : 'Abrir conversa'}
+                      title={expanded ? 'Fechar conversa' : 'Abrir conversa'}
+                      className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-blue-700"
+                    >
+                      {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => selectConversation(conversation)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold text-slate-900">{contactName || displayPhone(conversation.phone)}</p>
+                          <p className="mt-0.5 truncate font-mono text-[11px] text-slate-500">
+                            {contactName ? displayPhone(conversation.phone) : conversation.remote_jid}
+                          </p>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${blocked ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {blocked ? 'Bloq.' : 'Ativo'}
+                        </span>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-sm text-slate-600">{conversation.last_message || 'Sem mensagem recente.'}</p>
+                      <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+                        <span>{conversation.last_direction === 'outbound' ? 'Bot' : 'Cliente'}</span>
+                        <span>{formatDate(conversation.last_message_at)}</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  {expanded && (
+                    <div className="mx-4 mb-3 ml-[52px] rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-bold uppercase text-slate-500">Conversas recentes</p>
+                        {expandedLoading && <Loader2 className="animate-spin text-slate-400" size={14} />}
+                      </div>
+                      {expandedLoading && expandedMessages.length === 0 ? (
+                        <p className="text-xs font-semibold text-slate-500">Carregando previa...</p>
+                      ) : expandedMessages.length === 0 ? (
+                        <p className="text-xs font-semibold text-slate-500">Sem mensagens nesta previa.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {expandedMessages.map((item) => (
+                            <div key={item.id} className="min-w-0">
+                              <div className="mb-0.5 flex items-center justify-between gap-2 text-[10px] font-bold uppercase text-slate-400">
+                                <span>{item.direction === 'outbound' ? 'Bot' : item.direction === 'internal' ? 'Sistema' : 'Cliente'}</span>
+                                <span>{formatDate(item.created_at)}</span>
+                              </div>
+                              <p className={`line-clamp-2 rounded-md px-2 py-1.5 text-xs leading-relaxed ${
+                                item.direction === 'outbound'
+                                  ? 'bg-blue-50 text-blue-900'
+                                  : item.direction === 'internal'
+                                    ? 'bg-amber-50 text-amber-900'
+                                    : 'bg-slate-50 text-slate-700'
+                              }`}
+                              >
+                                {item.message_text || '-'}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${blocked ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                      {blocked ? 'Bloq.' : 'Ativo'}
-                    </span>
-                  </div>
-                  <p className="mt-2 line-clamp-2 text-sm text-slate-600">{conversation.last_message || 'Sem mensagem recente.'}</p>
-                  <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-                    <span>{conversation.last_direction === 'outbound' ? 'Bot' : 'Cliente'}</span>
-                    <span>{formatDate(conversation.last_message_at)}</span>
-                  </div>
-                </button>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -304,9 +396,13 @@ export default function NovoBotPage() {
               <div className="min-w-0">
                 <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
                   <Smartphone size={20} className="text-blue-600" />
-                  {selectedConversation ? displayPhone(selectedConversation.phone) : 'Selecione uma conversa'}
+                  {selectedConversation ? (displayContactName(selectedConversation.contact_name) || displayPhone(selectedConversation.phone)) : 'Selecione uma conversa'}
                 </h3>
-                <p className="mt-1 break-all font-mono text-xs text-slate-500">{selectedRemoteJid || '-'}</p>
+                <p className="mt-1 break-all font-mono text-xs text-slate-500">
+                  {selectedConversation && displayContactName(selectedConversation.contact_name)
+                    ? `${displayPhone(selectedConversation.phone)} - ${selectedRemoteJid}`
+                    : selectedRemoteJid || '-'}
+                </p>
                 <p className="mt-2 text-xs font-semibold text-slate-500">
                   Reset #{control?.reset_count ?? selectedConversation?.reset_count ?? 0}
                 </p>

@@ -2020,6 +2020,24 @@ function normalizeN8nBotMessageDirection(value) {
   return 'inbound';
 }
 
+function normalizeN8nBotContactName(input = {}) {
+  const payload = input.payload && typeof input.payload === 'object' ? input.payload : {};
+  const name = String(
+    input.contactName
+    || input.contact_name
+    || input.clienteNome
+    || input.customerName
+    || input.pushName
+    || payload.contactName
+    || payload.clienteNome
+    || payload.customerName
+    || payload.pushName
+    || ''
+  ).trim();
+  if (!name || /^\+?\d{8,}$/.test(name.replace(/\s+/g, ''))) return null;
+  return name.slice(0, 160);
+}
+
 async function insertN8nBotMessage(input = {}) {
   const identity = normalizeN8nBotClientIdentity(input);
   if (!identity) {
@@ -2034,14 +2052,21 @@ async function insertN8nBotMessage(input = {}) {
     throw error;
   }
   const direction = normalizeN8nBotMessageDirection(input.direction);
-  const payload = input.payload && typeof input.payload === 'object' ? JSON.stringify(input.payload) : null;
+  let payload = null;
+  if (input.payload && typeof input.payload === 'object') {
+    payload = JSON.stringify(input.payload);
+  } else if (typeof input.payload === 'string' && input.payload.trim()) {
+    payload = input.payload.trim();
+  }
+  const contactName = normalizeN8nBotContactName(input);
   await pool.query(
     `INSERT INTO n8n_bot_messages
-      (remote_jid, phone, direction, message_text, message_type, source_node, wa_message_id, payload_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      (remote_jid, phone, contact_name, direction, message_text, message_type, source_node, wa_message_id, payload_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       identity.remoteJid,
       identity.phone,
+      contactName,
       direction,
       text,
       String(input.messageType || input.message_type || 'text').slice(0, 80),
@@ -22071,6 +22096,7 @@ fastify.get('/n8n-bot/conversations', { preHandler: requireSyncKey }, async (req
     `SELECT
         latest.remote_jid,
         latest.phone,
+        latest.contact_name,
         latest.last_message_at,
         latest.last_message,
         latest.last_direction,
@@ -22087,6 +22113,7 @@ fastify.get('/n8n-bot/conversations', { preHandler: requireSyncKey }, async (req
        SELECT
           agg.remote_jid,
           agg.phone,
+          agg.contact_name,
           agg.last_message_at,
           agg.total_messages,
           agg.inbound_count,
@@ -22097,6 +22124,11 @@ fastify.get('/n8n-bot/conversations', { preHandler: requireSyncKey }, async (req
          SELECT
             remote_jid,
             MAX(phone) AS phone,
+            SUBSTRING_INDEX(
+              GROUP_CONCAT(NULLIF(contact_name, '') ORDER BY created_at DESC SEPARATOR '\n'),
+              '\n',
+              1
+            ) AS contact_name,
             MAX(created_at) AS last_message_at,
             COUNT(*) AS total_messages,
             SUM(direction = 'inbound') AS inbound_count,
@@ -22124,7 +22156,7 @@ fastify.get('/n8n-bot/messages', { preHandler: requireSyncKey }, async (req, rep
     ? [identity.remoteJid, afterId, limit]
     : [identity.remoteJid, limit];
   const [rows] = await pool.query(
-    `SELECT id, remote_jid, phone, direction, message_text, message_type, source_node, wa_message_id, created_at
+    `SELECT id, remote_jid, phone, contact_name, direction, message_text, message_type, source_node, wa_message_id, created_at
      FROM n8n_bot_messages
      WHERE remote_jid = ?
        ${afterId > 0 ? 'AND id > ?' : ''}
@@ -28153,6 +28185,7 @@ async function runMigrations() {
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       remote_jid VARCHAR(120) NOT NULL,
       phone VARCHAR(32) NOT NULL,
+      contact_name VARCHAR(160) NULL,
       direction VARCHAR(24) NOT NULL DEFAULT 'inbound',
       message_text MEDIUMTEXT NOT NULL,
       message_type VARCHAR(80) NULL,
@@ -28167,6 +28200,7 @@ async function runMigrations() {
   `);
   await addColumnIfMissing('n8n_bot_messages', 'payload_json', 'JSON NULL');
   await addColumnIfMissing('n8n_bot_messages', 'wa_message_id', 'VARCHAR(160) NULL');
+  await addColumnIfMissing('n8n_bot_messages', 'contact_name', 'VARCHAR(160) NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_delivery_job_logs (

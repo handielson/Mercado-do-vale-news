@@ -126,6 +126,36 @@ const restoreClientControlCode = `return [{ json: $('Controle Bot - Aplicar Cont
 
 const restoreOutboundCode = `return $('Dividir mensagens').all();`;
 
+function patchSplitMessagesNode(node) {
+  if (!node?.parameters?.jsCode) return;
+  let code = String(node.parameters.jsCode);
+  code = code.replace(
+    `fileName: message.fileName || 'produto.jpg',
+        messageIndex: index + 1,`,
+    `fileName: message.fileName || 'produto.jpg',
+        delayMs: Number(message.delayMs || 0),
+        messageIndex: index + 1,`
+  );
+  code = code.replace(
+    `fileName: '',
+    messageIndex: index + 1,`,
+    `fileName: '',
+    delayMs: 0,
+    messageIndex: index + 1,`
+  );
+  node.parameters.jsCode = code;
+}
+
+function patchSendDelayNode(node) {
+  if (!node?.parameters?.bodyParameters?.parameters) return;
+  const delayParam = node.parameters.bodyParameters.parameters.find((param) => param.name === 'delay');
+  if (!delayParam) return;
+  const fallback = node.name === 'Enviar WhatsApp - Imagem'
+    ? "Math.min(6500, 1200 + (($json.messageIndex || 1) - 1) * 1800)"
+    : "Math.min(6500, 1200 + (($json.messageIndex || 1) - 1) * 1800 + Math.min(1800, String($json.message || '').length * 18))";
+  delayParam.value = `={{Number($json.delayMs || 0) > 0 ? Number($json.delayMs || 0) : ${fallback}}}`;
+}
+
 const salesAIContextCode = `const source = $json;
 const staticData = $getWorkflowStaticData('global');
 staticData.salesPostList = staticData.salesPostList || {};
@@ -620,7 +650,7 @@ const buildAllPhotoMessages = (items) => {
   const linkText = option.url ? 'No link tem mais fotos, video e as caracteristicas dele: ' + option.url : '';
   const messages = [];
   const greeting = periodGreeting();
-  if (greeting) messages.push({ type: 'text', text: greeting });
+  if (greeting) messages.push({ type: 'text', text: greeting, delayMs: 800 });
 
   for (const item of variants) {
     const images = Array.isArray(item.images) ? item.images.filter((url) => String(url).includes('api.xiaomipetrolina.com.br/images/')).slice(0, 1) : [];
@@ -632,17 +662,18 @@ const buildAllPhotoMessages = (items) => {
         caption: captionBase,
         mimetype: 'image/jpeg',
         fileName: 'produto-' + normalize(item.color).replace(/\\s+/g, '-') + '-1.jpg',
+        delayMs: 1200 + messages.length * 4500,
       });
     }
   }
 
   const sentImages = messages.some((message) => message.type === 'image');
   if (!sentImages) {
-    messages.push({ type: 'text', text: linkText || 'Ainda nao tenho foto cadastrada dessas cores.' });
+    messages.push({ type: 'text', text: linkText || 'Ainda nao tenho foto cadastrada dessas cores.', delayMs: 1200 });
   } else if (linkText) {
-    messages.push({ type: 'text', text: linkText });
+    messages.push({ type: 'text', text: linkText, delayMs: 1200 + messages.length * 4500 });
   }
-  messages.push({ type: 'text', text: 'Gostou de alguma dessas cores? Posso separar para voce? 😊' });
+  messages.push({ type: 'text', text: 'Gostou de alguma dessas cores? Posso separar para voce? 😊', delayMs: 1200 + messages.length * 4500 });
   return messages;
 };`
   );
@@ -853,6 +884,12 @@ function patchGraph(nodes, connections) {
     }
     if (node.name === 'Parse Classificacao') {
       patchParseClassification(node);
+    }
+    if (node.name === 'Dividir mensagens') {
+      patchSplitMessagesNode(node);
+    }
+    if (node.name === 'Enviar WhatsApp' || node.name === 'Enviar WhatsApp - Imagem') {
+      patchSendDelayNode(node);
     }
   }
 
