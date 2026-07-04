@@ -8920,7 +8920,13 @@ function mapGoogleContactPerson(person) {
 async function searchGoogleContacts(query, limit = 8) {
   const normalizedQuery = String(query || '').trim();
   if (normalizedQuery.length < 2) return { configured: true, data: [] };
-  const accessToken = await getGoogleContactsAccessToken();
+  let accessToken = null;
+  try {
+    accessToken = await getGoogleContactsAccessToken();
+  } catch (err) {
+    console.warn('[google-contacts/search] token refresh failed', err?.message || err);
+    return { configured: false, data: [], error: 'google_contacts_token_invalid' };
+  }
   if (!accessToken) return { configured: false, data: [] };
 
   const url = new URL('https://people.googleapis.com/v1/people:searchContacts');

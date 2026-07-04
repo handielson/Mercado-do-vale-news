@@ -1,8 +1,8 @@
 {
-    "version": "v1.2.25-pix-agenda-google",
+    "version": "v1.2.26-pix-agenda-google-fallback",
     "date": "2026-07-04",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260704-144420-pix-agenda-google",
+    "release_vps": "/var/www/mdv-site/releases/20260704-145120-pix-agenda-google-fallback",
     "branch": "main",
-    "summary": "Integra agenda Google ao WhatsApp do Pix avulso com prefixo Brasil +55."
+    "summary": "Integra agenda Google ao WhatsApp do Pix avulso com fallback quando o token Google estiver invalido."
 }

@@ -14,6 +14,7 @@ function assertBackend(source, label) {
     'searchGoogleContacts',
     'people:searchContacts',
     'getGoogleContactsAccessToken',
+    "error: 'google_contacts_token_invalid'",
     "fastify.get('/pix/public/:token'",
     "metadata: {",
     "flow: 'standalone_pix'",
