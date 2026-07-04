@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Settings, Store, Users, ClipboardList, LogOut, Package, Tags, Shield, BadgeCheck, Smartphone, Palette, HardDrive, MemoryStick, GitBranch, BatteryCharging, FileText, BookOpen, CreditCard, ShoppingCart, Image, Database, Truck, MessageCircle, Ticket, Coins, Bot, Megaphone, Tag, MessageSquareDashed, Link2, Globe, Banknote, Search, Star, Activity, Server, Heart, Barcode, Boxes, Printer, Mail, DatabaseBackup, QrCode } from 'lucide-react';
 
 import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -76,6 +76,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       title: 'Financeiro',
       items: [
         { to: '/admin/financeiro', icon: <Banknote size={18} />, label: 'Financeiro', keywords: 'dinheiro pagamentos taxas contas' },
+        { to: '/admin/pix-avulso', icon: <QrCode size={18} />, label: 'Pix Avulso', keywords: 'pix mercado pago qr code caixa recebimento avulso' },
         { to: '/admin/contabilidade', icon: <BookOpen size={18} />, label: 'Contabilidade', keywords: 'imposto simples nacional das nfe faturamento tributavel' },
       ]
     },

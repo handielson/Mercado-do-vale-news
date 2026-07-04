@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.23-novo-bot-resposta-marcada
-date: 2026-07-03
+version: v1.2.24-pix-avulso
+date: 2026-07-04
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260703-174440-n8n-resposta-marcada
+release_vps: /var/www/mdv-site/releases/20260704-140610-pix-avulso
 branch: main
-summary: Publica resposta manual citando mensagem no Novo Bot n8n e rotina de retomada por inatividade.
+summary: Publica Pix avulso Mercado Pago com QR publico, WhatsApp, display e vencimento de 10 minutos.
 ```

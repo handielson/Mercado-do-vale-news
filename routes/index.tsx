@@ -133,8 +133,10 @@ const CheckoutPage = lazy(() => import('../pages/store/CheckoutPage'));
 const PublicProductPage = lazy(() => import('../pages/store/PublicProductPage').then(module => ({ default: module.PublicProductPage })));
 const FinancialPage = lazy(() => import('../pages/admin/financial/FinancialPage'));
 const CustomerCreditLedgerPage = lazy(() => import('../pages/admin/financial/CustomerCreditLedgerPage'));
+const StandalonePixPage = lazy(() => import('../pages/admin/financial/StandalonePixPage'));
 const AccountingPage = lazy(() => import('../pages/admin/accounting/AccountingPage'));
 const MySQLExplorerPage = lazy(() => import('../pages/admin/settings/MySQLExplorerPage').then(module => ({ default: module.MySQLExplorerPage })));
+const PublicPixPage = lazy(() => import('../pages/store/PublicPixPage'));
 
 const StorePage = () => (
   <div className="p-8 animate-in slide-in-from-bottom-4 duration-500">
@@ -226,6 +228,10 @@ export const router = createBrowserRouter([
     element: <DisplayPage />
   },
   {
+    path: "/pix/:token",
+    element: <PublicPixPage />
+  },
+  {
     path: "/admin",
     element: (
       <ProtectedRoute requireAdmin={true}>
@@ -254,6 +260,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><FinancialPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/pix-avulso",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><StandalonePixPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

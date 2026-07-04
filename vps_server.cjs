@@ -902,7 +902,7 @@ function normalizePdvPixStatus(status) {
   if (value === 'approved') return 'approved';
   if (value === 'rejected' || value === 'cancelled' || value === 'canceled' || value === 'refunded') return 'rejected';
   if (value === 'expired') return 'expired';
-  if (value === 'pending' || value === 'in_process' || value === 'authorized') return 'pending';
+  if (value === 'pending' || value === 'created' || value === 'in_process' || value === 'authorized') return 'pending';
   return value || 'pending';
 }
 
@@ -926,6 +926,84 @@ function buildPdvPixResponse(row) {
     qr_code: row.qr_code,
     qr_code_base64: row.qr_code_base64,
     ticket_url: row.ticket_url,
+  };
+}
+
+const STANDALONE_PIX_EXPIRATION_MINUTES = 10;
+
+function addMinutes(date, minutes) {
+  return new Date(date.getTime() + minutes * 60 * 1000);
+}
+
+function buildPublicToken() {
+  return crypto.randomBytes(24).toString('base64url');
+}
+
+function normalizeStandalonePixStatusLabel(row) {
+  const status = normalizePdvPixStatus(row?.status);
+  if (status === 'approved') return 'Aprovado';
+  if (status === 'pending' || status === 'creating') return 'Pendente';
+  if (status === 'expired') return 'Cancelado por falta de pagamento';
+  if (status === 'rejected') return 'Rejeitado';
+  return 'Erro';
+}
+
+function isStandalonePixExpired(row, now = new Date()) {
+  if (!row?.expires_at) return false;
+  if (normalizePdvPixStatus(row.status) === 'approved') return false;
+  return new Date(row.expires_at).getTime() <= now.getTime();
+}
+
+async function clearDisplayActivePixIfMatches(pixPaymentId) {
+  await pool.query(
+    'UPDATE pdv_displays SET active_pix_payment_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE active_pix_payment_id = ?',
+    [pixPaymentId]
+  );
+}
+
+function buildStandalonePixResponse(row, options = {}) {
+  if (!row) return null;
+  const payment = buildPdvPixResponse(row);
+  const status = row.cancel_reason === 'unpaid_expired' ? 'expired' : normalizePdvPixStatus(row.status);
+  const publicPath = row.public_token ? `/pix/${row.public_token}` : null;
+  const publicUrl = publicPath && options.publicBaseUrl ? `${options.publicBaseUrl}${publicPath}` : publicPath;
+  return {
+    ...payment,
+    source: row.source || 'pdv_sale',
+    public_token: row.public_token || null,
+    public_path: publicPath,
+    public_url: publicUrl,
+    status,
+    status_label: normalizeStandalonePixStatusLabel({ ...row, status }),
+    description: row.description || null,
+    expires_at: row.expires_at || null,
+    cancel_reason: row.cancel_reason || null,
+    shared_phone: row.shared_phone || null,
+    shared_at: row.shared_at || null,
+    share_channel: row.share_channel || null,
+    approved_at: row.approved_at || null,
+    cash_closing_id: row.cash_closing_id || null,
+  };
+}
+
+function buildStandalonePixPublicResponse(row) {
+  const pix = buildStandalonePixResponse(row);
+  if (!pix) return null;
+  return {
+    id: pix.id,
+    amount: pix.amount,
+    amount_cents: pix.amount_cents,
+    status: pix.status,
+    status_label: pix.status_label,
+    description: pix.description,
+    qr_code: pix.qr_code,
+    qr_code_base64: pix.qr_code_base64,
+    ticket_url: pix.ticket_url,
+    expires_at: pix.expires_at,
+    cancel_reason: pix.cancel_reason,
+    created_at: pix.created_at,
+    updated_at: pix.updated_at,
+    public_path: pix.public_path,
   };
 }
 
@@ -3266,6 +3344,36 @@ async function processCustomerDebtMercadoPagoPayment(payment) {
   }
 }
 
+async function processStandalonePixMercadoPagoPayment(payment) {
+  const paymentId = String(payment?.id || '').trim();
+  const metadataId = String(payment?.metadata?.standalone_pix_payment_id || '').trim();
+  const externalReference = String(payment?.external_reference || '');
+  const externalId = externalReference.startsWith('standalone_pix:') ? externalReference.slice('standalone_pix:'.length) : '';
+  const pixId = metadataId || externalId;
+  const whereSql = pixId
+    ? "((id = ? OR mercado_pago_payment_id = ?) AND source = 'standalone_pix')"
+    : "(mercado_pago_payment_id = ? AND source = 'standalone_pix')";
+  const params = pixId ? [pixId, paymentId] : [paymentId];
+  const [rows] = await pool.query(`SELECT * FROM pdv_pix_payments WHERE ${whereSql} LIMIT 1`, params);
+  const current = rows[0];
+  if (!current) {
+    return { status: 200, body: { message: 'standalone pix not found', payment_id: paymentId } };
+  }
+  await pool.query(
+    `UPDATE pdv_pix_payments
+     SET status = 'approved',
+         mercado_pago_payment_id = COALESCE(mercado_pago_payment_id, ?),
+         approved_at = COALESCE(approved_at, CURRENT_TIMESTAMP),
+         cancel_reason = NULL,
+         raw_response_json = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [paymentId, JSON.stringify(payment), current.id]
+  );
+  await clearDisplayActivePixIfMatches(current.id);
+  return { status: 200, body: { message: 'standalone pix approved', pix_payment_id: current.id } };
+}
+
 async function handleMercadoPagoWebhookVps(body) {
   const paymentId = String(body?.data?.id || '').trim();
   if (!paymentId) {
@@ -3322,6 +3430,10 @@ async function handleMercadoPagoWebhookVps(body) {
 
     if (isCustomerDebtMercadoPagoPayment(payment)) {
       return processCustomerDebtMercadoPagoPayment(payment);
+    }
+
+    if (payment?.metadata?.flow === 'standalone_pix' || String(payment?.external_reference || '').startsWith('standalone_pix:')) {
+      return processStandalonePixMercadoPagoPayment(payment);
     }
 
     const gatewayPaymentId = String(payment.id);
@@ -23630,6 +23742,208 @@ fastify.get('/pdv/pix-payments/:id/status', { preHandler: requireSyncKey }, asyn
   return buildPdvPixResponse(updatedRows[0]);
 });
 
+fastify.post('/pix/standalone', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const amount = Math.round(Number(body.amount || body.amount_cents || 0));
+  if (!amount || amount <= 0) return reply.code(400).send({ error: 'amount obrigatorio em centavos' });
+  const mp = await getPdvMercadoPagoAccessToken();
+  if (!mp?.accessToken) return reply.code(400).send({ error: 'Mercado Pago nao configurado' });
+
+  const id = crypto.randomUUID();
+  const displayId = body.display_id ? String(body.display_id) : null;
+  const cashierKey = body.cashier_key ? String(body.cashier_key) : null;
+  const description = String(body.description || 'Pix avulso Mercado do Vale').slice(0, 120);
+  const publicToken = buildPublicToken();
+  const expiresAt = addMinutes(new Date(), STANDALONE_PIX_EXPIRATION_MINUTES);
+  const payload = {
+    transaction_amount: Number((amount / 100).toFixed(2)),
+    description,
+    payment_method_id: 'pix',
+    external_reference: `standalone_pix:${id}`,
+    date_of_expiration: expiresAt.toISOString(),
+    metadata: {
+      flow: 'standalone_pix',
+      standalone_pix_payment_id: id,
+      cashier_key: cashierKey,
+      display_id: displayId,
+      public_token: publicToken,
+    },
+    notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook',
+    payer: {
+      email: String(body.payer_email || 'cliente@mercadodovale.com.br'),
+    },
+  };
+
+  const response = await fetch('https://api.mercadopago.com/v1/payments', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mp.accessToken}`,
+      'Content-Type': 'application/json',
+      'X-Idempotency-Key': id,
+    },
+    body: JSON.stringify(payload),
+  });
+  const raw = await response.json().catch(() => ({}));
+  const qr = raw?.point_of_interaction?.transaction_data || {};
+
+  if (!response.ok) {
+    await pool.query(
+      `INSERT INTO pdv_pix_payments
+        (id, source, public_token, local_reference, cashier_key, display_id, amount, status, description, expires_at, raw_response_json)
+       VALUES (?, 'standalone_pix', ?, ?, ?, ?, ?, 'failed', ?, ?, ?)`,
+      [id, publicToken, `standalone_pix:${id}`, cashierKey, displayId, amount, description, formatDateTimeSql(expiresAt), JSON.stringify(raw)]
+    );
+    return reply.code(502).send({ error: 'Falha ao criar Pix Mercado Pago', detail: raw?.message || raw?.error || response.statusText });
+  }
+
+  await pool.query(
+    `INSERT INTO pdv_pix_payments
+      (id, source, public_token, local_reference, cashier_key, display_id, mercado_pago_payment_id, amount, status, qr_code, qr_code_base64, ticket_url, description, expires_at, raw_response_json)
+     VALUES (?, 'standalone_pix', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      publicToken,
+      `standalone_pix:${id}`,
+      cashierKey,
+      displayId,
+      raw.id ? String(raw.id) : null,
+      amount,
+      normalizePdvPixStatus(raw.status),
+      qr.qr_code || null,
+      qr.qr_code_base64 || null,
+      qr.ticket_url || null,
+      description,
+      formatDateTimeSql(expiresAt),
+      JSON.stringify(raw),
+    ]
+  );
+
+  if (displayId) {
+    await pool.query('UPDATE pdv_displays SET active_pix_payment_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [id, displayId]);
+  }
+  const [rows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [id]);
+  return reply.code(201).send(buildStandalonePixResponse(rows[0]));
+});
+
+fastify.get('/pix/standalone', { preHandler: requireSyncKey }, async (req) => {
+  const query = req.query || {};
+  const conditions = ["source = 'standalone_pix'"];
+  const params = [];
+
+  if (query.status) {
+    conditions.push('status = ?');
+    params.push(String(query.status));
+  }
+  if (query.cashier_key) {
+    conditions.push('cashier_key = ?');
+    params.push(String(query.cashier_key));
+  }
+  if (query.display_id) {
+    conditions.push('display_id = ?');
+    params.push(String(query.display_id));
+  }
+  if (query.date_from) {
+    conditions.push('created_at >= ?');
+    params.push(String(query.date_from));
+  }
+  if (query.date_to) {
+    conditions.push('created_at <= ?');
+    params.push(String(query.date_to));
+  }
+  if (query.search) {
+    conditions.push('(description LIKE ? OR shared_phone LIKE ? OR local_reference LIKE ?)');
+    const term = `%${String(query.search).trim()}%`;
+    params.push(term, term, term);
+  }
+
+  const limit = Math.min(Math.max(Number(query.limit || 80), 1), 200);
+  const [rows] = await pool.query(
+    `SELECT * FROM pdv_pix_payments WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC LIMIT ${limit}`,
+    params
+  );
+  return { data: rows.map((row) => buildStandalonePixResponse(row)) };
+});
+
+fastify.get('/pix/standalone/:id/status', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [rows] = await pool.query("SELECT * FROM pdv_pix_payments WHERE id = ? AND source = 'standalone_pix' LIMIT 1", [req.params.id]);
+  const current = rows[0];
+  if (!current) return reply.code(404).send({ error: 'Pix avulso nao encontrado' });
+
+  if (isStandalonePixExpired(current)) {
+    await pool.query(
+      "UPDATE pdv_pix_payments SET status = 'expired', cancel_reason = 'unpaid_expired', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'approved'",
+      [current.id]
+    );
+    await clearDisplayActivePixIfMatches(current.id);
+    const [updatedRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [current.id]);
+    return buildStandalonePixResponse(updatedRows[0]);
+  }
+
+  if (!current.mercado_pago_payment_id) return buildStandalonePixResponse(current);
+
+  const mp = await getPdvMercadoPagoAccessToken();
+  if (!mp?.accessToken) return reply.code(400).send({ error: 'Mercado Pago nao configurado' });
+
+  const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(current.mercado_pago_payment_id)}`, {
+    headers: { Authorization: `Bearer ${mp.accessToken}` },
+  });
+  const raw = await response.json().catch(() => ({}));
+  if (!response.ok) return reply.code(502).send({ error: 'Falha ao consultar Mercado Pago', detail: raw?.message || raw?.error || response.statusText });
+
+  const status = normalizePdvPixStatus(raw.status);
+  await pool.query(
+    'UPDATE pdv_pix_payments SET status = ?, raw_response_json = ?, approved_at = IF(? = "approved", COALESCE(approved_at, CURRENT_TIMESTAMP), approved_at), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [status, JSON.stringify(raw), status, current.id]
+  );
+  const [updatedRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [current.id]);
+  return buildStandalonePixResponse(updatedRows[0]);
+});
+
+fastify.post('/pix/standalone/:id/share-whatsapp', { preHandler: requireSyncKey }, async (req, reply) => {
+  const phone = String(req.body?.phone || '').replace(/\D/g, '');
+  if (phone.length < 10) return reply.code(400).send({ error: 'Telefone WhatsApp invalido' });
+
+  const [rows] = await pool.query("SELECT * FROM pdv_pix_payments WHERE id = ? AND source = 'standalone_pix' LIMIT 1", [req.params.id]);
+  const current = rows[0];
+  if (!current) return reply.code(404).send({ error: 'Pix avulso nao encontrado' });
+
+  await pool.query(
+    "UPDATE pdv_pix_payments SET shared_phone = ?, shared_at = CURRENT_TIMESTAMP, share_channel = 'whatsapp_link', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [phone, current.id]
+  );
+  const [updatedRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [current.id]);
+  const pix = buildStandalonePixResponse(updatedRows[0], { publicBaseUrl: 'https://www.mercadodovale.com.br' });
+  const text = [
+    'Mercado do Vale - Pix avulso',
+    `Valor: R$ ${(Number(pix.amount || 0) / 100).toFixed(2).replace('.', ',')}`,
+    pix.description ? `Descricao: ${pix.description}` : '',
+    `Link para pagar: ${pix.public_url}`,
+    'Este Pix vence em 10 minutos.',
+    'Abra o link para escanear o QR Code ou copiar o codigo Pix.',
+  ].filter(Boolean).join('\n');
+  return { whatsapp_url: `https://wa.me/${phone}?text=${encodeURIComponent(text)}`, phone, pix };
+});
+
+fastify.get('/pix/public/:token', async (req, reply) => {
+  const token = String(req.params.token || '').trim();
+  if (!token) return reply.code(404).send({ error: 'Pix nao encontrado' });
+  const [rows] = await pool.query("SELECT * FROM pdv_pix_payments WHERE public_token = ? AND source = 'standalone_pix' LIMIT 1", [token]);
+  const current = rows[0];
+  if (!current) return reply.code(404).send({ error: 'Pix nao encontrado' });
+
+  if (isStandalonePixExpired(current)) {
+    await pool.query(
+      "UPDATE pdv_pix_payments SET status = 'expired', cancel_reason = 'unpaid_expired', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'approved'",
+      [current.id]
+    );
+    await clearDisplayActivePixIfMatches(current.id);
+    const [updatedRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [current.id]);
+    return buildStandalonePixPublicResponse(updatedRows[0]);
+  }
+
+  return buildStandalonePixPublicResponse(current);
+});
+
 fastify.post('/pdv/displays/:displayId/active-pix', { preHandler: requireSyncKey }, async (req, reply) => {
   const pixPaymentId = String(req.body?.pix_payment_id || '').trim();
   if (!pixPaymentId) return reply.code(400).send({ error: 'pix_payment_id obrigatorio' });
@@ -26925,7 +27239,8 @@ async function addIndexIfMissing(table, indexName, column) {
     [table, indexName]
   );
   if (Number(row.cnt) === 0) {
-    await pool.query(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` (\`${column}\`)`);
+    const columns = String(column).split(',').map((item) => `\`${item.trim().replace(/`/g, '')}\``).join(', ');
+    await pool.query(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` (${columns})`);
     console.log(`[migration] Added index ${table}.${indexName}`);
   } else {
     console.log(`[migration] index ${table}.${indexName} already exists - skip`);
@@ -28212,6 +28527,20 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] pdv display and pix tables: OK');
+
+  await addColumnIfMissing('pdv_pix_payments', 'source', "VARCHAR(40) NOT NULL DEFAULT 'pdv_sale'");
+  await addColumnIfMissing('pdv_pix_payments', 'public_token', 'VARCHAR(80) NULL');
+  await addColumnIfMissing('pdv_pix_payments', 'description', 'VARCHAR(255) NULL');
+  await addColumnIfMissing('pdv_pix_payments', 'expires_at', 'DATETIME NULL');
+  await addColumnIfMissing('pdv_pix_payments', 'cancel_reason', 'VARCHAR(80) NULL');
+  await addColumnIfMissing('pdv_pix_payments', 'shared_phone', 'VARCHAR(40) NULL');
+  await addColumnIfMissing('pdv_pix_payments', 'shared_at', 'DATETIME NULL');
+  await addColumnIfMissing('pdv_pix_payments', 'share_channel', 'VARCHAR(40) NULL');
+  await addColumnIfMissing('pdv_pix_payments', 'approved_at', 'DATETIME NULL');
+  await addColumnIfMissing('pdv_pix_payments', 'cash_closing_id', 'VARCHAR(80) NULL');
+  await addIndexIfMissing('pdv_pix_payments', 'idx_pdv_pix_source_created', 'source, created_at');
+  await addIndexIfMissing('pdv_pix_payments', 'idx_pdv_pix_public_token', 'public_token');
+  await addIndexIfMissing('pdv_pix_payments', 'idx_pdv_pix_expires', 'expires_at');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_debts (

@@ -1,0 +1,255 @@
+import React from 'react';
+import { Copy, ExternalLink, MessageCircle, Printer, QrCode, RefreshCw, Send, Smartphone } from 'lucide-react';
+import { toast } from 'sonner';
+import { standalonePixService } from '../../../services/standalonePixService';
+import { pdvDisplayService, buildPdvPixPrintData } from '../../../services/pdvDisplayService';
+import { printPixQr } from '../../../utils/printPixQr';
+import type { PdvDisplay } from '../../../types/pdvDisplay';
+import type { StandalonePixPayment } from '../../../types/standalonePix';
+import { formatStandalonePixStatus, isStandalonePixPayable } from '../../../types/standalonePix';
+
+function formatCurrency(cents: number): string {
+  return (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function toCents(value: string): number {
+  const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
+  return Math.round(Number(normalized || 0) * 100);
+}
+
+function formatDateTime(value?: string | null): string {
+  return value ? new Date(value).toLocaleString('pt-BR') : '-';
+}
+
+export default function StandalonePixPage() {
+  const [amount, setAmount] = React.useState('');
+  const [description, setDescription] = React.useState('Pix avulso Mercado do Vale');
+  const [cashierKey, setCashierKey] = React.useState(() => localStorage.getItem('standalone_pix_cashier_key') || 'caixa-01');
+  const [displayId, setDisplayId] = React.useState(() => localStorage.getItem('standalone_pix_display_id') || '');
+  const [phone, setPhone] = React.useState('');
+  const [currentPix, setCurrentPix] = React.useState<StandalonePixPayment | null>(null);
+  const [payments, setPayments] = React.useState<StandalonePixPayment[]>([]);
+  const [displays, setDisplays] = React.useState<PdvDisplay[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+
+  const displayOptions = React.useMemo(
+    () => displays.filter((display) => display.is_active && (display.type === 'cashier' || display.type === 'hybrid')),
+    [displays]
+  );
+
+  const loadData = React.useCallback(async () => {
+    const [pixRows, displayRows] = await Promise.all([
+      standalonePixService.list({ limit: 80, search }),
+      pdvDisplayService.listDisplays(),
+    ]);
+    setPayments(pixRows);
+    setDisplays(displayRows);
+  }, [search]);
+
+  React.useEffect(() => {
+    loadData().catch((error) => {
+      console.error('Erro ao carregar Pix avulso:', error);
+      toast.error('Erro ao carregar Pix avulso');
+    });
+  }, [loadData]);
+
+  async function copyText(text?: string | null, label = 'Texto') {
+    if (!text) {
+      toast.error(`${label} indisponivel`);
+      return;
+    }
+    const absoluteText = text.startsWith('/pix/') ? `${window.location.origin}${text}` : text;
+    await navigator.clipboard.writeText(absoluteText);
+    toast.success(`${label} copiado`);
+  }
+
+  async function handleCreate() {
+    const cents = toCents(amount);
+    if (cents <= 0) {
+      toast.error('Informe um valor para gerar o Pix');
+      return;
+    }
+    setLoading(true);
+    try {
+      localStorage.setItem('standalone_pix_cashier_key', cashierKey.trim() || 'caixa-01');
+      localStorage.setItem('standalone_pix_display_id', displayId.trim());
+      const pix = await standalonePixService.create({
+        amount: cents,
+        description: description.trim() || 'Pix avulso Mercado do Vale',
+        cashier_key: cashierKey.trim() || 'caixa-01',
+        display_id: displayId.trim() || null,
+      });
+      setCurrentPix(pix);
+      await loadData();
+      toast.success('Pix Avulso gerado');
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao gerar Pix Avulso');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRefresh(pix = currentPix) {
+    if (!pix) return;
+    setLoading(true);
+    try {
+      const updated = await standalonePixService.refreshStatus(pix.id);
+      setCurrentPix(updated);
+      await loadData();
+      toast.success('Status atualizado');
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao atualizar Pix');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDisplay(pix = currentPix) {
+    if (!pix || !displayId) {
+      toast.error('Selecione um Pix e um display');
+      return;
+    }
+    if (!isStandalonePixPayable(pix)) {
+      toast.error('Pix aprovado ou cancelado nao pode ir para o display');
+      return;
+    }
+    await pdvDisplayService.setActivePix(displayId, pix.id);
+    toast.success('Pix exibido no display');
+  }
+
+  async function handleShare(pix = currentPix) {
+    if (!pix) {
+      toast.error('Gere ou selecione um Pix primeiro');
+      return;
+    }
+    if (!phone.trim()) {
+      toast.error('Informe o WhatsApp do cliente');
+      return;
+    }
+    const result = await standalonePixService.shareWhatsApp(pix.id, phone);
+    setCurrentPix(result);
+    window.open(result.whatsapp_url, '_blank');
+    await loadData();
+  }
+
+  function handlePrint(pix = currentPix) {
+    if (!pix) return;
+    printPixQr(buildPdvPixPrintData({
+      payment: pix as any,
+      storeName: 'Mercado do Vale',
+      instructions: 'Este Pix avulso vence em 10 minutos.',
+    }));
+  }
+
+  return (
+    <div className="space-y-6 p-6">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Pix Avulso</h1>
+        <p className="text-sm text-slate-500">Gere cobrancas Mercado Pago fora do PDV, com extrato e display.</p>
+      </div>
+
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[420px_1fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex items-center gap-2 text-sm font-bold text-slate-800">
+            <QrCode size={18} /> Gerar Pix
+          </div>
+          <div className="space-y-3">
+            <input value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Valor em reais" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" />
+            <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descricao" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" />
+            <input value={cashierKey} onChange={(event) => setCashierKey(event.target.value)} placeholder="caixa-01" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" />
+            <select value={displayId} onChange={(event) => setDisplayId(event.target.value)} className="w-full rounded border border-slate-200 px-3 py-2 text-sm">
+              <option value="">Sem display</option>
+              {displayOptions.map((display) => <option key={display.id} value={display.id}>{display.name}</option>)}
+            </select>
+            <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="WhatsApp do cliente" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" />
+            <button onClick={handleCreate} disabled={loading} className="inline-flex w-full items-center justify-center gap-2 rounded bg-cyan-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+              <QrCode size={16} /> {loading ? 'Gerando...' : 'Gerar Pix'}
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          {currentPix ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr]">
+              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                {currentPix.qr_code_base64 && isStandalonePixPayable(currentPix) ? (
+                  <img src={`data:image/png;base64,${currentPix.qr_code_base64}`} alt="QR Code Pix" className="h-48 w-48 object-contain" />
+                ) : (
+                  <div className="flex h-48 w-48 items-center justify-center text-center text-sm text-slate-500">{formatStandalonePixStatus(currentPix)}</div>
+                )}
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-2xl font-black text-slate-900">{formatCurrency(currentPix.amount)}</div>
+                  <div className="text-sm font-semibold text-cyan-700">{formatStandalonePixStatus(currentPix)}</div>
+                  <div className="text-xs text-slate-500">Expira em: {formatDateTime(currentPix.expires_at)}</div>
+                </div>
+                <p className="break-all rounded bg-slate-50 p-2 font-mono text-xs text-slate-600">{currentPix.qr_code || 'Pix copia e cola indisponivel'}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => copyText(currentPix.qr_code, 'Copiar codigo Pix')} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><Copy size={14} />Copiar codigo Pix</button>
+                  <button onClick={() => copyText(currentPix.public_path, 'Copiar link publico')} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><ExternalLink size={14} />Copiar link publico</button>
+                  <button onClick={() => handleShare()} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><MessageCircle size={14} />Compartilhar no WhatsApp</button>
+                  <button onClick={() => handleDisplay()} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><Smartphone size={14} />Exibir no display</button>
+                  <button onClick={() => handleRefresh()} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><RefreshCw size={14} />Atualizar</button>
+                  <button onClick={() => handlePrint()} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><Printer size={14} />Imprimir QR</button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex min-h-64 items-center justify-center text-sm text-slate-500">Gere um Pix Avulso para ver o QR Code.</div>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Extrato</h2>
+            <p className="text-xs text-slate-500">Pix vencido aparece como Cancelado por falta de pagamento.</p>
+          </div>
+          <div className="flex gap-2">
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar no extrato" className="rounded border border-slate-200 px-3 py-2 text-sm" />
+            <button onClick={() => loadData()} className="inline-flex items-center gap-1 rounded border px-3 py-2 text-sm font-semibold"><RefreshCw size={14} />Filtrar</button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Criado</th>
+                <th className="px-3 py-2">Valor</th>
+                <th className="px-3 py-2">Descricao</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Caixa</th>
+                <th className="px-3 py-2">WhatsApp</th>
+                <th className="px-3 py-2">Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((pix) => (
+                <tr key={pix.id} className="border-t border-slate-100">
+                  <td className="px-3 py-2">{formatDateTime(pix.created_at)}</td>
+                  <td className="px-3 py-2 font-bold">{formatCurrency(pix.amount)}</td>
+                  <td className="px-3 py-2">{pix.description}</td>
+                  <td className="px-3 py-2">{formatStandalonePixStatus(pix)}</td>
+                  <td className="px-3 py-2">{pix.cashier_key || '-'}</td>
+                  <td className="px-3 py-2">{pix.shared_phone || '-'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex gap-1">
+                      <button title="Abrir" onClick={() => setCurrentPix(pix)} className="rounded border p-1"><ExternalLink size={14} /></button>
+                      <button title="Atualizar" onClick={() => handleRefresh(pix)} className="rounded border p-1"><RefreshCw size={14} /></button>
+                      <button title="Copiar codigo" onClick={() => copyText(pix.qr_code, 'Copiar codigo Pix')} className="rounded border p-1"><Copy size={14} /></button>
+                      <button title="Imprimir" onClick={() => handlePrint(pix)} className="rounded border p-1"><Printer size={14} /></button>
+                      <button title="Compartilhar" onClick={() => handleShare(pix)} className="rounded border p-1"><Send size={14} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
