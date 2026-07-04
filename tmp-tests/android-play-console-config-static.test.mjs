@@ -20,6 +20,8 @@ assert.match(gitignore, /android\/totem-pix\/keystore\.properties/, 'senha da ke
 assert.match(gitignore, /android\/totem-pix\/\*\.jks/, 'arquivo da keystore nao deve entrar no Git');
 assert.match(keystoreExample, /storeFile=totem-pix-upload-key\.jks/, 'exemplo deve documentar a chave de upload');
 assert.match(playDoc, /app-release\.aab/, 'documentacao deve indicar o AAB para Play Console');
+assert.match(androidManifest, /android:icon="@mipmap\/ic_launcher"/, 'app deve declarar icone no launcher Android');
+assert.match(androidManifest, /android:roundIcon="@mipmap\/ic_launcher_round"/, 'app deve declarar icone redondo no launcher Android');
 assert.match(androidManifest, /WAKE_LOCK/, 'app deve declarar WAKE_LOCK para manter rede ativa no totem');
 assert.match(mainActivity, /PARTIAL_WAKE_LOCK/, 'app deve manter CPU\/rede ativas mesmo se a tela bloquear');
 assert.match(mainActivity, /FLAG_KEEP_SCREEN_ON/, 'app deve tentar impedir bloqueio da tela durante exibicao');
