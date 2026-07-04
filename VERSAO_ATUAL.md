@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.30-display-idle-qr
+version: v1.2.31-display-hotfix
 date: 2026-07-04
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260704-202519-display-idle-qr
+release_vps: /var/www/mdv-site/releases/20260704-203841-display-hotfix
 branch: main
-summary: Atualiza a tela ociosa do display PDV com QR do site, Instagram e Wi-Fi.
+summary: Corrige o QR da tela do display e mostra a versao visual do app junto ao nome.
 ```

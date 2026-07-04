@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import QRCode from 'react-qr-code';
+import * as ReactQRCode from 'react-qr-code';
 import { CheckCircle2, Loader2, MessageCircle, MonitorSmartphone, QrCode, RefreshCw, ShieldAlert, WifiOff } from 'lucide-react';
 import { pdvDisplayService } from '../../services/pdvDisplayService';
 import { productService } from '../../services/products';
@@ -13,6 +13,14 @@ const POLLING_INTERVAL_MS = 5000;
 const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
+const DISPLAY_APP_VERSION = 'V1.01';
+
+const QRCode = (
+    (ReactQRCode as any).default?.default ||
+    (ReactQRCode as any).default?.QRCode ||
+    (ReactQRCode as any).QRCode ||
+    (ReactQRCode as any).default
+) as React.ComponentType<any>;
 
 type IdleQrCard = {
     type: 'site' | 'instagram' | 'wifi';
@@ -194,6 +202,10 @@ function formatCountdown(milliseconds: number): string {
 
 function getPaymentOrderNumber(payment: PdvPixPayment): string {
     return payment.receipt?.order_number || payment.sale_draft_id || payment.local_reference || payment.id;
+}
+
+function getDisplayVersionLabel(name: string | undefined): string {
+    return `${DISPLAY_APP_VERSION} - ${String(name || 'Display Android').trim() || 'Display Android'}`;
 }
 
 export default function DisplayPage() {
@@ -409,7 +421,7 @@ export default function DisplayPage() {
                 )}
                 {!showPix && (
                     <p className="pointer-events-none absolute bottom-4 left-4 max-w-[55vw] truncate text-sm font-semibold text-slate-500 sm:text-base">
-                        {display?.name || 'Display Android'}
+                        {getDisplayVersionLabel(display?.name)}
                     </p>
                 )}
             </section>
