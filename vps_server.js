@@ -8896,6 +8896,53 @@ async function createOrUpdateGoogleContact({ sender, name }) {
   return { ok: true, resourceName: contact.resourceName || null };
 }
 
+function normalizeGoogleContactPhoneDigits(value) {
+  const digits = String(value || '').replace(/\D+/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('55')) return digits;
+  if (digits.length >= 10 && digits.length <= 11) return `55${digits}`;
+  return digits;
+}
+
+function mapGoogleContactPerson(person) {
+  const phone = person?.phoneNumbers?.find((item) => item?.value)?.value || '';
+  const phoneDigits = normalizeGoogleContactPhoneDigits(phone);
+  return {
+    resource_name: person?.resourceName || null,
+    name: person?.names?.find((item) => item?.displayName)?.displayName || 'Contato sem nome',
+    phone,
+    phone_digits: phoneDigits,
+    phone_local: phoneDigits.startsWith('55') ? phoneDigits.slice(2) : phoneDigits,
+    note: person?.biographies?.find((item) => item?.value)?.value || null,
+  };
+}
+
+async function searchGoogleContacts(query, limit = 8) {
+  const normalizedQuery = String(query || '').trim();
+  if (normalizedQuery.length < 2) return { configured: true, data: [] };
+  const accessToken = await getGoogleContactsAccessToken();
+  if (!accessToken) return { configured: false, data: [] };
+
+  const url = new URL('https://people.googleapis.com/v1/people:searchContacts');
+  url.searchParams.set('query', normalizedQuery);
+  url.searchParams.set('pageSize', String(Math.min(Math.max(Number(limit) || 8, 1), 20)));
+  url.searchParams.set('readMask', 'names,phoneNumbers,biographies,metadata');
+  url.searchParams.set('sources', 'READ_SOURCE_TYPE_CONTACT');
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Google contact search failed: ${res.status} ${await res.text()}`);
+  }
+  const data = await res.json();
+  const people = Array.isArray(data.results) ? data.results.map((item) => item.person).filter(Boolean) : [];
+  return {
+    configured: true,
+    data: people.map(mapGoogleContactPerson).filter((contact) => contact.phone_digits),
+  };
+}
+
 async function getAutoresponderContactNameState(sender) {
   const [rows] = await pool.query(
     `SELECT contact_name_status, contact_name_suggestion, contact_name_confirmed, google_contact_resource_name
@@ -14237,6 +14284,15 @@ fastify.get('/autoresponder/whatsapp/debug', { preHandler: requireSyncKey }, asy
       baseUrl: EVOLUTION_BASE_URL,
       instanceName: EVOLUTION_INSTANCE_NAME,
     });
+  }
+});
+
+fastify.get('/google-contacts/search', { preHandler: requireSyncKey }, async (req, reply) => {
+  try {
+    const result = await searchGoogleContacts(req.query?.q || req.query?.query || '', req.query?.limit || 8);
+    return result;
+  } catch (err) {
+    return reply.code(502).send({ error: 'Falha ao buscar agenda Google', detail: err?.message || String(err) });
   }
 });
 

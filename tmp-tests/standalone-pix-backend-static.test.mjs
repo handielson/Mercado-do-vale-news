@@ -10,6 +10,10 @@ function assertBackend(source, label) {
     "fastify.get('/pix/standalone'",
     "fastify.get('/pix/standalone/:id/status'",
     "fastify.post('/pix/standalone/:id/share-whatsapp'",
+    "fastify.get('/google-contacts/search'",
+    'searchGoogleContacts',
+    'people:searchContacts',
+    'getGoogleContactsAccessToken',
     "fastify.get('/pix/public/:token'",
     "metadata: {",
     "flow: 'standalone_pix'",
@@ -42,6 +46,11 @@ function assertBackend(source, label) {
     source,
     /normalizeStandalonePixStatusLabel[\s\S]*Cancelado por falta de pagamento/,
     `${label} must expose unpaid expiration label`
+  );
+  assert.match(
+    source,
+    /fastify\.get\('\/google-contacts\/search', \{ preHandler: requireSyncKey \}/,
+    `${label} must protect Google Contacts search with sync key`
   );
 }
 

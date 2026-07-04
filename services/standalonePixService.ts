@@ -1,5 +1,6 @@
 import { vpsClient } from './vpsClient';
 import type {
+  GoogleContactOption,
   StandalonePixCreateInput,
   StandalonePixListFilters,
   StandalonePixPayment,
@@ -32,6 +33,11 @@ export const standalonePixService = {
 
   async shareWhatsApp(id: string, phone: string): Promise<StandalonePixShareResponse> {
     return vpsClient.post<StandalonePixShareResponse>(`/pix/standalone/${encodeURIComponent(id)}/share-whatsapp`, { phone });
+  },
+
+  async searchGoogleContacts(query: string): Promise<GoogleContactOption[]> {
+    const response = await vpsClient.get<{ data: GoogleContactOption[] }>('/google-contacts/search' + buildQuery({ q: query, limit: 8 } as any));
+    return Array.isArray(response.data) ? response.data : [];
   },
 
   async getPublic(token: string): Promise<StandalonePixPayment> {

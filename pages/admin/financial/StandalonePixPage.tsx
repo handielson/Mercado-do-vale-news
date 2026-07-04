@@ -5,7 +5,7 @@ import { standalonePixService } from '../../../services/standalonePixService';
 import { pdvDisplayService, buildPdvPixPrintData } from '../../../services/pdvDisplayService';
 import { printPixQr } from '../../../utils/printPixQr';
 import type { PdvDisplay } from '../../../types/pdvDisplay';
-import type { StandalonePixPayment } from '../../../types/standalonePix';
+import type { GoogleContactOption, StandalonePixPayment } from '../../../types/standalonePix';
 import { formatStandalonePixStatus, isStandalonePixPayable } from '../../../types/standalonePix';
 
 function formatCurrency(cents: number): string {
@@ -21,12 +21,25 @@ function formatDateTime(value?: string | null): string {
   return value ? new Date(value).toLocaleString('pt-BR') : '-';
 }
 
+function normalizeBrazilLocalPhone(value: string): string {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.startsWith('55') ? digits.slice(2) : digits;
+}
+
+function buildBrazilWhatsAppPhone(value: string): string {
+  const local = normalizeBrazilLocalPhone(value);
+  return local ? `55${local}` : '';
+}
+
 export default function StandalonePixPage() {
   const [amount, setAmount] = React.useState('');
   const [description, setDescription] = React.useState('Pix avulso Mercado do Vale');
   const [cashierKey, setCashierKey] = React.useState(() => localStorage.getItem('standalone_pix_cashier_key') || 'caixa-01');
   const [displayId, setDisplayId] = React.useState(() => localStorage.getItem('standalone_pix_display_id') || '');
   const [phone, setPhone] = React.useState('');
+  const [contactSearch, setContactSearch] = React.useState('');
+  const [contactResults, setContactResults] = React.useState<GoogleContactOption[]>([]);
+  const [contactLoading, setContactLoading] = React.useState(false);
   const [currentPix, setCurrentPix] = React.useState<StandalonePixPayment | null>(null);
   const [payments, setPayments] = React.useState<StandalonePixPayment[]>([]);
   const [displays, setDisplays] = React.useState<PdvDisplay[]>([]);
@@ -53,6 +66,25 @@ export default function StandalonePixPage() {
       toast.error('Erro ao carregar Pix avulso');
     });
   }, [loadData]);
+
+  React.useEffect(() => {
+    const query = contactSearch.trim();
+    if (query.length < 2) {
+      setContactResults([]);
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setContactLoading(true);
+      standalonePixService.searchGoogleContacts(query)
+        .then(setContactResults)
+        .catch((error) => {
+          console.error('Erro ao buscar agenda Google:', error);
+          setContactResults([]);
+        })
+        .finally(() => setContactLoading(false));
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [contactSearch]);
 
   async function copyText(text?: string | null, label = 'Texto') {
     if (!text) {
@@ -123,14 +155,22 @@ export default function StandalonePixPage() {
       toast.error('Gere ou selecione um Pix primeiro');
       return;
     }
-    if (!phone.trim()) {
+    const whatsappPhone = buildBrazilWhatsAppPhone(phone);
+    if (!whatsappPhone) {
       toast.error('Informe o WhatsApp do cliente');
       return;
     }
-    const result = await standalonePixService.shareWhatsApp(pix.id, phone);
+    const result = await standalonePixService.shareWhatsApp(pix.id, whatsappPhone);
     setCurrentPix(result);
     window.open(result.whatsapp_url, '_blank');
     await loadData();
+  }
+
+  function handleSelectGoogleContact(contact: GoogleContactOption) {
+    setPhone(normalizeBrazilLocalPhone(contact.phone_local || contact.phone_digits || contact.phone));
+    setContactSearch(contact.name);
+    setContactResults([]);
+    toast.success(`Contato selecionado: ${contact.name}`);
   }
 
   function handlePrint(pix = currentPix) {
@@ -162,7 +202,29 @@ export default function StandalonePixPage() {
               <option value="">Sem display</option>
               {displayOptions.map((display) => <option key={display.id} value={display.id}>{display.name}</option>)}
             </select>
-            <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="WhatsApp do cliente" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" />
+            <div className="space-y-2">
+              <input value={contactSearch} onChange={(event) => setContactSearch(event.target.value)} placeholder="Buscar cliente na agenda Google" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" />
+              {contactLoading && <div className="text-xs text-slate-500">Buscando agenda...</div>}
+              {contactResults.length > 0 && (
+                <div className="max-h-36 overflow-y-auto rounded border border-slate-200 bg-white text-sm shadow-sm">
+                  {contactResults.map((contact) => (
+                    <button
+                      key={`${contact.resource_name || contact.phone_digits}`}
+                      type="button"
+                      onClick={() => handleSelectGoogleContact(contact)}
+                      className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-cyan-50"
+                    >
+                      <span className="block font-semibold text-slate-800">{contact.name}</span>
+                      <span className="block text-xs text-slate-500">+{contact.phone_digits}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex rounded border border-slate-200 bg-white text-sm focus-within:ring-1 focus-within:ring-cyan-500">
+                <span className="inline-flex items-center border-r border-slate-200 bg-slate-50 px-3 font-semibold text-slate-600">+55</span>
+                <input value={phone} onChange={(event) => setPhone(normalizeBrazilLocalPhone(event.target.value))} placeholder="87988032612" className="min-w-0 flex-1 px-3 py-2 outline-none" />
+              </div>
+            </div>
             <button onClick={handleCreate} disabled={loading} className="inline-flex w-full items-center justify-center gap-2 rounded bg-cyan-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
               <QrCode size={16} /> {loading ? 'Gerando...' : 'Gerar Pix'}
             </button>

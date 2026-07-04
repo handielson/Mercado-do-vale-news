@@ -16,12 +16,14 @@ for (const snippet of [
   "vpsClient.get<StandalonePixPayment>(`/pix/standalone/${encodeURIComponent(id)}/status`",
   "vpsClient.post<StandalonePixShareResponse>(`/pix/standalone/${encodeURIComponent(id)}/share-whatsapp`",
   "vpsClient.get<StandalonePixPayment>(`/pix/public/${encodeURIComponent(token)}`",
+  "vpsClient.get<{ data: GoogleContactOption[] }>('/google-contacts/search",
 ]) {
   assert.ok(service.includes(snippet), `standalonePixService.ts must include ${snippet}`);
 }
 
 for (const snippet of [
   'StandalonePixPayment',
+  'GoogleContactOption',
   'Cancelado por falta de pagamento',
   'isStandalonePixPayable',
   'formatStandalonePixStatus',
@@ -41,6 +43,11 @@ for (const snippet of [
   'standalonePixService.create',
   'standalonePixService.list',
   'standalonePixService.shareWhatsApp',
+  'standalonePixService.searchGoogleContacts',
+  "placeholder=\"87988032612\"",
+  '+55',
+  'Buscar cliente na agenda Google',
+  'handleSelectGoogleContact',
 ]) {
   assert.ok(adminPage.includes(snippet), `StandalonePixPage.tsx must include ${snippet}`);
 }

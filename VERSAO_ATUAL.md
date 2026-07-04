@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.24-pix-avulso
+version: v1.2.25-pix-agenda-google
 date: 2026-07-04
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260704-140610-pix-avulso
+release_vps: /var/www/mdv-site/releases/20260704-144420-pix-agenda-google
 branch: main
-summary: Publica Pix avulso Mercado Pago com QR publico, WhatsApp, display e vencimento de 10 minutos.
+summary: Integra agenda Google ao WhatsApp do Pix avulso com prefixo Brasil +55.
 ```

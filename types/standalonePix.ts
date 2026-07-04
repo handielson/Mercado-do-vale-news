@@ -1,5 +1,14 @@
 export type StandalonePixStatus = 'idle' | 'creating' | 'pending' | 'approved' | 'rejected' | 'expired' | 'error';
 
+export interface GoogleContactOption {
+  resource_name: string | null;
+  name: string;
+  phone: string;
+  phone_digits: string;
+  phone_local: string;
+  note?: string | null;
+}
+
 export interface StandalonePixPayment {
   id: string;
   source?: 'standalone_pix' | 'pdv_sale' | string;
