@@ -29073,6 +29073,11 @@ async function runMigrations() {
       WHERE footer_text = ?`,
     [legacyCompanyFooterText]
   );
+  await pool.query(
+    `UPDATE whatsapp_automation_logs
+        SET rendered_text = REPLACE(REPLACE(rendered_text, 'Obrigado pela preferencia, ', 'Tudo certo, '), 'Obrigado pela preferencia!\\n', '')
+      WHERE rendered_text LIKE '%Obrigado pela preferencia%'`
+  );
 
 
   await pool.query(`

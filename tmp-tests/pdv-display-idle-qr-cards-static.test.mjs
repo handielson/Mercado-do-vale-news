@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 const displayPage = readFileSync('pages/display/DisplayPage.tsx', 'utf8');
 const displayTypes = readFileSync('types/pdvDisplay.ts', 'utf8');
 const adminPage = readFileSync('pages/admin/settings/DisplaysPage.tsx', 'utf8');
+const routes = readFileSync('routes/index.tsx', 'utf8');
+const updatePage = readFileSync('pages/store/TotemPixUpdatePage.tsx', 'utf8');
 const androidActivity = readFileSync('android/totem-pix/app/src/main/java/br/com/mercadodovale/totempix/MainActivity.kt', 'utf8');
 const androidManifest = readFileSync('android/totem-pix/app/src/main/AndroidManifest.xml', 'utf8');
 
@@ -21,8 +23,8 @@ assert.match(displayPage, /getDisplayVersionLabel\(display\?\.name\)/, 'display 
 assert.match(displayPage, /fetch\('\/VERSION\.json', \{ cache: 'no-store' \}\)/, 'display deve buscar manifesto publico de versao sem cache');
 assert.match(displayPage, /getTotemUpdateNotice\(versionInfo, nativeVersion\)/, 'display deve calcular aviso de atualizacao do app');
 assert.match(displayPage, /Atualizacao disponivel/, 'display deve ter mensagem de atualizacao disponivel');
-assert.match(displayPage, /PLAY_STORE_UPDATE_URL/, 'display deve ter link de fallback para Play Store');
-assert.match(displayPage, /play\.google\.com\/apps\/testing\/br\.com\.mercadodovale\.totempix/, 'display deve apontar para o link de teste interno do Google Play');
+assert.match(displayPage, /TOTEM_UPDATE_HELP_URL/, 'display deve ter link de fallback para pagina propria de atualizacao');
+assert.match(displayPage, /totem-pix\/atualizar/, 'display deve apontar para a pagina propria de atualizacao');
 assert.match(displayPage, /Atualizar agora/, 'display deve mostrar botao de atualizacao');
 assert.match(displayPage, /totem_pix_android\?\.update_url/, 'display deve aceitar URL de atualizacao do manifesto publico');
 assert.match(displayPage, /getAppVersionName/, 'display deve ler versionName da ponte Android');
@@ -51,5 +53,8 @@ assert.match(androidActivity, /getWifiSsid/, 'ponte Android deve oferecer metodo
 assert.match(androidActivity, /getAppVersionName/, 'ponte Android deve oferecer metodo getAppVersionName');
 assert.match(androidActivity, /getAppVersionCode/, 'ponte Android deve oferecer metodo getAppVersionCode');
 assert.match(androidActivity, /shouldOverrideUrlLoading/, 'ponte Android deve abrir atualizacao fora do WebView');
+assert.match(routes, /path:\s*"\/totem-pix\/atualizar"/, 'rota publica de atualizacao do Totem Pix deve existir');
+assert.match(updatePage, /App not available/, 'pagina de atualizacao deve orientar quando a Play Store negar acesso');
+assert.match(updatePage, /play\.google\.com\/apps\/testing\/br\.com\.mercadodovale\.totempix/, 'pagina de atualizacao deve manter link de teste interno como acao secundaria');
 
 console.log('pdv display idle QR cards static checks passed');

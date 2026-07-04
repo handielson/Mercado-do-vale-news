@@ -13,7 +13,7 @@ const POLLING_INTERVAL_MS = 5000;
 const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
-const PLAY_STORE_UPDATE_URL = 'https://play.google.com/apps/testing/br.com.mercadodovale.totempix';
+const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
 const DISPLAY_APP_VERSION = 'V1.06';
 
 type TotemVersionInfo = {
@@ -325,7 +325,7 @@ export default function DisplayPage() {
     const idle_content = getIdleContent(display);
     const orientationClass = display?.orientation === 'portrait' ? 'max-w-[760px]' : 'max-w-[1280px]';
     const updateNotice = getTotemUpdateNotice(versionInfo, nativeVersion);
-    const updateUrl = String(versionInfo?.totem_pix_android?.update_url || PLAY_STORE_UPDATE_URL).trim();
+    const updateUrl = String(versionInfo?.totem_pix_android?.update_url || TOTEM_UPDATE_HELP_URL).trim();
 
     const idleItems = useMemo(() => {
         const qrCards = buildIdleQrCards(idle_content, companySettings).map((card) => ({ type: 'qr-card' as const, card }));

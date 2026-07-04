@@ -81,6 +81,7 @@ const PaymentIntegrationsPage = lazy(() => import('../pages/admin/settings/Payme
 const DisplaysPage = lazy(() => import('../pages/admin/settings/DisplaysPage'));
 const DisplayPage = lazy(() => import('../pages/display/DisplayPage'));
 const PixReceiptSharePage = lazy(() => import('../pages/store/PixReceiptSharePage').then(module => ({ default: module.PixReceiptSharePage })));
+const TotemPixUpdatePage = lazy(() => import('../pages/store/TotemPixUpdatePage').then(module => ({ default: module.TotemPixUpdatePage })));
 const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
 const CatalogPage = lazy(() => import('../pages/catalog/index'));
 const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
@@ -227,6 +228,10 @@ export const router = createBrowserRouter([
   {
     path: "/display",
     element: <DisplayPage />
+  },
+  {
+    path: "/totem-pix/atualizar",
+    element: <TotemPixUpdatePage />
   },
   {
     path: "/pix/:token",

@@ -183,7 +183,12 @@ for (const file of [
   'services/companySettingsService.ts',
   'pages/admin/settings/DocumentSettingsPage.tsx',
 ]) {
-  const source = readFileSync(file, 'utf8');
+  let source = readFileSync(file, 'utf8');
+  if (file === 'vps_server.js' || file === 'vps_server.cjs') {
+    source = source
+      .replace(/const legacyCompanyFooterText[\s\S]*?WHERE footer_text = \?`,\s*\[\s*legacyCompanyFooterText\s*\]\s*\);/, '')
+      .replace(/await pool\.query\(\s*`UPDATE whatsapp_automation_logs[\s\S]*?WHERE rendered_text LIKE '%Obrigado pela preferencia%'`\s*\);/, '');
+  }
   assert.doesNotMatch(
     source,
     /Obrigado pela prefer[êe]ncia|Obrigado pela preferencia/i,
@@ -194,6 +199,7 @@ for (const file of [
 for (const file of ['vps_server.js', 'vps_server.cjs']) {
   const source = readFileSync(file, 'utf8');
   assert.match(source, /UPDATE company_settings[\s\S]*SET footer_text = 'Volte sempre!'/, `${file} must migrate legacy company footer text`);
+  assert.match(source, /UPDATE whatsapp_automation_logs[\s\S]*Obrigado pela preferencia/, `${file} must clean legacy preference text from WhatsApp logs`);
 }
 
 assert.ok(

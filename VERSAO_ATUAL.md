@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.35-totem-update-link
+version: v1.2.36-totem-update-help
 date: 2026-07-04
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260704-204000-totem-update-link
+release_vps: /var/www/mdv-site/releases/20260704-211000-totem-update-help
 branch: main
-summary: Corrige link de atualizacao para teste interno, limpa rodape salvo no banco e prepara Totem Pix V1.06.
+summary: Troca botao de atualizacao do Totem Pix para pagina de ajuda propria e limpa historico antigo com frase de preferencia.
 ```
