@@ -15,6 +15,10 @@ assert.match(tab, /type:\s*'credit'/, 'DeliveryWorkerTab statement must include 
 assert.match(tab, /type:\s*'debit'/, 'DeliveryWorkerTab statement must include admin payments and offsets as debit entries');
 assert.match(tab, /Pagamento admin|Pagamento do admin/, 'DeliveryWorkerTab statement must label admin payment entries');
 assert.match(tab, /new Date\(.*\)\.toLocaleString\('pt-BR'/, 'DeliveryWorkerTab statement must show date and hour');
+assert.match(tab, /sortAt:\s*item\.created_at\s*\|\|\s*item\.paid_at\s*\|\|\s*''/, 'DeliveryWorkerTab statement must order admin payments by posting/update date first');
+assert.match(tab, /sortAt:\s*item\.created_at\s*\|\|\s*item\.delivered_at\s*\|\|\s*''/, 'DeliveryWorkerTab statement must order delivery credits by posting/update date first');
+assert.match(tab, /compareDeliveryStatementEntriesByDateDesc/, 'DeliveryWorkerTab statement must use one chronological comparator for credits and payments');
+assert.doesNotMatch(tab, /\}\)\.reverse\(\)/, 'DeliveryWorkerTab statement must not reverse grouped credits/payments after balance calculation');
 assert.match(tab, /Pedido \{entry\.orderNumber\}/, 'DeliveryWorkerTab statement must show order number for delivery credits');
 assert.match(tab, /Cliente: \{entry\.customerName/, 'DeliveryWorkerTab statement must show customer name for delivery credits');
 

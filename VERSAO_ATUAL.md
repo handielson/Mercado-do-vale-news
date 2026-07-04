@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.26-pix-agenda-google-fallback
+version: v1.2.27-extrato-entregador-ordem
 date: 2026-07-04
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260704-145120-pix-agenda-google-fallback
+release_vps: /var/www/mdv-site/releases/20260704-151821-v127-extrato-entregador-ordem
 branch: main
-summary: Integra agenda Google ao WhatsApp do Pix avulso com fallback quando o token Google estiver invalido.
+summary: Corrige a ordenacao cronologica do extrato do entregador para mostrar o pagamento mais recente no topo.
 ```

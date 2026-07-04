@@ -96,6 +96,7 @@ type DeliveryStatementEntry = {
     id: string;
     type: 'credit' | 'debit';
     occurredAt: string;
+    sortAt: string;
     title: string;
     description: string;
     amount: number;
@@ -104,6 +105,23 @@ type DeliveryStatementEntry = {
     customerName?: string;
     paymentMethod?: string;
 };
+
+type DeliveryStatementEntryWithoutBalance = Omit<DeliveryStatementEntry, 'balance'>;
+
+function parseDeliveryStatementTimestamp(value?: string | null): number {
+    if (!value) return 0;
+    const normalized = String(value).includes('T') ? String(value) : String(value).replace(' ', 'T');
+    const timestamp = new Date(normalized).getTime();
+    return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function compareDeliveryStatementEntriesByDateAsc(a: DeliveryStatementEntryWithoutBalance, b: DeliveryStatementEntryWithoutBalance): number {
+    return parseDeliveryStatementTimestamp(a.sortAt) - parseDeliveryStatementTimestamp(b.sortAt);
+}
+
+function compareDeliveryStatementEntriesByDateDesc(a: DeliveryStatementEntryWithoutBalance, b: DeliveryStatementEntryWithoutBalance): number {
+    return parseDeliveryStatementTimestamp(b.sortAt) - parseDeliveryStatementTimestamp(a.sortAt);
+}
 
 function getDeliveryAdminCompleteErrorMessage(error: unknown): string {
     const rawMessage = error instanceof Error ? error.message : String(error || '');
@@ -168,11 +186,12 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
     const settled = useMemo(() => settlements.reduce((sum, item) => sum + toCents(item.amount), 0), [settlements]);
     const payable = earned - settled;
     const deliveryStatementEntries = useMemo<DeliveryStatementEntry[]>(() => {
-        const entries = [
+        const entries: DeliveryStatementEntryWithoutBalance[] = [
             ...ledger.map((item) => ({
                 id: `ledger-${item.id}`,
                 type: 'credit' as const,
                 occurredAt: item.delivered_at || item.created_at || '',
+                sortAt: item.created_at || item.delivered_at || '',
                 title: getDeliveryLedgerDescription(item),
                 description: item.delivery_address_text || 'Entrega registrada',
                 amount: toCents(item.amount),
@@ -183,22 +202,24 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
                 id: `settlement-${item.id}`,
                 type: 'debit' as const,
                 occurredAt: item.paid_at || item.created_at || '',
+                sortAt: item.created_at || item.paid_at || '',
                 title: item.type === 'debt_offset' ? 'Abatimento em debito' : 'Pagamento admin',
                 description: item.description || 'Pagamento do admin ao entregador',
                 amount: toCents(item.amount),
                 paymentMethod: deliveryPaymentMethodLabel(item.payment_method || (item.type === 'debt_offset' ? 'saldo_entregas' : '')),
             })),
-        ].sort((a, b) => {
-            const left = new Date(String(a.occurredAt || '').replace(' ', 'T')).getTime() || 0;
-            const right = new Date(String(b.occurredAt || '').replace(' ', 'T')).getTime() || 0;
-            return left - right;
-        });
+        ];
 
         let runningBalance = 0;
-        return entries.map((entry) => {
+        const balanceByEntryId = new Map<string, number>();
+        [...entries].sort(compareDeliveryStatementEntriesByDateAsc).forEach((entry) => {
             runningBalance += entry.type === 'credit' ? entry.amount : -entry.amount;
-            return { ...entry, balance: runningBalance };
-        }).reverse();
+            balanceByEntryId.set(entry.id, runningBalance);
+        });
+
+        return [...entries]
+            .sort(compareDeliveryStatementEntriesByDateDesc)
+            .map((entry) => ({ ...entry, balance: balanceByEntryId.get(entry.id) || 0 }));
     }, [ledger, settlements]);
     const openJobs = useMemo(() => jobs.filter((job) => job.delivery_status !== 'delivered'), [jobs]);
 
