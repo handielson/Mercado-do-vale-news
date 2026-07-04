@@ -313,7 +313,7 @@ export default function DocumentSettingsPage() {
                                             onChange={(e) => handleChange('footer_text', e.target.value)}
                                             rows={2}
                                             className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="Ex: Obrigado pela preferência! Volte sempre!"
+                                            placeholder="Ex: Volte sempre!"
                                         />
                                         <p className="text-xs text-slate-500 mt-1">
                                             Mensagem exibida no final do recibo

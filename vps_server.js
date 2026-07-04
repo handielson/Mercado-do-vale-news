@@ -29057,7 +29057,7 @@ async function runMigrations() {
   await addColumnIfMissing('whatsapp_automation_templates', 'category', "VARCHAR(40) NOT NULL DEFAULT 'future'");
   await addColumnIfMissing('whatsapp_automation_templates', 'enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('whatsapp_automation_templates', 'variables_json', 'JSON NULL');
-  const legacySaleCompletedPreferenceLine = ['Obrigado pela', 'preferencia, {nome}! Seu pedido {pedido} ja esta registrado com a gente. 🚀'].join(' ');
+  const legacySaleCompletedPreferenceLine = ['Obrigado', 'pela', 'preferencia, {nome}! Seu pedido {pedido} ja esta registrado com a gente. 🚀'].join(' ');
   const nextSaleCompletedLine = '{nome}, seu pedido {pedido} ja esta registrado com a gente. 🚀';
   await pool.query(
     `UPDATE whatsapp_automation_templates

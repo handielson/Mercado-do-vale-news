@@ -4,13 +4,16 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.os.PowerManager
 import android.view.View
 import android.view.WindowManager
 import android.webkit.WebSettings
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.JavascriptInterface
@@ -39,7 +42,7 @@ class MainActivity : Activity() {
         )
 
         webView = WebView(this)
-        webView.webViewClient = WebViewClient()
+        webView.webViewClient = TotemWebViewClient()
         webView.settings.javaScriptEnabled = true
         webView.settings.domStorageEnabled = true
         webView.settings.cacheMode = WebSettings.LOAD_DEFAULT
@@ -77,6 +80,25 @@ class MainActivity : Activity() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) return
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) return
         requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), locationPermissionRequest)
+    }
+
+    private fun openExternalUrl(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (_: Exception) {
+            webView.loadUrl(url)
+        }
+    }
+
+    inner class TotemWebViewClient : WebViewClient() {
+        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+            val url = request?.url?.toString() ?: return false
+            if (url.startsWith("market://") || url.contains("play.google.com/store/apps/details")) {
+                openExternalUrl(url)
+                return true
+            }
+            return false
+        }
     }
 
     inner class TotemBridge {

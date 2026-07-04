@@ -16,11 +16,14 @@ assert.match(displayPage, /type:\s*'instagram'/, 'display deve incluir card de I
 assert.match(displayPage, /type:\s*'wifi'/, 'display deve incluir card de Wi-Fi');
 assert.match(displayPage, /WIFI:T:\$\{escapeWifiQrValue\(card\.security\)\};S:\$\{escapeWifiQrValue\(card\.ssid\)\};P:\$\{escapeWifiQrValue\(card\.password\)\};;/, 'QR Wi-Fi deve usar formato padrao Android/iOS');
 assert.match(displayPage, /bottom-4 left-4/, 'nome do display deve ficar no canto inferior esquerdo');
-assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.04'/, 'display deve mostrar versao visual do aplicativo');
+assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.05'/, 'display deve mostrar versao visual do aplicativo');
 assert.match(displayPage, /getDisplayVersionLabel\(display\?\.name\)/, 'display deve mostrar versao ao lado do nome');
 assert.match(displayPage, /fetch\('\/VERSION\.json', \{ cache: 'no-store' \}\)/, 'display deve buscar manifesto publico de versao sem cache');
 assert.match(displayPage, /getTotemUpdateNotice\(versionInfo, nativeVersion\)/, 'display deve calcular aviso de atualizacao do app');
 assert.match(displayPage, /Atualizacao disponivel/, 'display deve ter mensagem de atualizacao disponivel');
+assert.match(displayPage, /PLAY_STORE_UPDATE_URL/, 'display deve ter link de fallback para Play Store');
+assert.match(displayPage, /Atualizar agora/, 'display deve mostrar botao de atualizacao');
+assert.match(displayPage, /totem_pix_android\?\.update_url/, 'display deve aceitar URL de atualizacao do manifesto publico');
 assert.match(displayPage, /getAppVersionName/, 'display deve ler versionName da ponte Android');
 assert.match(displayPage, /getAppVersionCode/, 'display deve ler versionCode da ponte Android');
 assert.match(displayPage, /function getStandalonePixCode[\s\S]*slice\(-6\)/, 'display deve gerar codigo curto para Pix avulso');
@@ -38,7 +41,7 @@ assert.match(displayTypes, /security:\s*'WPA'/, 'tipo Wi-Fi deve aceitar WPA com
 assert.match(adminPage, /Configurar Wi-Fi/, 'admin deve expor configuracao de Wi-Fi do display');
 assert.match(adminPage, /Captar rede pelo app Android/, 'admin deve orientar captura automatica de SSID pelo app');
 assert.match(adminPage, /Confirmar senha/, 'admin deve pedir confirmacao de senha para reduzir erro');
-assert.match(adminPage, /DISPLAY_APP_VERSION = 'V1\.04'/, 'admin deve mostrar versao visual do app no display cadastrado');
+assert.match(adminPage, /DISPLAY_APP_VERSION = 'V1\.05'/, 'admin deve mostrar versao visual do app no display cadastrado');
 
 assert.match(androidManifest, /ACCESS_WIFI_STATE/, 'app Android deve declarar permissao para ler estado Wi-Fi');
 assert.match(androidManifest, /ACCESS_FINE_LOCATION/, 'app Android deve declarar permissao necessaria para SSID em Android moderno');
@@ -46,5 +49,6 @@ assert.match(androidActivity, /addJavascriptInterface/, 'app Android deve expor 
 assert.match(androidActivity, /getWifiSsid/, 'ponte Android deve oferecer metodo getWifiSsid');
 assert.match(androidActivity, /getAppVersionName/, 'ponte Android deve oferecer metodo getAppVersionName');
 assert.match(androidActivity, /getAppVersionCode/, 'ponte Android deve oferecer metodo getAppVersionCode');
+assert.match(androidActivity, /shouldOverrideUrlLoading/, 'ponte Android deve abrir atualizacao fora do WebView');
 
 console.log('pdv display idle QR cards static checks passed');

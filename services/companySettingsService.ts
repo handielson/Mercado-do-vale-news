@@ -129,7 +129,7 @@ export const companySettingsService = {
             cnpj: '',
             email: '',
             header_text: 'Bem-vindo!',
-            footer_text: 'Obrigado pela preferência! Volte sempre!',
+            footer_text: 'Volte sempre!',
             receipt_width: '80mm',
             show_company_info: true,
             show_order_number: true,

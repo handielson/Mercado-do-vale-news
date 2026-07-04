@@ -13,7 +13,8 @@ const POLLING_INTERVAL_MS = 5000;
 const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
-const DISPLAY_APP_VERSION = 'V1.04';
+const PLAY_STORE_UPDATE_URL = 'https://play.google.com/store/apps/details?id=br.com.mercadodovale.totempix';
+const DISPLAY_APP_VERSION = 'V1.05';
 
 type TotemVersionInfo = {
     version?: string;
@@ -22,6 +23,7 @@ type TotemVersionInfo = {
         latest_version_code?: number;
         minimum_recommended_version_name?: string;
         update_message?: string;
+        update_url?: string;
     };
 };
 
@@ -323,6 +325,7 @@ export default function DisplayPage() {
     const idle_content = getIdleContent(display);
     const orientationClass = display?.orientation === 'portrait' ? 'max-w-[760px]' : 'max-w-[1280px]';
     const updateNotice = getTotemUpdateNotice(versionInfo, nativeVersion);
+    const updateUrl = String(versionInfo?.totem_pix_android?.update_url || PLAY_STORE_UPDATE_URL).trim();
 
     const idleItems = useMemo(() => {
         const qrCards = buildIdleQrCards(idle_content, companySettings).map((card) => ({ type: 'qr-card' as const, card }));
@@ -521,8 +524,16 @@ export default function DisplayPage() {
                     <IdleView items={idleItems} slide={idleSlide} />
                 )}
                 {updateNotice && (
-                    <div className="pointer-events-none absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-lg border border-amber-300/40 bg-amber-400 px-4 py-2 text-center text-sm font-black text-slate-950 shadow-2xl sm:text-base">
-                        {updateNotice}
+                    <div className="absolute bottom-16 left-1/2 z-20 w-[min(92vw,520px)] -translate-x-1/2 rounded-lg border border-amber-300/50 bg-amber-400 p-3 text-center text-sm font-black text-slate-950 shadow-2xl sm:text-base">
+                        <p>{updateNotice}</p>
+                        <a
+                            href={updateUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-2 inline-flex rounded-lg bg-slate-950 px-4 py-2 text-sm font-black text-white shadow-lg"
+                        >
+                            Atualizar agora
+                        </a>
                     </div>
                 )}
                 {!showPix && (

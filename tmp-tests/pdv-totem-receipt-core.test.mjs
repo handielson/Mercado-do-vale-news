@@ -180,6 +180,8 @@ for (const file of [
   'vps_server.cjs',
   'services/whatsappAutomationTemplateService.ts',
   'utils/printSaleReceipt.ts',
+  'services/companySettingsService.ts',
+  'pages/admin/settings/DocumentSettingsPage.tsx',
 ]) {
   const source = readFileSync(file, 'utf8');
   assert.doesNotMatch(
