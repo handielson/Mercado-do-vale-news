@@ -943,6 +943,7 @@ function normalizeStandalonePixStatusLabel(row) {
   const status = normalizePdvPixStatus(row?.status);
   if (status === 'approved') return 'Aprovado';
   if (status === 'pending' || status === 'creating') return 'Pendente';
+  if (row?.cancel_reason === 'manual_cancelled') return 'Cancelado manualmente';
   if (status === 'expired') return 'Cancelado por falta de pagamento';
   if (status === 'rejected') return 'Rejeitado';
   return 'Erro';
@@ -1034,6 +1035,13 @@ function getPdvPixReceiptOrderNumber(payment) {
   if (saleDraftId) return saleDraftId;
   const localReference = String(payment?.local_reference || '').trim();
   if (localReference) {
+    if (localReference.toLowerCase().startsWith('standalone_pix:')) {
+      const standaloneId = localReference.slice(localReference.indexOf(':') + 1);
+      const codeSource = String(standaloneId || payment?.id || payment?.mercado_pago_payment_id || '')
+        .replace(/[^a-z0-9]/gi, '')
+        .toUpperCase();
+      return `PIX-${codeSource.slice(-6) || 'AVULSO'}`;
+    }
     const saleMatch = localReference.match(/^sale:(.+)$/i);
     return saleMatch?.[1] || localReference;
   }
@@ -1113,7 +1121,6 @@ function formatPdvPixReceiptWhatsAppMessage(receipt) {
     'Pagamento: Pix',
     `Autenticacao: ${receipt.authentication_code}`,
     `Data/hora: ${receipt.approved_at_label}`,
-    receipt.customer_first_name ? 'Obrigado pela preferencia!' : null,
     'Mercado do Vale',
   ].filter(Boolean).join('\n');
 }
@@ -24094,6 +24101,23 @@ fastify.get('/pix/standalone/:id/status', { preHandler: requireSyncKey }, async 
     'UPDATE pdv_pix_payments SET status = ?, raw_response_json = ?, approved_at = IF(? = "approved", COALESCE(approved_at, CURRENT_TIMESTAMP), approved_at), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     [status, JSON.stringify(raw), status, current.id]
   );
+  const [updatedRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [current.id]);
+  return buildStandalonePixResponse(updatedRows[0]);
+});
+
+fastify.post('/pix/standalone/:id/cancel', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [rows] = await pool.query("SELECT * FROM pdv_pix_payments WHERE id = ? AND source = 'standalone_pix' LIMIT 1", [req.params.id]);
+  const current = rows[0];
+  if (!current) return reply.code(404).send({ error: 'Pix avulso nao encontrado' });
+  if (normalizePdvPixStatus(current.status) === 'approved') {
+    return reply.code(400).send({ error: 'Pix aprovado nao pode ser cancelado' });
+  }
+
+  await pool.query(
+    "UPDATE pdv_pix_payments SET status = 'expired', cancel_reason = 'manual_cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [current.id]
+  );
+  await clearDisplayActivePixIfMatches(current.id);
   const [updatedRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [current.id]);
   return buildStandalonePixResponse(updatedRows[0]);
 });

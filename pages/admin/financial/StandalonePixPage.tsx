@@ -1,5 +1,5 @@
 import React from 'react';
-import { Copy, ExternalLink, MessageCircle, Printer, QrCode, RefreshCw, Send, Smartphone } from 'lucide-react';
+import { Ban, Copy, ExternalLink, MessageCircle, Printer, QrCode, RefreshCw, Send, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { standalonePixService } from '../../../services/standalonePixService';
 import { pdvDisplayService, buildPdvPixPrintData } from '../../../services/pdvDisplayService';
@@ -137,6 +137,31 @@ export default function StandalonePixPage() {
     }
   }
 
+  async function handleCancel(pix = currentPix) {
+    if (!pix) {
+      toast.error('Selecione um Pix para cancelar');
+      return;
+    }
+    if (!isStandalonePixPayable(pix)) {
+      toast.error('Somente Pix pendente pode ser cancelado');
+      return;
+    }
+    if (!window.confirm('Cancelar este Pix avulso? Ele sera removido do display e nao podera ser pago por aqui.')) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const cancelled = await standalonePixService.cancel(pix.id);
+      setCurrentPix(cancelled);
+      await loadData();
+      toast.success('Pix avulso cancelado');
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao cancelar Pix');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleDisplay(pix = currentPix) {
     if (!pix || !displayId) {
       toast.error('Selecione um Pix e um display');
@@ -255,6 +280,9 @@ export default function StandalonePixPage() {
                   <button onClick={() => handleDisplay()} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><Smartphone size={14} />Exibir no display</button>
                   <button onClick={() => handleRefresh()} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><RefreshCw size={14} />Atualizar</button>
                   <button onClick={() => handlePrint()} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><Printer size={14} />Imprimir QR</button>
+                  {isStandalonePixPayable(currentPix) && (
+                    <button onClick={() => handleCancel()} className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"><Ban size={14} />Cancelar Pix</button>
+                  )}
                 </div>
               </div>
             </div>
@@ -304,6 +332,9 @@ export default function StandalonePixPage() {
                       <button title="Copiar codigo" onClick={() => copyText(pix.qr_code, 'Copiar codigo Pix')} className="rounded border p-1"><Copy size={14} /></button>
                       <button title="Imprimir" onClick={() => handlePrint(pix)} className="rounded border p-1"><Printer size={14} /></button>
                       <button title="Compartilhar" onClick={() => handleShare(pix)} className="rounded border p-1"><Send size={14} /></button>
+                      {isStandalonePixPayable(pix) && (
+                        <button title="Cancelar Pix" onClick={() => handleCancel(pix)} className="rounded border border-red-200 p-1 text-red-700"><Ban size={14} /></button>
+                      )}
                     </div>
                   </td>
                 </tr>

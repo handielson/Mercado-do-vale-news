@@ -64,6 +64,7 @@ export function formatStandalonePixStatus(
 ): string {
   if (!payment) return 'Pendente';
   if (payment.status_label) return payment.status_label;
+  if (payment.cancel_reason === 'manual_cancelled') return 'Cancelado manualmente';
   if (payment.cancel_reason === 'unpaid_expired' || payment.status === 'expired') return 'Cancelado por falta de pagamento';
   if (payment.status === 'approved') return 'Aprovado';
   if (payment.status === 'rejected') return 'Rejeitado';

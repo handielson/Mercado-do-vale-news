@@ -31,6 +31,10 @@ export const standalonePixService = {
     return vpsClient.get<StandalonePixPayment>(`/pix/standalone/${encodeURIComponent(id)}/status`);
   },
 
+  async cancel(id: string): Promise<StandalonePixPayment> {
+    return vpsClient.post<StandalonePixPayment>(`/pix/standalone/${encodeURIComponent(id)}/cancel`, {});
+  },
+
   async shareWhatsApp(id: string, phone: string): Promise<StandalonePixShareResponse> {
     return vpsClient.post<StandalonePixShareResponse>(`/pix/standalone/${encodeURIComponent(id)}/share-whatsapp`, { phone });
   },

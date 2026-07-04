@@ -9,6 +9,7 @@ function assertBackend(source, label) {
     "fastify.post('/pix/standalone'",
     "fastify.get('/pix/standalone'",
     "fastify.get('/pix/standalone/:id/status'",
+    "fastify.post('/pix/standalone/:id/cancel'",
     "fastify.post('/pix/standalone/:id/share-whatsapp'",
     "fastify.get('/google-contacts/search'",
     'searchGoogleContacts',
@@ -24,11 +25,13 @@ function assertBackend(source, label) {
     'public_token',
     'cancel_reason',
     'unpaid_expired',
+    'manual_cancelled',
     'shared_phone',
     'share_channel',
     'cash_closing_id',
     'Cancelado por falta de pagamento',
     'clearDisplayActivePixIfMatches',
+    'Pix aprovado nao pode ser cancelado',
   ]) {
     assert.ok(source.includes(snippet), `${label} must include ${snippet}`);
   }

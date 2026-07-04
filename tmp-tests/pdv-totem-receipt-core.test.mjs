@@ -33,6 +33,24 @@ function maskPdvReceiptPhone(phone) {
   return `(${areaCode}) *****-${lastFour}`;
 }
 
+function getPdvPixReceiptOrderNumber(payment) {
+  const saleDraftId = String(payment?.sale_draft_id || '').trim();
+  if (saleDraftId) return saleDraftId;
+  const localReference = String(payment?.local_reference || '').trim();
+  if (localReference) {
+    if (localReference.toLowerCase().startsWith('standalone_pix:')) {
+      const standaloneId = localReference.slice(localReference.indexOf(':') + 1);
+      const codeSource = String(standaloneId || payment?.id || payment?.mercado_pago_payment_id || '')
+        .replace(/[^a-z0-9]/gi, '')
+        .toUpperCase();
+      return `PIX-${codeSource.slice(-6) || 'AVULSO'}`;
+    }
+    const saleMatch = localReference.match(/^sale:(.+)$/i);
+    return saleMatch?.[1] || localReference;
+  }
+  return String(payment?.id || '').trim();
+}
+
 function formatPdvPixReceiptWhatsAppMessage(receipt) {
   const lines = [];
   const customerName = String(receipt?.customer_name || '').trim();
@@ -49,7 +67,6 @@ function formatPdvPixReceiptWhatsAppMessage(receipt) {
   lines.push('Pagamento: Pix');
   lines.push(`Autenticacao: ${receipt.authentication_code}`);
   lines.push(`Data/hora: ${receipt.approved_at_label}`);
-  lines.push('Obrigado pela preferencia!');
   lines.push('Mercado do Vale');
 
   return lines.join('\n');
@@ -111,6 +128,16 @@ assert.equal(
 
 assert.equal(maskPdvReceiptPhone('+5587988032612'), '(87) *****-2612');
 assert.equal(maskPdvReceiptPhone('+558788032612'), '(87) *****-2612');
+assert.equal(
+  getPdvPixReceiptOrderNumber({ local_reference: 'standalone_pix:550e8400-e29b-41d4-a716-446655440000', id: 'fallback' }),
+  'PIX-440000',
+  'standalone Pix receipt must use a short traceable code',
+);
+assert.equal(
+  getPdvPixReceiptOrderNumber({ local_reference: 'sale:12345', id: 'fallback' }),
+  '12345',
+  'sale local reference must keep exposing the sale order number',
+);
 
 assert.ok(
   formatPdvPixReceiptWhatsAppMessage({
@@ -137,11 +164,15 @@ for (const expectedLine of [
   'Pagamento: Pix',
   'Autenticacao: AUTH-123',
   'Data/hora: 04/07/2026 10:30',
-  'Obrigado pela preferencia!',
   'Mercado do Vale',
 ]) {
   assert.ok(whatsappMessage.includes(expectedLine), `WhatsApp message must include ${expectedLine}`);
 }
+
+assert.ok(
+  !whatsappMessage.includes('Obrigado pela preferencia!'),
+  'WhatsApp message must not include the preference thank-you line',
+);
 
 assert.ok(
   !formatPdvPixReceiptWhatsAppMessage({

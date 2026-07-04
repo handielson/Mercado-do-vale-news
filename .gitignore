@@ -17,6 +17,10 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+android/totem-pix/keystore.properties
+android/totem-pix/*.jks
+android/totem-pix/.gradle/
+android/totem-pix/local.properties
 
 # Logs
 npm-debug.log*

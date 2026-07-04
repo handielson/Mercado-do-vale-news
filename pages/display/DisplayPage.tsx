@@ -13,7 +13,7 @@ const POLLING_INTERVAL_MS = 5000;
 const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
-const DISPLAY_APP_VERSION = 'V1.01';
+const DISPLAY_APP_VERSION = 'V1.03';
 
 const QRCode = (
     (ReactQRCode as any).default?.default ||
@@ -200,8 +200,40 @@ function formatCountdown(milliseconds: number): string {
     return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+function getStandalonePixCode(payment: PdvPixPayment): string {
+    const localReference = String(payment.local_reference || '').trim();
+    const standaloneId = localReference.toLowerCase().startsWith('standalone_pix:')
+        ? localReference.slice(localReference.indexOf(':') + 1)
+        : '';
+    const source = String(standaloneId || payment.id || payment.mercado_pago_payment_id || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+    return source.slice(-6) || 'AVULSO';
+}
+
+function isStandalonePixPayment(payment: PdvPixPayment, orderNumber = ''): boolean {
+    return String(payment.local_reference || '').toLowerCase().startsWith('standalone_pix:')
+        || String(payment.receipt?.order_number || orderNumber).toUpperCase().startsWith('PIX-');
+}
+
 function getPaymentOrderNumber(payment: PdvPixPayment): string {
-    return payment.receipt?.order_number || payment.sale_draft_id || payment.local_reference || payment.id;
+    const receiptOrderNumber = String(payment.receipt?.order_number || '').trim();
+    if (receiptOrderNumber && !receiptOrderNumber.toLowerCase().startsWith('standalone_pix:') && receiptOrderNumber !== 'Pix avulso') {
+        return receiptOrderNumber;
+    }
+
+    const saleDraftId = String(payment.sale_draft_id || '').trim();
+    if (saleDraftId) return saleDraftId;
+
+    const localReference = String(payment.local_reference || '').trim();
+    if (localReference.toLowerCase().startsWith('standalone_pix:')) {
+        return `PIX-${getStandalonePixCode(payment)}`;
+    }
+
+    return localReference || payment.id;
+}
+
+function getPaymentTitle(payment: PdvPixPayment): string {
+    const orderNumber = getPaymentOrderNumber(payment);
+    return isStandalonePixPayment(payment, orderNumber) ? `Pix avulso #${orderNumber.replace(/^PIX-/i, '')}` : `Pedido ${orderNumber}`;
 }
 
 function getDisplayVersionLabel(name: string | undefined): string {
@@ -402,7 +434,7 @@ export default function DisplayPage() {
             <section className={`mx-auto flex h-full min-h-0 w-full ${orientationClass} flex-col p-3 sm:p-5`}>
                 {showPix && active_pix ? (
                     <header className="flex flex-shrink-0 items-center justify-between gap-3 text-sm text-slate-300">
-                        <p className="min-w-0 truncate font-mono text-lg font-bold text-white">Pedido {getPaymentOrderNumber(active_pix)}</p>
+                        <p className="min-w-0 truncate font-mono text-lg font-bold text-white">{getPaymentTitle(active_pix)}</p>
                         {error && <p className="text-amber-300"><WifiOff className="mr-1 inline h-4 w-4" />{error}</p>}
                     </header>
                 ) : (
@@ -508,7 +540,7 @@ function ApprovedReceiptView({ payment, now }: { payment: PdvPixPayment; now: nu
             <div className="mx-auto flex w-full max-w-xl flex-col justify-center rounded-lg border border-emerald-300/30 bg-white p-5 text-slate-950 shadow-2xl">
                 <div className="space-y-3 text-center">
                     <p className="text-sm font-bold uppercase text-slate-500">{receipt?.store_name || 'Mercado do Vale'}</p>
-                    <p className="font-mono text-2xl font-black">Pedido {receipt?.order_number || getPaymentOrderNumber(payment)}</p>
+                    <p className="font-mono text-2xl font-black">{getPaymentTitle(payment)}</p>
                     <p className="text-5xl font-black text-emerald-700">{receipt?.amount_label || formatCurrency(payment.amount)}</p>
                     <div className="grid gap-2 rounded-lg bg-slate-100 p-3 text-left text-sm font-semibold text-slate-700">
                         <p>Pagamento: Pix</p>

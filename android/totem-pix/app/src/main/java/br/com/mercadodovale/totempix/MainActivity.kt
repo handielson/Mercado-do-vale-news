@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.os.Bundle
+import android.os.PowerManager
 import android.view.View
 import android.view.WindowManager
 import android.webkit.WebSettings
@@ -16,12 +17,18 @@ import android.webkit.JavascriptInterface
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
+    private var wakeLock: PowerManager.WakeLock? = null
     private val locationPermissionRequest = 87
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressLint("SetJavaScriptEnabled", "WakelockTimeout")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+        )
+        acquireWakeLock()
         window.decorView.systemUiVisibility = (
             View.SYSTEM_UI_FLAG_FULLSCREEN
                 or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
@@ -47,7 +54,23 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        acquireWakeLock()
         window.decorView.systemUiVisibility = window.decorView.systemUiVisibility
+    }
+
+    override fun onDestroy() {
+        wakeLock?.takeIf { it.isHeld }?.release()
+        wakeLock = null
+        super.onDestroy()
+    }
+
+    @SuppressLint("WakelockTimeout")
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MercadoDoValeTotemPix:Display")
+        wakeLock?.setReferenceCounted(false)
+        wakeLock?.acquire()
     }
 
     private fun requestWifiPermissionIfNeeded() {
