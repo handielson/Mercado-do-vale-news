@@ -35,6 +35,13 @@ export interface PdvDisplayIdleContent {
         category_name?: string;
     }>;
     messages: string[];
+    wifi?: {
+        enabled?: boolean;
+        ssid?: string;
+        password?: string;
+        password_confirm?: string;
+        security: 'WPA' | 'WEP' | 'nopass';
+    };
 }
 
 export interface PdvDisplay {

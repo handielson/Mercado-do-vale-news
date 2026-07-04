@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
     AlertCircle,
     Copy,
+    Eye,
+    EyeOff,
     ExternalLink,
     KeyRound,
     Loader2,
@@ -38,14 +40,15 @@ const DEFAULT_FORM: PdvDisplayInput = {
     cashier_key: '',
     is_active: true,
     settings: DEFAULT_SETTINGS,
-    idle_content: { banners: [], products: [], categories: [], messages: ['Obrigado pela preferencia.'] },
+    idle_content: { banners: [], products: [], categories: [], messages: [], wifi: { enabled: false, ssid: '', password: '', password_confirm: '', security: 'WPA' } },
 };
 
 const DEFAULT_IDLE_CONTENT: PdvDisplayIdleContent = {
     banners: [],
     products: [],
     categories: [],
-    messages: ['Obrigado pela preferencia.'],
+    messages: [],
+    wifi: { enabled: false, ssid: '', password: '', password_confirm: '', security: 'WPA' },
 };
 
 function displayTypeLabel(type: PdvDisplayType): string {
@@ -91,6 +94,7 @@ export default function DisplaysPage() {
     const [idleProductSearch, setIdleProductSearch] = useState<Record<number, string>>({});
     const [idleProductResults, setIdleProductResults] = useState<Record<number, Product[]>>({});
     const [idleCategories, setIdleCategories] = useState<Category[]>([]);
+    const [showWifiPassword, setShowWifiPassword] = useState(false);
 
     useEffect(() => {
         loadDisplays();
@@ -274,11 +278,60 @@ export default function DisplaysPage() {
         updateIdleContent({ categories });
     }
 
+    function updateIdleWifi(field: 'enabled' | 'ssid' | 'password' | 'password_confirm' | 'security', value: string | boolean) {
+        updateIdleContent({
+            wifi: {
+                ...(DEFAULT_IDLE_CONTENT.wifi || { enabled: false, ssid: '', password: '', password_confirm: '', security: 'WPA' }),
+                ...(formData.idle_content?.wifi || {}),
+                [field]: value,
+            },
+        });
+    }
+
+    async function captureWifiSsidFromAndroid() {
+        const bridge = (window as any).MdvTotem;
+        if (!bridge?.getWifiSsid) {
+            toast.info('Captura automatica disponivel apenas no aplicativo Android atualizado.');
+            return;
+        }
+
+        try {
+            const ssid = String(await bridge.getWifiSsid()).trim();
+            if (!ssid) {
+                toast.info('Nao foi possivel identificar a rede. Digite o nome manualmente.');
+                return;
+            }
+            updateIdleWifi('ssid', ssid);
+            toast.success(`Rede captada: ${ssid}`);
+        } catch {
+            toast.info('Nao foi possivel captar a rede. Digite o nome manualmente.');
+        }
+    }
+
     async function handleSave(event: React.FormEvent) {
         event.preventDefault();
         const name = String(formData.name || '').trim();
         if (!name) {
             toast.error('Informe o nome do display.');
+            return;
+        }
+
+        const wifi = formData.idle_content?.wifi;
+        const wifiEnabled = Boolean(wifi?.enabled);
+        const wifiSsid = String(wifi?.ssid || '').trim();
+        const wifiPassword = String(wifi?.password || '');
+        const wifiConfirm = String(wifi?.password_confirm || '');
+        const wifiSecurity = wifi?.security || 'WPA';
+        if (wifiEnabled && !wifiSsid) {
+            toast.error('Informe o nome da rede Wi-Fi.');
+            return;
+        }
+        if (wifiEnabled && wifiSecurity !== 'nopass' && !wifiPassword) {
+            toast.error('Informe a senha do Wi-Fi.');
+            return;
+        }
+        if (wifiEnabled && wifiSecurity !== 'nopass' && wifiPassword !== wifiConfirm) {
+            toast.error('A senha do Wi-Fi e a confirmacao precisam ser iguais.');
             return;
         }
 
@@ -297,6 +350,12 @@ export default function DisplaysPage() {
                 products: (formData.idle_content?.products || []).filter((product) => product.name),
                 categories: (formData.idle_content?.categories || []).filter((category) => category.category_id),
                 messages: (formData.idle_content?.messages || []).map((message) => String(message || '').trim()).filter(Boolean),
+                wifi: {
+                    enabled: wifiEnabled,
+                    ssid: wifiSsid,
+                    password: wifiSecurity === 'nopass' ? '' : wifiPassword,
+                    security: wifiSecurity,
+                },
             },
         };
 
@@ -652,6 +711,86 @@ export default function DisplaysPage() {
                                     <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Conteudo ocioso</h3>
                                     <p className="mt-1 text-sm text-slate-500">Mensagens, banners e produtos exibidos quando nao houver Pix ativo.</p>
                                 </div>
+
+                                <section className="rounded-lg border border-slate-200 p-4">
+                                    <div className="mb-3 flex items-center justify-between gap-3">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-slate-800">Configurar Wi-Fi</h4>
+                                            <p className="mt-1 text-xs text-slate-500">Gera um QR Code para o cliente conectar sem digitar a senha.</p>
+                                        </div>
+                                        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={Boolean(formData.idle_content?.wifi?.enabled)}
+                                                onChange={(event) => updateIdleWifi('enabled', event.target.checked)}
+                                                className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                                            />
+                                            Ativo
+                                        </label>
+                                    </div>
+                                    <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                                        <label className="block">
+                                            <span className="text-sm font-semibold text-slate-700">Nome da rede</span>
+                                            <input
+                                                value={formData.idle_content?.wifi?.ssid || ''}
+                                                onChange={(event) => updateIdleWifi('ssid', event.target.value)}
+                                                placeholder="Ex: MercadoDoVale_Clientes"
+                                                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={captureWifiSsidFromAndroid}
+                                            className="mt-6 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                                        >
+                                            Captar rede pelo app Android
+                                        </button>
+                                    </div>
+                                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                                        <label className="block">
+                                            <span className="text-sm font-semibold text-slate-700">Tipo</span>
+                                            <select
+                                                value={formData.idle_content?.wifi?.security || 'WPA'}
+                                                onChange={(event) => updateIdleWifi('security', event.target.value)}
+                                                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                                            >
+                                                <option value="WPA">WPA/WPA2</option>
+                                                <option value="WEP">WEP</option>
+                                                <option value="nopass">Sem senha</option>
+                                            </select>
+                                        </label>
+                                        <label className="block">
+                                            <span className="text-sm font-semibold text-slate-700">Senha</span>
+                                            <div className="mt-1 flex rounded-lg border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500">
+                                                <input
+                                                    type={showWifiPassword ? 'text' : 'password'}
+                                                    value={formData.idle_content?.wifi?.password || ''}
+                                                    onChange={(event) => updateIdleWifi('password', event.target.value)}
+                                                    disabled={formData.idle_content?.wifi?.security === 'nopass'}
+                                                    className="min-w-0 flex-1 rounded-l-lg px-3 py-2 text-sm outline-none disabled:bg-slate-100"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowWifiPassword((current) => !current)}
+                                                    className="grid w-10 place-items-center rounded-r-lg text-slate-500 hover:bg-slate-50"
+                                                    aria-label={showWifiPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                                                >
+                                                    {showWifiPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                                </button>
+                                            </div>
+                                        </label>
+                                        <label className="block">
+                                            <span className="text-sm font-semibold text-slate-700">Confirmar senha</span>
+                                            <input
+                                                type={showWifiPassword ? 'text' : 'password'}
+                                                value={formData.idle_content?.wifi?.password_confirm || ''}
+                                                onChange={(event) => updateIdleWifi('password_confirm', event.target.value)}
+                                                disabled={formData.idle_content?.wifi?.security === 'nopass'}
+                                                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100"
+                                            />
+                                        </label>
+                                    </div>
+                                </section>
 
                                 <section className="rounded-lg border border-slate-200 p-4">
                                     <div className="mb-3 flex items-center justify-between gap-3">

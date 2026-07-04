@@ -3,6 +3,7 @@ import QRCode from 'react-qr-code';
 import { CheckCircle2, Loader2, MessageCircle, MonitorSmartphone, QrCode, RefreshCw, ShieldAlert, WifiOff } from 'lucide-react';
 import { pdvDisplayService } from '../../services/pdvDisplayService';
 import { productService } from '../../services/products';
+import { publicCompanySettingsService, type PublicCompanySettings } from '../../services/publicCompanySettings';
 import type { PdvDisplay, PdvDisplayIdleContent, PdvDisplayState, PdvPixPayment, PdvPixReceiptShareLinkResponse } from '../../types/pdvDisplay';
 import type { Product } from '../../types/product';
 import { formatCurrency } from '../../utils/saleCalculations';
@@ -11,6 +12,19 @@ export const PDV_DISPLAY_TOKEN_STORAGE_KEY = '@mdv_pdv_display_token';
 const POLLING_INTERVAL_MS = 5000;
 const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
+const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
+
+type IdleQrCard = {
+    type: 'site' | 'instagram' | 'wifi';
+    title: string;
+    subtitle: string;
+    value: string;
+    qrValue: string;
+    logoUrl?: string;
+    ssid?: string;
+    password?: string;
+    security?: 'WPA' | 'WEP' | 'nopass';
+};
 
 function getStoredDisplayToken(): string {
     if (typeof localStorage === 'undefined') return '';
@@ -34,7 +48,83 @@ function normalizePairingCode(value: string): string {
 }
 
 function getIdleContent(display: PdvDisplay | null): Partial<PdvDisplayIdleContent> {
-    return display?.idle_content || { messages: ['Mercado do Vale'], banners: [], products: [], categories: [] };
+    return display?.idle_content || { messages: [], banners: [], products: [], categories: [] };
+}
+
+function normalizeInstagramUrl(value: string | null | undefined): { label: string; url: string } | null {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    if (/^https?:\/\//i.test(raw)) {
+        try {
+            const url = new URL(raw);
+            const username = url.pathname.split('/').filter(Boolean)[0] || raw;
+            return { label: `@${username.replace(/^@/, '')}`, url: raw };
+        } catch {
+            return null;
+        }
+    }
+    const username = raw.replace(/^@/, '').replace(/^instagram\.com\//i, '').split('/')[0]?.trim();
+    if (!username) return null;
+    return { label: `@${username}`, url: `https://www.instagram.com/${username}` };
+}
+
+function escapeWifiQrValue(value: string | undefined): string {
+    return String(value || '').replace(/([\\;,":])/g, '\\$1');
+}
+
+function buildWifiQrValue(card: IdleQrCard): string {
+    if (card.security === 'nopass') {
+        return `WIFI:T:nopass;S:${escapeWifiQrValue(card.ssid)};;`;
+    }
+    return `WIFI:T:${escapeWifiQrValue(card.security)};S:${escapeWifiQrValue(card.ssid)};P:${escapeWifiQrValue(card.password)};;`;
+}
+
+function buildIdleQrCards(
+    idleContent: Partial<PdvDisplayIdleContent>,
+    companySettings: PublicCompanySettings | null
+): IdleQrCard[] {
+    const logoUrl = companySettings?.logo || companySettings?.receipt_logo_url || undefined;
+    const instagram = normalizeInstagramUrl(companySettings?.social_instagram);
+    const wifi = idleContent.wifi;
+    const cards: IdleQrCard[] = [
+        {
+            type: 'site',
+            title: 'Acesse nossas novidades!',
+            subtitle: 'www.mercadodovale.com.br',
+            value: STORE_SITE_URL,
+            qrValue: STORE_SITE_URL,
+            logoUrl,
+        },
+    ];
+
+    if (instagram) {
+        cards.push({
+            type: 'instagram',
+            title: 'Siga nosso Instagram!',
+            subtitle: instagram.label,
+            value: instagram.url,
+            qrValue: instagram.url,
+            logoUrl,
+        });
+    }
+
+    if (wifi?.enabled && wifi.ssid && (wifi.security === 'nopass' || wifi.password)) {
+        const card: IdleQrCard = {
+            type: 'wifi',
+            title: 'Conecte-se ao nosso Wi-Fi',
+            subtitle: wifi.ssid,
+            value: wifi.ssid,
+            qrValue: '',
+            logoUrl,
+            ssid: wifi.ssid,
+            password: wifi.password || '',
+            security: wifi.security || 'WPA',
+        };
+        card.qrValue = buildWifiQrValue(card);
+        cards.push(card);
+    }
+
+    return cards;
 }
 
 function shuffleArray<T>(items: T[]): T[] {
@@ -116,6 +206,7 @@ export default function DisplayPage() {
     const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
     const [now, setNow] = useState(Date.now());
     const [idleSlide, setIdleSlide] = useState(0);
+    const [companySettings, setCompanySettings] = useState<PublicCompanySettings | null>(null);
     const [categoryProductPages, setCategoryProductPages] = useState<Array<{
         categoryId: string;
         categoryName: string;
@@ -129,12 +220,17 @@ export default function DisplayPage() {
     const orientationClass = display?.orientation === 'portrait' ? 'max-w-[760px]' : 'max-w-[1280px]';
 
     const idleItems = useMemo(() => {
-        const messages = (idle_content.messages || []).filter(Boolean).map((message) => ({ type: 'message' as const, message }));
+        const qrCards = buildIdleQrCards(idle_content, companySettings).map((card) => ({ type: 'qr-card' as const, card }));
+        const displayName = String(display?.name || '').trim().toLowerCase();
+        const messages = (idle_content.messages || [])
+            .map((message) => String(message || '').trim())
+            .filter((message) => message && message.toLowerCase() !== displayName && message.toLowerCase() !== 'mercado do vale')
+            .map((message) => ({ type: 'message' as const, message }));
         const banners = (idle_content.banners || []).filter((banner) => banner.image_url).map((banner) => ({ type: 'banner' as const, banner }));
         const products = (idle_content.products || []).filter((product) => product.name).map((product) => ({ type: 'product' as const, product }));
         const productPages = categoryProductPages.map((productPage) => ({ type: 'product-page' as const, productPage }));
-        return [...banners, ...productPages, ...products, ...messages];
-    }, [idle_content, categoryProductPages]);
+        return [...qrCards, ...banners, ...productPages, ...products, ...messages];
+    }, [idle_content, categoryProductPages, companySettings, display?.name]);
 
     async function loadCategoryProducts() {
         const categories = (idle_content.categories || []).filter((category) => category.category_id);
@@ -191,6 +287,12 @@ export default function DisplayPage() {
         }, POLLING_INTERVAL_MS);
         return () => clearInterval(interval);
     }, [token]);
+
+    useEffect(() => {
+        publicCompanySettingsService.get()
+            .then(setCompanySettings)
+            .catch(() => setCompanySettings(null));
+    }, []);
 
     useEffect(() => {
         const rotationSeconds = Math.max(3, Number(settings.adRotationSeconds || 8));
@@ -292,11 +394,7 @@ export default function DisplayPage() {
                         {error && <p className="text-amber-300"><WifiOff className="mr-1 inline h-4 w-4" />{error}</p>}
                     </header>
                 ) : (
-                    <header className="flex flex-shrink-0 items-center justify-between gap-4 text-sm text-slate-300">
-                        <div>
-                            {settings.showStoreName !== false && <p className="text-lg font-bold text-white">Mercado do Vale</p>}
-                            <p>{display?.name || 'Display Android'}</p>
-                        </div>
+                    <header className="flex flex-shrink-0 items-center justify-end gap-4 text-sm text-slate-300">
                         <div className="text-right">
                             <p>{lastUpdatedAt ? `Atualizado ${lastUpdatedAt.toLocaleTimeString('pt-BR')}` : 'Conectando'}</p>
                             {error && <p className="text-amber-300"><WifiOff className="mr-1 inline h-4 w-4" />{error}</p>}
@@ -307,7 +405,12 @@ export default function DisplayPage() {
                 {showPix ? (
                     <PixView payment={active_pix} display={display} now={now} />
                 ) : (
-                    <IdleView items={idleItems} slide={idleSlide} display={display} />
+                    <IdleView items={idleItems} slide={idleSlide} />
+                )}
+                {!showPix && (
+                    <p className="pointer-events-none absolute bottom-4 left-4 max-w-[55vw] truncate text-sm font-semibold text-slate-500 sm:text-base">
+                        {display?.name || 'Display Android'}
+                    </p>
                 )}
             </section>
         </main>
@@ -448,12 +551,24 @@ function ApprovedReceiptView({ payment, now }: { payment: PdvPixPayment; now: nu
     );
 }
 
-function IdleView({ items, slide, display }: { items: Array<any>; slide: number; display: PdvDisplay | null }) {
-    const current = items.length > 0 ? items[slide % items.length] : { type: 'message', message: 'Mercado do Vale' };
+function IdleView({ items, slide }: { items: Array<any>; slide: number }) {
+    const current = items.length > 0 ? items[slide % items.length] : {
+        type: 'qr-card',
+        card: {
+            type: 'site',
+            title: 'Acesse nossas novidades!',
+            subtitle: 'www.mercadodovale.com.br',
+            value: STORE_SITE_URL,
+            qrValue: STORE_SITE_URL,
+        },
+    };
 
     return (
         <div className="flex min-h-0 flex-1 items-center justify-center py-3">
             <div className="h-full min-h-0 w-full text-center">
+                {current.type === 'qr-card' && (
+                    <IdleQrCardView card={current.card} />
+                )}
                 {current.type === 'banner' && (
                     <div className="mx-auto max-w-5xl overflow-hidden rounded-lg bg-white/5">
                         <img src={current.banner.image_url} alt={current.banner.title || 'Banner'} className="max-h-[72vh] w-full object-contain" />
@@ -501,8 +616,31 @@ function IdleView({ items, slide, display }: { items: Array<any>; slide: number;
                 {current.type === 'message' && (
                     <div>
                         <p className="text-6xl font-black tracking-tight sm:text-8xl">{current.message}</p>
-                        <p className="mt-6 text-2xl text-slate-300">{display?.name || 'Display Android'}</p>
                     </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function IdleQrCardView({ card }: { card: IdleQrCard }) {
+    return (
+        <div className="mx-auto grid h-full min-h-0 w-full max-w-3xl place-items-center px-4 py-2">
+            <div className="flex w-full flex-col items-center justify-center gap-5 text-center">
+                {card.logoUrl ? (
+                    <img src={card.logoUrl} alt="Logo da loja" className="max-h-24 max-w-[70%] object-contain sm:max-h-32" />
+                ) : (
+                    <div className="h-1" />
+                )}
+                <div className="space-y-3">
+                    <p className="text-4xl font-black leading-tight text-white sm:text-6xl">{card.title}</p>
+                    <p className="break-words text-2xl font-bold text-cyan-100 sm:text-4xl">{card.subtitle}</p>
+                </div>
+                <div className="rounded-lg bg-white p-4 shadow-2xl sm:p-5">
+                    <QRCode value={card.qrValue} size={220} />
+                </div>
+                {card.type === 'wifi' && (
+                    <p className="max-w-xl text-lg font-semibold text-slate-300 sm:text-2xl">Aponte a camera para conectar automaticamente</p>
                 )}
             </div>
         </div>
