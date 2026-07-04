@@ -1118,6 +1118,18 @@ function formatPdvPixReceiptWhatsAppMessage(receipt) {
   ].filter(Boolean).join('\n');
 }
 
+function getPdvReceiptPublicBaseUrl(req) {
+  const configuredUrl = process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL;
+  if (configuredUrl) return String(configuredUrl).replace(/\/+$/, '');
+  const headerUrl = String(req.headers?.origin || req.headers?.referer || '').trim();
+  if (headerUrl) {
+    try {
+      return new URL(headerUrl).origin;
+    } catch (_) {}
+  }
+  return 'https://www.mercadodovale.com.br';
+}
+
 fastify.post('/auth/login', async (request, reply) => {
   await ensureCustomerAuthTable();
   const body = request.body || {};
@@ -24141,6 +24153,9 @@ fastify.post('/pdv/pix-payments/:id/receipt/share-link', { preHandler: requireSy
   const [rows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [req.params.id]);
   const payment = rows?.[0];
   if (!payment) return reply.code(404).send({ error: 'Pix nao encontrado' });
+  if (normalizePdvPixStatus(payment.status) !== 'approved') {
+    return reply.code(409).send({ error: 'Comprovante disponivel somente apos aprovacao do Pix' });
+  }
   const receipt = buildPdvPixReceiptData(payment, req.body || {});
   const token = crypto.randomBytes(24).toString('base64url');
   const receipt_share_token_hash = hashPdvDisplaySecret(token);
@@ -24156,8 +24171,7 @@ fastify.post('/pdv/pix-payments/:id/receipt/share-link', { preHandler: requireSy
     [id]
   );
   const [tokenRows] = await pool.query('SELECT expires_at FROM pdv_receipt_share_tokens WHERE id = ? LIMIT 1', [id]);
-  const origin = String(req.headers?.origin || req.headers?.referer || '').replace(/\/+$/, '');
-  const baseUrl = process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL || origin || 'https://www.mercadodovale.com.br';
+  const baseUrl = getPdvReceiptPublicBaseUrl(req);
   return {
     token,
     url: `${baseUrl}/receipt-share/${token}`,
@@ -24194,6 +24208,9 @@ fastify.post('/pdv/pix-payments/:id/receipt/whatsapp', { preHandler: requireSync
   const [rows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [req.params.id]);
   const payment = rows?.[0];
   if (!payment) return reply.code(404).send({ error: 'Pix nao encontrado' });
+  if (normalizePdvPixStatus(payment.status) !== 'approved') {
+    return reply.code(409).send({ error: 'Comprovante disponivel somente apos aprovacao do Pix' });
+  }
   const body = req.body || {};
   const rawPhone = body.phone || body.whatsapp || pickPdvReceiptCustomerPhone(payment, body.customer_phone);
   const phone = normalizeDeliveryWhatsAppNumber(rawPhone);
