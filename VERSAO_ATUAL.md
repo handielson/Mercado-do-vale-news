@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.28-totem-pix-android
+version: v1.2.29-pdv-display-duplicate
 date: 2026-07-04
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260704-190640-v128-totem-pix-android
+release_vps: /var/www/mdv-site/releases/20260704-195135-v129-pdv-display-duplicate
 branch: main
-summary: Adiciona o Totem Pix Android com comprovante, compartilhamento por WhatsApp e QR temporario.
+summary: Corrige erro 500 ao tentar criar display PDV com nome ou identificador duplicado.
 ```

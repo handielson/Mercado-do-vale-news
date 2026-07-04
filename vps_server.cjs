@@ -23703,22 +23703,29 @@ fastify.post('/pdv/displays', { preHandler: requireSyncKey }, async (req, reply)
     .slice(0, 80) || id.slice(0, 8);
   const type = ['cashier', 'ads', 'hybrid'].includes(String(body.type)) ? String(body.type) : 'cashier';
   const orientation = ['portrait', 'landscape'].includes(String(body.orientation)) ? String(body.orientation) : 'landscape';
-  await pool.query(
-    `INSERT INTO pdv_displays
-      (id, name, slug, type, orientation, cashier_key, is_active, settings_json, idle_content_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id,
-      name,
-      slug,
-      type,
-      orientation,
-      body.cashier_key ? String(body.cashier_key).trim() : null,
-      body.is_active === false ? 0 : 1,
-      JSON.stringify(body.settings || {}),
-      JSON.stringify(body.idle_content || { banners: [], products: [], messages: [] }),
-    ]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO pdv_displays
+        (id, name, slug, type, orientation, cashier_key, is_active, settings_json, idle_content_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        name,
+        slug,
+        type,
+        orientation,
+        body.cashier_key ? String(body.cashier_key).trim() : null,
+        body.is_active === false ? 0 : 1,
+        JSON.stringify(body.settings || {}),
+        JSON.stringify(body.idle_content || { banners: [], products: [], messages: [] }),
+      ]
+    );
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return reply.code(409).send({ error: 'Ja existe um display com este nome ou identificador.' });
+    }
+    throw err;
+  }
   const [rows] = await pool.query('SELECT * FROM pdv_displays WHERE id = ? LIMIT 1', [id]);
   return reply.code(201).send(mapPdvDisplayRow(rows[0]));
 });
@@ -23730,23 +23737,30 @@ fastify.patch('/pdv/displays/:id', { preHandler: requireSyncKey }, async (req, r
   const current = mapPdvDisplayRow(existingRows[0]);
   const type = ['cashier', 'ads', 'hybrid'].includes(String(body.type)) ? String(body.type) : current.type;
   const orientation = ['portrait', 'landscape'].includes(String(body.orientation)) ? String(body.orientation) : current.orientation;
-  await pool.query(
-    `UPDATE pdv_displays SET
-      name = ?, slug = ?, type = ?, orientation = ?, cashier_key = ?, is_active = ?,
-      settings_json = ?, idle_content_json = ?, updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-    [
-      body.name ? String(body.name).trim() : current.name,
-      body.slug ? String(body.slug).trim() : current.slug,
-      type,
-      orientation,
-      body.cashier_key === undefined ? current.cashier_key : (body.cashier_key ? String(body.cashier_key).trim() : null),
-      body.is_active === undefined ? (current.is_active ? 1 : 0) : (body.is_active ? 1 : 0),
-      JSON.stringify(body.settings === undefined ? current.settings : body.settings),
-      JSON.stringify(body.idle_content === undefined ? current.idle_content : body.idle_content),
-      req.params.id,
-    ]
-  );
+  try {
+    await pool.query(
+      `UPDATE pdv_displays SET
+        name = ?, slug = ?, type = ?, orientation = ?, cashier_key = ?, is_active = ?,
+        settings_json = ?, idle_content_json = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [
+        body.name ? String(body.name).trim() : current.name,
+        body.slug ? String(body.slug).trim() : current.slug,
+        type,
+        orientation,
+        body.cashier_key === undefined ? current.cashier_key : (body.cashier_key ? String(body.cashier_key).trim() : null),
+        body.is_active === undefined ? (current.is_active ? 1 : 0) : (body.is_active ? 1 : 0),
+        JSON.stringify(body.settings === undefined ? current.settings : body.settings),
+        JSON.stringify(body.idle_content === undefined ? current.idle_content : body.idle_content),
+        req.params.id,
+      ]
+    );
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      return reply.code(409).send({ error: 'Ja existe um display com este nome ou identificador.' });
+    }
+    throw err;
+  }
   const [rows] = await pool.query('SELECT * FROM pdv_displays WHERE id = ? LIMIT 1', [req.params.id]);
   return mapPdvDisplayRow(rows[0]);
 });

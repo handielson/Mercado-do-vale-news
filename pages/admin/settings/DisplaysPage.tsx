@@ -313,7 +313,10 @@ export default function DisplaysPage() {
             setEditingDisplay(null);
             await loadDisplays();
         } catch (err: any) {
-            toast.error(err?.message || 'Erro ao salvar display');
+            const message = String(err?.message || '');
+            toast.error(message.includes('Ja existe um display')
+                ? 'Ja existe um display com este nome. Use outro nome para nao duplicar.'
+                : message || 'Erro ao salvar display');
         } finally {
             setSaving(false);
         }
