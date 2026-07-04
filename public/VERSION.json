@@ -1,8 +1,8 @@
 {
-    "version": "v1.2.27-extrato-entregador-ordem",
+    "version": "v1.2.28-totem-pix-android",
     "date": "2026-07-04",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260704-151821-v127-extrato-entregador-ordem",
+    "release_vps": "/var/www/mdv-site/releases/20260704-190640-v128-totem-pix-android",
     "branch": "main",
-    "summary": "Corrige a ordenacao cronologica do extrato do entregador para mostrar o pagamento mais recente no topo."
+    "summary": "Adiciona o Totem Pix Android com comprovante, compartilhamento por WhatsApp e QR temporario."
 }
