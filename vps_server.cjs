@@ -1007,6 +1007,117 @@ function buildStandalonePixPublicResponse(row) {
   };
 }
 
+function formatPdvReceiptAmount(cents) {
+  return Number(cents || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function formatPdvReceiptDate(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toLocaleString('pt-BR');
+  return date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
+
+function getPdvPixAuthenticationCode(payment) {
+  const raw = parsePdvDisplayJson(payment?.raw_response_json, payment?.raw_response || {});
+  return String(
+    raw?.transaction_details?.authorization_code ||
+      raw?.authorization_code ||
+      raw?.id ||
+      payment?.mercado_pago_payment_id ||
+      payment?.id ||
+      ''
+  ).trim();
+}
+
+function getPdvPixReceiptOrderNumber(payment) {
+  const saleDraftId = String(payment?.sale_draft_id || '').trim();
+  if (saleDraftId) return saleDraftId;
+  const localReference = String(payment?.local_reference || '').trim();
+  if (localReference) {
+    const saleMatch = localReference.match(/^sale:(.+)$/i);
+    return saleMatch?.[1] || localReference;
+  }
+  return String(payment?.id || '').trim();
+}
+
+function maskPdvReceiptPhone(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return null;
+  const withoutCountry = digits.startsWith('55') && digits.length >= 12 ? digits.slice(2) : digits;
+  const ddd = withoutCountry.length >= 10 ? withoutCountry.slice(0, 2) : '';
+  const subscriber = ddd ? withoutCountry.slice(2) : withoutCountry;
+  const last4 = subscriber.slice(-4);
+  if (ddd && last4) return `(${ddd}) *****-${last4}`;
+  return last4 ? `*****-${last4}` : null;
+}
+
+function pickPdvReceiptCustomerName(payment, overrideName) {
+  if (overrideName) return String(overrideName).trim();
+  const raw = parsePdvDisplayJson(payment?.raw_response_json, payment?.raw_response || {});
+  return String(
+    raw?.metadata?.customer_name ||
+      raw?.payer?.first_name ||
+      raw?.payer?.name ||
+      ''
+  ).trim();
+}
+
+function pickPdvReceiptCustomerPhone(payment, overridePhone) {
+  if (overridePhone) return String(overridePhone).trim();
+  const raw = parsePdvDisplayJson(payment?.raw_response_json, payment?.raw_response || {});
+  const payerPhone = raw?.payer?.phone;
+  if (typeof payerPhone === 'string') return payerPhone;
+  if (payerPhone?.area_code || payerPhone?.number) return `${payerPhone.area_code || ''}${payerPhone.number || ''}`;
+  return String(raw?.metadata?.customer_phone || raw?.metadata?.whatsapp || '').trim();
+}
+
+function buildPdvPixReceiptData(paymentRow, options = {}) {
+  const payment = mapPdvPixPaymentRow(paymentRow);
+  if (!payment) return null;
+  const customerPhone = pickPdvReceiptCustomerPhone(paymentRow, options.customer_phone);
+  const customerName = pickPdvReceiptCustomerName(paymentRow, options.customer_name);
+  const authenticationCode = getPdvPixAuthenticationCode(paymentRow);
+  const approvedAt = payment.updated_at || payment.created_at || new Date();
+  return {
+    payment_id: payment.id,
+    order_number: getPdvPixReceiptOrderNumber(payment),
+    amount: payment.amount,
+    amount_label: formatPdvReceiptAmount(payment.amount),
+    payment_method: 'Pix',
+    authentication_code: authenticationCode,
+    approved_at: approvedAt,
+    approved_at_label: formatPdvReceiptDate(approvedAt),
+    store_name: 'Mercado do Vale',
+    customer_name: customerName || null,
+    customer_first_name: customerName ? customerName.split(/\s+/)[0] : null,
+    customer_phone: customerPhone || null,
+    customer_phone_mask: maskPdvReceiptPhone(customerPhone),
+    has_customer_phone: Boolean(customerPhone),
+  };
+}
+
+function sanitizePdvPixReceiptData(receipt) {
+  if (!receipt) return null;
+  const { customer_phone, ...safeReceipt } = receipt;
+  return safeReceipt;
+}
+
+function formatPdvPixReceiptWhatsAppMessage(receipt) {
+  const greeting = receipt.customer_first_name
+    ? `Ola, ${receipt.customer_first_name}! Seu pagamento foi aprovado.`
+    : 'Pagamento aprovado.';
+  return [
+    greeting,
+    `Pedido: ${receipt.order_number}`,
+    `Valor: ${receipt.amount_label}`,
+    'Pagamento: Pix',
+    `Autenticacao: ${receipt.authentication_code}`,
+    `Data/hora: ${receipt.approved_at_label}`,
+    receipt.customer_first_name ? 'Obrigado pela preferencia!' : null,
+    'Mercado do Vale',
+  ].filter(Boolean).join('\n');
+}
+
 fastify.post('/auth/login', async (request, reply) => {
   await ensureCustomerAuthTable();
   const body = request.body || {};
@@ -24021,6 +24132,86 @@ fastify.delete('/pdv/displays/:displayId/active-pix', { preHandler: requireSyncK
   return { ok: true };
 });
 
+fastify.post('/pdv/displays/:displayId/clear-visual', { preHandler: requireSyncKey }, async (req) => {
+  await pool.query('UPDATE pdv_displays SET active_pix_payment_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [req.params.displayId]);
+  return { ok: true };
+});
+
+fastify.post('/pdv/pix-payments/:id/receipt/share-link', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [rows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [req.params.id]);
+  const payment = rows?.[0];
+  if (!payment) return reply.code(404).send({ error: 'Pix nao encontrado' });
+  const receipt = buildPdvPixReceiptData(payment, req.body || {});
+  const token = crypto.randomBytes(24).toString('base64url');
+  const receipt_share_token_hash = hashPdvDisplaySecret(token);
+  const id = crypto.randomUUID();
+  await pool.query(
+    `INSERT INTO pdv_receipt_share_tokens
+      (id, pix_payment_id, receipt_share_token_hash, receipt_snapshot_json)
+     VALUES (?, ?, ?, ?)`,
+    [id, payment.id, receipt_share_token_hash, JSON.stringify(sanitizePdvPixReceiptData(receipt))]
+  );
+  await pool.query(
+    'UPDATE pdv_receipt_share_tokens SET expires_at = DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id = ?',
+    [id]
+  );
+  const [tokenRows] = await pool.query('SELECT expires_at FROM pdv_receipt_share_tokens WHERE id = ? LIMIT 1', [id]);
+  const origin = String(req.headers?.origin || req.headers?.referer || '').replace(/\/+$/, '');
+  const baseUrl = process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL || origin || 'https://www.mercadodovale.com.br';
+  return {
+    token,
+    url: `${baseUrl}/receipt-share/${token}`,
+    expires_at: tokenRows?.[0]?.expires_at || null,
+    receipt: sanitizePdvPixReceiptData(receipt),
+  };
+});
+
+fastify.get('/pdv/receipt-share/:token', async (req, reply) => {
+  const token = String(req.params?.token || '').trim();
+  if (!token) return reply.code(404).send({ error: 'Comprovante nao encontrado' });
+  const receipt_share_token_hash = hashPdvDisplaySecret(token);
+  const [rows] = await pool.query(
+    `SELECT st.id AS share_token_id, st.expires_at, st.receipt_snapshot_json, p.*
+       FROM pdv_receipt_share_tokens st
+       JOIN pdv_pix_payments p ON p.id = st.pix_payment_id
+      WHERE st.receipt_share_token_hash = ?
+        AND st.revoked_at IS NULL
+        AND st.expires_at > NOW()
+      LIMIT 1`,
+    [receipt_share_token_hash]
+  );
+  const row = rows?.[0];
+  if (!row) return reply.code(404).send({ error: 'Comprovante expirado ou nao encontrado' });
+  await pool.query('UPDATE pdv_receipt_share_tokens SET last_accessed_at = NOW() WHERE id = ?', [row.share_token_id]);
+  const snapshot = parsePdvDisplayJson(row.receipt_snapshot_json, null);
+  return {
+    receipt: snapshot || sanitizePdvPixReceiptData(buildPdvPixReceiptData(row)),
+    expires_at: row.expires_at,
+  };
+});
+
+fastify.post('/pdv/pix-payments/:id/receipt/whatsapp', { preHandler: requireSyncKey }, async (req, reply) => {
+  const [rows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [req.params.id]);
+  const payment = rows?.[0];
+  if (!payment) return reply.code(404).send({ error: 'Pix nao encontrado' });
+  const body = req.body || {};
+  const rawPhone = body.phone || body.whatsapp || pickPdvReceiptCustomerPhone(payment, body.customer_phone);
+  const phone = normalizeDeliveryWhatsAppNumber(rawPhone);
+  if (!phone) return reply.code(400).send({ error: 'WhatsApp obrigatorio' });
+  const receipt = buildPdvPixReceiptData(payment, {
+    customer_name: body.customer_name || body.name,
+    customer_phone: phone,
+  });
+  const message = formatPdvPixReceiptWhatsAppMessage(receipt);
+  const result = await sendDeliveryWhatsappText(phone, message);
+  return {
+    ok: true,
+    phone_mask: maskPdvReceiptPhone(phone),
+    receipt: sanitizePdvPixReceiptData(receipt),
+    result,
+  };
+});
+
 fastify.get('/pdv/display-state', async (req, reply) => {
   const token = getBearerToken(req) || String(req.query?.token || '');
   if (!token) return reply.code(401).send({ error: 'Unauthorized' });
@@ -24042,6 +24233,9 @@ fastify.get('/pdv/display-state', async (req, reply) => {
   if (display?.active_pix_payment_id) {
     const [pixRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [display.active_pix_payment_id]);
     active_pix = buildPdvPixResponse(pixRows[0]);
+    if (active_pix?.status === 'approved') {
+      active_pix.receipt = sanitizePdvPixReceiptData(buildPdvPixReceiptData(pixRows[0]));
+    }
   }
   return { display, active_pix };
 });
@@ -28586,6 +28780,23 @@ async function runMigrations() {
       INDEX idx_pdv_pix_display (display_id),
       INDEX idx_pdv_pix_cashier (cashier_key),
       INDEX idx_pdv_pix_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_receipt_share_tokens (
+      id CHAR(36) PRIMARY KEY,
+      pix_payment_id CHAR(36) NOT NULL,
+      receipt_share_token_hash VARCHAR(128) NOT NULL,
+      receipt_snapshot_json JSON NULL,
+      expires_at TIMESTAMP NULL,
+      revoked_at TIMESTAMP NULL,
+      last_accessed_at TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_pdv_receipt_share_token_hash (receipt_share_token_hash),
+      INDEX idx_pdv_receipt_share_payment (pix_payment_id),
+      INDEX idx_pdv_receipt_share_expires (expires_at),
+      INDEX idx_pdv_receipt_share_revoked (revoked_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] pdv display and pix tables: OK');
