@@ -285,7 +285,6 @@ export function printSaleReceipt(
     </div>
 
     <div class="footer">
-        <p>Obrigado pela preferência! 💙</p>
         <p style="margin-top:4px;">${companyName}</p>
     </div>
 </div>

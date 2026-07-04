@@ -87,7 +87,7 @@ export const WHATSAPP_AUTOMATION_TEMPLATE_DEFAULTS: WhatsAppAutomationTemplate[]
     content: [
       '🛍️ Compra realizada com sucesso!',
       '',
-      'Obrigado pela preferencia, {nome}! Seu pedido {pedido} ja esta registrado com a gente. 🚀',
+      '{nome}, seu pedido {pedido} ja esta registrado com a gente. 🚀',
       '',
       'Data: {data}',
       '',

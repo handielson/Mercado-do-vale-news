@@ -81,6 +81,30 @@ class MainActivity : Activity() {
 
     inner class TotemBridge {
         @JavascriptInterface
+        fun getAppVersionName(): String {
+            return try {
+                packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+            } catch (_: Exception) {
+                ""
+            }
+        }
+
+        @JavascriptInterface
+        fun getAppVersionCode(): Int {
+            return try {
+                val info = packageManager.getPackageInfo(packageName, 0)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    info.longVersionCode.toInt()
+                } else {
+                    @Suppress("DEPRECATION")
+                    info.versionCode
+                }
+            } catch (_: Exception) {
+                0
+            }
+        }
+
+        @JavascriptInterface
         fun getWifiSsid(): String {
             return try {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M &&

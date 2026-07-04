@@ -2530,7 +2530,7 @@ const WHATSAPP_AUTOMATION_TEMPLATE_DEFAULTS_VPS = {
     content: [
       '\uD83D\uDED2 Compra realizada com sucesso!',
       '',
-      'Obrigado pela preferencia, {nome}! Seu pedido {pedido} ja esta registrado com a gente. \uD83D\uDE80',
+      '{nome}, seu pedido {pedido} ja esta registrado com a gente. \uD83D\uDE80',
       '',
       'Data: {data}',
       '',
@@ -29057,6 +29057,15 @@ async function runMigrations() {
   await addColumnIfMissing('whatsapp_automation_templates', 'category', "VARCHAR(40) NOT NULL DEFAULT 'future'");
   await addColumnIfMissing('whatsapp_automation_templates', 'enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('whatsapp_automation_templates', 'variables_json', 'JSON NULL');
+  const legacySaleCompletedPreferenceLine = ['Obrigado pela', 'preferencia, {nome}! Seu pedido {pedido} ja esta registrado com a gente. 🚀'].join(' ');
+  const nextSaleCompletedLine = '{nome}, seu pedido {pedido} ja esta registrado com a gente. 🚀';
+  await pool.query(
+    `UPDATE whatsapp_automation_templates
+        SET content = REPLACE(content, ?, ?)
+      WHERE template_key = 'sale_completed'
+        AND content LIKE ?`,
+    [legacySaleCompletedPreferenceLine, nextSaleCompletedLine, `%${legacySaleCompletedPreferenceLine.slice(0, -2)}%`]
+  );
 
 
   await pool.query(`

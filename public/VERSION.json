@@ -1,8 +1,14 @@
 {
-    "version": "v1.2.32-pix-avulso-totem",
+    "version": "v1.2.33-totem-update-notice",
     "date": "2026-07-04",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260704-224316-pix-avulso-totem",
+    "release_vps": "/var/www/mdv-site/releases/20260704-200939-totem-update-notice",
     "branch": "main",
-    "summary": "Adiciona codigo rastreavel e cancelamento manual para Pix avulso, remove despedida do comprovante e atualiza o Totem Pix para V1.03 com protecao contra bloqueio."
+    "summary": "Adiciona codigo rastreavel e cancelamento manual para Pix avulso, remove despedida do comprovante e atualiza o Totem Pix para V1.04 com aviso de atualizacao.",
+    "totem_pix_android": {
+        "latest_version_name": "1.04",
+        "latest_version_code": 104,
+        "minimum_recommended_version_name": "1.04",
+        "update_message": "Atualizacao disponivel: instale o Totem Pix 1.04 na Play Store."
+    }
 }

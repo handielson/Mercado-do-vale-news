@@ -13,7 +13,27 @@ const POLLING_INTERVAL_MS = 5000;
 const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
-const DISPLAY_APP_VERSION = 'V1.03';
+const DISPLAY_APP_VERSION = 'V1.04';
+
+type TotemVersionInfo = {
+    version?: string;
+    totem_pix_android?: {
+        latest_version_name?: string;
+        latest_version_code?: number;
+        minimum_recommended_version_name?: string;
+        update_message?: string;
+    };
+};
+
+declare global {
+    interface Window {
+        MdvTotem?: {
+            getAppVersionName?: () => string;
+            getAppVersionCode?: () => number;
+            getWifiSsid?: () => string;
+        };
+    }
+}
 
 const QRCode = (
     (ReactQRCode as any).default?.default ||
@@ -240,6 +260,44 @@ function getDisplayVersionLabel(name: string | undefined): string {
     return `${DISPLAY_APP_VERSION} - ${String(name || 'Display Android').trim() || 'Display Android'}`;
 }
 
+function normalizeVersionNumber(value: string | undefined): number {
+    const match = String(value || '').match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+    if (!match) return 0;
+    const major = Number(match[1] || 0);
+    const minor = Number(match[2] || 0);
+    const patch = Number(match[3] || 0);
+    return (major * 10000) + (minor * 100) + patch;
+}
+
+function isLikelyAndroidWebView(): boolean {
+    if (typeof navigator === 'undefined') return false;
+    return /Android/i.test(navigator.userAgent) && /; wv\)|Version\/\d+/i.test(navigator.userAgent);
+}
+
+function readNativeTotemVersion(): { name: string; code: number } | null {
+    try {
+        const bridge = window.MdvTotem;
+        const name = String(bridge?.getAppVersionName?.() || '').trim();
+        const code = Number(bridge?.getAppVersionCode?.() || 0);
+        if (name || code > 0) return { name, code };
+    } catch {
+        return null;
+    }
+    return null;
+}
+
+function getTotemUpdateNotice(versionInfo: TotemVersionInfo | null, nativeVersion: { name: string; code: number } | null): string {
+    const latest = versionInfo?.totem_pix_android;
+    const latestName = String(latest?.latest_version_name || '').trim();
+    const latestCode = Number(latest?.latest_version_code || 0);
+    if (!latestName && latestCode <= 0) return '';
+
+    const message = String(latest?.update_message || '').trim() || `Atualizacao disponivel: instale o Totem Pix ${latestName || 'mais recente'}.`;
+    if (!nativeVersion) return isLikelyAndroidWebView() ? message : '';
+    if (latestCode > 0 && nativeVersion.code > 0) return nativeVersion.code < latestCode ? message : '';
+    return normalizeVersionNumber(nativeVersion.name) < normalizeVersionNumber(latestName) ? message : '';
+}
+
 export default function DisplayPage() {
     const [token, setToken] = useState(() => getStoredDisplayToken());
     const [pairingCode, setPairingCode] = useState('');
@@ -251,6 +309,8 @@ export default function DisplayPage() {
     const [now, setNow] = useState(Date.now());
     const [idleSlide, setIdleSlide] = useState(0);
     const [companySettings, setCompanySettings] = useState<PublicCompanySettings | null>(null);
+    const [versionInfo, setVersionInfo] = useState<TotemVersionInfo | null>(null);
+    const [nativeVersion, setNativeVersion] = useState<{ name: string; code: number } | null>(null);
     const [categoryProductPages, setCategoryProductPages] = useState<Array<{
         categoryId: string;
         categoryName: string;
@@ -262,6 +322,7 @@ export default function DisplayPage() {
     const settings = display?.settings || {};
     const idle_content = getIdleContent(display);
     const orientationClass = display?.orientation === 'portrait' ? 'max-w-[760px]' : 'max-w-[1280px]';
+    const updateNotice = getTotemUpdateNotice(versionInfo, nativeVersion);
 
     const idleItems = useMemo(() => {
         const qrCards = buildIdleQrCards(idle_content, companySettings).map((card) => ({ type: 'qr-card' as const, card }));
@@ -336,6 +397,14 @@ export default function DisplayPage() {
         publicCompanySettingsService.get()
             .then(setCompanySettings)
             .catch(() => setCompanySettings(null));
+    }, []);
+
+    useEffect(() => {
+        setNativeVersion(readNativeTotemVersion());
+        fetch('/VERSION.json', { cache: 'no-store' })
+            .then((response) => response.ok ? response.json() : null)
+            .then((data) => setVersionInfo(data || null))
+            .catch(() => setVersionInfo(null));
     }, []);
 
     useEffect(() => {
@@ -450,6 +519,11 @@ export default function DisplayPage() {
                     <PixView payment={active_pix} display={display} now={now} />
                 ) : (
                     <IdleView items={idleItems} slide={idleSlide} />
+                )}
+                {updateNotice && (
+                    <div className="pointer-events-none absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-lg border border-amber-300/40 bg-amber-400 px-4 py-2 text-center text-sm font-black text-slate-950 shadow-2xl sm:text-base">
+                        {updateNotice}
+                    </div>
                 )}
                 {!showPix && (
                     <p className="pointer-events-none absolute bottom-4 left-4 max-w-[55vw] truncate text-sm font-semibold text-slate-500 sm:text-base">

@@ -4,8 +4,8 @@
 
 - Nome sugerido: Totem Pix Mercado do Vale
 - Package name: `br.com.mercadodovale.totempix`
-- Version code: `103`
-- Version name: `1.03`
+- Version code: `104`
+- Version name: `1.04`
 - Target SDK: `35`
 - Formato para upload: Android App Bundle (`.aab`)
 

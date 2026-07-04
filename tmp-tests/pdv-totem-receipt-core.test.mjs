@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 function pickPdvPixReceiptAuthorizationCode(payment) {
   const candidates = [
@@ -173,6 +174,20 @@ assert.ok(
   !whatsappMessage.includes('Obrigado pela preferencia!'),
   'WhatsApp message must not include the preference thank-you line',
 );
+
+for (const file of [
+  'vps_server.js',
+  'vps_server.cjs',
+  'services/whatsappAutomationTemplateService.ts',
+  'utils/printSaleReceipt.ts',
+]) {
+  const source = readFileSync(file, 'utf8');
+  assert.doesNotMatch(
+    source,
+    /Obrigado pela prefer[êe]ncia|Obrigado pela preferencia/i,
+    `${file} must not include the preference thank-you line in operational messages`,
+  );
+}
 
 assert.ok(
   !formatPdvPixReceiptWhatsAppMessage({

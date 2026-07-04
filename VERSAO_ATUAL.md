@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.32-pix-avulso-totem
+version: v1.2.33-totem-update-notice
 date: 2026-07-04
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260704-224316-pix-avulso-totem
+release_vps: /var/www/mdv-site/releases/20260704-200939-totem-update-notice
 branch: main
-summary: Adiciona codigo rastreavel e cancelamento manual para Pix avulso, remove despedida do comprovante e atualiza o Totem Pix para V1.03 com protecao contra bloqueio.
+summary: Remove mensagens de preferencia restantes, adiciona aviso de atualizacao no Totem Pix e prepara APK V1.04.
 ```
