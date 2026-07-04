@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, MonitorSmartphone, RefreshCw, ShieldAlert, WifiOff } from 'lucide-react';
+import QRCode from 'react-qr-code';
+import { CheckCircle2, Loader2, MessageCircle, MonitorSmartphone, QrCode, RefreshCw, ShieldAlert, WifiOff } from 'lucide-react';
 import { pdvDisplayService } from '../../services/pdvDisplayService';
 import { productService } from '../../services/products';
-import type { PdvDisplay, PdvDisplayIdleContent, PdvDisplayState, PdvPixPayment } from '../../types/pdvDisplay';
+import type { PdvDisplay, PdvDisplayIdleContent, PdvDisplayState, PdvPixPayment, PdvPixReceiptShareLinkResponse } from '../../types/pdvDisplay';
 import type { Product } from '../../types/product';
 import { formatCurrency } from '../../utils/saleCalculations';
 
 export const PDV_DISPLAY_TOKEN_STORAGE_KEY = '@mdv_pdv_display_token';
 const POLLING_INTERVAL_MS = 5000;
-const APPROVED_PIX_VISIBLE_MS = 8000;
+const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
+const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 
 function getStoredDisplayToken(): string {
     if (typeof localStorage === 'undefined') return '';
@@ -77,12 +79,31 @@ function ProductAdPrice({ priceInCents, compact = false }: { priceInCents: numbe
 export function shouldShowPixPayment(payment: PdvPixPayment | null, now = Date.now()): boolean {
     if (!payment) return false;
     const status = String(payment.status || '');
-    if (status === 'pending') return true;
+    const startedAt = Date.parse(String(payment.created_at || payment.updated_at || ''));
+    if (!Number.isFinite(startedAt)) return status === 'pending';
+    if (status === 'pending') return now - startedAt < PIX_QR_VISIBLE_MS;
     if (status !== 'approved') return false;
 
     const approvedAt = Date.parse(String(payment.updated_at || payment.created_at || ''));
     if (!Number.isFinite(approvedAt)) return false;
-    return now - approvedAt < APPROVED_PIX_VISIBLE_MS;
+    return now - approvedAt < APPROVED_RECEIPT_VISIBLE_MS;
+}
+
+function getRemainingMs(startedAt: string | undefined, durationMs: number, now: number): number {
+    const parsed = Date.parse(String(startedAt || ''));
+    if (!Number.isFinite(parsed)) return durationMs;
+    return Math.max(0, durationMs - (now - parsed));
+}
+
+function formatCountdown(milliseconds: number): string {
+    const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function getPaymentOrderNumber(payment: PdvPixPayment): string {
+    return payment.receipt?.order_number || payment.sale_draft_id || payment.local_reference || payment.id;
 }
 
 export default function DisplayPage() {
@@ -93,6 +114,7 @@ export default function DisplayPage() {
     const [pairing, setPairing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+    const [now, setNow] = useState(Date.now());
     const [idleSlide, setIdleSlide] = useState(0);
     const [categoryProductPages, setCategoryProductPages] = useState<Array<{
         categoryId: string;
@@ -179,6 +201,11 @@ export default function DisplayPage() {
     }, [settings.adRotationSeconds]);
 
     useEffect(() => {
+        const interval = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    useEffect(() => {
         loadCategoryProducts();
     }, [JSON.stringify(idle_content.categories || []), display?.orientation]);
 
@@ -254,24 +281,31 @@ export default function DisplayPage() {
         );
     }
 
-    const showPix = shouldShowPixPayment(active_pix);
+    const showPix = shouldShowPixPayment(active_pix, now);
 
     return (
         <main className="h-screen overflow-hidden bg-slate-950 text-white">
             <section className={`mx-auto flex h-full min-h-0 w-full ${orientationClass} flex-col p-3 sm:p-5`}>
-                <header className="flex flex-shrink-0 items-center justify-between gap-4 text-sm text-slate-300">
-                    <div>
-                        {settings.showStoreName !== false && <p className="text-lg font-bold text-white">Mercado do Vale</p>}
-                        <p>{display?.name || 'Display Android'}</p>
-                    </div>
-                    <div className="text-right">
-                        <p>{lastUpdatedAt ? `Atualizado ${lastUpdatedAt.toLocaleTimeString('pt-BR')}` : 'Conectando'}</p>
+                {showPix && active_pix ? (
+                    <header className="flex flex-shrink-0 items-center justify-between gap-3 text-sm text-slate-300">
+                        <p className="min-w-0 truncate font-mono text-lg font-bold text-white">Pedido {getPaymentOrderNumber(active_pix)}</p>
                         {error && <p className="text-amber-300"><WifiOff className="mr-1 inline h-4 w-4" />{error}</p>}
-                    </div>
-                </header>
+                    </header>
+                ) : (
+                    <header className="flex flex-shrink-0 items-center justify-between gap-4 text-sm text-slate-300">
+                        <div>
+                            {settings.showStoreName !== false && <p className="text-lg font-bold text-white">Mercado do Vale</p>}
+                            <p>{display?.name || 'Display Android'}</p>
+                        </div>
+                        <div className="text-right">
+                            <p>{lastUpdatedAt ? `Atualizado ${lastUpdatedAt.toLocaleTimeString('pt-BR')}` : 'Conectando'}</p>
+                            {error && <p className="text-amber-300"><WifiOff className="mr-1 inline h-4 w-4" />{error}</p>}
+                        </div>
+                    </header>
+                )}
 
                 {showPix ? (
-                    <PixView payment={active_pix} display={display} />
+                    <PixView payment={active_pix} display={display} now={now} />
                 ) : (
                     <IdleView items={idleItems} slide={idleSlide} display={display} />
                 )}
@@ -280,51 +314,135 @@ export default function DisplayPage() {
     );
 }
 
-function PixView({ payment, display }: { payment: PdvPixPayment; display: PdvDisplay | null }) {
+function PixView({ payment, display, now }: { payment: PdvPixPayment; display: PdvDisplay | null; now: number }) {
     const settings = display?.settings || {};
     const qrImage = payment.qr_code_base64 ? `data:image/png;base64,${payment.qr_code_base64}` : '';
-    const statusText = payment.status === 'approved' ? 'Pagamento aprovado' : 'Aguardando pagamento';
     const isApproved = payment.status === 'approved';
+    const qrRemainingMs = getRemainingMs(payment.created_at || payment.updated_at, PIX_QR_VISIBLE_MS, now);
+
+    if (isApproved) {
+        return <ApprovedReceiptView payment={payment} now={now} />;
+    }
 
     return (
-        <div className="grid min-h-0 flex-1 items-center gap-5 py-4 lg:grid-cols-[minmax(260px,440px)_1fr]">
-            <div className="mx-auto w-full max-w-[440px] rounded-lg bg-white p-4 text-slate-950 shadow-2xl">
-                {isApproved ? (
-                    <div className="flex aspect-square flex-col items-center justify-center rounded-lg bg-emerald-50 text-center text-emerald-700">
-                        <p className="text-8xl font-black">OK</p>
-                        <p className="mt-4 text-2xl font-bold">Pix aprovado</p>
-                    </div>
-                ) : qrImage ? (
+        <div className="grid min-h-0 flex-1 grid-rows-[1fr_auto] items-center gap-3 py-3">
+            <div className="mx-auto flex min-h-0 w-full max-w-[520px] items-center justify-center rounded-lg bg-white p-3 text-slate-950 shadow-2xl">
+                {qrImage ? (
                     <img src={qrImage} alt="QR Code Pix" className="aspect-square w-full object-contain" />
                 ) : (
-                    <div className="flex aspect-square items-center justify-center rounded-lg border border-slate-200 p-6 text-center font-mono text-xs break-all">
+                    <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-slate-200 p-5 text-center font-mono text-xs break-all">
                         {payment.qr_code}
                     </div>
                 )}
             </div>
-            <div className="space-y-6">
-                <div>
-                    <p className="text-lg font-semibold uppercase tracking-wide text-blue-200">{statusText}</p>
-                    {settings.showPixAmount !== false && (
-                        <p className="mt-2 text-6xl font-black tracking-tight sm:text-7xl">{formatCurrency(payment.amount)}</p>
-                    )}
+            <div className="flex flex-shrink-0 flex-col items-center gap-2 text-center">
+                {settings.showPixAmount !== false && (
+                    <p className="text-5xl font-black leading-none text-white sm:text-7xl">{formatCurrency(payment.amount)}</p>
+                )}
+                <p className="font-mono text-2xl font-bold text-cyan-200">{formatCountdown(qrRemainingMs)}</p>
+                {settings.showInstructions !== false && <p className="text-base font-semibold text-slate-200">Aponte a camera do banco para pagar com Pix</p>}
+            </div>
+        </div>
+    );
+}
+
+function ApprovedReceiptView({ payment, now }: { payment: PdvPixPayment; now: number }) {
+    const receipt = payment.receipt;
+    const [phone, setPhone] = useState('');
+    const [sending, setSending] = useState(false);
+    const [shareLink, setShareLink] = useState<PdvPixReceiptShareLinkResponse | null>(null);
+    const [shareError, setShareError] = useState<string | null>(null);
+    const receiptRemainingMs = getRemainingMs(payment.updated_at || payment.created_at, APPROVED_RECEIPT_VISIBLE_MS, now);
+    const linkRemainingMs = shareLink?.expires_at ? Math.max(0, Date.parse(shareLink.expires_at) - now) : 0;
+
+    async function handleGenerateLink() {
+        try {
+            setSending(true);
+            setShareError(null);
+            const result = await pdvDisplayService.createPixReceiptShareLink(payment.id, {});
+            setShareLink(result);
+        } catch (err: any) {
+            setShareError(err?.message || 'Erro ao gerar link do comprovante');
+        } finally {
+            setSending(false);
+        }
+    }
+
+    async function handleSendWhatsApp(event: React.FormEvent) {
+        event.preventDefault();
+        try {
+            setSending(true);
+            setShareError(null);
+            await pdvDisplayService.sendPixReceiptWhatsApp(payment.id, { phone });
+            setPhone('');
+            setShareError('Comprovante enviado.');
+        } catch (err: any) {
+            setShareError(err?.message || 'Erro ao enviar comprovante');
+        } finally {
+            setSending(false);
+        }
+    }
+
+    return (
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 py-3">
+            <div className="text-center">
+                <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-300" />
+                <p className="mt-2 text-3xl font-black text-white">Pagamento aprovado</p>
+            </div>
+
+            <div className="mx-auto flex w-full max-w-xl flex-col justify-center rounded-lg border border-emerald-300/30 bg-white p-5 text-slate-950 shadow-2xl">
+                <div className="space-y-3 text-center">
+                    <p className="text-sm font-bold uppercase text-slate-500">{receipt?.store_name || 'Mercado do Vale'}</p>
+                    <p className="font-mono text-2xl font-black">Pedido {receipt?.order_number || getPaymentOrderNumber(payment)}</p>
+                    <p className="text-5xl font-black text-emerald-700">{receipt?.amount_label || formatCurrency(payment.amount)}</p>
+                    <div className="grid gap-2 rounded-lg bg-slate-100 p-3 text-left text-sm font-semibold text-slate-700">
+                        <p>Pagamento: Pix</p>
+                        <p>Autenticacao: {receipt?.authentication_code || payment.mercado_pago_payment_id || payment.id}</p>
+                        <p>Data/hora: {receipt?.approved_at_label || new Date(payment.updated_at || payment.created_at || Date.now()).toLocaleString('pt-BR')}</p>
+                    </div>
                 </div>
-                {!isApproved && settings.showInstructions !== false && (
-                    <div className="rounded-lg border border-white/10 bg-white/10 p-5 text-xl leading-relaxed text-slate-100">
-                        Abra o app do banco, escolha Pix com QR Code e aponte a camera para a tela.
+            </div>
+
+            <div className="mx-auto w-full max-w-xl space-y-3">
+                <div className="flex items-center justify-between gap-2 text-sm font-semibold text-slate-300">
+                    <span>Visualizacao encerra em {formatCountdown(receiptRemainingMs)}</span>
+                    {receipt?.customer_phone_mask && <span>{receipt.customer_phone_mask}</span>}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                    <button
+                        type="button"
+                        onClick={handleGenerateLink}
+                        disabled={sending}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-3 text-sm font-bold text-slate-900 disabled:opacity-60"
+                    >
+                        <QrCode className="h-5 w-5" />
+                        QR comprovante
+                    </button>
+                    <form onSubmit={handleSendWhatsApp} className="flex min-w-0 gap-2">
+                        <input
+                            value={phone}
+                            onChange={(event) => setPhone(event.target.value)}
+                            placeholder="WhatsApp"
+                            inputMode="tel"
+                            className="min-w-0 flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-3 text-sm font-semibold text-white outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-300"
+                        />
+                        <button
+                            type="submit"
+                            disabled={sending || phone.trim().length < 8}
+                            className="inline-flex aspect-square h-12 items-center justify-center rounded-lg bg-emerald-500 text-white disabled:opacity-60"
+                            aria-label="Enviar comprovante"
+                        >
+                            <MessageCircle className="h-5 w-5" />
+                        </button>
+                    </form>
+                </div>
+                {shareLink && (
+                    <div className="mx-auto grid max-w-sm place-items-center gap-2 rounded-lg bg-white p-3 text-slate-950">
+                        <QRCode value={shareLink.url} size={140} />
+                        <p className="font-mono text-sm font-bold">Expira em {formatCountdown(linkRemainingMs)}</p>
                     </div>
                 )}
-                {settings.showItems !== false && (
-                    <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-                        <p className="text-sm font-semibold uppercase tracking-wide text-slate-300">Resumo</p>
-                        <p className="mt-2 text-slate-200">Venda PDV Mercado do Vale</p>
-                    </div>
-                )}
-                {settings.showAdsDuringPix && (
-                    <div className="rounded-lg bg-blue-500/20 p-4 text-sm text-blue-100">
-                        Obrigado por comprar no Mercado do Vale.
-                    </div>
-                )}
+                {shareError && <p className="text-center text-sm font-semibold text-emerald-200">{shareError}</p>}
             </div>
         </div>
     );

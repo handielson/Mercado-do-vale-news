@@ -93,6 +93,50 @@ export interface PdvPixPayment {
     raw_response?: unknown;
     created_at?: string;
     updated_at?: string;
+    receipt?: PdvPixReceipt | null;
+}
+
+export interface PdvPixReceipt {
+    payment_id: string;
+    order_number: string;
+    amount: number;
+    amount_label: string;
+    payment_method: 'Pix' | string;
+    authentication_code: string;
+    approved_at: string;
+    approved_at_label: string;
+    store_name: string;
+    customer_name?: string | null;
+    customer_first_name?: string | null;
+    customer_phone_mask?: string | null;
+    has_customer_phone?: boolean;
+}
+
+export interface PdvPixReceiptShareLinkResponse {
+    token: string;
+    url: string;
+    expires_at: string | null;
+    receipt: PdvPixReceipt;
+}
+
+export interface PdvPixReceiptShareResponse {
+    receipt: PdvPixReceipt;
+    expires_at: string | null;
+}
+
+export interface PdvPixReceiptWhatsAppInput {
+    phone?: string;
+    whatsapp?: string;
+    customer_phone?: string;
+    customer_name?: string;
+    name?: string;
+}
+
+export interface PdvPixReceiptWhatsAppResponse {
+    ok: boolean;
+    phone_mask: string;
+    receipt: PdvPixReceipt;
+    result?: unknown;
 }
 
 export interface PdvPixPaymentInput {

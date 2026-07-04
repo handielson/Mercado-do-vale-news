@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CreditCard, DollarSign, Smartphone, Trash2, Calendar } from 'lucide-react';
+import { CreditCard, DollarSign, Share2, Smartphone, Trash2, Calendar } from 'lucide-react';
 import { PaymentMethod, PaymentMethodType } from '../../types/sale';
 import type { PdvDisplay, PdvPixPayment } from '../../types/pdvDisplay';
 import {
@@ -51,6 +51,8 @@ interface PaymentSectionProps {
     onShowPdvPixOnDisplay?: () => void;
     onPrintPdvPixQr?: () => void;
     onCancelPdvPixPayment?: () => void;
+    onSharePdvPixReceipt?: () => void;
+    onClearPdvTotemVisual?: () => void;
 }
 
 export default function PaymentSection({
@@ -79,7 +81,9 @@ export default function PaymentSection({
     onRefreshPdvPixPayment,
     onShowPdvPixOnDisplay,
     onPrintPdvPixQr,
-    onCancelPdvPixPayment
+    onCancelPdvPixPayment,
+    onSharePdvPixReceipt,
+    onClearPdvTotemVisual
 }: PaymentSectionProps) {
     const getDueDateDefault = () => {
         const d = new Date();
@@ -564,6 +568,21 @@ export default function PaymentSection({
                         className="rounded bg-white px-3 py-2 text-xs font-semibold text-red-700 ring-1 ring-red-200 transition-colors hover:bg-red-50 disabled:opacity-50"
                     >
                         Cancelar Pix
+                    </button>
+                    <button
+                        onClick={onSharePdvPixReceipt}
+                        disabled={!pdvPixPayment || pdvPixPayment.status !== 'approved' || pdvPixLoading}
+                        className="inline-flex items-center justify-center gap-1 rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                        <Share2 size={14} />
+                        Compartilhar comprovante
+                    </button>
+                    <button
+                        onClick={onClearPdvTotemVisual}
+                        disabled={!pdvPixDisplayId || pdvPixLoading}
+                        className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
+                    >
+                        Limpar totem
                     </button>
                 </div>
             </div>

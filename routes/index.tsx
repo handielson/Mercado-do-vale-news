@@ -80,6 +80,7 @@ const NovoBotPage = lazy(() => import('../pages/admin/whatsapp/NovoBotPage'));
 const PaymentIntegrationsPage = lazy(() => import('../pages/admin/settings/PaymentIntegrationsPage'));
 const DisplaysPage = lazy(() => import('../pages/admin/settings/DisplaysPage'));
 const DisplayPage = lazy(() => import('../pages/display/DisplayPage'));
+const PixReceiptSharePage = lazy(() => import('../pages/store/PixReceiptSharePage').then(module => ({ default: module.PixReceiptSharePage })));
 const TabsTestPage = lazy(() => import('../pages/test/TabsTestPage').then(module => ({ default: module.TabsTestPage })));
 const CatalogPage = lazy(() => import('../pages/catalog/index'));
 const CoinsInfoPage = lazy(() => import('../pages/catalog/CoinsInfoPage'));
@@ -230,6 +231,10 @@ export const router = createBrowserRouter([
   {
     path: "/pix/:token",
     element: <PublicPixPage />
+  },
+  {
+    path: "/receipt-share/:token",
+    element: <PixReceiptSharePage />
   },
   {
     path: "/admin",

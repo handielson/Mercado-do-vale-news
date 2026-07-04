@@ -792,9 +792,6 @@ export default function PDVPage() {
 
             if (payment.status === 'approved') {
                 addApprovedPdvPixPayment(payment);
-                if (pdvPixDisplayId.trim()) {
-                    await pdvDisplayService.clearActivePix(pdvPixDisplayId.trim());
-                }
                 toast.success('Pix aprovado e adicionado ao pagamento');
                 return;
             }
@@ -845,6 +842,59 @@ export default function PDVPage() {
             items: cartItems,
             instructions: 'Pague com Pix e aguarde a confirmacao no caixa.'
         }));
+    };
+
+    const handleClearPdvTotemVisual = async () => {
+        const display_id = pdvPixDisplayId.trim();
+        if (!display_id) {
+            toast.error('Informe o Display ID vinculado ao caixa');
+            return;
+        }
+
+        try {
+            setPdvPixLoading(true);
+            await pdvDisplayService.clearDisplayVisual(display_id);
+            toast.success('Totem limpo');
+        } catch (error: any) {
+            toast.error(error?.message || 'Erro ao limpar totem');
+        } finally {
+            setPdvPixLoading(false);
+        }
+    };
+
+    const handleSharePdvPixReceipt = async () => {
+        if (!pdvPixPayment) {
+            toast.error('Gere um Pix antes de compartilhar comprovante');
+            return;
+        }
+        if (pdvPixPayment.status !== 'approved') {
+            toast.error('Comprovante disponivel somente apos aprovacao do Pix');
+            return;
+        }
+
+        const registeredPhone = selectedCustomer?.phone?.trim() || '';
+        const shouldUseRegisteredPhone = registeredPhone
+            ? window.confirm(`Enviar comprovante para ${selectedCustomer?.name || 'cliente'} no WhatsApp ${registeredPhone}?`)
+            : false;
+        const phone = shouldUseRegisteredPhone
+            ? registeredPhone
+            : window.prompt('Digite o WhatsApp para enviar o comprovante')?.trim();
+
+        if (!phone) return;
+
+        try {
+            setPdvPixLoading(true);
+            const result = await pdvDisplayService.sendPixReceiptWhatsApp(pdvPixPayment.id, {
+                phone,
+                customer_name: selectedCustomer?.name,
+                customer_phone: selectedCustomer?.phone,
+            });
+            toast.success(`Comprovante enviado para ${result.phone_mask || 'WhatsApp'}`);
+        } catch (error: any) {
+            toast.error(error?.message || 'Erro ao enviar comprovante');
+        } finally {
+            setPdvPixLoading(false);
+        }
     };
 
     // Finalizar venda
@@ -1490,6 +1540,8 @@ export default function PDVPage() {
                             onShowPdvPixOnDisplay={handleShowPdvPixOnDisplay}
                             onPrintPdvPixQr={handlePrintPdvPixQr}
                             onCancelPdvPixPayment={handleCancelPdvPixPayment}
+                            onSharePdvPixReceipt={handleSharePdvPixReceipt}
+                            onClearPdvTotemVisual={handleClearPdvTotemVisual}
                             onFinalAdjustmentDiscountChange={setFinalAdjustmentDiscount}
                             onApplyFinalPaymentAmount={handleApplyFinalPaymentAmount}
                         />

@@ -5,6 +5,10 @@ import type {
     PdvDisplayPairResponse,
     PdvDisplayPairingCodeResponse,
     PdvDisplayState,
+    PdvPixReceiptShareLinkResponse,
+    PdvPixReceiptShareResponse,
+    PdvPixReceiptWhatsAppInput,
+    PdvPixReceiptWhatsAppResponse,
     PdvPixPayment,
     PdvPixPaymentInput,
     PdvPixPaymentStatus,
@@ -100,7 +104,35 @@ export const pdvDisplayService = {
         await vpsClient.delete(`/pdv/displays/${encodeURIComponent(displayId)}/active-pix`);
     },
 
+    async clearDisplayVisual(displayId: string): Promise<void> {
+        await vpsClient.post(`/pdv/displays/${encodeURIComponent(displayId)}/clear-visual`, {});
+    },
+
     async getDisplayState(token: string): Promise<PdvDisplayState> {
         return vpsClient.get<PdvDisplayState>('/pdv/display-state' + `?token=${encodeURIComponent(token)}`);
+    },
+
+    async createPixReceiptShareLink(
+        pixPaymentId: string,
+        input: PdvPixReceiptWhatsAppInput = {}
+    ): Promise<PdvPixReceiptShareLinkResponse> {
+        return vpsClient.post<PdvPixReceiptShareLinkResponse>(
+            `/pdv/pix-payments/${encodeURIComponent(pixPaymentId)}/receipt/share-link`,
+            input
+        );
+    },
+
+    async sendPixReceiptWhatsApp(
+        pixPaymentId: string,
+        input: PdvPixReceiptWhatsAppInput
+    ): Promise<PdvPixReceiptWhatsAppResponse> {
+        return vpsClient.post<PdvPixReceiptWhatsAppResponse>(
+            `/pdv/pix-payments/${encodeURIComponent(pixPaymentId)}/receipt/whatsapp`,
+            input
+        );
+    },
+
+    async getTemporaryPixReceipt(token: string): Promise<PdvPixReceiptShareResponse> {
+        return vpsClient.get<PdvPixReceiptShareResponse>(`/pdv/receipt-share/${encodeURIComponent(token)}`);
     },
 };

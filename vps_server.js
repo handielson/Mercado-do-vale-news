@@ -24145,6 +24145,11 @@ fastify.delete('/pdv/displays/:displayId/active-pix', { preHandler: requireSyncK
 });
 
 fastify.post('/pdv/displays/:displayId/clear-visual', { preHandler: requireSyncKey }, async (req) => {
+  const [displayRows] = await pool.query('SELECT active_pix_payment_id FROM pdv_displays WHERE id = ? LIMIT 1', [req.params.displayId]);
+  const activePixPaymentId = displayRows?.[0]?.active_pix_payment_id || null;
+  if (activePixPaymentId) {
+    await pool.query('UPDATE pdv_receipt_share_tokens SET revoked_at = NOW() WHERE pix_payment_id = ? AND revoked_at IS NULL', [activePixPaymentId]);
+  }
   await pool.query('UPDATE pdv_displays SET active_pix_payment_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [req.params.displayId]);
   return { ok: true };
 });
