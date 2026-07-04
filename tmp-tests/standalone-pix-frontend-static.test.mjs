@@ -1,0 +1,65 @@
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+
+const read = (path) => readFileSync(path, 'utf8');
+
+const service = read('services/standalonePixService.ts');
+const types = read('types/standalonePix.ts');
+const adminPage = read('pages/admin/financial/StandalonePixPage.tsx');
+const publicPage = read('pages/store/PublicPixPage.tsx');
+const routes = read('routes/index.tsx');
+const layout = read('layouts/AdminLayout.tsx');
+
+for (const snippet of [
+  "vpsClient.post<StandalonePixPayment>('/pix/standalone'",
+  "vpsClient.get<{ data: StandalonePixPayment[] }>('/pix/standalone",
+  "vpsClient.get<StandalonePixPayment>(`/pix/standalone/${encodeURIComponent(id)}/status`",
+  "vpsClient.post<StandalonePixShareResponse>(`/pix/standalone/${encodeURIComponent(id)}/share-whatsapp`",
+  "vpsClient.get<StandalonePixPayment>(`/pix/public/${encodeURIComponent(token)}`",
+]) {
+  assert.ok(service.includes(snippet), `standalonePixService.ts must include ${snippet}`);
+}
+
+for (const snippet of [
+  'StandalonePixPayment',
+  'Cancelado por falta de pagamento',
+  'isStandalonePixPayable',
+  'formatStandalonePixStatus',
+]) {
+  assert.ok(types.includes(snippet), `types/standalonePix.ts must include ${snippet}`);
+}
+
+for (const snippet of [
+  'Pix Avulso',
+  'Gerar Pix',
+  'Copiar codigo Pix',
+  'Copiar link publico',
+  'Compartilhar no WhatsApp',
+  'Exibir no display',
+  'Cancelado por falta de pagamento',
+  'pdvDisplayService.setActivePix',
+  'standalonePixService.create',
+  'standalonePixService.list',
+  'standalonePixService.shareWhatsApp',
+]) {
+  assert.ok(adminPage.includes(snippet), `StandalonePixPage.tsx must include ${snippet}`);
+}
+
+for (const snippet of [
+  'useParams',
+  'standalonePixService.getPublic',
+  'Copiar codigo Pix',
+  'Cancelado por falta de pagamento',
+  'qr_code_base64',
+  'Pix copia e cola',
+]) {
+  assert.ok(publicPage.includes(snippet), `PublicPixPage.tsx must include ${snippet}`);
+}
+
+assert.ok(routes.includes("const StandalonePixPage = lazy(() => import('../pages/admin/financial/StandalonePixPage'))"), 'routes must lazy load admin standalone pix page');
+assert.ok(routes.includes("const PublicPixPage = lazy(() => import('../pages/store/PublicPixPage'))"), 'routes must lazy load public pix page');
+assert.ok(routes.includes('path: "/admin/pix-avulso"'), 'routes must expose /admin/pix-avulso');
+assert.ok(routes.includes('path: "/pix/:token"'), 'routes must expose /pix/:token');
+assert.ok(layout.includes("to: '/admin/pix-avulso'"), 'AdminLayout must add Pix Avulso menu item');
+
+console.log('standalone pix frontend static checks passed');
