@@ -93,7 +93,7 @@ class MainActivity : Activity() {
     inner class TotemWebViewClient : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
             val url = request?.url?.toString() ?: return false
-            if (url.startsWith("market://") || url.contains("play.google.com/store/apps/details")) {
+            if (url.startsWith("market://") || url.contains("play.google.com/")) {
                 openExternalUrl(url)
                 return true
             }

@@ -29066,6 +29066,13 @@ async function runMigrations() {
         AND content LIKE ?`,
     [legacySaleCompletedPreferenceLine, nextSaleCompletedLine, `%${legacySaleCompletedPreferenceLine.slice(0, -2)}%`]
   );
+  const legacyCompanyFooterText = ['Obrigado', 'pela', 'preferencia! Volte sempre!'].join(' ');
+  await pool.query(
+    `UPDATE company_settings
+        SET footer_text = 'Volte sempre!'
+      WHERE footer_text = ?`,
+    [legacyCompanyFooterText]
+  );
 
 
   await pool.query(`

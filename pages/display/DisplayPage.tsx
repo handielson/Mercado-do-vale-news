@@ -13,8 +13,8 @@ const POLLING_INTERVAL_MS = 5000;
 const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
-const PLAY_STORE_UPDATE_URL = 'https://play.google.com/store/apps/details?id=br.com.mercadodovale.totempix';
-const DISPLAY_APP_VERSION = 'V1.05';
+const PLAY_STORE_UPDATE_URL = 'https://play.google.com/apps/testing/br.com.mercadodovale.totempix';
+const DISPLAY_APP_VERSION = 'V1.06';
 
 type TotemVersionInfo = {
     version?: string;

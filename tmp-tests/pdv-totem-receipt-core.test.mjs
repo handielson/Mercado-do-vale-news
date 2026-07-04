@@ -191,6 +191,11 @@ for (const file of [
   );
 }
 
+for (const file of ['vps_server.js', 'vps_server.cjs']) {
+  const source = readFileSync(file, 'utf8');
+  assert.match(source, /UPDATE company_settings[\s\S]*SET footer_text = 'Volte sempre!'/, `${file} must migrate legacy company footer text`);
+}
+
 assert.ok(
   !formatPdvPixReceiptWhatsAppMessage({
     customer_name: '',

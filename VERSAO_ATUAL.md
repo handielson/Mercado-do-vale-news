@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.34-totem-update-button
+version: v1.2.35-totem-update-link
 date: 2026-07-04
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260704-203000-totem-update-button
+release_vps: /var/www/mdv-site/releases/20260704-204000-totem-update-link
 branch: main
-summary: Adiciona botao de atualizacao para Play Store no Totem Pix V1.05 e remove textos restantes de preferencia.
+summary: Corrige link de atualizacao para teste interno, limpa rodape salvo no banco e prepara Totem Pix V1.06.
 ```
