@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.47-totem-black-screen-pix-wake",
+    "version": "v1.2.48-tiktok-shop-oauth",
     "date": "2026-07-05",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260705-184318-totem-black-screen-pix-wake",
+    "release_vps": "/var/www/mdv-site/releases/20260705-193202-v148-tiktok-shop-oauth",
     "branch": "main",
-    "summary": "Corrige tela preta do Totem Pix para continuar recebendo Pix apos voltar das configuracoes.",
+    "summary": "Adiciona configuracao e OAuth inicial do TikTok Shop.",
     "totem_pix_android": {
         "latest_version_name": "1.14",
         "latest_version_code": 114,

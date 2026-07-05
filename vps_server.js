@@ -17,6 +17,7 @@ const {
   buildDiscardMessage,
   fitImageInsideA4,
 } = require('./services/signedWarrantyDocumentCore.cjs');
+require('dotenv').config({ path: path.join(__dirname, '.env.tiktok.local'), override: false });
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -3831,6 +3832,161 @@ function generateShopeePublicSignVps(partnerId, partnerKey, apiPath, timestamp) 
 function buildShopeeCallbackUrlVps() {
   const origin = String(process.env.SHOPEE_REDIRECT_BASE_URL || 'https://www.mercadodovale.com.br').replace(/\/+$/, '');
   return `${origin}/api/shopee?action=callback`;
+}
+
+function normalizeTikTokShopMarketVps(value) {
+  return String(value || '').trim().toUpperCase() === 'US' ? 'US' : 'ROW';
+}
+
+function getTikTokShopSellerAuthOriginVps(market) {
+  return normalizeTikTokShopMarketVps(market) === 'US'
+    ? 'https://services.us.tiktokshop.com'
+    : 'https://services.tiktokshop.com';
+}
+
+function buildTikTokShopRedirectUrlVps() {
+  return String(
+    process.env.TIKTOK_SHOP_REDIRECT_URL ||
+    'https://www.mercadodovale.com.br/api/tiktok-shop/oauth/callback'
+  ).replace(/\/+$/, '');
+}
+
+function getTikTokShopSetting(settings, key, envKey) {
+  return String(settings?.[key] || process.env[envKey] || '').trim();
+}
+
+function base64UrlEncodeVps(value) {
+  return Buffer.from(String(value)).toString('base64url');
+}
+
+function base64UrlDecodeVps(value) {
+  return Buffer.from(String(value), 'base64url').toString('utf8');
+}
+
+function buildTikTokShopOAuthStateVps(appSecret) {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const payload = `${issuedAt}.${nonce}`;
+  const signature = crypto.createHmac('sha256', appSecret).update(payload).digest('base64url');
+  return `${base64UrlEncodeVps(payload)}.${signature}`;
+}
+
+function verifyTikTokShopOAuthStateVps(state, appSecret) {
+  const parts = String(state || '').split('.');
+  if (parts.length !== 2) return false;
+  let payload = '';
+  try {
+    payload = base64UrlDecodeVps(parts[0]);
+  } catch {
+    return false;
+  }
+  const [issuedAtText] = payload.split('.');
+  const issuedAt = Number(issuedAtText);
+  if (!Number.isFinite(issuedAt)) return false;
+  if (Math.abs(Math.floor(Date.now() / 1000) - issuedAt) > 30 * 60) return false;
+  const expected = crypto.createHmac('sha256', appSecret).update(payload).digest('base64url');
+  const actualBuffer = Buffer.from(parts[1]);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+function sanitizeTikTokShopOAuthError(data) {
+  const code = data?.code ?? data?.error ?? 'unknown';
+  const message = data?.message ?? data?.error_description ?? data?.data?.message ?? '';
+  return `${code}${message ? `: ${message}` : ''}`.slice(0, 300);
+}
+
+async function loadTikTokShopOAuthSettingsVps() {
+  const rows = await vpsDbSelect(
+    'company_settings',
+    'select=id,tiktok_app_key,tiktok_app_secret,tiktok_service_id,tiktok_shop_cipher&limit=1'
+  );
+  const settings = Array.isArray(rows) ? rows[0] : null;
+  return {
+    id: settings?.id,
+    appKey: getTikTokShopSetting(settings, 'tiktok_app_key', 'TIKTOK_SHOP_APP_KEY'),
+    appSecret: getTikTokShopSetting(settings, 'tiktok_app_secret', 'TIKTOK_SHOP_APP_SECRET'),
+    serviceId: getTikTokShopSetting(settings, 'tiktok_service_id', 'TIKTOK_SHOP_SERVICE_ID'),
+    shopCipher: getTikTokShopSetting(settings, 'tiktok_shop_cipher', 'TIKTOK_SHOP_CIPHER'),
+  };
+}
+
+async function handleTikTokShopOAuthAuthVps(request, reply) {
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    if (!settings.appKey || !settings.appSecret || !settings.serviceId) {
+      return reply.code(400).send({ error: 'Credenciais TikTok Shop incompletas.' });
+    }
+
+    const market = normalizeTikTokShopMarketVps(request.query?.market || process.env.TIKTOK_SHOP_AUTH_MARKET);
+    const url = new URL('/open/authorize', getTikTokShopSellerAuthOriginVps(market));
+    url.searchParams.set('service_id', settings.serviceId);
+    url.searchParams.set('state', buildTikTokShopOAuthStateVps(settings.appSecret));
+    return reply.code(200).send({ url: url.toString(), redirect_url: buildTikTokShopRedirectUrlVps(), market });
+  } catch (err) {
+    console.warn('[tiktok-shop-oauth] auth url failed', { detail: err.message || 'unknown' });
+    return reply.code(500).send({ error: 'Falha ao gerar URL de autorizacao TikTok Shop.' });
+  }
+}
+
+async function handleTikTokShopOAuthCallbackVps(request, reply) {
+  const query = request.query || {};
+  if (query.error) {
+    return blingRedirect(reply, `/admin/settings/tiktok-shop?error=${encodeURIComponent(String(query.error))}`);
+  }
+  if (!query.code) {
+    return blingRedirect(reply, '/admin/settings/tiktok-shop?error=missing_code');
+  }
+
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    if (!settings.id || !settings.appKey || !settings.appSecret) {
+      return blingRedirect(reply, '/admin/settings/tiktok-shop?error=missing_credentials');
+    }
+    if (!verifyTikTokShopOAuthStateVps(query.state, settings.appSecret)) {
+      return blingRedirect(reply, '/admin/settings/tiktok-shop?error=invalid_state');
+    }
+
+    const params = new URLSearchParams();
+    params.set('app_key', settings.appKey);
+    params.set('app_secret', settings.appSecret);
+    params.set('auth_code', String(query.code));
+    params.set('grant_type', 'authorized_code');
+
+    const tokenResponse = await fetch(`https://auth.tiktok-shops.com/api/v2/token/get?${params.toString()}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(15000),
+    });
+    const tokenData = await tokenResponse.json().catch(() => ({}));
+    if (!tokenResponse.ok || Number(tokenData?.code) !== 0) {
+      const detail = sanitizeTikTokShopOAuthError(tokenData);
+      console.warn('[tiktok-shop-oauth] token exchange failed', {
+        status: tokenResponse.status,
+        detail,
+        request_id: tokenData?.request_id || null,
+      });
+      return blingRedirect(reply, `/admin/settings/tiktok-shop?error=token_exchange_failed&status=${tokenResponse.status}&detail=${encodeURIComponent(detail)}`);
+    }
+
+    const data = tokenData?.data || {};
+    await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, {
+      tiktok_access_token: data.access_token || null,
+      tiktok_refresh_token: data.refresh_token || null,
+      tiktok_access_token_expires_at: data.access_token_expire_in ? String(data.access_token_expire_in) : null,
+      tiktok_refresh_token_expires_at: data.refresh_token_expire_in ? String(data.refresh_token_expire_in) : null,
+      tiktok_open_id: data.open_id || null,
+      tiktok_seller_name: data.seller_name || null,
+      tiktok_seller_base_region: data.seller_base_region || null,
+      tiktok_granted_scopes: Array.isArray(data.granted_scopes) ? JSON.stringify(data.granted_scopes) : null,
+      ...(settings.shopCipher ? { tiktok_shop_cipher: settings.shopCipher } : {}),
+    });
+
+    return blingRedirect(reply, '/admin/settings/tiktok-shop?connected=true');
+  } catch (err) {
+    console.warn('[tiktok-shop-oauth] callback failed', { detail: err.message || 'unknown' });
+    return blingRedirect(reply, `/admin/settings/tiktok-shop?error=network_error&detail=${encodeURIComponent(err.message || 'unknown')}`);
+  }
 }
 
 async function handleShopeeOAuthVps(request, reply) {
@@ -8197,6 +8353,8 @@ fastify.all('/api/shopee', handleShopeeOAuthVps);
 fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);
 fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
 fastify.all('/api/shopee-actions', handleShopeeActionsVps);
+fastify.get('/api/tiktok-shop/oauth/auth', handleTikTokShopOAuthAuthVps);
+fastify.get('/api/tiktok-shop/oauth/callback', handleTikTokShopOAuthCallbackVps);
 fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);
 fastify.all('/api/telegram-webhook', handleTelegramWebhookVps);
 
@@ -22008,6 +22166,11 @@ fastify.patch('/company-settings', { preHandler: requireSyncKey }, async (req, r
     // Shopee Integration
     'shopee_partner_id', 'shopee_partner_key', 'shopee_shop_id', 
     'shopee_access_token', 'shopee_refresh_token',
+    'tiktok_app_key', 'tiktok_app_secret', 'tiktok_service_id', 'tiktok_shop_cipher',
+    'tiktok_access_token', 'tiktok_refresh_token',
+    'tiktok_access_token_expires_at', 'tiktok_refresh_token_expires_at',
+    'tiktok_open_id', 'tiktok_seller_name', 'tiktok_seller_base_region',
+    'tiktok_granted_scopes',
     'bling_client_id', 'bling_client_secret', 'bling_callback_url',
     'bling_access_token', 'bling_refresh_token', 'bling_token_expires_at',
 
@@ -27860,6 +28023,18 @@ async function runMigrations() {
 
   await addColumnIfMissing('company_settings', 'synology_video_base_url', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('company_settings', 'synology_video_extension', "VARCHAR(20) DEFAULT '.mp4'");
+  await addColumnIfMissing('company_settings', 'tiktok_app_key', 'VARCHAR(255) DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_app_secret', 'TEXT DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_service_id', 'VARCHAR(255) DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_shop_cipher', 'VARCHAR(255) DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_access_token', 'TEXT DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_refresh_token', 'TEXT DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_access_token_expires_at', 'VARCHAR(64) DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_refresh_token_expires_at', 'VARCHAR(64) DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_open_id', 'VARCHAR(255) DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_seller_name', 'VARCHAR(255) DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_seller_base_region', 'VARCHAR(32) DEFAULT NULL');
+  await addColumnIfMissing('company_settings', 'tiktok_granted_scopes', 'TEXT DEFAULT NULL');
   await addColumnIfMissing('products', 'exclude_from_seo', "TINYINT(1) DEFAULT 0");
   await addColumnIfMissing('products', 'hide_from_catalog', "TINYINT(1) DEFAULT 0");
   await addColumnIfMissing('products', 'meta_title', "VARCHAR(255) NULL");
