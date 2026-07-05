@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS: PdvDisplaySettings = {
     showAdsDuringPix: false,
     adRotationSeconds: 8,
 };
-const DISPLAY_APP_VERSION = 'V1.07';
+const DISPLAY_APP_VERSION = 'V1.08';
 
 const DEFAULT_FORM: PdvDisplayInput = {
     name: '',
