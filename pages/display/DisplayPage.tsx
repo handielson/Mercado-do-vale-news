@@ -7,6 +7,7 @@ import { publicCompanySettingsService, type PublicCompanySettings } from '../../
 import type { PdvDisplay, PdvDisplayIdleContent, PdvDisplayState, PdvPixPayment, PdvPixReceiptShareLinkResponse } from '../../types/pdvDisplay';
 import type { Product } from '../../types/product';
 import { formatCurrency } from '../../utils/saleCalculations';
+import { getStoreStatus } from '../../utils/storeStatus';
 
 export const PDV_DISPLAY_TOKEN_STORAGE_KEY = '@mdv_pdv_display_token';
 const POLLING_INTERVAL_MS = 5000;
@@ -14,7 +15,8 @@ const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
-const DISPLAY_APP_VERSION = 'V1.08';
+const DISPLAY_APP_VERSION = 'V1.09';
+const STORE_SLEEP_CHECK_INTERVAL_MS = 60 * 1000;
 
 type TotemVersionInfo = {
     version?: string;
@@ -33,6 +35,10 @@ declare global {
             getAppVersionName?: () => string;
             getAppVersionCode?: () => number;
             getWifiSsid?: () => string;
+            setDisplayAwake?: (awake: boolean) => void;
+            requestScreenSleep?: () => void;
+            requestScreenLockPermission?: () => void;
+            isScreenLockPermissionActive?: () => boolean;
         };
     }
 }
@@ -300,6 +306,31 @@ function getTotemUpdateNotice(versionInfo: TotemVersionInfo | null, nativeVersio
     return normalizeVersionNumber(nativeVersion.name) < normalizeVersionNumber(latestName) ? message : '';
 }
 
+function syncNativeDisplayPower(shouldStayAwake: boolean): void {
+    try {
+        const bridge = window.MdvTotem;
+        bridge?.setDisplayAwake?.(shouldStayAwake);
+        if (!shouldStayAwake) {
+            bridge?.requestScreenSleep?.();
+        }
+    } catch {
+        // Native bridge is optional outside the Android app.
+    }
+}
+
+function ensureNativeScreenLockPermission(): void {
+    try {
+        const bridge = window.MdvTotem;
+        if (!bridge?.requestScreenLockPermission || bridge?.isScreenLockPermissionActive?.()) return;
+        const storageKey = '@mdv_totem_screen_lock_permission_requested';
+        if (typeof localStorage !== 'undefined' && localStorage.getItem(storageKey) === '1') return;
+        if (typeof localStorage !== 'undefined') localStorage.setItem(storageKey, '1');
+        bridge.requestScreenLockPermission();
+    } catch {
+        // The display still works without immediate screen lock permission.
+    }
+}
+
 export default function DisplayPage() {
     const [token, setToken] = useState(() => getStoredDisplayToken());
     const [pairingCode, setPairingCode] = useState('');
@@ -313,6 +344,7 @@ export default function DisplayPage() {
     const [companySettings, setCompanySettings] = useState<PublicCompanySettings | null>(null);
     const [versionInfo, setVersionInfo] = useState<TotemVersionInfo | null>(null);
     const [nativeVersion, setNativeVersion] = useState<{ name: string; code: number } | null>(null);
+    const [storeShouldStayAwake, setStoreShouldStayAwake] = useState(true);
     const [categoryProductPages, setCategoryProductPages] = useState<Array<{
         categoryId: string;
         categoryName: string;
@@ -326,6 +358,7 @@ export default function DisplayPage() {
     const orientationClass = display?.orientation === 'portrait' ? 'max-w-[760px]' : 'max-w-[1280px]';
     const updateNotice = getTotemUpdateNotice(versionInfo, nativeVersion);
     const updateUrl = String(versionInfo?.totem_pix_android?.update_url || TOTEM_UPDATE_HELP_URL).trim();
+    const showPix = shouldShowPixPayment(active_pix, now);
 
     const idleItems = useMemo(() => {
         const qrCards = buildIdleQrCards(idle_content, companySettings).map((card) => ({ type: 'qr-card' as const, card }));
@@ -401,6 +434,43 @@ export default function DisplayPage() {
             .then(setCompanySettings)
             .catch(() => setCompanySettings(null));
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function refreshStoreWakeState() {
+            if (!companySettings?.business_hours) {
+                if (!cancelled) setStoreShouldStayAwake(true);
+                return;
+            }
+
+            const status = await getStoreStatus(
+                companySettings.business_hours,
+                companySettings.holiday_overrides,
+                companySettings.local_holidays,
+            );
+            if (!cancelled) {
+                setStoreShouldStayAwake(status.status === 'open' || status.status === 'closing_soon');
+            }
+        }
+
+        refreshStoreWakeState();
+        const interval = setInterval(refreshStoreWakeState, STORE_SLEEP_CHECK_INTERVAL_MS);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [
+        JSON.stringify(companySettings?.business_hours || {}),
+        JSON.stringify(companySettings?.holiday_overrides || []),
+        JSON.stringify(companySettings?.local_holidays || []),
+    ]);
+
+    useEffect(() => {
+        const shouldStayAwake = showPix || storeShouldStayAwake;
+        syncNativeDisplayPower(shouldStayAwake);
+        if (!shouldStayAwake) ensureNativeScreenLockPermission();
+    }, [showPix, storeShouldStayAwake]);
 
     useEffect(() => {
         setNativeVersion(readNativeTotemVersion());
@@ -498,8 +568,6 @@ export default function DisplayPage() {
             </main>
         );
     }
-
-    const showPix = shouldShowPixPayment(active_pix, now);
 
     return (
         <main className="h-screen overflow-hidden bg-slate-950 text-white">

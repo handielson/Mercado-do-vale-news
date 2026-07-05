@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Totem Pix</string>
+    <string name="device_admin_description">Apaga a tela automaticamente quando a loja estiver fechada.</string>
+</resources>
