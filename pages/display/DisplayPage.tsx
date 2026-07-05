@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as ReactQRCode from 'react-qr-code';
-import { CheckCircle2, Loader2, MessageCircle, MonitorSmartphone, QrCode, RefreshCw, ShieldAlert, WifiOff } from 'lucide-react';
+import { CheckCircle2, Loader2, MessageCircle, MonitorSmartphone, QrCode, RefreshCw, Settings, ShieldAlert, Volume2, WifiOff, X } from 'lucide-react';
 import { pdvDisplayService } from '../../services/pdvDisplayService';
 import { productService } from '../../services/products';
 import { publicCompanySettingsService, type PublicCompanySettings } from '../../services/publicCompanySettings';
@@ -15,8 +15,9 @@ const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
-const DISPLAY_APP_VERSION = 'V1.09';
+const DISPLAY_APP_VERSION = 'V1.10';
 const STORE_SLEEP_CHECK_INTERVAL_MS = 60 * 1000;
+const TOTEM_LOCAL_SETTINGS_STORAGE_KEY = '@mdv_totem_local_settings';
 
 type TotemVersionInfo = {
     version?: string;
@@ -39,6 +40,7 @@ declare global {
             requestScreenSleep?: () => void;
             requestScreenLockPermission?: () => void;
             isScreenLockPermissionActive?: () => boolean;
+            playPaymentSuccessTone?: (tone: string) => void;
         };
     }
 }
@@ -60,6 +62,16 @@ type IdleQrCard = {
     ssid?: string;
     password?: string;
     security?: 'WPA' | 'WEP' | 'nopass';
+};
+
+type TotemLocalSettings = {
+    paymentSuccessSound: boolean;
+    paymentSuccessTone: 'success' | 'cash' | 'bell';
+};
+
+const DEFAULT_TOTEM_LOCAL_SETTINGS: TotemLocalSettings = {
+    paymentSuccessSound: true,
+    paymentSuccessTone: 'success',
 };
 
 function getStoredDisplayToken(): string {
@@ -85,6 +97,22 @@ function normalizePairingCode(value: string): string {
 
 function getIdleContent(display: PdvDisplay | null): Partial<PdvDisplayIdleContent> {
     return display?.idle_content || { messages: [], banners: [], products: [], categories: [] };
+}
+
+function readTotemLocalSettings(): TotemLocalSettings {
+    if (typeof localStorage === 'undefined') return DEFAULT_TOTEM_LOCAL_SETTINGS;
+    try {
+        const raw = localStorage.getItem(TOTEM_LOCAL_SETTINGS_STORAGE_KEY);
+        if (!raw) return DEFAULT_TOTEM_LOCAL_SETTINGS;
+        return { ...DEFAULT_TOTEM_LOCAL_SETTINGS, ...JSON.parse(raw) };
+    } catch {
+        return DEFAULT_TOTEM_LOCAL_SETTINGS;
+    }
+}
+
+function saveTotemLocalSettings(settings: TotemLocalSettings): void {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(TOTEM_LOCAL_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 }
 
 function normalizeInstagramUrl(value: string | null | undefined): { label: string; url: string } | null {
@@ -331,6 +359,40 @@ function ensureNativeScreenLockPermission(): void {
     }
 }
 
+function playWebPaymentSuccessTone(tone: TotemLocalSettings['paymentSuccessTone']): void {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const audioContext = new AudioContextClass();
+    const gain = audioContext.createGain();
+    const frequencies = tone === 'cash' ? [880, 1175, 1568] : tone === 'bell' ? [1046, 1318] : [784, 988];
+    gain.gain.value = 0.12;
+    gain.connect(audioContext.destination);
+    frequencies.forEach((frequency, index) => {
+        const oscillator = audioContext.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        oscillator.connect(gain);
+        const start = audioContext.currentTime + index * 0.16;
+        oscillator.start(start);
+        oscillator.stop(start + 0.12);
+    });
+    window.setTimeout(() => audioContext.close().catch(() => undefined), 900);
+}
+
+function playPaymentSuccessTone(settings: TotemLocalSettings): void {
+    if (!settings.paymentSuccessSound) return;
+    try {
+        const bridge = window.MdvTotem;
+        if (bridge?.playPaymentSuccessTone) {
+            bridge.playPaymentSuccessTone(settings.paymentSuccessTone);
+            return;
+        }
+        playWebPaymentSuccessTone(settings.paymentSuccessTone);
+    } catch {
+        // Sound feedback is optional and must never block the payment screen.
+    }
+}
+
 export default function DisplayPage() {
     const [token, setToken] = useState(() => getStoredDisplayToken());
     const [pairingCode, setPairingCode] = useState('');
@@ -345,6 +407,11 @@ export default function DisplayPage() {
     const [versionInfo, setVersionInfo] = useState<TotemVersionInfo | null>(null);
     const [nativeVersion, setNativeVersion] = useState<{ name: string; code: number } | null>(null);
     const [storeShouldStayAwake, setStoreShouldStayAwake] = useState(true);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [screenLockPermissionActive, setScreenLockPermissionActive] = useState(false);
+    const [nativeWifiSsid, setNativeWifiSsid] = useState('');
+    const [totemLocalSettings, setTotemLocalSettings] = useState<TotemLocalSettings>(() => readTotemLocalSettings());
+    const lastSuccessTonePaymentIdRef = useRef('');
     const [categoryProductPages, setCategoryProductPages] = useState<Array<{
         categoryId: string;
         categoryName: string;
@@ -359,6 +426,7 @@ export default function DisplayPage() {
     const updateNotice = getTotemUpdateNotice(versionInfo, nativeVersion);
     const updateUrl = String(versionInfo?.totem_pix_android?.update_url || TOTEM_UPDATE_HELP_URL).trim();
     const showPix = shouldShowPixPayment(active_pix, now);
+    const nativeBridgeAvailable = Boolean(window.MdvTotem);
 
     const idleItems = useMemo(() => {
         const qrCards = buildIdleQrCards(idle_content, companySettings).map((card) => ({ type: 'qr-card' as const, card }));
@@ -474,11 +542,24 @@ export default function DisplayPage() {
 
     useEffect(() => {
         setNativeVersion(readNativeTotemVersion());
+        refreshNativeSettingsStatus();
         fetch('/VERSION.json', { cache: 'no-store' })
             .then((response) => response.ok ? response.json() : null)
             .then((data) => setVersionInfo(data || null))
             .catch(() => setVersionInfo(null));
     }, []);
+
+    useEffect(() => {
+        saveTotemLocalSettings(totemLocalSettings);
+    }, [totemLocalSettings]);
+
+    useEffect(() => {
+        if (active_pix?.status !== 'approved') return;
+        const paymentId = active_pix.id || active_pix.mercado_pago_payment_id || active_pix.updated_at || '';
+        if (!paymentId || lastSuccessTonePaymentIdRef.current === paymentId) return;
+        lastSuccessTonePaymentIdRef.current = paymentId;
+        playPaymentSuccessTone(totemLocalSettings);
+    }, [active_pix?.id, active_pix?.mercado_pago_payment_id, active_pix?.status, active_pix?.updated_at, totemLocalSettings]);
 
     useEffect(() => {
         const rotationSeconds = Math.max(3, Number(settings.adRotationSeconds || 8));
@@ -517,6 +598,31 @@ export default function DisplayPage() {
         } finally {
             setPairing(false);
         }
+    }
+
+    function refreshNativeSettingsStatus() {
+        try {
+            const bridge = window.MdvTotem;
+            setNativeVersion(readNativeTotemVersion());
+            setScreenLockPermissionActive(Boolean(bridge?.isScreenLockPermissionActive?.()));
+            setNativeWifiSsid(String(bridge?.getWifiSsid?.() || '').trim());
+        } catch {
+            setScreenLockPermissionActive(false);
+            setNativeWifiSsid('');
+        }
+    }
+
+    function requestAdminPermission() {
+        window.MdvTotem?.requestScreenLockPermission?.();
+        window.setTimeout(refreshNativeSettingsStatus, 1000);
+    }
+
+    function requestSleepNow() {
+        syncNativeDisplayPower(false);
+    }
+
+    function testPaymentTone() {
+        playPaymentSuccessTone(totemLocalSettings);
     }
 
     if (!token) {
@@ -605,12 +711,136 @@ export default function DisplayPage() {
                     </div>
                 )}
                 {!showPix && (
-                    <p className="pointer-events-none absolute bottom-4 left-4 max-w-[55vw] truncate text-sm font-semibold text-slate-500 sm:text-base">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            refreshNativeSettingsStatus();
+                            setSettingsOpen(true);
+                        }}
+                        className="absolute bottom-4 left-4 z-10 flex max-w-[60vw] items-center gap-2 rounded-lg bg-slate-900/60 px-3 py-2 text-left text-sm font-semibold text-slate-400 backdrop-blur transition-colors hover:bg-slate-800 hover:text-white sm:text-base"
+                    >
+                        <Settings className="h-4 w-4 flex-shrink-0" />
                         {getDisplayVersionLabel(display?.name)}
-                    </p>
+                    </button>
+                )}
+                {settingsOpen && (
+                    <TotemSettingsPanel
+                        nativeBridgeAvailable={nativeBridgeAvailable}
+                        nativeVersion={nativeVersion}
+                        nativeWifiSsid={nativeWifiSsid}
+                        screenLockPermissionActive={screenLockPermissionActive}
+                        storeShouldStayAwake={storeShouldStayAwake}
+                        localSettings={totemLocalSettings}
+                        onChangeLocalSettings={setTotemLocalSettings}
+                        onClose={() => setSettingsOpen(false)}
+                        onRefresh={refreshNativeSettingsStatus}
+                        onRequestAdminPermission={requestAdminPermission}
+                        onRequestSleepNow={requestSleepNow}
+                        onTestPaymentTone={testPaymentTone}
+                    />
                 )}
             </section>
         </main>
+    );
+}
+
+function TotemSettingsPanel({
+    nativeBridgeAvailable,
+    nativeVersion,
+    nativeWifiSsid,
+    screenLockPermissionActive,
+    storeShouldStayAwake,
+    localSettings,
+    onChangeLocalSettings,
+    onClose,
+    onRefresh,
+    onRequestAdminPermission,
+    onRequestSleepNow,
+    onTestPaymentTone,
+}: {
+    nativeBridgeAvailable: boolean;
+    nativeVersion: { name: string; code: number } | null;
+    nativeWifiSsid: string;
+    screenLockPermissionActive: boolean;
+    storeShouldStayAwake: boolean;
+    localSettings: TotemLocalSettings;
+    onChangeLocalSettings: (settings: TotemLocalSettings) => void;
+    onClose: () => void;
+    onRefresh: () => void;
+    onRequestAdminPermission: () => void;
+    onRequestSleepNow: () => void;
+    onTestPaymentTone: () => void;
+}) {
+    return (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur">
+            <div className="w-full max-w-xl rounded-lg border border-white/10 bg-slate-900 p-5 text-left text-white shadow-2xl">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h2 className="text-2xl font-black">Configuracoes do Totem</h2>
+                        <p className="mt-1 text-sm font-semibold text-slate-400">Status local deste aparelho</p>
+                    </div>
+                    <button type="button" onClick={onClose} className="rounded-lg bg-white/10 p-2 text-slate-200">
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+
+                <div className="mt-5 grid gap-3 text-sm font-semibold">
+                    <StatusRow label="Ponte Android" value={nativeBridgeAvailable ? 'Conectada' : 'Nao detectada'} ok={nativeBridgeAvailable} />
+                    <StatusRow label="Versao instalada" value={nativeVersion ? `${nativeVersion.name || '-'} / ${nativeVersion.code || '-'}` : 'Nao informada'} ok={Boolean(nativeVersion)} />
+                    <StatusRow label="Administrador do dispositivo" value={screenLockPermissionActive ? 'Ativo' : 'Nao ativado'} ok={screenLockPermissionActive} />
+                    <StatusRow label="Wi-Fi do aparelho" value={nativeWifiSsid || 'Nao informado'} ok={Boolean(nativeWifiSsid)} />
+                    <StatusRow label="Horario da loja" value={storeShouldStayAwake ? 'Aberta ou fechando' : 'Fechada'} ok={storeShouldStayAwake} />
+                    <StatusRow label="Online com tela apagada" value="Ativo por wake lock parcial" ok />
+                </div>
+
+                <div className="mt-5 rounded-lg border border-white/10 bg-white/5 p-4">
+                    <label className="flex items-center justify-between gap-3 text-sm font-bold">
+                        <span className="flex items-center gap-2"><Volume2 className="h-4 w-4" /> Som ao aprovar pagamento</span>
+                        <input
+                            type="checkbox"
+                            checked={localSettings.paymentSuccessSound}
+                            onChange={(event) => onChangeLocalSettings({ ...localSettings, paymentSuccessSound: event.target.checked })}
+                            className="h-5 w-5"
+                        />
+                    </label>
+                    <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+                        <select
+                            value={localSettings.paymentSuccessTone}
+                            onChange={(event) => onChangeLocalSettings({ ...localSettings, paymentSuccessTone: event.target.value as TotemLocalSettings['paymentSuccessTone'] })}
+                            className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm font-bold text-white"
+                        >
+                            <option value="success">Confirmacao</option>
+                            <option value="cash">Caixa</option>
+                            <option value="bell">Campainha</option>
+                        </select>
+                        <button type="button" onClick={onTestPaymentTone} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-black text-white">
+                            Testar
+                        </button>
+                    </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={onRequestAdminPermission} className="rounded-lg bg-blue-500 px-3 py-3 text-sm font-black text-white">
+                        Ativar admin
+                    </button>
+                    <button type="button" onClick={onRequestSleepNow} className="rounded-lg bg-slate-700 px-3 py-3 text-sm font-black text-white">
+                        Apagar tela
+                    </button>
+                    <button type="button" onClick={onRefresh} className="col-span-2 rounded-lg bg-white px-3 py-3 text-sm font-black text-slate-950">
+                        Atualizar status
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function StatusRow({ label, value, ok }: { label: string; value: string; ok: boolean }) {
+    return (
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-2">
+            <span className="text-slate-300">{label}</span>
+            <span className={ok ? 'text-emerald-300' : 'text-amber-300'}>{value}</span>
+        </div>
     );
 }
 

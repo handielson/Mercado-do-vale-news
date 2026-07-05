@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.40-totem-screen-sleep-hours
+version: v1.2.41-totem-local-settings-sound
 date: 2026-07-05
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260705-045740-totem-screen-sleep-hours
+release_vps: /var/www/mdv-site/releases/20260705-124914-totem-local-settings-sound
 branch: main
-summary: Desliga a tela do Totem Pix automaticamente fora do horario da loja.
+summary: Adiciona configuracoes locais e som de pagamento aprovado no Totem Pix.
 ```

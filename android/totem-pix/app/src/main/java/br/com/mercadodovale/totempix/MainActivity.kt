@@ -4,6 +4,8 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.admin.DevicePolicyManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -11,6 +13,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.view.View
 import android.view.WindowManager
@@ -159,6 +163,26 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun playPaymentSuccessTone(toneName: String) {
+        try {
+            val tone = when (toneName.lowercase()) {
+                "cash" -> ToneGenerator.TONE_PROP_ACK
+                "bell" -> ToneGenerator.TONE_PROP_BEEP2
+                else -> ToneGenerator.TONE_PROP_BEEP
+            }
+            val generator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+            generator.startTone(tone, 450)
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    generator.release()
+                } catch (_: Exception) {
+                }
+            }, 700)
+        } catch (_: Exception) {
+            // Sound feedback is optional.
+        }
+    }
+
     private fun requestWifiPermissionIfNeeded() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) return
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) return
@@ -245,6 +269,11 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun isScreenLockPermissionActive(): Boolean {
             return this@MainActivity.isScreenLockPermissionActive()
+        }
+
+        @JavascriptInterface
+        fun playPaymentSuccessTone(tone: String) {
+            runOnUiThread { this@MainActivity.playPaymentSuccessTone(tone) }
         }
     }
 }
