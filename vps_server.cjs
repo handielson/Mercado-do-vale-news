@@ -29078,6 +29078,31 @@ async function runMigrations() {
         SET rendered_text = REPLACE(REPLACE(rendered_text, 'Obrigado pela preferencia, ', 'Tudo certo, '), 'Obrigado pela preferencia!\\n', '')
       WHERE rendered_text LIKE '%Obrigado pela preferencia%'`
   );
+  const legacyIdleDisplayMessageRegex = new RegExp(['obrigado', 'pela', 'prefer'].join('\\s+'), 'i');
+  const [legacyIdleDisplayRows] = await pool.query(
+    `SELECT id, idle_content_json
+       FROM pdv_displays
+      WHERE LOWER(CAST(idle_content_json AS CHAR)) REGEXP 'obrigado[[:space:]]+pela[[:space:]]+prefer'`
+  );
+  for (const displayRow of legacyIdleDisplayRows) {
+    const idleContent = parsePdvDisplayJson(displayRow.idle_content_json, {
+      banners: [],
+      products: [],
+      categories: [],
+      messages: [],
+    });
+    const nextMessages = Array.isArray(idleContent.messages)
+      ? idleContent.messages
+        .map((message) => String(message || '').trim())
+        .filter((message) => message && !legacyIdleDisplayMessageRegex.test(message))
+      : [];
+    await pool.query(
+      `UPDATE pdv_displays
+          SET idle_content_json = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [JSON.stringify({ ...idleContent, messages: nextMessages }), displayRow.id]
+    );
+  }
 
 
   await pool.query(`
