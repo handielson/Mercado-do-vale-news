@@ -14,7 +14,7 @@ const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
-const DISPLAY_APP_VERSION = 'V1.06';
+const DISPLAY_APP_VERSION = 'V1.07';
 
 type TotemVersionInfo = {
     version?: string;
