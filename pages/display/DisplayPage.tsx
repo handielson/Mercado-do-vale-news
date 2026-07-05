@@ -15,7 +15,7 @@ const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
-const DISPLAY_APP_VERSION = 'V1.11';
+const DISPLAY_APP_VERSION = 'V1.12';
 const STORE_SLEEP_CHECK_INTERVAL_MS = 60 * 1000;
 const TOTEM_LOCAL_SETTINGS_STORAGE_KEY = '@mdv_totem_local_settings';
 
@@ -41,6 +41,10 @@ declare global {
             requestScreenLockPermission?: () => void;
             isScreenLockPermissionActive?: () => boolean;
             playPaymentSuccessTone?: (tone: string, volume?: number) => void;
+            chooseSystemPaymentTone?: () => void;
+            clearSystemPaymentTone?: () => void;
+            hasSystemPaymentTone?: () => boolean;
+            openAppUpdate?: () => void;
         };
     }
 }
@@ -426,6 +430,7 @@ export default function DisplayPage() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [screenLockPermissionActive, setScreenLockPermissionActive] = useState(false);
     const [nativeWifiSsid, setNativeWifiSsid] = useState('');
+    const [systemPaymentToneActive, setSystemPaymentToneActive] = useState(false);
     const [totemLocalSettings, setTotemLocalSettings] = useState<TotemLocalSettings>(() => readTotemLocalSettings());
     const lastSuccessTonePaymentIdRef = useRef('');
     const [categoryProductPages, setCategoryProductPages] = useState<Array<{
@@ -622,9 +627,11 @@ export default function DisplayPage() {
             setNativeVersion(readNativeTotemVersion());
             setScreenLockPermissionActive(Boolean(bridge?.isScreenLockPermissionActive?.()));
             setNativeWifiSsid(String(bridge?.getWifiSsid?.() || '').trim());
+            setSystemPaymentToneActive(Boolean(bridge?.hasSystemPaymentTone?.()));
         } catch {
             setScreenLockPermissionActive(false);
             setNativeWifiSsid('');
+            setSystemPaymentToneActive(false);
         }
     }
 
@@ -639,6 +646,23 @@ export default function DisplayPage() {
 
     function testPaymentTone() {
         playPaymentSuccessTone(totemLocalSettings);
+    }
+
+    function chooseSystemPaymentTone() {
+        window.MdvTotem?.chooseSystemPaymentTone?.();
+        window.setTimeout(refreshNativeSettingsStatus, 1000);
+    }
+
+    function clearSystemPaymentTone() {
+        window.MdvTotem?.clearSystemPaymentTone?.();
+        window.setTimeout(refreshNativeSettingsStatus, 250);
+    }
+
+    function openAppUpdate(event: React.MouseEvent<HTMLAnchorElement>) {
+        const bridge = window.MdvTotem;
+        if (!bridge?.openAppUpdate) return;
+        event.preventDefault();
+        bridge.openAppUpdate();
     }
 
     if (!token) {
@@ -718,6 +742,7 @@ export default function DisplayPage() {
                         <p className="whitespace-pre-line">{updateNotice}</p>
                         <a
                             href={updateUrl}
+                            onClick={openAppUpdate}
                             target="_blank"
                             rel="noreferrer"
                             className="mt-2 inline-flex rounded-lg bg-slate-950 px-4 py-2 text-sm font-black text-white shadow-lg"
@@ -745,6 +770,7 @@ export default function DisplayPage() {
                         nativeVersion={nativeVersion}
                         nativeWifiSsid={nativeWifiSsid}
                         screenLockPermissionActive={screenLockPermissionActive}
+                        systemPaymentToneActive={systemPaymentToneActive}
                         storeShouldStayAwake={storeShouldStayAwake}
                         localSettings={totemLocalSettings}
                         onChangeLocalSettings={setTotemLocalSettings}
@@ -752,6 +778,8 @@ export default function DisplayPage() {
                         onRefresh={refreshNativeSettingsStatus}
                         onRequestAdminPermission={requestAdminPermission}
                         onRequestSleepNow={requestSleepNow}
+                        onChooseSystemPaymentTone={chooseSystemPaymentTone}
+                        onClearSystemPaymentTone={clearSystemPaymentTone}
                         onTestPaymentTone={testPaymentTone}
                     />
                 )}
@@ -765,6 +793,7 @@ function TotemSettingsPanel({
     nativeVersion,
     nativeWifiSsid,
     screenLockPermissionActive,
+    systemPaymentToneActive,
     storeShouldStayAwake,
     localSettings,
     onChangeLocalSettings,
@@ -772,12 +801,15 @@ function TotemSettingsPanel({
     onRefresh,
     onRequestAdminPermission,
     onRequestSleepNow,
+    onChooseSystemPaymentTone,
+    onClearSystemPaymentTone,
     onTestPaymentTone,
 }: {
     nativeBridgeAvailable: boolean;
     nativeVersion: { name: string; code: number } | null;
     nativeWifiSsid: string;
     screenLockPermissionActive: boolean;
+    systemPaymentToneActive: boolean;
     storeShouldStayAwake: boolean;
     localSettings: TotemLocalSettings;
     onChangeLocalSettings: (settings: TotemLocalSettings) => void;
@@ -785,6 +817,8 @@ function TotemSettingsPanel({
     onRefresh: () => void;
     onRequestAdminPermission: () => void;
     onRequestSleepNow: () => void;
+    onChooseSystemPaymentTone: () => void;
+    onClearSystemPaymentTone: () => void;
     onTestPaymentTone: () => void;
 }) {
     return (
@@ -805,6 +839,7 @@ function TotemSettingsPanel({
                     <StatusRow label="Versao instalada" value={nativeVersion ? `${nativeVersion.name || '-'} / ${nativeVersion.code || '-'}` : 'Nao informada'} ok={Boolean(nativeVersion)} />
                     <StatusRow label="Administrador do dispositivo" value={screenLockPermissionActive ? 'Ativo' : 'Nao ativado'} ok={screenLockPermissionActive} />
                     <StatusRow label="Wi-Fi do aparelho" value={nativeWifiSsid || 'Nao informado'} ok={Boolean(nativeWifiSsid)} />
+                    <StatusRow label="Toque do aparelho" value={systemPaymentToneActive ? 'Selecionado' : 'Tom interno'} ok={systemPaymentToneActive} />
                     <StatusRow label="Horario da loja" value={storeShouldStayAwake ? 'Aberta ou fechando' : 'Fechada'} ok={storeShouldStayAwake} />
                     <StatusRow label="Online com tela apagada" value="Ativo por wake lock parcial" ok />
                 </div>
@@ -845,6 +880,17 @@ function TotemSettingsPanel({
                             className="mt-2 w-full accent-emerald-400"
                         />
                     </label>
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                        <button type="button" onClick={onChooseSystemPaymentTone} className="rounded-lg bg-blue-500 px-3 py-2 text-sm font-black text-white">
+                            Escolher toque do aparelho
+                        </button>
+                        <button type="button" onClick={onClearSystemPaymentTone} className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-black text-white">
+                            Usar tom interno
+                        </button>
+                    </div>
+                    <p className="mt-2 text-xs font-semibold text-slate-400">
+                        Se um toque do aparelho for escolhido, ele substitui o tom interno acima e continua respeitando o volume configurado.
+                    </p>
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-2">

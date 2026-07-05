@@ -10,8 +10,8 @@ const mainActivity = readFileSync('android/totem-pix/app/src/main/java/br/com/me
 
 assert.match(buildGradle, /applicationId 'br\.com\.mercadodovale\.totempix'/, 'package name deve ser estavel para Google Play');
 assert.match(buildGradle, /targetSdk 35/, 'targetSdk deve atender a exigencia atual do Google Play');
-assert.match(buildGradle, /versionCode 111/, 'versionCode deve estar preparado para V1.11');
-assert.match(buildGradle, /versionName '1\.11'/, 'versionName deve refletir V1.11');
+assert.match(buildGradle, /versionCode 112/, 'versionCode deve estar preparado para V1.12');
+assert.match(buildGradle, /versionName '1\.12'/, 'versionName deve refletir V1.12');
 assert.match(buildGradle, /keystore\.properties/, 'release signing deve ler keystore.properties local');
 assert.match(buildGradle, /storeFile rootProject\.file/, 'keystore deve ser resolvida relativa a raiz do projeto Android');
 assert.match(buildGradle, /signingConfig signingConfigs\.release/, 'build release deve usar signingConfig release');
@@ -33,9 +33,12 @@ assert.match(mainActivity, /playPaymentSuccessTone/, 'ponte Android deve tocar s
 assert.match(mainActivity, /ToneGenerator/, 'app deve usar som nativo para confirmacao de pagamento');
 assert.match(mainActivity, /volumePercent/, 'som nativo deve receber volume configurado pelo display');
 assert.match(mainActivity, /STREAM_MUSIC/, 'som nativo deve usar canal de musica para ficar audivel no totem');
+assert.match(mainActivity, /ACTION_RINGTONE_PICKER/, 'app deve permitir escolher toque do sistema para pagamento aprovado');
+assert.match(mainActivity, /MediaPlayer/, 'app deve tocar toque escolhido respeitando volume configurado');
 assert.match(mainActivity, /fun getAppVersionName\(\): String/, 'ponte Android deve expor versionName ao display');
 assert.match(mainActivity, /fun getAppVersionCode\(\): Int/, 'ponte Android deve expor versionCode ao display');
 assert.match(mainActivity, /shouldOverrideUrlLoading/, 'WebView deve interceptar links externos de atualizacao');
+assert.match(mainActivity, /market:\/\/details\?id=\$appPackageName/, 'atualizacao deve tentar abrir a Play Store pelo aplicativo do aparelho');
 assert.match(mainActivity, /play\.google\.com\//, 'WebView deve abrir links do Google Play fora do display');
 
 console.log('android play console config static checks passed');
