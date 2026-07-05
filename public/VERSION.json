@@ -1,15 +1,15 @@
 {
-    "version": "v1.2.42-totem-sound-volume",
+    "version": "v1.2.43-display-admin-no-app-version",
     "date": "2026-07-05",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260705-130748-totem-sound-volume",
+    "release_vps": "/var/www/mdv-site/releases/20260705-131235-display-admin-no-app-version",
     "branch": "main",
-    "summary": "Corrige teste de som e adiciona volume no Totem Pix.",
+    "summary": "Remove versao do app dos cards de display e lista melhorias no aviso de atualizacao.",
     "totem_pix_android": {
         "latest_version_name": "1.11",
         "latest_version_code": 111,
         "minimum_recommended_version_name": "1.11",
-        "update_message": "Atualizacao disponivel: instale o Totem Pix 1.11 na Play Store.",
+        "update_message": "V1.11\nMelhorias | implementacoes\n- Som de pagamento aprovado com escolha de tom\n- Controle de volume do som\n- Botao Testar som na engrenagem do Totem Pix\n- Mantem a tela online mesmo com tela apagada",
         "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
     }
 }

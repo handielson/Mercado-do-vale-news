@@ -715,7 +715,7 @@ export default function DisplayPage() {
                 )}
                 {updateNotice && (
                     <div className="absolute bottom-16 left-1/2 z-20 w-[min(92vw,520px)] -translate-x-1/2 rounded-lg border border-amber-300/50 bg-amber-400 p-3 text-center text-sm font-black text-slate-950 shadow-2xl sm:text-base">
-                        <p>{updateNotice}</p>
+                        <p className="whitespace-pre-line">{updateNotice}</p>
                         <a
                             href={updateUrl}
                             target="_blank"

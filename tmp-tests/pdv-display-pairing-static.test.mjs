@@ -4,12 +4,16 @@ import assert from 'node:assert/strict';
 
 const root = resolve(import.meta.dirname, '..');
 const pagePath = resolve(root, 'pages', 'display', 'DisplayPage.tsx');
+const adminPagePath = resolve(root, 'pages', 'admin', 'settings', 'DisplaysPage.tsx');
+const displayTypesPath = resolve(root, 'types', 'pdvDisplay.ts');
 const routesPath = resolve(root, 'routes', 'index.tsx');
 const planPath = resolve(root, 'docs', 'planos', 'android.md');
 
 assert.ok(existsSync(pagePath), 'pages/display/DisplayPage.tsx deve existir');
 
 const page = readFileSync(pagePath, 'utf8');
+const adminPage = readFileSync(adminPagePath, 'utf8');
+const displayTypes = readFileSync(displayTypesPath, 'utf8');
 const routes = readFileSync(routesPath, 'utf8');
 const plan = readFileSync(planPath, 'utf8');
 
@@ -28,12 +32,15 @@ for (const expected of [
   'qr_code_base64',
   'qr_code',
   'showPixAmount',
-  'showItems',
   'showInstructions',
-  'showAdsDuringPix',
   'idle_content',
 ]) {
   assert.ok(page.includes(expected), `DisplayPage.tsx deve conter ${expected}`);
+}
+
+for (const expected of ['showItems', 'showAdsDuringPix']) {
+  assert.ok(adminPage.includes(expected), `DisplaysPage.tsx deve conter ${expected}`);
+  assert.ok(displayTypes.includes(expected), `pdvDisplay.ts deve conter ${expected}`);
 }
 
 assert.ok(routes.includes("const DisplayPage = lazy(() => import('../pages/display/DisplayPage'))"), 'rota deve lazy-load DisplayPage');

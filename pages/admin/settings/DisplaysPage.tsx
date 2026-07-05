@@ -31,8 +31,6 @@ const DEFAULT_SETTINGS: PdvDisplaySettings = {
     showAdsDuringPix: false,
     adRotationSeconds: 8,
 };
-const DISPLAY_APP_VERSION = 'V1.11';
-
 const DEFAULT_FORM: PdvDisplayInput = {
     name: '',
     slug: '',
@@ -549,7 +547,7 @@ export default function DisplaysPage() {
                                 <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                                     <div className="min-w-0">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <h2 className="truncate text-lg font-bold text-slate-900">{DISPLAY_APP_VERSION} - {display.name}</h2>
+                                            <h2 className="truncate text-lg font-bold text-slate-900">{display.name}</h2>
                                             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
                                                 {displayTypeLabel(display.type)}
                                             </span>

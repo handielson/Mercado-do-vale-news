@@ -23,6 +23,7 @@ assert.match(displayPage, /getDisplayVersionLabel\(display\?\.name\)/, 'display 
 assert.match(displayPage, /fetch\('\/VERSION\.json', \{ cache: 'no-store' \}\)/, 'display deve buscar manifesto publico de versao sem cache');
 assert.match(displayPage, /getTotemUpdateNotice\(versionInfo, nativeVersion\)/, 'display deve calcular aviso de atualizacao do app');
 assert.match(displayPage, /Atualizacao disponivel/, 'display deve ter mensagem de atualizacao disponivel');
+assert.match(displayPage, /whitespace-pre-line/, 'display deve preservar lista de melhorias na mensagem de atualizacao');
 assert.match(displayPage, /TOTEM_UPDATE_HELP_URL/, 'display deve ter link de fallback para pagina propria de atualizacao');
 assert.match(displayPage, /totem-pix\/atualizar/, 'display deve apontar para a pagina propria de atualizacao');
 assert.match(displayPage, /Atualizar agora/, 'display deve mostrar botao de atualizacao');
@@ -44,7 +45,7 @@ assert.match(displayTypes, /security:\s*'WPA'/, 'tipo Wi-Fi deve aceitar WPA com
 assert.match(adminPage, /Configurar Wi-Fi/, 'admin deve expor configuracao de Wi-Fi do display');
 assert.match(adminPage, /Captar rede pelo app Android/, 'admin deve orientar captura automatica de SSID pelo app');
 assert.match(adminPage, /Confirmar senha/, 'admin deve pedir confirmacao de senha para reduzir erro');
-assert.match(adminPage, /DISPLAY_APP_VERSION = 'V1\.11'/, 'admin deve mostrar versao visual do app no display cadastrado');
+assert.doesNotMatch(adminPage, /DISPLAY_APP_VERSION|V1\.\d+\s*-\s*\{display\.name\}/, 'admin nao deve prefixar displays com versao do app Android');
 
 assert.match(androidManifest, /ACCESS_WIFI_STATE/, 'app Android deve declarar permissao para ler estado Wi-Fi');
 assert.match(androidManifest, /ACCESS_FINE_LOCATION/, 'app Android deve declarar permissao necessaria para SSID em Android moderno');
