@@ -1,15 +1,15 @@
 {
-    "version": "v1.2.46-totem-return-to-app-home",
+    "version": "v1.2.47-totem-black-screen-pix-wake",
     "date": "2026-07-05",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260705-182639-totem-return-to-app-home",
+    "release_vps": "/var/www/mdv-site/releases/20260705-184318-totem-black-screen-pix-wake",
     "branch": "main",
-    "summary": "Adiciona opcao para voltar para a tela inicial do app nas configuracoes do Totem Pix.",
+    "summary": "Corrige tela preta do Totem Pix para continuar recebendo Pix apos voltar das configuracoes.",
     "totem_pix_android": {
-        "latest_version_name": "1.13",
-        "latest_version_code": 113,
-        "minimum_recommended_version_name": "1.13",
-        "update_message": "V1.13\nMelhorias | implementacoes\n- Adiciona botao Voltar para tela inicial do app nas configuracoes do Totem Pix\n- Adiciona ponte nativa para trazer o app de volta para a tela /display\n- Mantem animacao e mensagem de retorno nos botoes de configuracao\n- Mantem selecao de toque do aparelho, volume e tela online com wake lock parcial",
+        "latest_version_name": "1.14",
+        "latest_version_code": 114,
+        "minimum_recommended_version_name": "1.14",
+        "update_message": "V1.14\nMelhorias | implementacoes\n- Corrige tela preta apos voltar das configuracoes do Totem Pix\n- Mantem o polling do Pix ativo quando a loja esta fechada\n- Pix recebido volta a reacender a tela do totem\n- Botao Apagar tela continua disponivel como acao manual\n- Mantem botao Voltar para tela inicial do app nas configuracoes",
         "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
     }
 }

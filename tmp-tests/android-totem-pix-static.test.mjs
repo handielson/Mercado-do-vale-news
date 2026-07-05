@@ -24,7 +24,8 @@ assert.match(activity, /FLAG_KEEP_SCREEN_ON/, 'Totem should keep screen on while
 assert.match(activity, /https:\/\/www\.mercadodovale\.com\.br\/display/, 'WebView must open the display route');
 assert.match(activity, /returnToAppHome/, 'Totem should expose a native return-to-app-home bridge');
 assert.match(activity, /FLAG_ACTIVITY_REORDER_TO_FRONT/, 'Totem should bring its activity to the front when returning to app');
-assert.match(buildGradle, /versionCode 113/, 'Android upload versionCode must be bumped for the next Play upload');
-assert.match(buildGradle, /versionName '1\.13'/, 'Android versionName must describe the next app release');
+assert.match(activity, /private fun returnToAppHome\(\)[\s\S]*setDisplayAwake\(true\)/, 'Totem should wake the screen when returning to app home');
+assert.match(buildGradle, /versionCode 114/, 'Android upload versionCode must be bumped for the next Play upload');
+assert.match(buildGradle, /versionName '1\.14'/, 'Android versionName must describe the next app release');
 
 console.log('android totem pix static checks passed');

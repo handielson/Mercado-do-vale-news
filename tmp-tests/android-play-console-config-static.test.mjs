@@ -10,8 +10,8 @@ const mainActivity = readFileSync('android/totem-pix/app/src/main/java/br/com/me
 
 assert.match(buildGradle, /applicationId 'br\.com\.mercadodovale\.totempix'/, 'package name deve ser estavel para Google Play');
 assert.match(buildGradle, /targetSdk 35/, 'targetSdk deve atender a exigencia atual do Google Play');
-assert.match(buildGradle, /versionCode 113/, 'versionCode deve estar preparado para V1.13');
-assert.match(buildGradle, /versionName '1\.13'/, 'versionName deve refletir V1.13');
+assert.match(buildGradle, /versionCode 114/, 'versionCode deve estar preparado para V1.14');
+assert.match(buildGradle, /versionName '1\.14'/, 'versionName deve refletir V1.14');
 assert.match(buildGradle, /keystore\.properties/, 'release signing deve ler keystore.properties local');
 assert.match(buildGradle, /storeFile rootProject\.file/, 'keystore deve ser resolvida relativa a raiz do projeto Android');
 assert.match(buildGradle, /signingConfig signingConfigs\.release/, 'build release deve usar signingConfig release');
@@ -41,6 +41,7 @@ assert.match(mainActivity, /shouldOverrideUrlLoading/, 'WebView deve interceptar
 assert.match(mainActivity, /market:\/\/details\?id=\$appPackageName/, 'atualizacao deve tentar abrir a Play Store pelo aplicativo do aparelho');
 assert.match(mainActivity, /play\.google\.com\//, 'WebView deve abrir links do Google Play fora do display');
 assert.match(mainActivity, /returnToAppHome/, 'ponte Android deve permitir voltar para tela inicial do app');
+assert.match(mainActivity, /private fun returnToAppHome\(\)[\s\S]*setDisplayAwake\(true\)/, 'retorno ao app deve reacender a tela');
 assert.match(mainActivity, /FLAG_ACTIVITY_REORDER_TO_FRONT/, 'retorno ao app deve trazer a activity do totem para frente');
 
 console.log('android play console config static checks passed');
