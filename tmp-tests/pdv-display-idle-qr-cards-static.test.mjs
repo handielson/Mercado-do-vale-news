@@ -62,6 +62,10 @@ assert.match(displayPage, /paymentSuccessVolume/, 'display deve salvar volume do
 assert.match(displayPage, /Volume do som/, 'painel deve permitir ajustar volume do som');
 assert.match(displayPage, /Escolher toque do aparelho/, 'painel deve abrir seletor de toque do sistema Android');
 assert.match(displayPage, /openAppUpdate/, 'botao de atualizacao deve chamar a ponte nativa do app quando existir');
+assert.match(displayPage, /function ActionButton/, 'painel deve usar botoes com estado visual de acao');
+assert.match(displayPage, /Aguarde\.\.\./, 'botoes do painel devem mostrar estado de processamento');
+assert.match(displayPage, /Status atualizado\./, 'botao Atualizar status deve retornar mensagem de confirmacao');
+assert.match(displayPage, /active:scale-95/, 'botoes do painel devem animar ao clicar');
 assert.match(displayPage, /Administrador do dispositivo/, 'painel deve mostrar status da permissao de administrador');
 assert.match(androidActivity, /playPaymentSuccessTone/, 'ponte Android deve expor som nativo de pagamento aprovado');
 assert.match(androidActivity, /ACTION_RINGTONE_PICKER/, 'ponte Android deve abrir seletor de toque do aparelho');

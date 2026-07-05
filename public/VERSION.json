@@ -1,15 +1,15 @@
 {
-    "version": "v1.2.44-totem-system-tone-playstore-update",
+    "version": "v1.2.45-totem-settings-button-feedback",
     "date": "2026-07-05",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260705-165958-totem-system-tone-playstore-update",
+    "release_vps": "/var/www/mdv-site/releases/20260705-171609-totem-settings-button-feedback",
     "branch": "main",
-    "summary": "Adiciona toque do sistema e abre Play Store na atualizacao do Totem Pix.",
+    "summary": "Adiciona feedback visual nos botoes de configuracao do Totem Pix.",
     "totem_pix_android": {
         "latest_version_name": "1.12",
         "latest_version_code": 112,
         "minimum_recommended_version_name": "1.12",
-        "update_message": "V1.12\nMelhorias | implementacoes\n- Abre seletor de toque do aparelho para som de pagamento aprovado\n- Botao Atualizar agora abre a Play Store pelo aplicativo do aparelho\n- Mantem escolha de tom interno e controle de volume\n- Mantem o totem online mesmo com tela apagada",
+        "update_message": "V1.12\nMelhorias | implementacoes\n- Abre seletor de toque do aparelho para som de pagamento aprovado\n- Botao Atualizar agora abre a Play Store pelo aplicativo do aparelho\n- Mantem escolha de tom interno e controle de volume\n- Mantem o totem online mesmo com tela apagada\n- Botoes de configuracao mostram animacao e mensagem de retorno ao clicar",
         "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
     }
 }

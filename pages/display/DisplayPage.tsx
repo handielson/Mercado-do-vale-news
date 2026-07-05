@@ -821,6 +821,19 @@ function TotemSettingsPanel({
     onClearSystemPaymentTone: () => void;
     onTestPaymentTone: () => void;
 }) {
+    const [activeAction, setActiveAction] = useState('');
+    const [feedbackMessage, setFeedbackMessage] = useState('');
+
+    function runPanelAction(action: string, successMessage: string, callback: () => void, delayMs = 650) {
+        setActiveAction(action);
+        setFeedbackMessage('');
+        callback();
+        window.setTimeout(() => {
+            setActiveAction('');
+            setFeedbackMessage(successMessage);
+        }, delayMs);
+    }
+
     return (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur">
             <div className="w-full max-w-xl rounded-lg border border-white/10 bg-slate-900 p-5 text-left text-white shadow-2xl">
@@ -864,9 +877,14 @@ function TotemSettingsPanel({
                             <option value="cash">Caixa</option>
                             <option value="bell">Campainha</option>
                         </select>
-                        <button type="button" onClick={onTestPaymentTone} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-black text-white">
+                        <ActionButton
+                            actionId="test-tone"
+                            activeAction={activeAction}
+                            onClick={() => runPanelAction('test-tone', 'Som de teste enviado.', onTestPaymentTone, 500)}
+                            className="bg-emerald-500 px-4 py-2 text-white"
+                        >
                             Testar
-                        </button>
+                        </ActionButton>
                     </div>
                     <label className="mt-4 block text-sm font-bold text-slate-200">
                         Volume do som: {clampPaymentVolume(localSettings.paymentSuccessVolume)}%
@@ -881,12 +899,22 @@ function TotemSettingsPanel({
                         />
                     </label>
                     <div className="mt-4 grid grid-cols-2 gap-2">
-                        <button type="button" onClick={onChooseSystemPaymentTone} className="rounded-lg bg-blue-500 px-3 py-2 text-sm font-black text-white">
+                        <ActionButton
+                            actionId="choose-tone"
+                            activeAction={activeAction}
+                            onClick={() => runPanelAction('choose-tone', 'Seletor de toque aberto.', onChooseSystemPaymentTone, 700)}
+                            className="bg-blue-500 px-3 py-2 text-white"
+                        >
                             Escolher toque do aparelho
-                        </button>
-                        <button type="button" onClick={onClearSystemPaymentTone} className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-black text-white">
+                        </ActionButton>
+                        <ActionButton
+                            actionId="clear-tone"
+                            activeAction={activeAction}
+                            onClick={() => runPanelAction('clear-tone', 'Tom interno ativado.', onClearSystemPaymentTone, 500)}
+                            className="bg-slate-700 px-3 py-2 text-white"
+                        >
                             Usar tom interno
-                        </button>
+                        </ActionButton>
                     </div>
                     <p className="mt-2 text-xs font-semibold text-slate-400">
                         Se um toque do aparelho for escolhido, ele substitui o tom interno acima e continua respeitando o volume configurado.
@@ -894,18 +922,64 @@ function TotemSettingsPanel({
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-2">
-                    <button type="button" onClick={onRequestAdminPermission} className="rounded-lg bg-blue-500 px-3 py-3 text-sm font-black text-white">
+                    <ActionButton
+                        actionId="admin"
+                        activeAction={activeAction}
+                        onClick={() => runPanelAction('admin', 'Solicitacao de admin enviada.', onRequestAdminPermission, 900)}
+                        className="bg-blue-500 px-3 py-3 text-white"
+                    >
                         Ativar admin
-                    </button>
-                    <button type="button" onClick={onRequestSleepNow} className="rounded-lg bg-slate-700 px-3 py-3 text-sm font-black text-white">
+                    </ActionButton>
+                    <ActionButton
+                        actionId="sleep"
+                        activeAction={activeAction}
+                        onClick={() => runPanelAction('sleep', 'Comando para apagar a tela enviado.', onRequestSleepNow, 600)}
+                        className="bg-slate-700 px-3 py-3 text-white"
+                    >
                         Apagar tela
-                    </button>
-                    <button type="button" onClick={onRefresh} className="col-span-2 rounded-lg bg-white px-3 py-3 text-sm font-black text-slate-950">
+                    </ActionButton>
+                    <ActionButton
+                        actionId="refresh"
+                        activeAction={activeAction}
+                        onClick={() => runPanelAction('refresh', 'Status atualizado.', onRefresh, 500)}
+                        className="col-span-2 bg-white px-3 py-3 text-slate-950"
+                    >
                         Atualizar status
-                    </button>
+                    </ActionButton>
                 </div>
+                {feedbackMessage && (
+                    <p className="mt-3 animate-pulse rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-center text-sm font-black text-emerald-200">
+                        {feedbackMessage}
+                    </p>
+                )}
             </div>
         </div>
+    );
+}
+
+function ActionButton({
+    actionId,
+    activeAction,
+    onClick,
+    className,
+    children,
+}: {
+    actionId: string;
+    activeAction: string;
+    onClick: () => void;
+    className: string;
+    children: React.ReactNode;
+}) {
+    const active = activeAction === actionId;
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={Boolean(activeAction)}
+            className={`rounded-lg text-sm font-black transition-all duration-150 active:scale-95 disabled:cursor-wait disabled:opacity-70 ${active ? 'scale-[0.98] animate-pulse ring-2 ring-white/60' : 'hover:scale-[1.02]'} ${className}`}
+        >
+            {active ? 'Aguarde...' : children}
+        </button>
     );
 }
 

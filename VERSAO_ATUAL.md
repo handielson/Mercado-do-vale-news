@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.44-totem-system-tone-playstore-update
+version: v1.2.45-totem-settings-button-feedback
 date: 2026-07-05
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260705-165958-totem-system-tone-playstore-update
+release_vps: /var/www/mdv-site/releases/20260705-171609-totem-settings-button-feedback
 branch: main
-summary: Adiciona toque do sistema e abre Play Store na atualizacao do Totem Pix.
+summary: Adiciona feedback visual nos botoes de configuracao do Totem Pix.
 ```
