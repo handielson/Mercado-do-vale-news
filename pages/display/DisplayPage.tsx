@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as ReactQRCode from 'react-qr-code';
-import { CheckCircle2, Loader2, MessageCircle, MonitorSmartphone, QrCode, RefreshCw, Settings, ShieldAlert, Volume2, WifiOff, X } from 'lucide-react';
+import { CheckCircle2, Home, Loader2, MessageCircle, MonitorSmartphone, QrCode, RefreshCw, Settings, ShieldAlert, Volume2, WifiOff, X } from 'lucide-react';
 import { pdvDisplayService } from '../../services/pdvDisplayService';
 import { productService } from '../../services/products';
 import { publicCompanySettingsService, type PublicCompanySettings } from '../../services/publicCompanySettings';
@@ -15,7 +15,7 @@ const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
-const DISPLAY_APP_VERSION = 'V1.12';
+const DISPLAY_APP_VERSION = 'V1.13';
 const STORE_SLEEP_CHECK_INTERVAL_MS = 60 * 1000;
 const TOTEM_LOCAL_SETTINGS_STORAGE_KEY = '@mdv_totem_local_settings';
 
@@ -45,6 +45,7 @@ declare global {
             clearSystemPaymentTone?: () => void;
             hasSystemPaymentTone?: () => boolean;
             openAppUpdate?: () => void;
+            returnToAppHome?: () => void;
         };
     }
 }
@@ -665,6 +666,11 @@ export default function DisplayPage() {
         bridge.openAppUpdate();
     }
 
+    function returnToAppHome() {
+        setSettingsOpen(false);
+        window.MdvTotem?.returnToAppHome?.();
+    }
+
     if (!token) {
         return (
             <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
@@ -781,6 +787,7 @@ export default function DisplayPage() {
                         onChooseSystemPaymentTone={chooseSystemPaymentTone}
                         onClearSystemPaymentTone={clearSystemPaymentTone}
                         onTestPaymentTone={testPaymentTone}
+                        onReturnToAppHome={returnToAppHome}
                     />
                 )}
             </section>
@@ -804,6 +811,7 @@ function TotemSettingsPanel({
     onChooseSystemPaymentTone,
     onClearSystemPaymentTone,
     onTestPaymentTone,
+    onReturnToAppHome,
 }: {
     nativeBridgeAvailable: boolean;
     nativeVersion: { name: string; code: number } | null;
@@ -820,6 +828,7 @@ function TotemSettingsPanel({
     onChooseSystemPaymentTone: () => void;
     onClearSystemPaymentTone: () => void;
     onTestPaymentTone: () => void;
+    onReturnToAppHome: () => void;
 }) {
     const [activeAction, setActiveAction] = useState('');
     const [feedbackMessage, setFeedbackMessage] = useState('');
@@ -922,6 +931,17 @@ function TotemSettingsPanel({
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-2">
+                    <ActionButton
+                        actionId="home"
+                        activeAction={activeAction}
+                        onClick={() => runPanelAction('home', 'Voltando para a tela inicial.', onReturnToAppHome, 250)}
+                        className="col-span-2 bg-emerald-500 px-3 py-3 text-white"
+                    >
+                        <span className="inline-flex items-center justify-center gap-2">
+                            <Home className="h-4 w-4" />
+                            Voltar para tela inicial do app
+                        </span>
+                    </ActionButton>
                     <ActionButton
                         actionId="admin"
                         activeAction={activeAction}

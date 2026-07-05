@@ -36,6 +36,7 @@ class MainActivity : Activity() {
     private val paymentToneUriKey = "payment_tone_uri"
     private val playStorePackage = "com.android.vending"
     private val appPackageName = "br.com.mercadodovale.totempix"
+    private val displayHomeUrl = "https://www.mercadodovale.com.br/display"
 
     @SuppressLint("SetJavaScriptEnabled", "WakelockTimeout")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,7 +62,7 @@ class MainActivity : Activity() {
 
         requestWifiPermissionIfNeeded()
 
-        webView.loadUrl("https://www.mercadodovale.com.br/display")
+        webView.loadUrl(displayHomeUrl)
     }
 
     override fun onResume() {
@@ -316,6 +317,21 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun returnToAppHome() {
+        try {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+        }
+
+        try {
+            webView.loadUrl(displayHomeUrl)
+        } catch (_: Exception) {
+        }
+    }
+
     inner class TotemWebViewClient : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
             val url = request?.url?.toString() ?: return false
@@ -413,6 +429,11 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun openAppUpdate() {
             runOnUiThread { this@MainActivity.openAppUpdate() }
+        }
+
+        @JavascriptInterface
+        fun returnToAppHome() {
+            runOnUiThread { this@MainActivity.returnToAppHome() }
         }
     }
 }

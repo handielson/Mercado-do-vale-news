@@ -18,7 +18,7 @@ assert.match(displayPage, /type:\s*'instagram'/, 'display deve incluir card de I
 assert.match(displayPage, /type:\s*'wifi'/, 'display deve incluir card de Wi-Fi');
 assert.match(displayPage, /WIFI:T:\$\{escapeWifiQrValue\(card\.security\)\};S:\$\{escapeWifiQrValue\(card\.ssid\)\};P:\$\{escapeWifiQrValue\(card\.password\)\};;/, 'QR Wi-Fi deve usar formato padrao Android/iOS');
 assert.match(displayPage, /bottom-4 left-4/, 'nome do display deve ficar no canto inferior esquerdo');
-assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.12'/, 'display deve mostrar versao visual do aplicativo');
+assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.13'/, 'display deve mostrar versao visual do aplicativo');
 assert.match(displayPage, /getDisplayVersionLabel\(display\?\.name\)/, 'display deve mostrar versao ao lado do nome');
 assert.match(displayPage, /fetch\('\/VERSION\.json', \{ cache: 'no-store' \}\)/, 'display deve buscar manifesto publico de versao sem cache');
 assert.match(displayPage, /getTotemUpdateNotice\(versionInfo, nativeVersion\)/, 'display deve calcular aviso de atualizacao do app');
@@ -62,6 +62,8 @@ assert.match(displayPage, /paymentSuccessVolume/, 'display deve salvar volume do
 assert.match(displayPage, /Volume do som/, 'painel deve permitir ajustar volume do som');
 assert.match(displayPage, /Escolher toque do aparelho/, 'painel deve abrir seletor de toque do sistema Android');
 assert.match(displayPage, /openAppUpdate/, 'botao de atualizacao deve chamar a ponte nativa do app quando existir');
+assert.match(displayPage, /returnToAppHome/, 'painel deve chamar a ponte nativa para voltar para a tela inicial do app');
+assert.match(displayPage, /Voltar para tela inicial do app/, 'painel deve ter botao visivel para voltar para o aplicativo');
 assert.match(displayPage, /function ActionButton/, 'painel deve usar botoes com estado visual de acao');
 assert.match(displayPage, /Aguarde\.\.\./, 'botoes do painel devem mostrar estado de processamento');
 assert.match(displayPage, /Status atualizado\./, 'botao Atualizar status deve retornar mensagem de confirmacao');
@@ -70,6 +72,8 @@ assert.match(displayPage, /Administrador do dispositivo/, 'painel deve mostrar s
 assert.match(androidActivity, /playPaymentSuccessTone/, 'ponte Android deve expor som nativo de pagamento aprovado');
 assert.match(androidActivity, /ACTION_RINGTONE_PICKER/, 'ponte Android deve abrir seletor de toque do aparelho');
 assert.match(androidActivity, /openAppUpdate/, 'ponte Android deve abrir a Play Store para atualizar o app');
+assert.match(androidActivity, /returnToAppHome/, 'ponte Android deve expor retorno para tela inicial do app');
+assert.match(androidActivity, /FLAG_ACTIVITY_REORDER_TO_FRONT/, 'retorno ao app deve trazer a activity do totem para frente');
 assert.match(androidActivity, /STREAM_MUSIC/, 'ponte Android deve tocar no canal de musica para respeitar volume audivel');
 assert.match(androidActivity, /shouldOverrideUrlLoading/, 'ponte Android deve abrir atualizacao fora do WebView');
 assert.match(routes, /path:\s*"\/totem-pix\/atualizar"/, 'rota publica de atualizacao do Totem Pix deve existir');
