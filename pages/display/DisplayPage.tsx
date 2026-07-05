@@ -15,7 +15,7 @@ const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
-const DISPLAY_APP_VERSION = 'V1.10';
+const DISPLAY_APP_VERSION = 'V1.11';
 const STORE_SLEEP_CHECK_INTERVAL_MS = 60 * 1000;
 const TOTEM_LOCAL_SETTINGS_STORAGE_KEY = '@mdv_totem_local_settings';
 
@@ -40,7 +40,7 @@ declare global {
             requestScreenSleep?: () => void;
             requestScreenLockPermission?: () => void;
             isScreenLockPermissionActive?: () => boolean;
-            playPaymentSuccessTone?: (tone: string) => void;
+            playPaymentSuccessTone?: (tone: string, volume?: number) => void;
         };
     }
 }
@@ -67,11 +67,13 @@ type IdleQrCard = {
 type TotemLocalSettings = {
     paymentSuccessSound: boolean;
     paymentSuccessTone: 'success' | 'cash' | 'bell';
+    paymentSuccessVolume: number;
 };
 
 const DEFAULT_TOTEM_LOCAL_SETTINGS: TotemLocalSettings = {
     paymentSuccessSound: true,
     paymentSuccessTone: 'success',
+    paymentSuccessVolume: 80,
 };
 
 function getStoredDisplayToken(): string {
@@ -104,10 +106,20 @@ function readTotemLocalSettings(): TotemLocalSettings {
     try {
         const raw = localStorage.getItem(TOTEM_LOCAL_SETTINGS_STORAGE_KEY);
         if (!raw) return DEFAULT_TOTEM_LOCAL_SETTINGS;
-        return { ...DEFAULT_TOTEM_LOCAL_SETTINGS, ...JSON.parse(raw) };
+        const parsed = { ...DEFAULT_TOTEM_LOCAL_SETTINGS, ...JSON.parse(raw) };
+        return {
+            ...parsed,
+            paymentSuccessVolume: clampPaymentVolume(parsed.paymentSuccessVolume),
+        };
     } catch {
         return DEFAULT_TOTEM_LOCAL_SETTINGS;
     }
+}
+
+function clampPaymentVolume(value: unknown): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return DEFAULT_TOTEM_LOCAL_SETTINGS.paymentSuccessVolume;
+    return Math.max(0, Math.min(100, Math.round(parsed)));
 }
 
 function saveTotemLocalSettings(settings: TotemLocalSettings): void {
@@ -359,14 +371,18 @@ function ensureNativeScreenLockPermission(): void {
     }
 }
 
-function playWebPaymentSuccessTone(tone: TotemLocalSettings['paymentSuccessTone']): void {
+function playWebPaymentSuccessTone(tone: TotemLocalSettings['paymentSuccessTone'], volume: number): void {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
     const audioContext = new AudioContextClass();
     const gain = audioContext.createGain();
     const frequencies = tone === 'cash' ? [880, 1175, 1568] : tone === 'bell' ? [1046, 1318] : [784, 988];
-    gain.gain.value = 0.12;
+    const normalizedVolume = clampPaymentVolume(volume) / 100;
+    gain.gain.value = 0.02 + normalizedVolume * 0.28;
     gain.connect(audioContext.destination);
+    if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(() => undefined);
+    }
     frequencies.forEach((frequency, index) => {
         const oscillator = audioContext.createOscillator();
         oscillator.type = 'sine';
@@ -384,10 +400,10 @@ function playPaymentSuccessTone(settings: TotemLocalSettings): void {
     try {
         const bridge = window.MdvTotem;
         if (bridge?.playPaymentSuccessTone) {
-            bridge.playPaymentSuccessTone(settings.paymentSuccessTone);
+            bridge.playPaymentSuccessTone(settings.paymentSuccessTone, clampPaymentVolume(settings.paymentSuccessVolume));
             return;
         }
-        playWebPaymentSuccessTone(settings.paymentSuccessTone);
+        playWebPaymentSuccessTone(settings.paymentSuccessTone, settings.paymentSuccessVolume);
     } catch {
         // Sound feedback is optional and must never block the payment screen.
     }
@@ -817,6 +833,18 @@ function TotemSettingsPanel({
                             Testar
                         </button>
                     </div>
+                    <label className="mt-4 block text-sm font-bold text-slate-200">
+                        Volume do som: {clampPaymentVolume(localSettings.paymentSuccessVolume)}%
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="5"
+                            value={clampPaymentVolume(localSettings.paymentSuccessVolume)}
+                            onChange={(event) => onChangeLocalSettings({ ...localSettings, paymentSuccessVolume: clampPaymentVolume(event.target.value) })}
+                            className="mt-2 w-full accent-emerald-400"
+                        />
+                    </label>
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-2">

@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.41-totem-local-settings-sound
+version: v1.2.42-totem-sound-volume
 date: 2026-07-05
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260705-124914-totem-local-settings-sound
+release_vps: /var/www/mdv-site/releases/20260705-130748-totem-sound-volume
 branch: main
-summary: Adiciona configuracoes locais e som de pagamento aprovado no Totem Pix.
+summary: Corrige teste de som e adiciona volume no Totem Pix.
 ```

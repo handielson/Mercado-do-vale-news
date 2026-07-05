@@ -18,7 +18,7 @@ assert.match(displayPage, /type:\s*'instagram'/, 'display deve incluir card de I
 assert.match(displayPage, /type:\s*'wifi'/, 'display deve incluir card de Wi-Fi');
 assert.match(displayPage, /WIFI:T:\$\{escapeWifiQrValue\(card\.security\)\};S:\$\{escapeWifiQrValue\(card\.ssid\)\};P:\$\{escapeWifiQrValue\(card\.password\)\};;/, 'QR Wi-Fi deve usar formato padrao Android/iOS');
 assert.match(displayPage, /bottom-4 left-4/, 'nome do display deve ficar no canto inferior esquerdo');
-assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.10'/, 'display deve mostrar versao visual do aplicativo');
+assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.11'/, 'display deve mostrar versao visual do aplicativo');
 assert.match(displayPage, /getDisplayVersionLabel\(display\?\.name\)/, 'display deve mostrar versao ao lado do nome');
 assert.match(displayPage, /fetch\('\/VERSION\.json', \{ cache: 'no-store' \}\)/, 'display deve buscar manifesto publico de versao sem cache');
 assert.match(displayPage, /getTotemUpdateNotice\(versionInfo, nativeVersion\)/, 'display deve calcular aviso de atualizacao do app');
@@ -44,7 +44,7 @@ assert.match(displayTypes, /security:\s*'WPA'/, 'tipo Wi-Fi deve aceitar WPA com
 assert.match(adminPage, /Configurar Wi-Fi/, 'admin deve expor configuracao de Wi-Fi do display');
 assert.match(adminPage, /Captar rede pelo app Android/, 'admin deve orientar captura automatica de SSID pelo app');
 assert.match(adminPage, /Confirmar senha/, 'admin deve pedir confirmacao de senha para reduzir erro');
-assert.match(adminPage, /DISPLAY_APP_VERSION = 'V1\.10'/, 'admin deve mostrar versao visual do app no display cadastrado');
+assert.match(adminPage, /DISPLAY_APP_VERSION = 'V1\.11'/, 'admin deve mostrar versao visual do app no display cadastrado');
 
 assert.match(androidManifest, /ACCESS_WIFI_STATE/, 'app Android deve declarar permissao para ler estado Wi-Fi');
 assert.match(androidManifest, /ACCESS_FINE_LOCATION/, 'app Android deve declarar permissao necessaria para SSID em Android moderno');
@@ -57,8 +57,11 @@ assert.match(displayPage, /getStoreStatus/, 'display deve usar horario publico d
 assert.match(displayPage, /syncNativeDisplayPower/, 'display deve sincronizar estado de energia com o app Android');
 assert.match(displayPage, /Configuracoes do Totem/, 'display deve ter painel local de configuracoes do app');
 assert.match(displayPage, /playPaymentSuccessTone/, 'display deve tocar som configuravel quando o Pix for aprovado');
+assert.match(displayPage, /paymentSuccessVolume/, 'display deve salvar volume do som de pagamento aprovado');
+assert.match(displayPage, /Volume do som/, 'painel deve permitir ajustar volume do som');
 assert.match(displayPage, /Administrador do dispositivo/, 'painel deve mostrar status da permissao de administrador');
 assert.match(androidActivity, /playPaymentSuccessTone/, 'ponte Android deve expor som nativo de pagamento aprovado');
+assert.match(androidActivity, /STREAM_MUSIC/, 'ponte Android deve tocar no canal de musica para respeitar volume audivel');
 assert.match(androidActivity, /shouldOverrideUrlLoading/, 'ponte Android deve abrir atualizacao fora do WebView');
 assert.match(routes, /path:\s*"\/totem-pix\/atualizar"/, 'rota publica de atualizacao do Totem Pix deve existir');
 assert.match(updatePage, /App not available/, 'pagina de atualizacao deve orientar quando a Play Store negar acesso');

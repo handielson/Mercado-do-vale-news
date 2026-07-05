@@ -10,8 +10,8 @@ const mainActivity = readFileSync('android/totem-pix/app/src/main/java/br/com/me
 
 assert.match(buildGradle, /applicationId 'br\.com\.mercadodovale\.totempix'/, 'package name deve ser estavel para Google Play');
 assert.match(buildGradle, /targetSdk 35/, 'targetSdk deve atender a exigencia atual do Google Play');
-assert.match(buildGradle, /versionCode 110/, 'versionCode deve estar preparado para V1.10');
-assert.match(buildGradle, /versionName '1\.10'/, 'versionName deve refletir V1.10');
+assert.match(buildGradle, /versionCode 111/, 'versionCode deve estar preparado para V1.11');
+assert.match(buildGradle, /versionName '1\.11'/, 'versionName deve refletir V1.11');
 assert.match(buildGradle, /keystore\.properties/, 'release signing deve ler keystore.properties local');
 assert.match(buildGradle, /storeFile rootProject\.file/, 'keystore deve ser resolvida relativa a raiz do projeto Android');
 assert.match(buildGradle, /signingConfig signingConfigs\.release/, 'build release deve usar signingConfig release');
@@ -31,6 +31,8 @@ assert.match(mainActivity, /setDisplayAwake/, 'ponte Android deve voltar a mante
 assert.match(mainActivity, /DevicePolicyManager/, 'app deve usar DevicePolicyManager para bloqueio imediato quando autorizado');
 assert.match(mainActivity, /playPaymentSuccessTone/, 'ponte Android deve tocar som de pagamento aprovado');
 assert.match(mainActivity, /ToneGenerator/, 'app deve usar som nativo para confirmacao de pagamento');
+assert.match(mainActivity, /volumePercent/, 'som nativo deve receber volume configurado pelo display');
+assert.match(mainActivity, /STREAM_MUSIC/, 'som nativo deve usar canal de musica para ficar audivel no totem');
 assert.match(mainActivity, /fun getAppVersionName\(\): String/, 'ponte Android deve expor versionName ao display');
 assert.match(mainActivity, /fun getAppVersionCode\(\): Int/, 'ponte Android deve expor versionCode ao display');
 assert.match(mainActivity, /shouldOverrideUrlLoading/, 'WebView deve interceptar links externos de atualizacao');

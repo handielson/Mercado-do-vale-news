@@ -163,14 +163,15 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun playPaymentSuccessTone(toneName: String) {
+    private fun playPaymentSuccessTone(toneName: String, volumePercent: Int) {
         try {
             val tone = when (toneName.lowercase()) {
                 "cash" -> ToneGenerator.TONE_PROP_ACK
                 "bell" -> ToneGenerator.TONE_PROP_BEEP2
                 else -> ToneGenerator.TONE_PROP_BEEP
             }
-            val generator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+            val safeVolume = volumePercent.coerceIn(0, 100)
+            val generator = ToneGenerator(AudioManager.STREAM_MUSIC, safeVolume)
             generator.startTone(tone, 450)
             Handler(Looper.getMainLooper()).postDelayed({
                 try {
@@ -272,8 +273,8 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
-        fun playPaymentSuccessTone(tone: String) {
-            runOnUiThread { this@MainActivity.playPaymentSuccessTone(tone) }
+        fun playPaymentSuccessTone(tone: String, volume: Int) {
+            runOnUiThread { this@MainActivity.playPaymentSuccessTone(tone, volume) }
         }
     }
 }
