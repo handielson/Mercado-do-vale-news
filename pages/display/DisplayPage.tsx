@@ -98,6 +98,14 @@ function clearDisplayToken(): void {
     localStorage.removeItem(PDV_DISPLAY_TOKEN_STORAGE_KEY);
 }
 
+export function isRevokedDisplayTokenError(message: string): boolean {
+    const normalized = String(message || '').toLowerCase();
+    return normalized.includes('401') ||
+        normalized.includes('token revogado') ||
+        normalized.includes('token invalido') ||
+        normalized.includes('token inválido');
+}
+
 function normalizePairingCode(value: string): string {
     const digits = value.replace(/\D/g, '').slice(0, 6);
     if (digits.length <= 3) return digits;
@@ -509,7 +517,7 @@ export default function DisplayPage() {
             setLastUpdatedAt(new Date());
         } catch (err: any) {
             const message = err?.message || 'Token revogado ou invalido';
-            if (message.includes('401') || message.toLowerCase().includes('token')) {
+            if (isRevokedDisplayTokenError(message)) {
                 clearDisplayToken();
                 setToken('');
                 setState(null);

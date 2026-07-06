@@ -36,6 +36,7 @@ assert.match(buildGradle, /versionName '1\.18'/, 'Android versionName must descr
 
 const monitorService = readFileSync('android/totem-pix/app/src/main/java/br/com/mercadodovale/totempix/TotemPixMonitorService.kt', 'utf8');
 assert.match(monitorService, /startForeground/, 'Pix monitor must run as a foreground service');
+assert.match(monitorService, /https:\/\/api\.xiaomipetrolina\.com\.br\/pdv\/display-state/, 'Pix monitor must poll the API display state endpoint directly');
 assert.match(monitorService, /DISPLAY_STATE_URL\?token=\$encodedToken/, 'Pix monitor must poll the display state endpoint natively');
 assert.match(monitorService, /active_pix/, 'Pix monitor must inspect active Pix state');
 assert.match(monitorService, /ACTION_SHOW_PAYMENT_SCREEN/, 'Pix monitor must wake the payment screen when Pix is active');

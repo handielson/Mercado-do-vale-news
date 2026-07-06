@@ -205,7 +205,7 @@ class TotemPixMonitorService : Service() {
         const val ACTION_SHOW_PAYMENT_SCREEN = "br.com.mercadodovale.totempix.SHOW_PAYMENT_SCREEN"
         const val PREFERENCES_NAME = "mdv_totem_pix_monitor"
         const val DISPLAY_TOKEN_KEY = "display_token"
-        private const val DISPLAY_STATE_URL = "https://www.mercadodovale.com.br/pdv/display-state"
+        private const val DISPLAY_STATE_URL = "https://api.xiaomipetrolina.com.br/pdv/display-state"
         private const val NOTIFICATION_CHANNEL_ID = "totem_pix_monitor"
         private const val NOTIFICATION_ID = 20260705
         private const val POLL_INTERVAL_MS = 5000L

@@ -22,6 +22,7 @@ for (const expected of [
   'localStorage.getItem(PDV_DISPLAY_TOKEN_STORAGE_KEY)',
   'localStorage.setItem(PDV_DISPLAY_TOKEN_STORAGE_KEY',
   'localStorage.removeItem(PDV_DISPLAY_TOKEN_STORAGE_KEY)',
+  'isRevokedDisplayTokenError',
   'pdvDisplayService.pairDisplay',
   'pdvDisplayService.getDisplayState',
   'setInterval',
@@ -47,5 +48,17 @@ assert.ok(routes.includes("const DisplayPage = lazy(() => import('../pages/displ
 assert.ok(routes.includes('path: "/display"'), 'rota /display deve existir');
 assert.ok(routes.includes('element: <DisplayPage />'), 'rota /display deve renderizar DisplayPage sem ProtectedRoute');
 assert.ok(plan.includes('### 2026-06-04 - Bloco Fase 4 Pagina Publica Android'), 'android.md deve registrar o bloco Fase 4');
+
+assert.match(
+  page,
+  /if \(isRevokedDisplayTokenError\(message\)\)/,
+  'Display must only clear the saved pairing token for explicit revoked/invalid token errors'
+);
+
+assert.doesNotMatch(
+  page,
+  /message\.toLowerCase\(\)\.includes\('token'\)/,
+  'Display must not clear pairing on any transient error just because the request URL contains token='
+);
 
 console.log('pdv display pairing static checks passed');
