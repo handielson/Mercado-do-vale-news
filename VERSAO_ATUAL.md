@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.59-display-brazil-time
+version: v1.2.60-totem-pix-foreground-recovery
 date: 2026-07-06
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260706-174632-display-brazil-time
+release_vps: /var/www/mdv-site/releases/20260706-175457-totem-pix-foreground-recovery
 branch: main
-summary: Corrige relogio do Totem Pix para usar o horario do Brasil.
+summary: Faz o Totem Pix voltar para frente quando outro app estiver aberto.
 ```

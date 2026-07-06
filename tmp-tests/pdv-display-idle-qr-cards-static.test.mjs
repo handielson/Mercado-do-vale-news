@@ -18,7 +18,7 @@ assert.match(displayPage, /type:\s*'instagram'/, 'display deve incluir card de I
 assert.match(displayPage, /type:\s*'wifi'/, 'display deve incluir card de Wi-Fi');
 assert.match(displayPage, /WIFI:T:\$\{escapeWifiQrValue\(card\.security\)\};S:\$\{escapeWifiQrValue\(card\.ssid\)\};P:\$\{escapeWifiQrValue\(card\.password\)\};;/, 'QR Wi-Fi deve usar formato padrao Android/iOS');
 assert.match(displayPage, /bottom-4 left-4/, 'nome do display deve ficar no canto inferior esquerdo');
-assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.19'/, 'display deve mostrar versao visual do aplicativo');
+assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.20'/, 'display deve mostrar versao visual do aplicativo');
 assert.match(displayPage, /getDisplayVersionLabel\(display\?\.name\)/, 'display deve mostrar versao ao lado do nome');
 assert.match(displayPage, /BRAZIL_TIME_ZONE = 'America\/Sao_Paulo'/, 'display deve fixar o fuso do relogio no horario do Brasil');
 assert.match(displayPage, /function formatBrazilTime[\s\S]*timeZone: BRAZIL_TIME_ZONE/, 'display deve formatar o horario do topo com fuso de Sao Paulo');

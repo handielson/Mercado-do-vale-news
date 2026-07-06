@@ -20,6 +20,8 @@ const buildGradle = readFileSync('android/totem-pix/app/build.gradle', 'utf8');
 assert.match(manifest, /android\.permission\.INTERNET/, 'Android app must request internet');
 assert.match(manifest, /android\.permission\.FOREGROUND_SERVICE/, 'Android app must be allowed to keep Pix polling active in a foreground service');
 assert.match(manifest, /android\.permission\.FOREGROUND_SERVICE_DATA_SYNC/, 'Android app must declare the dataSync foreground service permission on modern Android');
+assert.match(manifest, /android\.permission\.POST_NOTIFICATIONS/, 'Android app must request notification permission for active Pix alerts on Android 13+');
+assert.match(manifest, /android\.permission\.REORDER_TASKS/, 'Android app must be able to move its own totem task back to the front');
 assert.match(manifest, /android:name="\.TotemPixMonitorService"/, 'Android app must register the native Pix monitor service');
 assert.match(manifest, /android:foregroundServiceType="dataSync"/, 'Pix monitor service must declare its foreground service type');
 assert.match(manifest, /android:screenOrientation="portrait"/, 'Totem phone should default to portrait');
@@ -31,8 +33,8 @@ assert.match(activity, /showPaymentScreenNow/, 'Totem should expose a native bri
 assert.match(activity, /returnToAppHome/, 'Totem should expose a native return-to-app-home bridge');
 assert.match(activity, /FLAG_ACTIVITY_REORDER_TO_FRONT/, 'Totem should bring its activity to the front when returning to app');
 assert.match(activity, /private fun returnToAppHome\(\)[\s\S]*setDisplayAwake\(true\)/, 'Totem should wake the screen when returning to app home');
-assert.match(buildGradle, /versionCode 119/, 'Android upload versionCode must be bumped for the next Play upload');
-assert.match(buildGradle, /versionName '1\.19'/, 'Android versionName must describe the next app release');
+assert.match(buildGradle, /versionCode 120/, 'Android upload versionCode must be bumped for the next Play upload');
+assert.match(buildGradle, /versionName '1\.20'/, 'Android versionName must describe the next app release');
 
 const monitorService = readFileSync('android/totem-pix/app/src/main/java/br/com/mercadodovale/totempix/TotemPixMonitorService.kt', 'utf8');
 assert.match(monitorService, /startForeground/, 'Pix monitor must run as a foreground service');
@@ -40,6 +42,13 @@ assert.match(monitorService, /https:\/\/api\.xiaomipetrolina\.com\.br\/pdv\/disp
 assert.match(monitorService, /DISPLAY_STATE_URL\?token=\$encodedToken/, 'Pix monitor must poll the display state endpoint natively');
 assert.match(monitorService, /active_pix/, 'Pix monitor must inspect active Pix state');
 assert.match(monitorService, /ACTION_SHOW_PAYMENT_SCREEN/, 'Pix monitor must wake the payment screen when Pix is active');
+assert.match(monitorService, /ActivityManager/, 'Pix monitor must use ActivityManager to recover its own task from another foreground app');
+assert.match(monitorService, /appTasks\.firstOrNull\(\)[\s\S]*moveToFront\(\)/, 'Pix monitor must move the Totem task to the front before opening the QR screen');
+assert.match(monitorService, /ACTIVE_PIX_NOTIFICATION_CHANNEL_ID/, 'Pix monitor must publish a dedicated active Pix notification');
+assert.match(monitorService, /NotificationManager\.IMPORTANCE_HIGH/, 'active Pix notification must use high importance');
+assert.match(monitorService, /buildPaymentScreenPendingIntent/, 'active Pix notification must open the payment screen when tapped');
+assert.match(monitorService, /WAKE_REPEAT_INTERVAL_MS = 10_000L/, 'Pix monitor must retry quickly while another app is covering the Totem');
+assert.match(monitorService, /WAKE_RETRY_DELAY_MS/, 'Pix monitor must retry shortly after the first foreground attempt');
 assert.match(monitorService, /lastActivePixSignature/, 'Pix monitor must remember the active Pix it already woke');
 assert.match(monitorService, /WAKE_REPEAT_INTERVAL_MS/, 'Pix monitor must throttle repeated wake attempts for the same Pix');
 assert.match(monitorService, /if \(!shouldWakeForActivePix\(signature\)\) return/, 'Pix monitor must not relaunch the payment screen on every poll');

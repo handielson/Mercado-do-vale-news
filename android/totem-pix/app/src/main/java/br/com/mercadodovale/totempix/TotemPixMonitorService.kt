@@ -1,5 +1,6 @@
 package br.com.mercadodovale.totempix
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,7 +9,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import java.net.HttpURLConnection
 import java.net.URLEncoder
@@ -22,6 +25,7 @@ class TotemPixMonitorService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastActivePixSignature: String? = null
     private var lastWakeAttemptAt = 0L
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification())
@@ -128,18 +132,41 @@ class TotemPixMonitorService : Service() {
 
     private fun showPaymentScreen() {
         acquireWakeLock()
-        val intent = Intent(this, MainActivity::class.java).apply {
+        publishActivePixNotification()
+        bringTotemTaskToFront()
+        openTotemPaymentActivity()
+        mainHandler.postDelayed({
+            bringTotemTaskToFront()
+            openTotemPaymentActivity()
+        }, WAKE_RETRY_DELAY_MS)
+    }
+
+    private fun openTotemPaymentActivity() {
+        try {
+            startActivity(buildPaymentScreenIntent())
+        } catch (_: Exception) {
+            // Android can block background launches; the high-priority notification remains as fallback.
+        }
+    }
+
+    private fun bringTotemTaskToFront() {
+        try {
+            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val task = activityManager.appTasks.firstOrNull()
+            task?.moveToFront()
+        } catch (_: Exception) {
+            // If the task cannot be moved, the explicit activity launch below is still attempted.
+        }
+    }
+
+    private fun buildPaymentScreenIntent(): Intent {
+        return Intent(this, MainActivity::class.java).apply {
             action = ACTION_SHOW_PAYMENT_SCREEN
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP
             )
-        }
-        try {
-            startActivity(intent)
-        } catch (_: Exception) {
-            // The foreground notification still lets the operator reopen the totem if Android blocks background launch.
         }
     }
 
@@ -162,16 +189,7 @@ class TotemPixMonitorService : Service() {
 
     private fun buildNotification(): Notification {
         ensureNotificationChannel()
-        val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
-        val intent = Intent(this, MainActivity::class.java).apply {
-            action = ACTION_SHOW_PAYMENT_SCREEN
-            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
-        val pendingIntent = PendingIntent.getActivity(this, 0, intent, pendingIntentFlags)
+        val pendingIntent = buildPaymentScreenPendingIntent(0)
         return Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(applicationInfo.icon)
             .setContentTitle("Totem Pix ativo")
@@ -179,6 +197,39 @@ class TotemPixMonitorService : Service() {
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
+    }
+
+    private fun publishActivePixNotification() {
+        try {
+            ensureActivePixNotificationChannel()
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(ACTIVE_PIX_NOTIFICATION_ID, buildActivePixNotification())
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun buildActivePixNotification(): Notification {
+        val builder = Notification.Builder(this, ACTIVE_PIX_NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(applicationInfo.icon)
+            .setContentTitle("Pix aguardando no Totem")
+            .setContentText("Toque para abrir o QR Code no Totem Pix.")
+            .setContentIntent(buildPaymentScreenPendingIntent(1))
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setCategory(Notification.CATEGORY_STATUS)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            builder.setPriority(Notification.PRIORITY_HIGH)
+        }
+        return builder.build()
+    }
+
+    private fun buildPaymentScreenPendingIntent(requestCode: Int): PendingIntent {
+        val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        return PendingIntent.getActivity(this, requestCode, buildPaymentScreenIntent(), pendingIntentFlags)
     }
 
     private fun ensureNotificationChannel() {
@@ -190,6 +241,19 @@ class TotemPixMonitorService : Service() {
                 NOTIFICATION_CHANNEL_ID,
                 "Monitor do Totem Pix",
                 NotificationManager.IMPORTANCE_LOW
+            )
+        )
+    }
+
+    private fun ensureActivePixNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (manager.getNotificationChannel(ACTIVE_PIX_NOTIFICATION_CHANNEL_ID) != null) return
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ACTIVE_PIX_NOTIFICATION_CHANNEL_ID,
+                "Pix ativo no Totem",
+                NotificationManager.IMPORTANCE_HIGH
             )
         )
     }
@@ -207,8 +271,11 @@ class TotemPixMonitorService : Service() {
         const val DISPLAY_TOKEN_KEY = "display_token"
         private const val DISPLAY_STATE_URL = "https://api.xiaomipetrolina.com.br/pdv/display-state"
         private const val NOTIFICATION_CHANNEL_ID = "totem_pix_monitor"
+        private const val ACTIVE_PIX_NOTIFICATION_CHANNEL_ID = "totem_pix_active"
         private const val NOTIFICATION_ID = 20260705
+        private const val ACTIVE_PIX_NOTIFICATION_ID = 20260706
         private const val POLL_INTERVAL_MS = 5000L
-        private const val WAKE_REPEAT_INTERVAL_MS = 120_000L
+        private const val WAKE_REPEAT_INTERVAL_MS = 10_000L
+        private const val WAKE_RETRY_DELAY_MS = 1500L
     }
 }

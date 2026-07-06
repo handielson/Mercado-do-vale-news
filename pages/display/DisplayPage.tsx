@@ -13,7 +13,7 @@ const POLLING_INTERVAL_MS = 5000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
-const DISPLAY_APP_VERSION = 'V1.19';
+const DISPLAY_APP_VERSION = 'V1.20';
 const TOTEM_LOCAL_SETTINGS_STORAGE_KEY = '@mdv_totem_local_settings';
 const BRAZIL_TIME_ZONE = 'America/Sao_Paulo';
 

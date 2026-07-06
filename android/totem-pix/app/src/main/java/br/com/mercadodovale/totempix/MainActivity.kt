@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private var displayAwakeEnabled = true
     private val locationPermissionRequest = 87
     private val ringtonePickerRequest = 88
+    private val notificationPermissionRequest = 89
     private val paymentTonePreferences = "mdv_totem_payment_tone"
     private val paymentToneUriKey = "payment_tone_uri"
     private val playStorePackage = "com.android.vending"
@@ -61,6 +62,7 @@ class MainActivity : Activity() {
         setContentView(webView)
 
         requestWifiPermissionIfNeeded()
+        requestNotificationPermissionIfNeeded()
 
         webView.loadUrl(displayHomeUrl)
         if (intent?.action == TotemPixMonitorService.ACTION_SHOW_PAYMENT_SCREEN) {
@@ -308,6 +310,12 @@ class MainActivity : Activity() {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) return
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) return
         requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), locationPermissionRequest)
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) return
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), notificationPermissionRequest)
     }
 
     private fun openExternalUrl(url: String) {
