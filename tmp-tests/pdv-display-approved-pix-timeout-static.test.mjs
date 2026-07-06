@@ -17,8 +17,32 @@ assert.match(
 
 assert.match(
   source,
-  /if \(status === 'pending'\) return now - startedAt < PIX_QR_VISIBLE_MS;/,
-  'Pending Pix must continue showing the QR code within the QR visibility window'
+  /if \(status === 'pending'\) return true;/,
+  'Pending Pix must always take over the totem while it is the active Pix'
+);
+
+assert.doesNotMatch(
+  source,
+  /PIX_QR_VISIBLE_MS/,
+  'Display must not expire an active pending Pix in the WebView layer'
+);
+
+assert.match(
+  source,
+  /Aguardando pagamento/,
+  'Pending Pix must show a waiting-for-payment state instead of a visual expiration countdown'
+);
+
+assert.match(
+  source,
+  /mdv:force-display-refresh/,
+  'Native Android wake event must force the display to refresh active Pix state immediately'
+);
+
+assert.match(
+  source,
+  /if \(showPix\) setSettingsOpen\(false\);/,
+  'Active Pix must close settings overlays and take the foreground'
 );
 
 assert.match(

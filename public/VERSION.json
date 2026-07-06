@@ -1,15 +1,15 @@
 {
-    "version": "v1.2.57-display-pix-receipt-unified",
+    "version": "v1.2.58-totem-pix-always-on",
     "date": "2026-07-06",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260706-151507-display-pix-receipt-unified",
+    "release_vps": "/var/www/mdv-site/releases/20260706-173437-totem-pix-always-on",
     "branch": "main",
-    "summary": "Unifica comprovante Pix do PDV e avulso, corrige valor em centavos, WhatsApp do display e modal de telefone.",
+    "summary": "Mantem Totem Pix sempre ativo e faz Pix avulso sobrescrever a tela do display.",
     "totem_pix_android": {
-        "latest_version_name": "1.18",
-        "latest_version_code": 118,
-        "minimum_recommended_version_name": "1.18",
-        "update_message": "V1.18\nMelhorias | implementacoes\n- Gera nova release Android com versionCode 118 para envio limpo no Google Play\n- Mantem a correcao da piscada do QR Pix sem recarregar o WebView a cada polling\n- Mantem o monitor nativo acordando o totem apenas para Pix novo ou em intervalo de seguranca",
+        "latest_version_name": "1.19",
+        "latest_version_code": 119,
+        "minimum_recommended_version_name": "1.19",
+        "update_message": "V1.19\nMelhorias | implementacoes\n- Totem Pix dedicado fica sempre ativo, independente do horario da loja\n- Pix pendente ativo sobrescreve tela ociosa, configuracoes e qualquer estado anterior\n- Pix avulso seleciona automaticamente o display ativo quando houver um disponivel\n- Android forca refresh imediato do display ao acordar para novo Pix",
         "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
     }
 }

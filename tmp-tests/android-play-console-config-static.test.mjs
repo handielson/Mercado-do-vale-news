@@ -10,8 +10,8 @@ const mainActivity = readFileSync('android/totem-pix/app/src/main/java/br/com/me
 
 assert.match(buildGradle, /applicationId 'br\.com\.mercadodovale\.totempix'/, 'package name deve ser estavel para Google Play');
 assert.match(buildGradle, /targetSdk 35/, 'targetSdk deve atender a exigencia atual do Google Play');
-assert.match(buildGradle, /versionCode 118/, 'versionCode deve estar preparado para V1.18');
-assert.match(buildGradle, /versionName '1\.18'/, 'versionName deve refletir V1.18');
+assert.match(buildGradle, /versionCode 119/, 'versionCode deve estar preparado para V1.19');
+assert.match(buildGradle, /versionName '1\.19'/, 'versionName deve refletir V1.19');
 assert.match(buildGradle, /keystore\.properties/, 'release signing deve ler keystore.properties local');
 assert.match(buildGradle, /storeFile rootProject\.file/, 'keystore deve ser resolvida relativa a raiz do projeto Android');
 assert.match(buildGradle, /signingConfig signingConfigs\.release/, 'build release deve usar signingConfig release');
@@ -28,8 +28,8 @@ assert.match(androidManifest, /FOREGROUND_SERVICE_DATA_SYNC/, 'app deve declarar
 assert.match(androidManifest, /BIND_DEVICE_ADMIN/, 'app deve declarar receiver de administrador para apagar a tela no fechamento');
 assert.match(mainActivity, /PARTIAL_WAKE_LOCK/, 'app deve manter CPU\/rede ativas mesmo se a tela bloquear');
 assert.match(mainActivity, /FLAG_KEEP_SCREEN_ON/, 'app deve tentar impedir bloqueio da tela durante exibicao');
-assert.match(mainActivity, /requestScreenSleep/, 'ponte Android deve permitir apagar a tela quando a loja estiver fechada');
-assert.match(mainActivity, /setDisplayAwake/, 'ponte Android deve voltar a manter a tela ligada quando a loja abrir');
+assert.match(mainActivity, /requestScreenSleep/, 'ponte Android deve permitir apagar a tela somente por acao manual');
+assert.match(mainActivity, /setDisplayAwake/, 'ponte Android deve manter o Totem Pix dedicado acordado');
 assert.match(mainActivity, /registerDisplayToken/, 'ponte Android deve registrar token para monitoramento nativo do Pix');
 assert.match(mainActivity, /showPaymentScreenNow/, 'ponte Android deve permitir reacender a tela de pagamento');
 assert.match(mainActivity, /DevicePolicyManager/, 'app deve usar DevicePolicyManager para bloqueio imediato quando autorizado');

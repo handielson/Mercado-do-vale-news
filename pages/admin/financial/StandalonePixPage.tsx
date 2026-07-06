@@ -68,6 +68,17 @@ export default function StandalonePixPage() {
   }, [loadData]);
 
   React.useEffect(() => {
+    const currentDisplayId = displayId.trim();
+    const currentStillAvailable = displayOptions.some((display) => display.id === currentDisplayId);
+    if (currentDisplayId && currentStillAvailable) return;
+
+    const nextDisplayId = displayOptions[0]?.id || '';
+    if (!nextDisplayId) return;
+    setDisplayId(nextDisplayId);
+    localStorage.setItem('standalone_pix_display_id', nextDisplayId);
+  }, [displayId, displayOptions]);
+
+  React.useEffect(() => {
     if (!currentPix || !isStandalonePixPayable(currentPix)) return;
     let cancelled = false;
 
@@ -129,15 +140,17 @@ export default function StandalonePixPage() {
       toast.error('Informe um valor para gerar o Pix');
       return;
     }
+    const targetDisplayId = displayId.trim() || displayOptions[0]?.id || '';
     setLoading(true);
     try {
       localStorage.setItem('standalone_pix_cashier_key', cashierKey.trim() || 'caixa-01');
-      localStorage.setItem('standalone_pix_display_id', displayId.trim());
+      localStorage.setItem('standalone_pix_display_id', targetDisplayId);
+      if (targetDisplayId && targetDisplayId !== displayId.trim()) setDisplayId(targetDisplayId);
       const pix = await standalonePixService.create({
         amount: cents,
         description: description.trim() || 'Pix avulso Mercado do Vale',
         cashier_key: cashierKey.trim() || 'caixa-01',
-        display_id: displayId.trim() || null,
+        display_id: targetDisplayId || null,
       });
       setCurrentPix(pix);
       await loadData();

@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.57-display-pix-receipt-unified
+version: v1.2.58-totem-pix-always-on
 date: 2026-07-06
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260706-151507-display-pix-receipt-unified
+release_vps: /var/www/mdv-site/releases/20260706-173437-totem-pix-always-on
 branch: main
-summary: Unifica comprovante Pix do PDV e avulso, corrige valor em centavos, WhatsApp do display e modal de telefone.
+summary: Mantem Totem Pix sempre ativo e faz Pix avulso sobrescrever a tela do display.
 ```

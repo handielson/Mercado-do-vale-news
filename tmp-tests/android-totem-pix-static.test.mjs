@@ -31,8 +31,8 @@ assert.match(activity, /showPaymentScreenNow/, 'Totem should expose a native bri
 assert.match(activity, /returnToAppHome/, 'Totem should expose a native return-to-app-home bridge');
 assert.match(activity, /FLAG_ACTIVITY_REORDER_TO_FRONT/, 'Totem should bring its activity to the front when returning to app');
 assert.match(activity, /private fun returnToAppHome\(\)[\s\S]*setDisplayAwake\(true\)/, 'Totem should wake the screen when returning to app home');
-assert.match(buildGradle, /versionCode 118/, 'Android upload versionCode must be bumped for the next Play upload');
-assert.match(buildGradle, /versionName '1\.18'/, 'Android versionName must describe the next app release');
+assert.match(buildGradle, /versionCode 119/, 'Android upload versionCode must be bumped for the next Play upload');
+assert.match(buildGradle, /versionName '1\.19'/, 'Android versionName must describe the next app release');
 
 const monitorService = readFileSync('android/totem-pix/app/src/main/java/br/com/mercadodovale/totempix/TotemPixMonitorService.kt', 'utf8');
 assert.match(monitorService, /startForeground/, 'Pix monitor must run as a foreground service');
@@ -46,6 +46,8 @@ assert.match(monitorService, /if \(!shouldWakeForActivePix\(signature\)\) return
 assert.match(monitorService, /lastActivePixSignature = null/, 'Pix monitor must clear the wake guard after Pix disappears');
 
 const showPaymentScreenNowBody = activity.match(/private fun showPaymentScreenNow\(\) \{[\s\S]*?\n    \}/)?.[0] || '';
-assert.doesNotMatch(showPaymentScreenNowBody, /webView\.loadUrl\(displayHomeUrl\)/, 'native wake must not reload the display WebView and make the QR blink');
+assert.match(showPaymentScreenNowBody, /setDisplayAwake\(true\)/, 'native wake must always turn the totem screen on');
+assert.match(showPaymentScreenNowBody, /mdv:force-display-refresh/, 'native wake must force the WebView to refresh Pix state immediately');
+assert.match(showPaymentScreenNowBody, /if \(!webView\.url\.orEmpty\(\)\.startsWith\(displayHomeUrl\)\)/, 'native wake must only navigate back when WebView left the display app');
 
 console.log('android totem pix static checks passed');

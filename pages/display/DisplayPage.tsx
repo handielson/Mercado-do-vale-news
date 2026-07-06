@@ -7,16 +7,13 @@ import { publicCompanySettingsService, type PublicCompanySettings } from '../../
 import type { PdvDisplay, PdvDisplayIdleContent, PdvDisplayState, PdvPixPayment, PdvPixReceiptShareLinkResponse } from '../../types/pdvDisplay';
 import type { Product } from '../../types/product';
 import { formatCurrency } from '../../utils/saleCalculations';
-import { getStoreStatus } from '../../utils/storeStatus';
 
 export const PDV_DISPLAY_TOKEN_STORAGE_KEY = '@mdv_pdv_display_token';
 const POLLING_INTERVAL_MS = 5000;
-const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
-const DISPLAY_APP_VERSION = 'V1.18';
-const STORE_SLEEP_CHECK_INTERVAL_MS = 60 * 1000;
+const DISPLAY_APP_VERSION = 'V1.19';
 const TOTEM_LOCAL_SETTINGS_STORAGE_KEY = '@mdv_totem_local_settings';
 
 type TotemVersionInfo = {
@@ -260,9 +257,7 @@ function ProductAdPrice({ priceInCents, compact = false }: { priceInCents: numbe
 export function shouldShowPixPayment(payment: PdvPixPayment | null, now = Date.now()): boolean {
     if (!payment) return false;
     const status = String(payment.status || '');
-    const startedAt = Date.parse(String(payment.created_at || payment.updated_at || ''));
-    if (!Number.isFinite(startedAt)) return status === 'pending';
-    if (status === 'pending') return now - startedAt < PIX_QR_VISIBLE_MS;
+    if (status === 'pending') return true;
     if (status !== 'approved') return false;
 
     const approvedAt = Date.parse(String(payment.approved_at || payment.updated_at || payment.created_at || ''));
@@ -466,7 +461,6 @@ export default function DisplayPage() {
     const [companySettings, setCompanySettings] = useState<PublicCompanySettings | null>(null);
     const [versionInfo, setVersionInfo] = useState<TotemVersionInfo | null>(null);
     const [nativeVersion, setNativeVersion] = useState<{ name: string; code: number } | null>(null);
-    const [storeShouldStayAwake, setStoreShouldStayAwake] = useState(true);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [screenLockPermissionActive, setScreenLockPermissionActive] = useState(false);
     const [nativeWifiSsid, setNativeWifiSsid] = useState('');
@@ -561,48 +555,28 @@ export default function DisplayPage() {
     }, [token]);
 
     useEffect(() => {
+        if (!token) return;
+        function forceDisplayRefresh() {
+            loadDisplayState(token);
+        }
+        window.addEventListener('mdv:force-display-refresh', forceDisplayRefresh);
+        return () => window.removeEventListener('mdv:force-display-refresh', forceDisplayRefresh);
+    }, [token]);
+
+    useEffect(() => {
         publicCompanySettingsService.get()
             .then(setCompanySettings)
             .catch(() => setCompanySettings(null));
     }, []);
 
     useEffect(() => {
-        let cancelled = false;
-
-        async function refreshStoreWakeState() {
-            if (!companySettings?.business_hours) {
-                if (!cancelled) setStoreShouldStayAwake(true);
-                return;
-            }
-
-            const status = await getStoreStatus(
-                companySettings.business_hours,
-                companySettings.holiday_overrides,
-                companySettings.local_holidays,
-            );
-            if (!cancelled) {
-                setStoreShouldStayAwake(status.status === 'open' || status.status === 'closing_soon');
-            }
-        }
-
-        refreshStoreWakeState();
-        const interval = setInterval(refreshStoreWakeState, STORE_SLEEP_CHECK_INTERVAL_MS);
-        return () => {
-            cancelled = true;
-            clearInterval(interval);
-        };
-    }, [
-        JSON.stringify(companySettings?.business_hours || {}),
-        JSON.stringify(companySettings?.holiday_overrides || []),
-        JSON.stringify(companySettings?.local_holidays || []),
-    ]);
+        if (showPix) setSettingsOpen(false);
+    }, [showPix]);
 
     useEffect(() => {
-        const shouldStayAwake = showPix || storeShouldStayAwake;
-        syncNativeDisplayPower(shouldStayAwake);
+        syncNativeDisplayPower(true);
         if (showPix) showNativePaymentScreenNow();
-        if (!shouldStayAwake) ensureNativeScreenLockPermission();
-    }, [showPix, storeShouldStayAwake]);
+    }, [showPix]);
 
     useEffect(() => {
         setNativeVersion(readNativeTotemVersion());
@@ -820,7 +794,6 @@ export default function DisplayPage() {
                         nativeWifiSsid={nativeWifiSsid}
                         screenLockPermissionActive={screenLockPermissionActive}
                         systemPaymentToneActive={systemPaymentToneActive}
-                        storeShouldStayAwake={storeShouldStayAwake}
                         localSettings={totemLocalSettings}
                         onChangeLocalSettings={setTotemLocalSettings}
                         onClose={() => setSettingsOpen(false)}
@@ -844,7 +817,6 @@ function TotemSettingsPanel({
     nativeWifiSsid,
     screenLockPermissionActive,
     systemPaymentToneActive,
-    storeShouldStayAwake,
     localSettings,
     onChangeLocalSettings,
     onClose,
@@ -861,7 +833,6 @@ function TotemSettingsPanel({
     nativeWifiSsid: string;
     screenLockPermissionActive: boolean;
     systemPaymentToneActive: boolean;
-    storeShouldStayAwake: boolean;
     localSettings: TotemLocalSettings;
     onChangeLocalSettings: (settings: TotemLocalSettings) => void;
     onClose: () => void;
@@ -905,8 +876,8 @@ function TotemSettingsPanel({
                     <StatusRow label="Administrador do dispositivo" value={screenLockPermissionActive ? 'Ativo' : 'Nao ativado'} ok={screenLockPermissionActive} />
                     <StatusRow label="Wi-Fi do aparelho" value={nativeWifiSsid || 'Nao informado'} ok={Boolean(nativeWifiSsid)} />
                     <StatusRow label="Toque do aparelho" value={systemPaymentToneActive ? 'Selecionado' : 'Tom interno'} ok={systemPaymentToneActive} />
-                    <StatusRow label="Horario da loja" value={storeShouldStayAwake ? 'Aberta ou fechando' : 'Fechada'} ok={storeShouldStayAwake} />
-                    <StatusRow label="Online com tela apagada" value="Ativo por wake lock parcial" ok />
+                    <StatusRow label="Modo Totem Pix" value="Sempre ativo" ok />
+                    <StatusRow label="Pix em primeiro plano" value="Sobrescreve tela ociosa" ok />
                 </div>
 
                 <div className="mt-5 rounded-lg border border-white/10 bg-white/5 p-4">
@@ -1059,7 +1030,6 @@ function PixView({ payment, display, now, displayToken }: { payment: PdvPixPayme
     const settings = display?.settings || {};
     const qrImage = payment.qr_code_base64 ? `data:image/png;base64,${payment.qr_code_base64}` : '';
     const isApproved = payment.status === 'approved';
-    const qrRemainingMs = getRemainingMs(payment.created_at || payment.updated_at, PIX_QR_VISIBLE_MS, now);
 
     if (isApproved) {
         return <ApprovedReceiptView payment={payment} now={now} displayToken={displayToken} />;
@@ -1080,7 +1050,7 @@ function PixView({ payment, display, now, displayToken }: { payment: PdvPixPayme
                 {settings.showPixAmount !== false && (
                     <p className="text-5xl font-black leading-none text-white sm:text-7xl">{formatCurrency(payment.amount)}</p>
                 )}
-                <p className="font-mono text-2xl font-bold text-cyan-200">{formatCountdown(qrRemainingMs)}</p>
+                <p className="font-mono text-2xl font-bold text-cyan-200">Aguardando pagamento</p>
                 {settings.showInstructions !== false && <p className="text-base font-semibold text-slate-200">Aponte a camera do banco para pagar com Pix</p>}
             </div>
         </div>

@@ -354,6 +354,18 @@ class MainActivity : Activity() {
 
     private fun showPaymentScreenNow() {
         setDisplayAwake(true)
+        try {
+            if (!webView.url.orEmpty().startsWith(displayHomeUrl)) {
+                webView.loadUrl(displayHomeUrl)
+            } else {
+                webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('mdv:force-display-refresh'))", null)
+            }
+        } catch (_: Exception) {
+            try {
+                webView.loadUrl(displayHomeUrl)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun registerDisplayToken(token: String) {
