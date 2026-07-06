@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.47-totem-black-screen-pix-wake
-date: 2026-07-05
+version: v1.2.49-totem-pix-native-monitor
+date: 2026-07-06
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260705-184318-totem-black-screen-pix-wake
+release_vps: /var/www/mdv-site/releases/20260706-025449-totem-pix-native-monitor
 branch: main
-summary: Corrige tela preta do Totem Pix para continuar recebendo Pix apos voltar das configuracoes.
+summary: Prepara Totem Pix Android 1.15 com monitoramento nativo para reacender a tela quando houver QR ativo.
 ```

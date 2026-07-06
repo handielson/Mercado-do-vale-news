@@ -18,7 +18,7 @@ assert.match(displayPage, /type:\s*'instagram'/, 'display deve incluir card de I
 assert.match(displayPage, /type:\s*'wifi'/, 'display deve incluir card de Wi-Fi');
 assert.match(displayPage, /WIFI:T:\$\{escapeWifiQrValue\(card\.security\)\};S:\$\{escapeWifiQrValue\(card\.ssid\)\};P:\$\{escapeWifiQrValue\(card\.password\)\};;/, 'QR Wi-Fi deve usar formato padrao Android/iOS');
 assert.match(displayPage, /bottom-4 left-4/, 'nome do display deve ficar no canto inferior esquerdo');
-assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.14'/, 'display deve mostrar versao visual do aplicativo');
+assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.15'/, 'display deve mostrar versao visual do aplicativo');
 assert.match(displayPage, /getDisplayVersionLabel\(display\?\.name\)/, 'display deve mostrar versao ao lado do nome');
 assert.match(displayPage, /fetch\('\/VERSION\.json', \{ cache: 'no-store' \}\)/, 'display deve buscar manifesto publico de versao sem cache');
 assert.match(displayPage, /getTotemUpdateNotice\(versionInfo, nativeVersion\)/, 'display deve calcular aviso de atualizacao do app');
@@ -56,6 +56,8 @@ assert.match(androidActivity, /getAppVersionCode/, 'ponte Android deve oferecer 
 assert.match(androidActivity, /requestScreenSleep/, 'ponte Android deve oferecer metodo para dormir a tela fora do horario da loja');
 assert.match(displayPage, /getStoreStatus/, 'display deve usar horario publico da loja para controlar energia da tela');
 assert.match(displayPage, /syncNativeDisplayPower/, 'display deve sincronizar estado de energia com o app Android');
+assert.match(displayPage, /registerNativeDisplayToken/, 'display deve registrar token no app Android para monitoramento em segundo plano');
+assert.match(displayPage, /showNativePaymentScreenNow/, 'display deve pedir ao app Android para reacender a tela quando houver Pix ativo');
 const syncPowerBody = displayPage.match(/function syncNativeDisplayPower\(shouldStayAwake: boolean\): void \{[\s\S]*?\n\}/)?.[0] || '';
 assert.doesNotMatch(syncPowerBody, /requestScreenSleep/, 'controle automatico de horario nao deve bloquear a tela e parar o polling de Pix');
 assert.match(displayPage, /function requestSleepNow\(\)[\s\S]*requestScreenSleep/, 'botao manual Apagar tela deve continuar podendo bloquear a tela');
@@ -77,6 +79,8 @@ assert.match(androidActivity, /playPaymentSuccessTone/, 'ponte Android deve expo
 assert.match(androidActivity, /ACTION_RINGTONE_PICKER/, 'ponte Android deve abrir seletor de toque do aparelho');
 assert.match(androidActivity, /openAppUpdate/, 'ponte Android deve abrir a Play Store para atualizar o app');
 assert.match(androidActivity, /returnToAppHome/, 'ponte Android deve expor retorno para tela inicial do app');
+assert.match(androidActivity, /registerDisplayToken/, 'ponte Android deve receber token do display para monitorar Pix nativamente');
+assert.match(androidActivity, /showPaymentScreenNow/, 'ponte Android deve forcar tela Pix ativa quando houver cobranca');
 assert.match(androidActivity, /private fun returnToAppHome\(\)[\s\S]*setDisplayAwake\(true\)/, 'retorno nativo deve reacender a tela para sair da tela preta');
 assert.match(androidActivity, /FLAG_ACTIVITY_REORDER_TO_FRONT/, 'retorno ao app deve trazer a activity do totem para frente');
 assert.match(androidActivity, /STREAM_MUSIC/, 'ponte Android deve tocar no canal de musica para respeitar volume audivel');

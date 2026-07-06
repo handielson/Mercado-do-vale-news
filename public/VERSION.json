@@ -1,15 +1,15 @@
 {
-    "version": "v1.2.47-totem-black-screen-pix-wake",
-    "date": "2026-07-05",
+    "version": "v1.2.49-totem-pix-native-monitor",
+    "date": "2026-07-06",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260705-184318-totem-black-screen-pix-wake",
+    "release_vps": "/var/www/mdv-site/releases/20260706-025449-totem-pix-native-monitor",
     "branch": "main",
-    "summary": "Corrige tela preta do Totem Pix para continuar recebendo Pix apos voltar das configuracoes.",
+    "summary": "Mantem monitoramento nativo do Totem Pix para reacender a tela quando houver QR ativo.",
     "totem_pix_android": {
-        "latest_version_name": "1.14",
-        "latest_version_code": 114,
-        "minimum_recommended_version_name": "1.14",
-        "update_message": "V1.14\nMelhorias | implementacoes\n- Corrige tela preta apos voltar das configuracoes do Totem Pix\n- Mantem o polling do Pix ativo quando a loja esta fechada\n- Pix recebido volta a reacender a tela do totem\n- Botao Apagar tela continua disponivel como acao manual\n- Mantem botao Voltar para tela inicial do app nas configuracoes",
+        "latest_version_name": "1.15",
+        "latest_version_code": 115,
+        "minimum_recommended_version_name": "1.15",
+        "update_message": "V1.15\nMelhorias | implementacoes\n- Adiciona monitoramento nativo do Pix em servico de primeiro plano\n- Registra o token do display no app Android para continuar verificando cobrancas\n- Reacende e reabre a tela do Totem Pix quando houver QR pendente ou aprovado\n- Declara permissoes modernas de foreground service para Android 14/15\n- Mantem a ponte do WebView para forcar a tela de pagamento ativa",
         "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
     }
 }

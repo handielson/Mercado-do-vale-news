@@ -10,8 +10,8 @@ const mainActivity = readFileSync('android/totem-pix/app/src/main/java/br/com/me
 
 assert.match(buildGradle, /applicationId 'br\.com\.mercadodovale\.totempix'/, 'package name deve ser estavel para Google Play');
 assert.match(buildGradle, /targetSdk 35/, 'targetSdk deve atender a exigencia atual do Google Play');
-assert.match(buildGradle, /versionCode 114/, 'versionCode deve estar preparado para V1.14');
-assert.match(buildGradle, /versionName '1\.14'/, 'versionName deve refletir V1.14');
+assert.match(buildGradle, /versionCode 115/, 'versionCode deve estar preparado para V1.15');
+assert.match(buildGradle, /versionName '1\.15'/, 'versionName deve refletir V1.15');
 assert.match(buildGradle, /keystore\.properties/, 'release signing deve ler keystore.properties local');
 assert.match(buildGradle, /storeFile rootProject\.file/, 'keystore deve ser resolvida relativa a raiz do projeto Android');
 assert.match(buildGradle, /signingConfig signingConfigs\.release/, 'build release deve usar signingConfig release');
@@ -23,11 +23,15 @@ assert.match(playDoc, /app-release\.aab/, 'documentacao deve indicar o AAB para 
 assert.match(androidManifest, /android:icon="@mipmap\/ic_launcher"/, 'app deve declarar icone no launcher Android');
 assert.match(androidManifest, /android:roundIcon="@mipmap\/ic_launcher_round"/, 'app deve declarar icone redondo no launcher Android');
 assert.match(androidManifest, /WAKE_LOCK/, 'app deve declarar WAKE_LOCK para manter rede ativa no totem');
+assert.match(androidManifest, /FOREGROUND_SERVICE/, 'app deve declarar foreground service para monitorar Pix em segundo plano');
+assert.match(androidManifest, /FOREGROUND_SERVICE_DATA_SYNC/, 'app deve declarar permissao moderna do tipo dataSync');
 assert.match(androidManifest, /BIND_DEVICE_ADMIN/, 'app deve declarar receiver de administrador para apagar a tela no fechamento');
 assert.match(mainActivity, /PARTIAL_WAKE_LOCK/, 'app deve manter CPU\/rede ativas mesmo se a tela bloquear');
 assert.match(mainActivity, /FLAG_KEEP_SCREEN_ON/, 'app deve tentar impedir bloqueio da tela durante exibicao');
 assert.match(mainActivity, /requestScreenSleep/, 'ponte Android deve permitir apagar a tela quando a loja estiver fechada');
 assert.match(mainActivity, /setDisplayAwake/, 'ponte Android deve voltar a manter a tela ligada quando a loja abrir');
+assert.match(mainActivity, /registerDisplayToken/, 'ponte Android deve registrar token para monitoramento nativo do Pix');
+assert.match(mainActivity, /showPaymentScreenNow/, 'ponte Android deve permitir reacender a tela de pagamento');
 assert.match(mainActivity, /DevicePolicyManager/, 'app deve usar DevicePolicyManager para bloqueio imediato quando autorizado');
 assert.match(mainActivity, /playPaymentSuccessTone/, 'ponte Android deve tocar som de pagamento aprovado');
 assert.match(mainActivity, /ToneGenerator/, 'app deve usar som nativo para confirmacao de pagamento');

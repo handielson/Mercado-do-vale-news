@@ -15,7 +15,7 @@ const PIX_QR_VISIBLE_MS = 5 * 60 * 1000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
-const DISPLAY_APP_VERSION = 'V1.14';
+const DISPLAY_APP_VERSION = 'V1.15';
 const STORE_SLEEP_CHECK_INTERVAL_MS = 60 * 1000;
 const TOTEM_LOCAL_SETTINGS_STORAGE_KEY = '@mdv_totem_local_settings';
 
@@ -37,6 +37,8 @@ declare global {
             getAppVersionCode?: () => number;
             getWifiSsid?: () => string;
             setDisplayAwake?: (awake: boolean) => void;
+            registerDisplayToken?: (token: string) => void;
+            showPaymentScreenNow?: () => void;
             requestScreenSleep?: () => void;
             requestScreenLockPermission?: () => void;
             isScreenLockPermissionActive?: () => boolean;
@@ -360,6 +362,22 @@ function syncNativeDisplayPower(shouldStayAwake: boolean): void {
     }
 }
 
+function registerNativeDisplayToken(token: string): void {
+    try {
+        window.MdvTotem?.registerDisplayToken?.(token);
+    } catch {
+        // Native background monitoring is optional outside the Android app.
+    }
+}
+
+function showNativePaymentScreenNow(): void {
+    try {
+        window.MdvTotem?.showPaymentScreenNow?.();
+    } catch {
+        // The React view still renders the Pix screen when the native bridge is unavailable.
+    }
+}
+
 function ensureNativeScreenLockPermission(): void {
     try {
         const bridge = window.MdvTotem;
@@ -506,9 +524,11 @@ export default function DisplayPage() {
 
     useEffect(() => {
         if (!token) {
+            registerNativeDisplayToken('');
             setLoading(false);
             return;
         }
+        registerNativeDisplayToken(token);
         loadDisplayState(token);
         const interval = setInterval(() => {
             loadDisplayState(token);
@@ -556,6 +576,7 @@ export default function DisplayPage() {
     useEffect(() => {
         const shouldStayAwake = showPix || storeShouldStayAwake;
         syncNativeDisplayPower(shouldStayAwake);
+        if (showPix) showNativePaymentScreenNow();
         if (!shouldStayAwake) ensureNativeScreenLockPermission();
     }, [showPix, storeShouldStayAwake]);
 

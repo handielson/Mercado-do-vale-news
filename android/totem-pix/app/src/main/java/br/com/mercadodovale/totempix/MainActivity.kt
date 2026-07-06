@@ -63,6 +63,16 @@ class MainActivity : Activity() {
         requestWifiPermissionIfNeeded()
 
         webView.loadUrl(displayHomeUrl)
+        if (intent?.action == TotemPixMonitorService.ACTION_SHOW_PAYMENT_SCREEN) {
+            showPaymentScreenNow()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        if (intent?.action == TotemPixMonitorService.ACTION_SHOW_PAYMENT_SCREEN) {
+            showPaymentScreenNow()
+        }
     }
 
     override fun onResume() {
@@ -109,6 +119,10 @@ class MainActivity : Activity() {
     private fun setDisplayAwake(awake: Boolean) {
         displayAwakeEnabled = awake
         if (awake) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true)
+                setTurnScreenOn(true)
+            }
             window.addFlags(
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
                     or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
@@ -125,6 +139,10 @@ class MainActivity : Activity() {
 
     private fun allowDisplayToSleep(lockNow: Boolean) {
         displayAwakeEnabled = false
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(false)
+            setTurnScreenOn(false)
+        }
         window.clearFlags(
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
                 or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
@@ -334,6 +352,36 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun showPaymentScreenNow() {
+        setDisplayAwake(true)
+
+        try {
+            webView.loadUrl(displayHomeUrl)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun registerDisplayToken(token: String) {
+        val safeToken = token.trim()
+        getSharedPreferences(TotemPixMonitorService.PREFERENCES_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(TotemPixMonitorService.DISPLAY_TOKEN_KEY, safeToken)
+            .apply()
+
+        if (safeToken.isEmpty()) return
+
+        try {
+            val intent = Intent(this, TotemPixMonitorService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+        } catch (_: Exception) {
+            // Web polling still works when Android refuses to start the foreground service.
+        }
+    }
+
     inner class TotemWebViewClient : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
             val url = request?.url?.toString() ?: return false
@@ -391,6 +439,16 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun setDisplayAwake(awake: Boolean) {
             runOnUiThread { this@MainActivity.setDisplayAwake(awake) }
+        }
+
+        @JavascriptInterface
+        fun registerDisplayToken(token: String) {
+            runOnUiThread { this@MainActivity.registerDisplayToken(token) }
+        }
+
+        @JavascriptInterface
+        fun showPaymentScreenNow() {
+            runOnUiThread { this@MainActivity.showPaymentScreenNow() }
         }
 
         @JavascriptInterface
