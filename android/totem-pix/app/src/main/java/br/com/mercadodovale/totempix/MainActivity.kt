@@ -3,6 +3,7 @@ package br.com.mercadodovale.totempix
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -18,6 +19,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.media.RingtoneManager
+import android.provider.Settings
 import android.view.View
 import android.view.WindowManager
 import android.webkit.WebSettings
@@ -318,6 +320,68 @@ class MainActivity : Activity() {
         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), notificationPermissionRequest)
     }
 
+    private fun areNotificationsEnabled(): Boolean {
+        return try {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.areNotificationsEnabled()
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    private fun openNotificationPermissionSettings() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), notificationPermissionRequest)
+                return
+            }
+
+            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+            openAppPermissionSettings()
+        }
+    }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        return try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            powerManager.isIgnoringBatteryOptimizations(packageName)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun requestBatteryOptimizationPermission() {
+        try {
+            if (isIgnoringBatteryOptimizations()) return
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {
+                openAppPermissionSettings()
+            }
+        }
+    }
+
+    private fun openAppPermissionSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+        }
+    }
+
     private fun openExternalUrl(url: String) {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -479,6 +543,31 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun isScreenLockPermissionActive(): Boolean {
             return this@MainActivity.isScreenLockPermissionActive()
+        }
+
+        @JavascriptInterface
+        fun areNotificationsEnabled(): Boolean {
+            return this@MainActivity.areNotificationsEnabled()
+        }
+
+        @JavascriptInterface
+        fun requestNotificationPermission() {
+            runOnUiThread { this@MainActivity.openNotificationPermissionSettings() }
+        }
+
+        @JavascriptInterface
+        fun isIgnoringBatteryOptimizations(): Boolean {
+            return this@MainActivity.isIgnoringBatteryOptimizations()
+        }
+
+        @JavascriptInterface
+        fun requestBatteryOptimizationPermission() {
+            runOnUiThread { this@MainActivity.requestBatteryOptimizationPermission() }
+        }
+
+        @JavascriptInterface
+        fun openAppPermissionSettings() {
+            runOnUiThread { this@MainActivity.openAppPermissionSettings() }
         }
 
         @JavascriptInterface

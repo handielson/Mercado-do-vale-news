@@ -1,15 +1,15 @@
 {
-    "version": "v1.2.60-totem-pix-foreground-recovery",
+    "version": "v1.2.61-totem-pix-permission-panel",
     "date": "2026-07-06",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260706-175457-totem-pix-foreground-recovery",
+    "release_vps": "/var/www/mdv-site/releases/20260706-180908-totem-pix-permission-panel",
     "branch": "main",
-    "summary": "Faz o Totem Pix voltar para frente quando outro app estiver aberto.",
+    "summary": "Adiciona painel de liberacao de notificacoes e bateria no Totem Pix.",
     "totem_pix_android": {
-        "latest_version_name": "1.20",
-        "latest_version_code": 120,
-        "minimum_recommended_version_name": "1.20",
-        "update_message": "V1.20\nMelhorias | implementacoes\n- Totem Pix tenta voltar automaticamente para frente quando outro app estiver aberto\n- Monitor nativo publica alerta de Pix ativo com acao direta para abrir o QR Code\n- App solicita permissao de notificacao no Android moderno\n- Repeticao de tentativa de foco reduzida para 10 segundos durante Pix ativo",
+        "latest_version_name": "1.21",
+        "latest_version_code": 121,
+        "minimum_recommended_version_name": "1.21",
+        "update_message": "V1.21\nMelhorias | implementacoes\n- Painel do Totem mostra status de Notificacoes e Bateria sem restricao\n- Botoes para abrir liberacao de notificacoes, bateria e permissoes do app\n- Android solicita/abre permissao de notificacao quando o sistema permite\n- Android solicita liberacao de economia de bateria para manter o monitor ativo",
         "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
     }
 }

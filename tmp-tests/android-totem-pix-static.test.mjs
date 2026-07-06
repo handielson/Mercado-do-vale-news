@@ -22,6 +22,7 @@ assert.match(manifest, /android\.permission\.FOREGROUND_SERVICE/, 'Android app m
 assert.match(manifest, /android\.permission\.FOREGROUND_SERVICE_DATA_SYNC/, 'Android app must declare the dataSync foreground service permission on modern Android');
 assert.match(manifest, /android\.permission\.POST_NOTIFICATIONS/, 'Android app must request notification permission for active Pix alerts on Android 13+');
 assert.match(manifest, /android\.permission\.REORDER_TASKS/, 'Android app must be able to move its own totem task back to the front');
+assert.match(manifest, /android\.permission\.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS/, 'Android app must let operator allowlist battery optimization for kiosk polling');
 assert.match(manifest, /android:name="\.TotemPixMonitorService"/, 'Android app must register the native Pix monitor service');
 assert.match(manifest, /android:foregroundServiceType="dataSync"/, 'Pix monitor service must declare its foreground service type');
 assert.match(manifest, /android:screenOrientation="portrait"/, 'Totem phone should default to portrait');
@@ -33,8 +34,8 @@ assert.match(activity, /showPaymentScreenNow/, 'Totem should expose a native bri
 assert.match(activity, /returnToAppHome/, 'Totem should expose a native return-to-app-home bridge');
 assert.match(activity, /FLAG_ACTIVITY_REORDER_TO_FRONT/, 'Totem should bring its activity to the front when returning to app');
 assert.match(activity, /private fun returnToAppHome\(\)[\s\S]*setDisplayAwake\(true\)/, 'Totem should wake the screen when returning to app home');
-assert.match(buildGradle, /versionCode 120/, 'Android upload versionCode must be bumped for the next Play upload');
-assert.match(buildGradle, /versionName '1\.20'/, 'Android versionName must describe the next app release');
+assert.match(buildGradle, /versionCode 121/, 'Android upload versionCode must be bumped for the next Play upload');
+assert.match(buildGradle, /versionName '1\.21'/, 'Android versionName must describe the next app release');
 
 const monitorService = readFileSync('android/totem-pix/app/src/main/java/br/com/mercadodovale/totempix/TotemPixMonitorService.kt', 'utf8');
 assert.match(monitorService, /startForeground/, 'Pix monitor must run as a foreground service');
@@ -58,5 +59,13 @@ const showPaymentScreenNowBody = activity.match(/private fun showPaymentScreenNo
 assert.match(showPaymentScreenNowBody, /setDisplayAwake\(true\)/, 'native wake must always turn the totem screen on');
 assert.match(showPaymentScreenNowBody, /mdv:force-display-refresh/, 'native wake must force the WebView to refresh Pix state immediately');
 assert.match(showPaymentScreenNowBody, /if \(!webView\.url\.orEmpty\(\)\.startsWith\(displayHomeUrl\)\)/, 'native wake must only navigate back when WebView left the display app');
+
+assert.match(activity, /areNotificationsEnabled/, 'native bridge must report notification permission status');
+assert.match(activity, /requestNotificationPermission/, 'native bridge must explicitly open or request notification permission');
+assert.match(activity, /ACTION_APP_NOTIFICATION_SETTINGS/, 'notification permission flow must open the app notification settings when needed');
+assert.match(activity, /isIgnoringBatteryOptimizations/, 'native bridge must report battery optimization allowlist status');
+assert.match(activity, /requestBatteryOptimizationPermission/, 'native bridge must explicitly request battery optimization allowlist');
+assert.match(activity, /ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS/, 'battery flow must use Android battery optimization request intent');
+assert.match(activity, /openAppPermissionSettings/, 'native bridge must open the app permission details screen');
 
 console.log('android totem pix static checks passed');

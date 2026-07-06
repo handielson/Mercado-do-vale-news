@@ -13,7 +13,7 @@ const POLLING_INTERVAL_MS = 5000;
 const APPROVED_RECEIPT_VISIBLE_MS = 10 * 60 * 1000;
 const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
-const DISPLAY_APP_VERSION = 'V1.20';
+const DISPLAY_APP_VERSION = 'V1.21';
 const TOTEM_LOCAL_SETTINGS_STORAGE_KEY = '@mdv_totem_local_settings';
 const BRAZIL_TIME_ZONE = 'America/Sao_Paulo';
 
@@ -40,6 +40,11 @@ declare global {
             requestScreenSleep?: () => void;
             requestScreenLockPermission?: () => void;
             isScreenLockPermissionActive?: () => boolean;
+            areNotificationsEnabled?: () => boolean;
+            requestNotificationPermission?: () => void;
+            isIgnoringBatteryOptimizations?: () => boolean;
+            requestBatteryOptimizationPermission?: () => void;
+            openAppPermissionSettings?: () => void;
             playPaymentSuccessTone?: (tone: string, volume?: number) => void;
             chooseSystemPaymentTone?: () => void;
             clearSystemPaymentTone?: () => void;
@@ -478,6 +483,8 @@ export default function DisplayPage() {
     const [nativeVersion, setNativeVersion] = useState<{ name: string; code: number } | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [screenLockPermissionActive, setScreenLockPermissionActive] = useState(false);
+    const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+    const [batteryOptimizationIgnored, setBatteryOptimizationIgnored] = useState(false);
     const [nativeWifiSsid, setNativeWifiSsid] = useState('');
     const [systemPaymentToneActive, setSystemPaymentToneActive] = useState(false);
     const [totemLocalSettings, setTotemLocalSettings] = useState<TotemLocalSettings>(() => readTotemLocalSettings());
@@ -658,10 +665,14 @@ export default function DisplayPage() {
             const bridge = window.MdvTotem;
             setNativeVersion(readNativeTotemVersion());
             setScreenLockPermissionActive(Boolean(bridge?.isScreenLockPermissionActive?.()));
+            setNotificationsEnabled(Boolean(bridge?.areNotificationsEnabled?.()));
+            setBatteryOptimizationIgnored(Boolean(bridge?.isIgnoringBatteryOptimizations?.()));
             setNativeWifiSsid(String(bridge?.getWifiSsid?.() || '').trim());
             setSystemPaymentToneActive(Boolean(bridge?.hasSystemPaymentTone?.()));
         } catch {
             setScreenLockPermissionActive(false);
+            setNotificationsEnabled(false);
+            setBatteryOptimizationIgnored(false);
             setNativeWifiSsid('');
             setSystemPaymentToneActive(false);
         }
@@ -670,6 +681,20 @@ export default function DisplayPage() {
     function requestAdminPermission() {
         window.MdvTotem?.requestScreenLockPermission?.();
         window.setTimeout(refreshNativeSettingsStatus, 1000);
+    }
+
+    function requestNotificationPermission() {
+        window.MdvTotem?.requestNotificationPermission?.();
+        window.setTimeout(refreshNativeSettingsStatus, 1000);
+    }
+
+    function requestBatteryOptimizationPermission() {
+        window.MdvTotem?.requestBatteryOptimizationPermission?.();
+        window.setTimeout(refreshNativeSettingsStatus, 1000);
+    }
+
+    function openAppPermissionSettings() {
+        window.MdvTotem?.openAppPermissionSettings?.();
     }
 
     function requestSleepNow() {
@@ -808,12 +833,17 @@ export default function DisplayPage() {
                         nativeVersion={nativeVersion}
                         nativeWifiSsid={nativeWifiSsid}
                         screenLockPermissionActive={screenLockPermissionActive}
+                        notificationsEnabled={notificationsEnabled}
+                        batteryOptimizationIgnored={batteryOptimizationIgnored}
                         systemPaymentToneActive={systemPaymentToneActive}
                         localSettings={totemLocalSettings}
                         onChangeLocalSettings={setTotemLocalSettings}
                         onClose={() => setSettingsOpen(false)}
                         onRefresh={refreshNativeSettingsStatus}
                         onRequestAdminPermission={requestAdminPermission}
+                        onRequestNotificationPermission={requestNotificationPermission}
+                        onRequestBatteryOptimizationPermission={requestBatteryOptimizationPermission}
+                        onOpenAppPermissionSettings={openAppPermissionSettings}
                         onRequestSleepNow={requestSleepNow}
                         onChooseSystemPaymentTone={chooseSystemPaymentTone}
                         onClearSystemPaymentTone={clearSystemPaymentTone}
@@ -831,12 +861,17 @@ function TotemSettingsPanel({
     nativeVersion,
     nativeWifiSsid,
     screenLockPermissionActive,
+    notificationsEnabled,
+    batteryOptimizationIgnored,
     systemPaymentToneActive,
     localSettings,
     onChangeLocalSettings,
     onClose,
     onRefresh,
     onRequestAdminPermission,
+    onRequestNotificationPermission,
+    onRequestBatteryOptimizationPermission,
+    onOpenAppPermissionSettings,
     onRequestSleepNow,
     onChooseSystemPaymentTone,
     onClearSystemPaymentTone,
@@ -847,12 +882,17 @@ function TotemSettingsPanel({
     nativeVersion: { name: string; code: number } | null;
     nativeWifiSsid: string;
     screenLockPermissionActive: boolean;
+    notificationsEnabled: boolean;
+    batteryOptimizationIgnored: boolean;
     systemPaymentToneActive: boolean;
     localSettings: TotemLocalSettings;
     onChangeLocalSettings: (settings: TotemLocalSettings) => void;
     onClose: () => void;
     onRefresh: () => void;
     onRequestAdminPermission: () => void;
+    onRequestNotificationPermission: () => void;
+    onRequestBatteryOptimizationPermission: () => void;
+    onOpenAppPermissionSettings: () => void;
     onRequestSleepNow: () => void;
     onChooseSystemPaymentTone: () => void;
     onClearSystemPaymentTone: () => void;
@@ -888,6 +928,8 @@ function TotemSettingsPanel({
                 <div className="mt-5 grid gap-3 text-sm font-semibold">
                     <StatusRow label="Ponte Android" value={nativeBridgeAvailable ? 'Conectada' : 'Nao detectada'} ok={nativeBridgeAvailable} />
                     <StatusRow label="Versao instalada" value={nativeVersion ? `${nativeVersion.name || '-'} / ${nativeVersion.code || '-'}` : 'Nao informada'} ok={Boolean(nativeVersion)} />
+                    <StatusRow label="Notificacoes" value={notificationsEnabled ? 'Liberadas' : 'Revisar permissao'} ok={notificationsEnabled} />
+                    <StatusRow label="Bateria sem restricao" value={batteryOptimizationIgnored ? 'Liberada' : 'Revisar economia'} ok={batteryOptimizationIgnored} />
                     <StatusRow label="Administrador do dispositivo" value={screenLockPermissionActive ? 'Ativo' : 'Nao ativado'} ok={screenLockPermissionActive} />
                     <StatusRow label="Wi-Fi do aparelho" value={nativeWifiSsid || 'Nao informado'} ok={Boolean(nativeWifiSsid)} />
                     <StatusRow label="Toque do aparelho" value={systemPaymentToneActive ? 'Selecionado' : 'Tom interno'} ok={systemPaymentToneActive} />
@@ -972,6 +1014,22 @@ function TotemSettingsPanel({
                         </span>
                     </ActionButton>
                     <ActionButton
+                        actionId="notifications"
+                        activeAction={activeAction}
+                        onClick={() => runPanelAction('notifications', 'Tela de notificacoes aberta.', onRequestNotificationPermission, 900)}
+                        className="bg-cyan-500 px-3 py-3 text-white"
+                    >
+                        Liberar notificacoes
+                    </ActionButton>
+                    <ActionButton
+                        actionId="battery"
+                        activeAction={activeAction}
+                        onClick={() => runPanelAction('battery', 'Tela de bateria aberta.', onRequestBatteryOptimizationPermission, 900)}
+                        className="bg-amber-500 px-3 py-3 text-slate-950"
+                    >
+                        Liberar bateria
+                    </ActionButton>
+                    <ActionButton
                         actionId="admin"
                         activeAction={activeAction}
                         onClick={() => runPanelAction('admin', 'Solicitacao de admin enviada.', onRequestAdminPermission, 900)}
@@ -980,10 +1038,18 @@ function TotemSettingsPanel({
                         Ativar admin
                     </ActionButton>
                     <ActionButton
+                        actionId="app-settings"
+                        activeAction={activeAction}
+                        onClick={() => runPanelAction('app-settings', 'Permissoes do app abertas.', onOpenAppPermissionSettings, 700)}
+                        className="bg-indigo-500 px-3 py-3 text-white"
+                    >
+                        Permissoes do app
+                    </ActionButton>
+                    <ActionButton
                         actionId="sleep"
                         activeAction={activeAction}
                         onClick={() => runPanelAction('sleep', 'Comando para apagar a tela enviado.', onRequestSleepNow, 600)}
-                        className="bg-slate-700 px-3 py-3 text-white"
+                        className="col-span-2 bg-slate-700 px-3 py-3 text-white"
                     >
                         Apagar tela
                     </ActionButton>
