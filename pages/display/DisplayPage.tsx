@@ -15,6 +15,7 @@ const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
 const DISPLAY_APP_VERSION = 'V1.19';
 const TOTEM_LOCAL_SETTINGS_STORAGE_KEY = '@mdv_totem_local_settings';
+const BRAZIL_TIME_ZONE = 'America/Sao_Paulo';
 
 type TotemVersionInfo = {
     version?: string;
@@ -93,6 +94,20 @@ function saveDisplayToken(token: string): void {
 function clearDisplayToken(): void {
     if (typeof localStorage === 'undefined') return;
     localStorage.removeItem(PDV_DISPLAY_TOKEN_STORAGE_KEY);
+}
+
+function formatBrazilTime(value: Date | string | number): string {
+    return new Date(value).toLocaleTimeString('pt-BR', {
+        timeZone: BRAZIL_TIME_ZONE,
+        hour12: false,
+    });
+}
+
+function formatBrazilDateTime(value: Date | string | number): string {
+    return new Date(value).toLocaleString('pt-BR', {
+        timeZone: BRAZIL_TIME_ZONE,
+        hour12: false,
+    });
 }
 
 export function isRevokedDisplayTokenError(message: string): boolean {
@@ -749,7 +764,7 @@ export default function DisplayPage() {
                 ) : (
                     <header className="flex flex-shrink-0 items-center justify-end gap-4 text-sm text-slate-300">
                         <div className="text-right">
-                            <p>{lastUpdatedAt ? `Atualizado ${lastUpdatedAt.toLocaleTimeString('pt-BR')}` : 'Conectando'}</p>
+                            <p>{lastUpdatedAt ? `Atualizado ${formatBrazilTime(lastUpdatedAt)}` : 'Conectando'}</p>
                             {error && <p className="text-amber-300"><WifiOff className="mr-1 inline h-4 w-4" />{error}</p>}
                         </div>
                     </header>
@@ -1118,7 +1133,7 @@ function ApprovedReceiptView({ payment, now, displayToken }: { payment: PdvPixPa
                     <div className="grid gap-2 rounded-lg bg-slate-100 p-3 text-left text-sm font-semibold text-slate-700">
                         <p>Pagamento: Pix</p>
                         <p>Autenticacao: {receipt?.authentication_code || payment.mercado_pago_payment_id || payment.id}</p>
-                        <p>Data/hora: {receipt?.approved_at_label || new Date(payment.approved_at || payment.updated_at || payment.created_at || Date.now()).toLocaleString('pt-BR')}</p>
+                        <p>Data/hora: {receipt?.approved_at_label || formatBrazilDateTime(payment.approved_at || payment.updated_at || payment.created_at || Date.now())}</p>
                     </div>
                 </div>
             </div>

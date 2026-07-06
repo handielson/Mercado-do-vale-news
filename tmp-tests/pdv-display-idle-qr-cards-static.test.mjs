@@ -20,6 +20,10 @@ assert.match(displayPage, /WIFI:T:\$\{escapeWifiQrValue\(card\.security\)\};S:\$
 assert.match(displayPage, /bottom-4 left-4/, 'nome do display deve ficar no canto inferior esquerdo');
 assert.match(displayPage, /DISPLAY_APP_VERSION = 'V1\.19'/, 'display deve mostrar versao visual do aplicativo');
 assert.match(displayPage, /getDisplayVersionLabel\(display\?\.name\)/, 'display deve mostrar versao ao lado do nome');
+assert.match(displayPage, /BRAZIL_TIME_ZONE = 'America\/Sao_Paulo'/, 'display deve fixar o fuso do relogio no horario do Brasil');
+assert.match(displayPage, /function formatBrazilTime[\s\S]*timeZone: BRAZIL_TIME_ZONE/, 'display deve formatar o horario do topo com fuso de Sao Paulo');
+assert.match(displayPage, /Atualizado \$\{formatBrazilTime\(lastUpdatedAt\)\}/, 'relogio do topo deve usar formatador do Brasil');
+assert.match(displayPage, /function formatBrazilDateTime[\s\S]*timeZone: BRAZIL_TIME_ZONE/, 'comprovante deve ter fallback de data/hora no fuso de Sao Paulo');
 assert.match(displayPage, /fetch\('\/VERSION\.json', \{ cache: 'no-store' \}\)/, 'display deve buscar manifesto publico de versao sem cache');
 assert.match(displayPage, /getTotemUpdateNotice\(versionInfo, nativeVersion\)/, 'display deve calcular aviso de atualizacao do app');
 assert.match(displayPage, /Atualizacao disponivel/, 'display deve ter mensagem de atualizacao disponivel');
