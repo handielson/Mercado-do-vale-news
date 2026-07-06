@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.49-totem-pix-native-monitor
+version: v1.2.50-totem-pix-android-116
 date: 2026-07-06
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260706-025449-totem-pix-native-monitor
+release_vps: /var/www/mdv-site/releases/20260706-030512-totem-pix-android-116
 branch: main
-summary: Prepara Totem Pix Android 1.15 com monitoramento nativo para reacender a tela quando houver QR ativo.
+summary: Atualiza Totem Pix Android para 1.16 com versionCode 116 para aceite no Google Play.
 ```

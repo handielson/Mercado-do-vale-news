@@ -1,15 +1,15 @@
 {
-    "version": "v1.2.49-totem-pix-native-monitor",
+    "version": "v1.2.50-totem-pix-android-116",
     "date": "2026-07-06",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260706-025449-totem-pix-native-monitor",
+    "release_vps": "/var/www/mdv-site/releases/20260706-030512-totem-pix-android-116",
     "branch": "main",
-    "summary": "Mantem monitoramento nativo do Totem Pix para reacender a tela quando houver QR ativo.",
+    "summary": "Atualiza Totem Pix Android para versionCode 116 para aceite no Google Play.",
     "totem_pix_android": {
-        "latest_version_name": "1.15",
-        "latest_version_code": 115,
-        "minimum_recommended_version_name": "1.15",
-        "update_message": "V1.15\nMelhorias | implementacoes\n- Adiciona monitoramento nativo do Pix em servico de primeiro plano\n- Registra o token do display no app Android para continuar verificando cobrancas\n- Reacende e reabre a tela do Totem Pix quando houver QR pendente ou aprovado\n- Declara permissoes modernas de foreground service para Android 14/15\n- Mantem a ponte do WebView para forcar a tela de pagamento ativa",
+        "latest_version_name": "1.16",
+        "latest_version_code": 116,
+        "minimum_recommended_version_name": "1.16",
+        "update_message": "V1.16\nMelhorias | implementacoes\n- Atualiza o versionCode para 116 para novo envio no Google Play\n- Mantem o monitoramento nativo do Pix em servico de primeiro plano\n- Continua reacendendo e reabrindo a tela do Totem Pix quando houver QR pendente ou aprovado\n- Mantem as permissoes modernas de foreground service para Android 14/15",
         "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
     }
 }
