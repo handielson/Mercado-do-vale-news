@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.51-totem-pix-qr-no-blink
+version: v1.2.52-totem-pix-android-118
 date: 2026-07-06
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260706-031344-totem-pix-qr-no-blink
+release_vps: /var/www/mdv-site/releases/20260706-032344-totem-pix-android-118
 branch: main
-summary: Corrige piscada do QR Pix no Totem Android e prepara AAB 1.17 com versionCode 117.
+summary: Gera Totem Pix Android 1.18 com versionCode 118 para nova release Google Play.
 ```
