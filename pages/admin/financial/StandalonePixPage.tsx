@@ -31,6 +31,8 @@ function buildBrazilWhatsAppPhone(value: string): string {
   return local ? `55${local}` : '';
 }
 
+const STANDALONE_PIX_STATUS_POLLING_MS = 3000;
+
 export default function StandalonePixPage() {
   const [amount, setAmount] = React.useState('');
   const [description, setDescription] = React.useState('Pix avulso Mercado do Vale');
@@ -45,6 +47,7 @@ export default function StandalonePixPage() {
   const [displays, setDisplays] = React.useState<PdvDisplay[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [search, setSearch] = React.useState('');
+  const approvedToastRef = React.useRef('');
 
   const displayOptions = React.useMemo(
     () => displays.filter((display) => display.is_active && (display.type === 'cashier' || display.type === 'hybrid')),
@@ -66,6 +69,33 @@ export default function StandalonePixPage() {
       toast.error('Erro ao carregar Pix avulso');
     });
   }, [loadData]);
+
+  React.useEffect(() => {
+    if (!currentPix || !isStandalonePixPayable(currentPix)) return;
+    let cancelled = false;
+
+    async function pollCurrentPixStatus() {
+      try {
+        const updated = await standalonePixService.refreshStatus(currentPix.id);
+        if (cancelled) return;
+        setCurrentPix(updated);
+        setPayments((items) => items.map((item) => item.id === updated.id ? updated : item));
+        if (updated.status === 'approved' && approvedToastRef.current !== updated.id) {
+          approvedToastRef.current = updated.id;
+          toast.success('Pagamento aprovado');
+          void loadData();
+        }
+      } catch (error) {
+        console.error('Erro ao monitorar Pix avulso:', error);
+      }
+    }
+
+    const interval = window.setInterval(pollCurrentPixStatus, STANDALONE_PIX_STATUS_POLLING_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [currentPix?.id, currentPix?.status, loadData]);
 
   React.useEffect(() => {
     const query = contactSearch.trim();

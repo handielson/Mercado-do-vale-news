@@ -31,6 +31,7 @@ function assertBackend(source, label) {
     'cash_closing_id',
     'Cancelado por falta de pagamento',
     'clearDisplayActivePixIfMatches',
+    'refreshStandalonePixMercadoPagoStatus',
     'Pix aprovado nao pode ser cancelado',
   ]) {
     assert.ok(source.includes(snippet), `${label} must include ${snippet}`);
@@ -55,6 +56,24 @@ function assertBackend(source, label) {
     source,
     /fastify\.get\('\/google-contacts\/search', \{ preHandler: requireSyncKey \}/,
     `${label} must protect Google Contacts search with sync key`
+  );
+
+  const standaloneProcessorStart = source.indexOf('async function processStandalonePixMercadoPagoPayment(payment)');
+  const standaloneProcessorEnd = source.indexOf('async function processPdvPixMercadoPagoPayment(payment)', standaloneProcessorStart);
+  const standaloneProcessorBlock = source.slice(standaloneProcessorStart, standaloneProcessorEnd);
+  assert.doesNotMatch(
+    standaloneProcessorBlock,
+    /clearDisplayActivePixIfMatches/,
+    `${label} must not clear standalone Pix display immediately after approval`
+  );
+
+  const publicRouteStart = source.indexOf("fastify.get('/pix/public/:token'");
+  const publicRouteEnd = source.indexOf("fastify.post('/pdv/displays/:displayId/active-pix'", publicRouteStart);
+  const publicRouteBlock = source.slice(publicRouteStart, publicRouteEnd);
+  assert.match(
+    publicRouteBlock,
+    /refreshStandalonePixMercadoPagoStatus\(current\)/,
+    `${label} public Pix route must refresh Mercado Pago status instead of depending only on webhook`
   );
 }
 

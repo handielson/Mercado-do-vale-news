@@ -3501,8 +3501,28 @@ async function processStandalonePixMercadoPagoPayment(payment) {
      WHERE id = ?`,
     [paymentId, JSON.stringify(payment), current.id]
   );
-  await clearDisplayActivePixIfMatches(current.id);
   return { status: 200, body: { message: 'standalone pix approved', pix_payment_id: current.id } };
+}
+
+async function refreshStandalonePixMercadoPagoStatus(current) {
+  if (!current?.mercado_pago_payment_id) return current;
+  if (normalizePdvPixStatus(current.status) === 'approved') return current;
+  const mp = await getPdvMercadoPagoAccessToken();
+  if (!mp?.accessToken) return current;
+
+  const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(current.mercado_pago_payment_id)}`, {
+    headers: { Authorization: `Bearer ${mp.accessToken}` },
+  });
+  const raw = await response.json().catch(() => ({}));
+  if (!response.ok) return current;
+
+  const status = normalizePdvPixStatus(raw.status);
+  await pool.query(
+    'UPDATE pdv_pix_payments SET status = ?, raw_response_json = ?, approved_at = IF(? = "approved", COALESCE(approved_at, CURRENT_TIMESTAMP), approved_at), cancel_reason = IF(? = "approved", NULL, cancel_reason), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [status, JSON.stringify(raw), status, status, current.id]
+  );
+  const [updatedRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [current.id]);
+  return updatedRows[0] || current;
 }
 
 async function processPdvPixMercadoPagoPayment(payment) {
@@ -24278,8 +24298,10 @@ fastify.get('/pix/standalone', { preHandler: requireSyncKey }, async (req) => {
 
 fastify.get('/pix/standalone/:id/status', { preHandler: requireSyncKey }, async (req, reply) => {
   const [rows] = await pool.query("SELECT * FROM pdv_pix_payments WHERE id = ? AND source = 'standalone_pix' LIMIT 1", [req.params.id]);
-  const current = rows[0];
+  let current = rows[0];
   if (!current) return reply.code(404).send({ error: 'Pix avulso nao encontrado' });
+
+  current = await refreshStandalonePixMercadoPagoStatus(current);
 
   if (isStandalonePixExpired(current)) {
     await pool.query(
@@ -24291,24 +24313,7 @@ fastify.get('/pix/standalone/:id/status', { preHandler: requireSyncKey }, async 
     return buildStandalonePixResponse(updatedRows[0]);
   }
 
-  if (!current.mercado_pago_payment_id) return buildStandalonePixResponse(current);
-
-  const mp = await getPdvMercadoPagoAccessToken();
-  if (!mp?.accessToken) return reply.code(400).send({ error: 'Mercado Pago nao configurado' });
-
-  const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(current.mercado_pago_payment_id)}`, {
-    headers: { Authorization: `Bearer ${mp.accessToken}` },
-  });
-  const raw = await response.json().catch(() => ({}));
-  if (!response.ok) return reply.code(502).send({ error: 'Falha ao consultar Mercado Pago', detail: raw?.message || raw?.error || response.statusText });
-
-  const status = normalizePdvPixStatus(raw.status);
-  await pool.query(
-    'UPDATE pdv_pix_payments SET status = ?, raw_response_json = ?, approved_at = IF(? = "approved", COALESCE(approved_at, CURRENT_TIMESTAMP), approved_at), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [status, JSON.stringify(raw), status, current.id]
-  );
-  const [updatedRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [current.id]);
-  return buildStandalonePixResponse(updatedRows[0]);
+  return buildStandalonePixResponse(current);
 });
 
 fastify.post('/pix/standalone/:id/cancel', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -24357,8 +24362,10 @@ fastify.get('/pix/public/:token', async (req, reply) => {
   const token = String(req.params.token || '').trim();
   if (!token) return reply.code(404).send({ error: 'Pix nao encontrado' });
   const [rows] = await pool.query("SELECT * FROM pdv_pix_payments WHERE public_token = ? AND source = 'standalone_pix' LIMIT 1", [token]);
-  const current = rows[0];
+  let current = rows[0];
   if (!current) return reply.code(404).send({ error: 'Pix nao encontrado' });
+
+  current = await refreshStandalonePixMercadoPagoStatus(current);
 
   if (isStandalonePixExpired(current)) {
     await pool.query(

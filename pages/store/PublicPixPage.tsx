@@ -10,6 +10,8 @@ function formatCurrency(cents: number): string {
   return (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+const STANDALONE_PIX_PUBLIC_POLLING_MS = 3000;
+
 export default function PublicPixPage() {
   const { token = '' } = useParams();
   const [pix, setPix] = React.useState<StandalonePixPayment | null>(null);
@@ -30,6 +32,14 @@ export default function PublicPixPage() {
   React.useEffect(() => {
     void loadPix();
   }, [loadPix]);
+
+  React.useEffect(() => {
+    if (!pix || !isStandalonePixPayable(pix)) return;
+    const interval = window.setInterval(() => {
+      void loadPix();
+    }, STANDALONE_PIX_PUBLIC_POLLING_MS);
+    return () => window.clearInterval(interval);
+  }, [loadPix, pix?.id, pix?.status]);
 
   async function copyCode() {
     if (!pix?.qr_code) {
@@ -61,6 +71,10 @@ export default function PublicPixPage() {
             <div className="flex justify-center rounded border border-slate-200 bg-slate-50 p-4">
               {pix.qr_code_base64 && isStandalonePixPayable(pix) ? (
                 <img src={`data:image/png;base64,${pix.qr_code_base64}`} alt="QR Code Pix" className="h-64 w-64 object-contain" />
+              ) : pix.status === 'approved' ? (
+                <div className="flex h-64 w-64 items-center justify-center rounded-lg bg-emerald-50 p-6 text-center text-lg font-black text-emerald-700">
+                  Pagamento aprovado
+                </div>
               ) : (
                 <div className="flex h-64 w-64 items-center justify-center text-center text-sm font-semibold text-slate-500">
                   Cancelado por falta de pagamento
