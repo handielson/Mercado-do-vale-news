@@ -1,0 +1,74 @@
+import assert from 'node:assert/strict';
+
+import {
+  buildStatusCaption,
+  buildStatusPayload,
+  buildStatusSendDebug,
+  clampDailyProductLimit,
+  resolveScheduledSendTimes,
+  selectStatusProducts,
+} from '../services/whatsappStatusCampaignHelper.js';
+
+const products = Array.from({ length: 12 }, (_, index) => ({
+  id: `p-${index + 1}`,
+  name: `Produto ${index + 1}`,
+  slug: `produto-${index + 1}`,
+  price_retail: 100000 + index * 1000,
+  stock_quantity: 2,
+  images: [`https://cdn.example.com/p-${index + 1}.jpg`],
+}));
+
+assert.equal(clampDailyProductLimit(99), 10);
+assert.equal(clampDailyProductLimit(0), 1);
+assert.equal(clampDailyProductLimit(4), 4);
+
+assert.deepEqual(
+  resolveScheduledSendTimes({ startTime: '08:00', count: 4, intervalMinutes: 30 }),
+  ['08:00', '08:30', '09:00', '09:30'],
+);
+
+assert.deepEqual(
+  selectStatusProducts(products, { dailyLimit: 99, lastProductId: 'p-2' }).map((product) => product.id),
+  ['p-3', 'p-4', 'p-5', 'p-6', 'p-7', 'p-8', 'p-9', 'p-10', 'p-11', 'p-12'],
+);
+
+const caption = buildStatusCaption({
+  product: products[0],
+  cardPlan: { installments: 12, value: 9250, total: 111000 },
+  siteBaseUrl: 'https://mercadodovale.com.br',
+});
+
+assert.match(caption, /Produto 1/);
+assert.match(caption, /A vista no PIX: R\$ 1\.000,00/);
+assert.match(caption, /Cartao: 12x de R\$ 92,50/);
+assert.match(caption, /https:\/\/mercadodovale\.com\.br\/produto\/produto-1/);
+
+assert.deepEqual(
+  buildStatusPayload({
+    product: products[0],
+    caption,
+  }),
+  {
+    type: 'image',
+    content: 'https://cdn.example.com/p-1.jpg',
+    caption,
+    allContacts: true,
+  },
+);
+
+const debug = buildStatusSendDebug({
+  campaign: { id: 'c-1', title: 'Campanha Celulares' },
+  product: products[0],
+  endpoint: 'https://bot.mercadodovale.com.br/message/sendStatus/botmercadodovale',
+  httpStatus: 500,
+  errorMessage: 'apikey: segredo-super-secreto falhou',
+});
+
+assert.match(debug, /WHATSAPP_STATUS_SEND_DEBUG/);
+assert.match(debug, /Campanha Celulares/);
+assert.match(debug, /Produto 1/);
+assert.match(debug, /HTTP: 500/);
+assert.doesNotMatch(debug, /segredo-super-secreto/);
+assert.match(debug, /apikey:\s*\[redacted\]/);
+
+console.log('whatsapp-status-campaign-helper.test.mjs: ok');

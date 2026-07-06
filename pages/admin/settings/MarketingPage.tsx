@@ -28,6 +28,7 @@ import { instagramScheduleService, InstagramSlot, CONTENT_TYPE_LABELS, ContentTy
 import MarketingKitPanel from './marketing/MarketingKitPanel';
 import MarketingStickerTypographyEditor from './marketing/MarketingStickerTypographyEditor';
 import MarketingTypographyText from './marketing/MarketingTypographyText';
+import WhatsAppStatusCampaignPanel from './marketing/WhatsAppStatusCampaignPanel';
 import { ensureMarketingTypographyFontLoaded } from './marketing/marketingTypographyFonts';
 import {
     DAY_LABELS_FULL,
@@ -2075,6 +2076,7 @@ export default function MarketingPage() {
                     )}
                     {activeTab === 'agenda' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
+                            <WhatsAppStatusCampaignPanel />
 
                             {/* Day Selector */}
                             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">

@@ -8338,6 +8338,10 @@ async function handleCronDispatcherVps(request, reply) {
 
   try {
     const birthdaySummary = await sendBirthdayGreetingsForToday({ birthdaySummary: true }).catch((err) => ({ birthdaySummary: true, error: err.message || String(err) }));
+    const whatsappStatusSummary = await runDueWhatsAppStatusCampaigns().catch((err) => ({
+      ok: false,
+      error: err.message || String(err),
+    }));
     const rows = await vpsDbSelect('telegram_settings', 'select=*&limit=1');
     const settings = cronDispatcherFirstRowVps(rows);
     const hasConfiguredTelegramCredential = !!settings?.bot_token;
@@ -8345,6 +8349,7 @@ async function handleCronDispatcherVps(request, reply) {
       return reply.code(200).send({
         message: 'Telegram integration inactive or not fully configured',
         birthdaySummary,
+        whatsappStatusSummary,
         debug: buildCopyableDebug('cron-dispatcher', {
           hasSettings: !!settings,
           isActive: !!settings?.active,
@@ -8355,7 +8360,7 @@ async function handleCronDispatcherVps(request, reply) {
     }
 
     const templates = parseCronDispatcherTemplatesVps(settings);
-    if (!templates.length) return reply.code(200).send({ message: 'No templates configured', birthdaySummary });
+    if (!templates.length) return reply.code(200).send({ message: 'No templates configured', birthdaySummary, whatsappStatusSummary });
 
     const now = new Date();
     const timeParts = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).formatToParts(now);
@@ -8368,7 +8373,11 @@ async function handleCronDispatcherVps(request, reply) {
       return template.type === 'scheduled' && String(template.schedule_time || '').startsWith(currentHourPrefix);
     });
     if (!scheduledTemplates.length) {
-      return reply.code(200).send({ message: forceTemplateId ? 'Template nao encontrado.' : `No templates scheduled for hour ${hour}` });
+      return reply.code(200).send({
+        message: forceTemplateId ? 'Template nao encontrado.' : `No templates scheduled for hour ${hour}`,
+        birthdaySummary,
+        whatsappStatusSummary,
+      });
     }
 
     const instagramSlots = await loadCronDispatcherInstagramScheduleVps();
@@ -8406,6 +8415,7 @@ async function handleCronDispatcherVps(request, reply) {
       dispatched,
       instagramReminderSent,
       birthdaySummary,
+      whatsappStatusSummary,
     });
   } catch (err) {
     console.error('[cron-dispatcher] fatal error', err);
@@ -22637,6 +22647,297 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
 fastify.post('/whatsapp/automation/test-send', { preHandler: requireSyncKey }, async (req) => {
   return sendWhatsAppAutomationTemplateTestVps(req.body || {});
 });
+
+const MAX_WHATSAPP_STATUS_PRODUCTS_PER_RUN = 10;
+
+function clampWhatsAppStatusDailyLimit(value) {
+  const parsed = Math.floor(Number(value) || 0);
+  return Math.max(1, Math.min(MAX_WHATSAPP_STATUS_PRODUCTS_PER_RUN, parsed));
+}
+
+function normalizeWhatsAppStatusInterval(value) {
+  const parsed = Math.floor(Number(value) || 30);
+  return Math.max(1, parsed);
+}
+
+function formatWhatsAppStatusMoney(cents) {
+  return (Number(cents || 0) / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).replace(/\u00a0/g, ' ');
+}
+
+function sanitizeWhatsAppStatusDebugText(value) {
+  return String(value || '')
+    .replace(/(apikey\s*[:=]\s*)[^\s,;]+/gi, '$1[redacted]')
+    .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi, '$1[redacted]')
+    .replace(/(token\s*[:=]\s*)[^\s,;]+/gi, '$1[redacted]')
+    .slice(0, 1200);
+}
+
+function buildWhatsAppStatusDebug({ campaign, product, endpoint, httpStatus, errorMessage, responseBody, scheduledFor }) {
+  return [
+    'WHATSAPP_STATUS_SEND_DEBUG',
+    `Campanha: ${campaign?.title || 'sem titulo'} (${campaign?.id || 'sem id'})`,
+    `Produto: ${product?.name || 'sem produto'} (${product?.id || product?.sku || 'sem id'})`,
+    `Horario: ${scheduledFor || 'envio manual/agora'}`,
+    `Endpoint: ${endpoint || 'nao informado'}`,
+    `HTTP: ${httpStatus || 'sem resposta'}`,
+    `Erro: ${sanitizeWhatsAppStatusDebugText(errorMessage || 'sem mensagem')}`,
+    `Resposta: ${sanitizeWhatsAppStatusDebugText(responseBody || '')}`,
+  ].join('\n');
+}
+
+function parseWhatsAppStatusImages(value) {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return String(value).trim() ? [String(value).trim()] : [];
+  }
+}
+
+function normalizeWhatsAppStatusProduct(row) {
+  if (!row) return null;
+  const images = parseWhatsAppStatusImages(row.images);
+  return {
+    ...row,
+    images,
+    image_url: row.image_url || images[0] || null,
+  };
+}
+
+function isWhatsAppStatusProductEligible(product) {
+  if (!product?.id) return false;
+  if (Number(product.price_retail || 0) <= 0) return false;
+  if (Number(product.stock_quantity ?? 0) <= 0 && product.track_inventory !== 0 && product.track_inventory !== false) return false;
+  return Array.isArray(product.images) && product.images.some((image) => String(image || '').trim());
+}
+
+function rotateWhatsAppStatusProducts(products, lastProductId) {
+  const eligible = products.filter(isWhatsAppStatusProductEligible);
+  if (!eligible.length) return [];
+  const startIndex = Math.max(0, eligible.findIndex((product) => product.id === lastProductId) + 1);
+  return [...eligible.slice(startIndex), ...eligible.slice(0, startIndex)];
+}
+
+async function getWhatsAppStatusCampaign(campaignId) {
+  const [rows] = await pool.query('SELECT * FROM whatsapp_status_campaigns WHERE id = ? LIMIT 1', [campaignId]);
+  return rows[0] || null;
+}
+
+async function getWhatsAppStatusCampaignProducts(campaign) {
+  if (campaign.source_type === 'product') {
+    const [rows] = await pool.query(
+      `SELECT id, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory
+       FROM products WHERE id = ? LIMIT 1`,
+      [campaign.product_id]
+    );
+    return rows.map(normalizeWhatsAppStatusProduct).filter(Boolean);
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory
+     FROM products
+     WHERE category_id = ? AND status = 'active'
+     ORDER BY updated_at DESC, name ASC
+     LIMIT 300`,
+    [campaign.category_id]
+  );
+  return rows.map(normalizeWhatsAppStatusProduct).filter(Boolean);
+}
+
+async function getWhatsAppStatusCardPlan(priceRetailCents) {
+  const [rows] = await pool.query(
+    `SELECT installments, applied_fee_pct
+     FROM payment_fees
+     WHERE installments = 12
+       AND method IN ('credit', 'card', 'credit_card')
+     ORDER BY channel = 'all' DESC, applied_fee_pct ASC
+     LIMIT 1`
+  );
+  const feePct = Number(rows[0]?.applied_fee_pct || 0);
+  const total = Math.round(Number(priceRetailCents || 0) * (1 + feePct / 100));
+  return { installments: 12, value: Math.round(total / 12), total };
+}
+
+function buildWhatsAppStatusCaption(product, cardPlan) {
+  const siteBaseUrl = String(process.env.PUBLIC_SITE_URL || 'https://mercadodovale.com.br').replace(/\/+$/, '');
+  const link = product.slug ? `${siteBaseUrl}/produto/${product.slug}` : siteBaseUrl;
+  return [
+    String(product.name || 'Produto').trim(),
+    '',
+    `A vista no PIX: ${formatWhatsAppStatusMoney(product.price_retail)}`,
+    `Cartao: ${cardPlan.installments}x de ${formatWhatsAppStatusMoney(cardPlan.value)}`,
+    '',
+    'Veja no site:',
+    link,
+  ].join('\n');
+}
+
+async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null) {
+  const baseUrl = String(process.env.EVOLUTION_SERVER_URL || process.env.EVOLUTION_API_URL || 'https://bot.mercadodovale.com.br').replace(/\/+$/, '');
+  const apiKey = String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_GLOBAL_API_KEY || '');
+  const instance = String(process.env.EVOLUTION_STATUS_INSTANCE || process.env.EVOLUTION_API_INSTANCE || 'botmercadodovale');
+  const endpoint = `${baseUrl}/message/sendStatus/${encodeURIComponent(instance)}`;
+  const image = product.images.find((value) => String(value || '').trim());
+  const cardPlan = await getWhatsAppStatusCardPlan(product.price_retail);
+  const caption = buildWhatsAppStatusCaption(product, cardPlan);
+  const payload = { type: 'image', content: image, caption, allContacts: true };
+
+  if (!apiKey) {
+    const debug = buildWhatsAppStatusDebug({
+      campaign,
+      product,
+      endpoint,
+      scheduledFor,
+      errorMessage: 'EVOLUTION_API_KEY ausente no ambiente da VPS',
+    });
+    return { productId: product.id, productName: product.name, status: 'failed', debug };
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: apiKey,
+      },
+      body: JSON.stringify(payload),
+    });
+    const text = await response.text();
+    let body = text;
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {}
+
+    if (!response.ok || body?.error === true) {
+      const debug = buildWhatsAppStatusDebug({
+        campaign,
+        product,
+        endpoint,
+        httpStatus: response.status,
+        responseBody: typeof body === 'string' ? body : JSON.stringify(body),
+        errorMessage: body?.message || body?.response || response.statusText,
+        scheduledFor,
+      });
+      return { productId: product.id, productName: product.name, status: 'failed', debug };
+    }
+
+    return { productId: product.id, productName: product.name, status: 'sent' };
+  } catch (error) {
+    const debug = buildWhatsAppStatusDebug({
+      campaign,
+      product,
+      endpoint,
+      scheduledFor,
+      errorMessage: error?.message || String(error),
+    });
+    return { productId: product.id, productName: product.name, status: 'failed', debug };
+  }
+}
+
+async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledFor = null, slotIndex = null } = {}) {
+  const products = await getWhatsAppStatusCampaignProducts(campaign);
+  const selected = rotateWhatsAppStatusProducts(products, campaign.last_product_id)
+    .slice(0, clampWhatsAppStatusDailyLimit(maxProducts || campaign.daily_limit));
+
+  if (!selected.length) {
+    const debug = buildWhatsAppStatusDebug({
+      campaign,
+      scheduledFor,
+      errorMessage: 'Nenhum produto elegivel com estoque, preco e imagem foi encontrado.',
+    });
+    await pool.query('UPDATE whatsapp_status_campaigns SET last_error_debug = ? WHERE id = ?', [debug, campaign.id]);
+    return { ok: false, sent: 0, failed: 1, debug, logs: [{ status: 'skipped', debug }] };
+  }
+
+  const logs = [];
+  for (const product of selected) {
+    const result = await sendWhatsAppStatusProduct(campaign, product, scheduledFor);
+    logs.push(result);
+    await pool.query(
+      `INSERT INTO whatsapp_status_campaign_logs
+        (id, campaign_id, product_id, status, debug_text, scheduled_for, slot_index)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [crypto.randomUUID(), campaign.id, product.id, result.status, result.debug || null, scheduledFor, slotIndex]
+    );
+  }
+
+  const failed = logs.filter((log) => log.status === 'failed').length;
+  const sent = logs.filter((log) => log.status === 'sent').length;
+  const lastSent = [...logs].reverse().find((log) => log.status === 'sent');
+  const debug = logs.map((log) => log.debug).filter(Boolean).join('\n\n') || null;
+
+  await pool.query(
+    `UPDATE whatsapp_status_campaigns
+     SET last_product_id = COALESCE(?, last_product_id),
+         last_run_at = NOW(),
+         last_error_debug = ?
+     WHERE id = ?`,
+    [lastSent?.productId || null, debug, campaign.id]
+  );
+
+  return { ok: failed === 0, sent, failed, debug: debug || undefined, logs };
+}
+
+fastify.post('/whatsapp/status-campaigns/:id/send-now', { preHandler: requireSyncKey }, async (req, reply) => {
+  const campaign = await getWhatsAppStatusCampaign(req.params.id);
+  if (!campaign) return reply.code(404).send({ error: 'Campanha nao encontrada' });
+  return executeWhatsAppStatusCampaign(campaign, { maxProducts: campaign.daily_limit });
+});
+
+async function runDueWhatsAppStatusCampaigns() {
+  const [campaigns] = await pool.query(
+    `SELECT *
+     FROM whatsapp_status_campaigns
+     WHERE active = 1
+       AND frequency IN ('daily', 'weekly', 'once')
+       AND start_time <= CURTIME()
+     ORDER BY start_time ASC
+     LIMIT 20`
+  );
+  const results = [];
+  const now = new Date();
+  for (const campaign of campaigns) {
+    const interval = normalizeWhatsAppStatusInterval(campaign.interval_minutes);
+    const limit = clampWhatsAppStatusDailyLimit(campaign.daily_limit);
+    const [startHours, startMinutes] = String(campaign.start_time || '08:00').split(':').map((part) => Number(part) || 0);
+    const startTotal = startHours * 60 + startMinutes;
+    const nowTotal = now.getHours() * 60 + now.getMinutes();
+    const elapsed = nowTotal - startTotal;
+    if (elapsed < 0) continue;
+    const slotIndex = Math.floor(elapsed / interval);
+    if (slotIndex < 0 || slotIndex >= limit) continue;
+
+    const [existingLogs] = await pool.query(
+      `SELECT id FROM whatsapp_status_campaign_logs
+       WHERE campaign_id = ? AND slot_index = ? AND DATE(created_at) = CURDATE()
+       LIMIT 1`,
+      [campaign.id, slotIndex]
+    );
+    if (existingLogs.length > 0) continue;
+
+    const scheduledFor = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, startTotal + slotIndex * interval, 0);
+    const result = await executeWhatsAppStatusCampaign(campaign, {
+      maxProducts: 1,
+      scheduledFor: scheduledFor.toISOString().slice(0, 19).replace('T', ' '),
+      slotIndex,
+    });
+    results.push({ campaignId: campaign.id, slotIndex, ...result });
+
+    if (campaign.frequency === 'once' && slotIndex >= limit - 1) {
+      await pool.query('UPDATE whatsapp_status_campaigns SET active = 0 WHERE id = ?', [campaign.id]);
+    }
+  }
+  return { ok: true, campaigns: campaigns.length, results };
+}
+
+fastify.post('/whatsapp/status-campaigns/run-due', { preHandler: requireSyncKey }, async () => {
+  return runDueWhatsAppStatusCampaigns();
+});
 fastify.get('/n8n-bot/client-control', { preHandler: requireSyncKey }, async (req, reply) => {
   const identity = normalizeN8nBotClientIdentity(req.query || {});
   if (!identity) {
@@ -29394,6 +29695,49 @@ async function runMigrations() {
   await addColumnIfMissing('whatsapp_automation_templates', 'category', "VARCHAR(40) NOT NULL DEFAULT 'future'");
   await addColumnIfMissing('whatsapp_automation_templates', 'enabled', 'TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('whatsapp_automation_templates', 'variables_json', 'JSON NULL');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_status_campaigns (
+      id CHAR(36) PRIMARY KEY,
+      title VARCHAR(180) NOT NULL,
+      source_type ENUM('product','category') NOT NULL DEFAULT 'category',
+      product_id CHAR(36) NULL,
+      category_id CHAR(36) NULL,
+      daily_limit INT NOT NULL DEFAULT 10,
+      interval_minutes INT NOT NULL DEFAULT 30,
+      start_time TIME NOT NULL DEFAULT '08:00:00',
+      frequency ENUM('once','daily','weekly') NOT NULL DEFAULT 'daily',
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      last_product_id CHAR(36) NULL,
+      last_run_at DATETIME NULL,
+      last_error_debug TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_whatsapp_status_campaigns_active (active, start_time),
+      INDEX idx_whatsapp_status_campaigns_source (source_type, product_id, category_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('whatsapp_status_campaigns', 'daily_limit', 'INT NOT NULL DEFAULT 10');
+  await addColumnIfMissing('whatsapp_status_campaigns', 'interval_minutes', 'INT NOT NULL DEFAULT 30');
+  await addColumnIfMissing('whatsapp_status_campaigns', 'last_error_debug', 'TEXT NULL');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_status_campaign_logs (
+      id CHAR(36) PRIMARY KEY,
+      campaign_id CHAR(36) NOT NULL,
+      product_id CHAR(36) NULL,
+      status ENUM('sent','failed','skipped') NOT NULL DEFAULT 'failed',
+      debug_text TEXT NULL,
+      scheduled_for DATETIME NULL,
+      slot_index INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_whatsapp_status_logs_campaign (campaign_id, created_at),
+      INDEX idx_whatsapp_status_logs_slot (campaign_id, slot_index, created_at),
+      INDEX idx_whatsapp_status_logs_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('whatsapp_status_campaign_logs', 'slot_index', 'INT NULL');
+
   const legacySaleCompletedPreferenceLine = ['Obrigado', 'pela', 'preferencia, {nome}! Seu pedido {pedido} ja esta registrado com a gente. 🚀'].join(' ');
   const nextSaleCompletedLine = '{nome}, seu pedido {pedido} ja esta registrado com a gente. 🚀';
   await pool.query(
