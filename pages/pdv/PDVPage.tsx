@@ -52,6 +52,8 @@ type FinalizeStep = {
     debug?: unknown;
 };
 
+const PDV_PIX_STATUS_POLLING_MS = 3000;
+
 function FinalizeProgress({
     steps,
     log,
@@ -212,6 +214,7 @@ export default function PDVPage() {
     const [pdvPixCashierKey, setPdvPixCashierKey] = useState(() => localStorage.getItem('pdv_pix_cashier_key') || 'caixa-01');
     const [pdvPixDisplayId, setPdvPixDisplayId] = useState(() => localStorage.getItem('pdv_pix_display_id') || '');
     const [pdvPixDisplays, setPdvPixDisplays] = useState<PdvDisplay[]>([]);
+    const pdvPixApprovedToastRef = useRef('');
 
     // Estado da entrega
     const [deliveryType, setDeliveryType] = useState<DeliveryType | undefined>();
@@ -718,11 +721,45 @@ export default function PDVPage() {
                     pix_payment_id: payment.id,
                     mercado_pago_payment_id: payment.mercado_pago_payment_id || undefined,
                     pix_status: 'approved',
-                    pix_paid_at: payment.updated_at || new Date().toISOString()
+                    pix_paid_at: payment.approved_at || payment.updated_at || new Date().toISOString()
                 }
             ];
         });
     };
+
+    const handleApprovedPdvPixPayment = React.useCallback((payment: PdvPixPayment, message = 'Pix aprovado e adicionado ao pagamento') => {
+        setPdvPixPayment(payment);
+        addApprovedPdvPixPayment(payment);
+        if (pdvPixApprovedToastRef.current !== payment.id) {
+            pdvPixApprovedToastRef.current = payment.id;
+            toast.success(message);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        if (!pdvPixPayment || !['creating', 'pending'].includes(pdvPixPayment.status)) return;
+        let cancelled = false;
+
+        async function pollPdvPixStatus() {
+            try {
+                const payment = await pdvDisplayService.refreshPixPaymentStatus(pdvPixPayment.id);
+                if (cancelled) return;
+                setPdvPixPayment(payment);
+
+                if (payment.status === 'approved') {
+                    handleApprovedPdvPixPayment(payment);
+                }
+            } catch (error) {
+                console.error('Erro ao monitorar pagamento Pix PDV:', error);
+            }
+        }
+
+        const interval = window.setInterval(pollPdvPixStatus, PDV_PIX_STATUS_POLLING_MS);
+        return () => {
+            cancelled = true;
+            window.clearInterval(interval);
+        };
+    }, [handleApprovedPdvPixPayment, pdvPixPayment?.id, pdvPixPayment?.status]);
 
     const handleShowPdvPixOnDisplay = async () => {
         if (!pdvPixPayment) {
@@ -770,8 +807,7 @@ export default function PDVPage() {
             }
 
             if (payment.status === 'approved') {
-                addApprovedPdvPixPayment(payment);
-                toast.success('Pix aprovado e adicionado ao pagamento');
+                handleApprovedPdvPixPayment(payment);
             } else {
                 toast.success('Pix gerado. Aguarde o pagamento do cliente.');
             }
@@ -791,8 +827,7 @@ export default function PDVPage() {
             setPdvPixPayment(payment);
 
             if (payment.status === 'approved') {
-                addApprovedPdvPixPayment(payment);
-                toast.success('Pix aprovado e adicionado ao pagamento');
+                handleApprovedPdvPixPayment(payment);
                 return;
             }
 

@@ -257,7 +257,7 @@ export function shouldShowPixPayment(payment: PdvPixPayment | null, now = Date.n
     if (status === 'pending') return now - startedAt < PIX_QR_VISIBLE_MS;
     if (status !== 'approved') return false;
 
-    const approvedAt = Date.parse(String(payment.updated_at || payment.created_at || ''));
+    const approvedAt = Date.parse(String(payment.approved_at || payment.updated_at || payment.created_at || ''));
     if (!Number.isFinite(approvedAt)) return false;
     return now - approvedAt < APPROVED_RECEIPT_VISIBLE_MS;
 }
@@ -1069,7 +1069,7 @@ function ApprovedReceiptView({ payment, now }: { payment: PdvPixPayment; now: nu
     const [sending, setSending] = useState(false);
     const [shareLink, setShareLink] = useState<PdvPixReceiptShareLinkResponse | null>(null);
     const [shareError, setShareError] = useState<string | null>(null);
-    const receiptRemainingMs = getRemainingMs(payment.updated_at || payment.created_at, APPROVED_RECEIPT_VISIBLE_MS, now);
+    const receiptRemainingMs = getRemainingMs(payment.approved_at || payment.updated_at || payment.created_at, APPROVED_RECEIPT_VISIBLE_MS, now);
     const linkRemainingMs = shareLink?.expires_at ? Math.max(0, Date.parse(shareLink.expires_at) - now) : 0;
 
     async function handleGenerateLink() {
@@ -1115,7 +1115,7 @@ function ApprovedReceiptView({ payment, now }: { payment: PdvPixPayment; now: nu
                     <div className="grid gap-2 rounded-lg bg-slate-100 p-3 text-left text-sm font-semibold text-slate-700">
                         <p>Pagamento: Pix</p>
                         <p>Autenticacao: {receipt?.authentication_code || payment.mercado_pago_payment_id || payment.id}</p>
-                        <p>Data/hora: {receipt?.approved_at_label || new Date(payment.updated_at || payment.created_at || Date.now()).toLocaleString('pt-BR')}</p>
+                        <p>Data/hora: {receipt?.approved_at_label || new Date(payment.approved_at || payment.updated_at || payment.created_at || Date.now()).toLocaleString('pt-BR')}</p>
                     </div>
                 </div>
             </div>

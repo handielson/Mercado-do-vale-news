@@ -3505,6 +3505,45 @@ async function processStandalonePixMercadoPagoPayment(payment) {
   return { status: 200, body: { message: 'standalone pix approved', pix_payment_id: current.id } };
 }
 
+async function processPdvPixMercadoPagoPayment(payment) {
+  const paymentId = String(payment?.id || '').trim();
+  const metadata = payment?.metadata || {};
+  const metadataId = String(metadata?.pdv_pix_payment_id || '').trim();
+  const externalReference = String(payment?.external_reference || '').trim();
+  const whereSql = metadataId
+    ? '(id = ? OR mercado_pago_payment_id = ? OR local_reference = ?)'
+    : '(mercado_pago_payment_id = ? OR local_reference = ?)';
+  const params = metadataId
+    ? [metadataId, paymentId, externalReference]
+    : [paymentId, externalReference];
+  const [rows] = await pool.query(`SELECT * FROM pdv_pix_payments WHERE ${whereSql} LIMIT 1`, params);
+  const current = rows[0];
+  if (!current) {
+    return { status: 200, body: { message: 'pdv pix not found', payment_id: paymentId } };
+  }
+
+  await pool.query(
+    `UPDATE pdv_pix_payments
+     SET status = 'approved',
+         mercado_pago_payment_id = COALESCE(mercado_pago_payment_id, ?),
+         approved_at = COALESCE(approved_at, CURRENT_TIMESTAMP),
+         cancel_reason = NULL,
+         raw_response_json = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [paymentId, JSON.stringify(payment), current.id]
+  );
+
+  if (current.display_id) {
+    await pool.query(
+      'UPDATE pdv_displays SET active_pix_payment_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [current.id, current.display_id]
+    );
+  }
+
+  return { status: 200, body: { message: 'pdv pix approved', pix_payment_id: current.id } };
+}
+
 async function handleMercadoPagoWebhookVps(body) {
   const paymentId = String(body?.data?.id || '').trim();
   if (!paymentId) {
@@ -3565,6 +3604,10 @@ async function handleMercadoPagoWebhookVps(body) {
 
     if (payment?.metadata?.flow === 'standalone_pix' || String(payment?.external_reference || '').startsWith('standalone_pix:')) {
       return processStandalonePixMercadoPagoPayment(payment);
+    }
+
+    if (payment?.metadata?.flow === 'pdv_pix') {
+      return processPdvPixMercadoPagoPayment(payment);
     }
 
     const gatewayPaymentId = String(payment.id);
@@ -24104,8 +24147,8 @@ fastify.get('/pdv/pix-payments/:id/status', { preHandler: requireSyncKey }, asyn
   const raw = await response.json().catch(() => ({}));
   if (!response.ok) return reply.code(502).send({ error: 'Falha ao consultar Mercado Pago', detail: raw?.message || raw?.error || response.statusText });
   await pool.query(
-    'UPDATE pdv_pix_payments SET status = ?, raw_response_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [normalizePdvPixStatus(raw.status), JSON.stringify(raw), req.params.id]
+    'UPDATE pdv_pix_payments SET status = ?, raw_response_json = ?, approved_at = IF(? = "approved", COALESCE(approved_at, CURRENT_TIMESTAMP), approved_at), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [normalizePdvPixStatus(raw.status), JSON.stringify(raw), normalizePdvPixStatus(raw.status), req.params.id]
   );
   const [updatedRows] = await pool.query('SELECT * FROM pdv_pix_payments WHERE id = ? LIMIT 1', [req.params.id]);
   return buildPdvPixResponse(updatedRows[0]);

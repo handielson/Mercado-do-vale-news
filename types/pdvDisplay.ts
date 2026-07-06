@@ -100,6 +100,7 @@ export interface PdvPixPayment {
     raw_response?: unknown;
     created_at?: string;
     updated_at?: string;
+    approved_at?: string | null;
     receipt?: PdvPixReceipt | null;
 }
 

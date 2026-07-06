@@ -20,6 +20,9 @@ const requiredPdvPageSnippets = [
   'handleCancelPdvPixPayment',
   'pdvDisplayService.createPixPayment',
   'pdvDisplayService.refreshPixPaymentStatus',
+  'PDV_PIX_STATUS_POLLING_MS',
+  'pollPdvPixStatus',
+  'handleApprovedPdvPixPayment',
   'pdvDisplayService.setActivePix',
   'pdvDisplayService.clearActivePix',
   'pdvDisplayService.listDisplays',
@@ -109,8 +112,14 @@ assert.match(
 );
 assert.match(
   pdvPage,
-  /pix_paid_at:\s*payment\.updated_at\s*\|\|\s*new Date\(\)\.toISOString\(\)/,
-  'PDVPage.tsx deve guardar a hora da aprovacao do Pix Mercado Pago no pagamento da venda'
+  /pix_paid_at:\s*payment\.approved_at\s*\|\|\s*payment\.updated_at\s*\|\|\s*new Date\(\)\.toISOString\(\)/,
+  'PDVPage.tsx deve guardar approved_at como hora da aprovacao do Pix Mercado Pago no pagamento da venda'
+);
+
+assert.match(
+  pdvPage,
+  /window\.setInterval\(pollPdvPixStatus, PDV_PIX_STATUS_POLLING_MS\)/,
+  'PDVPage.tsx deve monitorar automaticamente o status do Pix pendente'
 );
 
 console.log('pdv pix payment static checks passed');

@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.52-totem-pix-android-118",
+    "version": "v1.2.53-pdv-pix-webhook-receipt",
     "date": "2026-07-06",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260706-032344-totem-pix-android-118",
+    "release_vps": "/var/www/mdv-site/releases/20260706-033635-pdv-pix-webhook-receipt",
     "branch": "main",
-    "summary": "Gera Totem Pix Android 1.18 com versionCode 118 para nova release Google Play.",
+    "summary": "Corrige aprovacao do Pix PDV pelo webhook e mantem comprovante no display para compartilhar no WhatsApp.",
     "totem_pix_android": {
         "latest_version_name": "1.18",
         "latest_version_code": 118,
