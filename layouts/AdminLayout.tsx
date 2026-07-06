@@ -116,6 +116,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       items: [
         { to: '/admin/settings/bling', icon: <Link2 size={18} />, label: 'Bling', keywords: 'erp integracao' },
         { to: '/admin/settings/shopee', icon: <Store size={18} />, label: 'Shopee', keywords: 'shopee marketplace integracao loja api' },
+        { to: '/admin/settings/tiktok-shop', icon: <Store size={18} />, label: 'TikTok Shop', keywords: 'tiktok shop marketplace integracao loja api' },
         { to: '/admin/settings/whatsapp', icon: <MessageCircle size={18} />, label: 'WhatsApp', keywords: 'conexao evolution atendimento contato' },
         { to: '/admin/whatsapp/novo-bot', icon: <Bot size={18} />, label: 'Novo Bot', keywords: 'n8n novo bot reset bloquear cliente fluxo memoria contexto' },
         { to: '/admin/whatsapp/mensagens', icon: <MessageSquareDashed size={18} />, label: 'Mensagens WhatsApp', keywords: 'whatsapp conversas atendimento mensagens historico humano' },

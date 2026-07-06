@@ -131,6 +131,7 @@ const SalesPage = lazy(() => import('../pages/admin/sales/SalesPage'));
 const BlingPage = lazy(() => import('../pages/admin/settings/BlingPage'));
 const ShopeePage = lazy(() => import('../pages/admin/settings/ShopeePage'));
 const ShopeeTemplatesPage = lazy(() => import('../pages/admin/settings/ShopeeTemplatesPage'));
+const TikTokShopPage = lazy(() => import('../pages/admin/settings/TikTokShopPage'));
 const CheckoutPage = lazy(() => import('../pages/store/CheckoutPage'));
 const PublicProductPage = lazy(() => import('../pages/store/PublicProductPage').then(module => ({ default: module.PublicProductPage })));
 const FinancialPage = lazy(() => import('../pages/admin/financial/FinancialPage'));
@@ -607,6 +608,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><ShopeeTemplatesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/settings/tiktok-shop",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><TikTokShopPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

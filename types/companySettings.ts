@@ -91,6 +91,20 @@ export interface CompanySettings {
     shopee_access_token?: string;
     shopee_refresh_token?: string;
 
+    // TikTok Shop Integration
+    tiktok_app_key?: string | null;
+    tiktok_app_secret?: string | null;
+    tiktok_service_id?: string | null;
+    tiktok_shop_cipher?: string | null;
+    tiktok_access_token?: string | null;
+    tiktok_refresh_token?: string | null;
+    tiktok_access_token_expires_at?: string | null;
+    tiktok_refresh_token_expires_at?: string | null;
+    tiktok_open_id?: string | null;
+    tiktok_seller_name?: string | null;
+    tiktok_seller_base_region?: string | null;
+    tiktok_granted_scopes?: string | string[] | null;
+
     // Bling Integration
     bling_client_id?: string;
     bling_client_secret?: string;
@@ -160,6 +174,20 @@ export interface CompanySettingsInput {
     shopee_shop_id?: string;
     shopee_access_token?: string;
     shopee_refresh_token?: string;
+
+    // TikTok Shop Integration
+    tiktok_app_key?: string | null;
+    tiktok_app_secret?: string | null;
+    tiktok_service_id?: string | null;
+    tiktok_shop_cipher?: string | null;
+    tiktok_access_token?: string | null;
+    tiktok_refresh_token?: string | null;
+    tiktok_access_token_expires_at?: string | null;
+    tiktok_refresh_token_expires_at?: string | null;
+    tiktok_open_id?: string | null;
+    tiktok_seller_name?: string | null;
+    tiktok_seller_base_region?: string | null;
+    tiktok_granted_scopes?: string | string[] | null;
 
     // Bling Integration
     bling_client_id?: string;
