@@ -2428,32 +2428,25 @@ async function sendDeliveryWhatsappText(phone, text) {
   const number = normalizeDeliveryWhatsAppNumber(phone);
   if (!number) throw new Error('Telefone do cliente nao informado');
 
-  let settings = null;
-  try {
-    const [rows] = await pool.query('SELECT * FROM whatsapp_settings WHERE is_active = 1 ORDER BY updated_at DESC, created_at DESC LIMIT 1');
-    settings = rows?.[0] || null;
-  } catch {
-    settings = null;
-  }
+  const settings = await getN8nBotEvolutionSettings();
+  const baseUrl = String(settings.baseUrl || '').replace(/\/+$/, '');
+  const apiKey = String(settings.apiKey || '');
+  const instanceName = String(settings.instanceName || '');
+  if (!baseUrl || !apiKey || !instanceName) throw new Error('Configuracao Evolution API incompleta');
 
-  if (settings?.api_url && settings?.api_key && settings?.instance_name) {
-    const baseUrl = String(settings.api_url).replace(/\/+$/, '');
-    const response = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(settings.instance_name)}`, {
-      method: 'POST',
-      headers: {
-        apikey: String(settings.api_key),
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ number, text }),
-      signal: AbortSignal.timeout(20000),
-    });
-    const body = await response.text();
-    let parsed = body;
-    try { parsed = JSON.parse(body); } catch {}
-    return { ok: response.ok, status: response.status, body: parsed };
-  }
-
-  return sendAutoresponderEvolutionTextMessage(number, text);
+  const response = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(instanceName)}`, {
+    method: 'POST',
+    headers: {
+      apikey: apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ number, text }),
+    signal: AbortSignal.timeout(20000),
+  });
+  const body = await response.text();
+  let parsed = body;
+  try { parsed = JSON.parse(body); } catch {}
+  return { ok: response.ok, status: response.status, body: parsed, instanceName };
 }
 
 async function notifyCustomerDeliveryCompleted(job) {

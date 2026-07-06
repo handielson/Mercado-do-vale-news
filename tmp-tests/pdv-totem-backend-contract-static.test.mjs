@@ -38,6 +38,14 @@ function extractRouteBlock(source, routeDeclaration) {
   return source.slice(start, end);
 }
 
+function extractFunctionBlock(source, functionDeclaration) {
+  const start = source.indexOf(functionDeclaration);
+  if (start === -1) return '';
+  const nextFunction = source.slice(start + functionDeclaration.length).search(/\n\s*(?:async\s+)?function\s+/);
+  const end = nextFunction === -1 ? source.length : start + functionDeclaration.length + nextFunction;
+  return source.slice(start, end);
+}
+
 for (const file of files) {
   const source = readFileSync(resolve(root, file), 'utf8');
 
@@ -47,6 +55,7 @@ for (const file of files) {
 
   const displayShareRouteBlock = extractRouteBlock(source, "fastify.post('/pdv/display/pix-payments/:id/receipt/share-link'");
   const displayWhatsappRouteBlock = extractRouteBlock(source, "fastify.post('/pdv/display/pix-payments/:id/receipt/whatsapp'");
+  const deliveryWhatsappFunctionBlock = extractFunctionBlock(source, 'async function sendDeliveryWhatsappText');
 
   assert.ok(
     displayShareRouteBlock.includes('pdv_display_tokens'),
@@ -84,6 +93,18 @@ for (const file of files) {
     displayWhatsappRouteBlock,
     /if \(!result\?\.ok\) throw new Error\(`WhatsApp API retornou HTTP \$\{result\?\.status \|\| 'desconhecido'\}`\)/,
     `${file} display receipt WhatsApp route must fail when Evolution does not accept the send`,
+  );
+
+  assert.match(
+    deliveryWhatsappFunctionBlock,
+    /getN8nBotEvolutionSettings\(\)/,
+    `${file} transactional WhatsApp sends must use the current Evolution env settings`,
+  );
+
+  assert.doesNotMatch(
+    deliveryWhatsappFunctionBlock,
+    /sendAutoresponderEvolutionTextMessage/,
+    `${file} transactional WhatsApp sends must not fall back to the legacy autoresponder instance/key`,
   );
 
   const clearVisualRouteBlock = extractRouteBlock(source, clearVisualRouteDeclaration);

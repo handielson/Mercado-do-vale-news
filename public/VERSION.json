@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.62-totem-pix-notificacao-whatsapp",
+    "version": "v1.2.63-whatsapp-comprovante-evolution-env",
     "date": "2026-07-06",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260706-192822-totem-pix-notificacao-whatsapp",
+    "release_vps": "/var/www/mdv-site/releases/20260706-194414-whatsapp-comprovante-evolution-env",
     "branch": "main",
-    "summary": "Corrige notificacao do Totem Pix apos pagamento e valida falhas no envio de comprovante WhatsApp.",
+    "summary": "Corrige envio do comprovante WhatsApp usando as credenciais Evolution atuais da VPS.",
     "totem_pix_android": {
         "latest_version_name": "1.22",
         "latest_version_code": 122,
