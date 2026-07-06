@@ -758,7 +758,7 @@ export default function DisplayPage() {
                 )}
 
                 {showPix ? (
-                    <PixView payment={active_pix} display={display} now={now} />
+                    <PixView payment={active_pix} display={display} now={now} displayToken={token} />
                 ) : (
                     <IdleView items={idleItems} slide={idleSlide} />
                 )}
@@ -1031,14 +1031,14 @@ function StatusRow({ label, value, ok }: { label: string; value: string; ok: boo
     );
 }
 
-function PixView({ payment, display, now }: { payment: PdvPixPayment; display: PdvDisplay | null; now: number }) {
+function PixView({ payment, display, now, displayToken }: { payment: PdvPixPayment; display: PdvDisplay | null; now: number; displayToken: string }) {
     const settings = display?.settings || {};
     const qrImage = payment.qr_code_base64 ? `data:image/png;base64,${payment.qr_code_base64}` : '';
     const isApproved = payment.status === 'approved';
     const qrRemainingMs = getRemainingMs(payment.created_at || payment.updated_at, PIX_QR_VISIBLE_MS, now);
 
     if (isApproved) {
-        return <ApprovedReceiptView payment={payment} now={now} />;
+        return <ApprovedReceiptView payment={payment} now={now} displayToken={displayToken} />;
     }
 
     return (
@@ -1063,7 +1063,7 @@ function PixView({ payment, display, now }: { payment: PdvPixPayment; display: P
     );
 }
 
-function ApprovedReceiptView({ payment, now }: { payment: PdvPixPayment; now: number }) {
+function ApprovedReceiptView({ payment, now, displayToken }: { payment: PdvPixPayment; now: number; displayToken: string }) {
     const receipt = payment.receipt;
     const [phone, setPhone] = useState('');
     const [sending, setSending] = useState(false);
@@ -1076,7 +1076,7 @@ function ApprovedReceiptView({ payment, now }: { payment: PdvPixPayment; now: nu
         try {
             setSending(true);
             setShareError(null);
-            const result = await pdvDisplayService.createPixReceiptShareLink(payment.id, {});
+            const result = await pdvDisplayService.createDisplayPixReceiptShareLink(payment.id, displayToken);
             setShareLink(result);
         } catch (err: any) {
             setShareError(err?.message || 'Erro ao gerar link do comprovante');

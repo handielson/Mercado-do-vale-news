@@ -3,18 +3,15 @@ import { Ban, Copy, ExternalLink, MessageCircle, Printer, QrCode, RefreshCw, Sen
 import { toast } from 'sonner';
 import { standalonePixService } from '../../../services/standalonePixService';
 import { pdvDisplayService, buildPdvPixPrintData } from '../../../services/pdvDisplayService';
+import { moneyInputToCents } from '../../../utils/moneyInput';
 import { printPixQr } from '../../../utils/printPixQr';
+import { printStandalonePixReceipt } from '../../../utils/printStandalonePixReceipt';
 import type { PdvDisplay } from '../../../types/pdvDisplay';
 import type { GoogleContactOption, StandalonePixPayment } from '../../../types/standalonePix';
 import { formatStandalonePixStatus, isStandalonePixPayable } from '../../../types/standalonePix';
 
 function formatCurrency(cents: number): string {
   return (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-function toCents(value: string): number {
-  const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
-  return Math.round(Number(normalized || 0) * 100);
 }
 
 function formatDateTime(value?: string | null): string {
@@ -127,7 +124,7 @@ export default function StandalonePixPage() {
   }
 
   async function handleCreate() {
-    const cents = toCents(amount);
+    const cents = moneyInputToCents(amount);
     if (cents <= 0) {
       toast.error('Informe um valor para gerar o Pix');
       return;
@@ -237,6 +234,15 @@ export default function StandalonePixPage() {
     }));
   }
 
+  function handlePrintReceipt(pix = currentPix) {
+    if (!pix) return;
+    if (pix.status !== 'approved') {
+      toast.error('Comprovante disponivel somente apos aprovacao do Pix');
+      return;
+    }
+    printStandalonePixReceipt(pix);
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div>
@@ -310,6 +316,9 @@ export default function StandalonePixPage() {
                   <button onClick={() => handleDisplay()} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><Smartphone size={14} />Exibir no display</button>
                   <button onClick={() => handleRefresh()} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><RefreshCw size={14} />Atualizar</button>
                   <button onClick={() => handlePrint()} className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold"><Printer size={14} />Imprimir QR</button>
+                  {currentPix.status === 'approved' && (
+                    <button onClick={() => handlePrintReceipt()} className="inline-flex items-center gap-1 rounded border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"><Printer size={14} />Imprimir comprovante</button>
+                  )}
                   {isStandalonePixPayable(currentPix) && (
                     <button onClick={() => handleCancel()} className="inline-flex items-center gap-1 rounded border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"><Ban size={14} />Cancelar Pix</button>
                   )}
@@ -361,6 +370,9 @@ export default function StandalonePixPage() {
                       <button title="Atualizar" onClick={() => handleRefresh(pix)} className="rounded border p-1"><RefreshCw size={14} /></button>
                       <button title="Copiar codigo" onClick={() => copyText(pix.qr_code, 'Copiar codigo Pix')} className="rounded border p-1"><Copy size={14} /></button>
                       <button title="Imprimir" onClick={() => handlePrint(pix)} className="rounded border p-1"><Printer size={14} /></button>
+                      {pix.status === 'approved' && (
+                        <button title="Imprimir comprovante" onClick={() => handlePrintReceipt(pix)} className="rounded border border-emerald-200 p-1 text-emerald-700"><Printer size={14} /></button>
+                      )}
                       <button title="Compartilhar" onClick={() => handleShare(pix)} className="rounded border p-1"><Send size={14} /></button>
                       {isStandalonePixPayable(pix) && (
                         <button title="Cancelar Pix" onClick={() => handleCancel(pix)} className="rounded border border-red-200 p-1 text-red-700"><Ban size={14} /></button>

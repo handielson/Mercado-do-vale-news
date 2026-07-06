@@ -122,6 +122,16 @@ export const pdvDisplayService = {
         );
     },
 
+    async createDisplayPixReceiptShareLink(
+        pixPaymentId: string,
+        displayToken: string
+    ): Promise<PdvPixReceiptShareLinkResponse> {
+        return vpsClient.post<PdvPixReceiptShareLinkResponse>(
+            `/pdv/display/pix-payments/${encodeURIComponent(pixPaymentId)}/receipt/share-link`,
+            { token: displayToken }
+        );
+    },
+
     async sendPixReceiptWhatsApp(
         pixPaymentId: string,
         input: PdvPixReceiptWhatsAppInput

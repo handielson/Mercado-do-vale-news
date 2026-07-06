@@ -11,6 +11,7 @@ const requiredSnippets = [
   "fastify.post('/pdv/displays/:displayId/clear-visual'",
   "fastify.post('/pdv/pix-payments/:id/receipt/whatsapp'",
   "fastify.post('/pdv/pix-payments/:id/receipt/share-link'",
+  "fastify.post('/pdv/display/pix-payments/:id/receipt/share-link'",
   "fastify.get('/pdv/receipt-share/:token'",
   'buildPdvPixReceiptData',
   'formatPdvPixReceiptWhatsAppMessage',
@@ -41,6 +42,24 @@ for (const file of files) {
   for (const snippet of requiredSnippets) {
     assert.ok(source.includes(snippet), `${file} must include ${snippet}`);
   }
+
+  const displayShareRouteBlock = extractRouteBlock(source, "fastify.post('/pdv/display/pix-payments/:id/receipt/share-link'");
+
+  assert.ok(
+    displayShareRouteBlock.includes('pdv_display_tokens'),
+    `${file} display receipt share route must validate the paired display token`,
+  );
+
+  assert.ok(
+    displayShareRouteBlock.includes('active_pix_payment_id = p.id'),
+    `${file} display receipt share route must only allow the active Pix on that display`,
+  );
+
+  assert.doesNotMatch(
+    displayShareRouteBlock,
+    /preHandler:\s*requireSyncKey/,
+    `${file} display receipt share route must not require the admin sync key`,
+  );
 
   const clearVisualRouteBlock = extractRouteBlock(source, clearVisualRouteDeclaration);
 

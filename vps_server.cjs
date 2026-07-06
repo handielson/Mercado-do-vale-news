@@ -24436,6 +24436,60 @@ fastify.post('/pdv/pix-payments/:id/receipt/share-link', { preHandler: requireSy
   };
 });
 
+fastify.post('/pdv/display/pix-payments/:id/receipt/share-link', async (req, reply) => {
+  const token = getBearerToken(req) || String(req.body?.token || req.query?.token || '');
+  if (!token) return reply.code(401).send({ error: 'Unauthorized' });
+  const tokenHash = hashPdvDisplaySecret(token);
+  const [tokenRows] = await pool.query(
+    `SELECT dt.display_id
+       FROM pdv_display_tokens dt
+       JOIN pdv_displays d ON d.id = dt.display_id
+      WHERE dt.token_hash = ? AND dt.revoked_at IS NULL AND d.is_active = 1
+      LIMIT 1`,
+    [tokenHash]
+  );
+  const displayId = tokenRows?.[0]?.display_id;
+  if (!displayId) return reply.code(401).send({ error: 'Token revogado ou invalido' });
+  await pool.query('UPDATE pdv_display_tokens SET last_seen_at = NOW() WHERE token_hash = ?', [tokenHash]);
+
+  const [rows] = await pool.query(
+    `SELECT p.*
+       FROM pdv_pix_payments p
+       JOIN pdv_displays d ON d.id = ?
+      WHERE p.id = ?
+        AND (p.display_id = ? OR d.active_pix_payment_id = p.id)
+      LIMIT 1`,
+    [displayId, req.params.id, displayId]
+  );
+  const payment = rows?.[0];
+  if (!payment) return reply.code(404).send({ error: 'Pix nao encontrado para este display' });
+  if (normalizePdvPixStatus(payment.status) !== 'approved') {
+    return reply.code(409).send({ error: 'Comprovante disponivel somente apos aprovacao do Pix' });
+  }
+  const receipt = buildPdvPixReceiptData(payment, req.body || {});
+  const shareToken = crypto.randomBytes(24).toString('base64url');
+  const receipt_share_token_hash = hashPdvDisplaySecret(shareToken);
+  const id = crypto.randomUUID();
+  await pool.query(
+    `INSERT INTO pdv_receipt_share_tokens
+      (id, pix_payment_id, receipt_share_token_hash, receipt_snapshot_json)
+     VALUES (?, ?, ?, ?)`,
+    [id, payment.id, receipt_share_token_hash, JSON.stringify(sanitizePdvPixReceiptData(receipt))]
+  );
+  await pool.query(
+    'UPDATE pdv_receipt_share_tokens SET expires_at = DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id = ?',
+    [id]
+  );
+  const [tokenRows2] = await pool.query('SELECT expires_at FROM pdv_receipt_share_tokens WHERE id = ? LIMIT 1', [id]);
+  const baseUrl = getPdvReceiptPublicBaseUrl(req);
+  return {
+    token: shareToken,
+    url: `${baseUrl}/receipt-share/${shareToken}`,
+    expires_at: tokenRows2?.[0]?.expires_at || null,
+    receipt: sanitizePdvPixReceiptData(receipt),
+  };
+});
+
 fastify.get('/pdv/receipt-share/:token', async (req, reply) => {
   const token = String(req.params?.token || '').trim();
   if (!token) return reply.code(404).send({ error: 'Comprovante nao encontrado' });

@@ -47,6 +47,18 @@ assert.match(
 
 assert.match(
   source,
+  /<PixView payment=\{active_pix\} display=\{display\} now=\{now\} displayToken=\{token\} \/>/,
+  'Display must pass its pairing token to the approved receipt view'
+);
+
+assert.match(
+  source,
+  /createDisplayPixReceiptShareLink\(payment\.id,\s*displayToken\)/,
+  'Display receipt QR must use the display-token endpoint instead of the sync-key admin endpoint'
+);
+
+assert.match(
+  source,
   /getRemainingMs\(payment\.approved_at \|\| payment\.updated_at \|\| payment\.created_at, APPROVED_RECEIPT_VISIBLE_MS, now\)/,
   'Receipt countdown must use approved_at before updated_at'
 );
