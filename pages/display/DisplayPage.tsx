@@ -15,6 +15,7 @@ const STORE_SITE_URL = 'https://www.mercadodovale.com.br';
 const TOTEM_UPDATE_HELP_URL = `${STORE_SITE_URL}/totem-pix/atualizar`;
 const DISPLAY_APP_VERSION = 'V1.22';
 const TOTEM_LOCAL_SETTINGS_STORAGE_KEY = '@mdv_totem_local_settings';
+const DISMISSED_APPROVED_RECEIPTS_STORAGE_KEY = '@mdv_dismissed_approved_receipts';
 const BRAZIL_TIME_ZONE = 'America/Sao_Paulo';
 
 type TotemVersionInfo = {
@@ -291,6 +292,28 @@ function getRemainingMs(startedAt: string | undefined, durationMs: number, now: 
     return Math.max(0, durationMs - (now - parsed));
 }
 
+function getApprovedReceiptDismissalId(payment: PdvPixPayment | null): string {
+    if (!payment || payment.status !== 'approved') return '';
+    return String(payment.id || payment.mercado_pago_payment_id || payment.local_reference || '').trim();
+}
+
+function readDismissedApprovedReceipts(now = Date.now()): Record<string, number> {
+    if (typeof localStorage === 'undefined') return {};
+    try {
+        const parsed = JSON.parse(localStorage.getItem(DISMISSED_APPROVED_RECEIPTS_STORAGE_KEY) || '{}') as Record<string, number>;
+        return Object.fromEntries(
+            Object.entries(parsed).filter(([id, expiresAt]) => id && Number(expiresAt) > now)
+        );
+    } catch {
+        return {};
+    }
+}
+
+function saveDismissedApprovedReceipts(receipts: Record<string, number>): void {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(DISMISSED_APPROVED_RECEIPTS_STORAGE_KEY, JSON.stringify(receipts));
+}
+
 function formatCountdown(milliseconds: number): string {
     const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
     const minutes = Math.floor(totalSeconds / 60);
@@ -488,6 +511,7 @@ export default function DisplayPage() {
     const [nativeWifiSsid, setNativeWifiSsid] = useState('');
     const [systemPaymentToneActive, setSystemPaymentToneActive] = useState(false);
     const [totemLocalSettings, setTotemLocalSettings] = useState<TotemLocalSettings>(() => readTotemLocalSettings());
+    const [dismissedApprovedReceipts, setDismissedApprovedReceipts] = useState<Record<string, number>>(() => readDismissedApprovedReceipts());
     const lastSuccessTonePaymentIdRef = useRef('');
     const [categoryProductPages, setCategoryProductPages] = useState<Array<{
         categoryId: string;
@@ -502,7 +526,8 @@ export default function DisplayPage() {
     const orientationClass = display?.orientation === 'portrait' ? 'max-w-[760px]' : 'max-w-[1280px]';
     const updateNotice = getTotemUpdateNotice(versionInfo, nativeVersion);
     const updateUrl = String(versionInfo?.totem_pix_android?.update_url || TOTEM_UPDATE_HELP_URL).trim();
-    const showPix = shouldShowPixPayment(active_pix, now);
+    const activePixDismissalId = getApprovedReceiptDismissalId(active_pix);
+    const showPix = shouldShowPixPayment(active_pix, now) && !(activePixDismissalId && dismissedApprovedReceipts[activePixDismissalId]);
     const nativeBridgeAvailable = Boolean(window.MdvTotem);
 
     const idleItems = useMemo(() => {
@@ -728,6 +753,21 @@ export default function DisplayPage() {
         window.MdvTotem?.returnToAppHome?.();
     }
 
+    function dismissApprovedReceipt(payment: PdvPixPayment) {
+        const dismissalId = getApprovedReceiptDismissalId(payment);
+        if (!dismissalId) return;
+        const startedAt = Date.parse(String(payment.approved_at || payment.updated_at || payment.created_at || ''));
+        const expiresAt = Number.isFinite(startedAt) ? startedAt + APPROVED_RECEIPT_VISIBLE_MS : Date.now() + APPROVED_RECEIPT_VISIBLE_MS;
+        setDismissedApprovedReceipts(() => {
+            const next = {
+                ...readDismissedApprovedReceipts(),
+                [dismissalId]: expiresAt,
+            };
+            saveDismissedApprovedReceipts(next);
+            return next;
+        });
+    }
+
     if (!token) {
         return (
             <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
@@ -796,7 +836,7 @@ export default function DisplayPage() {
                 )}
 
                 {showPix ? (
-                    <PixView payment={active_pix} display={display} now={now} displayToken={token} />
+                    <PixView payment={active_pix} display={display} now={now} displayToken={token} onDismissApprovedReceipt={dismissApprovedReceipt} />
                 ) : (
                     <IdleView items={idleItems} slide={idleSlide} />
                 )}
@@ -1107,13 +1147,25 @@ function StatusRow({ label, value, ok }: { label: string; value: string; ok: boo
     );
 }
 
-function PixView({ payment, display, now, displayToken }: { payment: PdvPixPayment; display: PdvDisplay | null; now: number; displayToken: string }) {
+function PixView({
+    payment,
+    display,
+    now,
+    displayToken,
+    onDismissApprovedReceipt,
+}: {
+    payment: PdvPixPayment;
+    display: PdvDisplay | null;
+    now: number;
+    displayToken: string;
+    onDismissApprovedReceipt: (payment: PdvPixPayment) => void;
+}) {
     const settings = display?.settings || {};
     const qrImage = payment.qr_code_base64 ? `data:image/png;base64,${payment.qr_code_base64}` : '';
     const isApproved = payment.status === 'approved';
 
     if (isApproved) {
-        return <ApprovedReceiptView payment={payment} now={now} displayToken={displayToken} />;
+        return <ApprovedReceiptView payment={payment} now={now} displayToken={displayToken} onDismiss={() => onDismissApprovedReceipt(payment)} />;
     }
 
     return (
@@ -1138,7 +1190,17 @@ function PixView({ payment, display, now, displayToken }: { payment: PdvPixPayme
     );
 }
 
-function ApprovedReceiptView({ payment, now, displayToken }: { payment: PdvPixPayment; now: number; displayToken: string }) {
+function ApprovedReceiptView({
+    payment,
+    now,
+    displayToken,
+    onDismiss,
+}: {
+    payment: PdvPixPayment;
+    now: number;
+    displayToken: string;
+    onDismiss: () => void;
+}) {
     const receipt = payment.receipt;
     const [phone, setPhone] = useState('');
     const [phoneModalOpen, setPhoneModalOpen] = useState(false);
@@ -1229,6 +1291,14 @@ function ApprovedReceiptView({ payment, now, displayToken }: { payment: PdvPixPa
                         Enviar WhatsApp
                     </button>
                 </div>
+                <button
+                    type="button"
+                    onClick={onDismiss}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-white/15 bg-slate-800 px-3 py-3 text-sm font-bold text-white active:scale-[0.99]"
+                >
+                    <X className="h-5 w-5" />
+                    Fechar
+                </button>
                 {shareLink && (
                     <div className="mx-auto grid max-w-sm place-items-center gap-2 rounded-lg bg-white p-3 text-slate-950">
                         <QRCode value={shareLink.url} size={140} />
