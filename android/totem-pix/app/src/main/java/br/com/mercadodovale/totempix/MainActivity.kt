@@ -354,11 +354,6 @@ class MainActivity : Activity() {
 
     private fun showPaymentScreenNow() {
         setDisplayAwake(true)
-
-        try {
-            webView.loadUrl(displayHomeUrl)
-        } catch (_: Exception) {
-        }
     }
 
     private fun registerDisplayToken(token: String) {

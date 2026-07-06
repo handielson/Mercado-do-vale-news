@@ -10,8 +10,8 @@ const mainActivity = readFileSync('android/totem-pix/app/src/main/java/br/com/me
 
 assert.match(buildGradle, /applicationId 'br\.com\.mercadodovale\.totempix'/, 'package name deve ser estavel para Google Play');
 assert.match(buildGradle, /targetSdk 35/, 'targetSdk deve atender a exigencia atual do Google Play');
-assert.match(buildGradle, /versionCode 116/, 'versionCode deve estar preparado para V1.16');
-assert.match(buildGradle, /versionName '1\.16'/, 'versionName deve refletir V1.16');
+assert.match(buildGradle, /versionCode 117/, 'versionCode deve estar preparado para V1.17');
+assert.match(buildGradle, /versionName '1\.17'/, 'versionName deve refletir V1.17');
 assert.match(buildGradle, /keystore\.properties/, 'release signing deve ler keystore.properties local');
 assert.match(buildGradle, /storeFile rootProject\.file/, 'keystore deve ser resolvida relativa a raiz do projeto Android');
 assert.match(buildGradle, /signingConfig signingConfigs\.release/, 'build release deve usar signingConfig release');

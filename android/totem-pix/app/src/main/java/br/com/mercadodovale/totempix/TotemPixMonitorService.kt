@@ -14,11 +14,14 @@ import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
 import java.nio.charset.StandardCharsets
+import org.json.JSONObject
 
 class TotemPixMonitorService : Service() {
     private var worker: Thread? = null
     @Volatile private var running = false
     private var wakeLock: PowerManager.WakeLock? = null
+    private var lastActivePixSignature: String? = null
+    private var lastWakeAttemptAt = 0L
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification())
@@ -73,17 +76,54 @@ class TotemPixMonitorService : Service() {
             connection.setRequestProperty("Accept", "application/json")
             if (connection.responseCode !in 200..299) return
             val body = connection.inputStream.bufferedReader().use { it.readText() }
-            if (hasVisibleActivePix(body)) {
-                showPaymentScreen()
+            val signature = activePixSignature(body)
+            if (signature == null) {
+                lastActivePixSignature = null
+                lastWakeAttemptAt = 0L
+                return
             }
+            if (!shouldWakeForActivePix(signature)) return
+            showPaymentScreen()
         } finally {
             connection.disconnect()
         }
     }
 
-    private fun hasVisibleActivePix(body: String): Boolean {
-        if (!body.contains("\"active_pix\"") || body.contains("\"active_pix\":null")) return false
-        return body.contains("\"status\":\"pending\"") || body.contains("\"status\":\"approved\"")
+    private fun activePixSignature(body: String): String? {
+        return try {
+            val activePix = JSONObject(body).optJSONObject("active_pix") ?: return null
+            val status = activePix.optString("status", "").trim()
+            if (status != "pending" && status != "approved") return null
+            val id = firstNonBlank(
+                activePix.optString("id", ""),
+                activePix.optString("mercado_pago_payment_id", ""),
+                activePix.optString("external_reference", ""),
+                activePix.optString("updated_at", ""),
+            )
+            "$status:$id"
+        } catch (_: Exception) {
+            if (!body.contains("\"active_pix\"") || body.contains("\"active_pix\":null")) return null
+            if (!body.contains("\"status\":\"pending\"") && !body.contains("\"status\":\"approved\"")) return null
+            body.hashCode().toString()
+        }
+    }
+
+    private fun firstNonBlank(vararg values: String): String {
+        return values.firstOrNull { it.trim().isNotEmpty() }?.trim() ?: "active"
+    }
+
+    private fun shouldWakeForActivePix(signature: String): Boolean {
+        val now = System.currentTimeMillis()
+        if (signature != lastActivePixSignature) {
+            lastActivePixSignature = signature
+            lastWakeAttemptAt = now
+            return true
+        }
+        if (now - lastWakeAttemptAt >= WAKE_REPEAT_INTERVAL_MS) {
+            lastWakeAttemptAt = now
+            return true
+        }
+        return false
     }
 
     private fun showPaymentScreen() {
@@ -169,5 +209,6 @@ class TotemPixMonitorService : Service() {
         private const val NOTIFICATION_CHANNEL_ID = "totem_pix_monitor"
         private const val NOTIFICATION_ID = 20260705
         private const val POLL_INTERVAL_MS = 5000L
+        private const val WAKE_REPEAT_INTERVAL_MS = 120_000L
     }
 }

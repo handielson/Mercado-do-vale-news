@@ -1,15 +1,15 @@
 {
-    "version": "v1.2.50-totem-pix-android-116",
+    "version": "v1.2.51-totem-pix-qr-no-blink",
     "date": "2026-07-06",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260706-030512-totem-pix-android-116",
+    "release_vps": "/var/www/mdv-site/releases/20260706-031344-totem-pix-qr-no-blink",
     "branch": "main",
-    "summary": "Atualiza Totem Pix Android para versionCode 116 para aceite no Google Play.",
+    "summary": "Corrige piscada do QR Pix no Totem Android.",
     "totem_pix_android": {
-        "latest_version_name": "1.16",
-        "latest_version_code": 116,
-        "minimum_recommended_version_name": "1.16",
-        "update_message": "V1.16\nMelhorias | implementacoes\n- Atualiza o versionCode para 116 para novo envio no Google Play\n- Mantem o monitoramento nativo do Pix em servico de primeiro plano\n- Continua reacendendo e reabrindo a tela do Totem Pix quando houver QR pendente ou aprovado\n- Mantem as permissoes modernas de foreground service para Android 14/15",
+        "latest_version_name": "1.17",
+        "latest_version_code": 117,
+        "minimum_recommended_version_name": "1.17",
+        "update_message": "V1.17\nMelhorias | implementacoes\n- Corrige a piscada do QR Pix causada por recarregamento repetido do WebView\n- O monitor nativo agora acorda o totem apenas para Pix novo ou em intervalo de seguranca\n- Mantem a tela acordada sem recarregar a pagina de pagamento a cada polling\n- Mantem o versionCode 117 para novo envio no Google Play",
         "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
     }
 }
