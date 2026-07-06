@@ -59,6 +59,30 @@ assert.match(
 
 assert.match(
   source,
+  /sendDisplayPixReceiptWhatsApp\(payment\.id,\s*displayToken,\s*\{\s*phone\s*\}\)/,
+  'Display receipt WhatsApp must use the display-token endpoint instead of the sync-key admin endpoint'
+);
+
+assert.match(
+  source,
+  /phoneModalOpen/,
+  'Display receipt WhatsApp entry must open in a modal'
+);
+
+assert.match(
+  source,
+  /appendPhoneDigit/,
+  'Display receipt WhatsApp modal must use the on-screen numeric keypad'
+);
+
+assert.match(
+  source,
+  /Confirmar numero/,
+  'Display receipt WhatsApp modal must have an explicit confirmation button'
+);
+
+assert.match(
+  source,
   /getRemainingMs\(payment\.approved_at \|\| payment\.updated_at \|\| payment\.created_at, APPROVED_RECEIPT_VISIBLE_MS, now\)/,
   'Receipt countdown must use approved_at before updated_at'
 );

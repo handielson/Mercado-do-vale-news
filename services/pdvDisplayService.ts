@@ -142,6 +142,17 @@ export const pdvDisplayService = {
         );
     },
 
+    async sendDisplayPixReceiptWhatsApp(
+        pixPaymentId: string,
+        displayToken: string,
+        input: PdvPixReceiptWhatsAppInput
+    ): Promise<PdvPixReceiptWhatsAppResponse> {
+        return vpsClient.post<PdvPixReceiptWhatsAppResponse>(
+            `/pdv/display/pix-payments/${encodeURIComponent(pixPaymentId)}/receipt/whatsapp`,
+            { ...input, token: displayToken }
+        );
+    },
+
     async getTemporaryPixReceipt(token: string): Promise<PdvPixReceiptShareResponse> {
         return vpsClient.get<PdvPixReceiptShareResponse>(`/pdv/receipt-share/${encodeURIComponent(token)}`);
     },

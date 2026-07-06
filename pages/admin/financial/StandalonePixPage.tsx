@@ -257,7 +257,7 @@ export default function StandalonePixPage() {
           </div>
           <div className="space-y-3">
             <input value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Valor em reais" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" />
-            <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Descricao" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" />
+            <input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Texto que aparece no comprovante" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" />
             <input value={cashierKey} onChange={(event) => setCashierKey(event.target.value)} placeholder="caixa-01" className="w-full rounded border border-slate-200 px-3 py-2 text-sm" />
             <select value={displayId} onChange={(event) => setDisplayId(event.target.value)} className="w-full rounded border border-slate-200 px-3 py-2 text-sm">
               <option value="">Sem display</option>

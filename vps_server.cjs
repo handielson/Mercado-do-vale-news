@@ -1010,7 +1010,7 @@ function buildStandalonePixPublicResponse(row) {
 }
 
 function formatPdvReceiptAmount(cents) {
-  return Number(cents || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function formatPdvReceiptDate(value) {
@@ -1032,11 +1032,11 @@ function getPdvPixAuthenticationCode(payment) {
 }
 
 function getPdvPixReceiptOrderNumber(payment) {
-  const saleDraftId = String(payment?.sale_draft_id || '').trim();
-  if (saleDraftId) return saleDraftId;
   const localReference = String(payment?.local_reference || '').trim();
   if (localReference) {
     if (localReference.toLowerCase().startsWith('standalone_pix:')) {
+      const description = String(payment?.description || '').trim();
+      if (description && description !== 'Pix avulso Mercado do Vale') return description;
       const standaloneId = localReference.slice(localReference.indexOf(':') + 1);
       const codeSource = String(standaloneId || payment?.id || payment?.mercado_pago_payment_id || '')
         .replace(/[^a-z0-9]/gi, '')
@@ -1044,8 +1044,15 @@ function getPdvPixReceiptOrderNumber(payment) {
       return `PIX-${codeSource.slice(-6) || 'AVULSO'}`;
     }
     const saleMatch = localReference.match(/^sale:(.+)$/i);
+    const pdvMatch = localReference.match(/^pdv:(.+)$/i);
+    if (pdvMatch?.[1]) return pdvMatch[1];
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(localReference)) {
+      return `PDV-${localReference.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    }
     return saleMatch?.[1] || localReference;
   }
+  const saleDraftId = String(payment?.sale_draft_id || '').trim();
+  if (saleDraftId) return saleDraftId;
   return String(payment?.id || '').trim();
 }
 
@@ -1595,6 +1602,10 @@ function isVpsProxyPublicPath(proxyPath, method = 'GET') {
   }
 
   if (normalizedMethod === 'GET' && pathname === '/pdv/display-state') {
+    return true;
+  }
+
+  if (normalizedMethod === 'POST' && /^\/pdv\/display\/pix-payments\/[^/]+\/receipt\/(?:share-link|whatsapp)$/u.test(pathname)) {
     return true;
   }
 
@@ -24487,6 +24498,58 @@ fastify.post('/pdv/display/pix-payments/:id/receipt/share-link', async (req, rep
     url: `${baseUrl}/receipt-share/${shareToken}`,
     expires_at: tokenRows2?.[0]?.expires_at || null,
     receipt: sanitizePdvPixReceiptData(receipt),
+  };
+});
+
+fastify.post('/pdv/display/pix-payments/:id/receipt/whatsapp', async (req, reply) => {
+  const token = getBearerToken(req) || String(req.body?.token || req.query?.token || '');
+  if (!token) return reply.code(401).send({ error: 'Unauthorized' });
+  const tokenHash = hashPdvDisplaySecret(token);
+  const [tokenRows] = await pool.query(
+    `SELECT dt.display_id
+       FROM pdv_display_tokens dt
+       JOIN pdv_displays d ON d.id = dt.display_id
+      WHERE dt.token_hash = ? AND dt.revoked_at IS NULL AND d.is_active = 1
+      LIMIT 1`,
+    [tokenHash]
+  );
+  const displayId = tokenRows?.[0]?.display_id;
+  if (!displayId) return reply.code(401).send({ error: 'Token revogado ou invalido' });
+  await pool.query('UPDATE pdv_display_tokens SET last_seen_at = NOW() WHERE token_hash = ?', [tokenHash]);
+
+  const [rows] = await pool.query(
+    `SELECT p.*
+       FROM pdv_pix_payments p
+       JOIN pdv_displays d ON d.id = ?
+      WHERE p.id = ?
+        AND (p.display_id = ? OR d.active_pix_payment_id = p.id)
+      LIMIT 1`,
+    [displayId, req.params.id, displayId]
+  );
+  const payment = rows?.[0];
+  if (!payment) return reply.code(404).send({ error: 'Pix nao encontrado para este display' });
+  if (normalizePdvPixStatus(payment.status) !== 'approved') {
+    return reply.code(409).send({ error: 'Comprovante disponivel somente apos aprovacao do Pix' });
+  }
+  const body = req.body || {};
+  const rawPhone = body.phone || body.whatsapp || pickPdvReceiptCustomerPhone(payment, body.customer_phone);
+  const phone = normalizeDeliveryWhatsAppNumber(rawPhone);
+  if (!phone) return reply.code(400).send({ error: 'WhatsApp obrigatorio' });
+  const receipt = buildPdvPixReceiptData(payment, {
+    customer_name: body.customer_name || body.name,
+    customer_phone: phone,
+  });
+  const message = formatPdvPixReceiptWhatsAppMessage(receipt);
+  const result = await sendDeliveryWhatsappText(phone, message);
+  await pool.query(
+    "UPDATE pdv_pix_payments SET shared_phone = ?, shared_at = CURRENT_TIMESTAMP, share_channel = 'display_whatsapp', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [phone, payment.id]
+  );
+  return {
+    ok: true,
+    phone_mask: maskPdvReceiptPhone(phone),
+    receipt: sanitizePdvPixReceiptData(receipt),
+    result,
   };
 });
 

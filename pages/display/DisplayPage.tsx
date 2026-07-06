@@ -303,13 +303,18 @@ function getPaymentOrderNumber(payment: PdvPixPayment): string {
         return receiptOrderNumber;
     }
 
-    const saleDraftId = String(payment.sale_draft_id || '').trim();
-    if (saleDraftId) return saleDraftId;
-
     const localReference = String(payment.local_reference || '').trim();
     if (localReference.toLowerCase().startsWith('standalone_pix:')) {
         return `PIX-${getStandalonePixCode(payment)}`;
     }
+    const pdvMatch = localReference.match(/^pdv:(.+)$/i);
+    if (pdvMatch?.[1]) return pdvMatch[1];
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(localReference)) {
+        return `PDV-${localReference.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    }
+
+    const saleDraftId = String(payment.sale_draft_id || '').trim();
+    if (saleDraftId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saleDraftId)) return saleDraftId;
 
     return localReference || payment.id;
 }
@@ -335,6 +340,17 @@ function normalizeVersionNumber(value: string | undefined): number {
 function isLikelyAndroidWebView(): boolean {
     if (typeof navigator === 'undefined') return false;
     return /Android/i.test(navigator.userAgent) && /; wv\)|Version\/\d+/i.test(navigator.userAgent);
+}
+
+function normalizeDisplayPhoneDigits(value: string): string {
+    return String(value || '').replace(/\D/g, '').slice(0, 11);
+}
+
+function formatDisplayPhoneDigits(value: string): string {
+    const digits = normalizeDisplayPhoneDigits(value);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
 function readNativeTotemVersion(): { name: string; code: number } | null {
@@ -1074,6 +1090,7 @@ function PixView({ payment, display, now, displayToken }: { payment: PdvPixPayme
 function ApprovedReceiptView({ payment, now, displayToken }: { payment: PdvPixPayment; now: number; displayToken: string }) {
     const receipt = payment.receipt;
     const [phone, setPhone] = useState('');
+    const [phoneModalOpen, setPhoneModalOpen] = useState(false);
     const [sending, setSending] = useState(false);
     const [shareLink, setShareLink] = useState<PdvPixReceiptShareLinkResponse | null>(null);
     const [shareError, setShareError] = useState<string | null>(null);
@@ -1093,13 +1110,21 @@ function ApprovedReceiptView({ payment, now, displayToken }: { payment: PdvPixPa
         }
     }
 
-    async function handleSendWhatsApp(event: React.FormEvent) {
-        event.preventDefault();
+    function appendPhoneDigit(digit: string) {
+        setPhone((current) => normalizeDisplayPhoneDigits(`${current}${digit}`));
+    }
+
+    function erasePhoneDigit() {
+        setPhone((current) => normalizeDisplayPhoneDigits(current).slice(0, -1));
+    }
+
+    async function handleConfirmWhatsApp() {
         try {
             setSending(true);
             setShareError(null);
-            await pdvDisplayService.sendPixReceiptWhatsApp(payment.id, { phone });
+            await pdvDisplayService.sendDisplayPixReceiptWhatsApp(payment.id, displayToken, { phone });
             setPhone('');
+            setPhoneModalOpen(false);
             setShareError('Comprovante enviado.');
         } catch (err: any) {
             setShareError(err?.message || 'Erro ao enviar comprovante');
@@ -1143,23 +1168,15 @@ function ApprovedReceiptView({ payment, now, displayToken }: { payment: PdvPixPa
                         <QrCode className="h-5 w-5" />
                         QR comprovante
                     </button>
-                    <form onSubmit={handleSendWhatsApp} className="flex min-w-0 gap-2">
-                        <input
-                            value={phone}
-                            onChange={(event) => setPhone(event.target.value)}
-                            placeholder="WhatsApp"
-                            inputMode="tel"
-                            className="min-w-0 flex-1 rounded-lg border border-white/20 bg-white/10 px-3 py-3 text-sm font-semibold text-white outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-300"
-                        />
-                        <button
-                            type="submit"
-                            disabled={sending || phone.trim().length < 8}
-                            className="inline-flex aspect-square h-12 items-center justify-center rounded-lg bg-emerald-500 text-white disabled:opacity-60"
-                            aria-label="Enviar comprovante"
-                        >
-                            <MessageCircle className="h-5 w-5" />
-                        </button>
-                    </form>
+                    <button
+                        type="button"
+                        onClick={() => setPhoneModalOpen(true)}
+                        disabled={sending}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500 px-3 py-3 text-sm font-bold text-white disabled:opacity-60"
+                    >
+                        <MessageCircle className="h-5 w-5" />
+                        Enviar WhatsApp
+                    </button>
                 </div>
                 {shareLink && (
                     <div className="mx-auto grid max-w-sm place-items-center gap-2 rounded-lg bg-white p-3 text-slate-950">
@@ -1169,6 +1186,69 @@ function ApprovedReceiptView({ payment, now, displayToken }: { payment: PdvPixPa
                 )}
                 {shareError && <p className="text-center text-sm font-semibold text-emerald-200">{shareError}</p>}
             </div>
+
+            {phoneModalOpen && (
+                <div className="fixed inset-0 z-50 grid place-items-start bg-black/80 px-4 py-6">
+                    <div className="mx-auto w-full max-w-sm rounded-lg border border-white/15 bg-slate-950 p-4 text-white shadow-2xl">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                            <p className="text-lg font-black">WhatsApp do cliente</p>
+                            <button
+                                type="button"
+                                onClick={() => setPhoneModalOpen(false)}
+                                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/15 text-white"
+                                aria-label="Fechar"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="rounded-lg border border-emerald-300 bg-white px-4 py-3 text-center font-mono text-2xl font-black text-slate-950">
+                            {formatDisplayPhoneDigits(phone) || '(__) _____-____'}
+                        </div>
+                        <div className="mt-4 grid grid-cols-3 gap-2">
+                            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                                <button
+                                    key={digit}
+                                    type="button"
+                                    onClick={() => appendPhoneDigit(digit)}
+                                    className="h-14 rounded-lg bg-white text-2xl font-black text-slate-950"
+                                >
+                                    {digit}
+                                </button>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={erasePhoneDigit}
+                                className="h-14 rounded-lg border border-white/20 text-lg font-black text-white"
+                            >
+                                Apagar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => appendPhoneDigit('0')}
+                                className="h-14 rounded-lg bg-white text-2xl font-black text-slate-950"
+                            >
+                                0
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPhone('')}
+                                className="h-14 rounded-lg border border-white/20 text-lg font-black text-white"
+                            >
+                                Limpar
+                            </button>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleConfirmWhatsApp}
+                            disabled={sending || normalizeDisplayPhoneDigits(phone).length < 10}
+                            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-4 text-base font-black text-white disabled:opacity-60"
+                        >
+                            <MessageCircle className="h-5 w-5" />
+                            Confirmar numero
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -54,6 +54,16 @@ type FinalizeStep = {
 
 const PDV_PIX_STATUS_POLLING_MS = 3000;
 
+function buildPdvPixCustomerReference(): string {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hour = String(now.getHours()).padStart(2, '0');
+    const minute = String(now.getMinutes()).padStart(2, '0');
+    const suffix = crypto.randomUUID().replace(/-/g, '').slice(0, 4).toUpperCase();
+    return `PDV-${month}${day}-${hour}${minute}-${suffix}`;
+}
+
 function FinalizeProgress({
     steps,
     log,
@@ -790,12 +800,14 @@ export default function PDVPage() {
             const display_id = pdvPixDisplayId.trim();
             const cashier_key = pdvPixCashierKey.trim() || 'caixa-01';
             rememberPdvPixDisplayConfig(display_id, cashier_key);
+            const customerReference = buildPdvPixCustomerReference();
 
             const payment = await pdvDisplayService.createPixPayment({
                 amount,
+                sale_draft_id: customerReference,
                 display_id: display_id || null,
                 cashier_key,
-                local_reference: crypto.randomUUID(),
+                local_reference: `pdv:${customerReference}`,
                 description: 'Venda PDV Mercado do Vale',
                 payer_email: selectedCustomer?.email || undefined
             });

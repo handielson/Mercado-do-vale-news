@@ -12,10 +12,12 @@ const requiredSnippets = [
   "fastify.post('/pdv/pix-payments/:id/receipt/whatsapp'",
   "fastify.post('/pdv/pix-payments/:id/receipt/share-link'",
   "fastify.post('/pdv/display/pix-payments/:id/receipt/share-link'",
+  "fastify.post('/pdv/display/pix-payments/:id/receipt/whatsapp'",
   "fastify.get('/pdv/receipt-share/:token'",
   'buildPdvPixReceiptData',
   'formatPdvPixReceiptWhatsAppMessage',
   'maskPdvReceiptPhone',
+  "receipt\\/(?:share-link|whatsapp)",
   'expires_at = DATE_ADD(NOW(), INTERVAL 5 MINUTE)',
 ];
 
@@ -44,6 +46,7 @@ for (const file of files) {
   }
 
   const displayShareRouteBlock = extractRouteBlock(source, "fastify.post('/pdv/display/pix-payments/:id/receipt/share-link'");
+  const displayWhatsappRouteBlock = extractRouteBlock(source, "fastify.post('/pdv/display/pix-payments/:id/receipt/whatsapp'");
 
   assert.ok(
     displayShareRouteBlock.includes('pdv_display_tokens'),
@@ -59,6 +62,22 @@ for (const file of files) {
     displayShareRouteBlock,
     /preHandler:\s*requireSyncKey/,
     `${file} display receipt share route must not require the admin sync key`,
+  );
+
+  assert.ok(
+    displayWhatsappRouteBlock.includes('pdv_display_tokens'),
+    `${file} display receipt WhatsApp route must validate the paired display token`,
+  );
+
+  assert.ok(
+    displayWhatsappRouteBlock.includes('active_pix_payment_id = p.id'),
+    `${file} display receipt WhatsApp route must only allow the active Pix on that display`,
+  );
+
+  assert.doesNotMatch(
+    displayWhatsappRouteBlock,
+    /preHandler:\s*requireSyncKey/,
+    `${file} display receipt WhatsApp route must not require the admin sync key`,
   );
 
   const clearVisualRouteBlock = extractRouteBlock(source, clearVisualRouteDeclaration);

@@ -35,11 +35,11 @@ function maskPdvReceiptPhone(phone) {
 }
 
 function getPdvPixReceiptOrderNumber(payment) {
-  const saleDraftId = String(payment?.sale_draft_id || '').trim();
-  if (saleDraftId) return saleDraftId;
   const localReference = String(payment?.local_reference || '').trim();
   if (localReference) {
     if (localReference.toLowerCase().startsWith('standalone_pix:')) {
+      const description = String(payment?.description || '').trim();
+      if (description && description !== 'Pix avulso Mercado do Vale') return description;
       const standaloneId = localReference.slice(localReference.indexOf(':') + 1);
       const codeSource = String(standaloneId || payment?.id || payment?.mercado_pago_payment_id || '')
         .replace(/[^a-z0-9]/gi, '')
@@ -47,9 +47,20 @@ function getPdvPixReceiptOrderNumber(payment) {
       return `PIX-${codeSource.slice(-6) || 'AVULSO'}`;
     }
     const saleMatch = localReference.match(/^sale:(.+)$/i);
+    const pdvMatch = localReference.match(/^pdv:(.+)$/i);
+    if (pdvMatch?.[1]) return pdvMatch[1];
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(localReference)) {
+      return `PDV-${localReference.replace(/-/g, '').slice(0, 8).toUpperCase()}`;
+    }
     return saleMatch?.[1] || localReference;
   }
+  const saleDraftId = String(payment?.sale_draft_id || '').trim();
+  if (saleDraftId) return saleDraftId;
   return String(payment?.id || '').trim();
+}
+
+function formatPdvReceiptAmount(cents) {
+  return (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 function formatPdvPixReceiptWhatsAppMessage(receipt) {
@@ -138,6 +149,30 @@ assert.equal(
   getPdvPixReceiptOrderNumber({ local_reference: 'sale:12345', id: 'fallback' }),
   '12345',
   'sale local reference must keep exposing the sale order number',
+);
+assert.equal(
+  getPdvPixReceiptOrderNumber({ local_reference: 'pdv:PDV-0706-1202-A1B2', id: 'fallback' }),
+  'PDV-0706-1202-A1B2',
+  'PDV Pix local reference must expose the customer-facing reference',
+);
+assert.equal(
+  getPdvPixReceiptOrderNumber({ local_reference: 'f29e6068-0f74-48b4-982b-b1600ad2963c', id: 'fallback' }),
+  'PDV-F29E6068',
+  'legacy raw UUID local reference must be shortened before showing to the customer',
+);
+assert.equal(
+  getPdvPixReceiptOrderNumber({
+    local_reference: 'standalone_pix:550e8400-e29b-41d4-a716-446655440000',
+    description: 'Cliente Joao - taxa',
+    id: 'fallback',
+  }),
+  'Cliente Joao - taxa',
+  'standalone Pix receipt must use the operator description when provided',
+);
+assert.equal(
+  formatPdvReceiptAmount(100).replace(/\s/u, ' '),
+  'R$ 1,00',
+  'receipt amount must treat stored Pix amount as cents',
 );
 
 assert.ok(
