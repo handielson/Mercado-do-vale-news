@@ -27,6 +27,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.JavascriptInterface
+import java.lang.ref.WeakReference
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
@@ -62,6 +63,7 @@ class MainActivity : Activity() {
         webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         webView.addJavascriptInterface(TotemBridge(), "MdvTotem")
         setContentView(webView)
+        activeInstance = WeakReference(this)
 
         requestWifiPermissionIfNeeded()
         requestNotificationPermissionIfNeeded()
@@ -81,6 +83,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        activeInstance = WeakReference(this)
         if (displayAwakeEnabled) {
             setDisplayAwake(true)
         } else {
@@ -90,6 +93,9 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (activeInstance?.get() === this) {
+            activeInstance = null
+        }
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
         super.onDestroy()
@@ -598,6 +604,17 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun returnToAppHome() {
             runOnUiThread { this@MainActivity.returnToAppHome() }
+        }
+    }
+
+    companion object {
+        @Volatile private var activeInstance: WeakReference<MainActivity>? = null
+
+        fun requestShowPaymentScreenFromMonitor(): Boolean {
+            val activity = activeInstance?.get() ?: return false
+            if (!activity::webView.isInitialized) return false
+            activity.runOnUiThread { activity.showPaymentScreenNow() }
+            return true
         }
     }
 }

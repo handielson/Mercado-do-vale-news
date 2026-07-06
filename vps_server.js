@@ -24541,6 +24541,7 @@ fastify.post('/pdv/display/pix-payments/:id/receipt/whatsapp', async (req, reply
   });
   const message = formatPdvPixReceiptWhatsAppMessage(receipt);
   const result = await sendDeliveryWhatsappText(phone, message);
+  if (!result?.ok) throw new Error(`WhatsApp API retornou HTTP ${result?.status || 'desconhecido'}`);
   await pool.query(
     "UPDATE pdv_pix_payments SET shared_phone = ?, shared_at = CURRENT_TIMESTAMP, share_channel = 'display_whatsapp', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     [phone, payment.id]
@@ -24594,6 +24595,7 @@ fastify.post('/pdv/pix-payments/:id/receipt/whatsapp', { preHandler: requireSync
   });
   const message = formatPdvPixReceiptWhatsAppMessage(receipt);
   const result = await sendDeliveryWhatsappText(phone, message);
+  if (!result?.ok) throw new Error(`WhatsApp API retornou HTTP ${result?.status || 'desconhecido'}`);
   return {
     ok: true,
     phone_mask: maskPdvReceiptPhone(phone),

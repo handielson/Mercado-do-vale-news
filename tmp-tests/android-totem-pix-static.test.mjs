@@ -34,8 +34,8 @@ assert.match(activity, /showPaymentScreenNow/, 'Totem should expose a native bri
 assert.match(activity, /returnToAppHome/, 'Totem should expose a native return-to-app-home bridge');
 assert.match(activity, /FLAG_ACTIVITY_REORDER_TO_FRONT/, 'Totem should bring its activity to the front when returning to app');
 assert.match(activity, /private fun returnToAppHome\(\)[\s\S]*setDisplayAwake\(true\)/, 'Totem should wake the screen when returning to app home');
-assert.match(buildGradle, /versionCode 121/, 'Android upload versionCode must be bumped for the next Play upload');
-assert.match(buildGradle, /versionName '1\.21'/, 'Android versionName must describe the next app release');
+assert.match(buildGradle, /versionCode 122/, 'Android upload versionCode must be bumped for the next Play upload');
+assert.match(buildGradle, /versionName '1\.22'/, 'Android versionName must describe the next app release');
 
 const monitorService = readFileSync('android/totem-pix/app/src/main/java/br/com/mercadodovale/totempix/TotemPixMonitorService.kt', 'utf8');
 assert.match(monitorService, /startForeground/, 'Pix monitor must run as a foreground service');
@@ -54,6 +54,8 @@ assert.match(monitorService, /lastActivePixSignature/, 'Pix monitor must remembe
 assert.match(monitorService, /WAKE_REPEAT_INTERVAL_MS/, 'Pix monitor must throttle repeated wake attempts for the same Pix');
 assert.match(monitorService, /if \(!shouldWakeForActivePix\(signature\)\) return/, 'Pix monitor must not relaunch the payment screen on every poll');
 assert.match(monitorService, /lastActivePixSignature = null/, 'Pix monitor must clear the wake guard after Pix disappears');
+assert.match(monitorService, /if \(status != "pending"\) return null/, 'Pix monitor must only wake or notify for pending Pix, not approved receipt display');
+assert.match(monitorService, /cancelActivePixNotification\(\)/, 'Pix monitor must cancel the active Pix notification when Pix is no longer pending');
 
 const showPaymentScreenNowBody = activity.match(/private fun showPaymentScreenNow\(\) \{[\s\S]*?\n    \}/)?.[0] || '';
 assert.match(showPaymentScreenNowBody, /setDisplayAwake\(true\)/, 'native wake must always turn the totem screen on');

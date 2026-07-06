@@ -24,6 +24,7 @@ class TotemPixMonitorService : Service() {
     @Volatile private var running = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastActivePixSignature: String? = null
+    private var lastActivePixNotificationSignature: String? = null
     private var lastWakeAttemptAt = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -83,11 +84,13 @@ class TotemPixMonitorService : Service() {
             val signature = activePixSignature(body)
             if (signature == null) {
                 lastActivePixSignature = null
+                lastActivePixNotificationSignature = null
                 lastWakeAttemptAt = 0L
+                cancelActivePixNotification()
                 return
             }
             if (!shouldWakeForActivePix(signature)) return
-            showPaymentScreen()
+            showPaymentScreen(signature)
         } finally {
             connection.disconnect()
         }
@@ -97,7 +100,7 @@ class TotemPixMonitorService : Service() {
         return try {
             val activePix = JSONObject(body).optJSONObject("active_pix") ?: return null
             val status = activePix.optString("status", "").trim()
-            if (status != "pending" && status != "approved") return null
+            if (status != "pending") return null
             val id = firstNonBlank(
                 activePix.optString("id", ""),
                 activePix.optString("mercado_pago_payment_id", ""),
@@ -107,7 +110,7 @@ class TotemPixMonitorService : Service() {
             "$status:$id"
         } catch (_: Exception) {
             if (!body.contains("\"active_pix\"") || body.contains("\"active_pix\":null")) return null
-            if (!body.contains("\"status\":\"pending\"") && !body.contains("\"status\":\"approved\"")) return null
+            if (!body.contains("\"status\":\"pending\"")) return null
             body.hashCode().toString()
         }
     }
@@ -130,14 +133,23 @@ class TotemPixMonitorService : Service() {
         return false
     }
 
-    private fun showPaymentScreen() {
+    private fun showPaymentScreen(signature: String) {
         acquireWakeLock()
-        publishActivePixNotification()
+        val openedDirectly = MainActivity.requestShowPaymentScreenFromMonitor()
+        if (openedDirectly) {
+            cancelActivePixNotification()
+        }
         bringTotemTaskToFront()
         openTotemPaymentActivity()
         mainHandler.postDelayed({
-            bringTotemTaskToFront()
-            openTotemPaymentActivity()
+            val retriedDirectly = MainActivity.requestShowPaymentScreenFromMonitor()
+            if (retriedDirectly) {
+                cancelActivePixNotification()
+            } else {
+                bringTotemTaskToFront()
+                openTotemPaymentActivity()
+                publishActivePixNotificationOnce(signature)
+            }
         }, WAKE_RETRY_DELAY_MS)
     }
 
@@ -199,11 +211,21 @@ class TotemPixMonitorService : Service() {
             .build()
     }
 
-    private fun publishActivePixNotification() {
+    private fun publishActivePixNotificationOnce(signature: String) {
+        if (signature == lastActivePixNotificationSignature) return
         try {
             ensureActivePixNotificationChannel()
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(ACTIVE_PIX_NOTIFICATION_ID, buildActivePixNotification())
+            lastActivePixNotificationSignature = signature
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun cancelActivePixNotification() {
+        try {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(ACTIVE_PIX_NOTIFICATION_ID)
         } catch (_: Exception) {
         }
     }
@@ -214,8 +236,8 @@ class TotemPixMonitorService : Service() {
             .setContentTitle("Pix aguardando no Totem")
             .setContentText("Toque para abrir o QR Code no Totem Pix.")
             .setContentIntent(buildPaymentScreenPendingIntent(1))
-            .setOngoing(true)
-            .setAutoCancel(false)
+            .setOngoing(false)
+            .setAutoCancel(true)
             .setCategory(Notification.CATEGORY_STATUS)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             builder.setPriority(Notification.PRIORITY_HIGH)

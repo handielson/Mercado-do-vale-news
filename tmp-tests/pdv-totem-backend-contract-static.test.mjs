@@ -80,6 +80,12 @@ for (const file of files) {
     `${file} display receipt WhatsApp route must not require the admin sync key`,
   );
 
+  assert.match(
+    displayWhatsappRouteBlock,
+    /if \(!result\?\.ok\) throw new Error\(`WhatsApp API retornou HTTP \$\{result\?\.status \|\| 'desconhecido'\}`\)/,
+    `${file} display receipt WhatsApp route must fail when Evolution does not accept the send`,
+  );
+
   const clearVisualRouteBlock = extractRouteBlock(source, clearVisualRouteDeclaration);
 
   assert.ok(

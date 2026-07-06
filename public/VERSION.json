@@ -1,15 +1,15 @@
 {
-    "version": "v1.2.61-totem-pix-permission-panel",
+    "version": "v1.2.62-totem-pix-notificacao-whatsapp",
     "date": "2026-07-06",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260706-180908-totem-pix-permission-panel",
+    "release_vps": "/var/www/mdv-site/releases/20260706-192822-totem-pix-notificacao-whatsapp",
     "branch": "main",
-    "summary": "Adiciona painel de liberacao de notificacoes e bateria no Totem Pix.",
+    "summary": "Corrige notificacao do Totem Pix apos pagamento e valida falhas no envio de comprovante WhatsApp.",
     "totem_pix_android": {
-        "latest_version_name": "1.21",
-        "latest_version_code": 121,
-        "minimum_recommended_version_name": "1.21",
-        "update_message": "V1.21\nMelhorias | implementacoes\n- Painel do Totem mostra status de Notificacoes e Bateria sem restricao\n- Botoes para abrir liberacao de notificacoes, bateria e permissoes do app\n- Android solicita/abre permissao de notificacao quando o sistema permite\n- Android solicita liberacao de economia de bateria para manter o monitor ativo",
+        "latest_version_name": "1.22",
+        "latest_version_code": 122,
+        "minimum_recommended_version_name": "1.22",
+        "update_message": "V1.22\nCorrecoes\n- Notificacao Pix aguardando some apos pagamento aprovado\n- Totem tenta abrir a tela do Pix direto antes de usar notificacao\n- Comprovante WhatsApp nao mostra sucesso quando a API de envio falha",
         "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
     }
 }
