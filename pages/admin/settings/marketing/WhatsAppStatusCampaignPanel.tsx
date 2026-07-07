@@ -1,8 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Copy, Play, Plus, RefreshCw, Save, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Copy, ImageIcon, MessageCircle, Play, Plus, RefreshCw, Save, Smartphone, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogService } from '../../../../services/catalogService';
 import type { CatalogProduct } from '../../../../types/catalog';
+import { calculateInstallmentFromFees } from '../../../../services/installmentCalculator';
+import { paymentFeesService, type PaymentFee } from '../../../../services/payment-fees';
+import {
+  buildStatusCaption,
+  buildStatusPayload,
+  groupStatusProductsByVariation,
+  selectStatusProducts,
+} from '../../../../services/whatsappStatusCampaignHelper.js';
 import {
   whatsappStatusCampaignService,
   type WhatsAppStatusCampaign,
@@ -63,10 +71,66 @@ function formatProductOptionLabel(product: CatalogProduct) {
   ].filter(Boolean).join(' - ');
 }
 
+function findGroupedPreviewProduct(products: CatalogProduct[], selectedProductId?: string | null) {
+  if (!selectedProductId) return null;
+  const grouped = groupStatusProductsByVariation(products) as any[];
+  return grouped.find((product) => {
+    const ids = product?.status_variation?.product_ids || [product?.id];
+    return ids.includes(selectedProductId);
+  }) || products.find((product) => product.id === selectedProductId) || null;
+}
+
+function StatusPreviewCard({ product, paymentFees }: { product: any; paymentFees: PaymentFee[] }) {
+  const cardPlan = calculateInstallmentFromFees(Number(product?.price_retail || 0), paymentFees, 12);
+  const caption = buildStatusCaption({
+    product,
+    cardPlan,
+    siteBaseUrl: 'https://mercadodovale.com.br',
+  });
+  const payload = buildStatusPayload({ product, caption });
+  const lines = caption.split('\n');
+  const title = lines[0] || 'Produto';
+  const details = lines.slice(1);
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="relative aspect-[9/10] bg-slate-100">
+        {payload.content ? (
+          <img
+            src={payload.content}
+            alt={title}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-slate-300">
+            <ImageIcon className="h-10 w-10" />
+          </div>
+        )}
+        <div className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+          Status
+        </div>
+      </div>
+      <div className="space-y-2 p-3">
+        <div className="line-clamp-2 text-sm font-black leading-snug text-slate-900">{title}</div>
+        <div className="space-y-1 text-xs leading-relaxed text-slate-600">
+          {details.map((line, index) => (
+            line
+              ? <p key={`${line}-${index}`} className={line.startsWith('Veja') ? 'font-bold text-slate-700' : ''}>{line}</p>
+              : <div key={`gap-${index}`} className="h-1" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WhatsAppStatusCampaignPanel() {
   const [campaigns, setCampaigns] = useState<WhatsAppStatusCampaign[]>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [categoryPreviewProducts, setCategoryPreviewProducts] = useState<CatalogProduct[]>([]);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
   const [form, setForm] = useState<WhatsAppStatusCampaignInput>(DEFAULT_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -94,6 +158,7 @@ export default function WhatsAppStatusCampaignPanel() {
 
   useEffect(() => {
     loadData();
+    paymentFeesService.list().then(setPaymentFees).catch(() => setPaymentFees([]));
   }, []);
 
   useEffect(() => {
@@ -124,6 +189,40 @@ export default function WhatsAppStatusCampaignPanel() {
       window.clearTimeout(timer);
     };
   }, [form.source_type, productSearch]);
+
+  useEffect(() => {
+    if (form.source_type !== 'category' || !form.category_id) {
+      setCategoryPreviewProducts([]);
+      return;
+    }
+
+    let mounted = true;
+    setPreviewLoading(true);
+    catalogService.getProducts({ categories: [form.category_id], inStockOnly: true }, 1, 80, true)
+      .then((result) => {
+        if (mounted) setCategoryPreviewProducts(result.products);
+      })
+      .catch(() => {
+        if (mounted) setCategoryPreviewProducts([]);
+      })
+      .finally(() => {
+        if (mounted) setPreviewLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [form.source_type, form.category_id]);
+
+  const previewProducts = useMemo(() => {
+    if (form.source_type === 'product') {
+      const product = findGroupedPreviewProduct(products, form.product_id);
+      return product ? [product] : [];
+    }
+    return selectStatusProducts(categoryPreviewProducts, {
+      dailyLimit: Math.min(3, Number(form.daily_limit || 3)),
+    }) as any[];
+  }, [categoryPreviewProducts, form.daily_limit, form.product_id, form.source_type, products]);
 
   function startEdit(campaign: WhatsAppStatusCampaign) {
     setEditingId(campaign.id);
@@ -392,6 +491,47 @@ export default function WhatsAppStatusCampaignPanel() {
         </div>
 
         <div className="space-y-3">
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-emerald-600" />
+                <h4 className="font-bold text-slate-800">Preview do Status</h4>
+              </div>
+              <span className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">
+                {previewProducts.length ? `${previewProducts.length} card(s)` : 'Aguardando'}
+              </span>
+            </div>
+
+            {previewLoading || productLoading ? (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    <div className="aspect-[9/10] animate-pulse bg-slate-100" />
+                    <div className="space-y-2 p-3">
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-slate-100" />
+                      <div className="h-3 w-full animate-pulse rounded bg-slate-100" />
+                      <div className="h-3 w-2/3 animate-pulse rounded bg-slate-100" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : previewProducts.length > 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {previewProducts.map((product) => (
+                  <StatusPreviewCard key={product.id} product={product} paymentFees={paymentFees} />
+                ))}
+              </div>
+            ) : (
+              <div className="flex min-h-[220px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 text-center">
+                <MessageCircle className="mb-3 h-8 w-8 text-slate-300" />
+                <p className="text-sm font-bold text-slate-500">Escolha um produto ou categoria para ver o preview.</p>
+                <p className="mt-1 max-w-md text-xs text-slate-400">
+                  O preview mostra a imagem, legenda, cores disponiveis, preco no PIX, 12x no cartao e link que serao enviados no Status.
+                </p>
+              </div>
+            )}
+          </div>
+
           {lastDebug && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
               <div className="mb-2 flex items-center justify-between gap-3">

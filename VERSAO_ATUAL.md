@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.67-status-variacoes-agrupadas
+version: v1.2.68-status-preview
 date: 2026-07-06
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260706-213740-status-variacoes-agrupadas
+release_vps: /var/www/mdv-site/releases/20260706-214900-status-preview
 branch: main
-summary: Agrupa variacoes no Status WhatsApp por RAM e armazenamento, com cores disponiveis na legenda.
+summary: Adiciona preview visual dos cards do Status WhatsApp no painel de programacao.
 ```

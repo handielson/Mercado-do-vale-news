@@ -33,5 +33,11 @@ assert.match(panel, /Copiar ultimo erro/);
 assert.match(panel, /max=\{10\}/);
 assert.match(panel, /formatProductOptionLabel/);
 assert.match(panel, /memoria_interna/);
+assert.match(panel, /Preview do Status/);
+assert.match(panel, /StatusPreviewCard/);
+assert.match(panel, /buildStatusCaption/);
+assert.match(panel, /buildStatusPayload/);
+assert.match(panel, /groupStatusProductsByVariation/);
+assert.match(panel, /categories: \[form\.category_id\]/);
 
 console.log('whatsapp-status-campaign-vps-static.test.mjs: ok');
