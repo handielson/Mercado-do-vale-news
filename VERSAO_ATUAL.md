@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.74-status-envio-assincrono
+version: v1.2.75-status-evolution-interna
 date: 2026-07-07
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260707-104500-v1274-status-envio-assincrono
+release_vps: /var/www/mdv-site/releases/20260707-110000-v1275-status-evolution-interna
 branch: main
-summary: Dispara Enviar agora do Status em segundo plano e acompanha pela barra de progresso.
+summary: Status WhatsApp usa Evolution interna no VPS para evitar 504 do Cloudflare.
 ```

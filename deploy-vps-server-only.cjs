@@ -26,6 +26,7 @@ const autoresponderEngineFiles = [
 ];
 const adminEmail = process.env.MDV_ADMIN_EMAIL || process.env.ADMIN_EMAIL || process.env.VPS_ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL;
 const adminPassword = process.env.MDV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || process.env.VPS_ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD;
+const evolutionStatusServerUrl = process.env.EVOLUTION_STATUS_SERVER_URL || process.env.EVOLUTION_INTERNAL_SERVER_URL || 'http://127.0.0.1:8080';
 
 if (!host || !username || (!password && !privateKey)) {
   throw new Error('Missing VPS SSH env vars');
@@ -136,21 +137,18 @@ function upsertEnv(content, entries) {
 }
 
 async function ensureRemoteAdminEnv(appDir) {
-  if (!adminEmail || !adminPassword) {
-    console.warn('Skipping remote admin env sync: MDV_ADMIN_EMAIL and MDV_ADMIN_PASSWORD are not both set locally.');
-    return;
-  }
-
   const remoteEnv = `${appDir}/.env`;
   await withSftp(async (sftp) => {
     const current = await readRemoteText(sftp, remoteEnv);
-    const next = upsertEnv(current, {
-      MDV_ADMIN_EMAIL: adminEmail,
-      MDV_ADMIN_PASSWORD: adminPassword,
-    });
+    const entries = { EVOLUTION_STATUS_SERVER_URL: evolutionStatusServerUrl };
+    if (adminEmail && adminPassword) {
+      entries.MDV_ADMIN_EMAIL = adminEmail;
+      entries.MDV_ADMIN_PASSWORD = adminPassword;
+    }
+    const next = upsertEnv(current, entries);
     await writeRemoteText(sftp, remoteEnv, next);
   });
-  console.log(`Remote admin auth env synced at ${remoteEnv}`);
+  console.log(`Remote runtime env synced at ${remoteEnv}`);
 }
 
 async function ensureRemoteImageDocumentDependencies(appDir) {

@@ -29,10 +29,12 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /EVOLUTION_STATUS_TIMEOUT_MS/);
   assert.match(source, /fetchWhatsAppStatusAudience/);
   assert.match(source, /EVOLUTION_STATUS_JID_LIST/);
+  assert.match(source, /EVOLUTION_STATUS_SERVER_URL/);
+  assert.match(source, /EVOLUTION_INTERNAL_SERVER_URL/);
   assert.match(source, /EVOLUTION_STATUS_CONTACT_LIMIT/);
   assert.match(source, /@lid/);
   assert.match(source, /Contatos Status/);
-  assert.match(source, /EVOLUTION_STATUS_TIMEOUT_MS \|\| 120000/);
+  assert.match(source, /EVOLUTION_STATUS_TIMEOUT_MS \|\| 180000/);
   assert.match(source, /\/chat\/findContacts\/\$\{encodeURIComponent\(instance\)\}/);
   assert.match(source, /statusJidList/);
   assert.match(source, /allContacts: false/);

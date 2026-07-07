@@ -23032,14 +23032,14 @@ async function fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance }) {
 }
 
 async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null) {
-  const baseUrl = String(process.env.EVOLUTION_SERVER_URL || process.env.EVOLUTION_API_URL || 'https://bot.mercadodovale.com.br').replace(/\/+$/, '');
+  const baseUrl = String(process.env.EVOLUTION_STATUS_SERVER_URL || process.env.EVOLUTION_INTERNAL_SERVER_URL || process.env.EVOLUTION_SERVER_URL || process.env.EVOLUTION_API_URL || 'https://bot.mercadodovale.com.br').replace(/\/+$/, '');
   const apiKey = String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_GLOBAL_API_KEY || '');
   const instance = String(process.env.EVOLUTION_STATUS_INSTANCE || process.env.EVOLUTION_API_INSTANCE || 'botmercadodovale');
   const endpoint = `${baseUrl}/message/sendStatus/${encodeURIComponent(instance)}`;
   const image = getWhatsAppStatusProductImage(product);
   const cardPlan = await getWhatsAppStatusCardPlan(product.price_retail);
   const caption = buildWhatsAppStatusCaption(product, cardPlan);
-  const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 120000));
+  const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 180000));
   const startedAt = Date.now();
   let statusAudienceCount = 0;
 
