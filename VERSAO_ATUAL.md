@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.66-status-busca-produto
+version: v1.2.67-status-variacoes-agrupadas
 date: 2026-07-06
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260706-235240-status-busca-produto
+release_vps: /var/www/mdv-site/releases/20260706-213740-status-variacoes-agrupadas
 branch: main
-summary: Corrige busca de produtos no Status WhatsApp e remove tela legada Memoria IA.
+summary: Agrupa variacoes no Status WhatsApp por RAM e armazenamento, com cores disponiveis na legenda.
 ```

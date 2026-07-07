@@ -32,6 +32,37 @@ function normalizeTime(value?: string | null) {
   return String(value || '08:00').slice(0, 5);
 }
 
+function normalizeMemoryLabel(value: unknown) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return text
+    .replace(/\s+/g, '')
+    .toUpperCase()
+    .replace(/(\d+)G$/i, '$1GB')
+    .replace(/(\d+)T$/i, '$1TB');
+}
+
+function getProductSpec(product: CatalogProduct, keys: string[]) {
+  const specs = product.specs || {};
+  for (const key of keys) {
+    const value = (specs as Record<string, unknown>)[key];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+  }
+  return '';
+}
+
+function formatProductOptionLabel(product: CatalogProduct) {
+  const ram = normalizeMemoryLabel(getProductSpec(product, ['ram', 'memoria_ram', 'memory_ram', 'RAM']));
+  const storage = normalizeMemoryLabel(getProductSpec(product, ['storage', 'armazenamento', 'memoria', 'memoria_interna', 'capacity']));
+  const color = getProductSpec(product, ['color', 'cor', 'colour', 'Color', 'Cor']);
+  const variation = [ram && `${ram} RAM`, storage, color].filter(Boolean).join(' / ');
+  return [
+    product.name,
+    variation,
+    product.sku,
+  ].filter(Boolean).join(' - ');
+}
+
 export default function WhatsAppStatusCampaignPanel() {
   const [campaigns, setCampaigns] = useState<WhatsAppStatusCampaign[]>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
@@ -272,7 +303,7 @@ export default function WhatsAppStatusCampaignPanel() {
                   )}
                   {products.map((product) => (
                     <option key={product.id} value={product.id}>
-                      {product.name}{product.sku ? ` - ${product.sku}` : ''}
+                      {formatProductOptionLabel(product)}
                     </option>
                   ))}
                 </select>

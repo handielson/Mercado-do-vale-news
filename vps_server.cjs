@@ -22704,6 +22704,8 @@ function normalizeWhatsAppStatusProduct(row) {
   const images = parseWhatsAppStatusImages(row.images);
   return {
     ...row,
+    specs: parsePublicJson(row.specs, row.specs || {}) || {},
+    custom_fields: parsePublicJson(row.custom_fields, row.custom_fields || {}) || {},
     images,
     image_url: row.image_url || images[0] || null,
   };
@@ -22719,8 +22721,139 @@ function isWhatsAppStatusProductEligible(product) {
 function rotateWhatsAppStatusProducts(products, lastProductId) {
   const eligible = products.filter(isWhatsAppStatusProductEligible);
   if (!eligible.length) return [];
-  const startIndex = Math.max(0, eligible.findIndex((product) => product.id === lastProductId) + 1);
-  return [...eligible.slice(startIndex), ...eligible.slice(0, startIndex)];
+  const grouped = groupWhatsAppStatusProductsByVariation(eligible);
+  const startIndex = Math.max(0, grouped.findIndex((product) => product.id === lastProductId) + 1);
+  return [...grouped.slice(startIndex), ...grouped.slice(0, startIndex)];
+}
+
+function normalizeWhatsAppStatusText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function normalizeWhatsAppStatusMemoryLabel(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return text
+    .replace(/\s+/g, '')
+    .toUpperCase()
+    .replace(/(\d+)G$/i, '$1GB')
+    .replace(/(\d+)T$/i, '$1TB');
+}
+
+function getWhatsAppStatusSpecValue(product, keys) {
+  for (const source of [product?.specs || {}, product?.custom_fields || {}]) {
+    for (const key of keys) {
+      const value = source?.[key];
+      if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+    }
+  }
+  return '';
+}
+
+function getWhatsAppStatusProductVariation(product) {
+  const ram = normalizeWhatsAppStatusMemoryLabel(getWhatsAppStatusSpecValue(product, ['ram', 'memoria_ram', 'memory_ram', 'RAM']));
+  const storage = normalizeWhatsAppStatusMemoryLabel(getWhatsAppStatusSpecValue(product, ['storage', 'armazenamento', 'memoria', 'memoria_interna', 'capacity']));
+  const color = getWhatsAppStatusSpecValue(product, ['color', 'cor', 'colour', 'Color', 'Cor']);
+  return { ram, storage, color };
+}
+
+function extractWhatsAppStatusMemoryFromName(product) {
+  const name = String(product?.name || '');
+  const slashMatch = name.match(/\b(\d+\s*(?:gb|g|tb|t))\s*\/\s*(\d+\s*(?:gb|g|tb|t))\b/i);
+  if (slashMatch) {
+    return {
+      ram: normalizeWhatsAppStatusMemoryLabel(slashMatch[1]),
+      storage: normalizeWhatsAppStatusMemoryLabel(slashMatch[2]),
+    };
+  }
+  const pairMatch = name.match(/\b(\d+\s*(?:gb|g))\s+(?:ram\s+)?(\d+\s*(?:gb|g|tb|t))\b/i);
+  if (pairMatch) {
+    return {
+      ram: normalizeWhatsAppStatusMemoryLabel(pairMatch[1]),
+      storage: normalizeWhatsAppStatusMemoryLabel(pairMatch[2]),
+    };
+  }
+  return { ram: '', storage: '' };
+}
+
+function getWhatsAppStatusGroupName(product, variation) {
+  let name = String(product?.model || product?.name || 'Produto').trim();
+  for (const part of [variation?.ram, variation?.storage, variation?.color]) {
+    if (!part) continue;
+    name = name.replace(new RegExp(`\\b${String(part).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'ig'), ' ');
+  }
+  return name.replace(/\s+-\s*$/, '').replace(/\s+/g, ' ').trim() || String(product?.name || 'Produto').trim();
+}
+
+function chooseWhatsAppStatusRepresentative(products) {
+  return [...products]
+    .sort((a, b) => {
+      const colorA = normalizeWhatsAppStatusText(getWhatsAppStatusProductVariation(a).color || a?.name || a?.sku || a?.id);
+      const colorB = normalizeWhatsAppStatusText(getWhatsAppStatusProductVariation(b).color || b?.name || b?.sku || b?.id);
+      return colorA.localeCompare(colorB, 'pt-BR');
+    })
+    .find(isWhatsAppStatusProductEligible) || products[0];
+}
+
+function groupWhatsAppStatusProductsByVariation(products) {
+  const groups = new Map();
+  for (const product of Array.isArray(products) ? products : []) {
+    const explicit = getWhatsAppStatusProductVariation(product);
+    const fromName = extractWhatsAppStatusMemoryFromName(product);
+    const variation = {
+      ram: explicit.ram || fromName.ram,
+      storage: explicit.storage || fromName.storage,
+      color: explicit.color,
+    };
+    const groupName = getWhatsAppStatusGroupName(product, variation);
+    const key = [
+      product?.model_id || normalizeWhatsAppStatusText(groupName),
+      normalizeWhatsAppStatusText(groupName),
+      normalizeWhatsAppStatusText(variation.ram),
+      normalizeWhatsAppStatusText(variation.storage),
+    ].join('|');
+    if (!groups.has(key)) {
+      groups.set(key, { name: groupName, ram: variation.ram, storage: variation.storage, products: [] });
+    }
+    groups.get(key).products.push(product);
+  }
+
+  return Array.from(groups.values()).map((group) => {
+    const representative = chooseWhatsAppStatusRepresentative(group.products);
+    const colors = Array.from(new Set(
+      group.products
+        .map((product) => getWhatsAppStatusProductVariation(product).color)
+        .filter(Boolean)
+        .map((color) => String(color).trim())
+    )).sort((a, b) => normalizeWhatsAppStatusText(a).localeCompare(normalizeWhatsAppStatusText(b), 'pt-BR'));
+    const prices = group.products.map((product) => Number(product?.price_retail || 0)).filter((price) => price > 0);
+    return {
+      ...representative,
+      name: group.name || representative.name,
+      price_retail: prices.length ? Math.min(...prices) : representative.price_retail,
+      status_variation: {
+        ram: group.ram,
+        storage: group.storage,
+        colors,
+        product_ids: group.products.map((product) => product.id).filter(Boolean),
+      },
+      status_group_products: group.products,
+    };
+  });
+}
+
+function sameWhatsAppStatusMemoryVariation(a, b) {
+  const variationA = getWhatsAppStatusProductVariation(a);
+  const variationB = getWhatsAppStatusProductVariation(b);
+  const fallbackA = extractWhatsAppStatusMemoryFromName(a);
+  const fallbackB = extractWhatsAppStatusMemoryFromName(b);
+  return normalizeWhatsAppStatusText(variationA.ram || fallbackA.ram) === normalizeWhatsAppStatusText(variationB.ram || fallbackB.ram)
+    && normalizeWhatsAppStatusText(variationA.storage || fallbackA.storage) === normalizeWhatsAppStatusText(variationB.storage || fallbackB.storage);
 }
 
 async function getWhatsAppStatusCampaign(campaignId) {
@@ -22731,15 +22864,29 @@ async function getWhatsAppStatusCampaign(campaignId) {
 async function getWhatsAppStatusCampaignProducts(campaign) {
   if (campaign.source_type === 'product') {
     const [rows] = await pool.query(
-      `SELECT id, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory
+      `SELECT id, model_id, brand, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
        FROM products WHERE id = ? LIMIT 1`,
       [campaign.product_id]
     );
-    return rows.map(normalizeWhatsAppStatusProduct).filter(Boolean);
+    const selected = rows.map(normalizeWhatsAppStatusProduct).filter(Boolean)[0];
+    if (!selected?.model_id) return selected ? [selected] : [];
+
+    const [siblings] = await pool.query(
+      `SELECT id, model_id, brand, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
+       FROM products
+       WHERE model_id = ? AND status = 'active'
+       ORDER BY name ASC
+       LIMIT 120`,
+      [selected.model_id]
+    );
+    return siblings
+      .map(normalizeWhatsAppStatusProduct)
+      .filter(Boolean)
+      .filter((product) => sameWhatsAppStatusMemoryVariation(product, selected));
   }
 
   const [rows] = await pool.query(
-    `SELECT id, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory
+    `SELECT id, model_id, brand, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
      FROM products
      WHERE category_id = ? AND status = 'active'
      ORDER BY updated_at DESC, name ASC
@@ -22766,8 +22913,16 @@ async function getWhatsAppStatusCardPlan(priceRetailCents) {
 function buildWhatsAppStatusCaption(product, cardPlan) {
   const siteBaseUrl = String(process.env.PUBLIC_SITE_URL || 'https://mercadodovale.com.br').replace(/\/+$/, '');
   const link = product.slug ? `${siteBaseUrl}/produto/${product.slug}` : siteBaseUrl;
+  const variation = product.status_variation || getWhatsAppStatusProductVariation(product);
+  const memoryLine = [
+    variation?.ram ? `${variation.ram} RAM` : '',
+    variation?.storage ? `${variation.storage} armazenamento` : '',
+  ].filter(Boolean).join(' + ');
+  const colors = Array.isArray(variation?.colors) && variation.colors.length ? variation.colors : [variation?.color].filter(Boolean);
   return [
     String(product.name || 'Produto').trim(),
+    memoryLine ? `Memoria: ${memoryLine}` : '',
+    colors.length ? `Cores disponiveis: ${colors.join(', ')}` : '',
     '',
     `A vista no PIX: ${formatWhatsAppStatusMoney(product.price_retail)}`,
     `Cartao: ${cardPlan.installments}x de ${formatWhatsAppStatusMoney(cardPlan.value)}`,

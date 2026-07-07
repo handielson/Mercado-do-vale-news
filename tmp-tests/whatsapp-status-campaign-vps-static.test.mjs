@@ -13,6 +13,10 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /\/message\/sendStatus\/\$\{encodeURIComponent\(instance\)\}/);
   assert.match(source, /WHATSAPP_STATUS_SEND_DEBUG/);
   assert.match(source, /slot_index/);
+  assert.match(source, /groupWhatsAppStatusProductsByVariation/);
+  assert.match(source, /Cores disponiveis/);
+  assert.match(source, /specs, custom_fields/);
+  assert.match(source, /sameWhatsAppStatusMemoryVariation/);
   assert.match(source, /runDueWhatsAppStatusCampaigns/);
   assert.match(source, /\/whatsapp\/status-campaigns\/:id\/send-now/);
   assert.match(source, /\/whatsapp\/status-campaigns\/run-due/);
@@ -27,5 +31,7 @@ assert.match(panel, /Status WhatsApp/);
 assert.match(panel, /Enviar agora/);
 assert.match(panel, /Copiar ultimo erro/);
 assert.match(panel, /max=\{10\}/);
+assert.match(panel, /formatProductOptionLabel/);
+assert.match(panel, /memoria_interna/);
 
 console.log('whatsapp-status-campaign-vps-static.test.mjs: ok');

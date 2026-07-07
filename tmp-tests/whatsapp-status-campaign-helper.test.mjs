@@ -5,6 +5,8 @@ import {
   buildStatusPayload,
   buildStatusSendDebug,
   clampDailyProductLimit,
+  getStatusProductVariation,
+  groupStatusProductsByVariation,
   resolveScheduledSendTimes,
   selectStatusProducts,
 } from '../services/whatsappStatusCampaignHelper.js';
@@ -31,6 +33,83 @@ assert.deepEqual(
   selectStatusProducts(products, { dailyLimit: 99, lastProductId: 'p-2' }).map((product) => product.id),
   ['p-3', 'p-4', 'p-5', 'p-6', 'p-7', 'p-8', 'p-9', 'p-10', 'p-11', 'p-12'],
 );
+
+const variantProducts = [
+  {
+    id: 'x8-blue',
+    model_id: 'model-x8-pro',
+    name: 'Poco X8 Pro 5G',
+    slug: 'poco-x8-pro-5g-azul',
+    sku: 'PX85G8512A',
+    price_retail: 250000,
+    stock_quantity: 2,
+    images: ['https://cdn.example.com/azul.jpg'],
+    specs: { ram: '8GB', storage: '512GB', color: 'Azul' },
+  },
+  {
+    id: 'x8-black',
+    model_id: 'model-x8-pro',
+    name: 'Poco X8 Pro 5G',
+    slug: 'poco-x8-pro-5g-preto',
+    sku: 'PX85G8512P',
+    price_retail: 245000,
+    stock_quantity: 3,
+    images: ['https://cdn.example.com/preto.jpg'],
+    specs: { ram: '8GB', storage: '512GB', color: 'Preto' },
+  },
+  {
+    id: 'x8-green',
+    model_id: 'model-x8-pro',
+    name: 'Poco X8 Pro 5G',
+    slug: 'poco-x8-pro-5g-verde',
+    sku: 'PX85G8512V',
+    price_retail: 255000,
+    stock_quantity: 1,
+    images: ['https://cdn.example.com/verde.jpg'],
+    specs: { ram: '8GB', storage: '512GB', color: 'Verde' },
+  },
+  {
+    id: 'x8-256',
+    model_id: 'model-x8-pro',
+    name: 'Poco X8 Pro 5G',
+    slug: 'poco-x8-pro-5g-256-preto',
+    sku: 'PX85G8256P',
+    price_retail: 230000,
+    stock_quantity: 2,
+    images: ['https://cdn.example.com/preto-256.jpg'],
+    specs: { ram: '8GB', storage: '256GB', color: 'Preto' },
+  },
+];
+
+assert.deepEqual(
+  getStatusProductVariation(variantProducts[0]),
+  { ram: '8GB', storage: '512GB', color: 'Azul' },
+);
+
+const groupedVariants = groupStatusProductsByVariation(variantProducts);
+assert.equal(groupedVariants.length, 2);
+assert.deepEqual(
+  groupedVariants.find((product) => product.status_variation.storage === '512GB')?.status_variation.colors,
+  ['Azul', 'Preto', 'Verde'],
+);
+assert.equal(
+  groupedVariants.find((product) => product.status_variation.storage === '512GB')?.images[0],
+  'https://cdn.example.com/azul.jpg',
+);
+
+const selectedVariants = selectStatusProducts(variantProducts, { dailyLimit: 10 });
+assert.equal(selectedVariants.length, 2);
+
+const groupedCaption = buildStatusCaption({
+  product: selectedVariants.find((product) => product.status_variation.storage === '512GB'),
+  cardPlan: { installments: 12, value: 23000, total: 276000 },
+  siteBaseUrl: 'https://mercadodovale.com.br',
+});
+
+assert.match(groupedCaption, /Poco X8 Pro 5G/);
+assert.match(groupedCaption, /Memoria: 8GB RAM \+ 512GB armazenamento/);
+assert.match(groupedCaption, /Cores disponiveis: Azul, Preto, Verde/);
+assert.match(groupedCaption, /A vista no PIX: R\$ 2\.450,00/);
 
 const caption = buildStatusCaption({
   product: products[0],
