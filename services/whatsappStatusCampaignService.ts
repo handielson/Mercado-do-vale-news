@@ -29,6 +29,8 @@ export type WhatsAppStatusCampaignInput = Omit<
 
 export interface WhatsAppStatusSendNowResult {
   ok: boolean;
+  queued?: boolean;
+  already_running?: boolean;
   sent: number;
   failed: number;
   debug?: string;

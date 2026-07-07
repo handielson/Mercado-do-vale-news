@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.73-status-contatos-validos
+version: v1.2.74-status-envio-assincrono
 date: 2026-07-07
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260707-103000-v1273-status-contatos-validos
+release_vps: /var/www/mdv-site/releases/20260707-104500-v1274-status-envio-assincrono
 branch: main
-summary: Filtra contatos invalidos do Status WhatsApp e amplia o timeout do envio.
+summary: Dispara Enviar agora do Status em segundo plano e acompanha pela barra de progresso.
 ```

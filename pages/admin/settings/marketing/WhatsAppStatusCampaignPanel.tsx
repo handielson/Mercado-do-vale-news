@@ -294,6 +294,23 @@ export default function WhatsAppStatusCampaignPanel() {
   }, [sendingId]);
 
   useEffect(() => {
+    if (!sendingId) return;
+    const session = sendSessions[sendingId];
+    const progress = progressMap[sendingId];
+    if (!session || !progress) return;
+    const manualLogs = (progress.logs || []).filter((log) => {
+      const createdAt = parseProgressDate(log.created_at);
+      return createdAt >= parseProgressDate(session.startedAt) - 3000
+        && (log.slot_index === null || log.slot_index === undefined);
+    });
+    const hasSending = manualLogs.some((log) => log.status === 'sending');
+    const completed = manualLogs.filter((log) => ['sent', 'failed', 'skipped'].includes(String(log.status))).length;
+    if (manualLogs.length > 0 && completed >= session.total && !hasSending) {
+      setSendingId(null);
+    }
+  }, [progressMap, sendSessions, sendingId]);
+
+  useEffect(() => {
     if (form.source_type !== 'product') return;
     let mounted = true;
     const query = productSearch.trim();
@@ -493,11 +510,15 @@ export default function WhatsAppStatusCampaignPanel() {
     }));
     setLastDebug('');
     await loadProgress();
+    let keepPolling = false;
     try {
       const result = await whatsappStatusCampaignService.sendNow(campaign.id);
       const debug = result.debug || result.logs?.map((log) => log.debug).filter(Boolean).join('\n\n') || '';
       if (debug) setLastDebug(debug);
-      if (result.failed > 0) {
+      if (result.queued) {
+        keepPolling = true;
+        toast.success(result.already_running ? 'Envio ja esta em andamento' : 'Envio iniciado');
+      } else if (result.failed > 0) {
         toast.error(`Envio finalizado com ${result.failed} erro(s)`);
       } else {
         toast.success(`${result.sent} status enviado(s)`);
@@ -513,7 +534,7 @@ export default function WhatsAppStatusCampaignPanel() {
       setLastDebug(debug);
       toast.error('Erro ao enviar agora');
     } finally {
-      setSendingId(null);
+      if (!keepPolling) setSendingId(null);
       window.setTimeout(loadProgress, 1200);
     }
   }

@@ -23268,7 +23268,30 @@ fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey 
 fastify.post('/whatsapp/status-campaigns/:id/send-now', { preHandler: requireSyncKey }, async (req, reply) => {
   const campaign = await getWhatsAppStatusCampaign(req.params.id);
   if (!campaign) return reply.code(404).send({ error: 'Campanha nao encontrada' });
-  return executeWhatsAppStatusCampaign(campaign, { maxProducts: campaign.daily_limit });
+  const [sendingLogs] = await pool.query(
+    `SELECT id FROM whatsapp_status_campaign_logs
+     WHERE campaign_id = ? AND status = 'sending' AND DATE(created_at) = CURDATE()
+     LIMIT 1`,
+    [campaign.id]
+  );
+  if (sendingLogs.length > 0) {
+    return { ok: true, queued: true, already_running: true, sent: 0, failed: 0 };
+  }
+
+  setImmediate(() => {
+    executeWhatsAppStatusCampaign(campaign, { maxProducts: campaign.daily_limit }).catch(async (error) => {
+      const debug = buildWhatsAppStatusDebug({
+        campaign,
+        endpoint: 'envio manual/agora',
+        errorMessage: error?.message || String(error),
+      });
+      try {
+        await pool.query('UPDATE whatsapp_status_campaigns SET last_error_debug = ? WHERE id = ?', [debug, campaign.id]);
+      } catch {}
+    });
+  });
+
+  return { ok: true, queued: true, sent: 0, failed: 0 };
 });
 
 async function runDueWhatsAppStatusCampaigns() {

@@ -40,6 +40,9 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /VALUES \(\?, \?, \?, 'sending', NULL, \?, \?\)/);
   assert.match(source, /UPDATE whatsapp_status_campaign_logs/);
   assert.match(source, /\/whatsapp\/status-campaigns\/:id\/send-now/);
+  assert.match(source, /queued: true/);
+  assert.match(source, /already_running/);
+  assert.match(source, /setImmediate/);
   assert.match(source, /\/whatsapp\/status-campaigns\/run-due/);
   assert.match(source, /apikey\\s\*\[:=\]/);
   assert.doesNotMatch(source, /product\.images\.find\(\(value\) => String\(value \|\| ''\)\.trim\(\)\)/);
@@ -47,6 +50,8 @@ for (const source of [server, serverCjs]) {
 }
 
 assert.match(service, /sendNow\(id: string\)/);
+assert.match(service, /queued\?: boolean/);
+assert.match(service, /already_running\?: boolean/);
 assert.match(service, /WhatsAppStatusCampaignProgress/);
 assert.match(service, /progress\(\): Promise<WhatsAppStatusProgressResponse>/);
 assert.match(service, /product_ids\?: string\[\] \| string \| null/);
@@ -68,6 +73,8 @@ assert.match(panel, /ChevronLeft/);
 assert.match(panel, /ChevronRight/);
 assert.match(panel, /CampaignProgressBar/);
 assert.match(panel, /Enviando agora/);
+assert.match(panel, /Envio iniciado/);
+assert.match(panel, /keepPolling/);
 assert.match(panel, /Programado hoje/);
 assert.match(panel, /Em envio/);
 assert.match(panel, /loadProgress/);
