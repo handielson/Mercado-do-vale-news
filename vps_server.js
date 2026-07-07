@@ -23618,6 +23618,85 @@ fastify.post('/n8n-bot/global-control', { preHandler: requireSyncKey }, async (r
   return { control };
 });
 
+fastify.post('/n8n-bot/admin-command', { preHandler: requireSyncKey }, async (req) => {
+  const identity = normalizeN8nBotAdminIdentity(req.body || {});
+  const command = normalizeN8nBotAdminCommand(req.body?.message || req.body?.command || '');
+  if (!identity || !command.valid) return { handled: false, reply: '' };
+
+  const [adminRows] = await pool.query(
+    'SELECT id, remote_jid, phone, label, active FROM n8n_bot_admin_numbers WHERE remote_jid = ? AND active = 1 LIMIT 1',
+    [identity.remoteJid]
+  );
+  const admin = adminRows?.[0] || null;
+  if (!admin) return { handled: false, reply: '' };
+
+  if (!command.remoteJid) {
+    if (command.action === 'pausar' || command.action === 'continuar') {
+      const paused = command.action === 'pausar';
+      const control = await setN8nBotGlobalControl({
+        paused,
+        reason: paused ? 'Pausado por comando WhatsApp' : '',
+        changedBy: admin.label || admin.phone || 'admin-whatsapp',
+        changedByRemoteJid: identity.remoteJid,
+      });
+      return {
+        handled: true,
+        scope: 'global',
+        action: command.action,
+        reply: paused ? 'Bot pausado para todos os clientes.' : 'Bot reativado para todos os clientes.',
+        control,
+      };
+    }
+
+    const control = await getN8nBotGlobalControl();
+    return {
+      handled: true,
+      scope: 'global',
+      action: command.action,
+      reply: control.paused
+        ? `Bot esta pausado desde ${control.changed_at || '-'} por ${control.changed_by || 'admin'}.`
+        : 'Bot esta ativo para todos os clientes.',
+      control,
+    };
+  }
+
+  if (command.action === 'status') {
+    const lookup = await getN8nBotClientControl({ remoteJid: command.remoteJid, phone: command.phone });
+    return {
+      handled: true,
+      scope: 'client',
+      action: command.action,
+      reply: Number(lookup.control?.blocked || 0) === 1
+        ? `Cliente ${command.phone} esta pausado.`
+        : `Cliente ${command.phone} esta liberado.`,
+      control: lookup.control,
+    };
+  }
+
+  const blocked = command.action === 'pausar';
+  const [existingRows] = await pool.query(
+    'SELECT reset_count FROM n8n_bot_client_controls WHERE remote_jid = ? LIMIT 1',
+    [command.remoteJid]
+  );
+  const lookup = await upsertN8nBotClientControl(
+    { remoteJid: command.remoteJid, phone: command.phone },
+    {
+      blocked,
+      block_reason: blocked ? 'Pausado por comando WhatsApp' : null,
+      blocked_at: blocked ? new Date() : null,
+      blocked_by: admin.label || admin.phone || 'admin-whatsapp',
+      reset_count: Number(existingRows?.[0]?.reset_count || 0),
+    }
+  );
+  return {
+    handled: true,
+    scope: 'client',
+    action: command.action,
+    reply: blocked ? `Cliente ${command.phone} pausado.` : `Cliente ${command.phone} liberado.`,
+    control: lookup.control,
+  };
+});
+
 fastify.get('/n8n-bot/client-control', { preHandler: requireSyncKey }, async (req, reply) => {
   const identity = normalizeN8nBotClientIdentity(req.query || {});
   if (!identity) {

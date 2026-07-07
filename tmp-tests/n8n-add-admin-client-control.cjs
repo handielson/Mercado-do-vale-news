@@ -122,6 +122,44 @@ if (payload.resetPending) {
 
 return [{ json: output }];`;
 
+const adminCommandCode = `const source = $('Controle Bot - Verificar Cliente').first().json || {};
+const payload = $json || {};
+const remoteJid = String(source.remoteJid || '');
+const text = String(source.conversation || source.text || '').trim().toLowerCase().replace(/\\s+/g, ' ');
+const adminRows = Array.isArray(payload.adminNumbers) ? payload.adminNumbers : [];
+const globalControl = payload.control || {};
+const isAdmin = adminRows.some((row) => String(row.remote_jid || '') === remoteJid && Number(row.active ?? 1) === 1);
+const match = text.match(/^(pausar|continuar|status)(?:\\s+(.+))?$/);
+const normalizeTarget = (value) => {
+  const digits = String(value || '').replace(/\\D/g, '');
+  if (!digits) return { phone: '', remoteJid: '' };
+  const phone = digits.startsWith('55') ? digits : ((digits.length === 10 || digits.length === 11) ? '55' + digits : digits);
+  return { phone, remoteJid: phone + '@s.whatsapp.net' };
+};
+const target = match && match[2] ? normalizeTarget(match[2]) : { phone: '', remoteJid: '' };
+
+return [{
+  json: {
+    ...source,
+    n8nBotGlobalPaused: Boolean(globalControl.paused),
+    n8nBotGlobalControl: globalControl,
+    n8nBotIsAdmin: isAdmin,
+    n8nBotAdminCommand: Boolean(isAdmin && match && (!match[2] || target.remoteJid)),
+    adminCommandAction: match ? match[1] : '',
+    adminCommandPhone: target.phone,
+    adminCommandRemoteJid: target.remoteJid,
+  },
+}];`;
+
+const adminReplyCode = `const source = $('Controle Bot - Comando Admin').first().json || {};
+const result = $json || {};
+return [{
+  json: {
+    ...source,
+    adminCommandReply: result.reply || 'Comando recebido.',
+  },
+}];`;
+
 const restoreClientControlCode = `return [{ json: $('Controle Bot - Aplicar Controle').first().json }];`;
 
 const restoreOutboundCode = `return $('Dividir mensagens').all();`;
@@ -280,6 +318,40 @@ function makeIfNode() {
           {
             id: 'n8n-admin-control-blocked-condition',
             leftValue: '={{$json.n8nBotBlocked}}',
+            rightValue: true,
+            operator: {
+              type: 'boolean',
+              operation: 'true',
+              singleValue: true,
+            },
+          },
+        ],
+        combinator: 'and',
+      },
+      options: {},
+    },
+  };
+}
+
+function makeBooleanIfNode({ id, name, position, leftValue }) {
+  return {
+    id,
+    name,
+    type: 'n8n-nodes-base.if',
+    typeVersion: 2.2,
+    position,
+    parameters: {
+      conditions: {
+        options: {
+          caseSensitive: true,
+          leftValue: '',
+          typeValidation: 'strict',
+          version: 2,
+        },
+        conditions: [
+          {
+            id: `${id}-condition`,
+            leftValue,
             rightValue: true,
             operator: {
               type: 'boolean',
@@ -734,6 +806,32 @@ function makeHttpNode({ id, name, position, method = 'GET', url, bodyParameters 
   return node;
 }
 
+function makeAdminWhatsAppReplyNode() {
+  return {
+    id: 'n8n-admin-command-whatsapp-reply-001',
+    name: 'Controle Bot - Responder Admin',
+    type: 'n8n-nodes-base.httpRequest',
+    typeVersion: 4.2,
+    position: [1392, -272],
+    parameters: {
+      method: 'POST',
+      url: "={{$env.EVOLUTION_SERVER_URL + '/message/sendText/botmercadodovale'}}",
+      options: {},
+      sendHeaders: true,
+      headerParameters: {
+        parameters: [{ name: 'apikey', value: '={{$env.EVOLUTION_API_KEY}}' }],
+      },
+      sendBody: true,
+      bodyParameters: {
+        parameters: [
+          { name: 'number', value: "={{$json.remoteJid.replace('@s.whatsapp.net', '')}}" },
+          { name: 'text', value: '={{$json.adminCommandReply}}' },
+        ],
+      },
+    },
+  };
+}
+
 function makeResetPendingIfNode() {
   return {
     id: 'n8n-admin-control-reset-if-001',
@@ -792,6 +890,60 @@ function patchGraph(nodes, connections) {
       { name: 'sourceNode', value: 'Controle Bot - Registrar Entrada' },
       { name: 'waMessageId', value: "={{ $('Controle Bot - Verificar Cliente').first().json.messageId || $('Controle Bot - Verificar Cliente').first().json.id || $('Controle Bot - Verificar Cliente').first().json.key?.id || '' }}" },
     ],
+  }));
+
+  upsertNode(nodes, makeHttpNode({
+    id: 'n8n-admin-global-fetch-001',
+    name: 'Controle Bot - Buscar Admin Global',
+    position: [672, -272],
+    method: 'GET',
+    url: `${MDV_API_URL}/n8n-bot/global-control`,
+  }));
+
+  upsertNode(nodes, {
+    id: 'n8n-admin-command-parse-001',
+    name: 'Controle Bot - Comando Admin',
+    type: 'n8n-nodes-base.code',
+    typeVersion: 2,
+    position: [816, -272],
+    parameters: { jsCode: adminCommandCode },
+  });
+
+  upsertNode(nodes, makeBooleanIfNode({
+    id: 'n8n-admin-command-if-001',
+    name: 'Controle Bot - E comando admin?',
+    position: [960, -272],
+    leftValue: '={{$json.n8nBotAdminCommand}}',
+  }));
+
+  upsertNode(nodes, makeHttpNode({
+    id: 'n8n-admin-command-execute-001',
+    name: 'Controle Bot - Executar Comando Admin',
+    position: [1104, -384],
+    method: 'POST',
+    url: `${MDV_API_URL}/n8n-bot/admin-command`,
+    bodyParameters: [
+      { name: 'remoteJid', value: "={{ $('Controle Bot - Comando Admin').first().json.remoteJid }}" },
+      { name: 'message', value: "={{ $('Controle Bot - Comando Admin').first().json.conversation || '' }}" },
+    ],
+  }));
+
+  upsertNode(nodes, {
+    id: 'n8n-admin-command-reply-code-001',
+    name: 'Controle Bot - Preparar Resposta Admin',
+    type: 'n8n-nodes-base.code',
+    typeVersion: 2,
+    position: [1248, -384],
+    parameters: { jsCode: adminReplyCode },
+  });
+
+  upsertNode(nodes, makeAdminWhatsAppReplyNode());
+
+  upsertNode(nodes, makeBooleanIfNode({
+    id: 'n8n-admin-global-paused-if-001',
+    name: 'Controle Bot - Pausa global?',
+    position: [1104, -112],
+    leftValue: '={{$json.n8nBotGlobalPaused}}',
   }));
 
   upsertNode(nodes, makeHttpNode({
@@ -900,7 +1052,34 @@ function patchGraph(nodes, connections) {
     main: [[{ node: 'Controle Bot - Registrar Entrada', type: 'main', index: 0 }]],
   };
   connections['Controle Bot - Registrar Entrada'] = {
-    main: [[{ node: 'Controle Bot - Buscar Controle', type: 'main', index: 0 }]],
+    main: [[{ node: 'Controle Bot - Buscar Admin Global', type: 'main', index: 0 }]],
+  };
+  connections['Controle Bot - Buscar Admin Global'] = {
+    main: [[{ node: 'Controle Bot - Comando Admin', type: 'main', index: 0 }]],
+  };
+  connections['Controle Bot - Comando Admin'] = {
+    main: [[{ node: 'Controle Bot - E comando admin?', type: 'main', index: 0 }]],
+  };
+  connections['Controle Bot - E comando admin?'] = {
+    main: [
+      [{ node: 'Controle Bot - Executar Comando Admin', type: 'main', index: 0 }],
+      [{ node: 'Controle Bot - Pausa global?', type: 'main', index: 0 }],
+    ],
+  };
+  connections['Controle Bot - Executar Comando Admin'] = {
+    main: [[{ node: 'Controle Bot - Preparar Resposta Admin', type: 'main', index: 0 }]],
+  };
+  connections['Controle Bot - Preparar Resposta Admin'] = {
+    main: [[{ node: 'Controle Bot - Responder Admin', type: 'main', index: 0 }]],
+  };
+  connections['Controle Bot - Responder Admin'] = {
+    main: [[]],
+  };
+  connections['Controle Bot - Pausa global?'] = {
+    main: [
+      [],
+      [{ node: 'Controle Bot - Buscar Controle', type: 'main', index: 0 }],
+    ],
   };
   connections['Controle Bot - Buscar Controle'] = {
     main: [[{ node: 'Controle Bot - Aplicar Controle', type: 'main', index: 0 }]],
