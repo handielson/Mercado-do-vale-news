@@ -2493,11 +2493,20 @@ function validateN8nBotWebhook(webhook) {
   );
 }
 
+function pickFirstN8nBotString(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
 function sanitizeN8nBotEvolutionConnectResult(raw) {
+  const qrcode = raw?.qrcode || raw?.qrCode || raw?.qr || raw?.data?.qrcode || raw?.data?.qrCode || raw?.data?.qr || {};
   return {
-    base64: typeof raw?.base64 === 'string' ? raw.base64 : undefined,
-    pairingCode: typeof raw?.pairingCode === 'string' ? raw.pairingCode : undefined,
-    code: typeof raw?.code === 'string' ? raw.code : undefined,
+    base64: pickFirstN8nBotString(raw?.base64, raw?.qrcode, raw?.qrCode, raw?.qr, raw?.data?.base64, qrcode?.base64, qrcode?.qrcode, qrcode?.qrCode, qrcode?.qr),
+    pairingCode: pickFirstN8nBotString(raw?.pairingCode, raw?.pairing_code, raw?.data?.pairingCode, raw?.data?.pairing_code, qrcode?.pairingCode, qrcode?.pairing_code),
+    code: pickFirstN8nBotString(raw?.code, raw?.data?.code, qrcode?.code),
+    message: pickFirstN8nBotString(raw?.message, raw?.response?.message, raw?.data?.message),
     instance: raw?.instance && typeof raw.instance === 'object'
       ? {
           instanceName: raw.instance.instanceName || getN8nBotEvolutionInstanceName(),
@@ -23844,10 +23853,27 @@ fastify.post('/n8n-bot/whatsapp-switch/connect', { preHandler: requireSyncKey },
     return reply.code(409).send({ ok: false, error: 'BOT_NOT_PAUSED', message: 'Pause o bot antes de gerar QR Code.' });
   }
   const instanceName = getN8nBotEvolutionInstanceName();
+  const before = await getN8nBotWhatsAppSwitchStatus();
+  if (before.evolution?.state === 'open') {
+    return {
+      ...before,
+      step: 'connected_pending_confirmation',
+      connect: {
+        ok: true,
+        status: 200,
+        instance: { instanceName, state: 'open' },
+        message: 'A instancia ja esta conectada. Para gerar QR Code de outro numero, clique em desconectar o WhatsApp atual primeiro.',
+      },
+    };
+  }
   const result = await callN8nBotEvolutionApi(`/instance/connect/${encodeURIComponent(instanceName)}`);
+  const connect = { ok: result.ok, status: result.status, ...sanitizeN8nBotEvolutionConnectResult(result.body) };
+  if (!connect.base64 && connect.instance?.state === 'open') {
+    connect.message = connect.message || 'A instancia ja esta conectada. Para gerar QR Code de outro numero, clique em desconectar o WhatsApp atual primeiro.';
+  }
   return getN8nBotWhatsAppSwitchStatus({
-    step: 'awaiting_qr_scan',
-    connect: { ok: result.ok, status: result.status, ...sanitizeN8nBotEvolutionConnectResult(result.body) },
+    step: connect.base64 ? 'awaiting_qr_scan' : (connect.instance?.state === 'open' ? 'connected_pending_confirmation' : 'awaiting_qr_scan'),
+    connect,
   });
 });
 

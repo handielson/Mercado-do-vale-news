@@ -17,7 +17,9 @@ function isSwitchReadyToConfirm(status: WhatsAppSwitchStatus | null): boolean {
 }
 
 function getQrCode(status: WhatsAppSwitchStatus | null): string | null {
-  return status?.connect?.base64 || null;
+  const base64 = status?.connect?.base64?.trim();
+  if (!base64) return null;
+  return base64.startsWith('data:') ? base64 : `data:image/png;base64,${base64}`;
 }
 
 function StatusPill({ ok, children }: { ok: boolean; children: React.ReactNode }) {
@@ -130,6 +132,7 @@ export function WhatsAppNumberSwitchPanel() {
   const evolutionOpen = status?.evolution?.state === 'open';
   const connectedPhone = status?.evolution?.instance?.phone;
   const canConfirm = isSwitchReadyToConfirm(status);
+  const connectMessage = status?.connect?.message || status?.message || '';
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white">
@@ -228,6 +231,13 @@ export function WhatsAppNumberSwitchPanel() {
             <div className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50 p-3 text-sm font-medium text-red-700">
               <AlertTriangle className="mt-0.5 shrink-0" size={16} />
               <span>{error}</span>
+            </div>
+          )}
+
+          {connectMessage && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm font-medium text-amber-800">
+              <AlertTriangle className="mt-0.5 shrink-0" size={16} />
+              <span>{connectMessage}</span>
             </div>
           )}
         </div>

@@ -157,6 +157,7 @@ export interface WhatsAppSwitchStatus {
         base64?: string;
         pairingCode?: string;
         code?: string;
+        message?: string;
         instance?: { instanceName?: string; state?: string | null };
     };
     error?: string;

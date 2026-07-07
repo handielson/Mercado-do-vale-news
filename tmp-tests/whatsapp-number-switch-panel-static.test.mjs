@@ -34,6 +34,8 @@ for (const call of requiredCalls) {
 assert.match(panel, /window\.confirm\('Desconectar o WhatsApp atual/, 'disconnect action must require explicit confirmation');
 assert.match(panel, /status\?\.control\?\.paused !== true/, 'dangerous actions must be blocked unless bot is paused');
 assert.match(panel, /status\?\.evolution\?\.state === 'open'/, 'confirmation must depend on Evolution open state');
+assert.match(panel, /data:image\/png;base64/, 'panel must render bare QR base64 as an image data URL');
+assert.match(panel, /status\?\.connect\?\.message/, 'panel must show backend connect guidance when QR is not available');
 assert.match(page, /import \{ WhatsAppNumberSwitchPanel \}/, 'WhatsApp page must import the switch panel');
 assert.match(page, /<WhatsAppNumberSwitchPanel \/>/, 'WhatsApp page must render the switch panel');
 
