@@ -5,6 +5,7 @@ const server = fs.readFileSync('vps_server.js', 'utf8');
 const serverCjs = fs.readFileSync('vps_server.cjs', 'utf8');
 const service = fs.readFileSync('services/whatsappStatusCampaignService.ts', 'utf8');
 const panel = fs.readFileSync('pages/admin/settings/marketing/WhatsAppStatusCampaignPanel.tsx', 'utf8');
+const deployServerOnly = fs.readFileSync('deploy-vps-server-only.cjs', 'utf8');
 
 for (const source of [server, serverCjs]) {
   assert.match(source, /CREATE TABLE IF NOT EXISTS whatsapp_status_campaigns/);
@@ -97,5 +98,9 @@ assert.match(panel, /buildStatusCaption/);
 assert.match(panel, /buildStatusPayload/);
 assert.match(panel, /groupStatusProductsByVariation/);
 assert.match(panel, /categories: \[form\.category_id\]/);
+
+assert.match(deployServerOnly, /EVOLUTION_STATUS_SERVER_URL/);
+assert.match(deployServerOnly, /EVOLUTION_STATUS_TIMEOUT_MS/);
+assert.match(deployServerOnly, /WHATSAPP_STATUS_STALE_SENDING_SECONDS/);
 
 console.log('whatsapp-status-campaign-vps-static.test.mjs: ok');

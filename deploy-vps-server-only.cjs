@@ -140,7 +140,11 @@ async function ensureRemoteAdminEnv(appDir) {
   const remoteEnv = `${appDir}/.env`;
   await withSftp(async (sftp) => {
     const current = await readRemoteText(sftp, remoteEnv);
-    const entries = { EVOLUTION_STATUS_SERVER_URL: evolutionStatusServerUrl };
+    const entries = {
+      EVOLUTION_STATUS_SERVER_URL: evolutionStatusServerUrl,
+      EVOLUTION_STATUS_TIMEOUT_MS: process.env.EVOLUTION_STATUS_TIMEOUT_MS || '30000',
+      WHATSAPP_STATUS_STALE_SENDING_SECONDS: process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || '120',
+    };
     if (adminEmail && adminPassword) {
       entries.MDV_ADMIN_EMAIL = adminEmail;
       entries.MDV_ADMIN_PASSWORD = adminPassword;
