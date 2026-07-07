@@ -23,6 +23,18 @@ assert.match(
 
 assert.match(
   source,
+  /const EVOLUTION_GLOBAL_API_KEY = process\.env\.EVOLUTION_API_KEY \|\| process\.env\.EVOLUTION_GLOBAL_API_KEY \|\| ''/,
+  'legacy autoresponder Evolution proxy must use the production Evolution API key from env'
+);
+
+assert.doesNotMatch(
+  source,
+  /ChaveSecretaGeradaParaAutenticacaoEvolution123/,
+  'legacy autoresponder must not use the obsolete hardcoded Evolution API key'
+);
+
+assert.match(
+  source,
   /const EVOLUTION_INSTANCE_NAME = process\.env\.EVOLUTION_INSTANCE_NAME \|\| process\.env\.EVOLUTION_API_INSTANCE \|\| 'botmercadodovale'/,
   'legacy autoresponder Evolution fallback must use the official bot instance'
 );

@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.87-whatsapp-instancia-oficial
+version: v1.2.88-whatsapp-evolution-env
 date: 2026-07-07
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260707-222750-whatsapp-instancia-oficial
+release_vps: /var/www/mdv-site/releases/20260707-223230-whatsapp-evolution-env
 branch: main
-summary: Mantem WhatsApp oficial 558781137240 e remove fallback da instancia antiga.
+summary: Usa a chave Evolution do ambiente nos endpoints legados do WhatsApp oficial.
 ```
