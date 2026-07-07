@@ -22711,6 +22711,20 @@ function normalizeWhatsAppStatusProduct(row) {
   };
 }
 
+function getWhatsAppStatusProductImage(product) {
+  const candidates = [
+    ...parseWhatsAppStatusImages(product?.images),
+    product?.image_url,
+    product?.imageUrl,
+    product?.thumbnail,
+    product?.main_image_url,
+    product?.image,
+    ...parseWhatsAppStatusImages(product?.product_images),
+    ...parseWhatsAppStatusImages(product?.custom_images),
+  ];
+  return String(candidates.find((image) => String(image || '').trim()) || '').trim();
+}
+
 function parseWhatsAppStatusProductIds(value, fallbackProductId = null) {
   let ids = [];
   if (Array.isArray(value)) {
@@ -22731,7 +22745,7 @@ function isWhatsAppStatusProductEligible(product) {
   if (!product?.id) return false;
   if (Number(product.price_retail || 0) <= 0) return false;
   if (Number(product.stock_quantity ?? 0) <= 0 && product.track_inventory !== 0 && product.track_inventory !== false) return false;
-  return Array.isArray(product.images) && product.images.some((image) => String(image || '').trim());
+  return Boolean(getWhatsAppStatusProductImage(product));
 }
 
 function rotateWhatsAppStatusProducts(products, lastProductId) {
@@ -22962,10 +22976,22 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   const apiKey = String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_GLOBAL_API_KEY || '');
   const instance = String(process.env.EVOLUTION_STATUS_INSTANCE || process.env.EVOLUTION_API_INSTANCE || 'botmercadodovale');
   const endpoint = `${baseUrl}/message/sendStatus/${encodeURIComponent(instance)}`;
-  const image = product.images.find((value) => String(value || '').trim());
+  const image = getWhatsAppStatusProductImage(product);
   const cardPlan = await getWhatsAppStatusCardPlan(product.price_retail);
   const caption = buildWhatsAppStatusCaption(product, cardPlan);
   const payload = { type: 'image', content: image, caption, allContacts: true };
+  const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 25000));
+
+  if (!image) {
+    const debug = buildWhatsAppStatusDebug({
+      campaign,
+      product,
+      endpoint,
+      scheduledFor,
+      errorMessage: 'Produto sem imagem publica para enviar no Status',
+    });
+    return { productId: product.id, productName: product.name, status: 'failed', debug };
+  }
 
   if (!apiKey) {
     const debug = buildWhatsAppStatusDebug({
@@ -22986,6 +23012,7 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
         apikey: apiKey,
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const text = await response.text();
     let body = text;
@@ -23013,7 +23040,9 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
       product,
       endpoint,
       scheduledFor,
-      errorMessage: error?.message || String(error),
+      errorMessage: error?.name === 'TimeoutError' || error?.name === 'AbortError'
+        ? `Timeout ao enviar Status apos ${Math.round(timeoutMs / 1000)}s`
+        : error?.message || String(error),
     });
     return { productId: product.id, productName: product.name, status: 'failed', debug };
   }
@@ -23036,13 +23065,20 @@ async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledF
 
   const logs = [];
   for (const product of selected) {
-    const result = await sendWhatsAppStatusProduct(campaign, product, scheduledFor);
-    logs.push(result);
+    const logId = crypto.randomUUID();
     await pool.query(
       `INSERT INTO whatsapp_status_campaign_logs
         (id, campaign_id, product_id, status, debug_text, scheduled_for, slot_index)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [crypto.randomUUID(), campaign.id, product.id, result.status, result.debug || null, scheduledFor, slotIndex]
+       VALUES (?, ?, ?, 'sending', NULL, ?, ?)`,
+      [logId, campaign.id, product.id, scheduledFor, slotIndex]
+    );
+    const result = await sendWhatsAppStatusProduct(campaign, product, scheduledFor);
+    logs.push(result);
+    await pool.query(
+      `UPDATE whatsapp_status_campaign_logs
+       SET status = ?, debug_text = ?
+       WHERE id = ?`,
+      [result.status, result.debug || null, logId]
     );
   }
 
@@ -23062,6 +23098,87 @@ async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledF
 
   return { ok: failed === 0, sent, failed, debug: debug || undefined, logs };
 }
+
+function buildWhatsAppStatusProgress(campaigns, logs) {
+  const logsByCampaign = new Map();
+  for (const log of Array.isArray(logs) ? logs : []) {
+    const campaignLogs = logsByCampaign.get(log.campaign_id) || [];
+    campaignLogs.push(log);
+    logsByCampaign.set(log.campaign_id, campaignLogs);
+  }
+
+  const now = new Date();
+  return campaigns.map((campaign) => {
+    const campaignLogs = logsByCampaign.get(campaign.id) || [];
+    const scheduledLogs = campaignLogs.filter((log) => log.slot_index !== null && log.slot_index !== undefined);
+    const completedSlots = new Set(scheduledLogs.map((log) => Number(log.slot_index)).filter((slot) => Number.isFinite(slot)));
+    const total = clampWhatsAppStatusDailyLimit(campaign.daily_limit);
+    let nextSlotIndex = null;
+    for (let slot = 0; slot < total; slot += 1) {
+      if (!completedSlots.has(slot)) {
+        nextSlotIndex = slot;
+        break;
+      }
+    }
+
+    const interval = normalizeWhatsAppStatusInterval(campaign.interval_minutes);
+    const [startHours, startMinutes] = String(campaign.start_time || '08:00').split(':').map((part) => Number(part) || 0);
+    const startTotal = startHours * 60 + startMinutes;
+    const nextDate = nextSlotIndex === null
+      ? null
+      : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, startTotal + nextSlotIndex * interval, 0);
+    const countStatus = (items, status) => items.filter((log) => log.status === status).length;
+
+    return {
+      campaign_id: campaign.id,
+      daily_limit: total,
+      interval_minutes: interval,
+      start_time: String(campaign.start_time || '08:00').slice(0, 5),
+      active: campaign.active === 1 || campaign.active === true,
+      scheduled: {
+        total,
+        done: Math.min(total, completedSlots.size),
+        sent: countStatus(scheduledLogs, 'sent'),
+        failed: countStatus(scheduledLogs, 'failed'),
+        skipped: countStatus(scheduledLogs, 'skipped'),
+        percent: total > 0 ? Math.round((Math.min(total, completedSlots.size) / total) * 100) : 0,
+        next_slot_index: nextSlotIndex,
+        next_scheduled_for: nextDate ? nextDate.toISOString() : null,
+      },
+      today: {
+        total_logs: campaignLogs.length,
+        sent: countStatus(campaignLogs, 'sent'),
+        failed: countStatus(campaignLogs, 'failed'),
+        skipped: countStatus(campaignLogs, 'skipped'),
+      },
+      last_log: campaignLogs[0] || null,
+      logs: campaignLogs.slice(0, 10),
+    };
+  });
+}
+
+fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey }, async () => {
+  const [campaigns] = await pool.query(
+    `SELECT id, title, active, daily_limit, interval_minutes, start_time
+     FROM whatsapp_status_campaigns
+     ORDER BY updated_at DESC
+     LIMIT 200`
+  );
+  const [logs] = await pool.query(
+    `SELECT l.id, l.campaign_id, l.product_id, p.name AS product_name, l.status, l.debug_text,
+            l.scheduled_for, l.slot_index, l.created_at
+     FROM whatsapp_status_campaign_logs l
+     LEFT JOIN products p ON p.id = l.product_id
+     WHERE DATE(l.created_at) = CURDATE()
+     ORDER BY l.created_at DESC
+     LIMIT 500`
+  );
+  return {
+    ok: true,
+    generated_at: new Date().toISOString(),
+    campaigns: buildWhatsAppStatusProgress(campaigns, logs),
+  };
+});
 
 fastify.post('/whatsapp/status-campaigns/:id/send-now', { preHandler: requireSyncKey }, async (req, reply) => {
   const campaign = await getWhatsAppStatusCampaign(req.params.id);
@@ -29908,7 +30025,7 @@ async function runMigrations() {
       id CHAR(36) PRIMARY KEY,
       campaign_id CHAR(36) NOT NULL,
       product_id CHAR(36) NULL,
-      status ENUM('sent','failed','skipped') NOT NULL DEFAULT 'failed',
+      status ENUM('sending','sent','failed','skipped') NOT NULL DEFAULT 'failed',
       debug_text TEXT NULL,
       scheduled_for DATETIME NULL,
       slot_index INT NULL,
@@ -29918,6 +30035,7 @@ async function runMigrations() {
       INDEX idx_whatsapp_status_logs_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await pool.query("ALTER TABLE whatsapp_status_campaign_logs MODIFY status ENUM('sending','sent','failed','skipped') NOT NULL DEFAULT 'failed'");
   await addColumnIfMissing('whatsapp_status_campaign_logs', 'slot_index', 'INT NULL');
 
   const legacySaleCompletedPreferenceLine = ['Obrigado', 'pela', 'preferencia, {nome}! Seu pedido {pedido} ja esta registrado com a gente. 🚀'].join(' ');

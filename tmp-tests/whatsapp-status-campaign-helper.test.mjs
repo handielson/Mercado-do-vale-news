@@ -5,6 +5,7 @@ import {
   buildStatusPayload,
   buildStatusSendDebug,
   clampDailyProductLimit,
+  getStatusProductImage,
   getStatusProductVariation,
   groupStatusProductsByVariation,
   resolveScheduledSendTimes,
@@ -133,6 +134,25 @@ assert.deepEqual(
     caption,
     allContacts: true,
   },
+);
+
+const imageUrlOnlyProduct = {
+  id: 'image-url-only',
+  name: 'Produto com image_url',
+  slug: 'produto-com-image-url',
+  price_retail: 200000,
+  stock_quantity: 1,
+  image_url: 'https://cdn.example.com/image-url-only.jpg',
+};
+
+assert.equal(getStatusProductImage(imageUrlOnlyProduct), 'https://cdn.example.com/image-url-only.jpg');
+assert.equal(selectStatusProducts([imageUrlOnlyProduct], { dailyLimit: 1 }).length, 1);
+assert.equal(
+  buildStatusPayload({
+    product: imageUrlOnlyProduct,
+    caption,
+  }).content,
+  'https://cdn.example.com/image-url-only.jpg',
 );
 
 const debug = buildStatusSendDebug({

@@ -34,8 +34,38 @@ export function resolveScheduledSendTimes({ startTime = '08:00', count = 1, inte
   return Array.from({ length: safeCount }, (_, index) => minutesToTime(start + index * safeInterval));
 }
 
+function parseStatusImages(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((image) => String(image || '').trim()).filter(Boolean);
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) return [];
+    try {
+      const parsed = JSON.parse(text);
+      return Array.isArray(parsed) ? parsed.map((image) => String(image || '').trim()).filter(Boolean) : [text];
+    } catch {
+      return [text];
+    }
+  }
+  return [];
+}
+
+export function getStatusProductImage(product) {
+  const candidates = [
+    ...parseStatusImages(product?.images),
+    product?.image_url,
+    product?.imageUrl,
+    product?.thumbnail,
+    product?.main_image_url,
+    product?.image,
+    ...parseStatusImages(product?.product_images),
+    ...parseStatusImages(product?.custom_images),
+  ];
+  return String(candidates.find((image) => String(image || '').trim()) || '').trim();
+}
+
 function hasUsableImage(product) {
-  return Array.isArray(product?.images) && product.images.some((image) => String(image || '').trim());
+  return Boolean(getStatusProductImage(product));
 }
 
 function hasUsablePrice(product) {
@@ -250,9 +280,7 @@ export function buildStatusCaption({ product, cardPlan, siteBaseUrl = 'https://m
 }
 
 export function buildStatusPayload({ product, caption }) {
-  const image = Array.isArray(product?.images)
-    ? product.images.find((value) => String(value || '').trim())
-    : '';
+  const image = getStatusProductImage(product);
 
   return {
     type: 'image',

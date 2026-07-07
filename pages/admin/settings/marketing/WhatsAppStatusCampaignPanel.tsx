@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, Copy, ImageIcon, MessageCircle, Play, Plus, RefreshCw, Save, Smartphone, Trash2, X, ToggleLeft, ToggleRight } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Copy, ImageIcon, Loader2, MessageCircle, Play, Plus, RefreshCw, Save, Smartphone, Trash2, X, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogService } from '../../../../services/catalogService';
 import type { CatalogProduct } from '../../../../types/catalog';
@@ -14,6 +14,7 @@ import {
 import {
   whatsappStatusCampaignService,
   type WhatsAppStatusCampaign,
+  type WhatsAppStatusCampaignProgress,
   type WhatsAppStatusCampaignInput,
   type WhatsAppStatusCampaignSourceType,
 } from '../../../../services/whatsappStatusCampaignService';
@@ -135,6 +136,89 @@ function StatusPreviewCard({ product, paymentFees }: { product: any; paymentFees
   );
 }
 
+function parseProgressDate(value?: string | null) {
+  if (!value) return 0;
+  return new Date(String(value).replace(' ', 'T')).getTime() || 0;
+}
+
+function formatProgressTime(value?: string | null) {
+  if (!value) return '--:--';
+  const date = new Date(String(value).replace(' ', 'T'));
+  if (Number.isNaN(date.getTime())) return String(value).slice(11, 16) || '--:--';
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function statusLabel(status?: string | null) {
+  if (status === 'sending') return 'Em envio';
+  if (status === 'sent') return 'Enviado';
+  if (status === 'failed') return 'Falhou';
+  if (status === 'skipped') return 'Ignorado';
+  return status || 'Aguardando';
+}
+
+function CampaignProgressBar({
+  campaign,
+  progress,
+  sendingSession,
+  isSending,
+}: {
+  campaign: WhatsAppStatusCampaign;
+  progress?: WhatsAppStatusCampaignProgress;
+  sendingSession?: { startedAt: string; total: number };
+  isSending: boolean;
+}) {
+  const manualLogs = sendingSession
+    ? (progress?.logs || []).filter((log) => {
+        const createdAt = parseProgressDate(log.created_at);
+        return createdAt >= parseProgressDate(sendingSession.startedAt) - 3000
+          && (log.slot_index === null || log.slot_index === undefined);
+      })
+    : [];
+  const manualDone = manualLogs.length;
+  const manualFailed = manualLogs.filter((log) => log.status === 'failed').length;
+  const manualTotal = Math.max(1, sendingSession?.total || campaign.daily_limit || 1);
+  const scheduled = progress?.scheduled;
+  const scheduledPercent = scheduled?.percent ?? 0;
+  const percent = isSending
+    ? Math.min(100, Math.max(manualDone > 0 ? Math.round((manualDone / manualTotal) * 100) : 8, 8))
+    : scheduledPercent;
+  const tone = manualFailed > 0 || (progress?.today.failed || 0) > 0 ? 'bg-red-500' : isSending ? 'bg-emerald-500' : 'bg-blue-500';
+  const lastLog = progress?.last_log || null;
+  const label = isSending
+    ? `Enviando agora ${manualDone}/${manualTotal}`
+    : `Programado hoje ${scheduled?.done || 0}/${scheduled?.total || campaign.daily_limit}`;
+  const detail = isSending
+    ? (manualDone > 0 ? `${statusLabel(manualLogs[0]?.status)}: ${manualLogs[0]?.product_name || manualLogs[0]?.product_id || 'produto'}` : 'Iniciando envio e aguardando retorno da API')
+    : lastLog
+      ? `${statusLabel(lastLog.status)} ${formatProgressTime(lastLog.created_at)} - ${lastLog.product_name || lastLog.product_id || 'produto'}`
+      : scheduled?.next_scheduled_for
+        ? `Proximo slot: ${formatProgressTime(scheduled.next_scheduled_for)}`
+        : 'Nenhum envio registrado hoje';
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {isSending && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-emerald-600" />}
+          <span className="truncate text-xs font-bold text-slate-700">{label}</span>
+        </div>
+        <span className="text-xs font-black text-slate-500">{percent}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-white">
+        <div className={`h-full rounded-full ${tone} transition-all duration-500`} style={{ width: `${percent}%` }} />
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+        <span className="min-w-0 flex-1 truncate">{detail}</span>
+        {progress?.today.total_logs ? (
+          <span className="shrink-0 font-semibold">
+            Hoje: {progress.today.sent} ok / {progress.today.failed} erro
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function WhatsAppStatusCampaignPanel() {
   const [campaigns, setCampaigns] = useState<WhatsAppStatusCampaign[]>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
@@ -152,6 +236,8 @@ export default function WhatsAppStatusCampaignPanel() {
   const [pendingProductId, setPendingProductId] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<CatalogProduct[]>([]);
   const [previewIndex, setPreviewIndex] = useState(0);
+  const [progressByCampaign, setProgressByCampaign] = useState<Record<string, WhatsAppStatusCampaignProgress>>({});
+  const [sendSessions, setSendSessions] = useState<Record<string, { startedAt: string; total: number }>>({});
   const [lastDebug, setLastDebug] = useState('');
 
   const selectedProductIds = useMemo(() => {
@@ -184,10 +270,28 @@ export default function WhatsAppStatusCampaignPanel() {
     }
   }
 
+  async function loadProgress() {
+    try {
+      const result = await whatsappStatusCampaignService.progress();
+      const next: Record<string, WhatsAppStatusCampaignProgress> = {};
+      for (const item of result.campaigns || []) next[item.campaign_id] = item;
+      setProgressByCampaign(next);
+    } catch {
+      // A barra e os logs sao auxiliares; a tela principal continua funcionando se a consulta falhar.
+    }
+  }
+
   useEffect(() => {
     loadData();
+    loadProgress();
     paymentFeesService.list().then(setPaymentFees).catch(() => setPaymentFees([]));
   }, []);
+
+  useEffect(() => {
+    const intervalMs = sendingId ? 2500 : 10000;
+    const timer = window.setInterval(loadProgress, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [sendingId]);
 
   useEffect(() => {
     if (form.source_type !== 'product') return;
@@ -383,7 +487,12 @@ export default function WhatsAppStatusCampaignPanel() {
 
   async function sendNow(campaign: WhatsAppStatusCampaign) {
     setSendingId(campaign.id);
+    setSendSessions((current) => ({
+      ...current,
+      [campaign.id]: { startedAt: new Date().toISOString(), total: Math.max(1, Number(campaign.daily_limit || 1)) },
+    }));
     setLastDebug('');
+    await loadProgress();
     try {
       const result = await whatsappStatusCampaignService.sendNow(campaign.id);
       const debug = result.debug || result.logs?.map((log) => log.debug).filter(Boolean).join('\n\n') || '';
@@ -394,6 +503,7 @@ export default function WhatsAppStatusCampaignPanel() {
         toast.success(`${result.sent} status enviado(s)`);
       }
       await loadData();
+      await loadProgress();
     } catch (error: any) {
       const debug = [
         'WHATSAPP_STATUS_SEND_NOW_FRONTEND_DEBUG',
@@ -404,6 +514,7 @@ export default function WhatsAppStatusCampaignPanel() {
       toast.error('Erro ao enviar agora');
     } finally {
       setSendingId(null);
+      window.setTimeout(loadProgress, 1200);
     }
   }
 
@@ -755,6 +866,12 @@ export default function WhatsAppStatusCampaignPanel() {
                         Copiar ultimo erro
                       </button>
                     )}
+                    <CampaignProgressBar
+                      campaign={campaign}
+                      progress={progressByCampaign[campaign.id]}
+                      sendingSession={sendSessions[campaign.id]}
+                      isSending={sendingId === campaign.id}
+                    />
                   </button>
 
                   <div className="flex shrink-0 gap-1">

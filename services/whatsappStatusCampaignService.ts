@@ -35,9 +35,53 @@ export interface WhatsAppStatusSendNowResult {
   logs?: Array<{
     productId?: string;
     productName?: string;
-    status: 'sent' | 'failed' | 'skipped';
+    status: 'sending' | 'sent' | 'failed' | 'skipped';
     debug?: string;
   }>;
+}
+
+export interface WhatsAppStatusCampaignLog {
+  id?: string;
+  campaign_id?: string;
+  product_id?: string | null;
+  product_name?: string | null;
+  status: 'sending' | 'sent' | 'failed' | 'skipped' | string;
+  debug_text?: string | null;
+  scheduled_for?: string | null;
+  slot_index?: number | null;
+  created_at?: string | null;
+}
+
+export interface WhatsAppStatusCampaignProgress {
+  campaign_id: string;
+  daily_limit: number;
+  interval_minutes: number;
+  start_time: string;
+  active: boolean;
+  scheduled: {
+    total: number;
+    done: number;
+    sent: number;
+    failed: number;
+    skipped: number;
+    percent: number;
+    next_slot_index: number | null;
+    next_scheduled_for: string | null;
+  };
+  today: {
+    total_logs: number;
+    sent: number;
+    failed: number;
+    skipped: number;
+  };
+  last_log: WhatsAppStatusCampaignLog | null;
+  logs: WhatsAppStatusCampaignLog[];
+}
+
+export interface WhatsAppStatusProgressResponse {
+  ok: boolean;
+  generated_at: string;
+  campaigns: WhatsAppStatusCampaignProgress[];
 }
 
 interface TableDataResponse<T> {
@@ -104,5 +148,9 @@ export const whatsappStatusCampaignService = {
       `/whatsapp/status-campaigns/${encodeURIComponent(id)}/send-now`,
       {},
     );
+  },
+
+  async progress(): Promise<WhatsAppStatusProgressResponse> {
+    return vpsClient.get<WhatsAppStatusProgressResponse>('/whatsapp/status-campaigns/progress');
   },
 };
