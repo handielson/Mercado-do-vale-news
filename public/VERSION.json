@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.75-status-evolution-interna",
+    "version": "v1.2.76-status-audiencia-rotativa",
     "date": "2026-07-07",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260707-110000-v1275-status-evolution-interna",
+    "release_vps": "/var/www/mdv-site/releases/20260707-112000-v1276-status-audiencia-rotativa",
     "branch": "main",
-    "summary": "Status WhatsApp usa Evolution interna no VPS para evitar 504 do Cloudflare.",
+    "summary": "Status WhatsApp limita e rotaciona audiencia para evitar travamento na Evolution.",
     "totem_pix_android": {
         "latest_version_name": "1.22",
         "latest_version_code": 122,

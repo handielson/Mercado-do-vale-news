@@ -22990,6 +22990,24 @@ function normalizeWhatsAppStatusContactNumber(value) {
   return digits.length >= 10 ? digits : '';
 }
 
+function hashWhatsAppStatusAudienceSeed(value) {
+  const text = String(value || '');
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function selectWhatsAppStatusAudience(numbers, seed, limit) {
+  const unique = Array.from(new Set((Array.isArray(numbers) ? numbers : []).filter(Boolean)));
+  const max = Math.max(1, Math.min(unique.length || 1, Number(limit) || unique.length || 1));
+  if (unique.length <= max) return { selected: unique, total: unique.length };
+  const offset = hashWhatsAppStatusAudienceSeed(seed) % unique.length;
+  const rotated = unique.slice(offset).concat(unique.slice(0, offset));
+  return { selected: rotated.slice(0, max), total: unique.length };
+}
+
 const whatsappStatusAudienceCache = new Map();
 
 async function fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance }) {
@@ -23042,6 +23060,8 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 180000));
   const startedAt = Date.now();
   let statusAudienceCount = 0;
+  let statusAudienceTotal = 0;
+  let statusAudienceLimit = 0;
 
   if (!image) {
     const debug = buildWhatsAppStatusDebug({
@@ -23066,8 +23086,17 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   }
 
   try {
-    const statusJidList = await fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance });
+    const allStatusJidList = await fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance });
+    const audienceLimit = Math.max(1, Math.min(5000, Number(process.env.EVOLUTION_STATUS_AUDIENCE_LIMIT || 250)));
+    statusAudienceLimit = audienceLimit;
+    const audience = selectWhatsAppStatusAudience(
+      allStatusJidList,
+      `${campaign?.id || ''}:${product?.id || product?.sku || ''}:${new Date().toISOString().slice(0, 10)}`,
+      audienceLimit,
+    );
+    const statusJidList = audience.selected;
     statusAudienceCount = statusJidList.length;
+    statusAudienceTotal = audience.total;
     if (!statusJidList.length) {
       const debug = buildWhatsAppStatusDebug({
         campaign,
@@ -23105,7 +23134,8 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
         errorMessage: body?.message || body?.response || response.statusText,
         scheduledFor,
         extraLines: [
-          `Contatos Status: ${statusAudienceCount}`,
+          `Contatos Status: ${statusAudienceCount} de ${audience.total}`,
+          `Limite de audiencia: ${audienceLimit}`,
           `Tempo decorrido: ${Date.now() - startedAt}ms`,
           `Timeout configurado: ${timeoutMs}ms`,
         ],
@@ -23121,7 +23151,8 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
       endpoint,
       scheduledFor,
       extraLines: [
-        statusAudienceCount ? `Contatos Status: ${statusAudienceCount}` : '',
+        statusAudienceCount ? `Contatos Status: ${statusAudienceCount} de ${statusAudienceTotal || statusAudienceCount}` : '',
+        statusAudienceLimit ? `Limite de audiencia: ${statusAudienceLimit}` : '',
         `Tempo decorrido: ${Date.now() - startedAt}ms`,
         `Timeout configurado: ${timeoutMs}ms`,
       ],
