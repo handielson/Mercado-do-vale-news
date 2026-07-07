@@ -20,14 +20,20 @@ for (const file of files) {
 
   assert.match(
     source,
-    /No momento nao encontrei \$\{label\} disponivel em estoque/,
-    `${file} unavailable-device reply must tell the customer the device is not in stock`,
+    /Esse \$\{label\} acabou todo estoque no momento e estamos aguardando reposicao/,
+    `${file} unavailable-device reply must tell the customer the device is awaiting restock`,
   );
 
   assert.match(
     source,
+    /lista completa de celulares disponiveis agora/,
+    `${file} unavailable-device reply must guide the customer toward available phone alternatives`,
+  );
+
+  assert.doesNotMatch(
+    source,
     /Encontrei apenas acessorios relacionados/,
-    `${file} unavailable-device reply must distinguish accessories from the requested device`,
+    `${file} unavailable-device reply must not offer accessories as if they replaced the requested phone`,
   );
 
   assert.match(

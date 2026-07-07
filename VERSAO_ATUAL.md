@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.82-bot-produto-indisponivel
+version: v1.2.83-bot-guia-celulares
 date: 2026-07-07
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260707-162000-v1282-bot-produto-indisponivel
+release_vps: /var/www/mdv-site/releases/20260707-173000-v1283-bot-guia-celulares
 branch: main
-summary: Responde quando o bot nao encontra aparelho solicitado em estoque.
+summary: Bot confirma marcas ambiguas e oferece lista real de celulares quando aparelho pedido esta sem estoque.
 ```

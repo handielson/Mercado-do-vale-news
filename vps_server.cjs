@@ -12975,15 +12975,10 @@ function isAutoresponderDeviceAvailabilityRequest(message = '', query = '') {
 
 function buildAutoresponderUnavailableDeviceReply({ message = '', query = '', products = [] } = {}) {
   const label = getAutoresponderRequestedDeviceLabel(message, query);
-  const availableProducts = filterAutoresponderAvailableProducts(products);
-  const hasRelatedAccessories = availableProducts.some((product) => isAutoresponderAccessoryProduct(product));
   const lines = [
-    `No momento nao encontrei ${label} disponivel em estoque.`,
+    `Esse ${label} acabou todo estoque no momento e estamos aguardando reposicao.`,
   ];
-  if (hasRelatedAccessories) {
-    lines.push('Encontrei apenas acessorios relacionados, como capas ou itens compativeis.');
-  }
-  lines.push('Posso te mostrar celulares de outras marcas disponiveis ou chamar um atendente para conferir uma alternativa parecida.');
+  lines.push('Tenho outras opcoes no catalogo e posso te mandar a lista completa de celulares disponiveis agora.');
   return lines.join('\n');
 }
 
@@ -14060,6 +14055,32 @@ async function buildAutoresponderPriorityProductSearchReplyData({ message, conta
     rows = sortAutoresponderProductsForAiCatalogTool([...candidatesById.values()], searchKeyword);
     products = rows.slice(0, pageSize);
     usedBroadCandidateSearch = products.length > 0;
+  }
+  const deviceAvailabilityRequest = isAutoresponderDeviceAvailabilityRequest(message, searchKeyword);
+  const availableProducts = filterAutoresponderAvailableProducts(products);
+  const onlyRelatedAccessories = availableProducts.length > 0
+    && availableProducts.every((product) => isAutoresponderAccessoryProduct(product));
+  if (deviceAvailabilityRequest && (products.length === 0 || availableProducts.length === 0 || onlyRelatedAccessories)) {
+    const replyMessages = buildAutoresponderReplyMessagesWithSeparateGreeting([
+      buildAutoresponderUnavailableDeviceReply({ message, query: searchKeyword, products }),
+    ], {
+      message,
+      contactFirstName,
+      settings,
+      shouldIncludeGreeting: shouldPrefixGreeting || isAutoresponderGreeting(message),
+    });
+    return {
+      productSearchTokens,
+      searchKeyword,
+      pageSize,
+      products: availableProducts,
+      productOptions: [],
+      hasMore: false,
+      total: 0,
+      replyMessages,
+      deterministicReply: true,
+      source: 'unavailable_device',
+    };
   }
   if (products.length === 0) return null;
 
