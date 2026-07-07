@@ -2161,6 +2161,22 @@ function normalizeN8nBotClientIdentity(input = {}) {
   };
 }
 
+function normalizeN8nBotAdminIdentity(input = {}) {
+  return normalizeN8nBotClientIdentity(input);
+}
+
+function normalizeN8nBotAdminCommand(text) {
+  const normalized = String(text || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const match = normalized.match(/^(pausar|continuar|status)(?:\s+(.+))?$/);
+  if (!match) return { valid: false, action: '', phone: '', remoteJid: '' };
+  const action = match[1];
+  const rawTarget = String(match[2] || '').trim();
+  if (!rawTarget) return { valid: true, action, phone: '', remoteJid: '' };
+  const target = normalizeN8nBotClientIdentity({ phone: rawTarget, remoteJid: rawTarget });
+  if (!target) return { valid: false, action, phone: '', remoteJid: '' };
+  return { valid: true, action, phone: target.phone, remoteJid: target.remoteJid };
+}
+
 function buildN8nBotMemorySessionKey(remoteJid, resetCount) {
   const count = Number(resetCount || 0);
   return count > 0 ? `${remoteJid}:r${count}` : remoteJid;
@@ -2200,6 +2216,43 @@ async function getN8nBotClientControl(identity) {
     [identity.remoteJid]
   );
   return mapN8nBotControlRow(rows?.[0] || null, identity);
+}
+
+async function getN8nBotGlobalControl() {
+  const [rows] = await pool.query(
+    "SELECT * FROM n8n_bot_global_control WHERE control_key = 'main' LIMIT 1"
+  );
+  const row = rows?.[0] || {};
+  return {
+    paused: Number(row.paused || 0) === 1,
+    reason: row.reason || null,
+    changed_by: row.changed_by || null,
+    changed_by_remote_jid: row.changed_by_remote_jid || null,
+    changed_at: row.changed_at || null,
+    updated_at: row.updated_at || null,
+  };
+}
+
+async function setN8nBotGlobalControl({ paused, reason = '', changedBy = '', changedByRemoteJid = '' }) {
+  await pool.query(
+    `INSERT INTO n8n_bot_global_control
+      (control_key, paused, reason, changed_by, changed_by_remote_jid, changed_at)
+     VALUES ('main', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       paused = VALUES(paused),
+       reason = VALUES(reason),
+       changed_by = VALUES(changed_by),
+       changed_by_remote_jid = VALUES(changed_by_remote_jid),
+       changed_at = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      paused ? 1 : 0,
+      String(reason || '').slice(0, 500) || null,
+      String(changedBy || '').slice(0, 120) || null,
+      String(changedByRemoteJid || '').slice(0, 120) || null,
+    ]
+  );
+  return getN8nBotGlobalControl();
 }
 
 async function upsertN8nBotClientControl(identity, patch = {}) {
@@ -23511,6 +23564,60 @@ async function runDueWhatsAppStatusCampaigns() {
 fastify.post('/whatsapp/status-campaigns/run-due', { preHandler: requireSyncKey }, async () => {
   return runDueWhatsAppStatusCampaigns();
 });
+
+fastify.get('/n8n-bot/admin-numbers', { preHandler: requireSyncKey }, async () => {
+  const [rows] = await pool.query(
+    'SELECT id, remote_jid, phone, label, active, created_at, updated_at FROM n8n_bot_admin_numbers ORDER BY updated_at DESC, created_at DESC'
+  );
+  return { rows };
+});
+
+fastify.post('/n8n-bot/admin-numbers', { preHandler: requireSyncKey }, async (req, reply) => {
+  const identity = normalizeN8nBotAdminIdentity(req.body || {});
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  const id = req.body?.id || (crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID());
+  await pool.query(
+    `INSERT INTO n8n_bot_admin_numbers (id, remote_jid, phone, label, active)
+     VALUES (?, ?, ?, ?, 1)
+     ON DUPLICATE KEY UPDATE
+       phone = VALUES(phone),
+       label = VALUES(label),
+       active = 1,
+       updated_at = CURRENT_TIMESTAMP`,
+    [id, identity.remoteJid, identity.phone, String(req.body?.label || '').slice(0, 120) || null]
+  );
+  const [rows] = await pool.query(
+    'SELECT id, remote_jid, phone, label, active, created_at, updated_at FROM n8n_bot_admin_numbers WHERE remote_jid = ? LIMIT 1',
+    [identity.remoteJid]
+  );
+  return { adminNumber: rows[0] };
+});
+
+fastify.delete('/n8n-bot/admin-numbers/:id', { preHandler: requireSyncKey }, async (req) => {
+  await pool.query(
+    'UPDATE n8n_bot_admin_numbers SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [String(req.params?.id || '')]
+  );
+  return { ok: true };
+});
+
+fastify.get('/n8n-bot/global-control', { preHandler: requireSyncKey }, async () => {
+  const [adminRows] = await pool.query(
+    'SELECT id, remote_jid, phone, label, active, created_at, updated_at FROM n8n_bot_admin_numbers WHERE active = 1 ORDER BY updated_at DESC, created_at DESC'
+  );
+  return { control: await getN8nBotGlobalControl(), adminNumbers: adminRows };
+});
+
+fastify.post('/n8n-bot/global-control', { preHandler: requireSyncKey }, async (req) => {
+  const control = await setN8nBotGlobalControl({
+    paused: req.body?.paused === true,
+    reason: req.body?.reason || '',
+    changedBy: req.body?.changedBy || 'admin',
+    changedByRemoteJid: req.body?.changedByRemoteJid || '',
+  });
+  return { control };
+});
+
 fastify.get('/n8n-bot/client-control', { preHandler: requireSyncKey }, async (req, reply) => {
   const identity = normalizeN8nBotClientIdentity(req.query || {});
   if (!identity) {
@@ -30396,6 +30503,34 @@ async function runMigrations() {
       INDEX idx_whatsapp_automation_logs_entity (entity_type, entity_id),
       INDEX idx_whatsapp_automation_logs_status (status),
       INDEX idx_whatsapp_automation_logs_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS n8n_bot_admin_numbers (
+      id CHAR(36) PRIMARY KEY,
+      remote_jid VARCHAR(120) NOT NULL,
+      phone VARCHAR(32) NOT NULL,
+      label VARCHAR(120) NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_n8n_bot_admin_numbers_remote_jid (remote_jid),
+      INDEX idx_n8n_bot_admin_numbers_phone (phone),
+      INDEX idx_n8n_bot_admin_numbers_active (active)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS n8n_bot_global_control (
+      control_key VARCHAR(32) PRIMARY KEY,
+      paused TINYINT(1) NOT NULL DEFAULT 0,
+      reason TEXT NULL,
+      changed_by VARCHAR(120) NULL,
+      changed_by_remote_jid VARCHAR(120) NULL,
+      changed_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
