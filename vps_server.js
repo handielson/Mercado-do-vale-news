@@ -22981,6 +22981,54 @@ function buildWhatsAppStatusCaption(product, cardPlan) {
   ].join('\n');
 }
 
+function normalizeWhatsAppStatusContactNumber(value) {
+  const text = String(value || '').trim();
+  if (!text || /@g\.us$/i.test(text)) return '';
+  const digits = text.replace(/@s\.whatsapp\.net$/i, '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits : '';
+}
+
+const whatsappStatusAudienceCache = new Map();
+
+async function fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance }) {
+  const configured = String(process.env.EVOLUTION_STATUS_JID_LIST || '')
+    .split(',')
+    .map(normalizeWhatsAppStatusContactNumber)
+    .filter(Boolean);
+  if (configured.length > 0) return Array.from(new Set(configured));
+
+  const cacheKey = `${baseUrl}|${instance}`;
+  const cached = whatsappStatusAudienceCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.numbers;
+
+  const take = Math.max(1, Math.min(5000, Number(process.env.EVOLUTION_STATUS_CONTACT_LIMIT || 2000)));
+  const endpoint = `${baseUrl}/chat/findContacts/${encodeURIComponent(instance)}`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: apiKey,
+    },
+    body: JSON.stringify({ where: {}, take, skip: 0, orderBy: {} }),
+    signal: AbortSignal.timeout(Math.max(5000, Number(process.env.EVOLUTION_STATUS_CONTACTS_TIMEOUT_MS || 15000))),
+  });
+  const text = await response.text();
+  let body = text;
+  try {
+    body = text ? JSON.parse(text) : [];
+  } catch {}
+  if (!response.ok) {
+    throw new Error(`Falha ao buscar contatos para Status: HTTP ${response.status} ${typeof body === 'string' ? body.slice(0, 180) : JSON.stringify(body).slice(0, 180)}`);
+  }
+  const rows = Array.isArray(body) ? body : (Array.isArray(body?.contacts) ? body.contacts : (Array.isArray(body?.data) ? body.data : []));
+  const numbers = rows
+    .map((contact) => normalizeWhatsAppStatusContactNumber(contact?.number || contact?.remoteJid || contact?.id || contact?.jid))
+    .filter(Boolean);
+  const unique = Array.from(new Set(numbers));
+  whatsappStatusAudienceCache.set(cacheKey, { numbers: unique, expiresAt: Date.now() + 10 * 60 * 1000 });
+  return unique;
+}
+
 async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null) {
   const baseUrl = String(process.env.EVOLUTION_SERVER_URL || process.env.EVOLUTION_API_URL || 'https://bot.mercadodovale.com.br').replace(/\/+$/, '');
   const apiKey = String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_GLOBAL_API_KEY || '');
@@ -22989,7 +23037,6 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   const image = getWhatsAppStatusProductImage(product);
   const cardPlan = await getWhatsAppStatusCardPlan(product.price_retail);
   const caption = buildWhatsAppStatusCaption(product, cardPlan);
-  const payload = { type: 'image', content: image, caption, allContacts: true };
   const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 25000));
 
   if (!image) {
@@ -23015,6 +23062,18 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   }
 
   try {
+    const statusJidList = await fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance });
+    if (!statusJidList.length) {
+      const debug = buildWhatsAppStatusDebug({
+        campaign,
+        product,
+        endpoint,
+        scheduledFor,
+        errorMessage: 'Nenhum contato elegivel encontrado para visualizar o Status',
+      });
+      return { productId: product.id, productName: product.name, status: 'failed', debug };
+    }
+    const payload = { type: 'image', content: image, caption, allContacts: false, statusJidList };
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {

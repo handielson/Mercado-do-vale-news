@@ -27,6 +27,12 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /\/whatsapp\/status-campaigns\/progress/);
   assert.match(source, /ENUM\('sending','sent','failed','skipped'\)/);
   assert.match(source, /EVOLUTION_STATUS_TIMEOUT_MS/);
+  assert.match(source, /fetchWhatsAppStatusAudience/);
+  assert.match(source, /EVOLUTION_STATUS_JID_LIST/);
+  assert.match(source, /EVOLUTION_STATUS_CONTACT_LIMIT/);
+  assert.match(source, /\/chat\/findContacts\/\$\{encodeURIComponent\(instance\)\}/);
+  assert.match(source, /statusJidList/);
+  assert.match(source, /allContacts: false/);
   assert.match(source, /AbortSignal\.timeout\(timeoutMs\)/);
   assert.match(source, /VALUES \(\?, \?, \?, 'sending', NULL, \?, \?\)/);
   assert.match(source, /UPDATE whatsapp_status_campaign_logs/);
@@ -34,6 +40,7 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /\/whatsapp\/status-campaigns\/run-due/);
   assert.match(source, /apikey\\s\*\[:=\]/);
   assert.doesNotMatch(source, /product\.images\.find\(\(value\) => String\(value \|\| ''\)\.trim\(\)\)/);
+  assert.doesNotMatch(source, /allContacts: true/);
 }
 
 assert.match(service, /sendNow\(id: string\)/);

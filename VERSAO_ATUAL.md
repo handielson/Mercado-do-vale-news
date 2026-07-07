@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.71-seo-canonical-www
+version: v1.2.72-status-jid-list
 date: 2026-07-07
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260707-092000-v1271-seo-canonical-www
+release_vps: /var/www/mdv-site/releases/20260707-093500-v1272-status-jid-list
 branch: main
-summary: Unifica canonical, Open Graph, sitemap e SEO de produto no dominio www.
+summary: Evita timeout no Status WhatsApp usando statusJidList em vez de allContacts.
 ```

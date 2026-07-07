@@ -132,7 +132,8 @@ assert.deepEqual(
     type: 'image',
     content: 'https://cdn.example.com/p-1.jpg',
     caption,
-    allContacts: true,
+    allContacts: false,
+    statusJidList: [],
   },
 );
 
