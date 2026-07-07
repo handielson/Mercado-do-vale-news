@@ -34,8 +34,8 @@ assert.match(activity, /showPaymentScreenNow/, 'Totem should expose a native bri
 assert.match(activity, /returnToAppHome/, 'Totem should expose a native return-to-app-home bridge');
 assert.match(activity, /FLAG_ACTIVITY_REORDER_TO_FRONT/, 'Totem should bring its activity to the front when returning to app');
 assert.match(activity, /private fun returnToAppHome\(\)[\s\S]*setDisplayAwake\(true\)/, 'Totem should wake the screen when returning to app home');
-assert.match(buildGradle, /versionCode 122/, 'Android upload versionCode must be bumped for the next Play upload');
-assert.match(buildGradle, /versionName '1\.22'/, 'Android versionName must describe the next app release');
+assert.match(buildGradle, /versionCode 123/, 'Android upload versionCode must be bumped for the next Play upload');
+assert.match(buildGradle, /versionName '1\.23'/, 'Android versionName must describe the next app release');
 
 const monitorService = readFileSync('android/totem-pix/app/src/main/java/br/com/mercadodovale/totempix/TotemPixMonitorService.kt', 'utf8');
 assert.match(monitorService, /startForeground/, 'Pix monitor must run as a foreground service');

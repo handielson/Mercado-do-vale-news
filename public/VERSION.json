@@ -1,15 +1,15 @@
 {
-    "version": "v1.2.80-n8n-followup-inatividade",
+    "version": "v1.2.81-totem-brilho-maximo",
     "date": "2026-07-07",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260707-154000-v1280-n8n-followup-inatividade",
+    "release_vps": "/var/www/mdv-site/releases/20260707-193000-totem-brilho-maximo",
     "branch": "main",
-    "summary": "Corrige retomada e encerramento por inatividade do Novo Bot n8n.",
+    "summary": "Totem Pix mantem brilho maximo enquanto a tela esta ativa.",
     "totem_pix_android": {
-        "latest_version_name": "1.22",
-        "latest_version_code": 122,
-        "minimum_recommended_version_name": "1.22",
-        "update_message": "V1.22\nCorrecoes\n- Notificacao Pix aguardando some apos pagamento aprovado\n- Totem tenta abrir a tela do Pix direto antes de usar notificacao\n- Comprovante WhatsApp nao mostra sucesso quando a API de envio falha",
+        "latest_version_name": "1.23",
+        "latest_version_code": 123,
+        "minimum_recommended_version_name": "1.23",
+        "update_message": "V1.23\nCorrecoes\n- Totem Pix mantem brilho maximo enquanto a tela esta ativa\n- Modo Apagar tela manual continua reduzindo o brilho",
         "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
     }
 }

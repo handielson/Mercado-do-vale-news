@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.80-n8n-followup-inatividade
+version: v1.2.81-totem-brilho-maximo
 date: 2026-07-07
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260707-154000-v1280-n8n-followup-inatividade
+release_vps: /var/www/mdv-site/releases/20260707-193000-totem-brilho-maximo
 branch: main
-summary: Corrige retomada e encerramento por inatividade do Novo Bot n8n.
+summary: Totem Pix mantem brilho maximo enquanto a tela esta ativa.
 ```

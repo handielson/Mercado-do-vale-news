@@ -139,7 +139,7 @@ class MainActivity : Activity() {
                     or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
             )
             window.attributes = window.attributes.apply {
-                screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
             }
             acquireWakeLock()
         } else {
