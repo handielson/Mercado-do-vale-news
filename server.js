@@ -5914,13 +5914,23 @@ function isLocalSitemapHost(host) {
   return /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(String(host || ''));
 }
 
+const CANONICAL_SITE_ORIGIN = 'https://www.mercadodovale.com.br';
+
+function normalizePublicSeoBaseUrl(protocol, rawHost) {
+  const host = String(rawHost || '').trim();
+  if (!host) return CANONICAL_SITE_ORIGIN;
+  if (isLocalSitemapHost(host)) return `${protocol}://${host}`;
+  if (host.toLowerCase() === 'mercadodovale.com.br') return CANONICAL_SITE_ORIGIN;
+  return `https://${host}`;
+}
+
 function buildSitemapBaseUrl(request) {
   const forwardedProto = String(request.headers['x-forwarded-proto'] || '').split(',')[0].trim();
   const forwardedHost = String(request.headers['x-forwarded-host'] || '').split(',')[0].trim();
   const rawProtocol = forwardedProto || 'https';
   const host = forwardedHost || request.headers.host || 'mercadodovale.com.br';
   const protocol = rawProtocol === 'http' && isLocalSitemapHost(host) ? 'http' : 'https';
-  return `${protocol}://${host}`;
+  return normalizePublicSeoBaseUrl(protocol, host);
 }
 
 function formatSitemapDate(value) {

@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.70-status-imagem-preview
+version: v1.2.71-seo-canonical-www
 date: 2026-07-07
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260707-091548-status-imagem-preview
+release_vps: /var/www/mdv-site/releases/20260707-092000-v1271-seo-canonical-www
 branch: main
-summary: Corrige imagem do Status WhatsApp e adiciona progresso online para envios manuais e programados.
+summary: Unifica canonical, Open Graph, sitemap e SEO de produto no dominio www.
 ```

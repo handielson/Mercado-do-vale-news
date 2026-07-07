@@ -1144,22 +1144,22 @@ export const PublicProductPage: React.FC = () => {
             <Helmet>
                 <title>{title}</title>
                 <meta name="description" content={description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 160)} />
-                <link rel="canonical" href={`https://mercadodovale.com.br/produto/${product.slug || product.id}`} />
+                <link rel="canonical" href={`https://www.mercadodovale.com.br/produto/${product.slug || product.id}`} />
 
                 {/* Open Graph — WhatsApp, Facebook, LinkedIn */}
                 <meta property="og:type" content="product" />
                 <meta property="og:site_name" content="Mercado do Vale" />
                 <meta property="og:title" content={title} />
                 <meta property="og:description" content={description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 200)} />
-                <meta property="og:image" content={product.images?.[0] || 'https://mercadodovale.com.br/og-cover.jpg'} />
-                <meta property="og:url" content={`https://mercadodovale.com.br/produto/${product.slug || product.id}`} />
+                <meta property="og:image" content={product.images?.[0] || 'https://www.mercadodovale.com.br/og-cover.jpg'} />
+                <meta property="og:url" content={`https://www.mercadodovale.com.br/produto/${product.slug || product.id}`} />
                 <meta property="og:locale" content="pt_BR" />
 
                 {/* Twitter Card */}
                 <meta name="twitter:card" content="summary_large_image" />
                 <meta name="twitter:title" content={title} />
                 <meta name="twitter:description" content={description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 200)} />
-                <meta name="twitter:image" content={product.images?.[0] || 'https://mercadodovale.com.br/og-cover.jpg'} />
+                <meta name="twitter:image" content={product.images?.[0] || 'https://www.mercadodovale.com.br/og-cover.jpg'} />
 
                 {product.exclude_from_seo && (
                     <meta name="robots" content="noindex, nofollow" />
@@ -1178,7 +1178,7 @@ export const PublicProductPage: React.FC = () => {
                         },
                         "offers": {
                             "@type": "Offer",
-                            "url": `https://mercadodovale.com.br/produto/${product.slug || product.id}`,
+                            "url": `https://www.mercadodovale.com.br/produto/${product.slug || product.id}`,
                             "priceCurrency": "BRL",
                             "price": displayPrice.toString(),
                             "availability": product.stock_quantity && product.stock_quantity > 0
