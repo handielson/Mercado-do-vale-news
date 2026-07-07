@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.68-status-preview",
-    "date": "2026-07-06",
+    "version": "v1.2.69-status-multi-produtos",
+    "date": "2026-07-07",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260706-214900-status-preview",
+    "release_vps": "/var/www/mdv-site/releases/20260707-083927-status-multi-produtos",
     "branch": "main",
-    "summary": "Adiciona preview visual dos cards do Status WhatsApp no painel de programacao.",
+    "summary": "Permite selecionar ate 10 produtos no Status WhatsApp e visualizar em carrossel.",
     "totem_pix_android": {
         "latest_version_name": "1.22",
         "latest_version_code": 122,

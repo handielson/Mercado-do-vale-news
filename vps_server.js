@@ -22711,6 +22711,22 @@ function normalizeWhatsAppStatusProduct(row) {
   };
 }
 
+function parseWhatsAppStatusProductIds(value, fallbackProductId = null) {
+  let ids = [];
+  if (Array.isArray(value)) {
+    ids = value;
+  } else if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      ids = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      ids = [];
+    }
+  }
+  if (!ids.length && fallbackProductId) ids = [fallbackProductId];
+  return Array.from(new Set(ids.map((id) => String(id || '').trim()).filter(Boolean))).slice(0, 10);
+}
+
 function isWhatsAppStatusProductEligible(product) {
   if (!product?.id) return false;
   if (Number(product.price_retail || 0) <= 0) return false;
@@ -22863,26 +22879,35 @@ async function getWhatsAppStatusCampaign(campaignId) {
 
 async function getWhatsAppStatusCampaignProducts(campaign) {
   if (campaign.source_type === 'product') {
+    const productIds = parseWhatsAppStatusProductIds(campaign.product_ids, campaign.product_id);
+    if (!productIds.length) return [];
+    const placeholders = productIds.map(() => '?').join(',');
     const [rows] = await pool.query(
       `SELECT id, model_id, brand, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
-       FROM products WHERE id = ? LIMIT 1`,
-      [campaign.product_id]
+       FROM products WHERE id IN (${placeholders})`,
+      productIds
     );
-    const selected = rows.map(normalizeWhatsAppStatusProduct).filter(Boolean)[0];
-    if (!selected?.model_id) return selected ? [selected] : [];
+    const selectedProducts = rows.map(normalizeWhatsAppStatusProduct).filter(Boolean);
+    if (!selectedProducts.length) return [];
 
+    const modelIds = Array.from(new Set(selectedProducts.map((product) => product.model_id).filter(Boolean)));
+    if (!modelIds.length) return selectedProducts;
+    const modelPlaceholders = modelIds.map(() => '?').join(',');
     const [siblings] = await pool.query(
       `SELECT id, model_id, brand, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
        FROM products
-       WHERE model_id = ? AND status = 'active'
+       WHERE model_id IN (${modelPlaceholders}) AND status = 'active'
        ORDER BY name ASC
        LIMIT 120`,
-      [selected.model_id]
+      modelIds
     );
-    return siblings
+    const siblingRows = siblings
       .map(normalizeWhatsAppStatusProduct)
       .filter(Boolean)
-      .filter((product) => sameWhatsAppStatusMemoryVariation(product, selected));
+      .filter((product) => selectedProducts.some((selected) => product.model_id === selected.model_id && sameWhatsAppStatusMemoryVariation(product, selected)));
+    const byId = new Map();
+    for (const product of [...selectedProducts, ...siblingRows]) byId.set(product.id, product);
+    return Array.from(byId.values());
   }
 
   const [rows] = await pool.query(
@@ -29857,6 +29882,7 @@ async function runMigrations() {
       title VARCHAR(180) NOT NULL,
       source_type ENUM('product','category') NOT NULL DEFAULT 'category',
       product_id CHAR(36) NULL,
+      product_ids JSON NULL,
       category_id CHAR(36) NULL,
       daily_limit INT NOT NULL DEFAULT 10,
       interval_minutes INT NOT NULL DEFAULT 30,
@@ -29872,6 +29898,7 @@ async function runMigrations() {
       INDEX idx_whatsapp_status_campaigns_source (source_type, product_id, category_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await addColumnIfMissing('whatsapp_status_campaigns', 'product_ids', 'JSON NULL');
   await addColumnIfMissing('whatsapp_status_campaigns', 'daily_limit', 'INT NOT NULL DEFAULT 10');
   await addColumnIfMissing('whatsapp_status_campaigns', 'interval_minutes', 'INT NOT NULL DEFAULT 30');
   await addColumnIfMissing('whatsapp_status_campaigns', 'last_error_debug', 'TEXT NULL');

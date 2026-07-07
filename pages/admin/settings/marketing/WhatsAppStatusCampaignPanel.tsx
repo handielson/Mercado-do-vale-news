@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Copy, ImageIcon, MessageCircle, Play, Plus, RefreshCw, Save, Smartphone, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Copy, ImageIcon, MessageCircle, Play, Plus, RefreshCw, Save, Smartphone, Trash2, X, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogService } from '../../../../services/catalogService';
 import type { CatalogProduct } from '../../../../types/catalog';
@@ -22,6 +22,7 @@ const DEFAULT_FORM: WhatsAppStatusCampaignInput = {
   title: 'Status diario de produtos',
   source_type: 'category',
   product_id: null,
+  product_ids: [],
   category_id: null,
   daily_limit: 10,
   interval_minutes: 30,
@@ -78,6 +79,16 @@ function findGroupedPreviewProduct(products: CatalogProduct[], selectedProductId
     const ids = product?.status_variation?.product_ids || [product?.id];
     return ids.includes(selectedProductId);
   }) || products.find((product) => product.id === selectedProductId) || null;
+}
+
+function findGroupedPreviewProducts(products: CatalogProduct[], selectedProductIds: string[]) {
+  const grouped = groupStatusProductsByVariation(products) as any[];
+  return selectedProductIds
+    .map((id) => grouped.find((product) => {
+      const ids = product?.status_variation?.product_ids || [product?.id];
+      return ids.includes(id);
+    }) || products.find((product) => product.id === id))
+    .filter(Boolean);
 }
 
 function StatusPreviewCard({ product, paymentFees }: { product: any; paymentFees: PaymentFee[] }) {
@@ -138,7 +149,24 @@ export default function WhatsAppStatusCampaignPanel() {
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [productLoading, setProductLoading] = useState(false);
   const [productSearch, setProductSearch] = useState('');
+  const [pendingProductId, setPendingProductId] = useState('');
+  const [selectedProducts, setSelectedProducts] = useState<CatalogProduct[]>([]);
+  const [previewIndex, setPreviewIndex] = useState(0);
   const [lastDebug, setLastDebug] = useState('');
+
+  const selectedProductIds = useMemo(() => {
+    const raw = form.product_ids;
+    if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    }
+    return form.product_id ? [form.product_id] : [];
+  }, [form.product_id, form.product_ids]);
 
   async function loadData() {
     setLoading(true);
@@ -216,13 +244,59 @@ export default function WhatsAppStatusCampaignPanel() {
 
   const previewProducts = useMemo(() => {
     if (form.source_type === 'product') {
-      const product = findGroupedPreviewProduct(products, form.product_id);
-      return product ? [product] : [];
+      const previewPool = [...selectedProducts, ...products]
+        .filter((product, index, list) => list.findIndex((item) => item.id === product.id) === index);
+      return findGroupedPreviewProducts(previewPool, selectedProductIds);
     }
     return selectStatusProducts(categoryPreviewProducts, {
       dailyLimit: Math.min(3, Number(form.daily_limit || 3)),
     }) as any[];
-  }, [categoryPreviewProducts, form.daily_limit, form.product_id, form.source_type, products]);
+  }, [categoryPreviewProducts, form.daily_limit, form.source_type, selectedProductIds, selectedProducts]);
+
+  useEffect(() => {
+    setPreviewIndex(0);
+  }, [form.source_type, selectedProductIds.join('|'), form.category_id]);
+
+  useEffect(() => {
+    if (previewIndex >= previewProducts.length) setPreviewIndex(Math.max(0, previewProducts.length - 1));
+  }, [previewIndex, previewProducts.length]);
+
+  function updateSelectedProductIds(ids: string[]) {
+    const unique = Array.from(new Set(ids)).slice(0, 10);
+    setForm((current) => ({
+      ...current,
+      product_id: unique[0] || null,
+      product_ids: unique,
+      daily_limit: current.source_type === 'product' ? Math.min(10, Math.max(1, unique.length || Number(current.daily_limit || 1))) : current.daily_limit,
+    }));
+  }
+
+  function addPendingProduct() {
+    const product = products.find((item) => item.id === pendingProductId);
+    if (!product) {
+      toast.error('Escolha um produto para adicionar');
+      return;
+    }
+    if (selectedProductIds.includes(product.id)) {
+      toast.info('Produto ja esta selecionado');
+      return;
+    }
+    if (selectedProductIds.length >= 10) {
+      toast.error('Limite de 10 produtos por programacao');
+      return;
+    }
+    setSelectedProducts((current) => {
+      const merged = [...current, product];
+      return merged.filter((item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index);
+    });
+    updateSelectedProductIds([...selectedProductIds, product.id]);
+    setPendingProductId('');
+  }
+
+  function removeSelectedProduct(productId: string) {
+    updateSelectedProductIds(selectedProductIds.filter((id) => id !== productId));
+    setSelectedProducts((current) => current.filter((product) => product.id !== productId));
+  }
 
   function startEdit(campaign: WhatsAppStatusCampaign) {
     setEditingId(campaign.id);
@@ -230,6 +304,7 @@ export default function WhatsAppStatusCampaignPanel() {
       title: campaign.title,
       source_type: campaign.source_type,
       product_id: campaign.product_id,
+      product_ids: Array.isArray(campaign.product_ids) ? campaign.product_ids : (campaign.product_id ? [campaign.product_id] : []),
       category_id: campaign.category_id,
       daily_limit: campaign.daily_limit,
       interval_minutes: campaign.interval_minutes,
@@ -237,11 +312,15 @@ export default function WhatsAppStatusCampaignPanel() {
       frequency: campaign.frequency,
       active: Boolean(campaign.active),
     });
+    setSelectedProducts([]);
+    setPendingProductId('');
   }
 
   function resetForm() {
     setEditingId(null);
     setForm(DEFAULT_FORM);
+    setSelectedProducts([]);
+    setPendingProductId('');
   }
 
   function updateForm<K extends keyof WhatsAppStatusCampaignInput>(key: K, value: WhatsAppStatusCampaignInput[K]) {
@@ -255,9 +334,15 @@ export default function WhatsAppStatusCampaignPanel() {
         ...form,
         daily_limit: Math.max(1, Math.min(10, Number(form.daily_limit || 1))),
         interval_minutes: Math.max(1, Number(form.interval_minutes || 30)),
-        product_id: form.source_type === 'product' ? form.product_id : null,
+        product_id: form.source_type === 'product' ? (selectedProductIds[0] || null) : null,
+        product_ids: form.source_type === 'product' ? selectedProductIds : [],
         category_id: form.source_type === 'category' ? form.category_id : null,
       };
+
+      if (payload.source_type === 'product' && selectedProductIds.length === 0) {
+        toast.error('Adicione pelo menos um produto');
+        return;
+      }
 
       if (editingId) {
         const updated = await whatsappStatusCampaignService.update(editingId, payload);
@@ -391,21 +476,62 @@ export default function WhatsAppStatusCampaignPanel() {
                   placeholder="Buscar por nome, SKU ou EAN"
                   className="mb-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
                 />
-                <select
-                  value={form.product_id || ''}
-                  onChange={(event) => updateForm('product_id', event.target.value || null)}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="">{productLoading ? 'Buscando produtos...' : 'Escolher produto'}</option>
-                  {!productLoading && products.length === 0 && productSearch.trim() && (
-                    <option value="" disabled>Nenhum produto encontrado</option>
+                <div className="flex gap-2">
+                  <select
+                    value={pendingProductId}
+                    onChange={(event) => setPendingProductId(event.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">{productLoading ? 'Buscando produtos...' : 'Produto para adicionar'}</option>
+                    {!productLoading && products.length === 0 && productSearch.trim() && (
+                      <option value="" disabled>Nenhum produto encontrado</option>
+                    )}
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id} disabled={selectedProductIds.includes(product.id)}>
+                        {formatProductOptionLabel(product)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={addPendingProduct}
+                    disabled={!pendingProductId || selectedProductIds.length >= 10}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                    title="Adicionar produto"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase text-slate-500">Selecionados</span>
+                    <span className="rounded bg-white px-2 py-0.5 text-xs font-bold text-slate-500">{selectedProductIds.length}/10</span>
+                  </div>
+                  {selectedProductIds.length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-slate-400">Adicione ate 10 produtos para montar o carrossel.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {selectedProductIds.map((productId, index) => {
+                        const product = selectedProducts.find((item) => item.id === productId) || products.find((item) => item.id === productId);
+                        return (
+                          <div key={productId} className="flex items-center gap-2 rounded-md bg-white px-2 py-1.5 text-xs text-slate-700">
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-emerald-50 font-black text-emerald-700">{index + 1}</span>
+                            <span className="min-w-0 flex-1 truncate">{product ? formatProductOptionLabel(product) : productId}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeSelectedProduct(productId)}
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              title="Remover"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {formatProductOptionLabel(product)}
-                    </option>
-                  ))}
-                </select>
+                </div>
               </div>
             )}
 
@@ -498,7 +624,7 @@ export default function WhatsAppStatusCampaignPanel() {
                 <h4 className="font-bold text-slate-800">Preview do Status</h4>
               </div>
               <span className="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">
-                {previewProducts.length ? `${previewProducts.length} card(s)` : 'Aguardando'}
+                {previewProducts.length ? `${previewIndex + 1}/${previewProducts.length}` : 'Aguardando'}
               </span>
             </div>
 
@@ -516,10 +642,41 @@ export default function WhatsAppStatusCampaignPanel() {
                 ))}
               </div>
             ) : previewProducts.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {previewProducts.map((product) => (
-                  <StatusPreviewCard key={product.id} product={product} paymentFees={paymentFees} />
-                ))}
+              <div className="space-y-3">
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewIndex((current) => (current - 1 + previewProducts.length) % previewProducts.length)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    title="Status anterior"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <div className="w-full max-w-[280px]">
+                    <StatusPreviewCard product={previewProducts[previewIndex]} paymentFees={paymentFees} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewIndex((current) => (current + 1) % previewProducts.length)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    title="Proximo status"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+                {previewProducts.length > 1 && (
+                  <div className="flex flex-wrap justify-center gap-1.5">
+                    {previewProducts.map((product, index) => (
+                      <button
+                        key={`${product.id}-${index}`}
+                        type="button"
+                        onClick={() => setPreviewIndex(index)}
+                        className={`h-2.5 rounded-full transition-all ${index === previewIndex ? 'w-6 bg-emerald-500' : 'w-2.5 bg-slate-200 hover:bg-slate-300'}`}
+                        title={`Ver status ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex min-h-[220px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 text-center">

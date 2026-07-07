@@ -13,6 +13,9 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /\/message\/sendStatus\/\$\{encodeURIComponent\(instance\)\}/);
   assert.match(source, /WHATSAPP_STATUS_SEND_DEBUG/);
   assert.match(source, /slot_index/);
+  assert.match(source, /product_ids JSON NULL/);
+  assert.match(source, /parseWhatsAppStatusProductIds/);
+  assert.match(source, /WHERE id IN \(\$\{placeholders\}\)/);
   assert.match(source, /groupWhatsAppStatusProductsByVariation/);
   assert.match(source, /Cores disponiveis/);
   assert.match(source, /specs, custom_fields/);
@@ -24,6 +27,7 @@ for (const source of [server, serverCjs]) {
 }
 
 assert.match(service, /sendNow\(id: string\)/);
+assert.match(service, /product_ids\?: string\[\] \| string \| null/);
 assert.match(service, /\/whatsapp\/status-campaigns\/\$\{encodeURIComponent\(id\)\}\/send-now/);
 assert.match(service, /daily_limit: Math\.max\(1, Math\.min\(10/);
 
@@ -35,6 +39,11 @@ assert.match(panel, /formatProductOptionLabel/);
 assert.match(panel, /memoria_interna/);
 assert.match(panel, /Preview do Status/);
 assert.match(panel, /StatusPreviewCard/);
+assert.match(panel, /Produto para adicionar/);
+assert.match(panel, /selectedProductIds\.length >= 10/);
+assert.match(panel, /Adicionar produto/);
+assert.match(panel, /ChevronLeft/);
+assert.match(panel, /ChevronRight/);
 assert.match(panel, /buildStatusCaption/);
 assert.match(panel, /buildStatusPayload/);
 assert.match(panel, /groupStatusProductsByVariation/);

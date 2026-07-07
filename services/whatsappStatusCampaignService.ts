@@ -8,6 +8,7 @@ export interface WhatsAppStatusCampaign {
   title: string;
   source_type: WhatsAppStatusCampaignSourceType;
   product_id: string | null;
+  product_ids?: string[] | string | null;
   category_id: string | null;
   daily_limit: number;
   interval_minutes: number;
@@ -51,8 +52,22 @@ function extractRows<T>(response: TableDataResponse<T> | T[]): T[] {
 }
 
 function normalizeCampaign(row: WhatsAppStatusCampaign): WhatsAppStatusCampaign {
+  let productIds: string[] = [];
+  if (Array.isArray(row.product_ids)) {
+    productIds = row.product_ids.map(String).filter(Boolean);
+  } else if (typeof row.product_ids === 'string' && row.product_ids.trim()) {
+    try {
+      const parsed = JSON.parse(row.product_ids);
+      productIds = Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+    } catch {
+      productIds = [];
+    }
+  }
+  if (!productIds.length && row.product_id) productIds = [row.product_id];
+
   return {
     ...row,
+    product_ids: productIds,
     daily_limit: Math.max(1, Math.min(10, Number(row.daily_limit || 1))),
     interval_minutes: Math.max(1, Number(row.interval_minutes || 30)),
     active: row.active === true || row.active === 1,
