@@ -148,6 +148,13 @@ function formatProgressTime(value?: string | null) {
   return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatElapsed(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0 ? `${minutes}m ${String(seconds).padStart(2, '0')}s` : `${seconds}s`;
+}
+
 function statusLabel(status?: string | null) {
   if (status === 'sending') return 'Em envio';
   if (status === 'sent') return 'Enviado';
@@ -161,11 +168,13 @@ function CampaignProgressBar({
   progress,
   sendingSession,
   isSending,
+  nowMs,
 }: {
   campaign: WhatsAppStatusCampaign;
   progress?: WhatsAppStatusCampaignProgress;
   sendingSession?: { startedAt: string; total: number };
   isSending: boolean;
+  nowMs: number;
 }) {
   const manualLogs = sendingSession
     ? (progress?.logs || []).filter((log) => {
@@ -174,21 +183,33 @@ function CampaignProgressBar({
           && (log.slot_index === null || log.slot_index === undefined);
       })
     : [];
-  const manualDone = manualLogs.length;
+  const manualStarted = manualLogs.length;
+  const manualFinished = manualLogs.filter((log) => ['sent', 'failed', 'skipped'].includes(String(log.status))).length;
   const manualFailed = manualLogs.filter((log) => log.status === 'failed').length;
+  const manualSending = manualLogs.find((log) => log.status === 'sending') || null;
   const manualTotal = Math.max(1, sendingSession?.total || campaign.daily_limit || 1);
   const scheduled = progress?.scheduled;
   const scheduledPercent = scheduled?.percent ?? 0;
   const percent = isSending
-    ? Math.min(100, Math.max(manualDone > 0 ? Math.round((manualDone / manualTotal) * 100) : 8, 8))
+    ? Math.min(100, Math.max(Math.round(((manualFinished + (manualSending ? 0.35 : 0)) / manualTotal) * 100), 8))
     : scheduledPercent;
   const tone = manualFailed > 0 || (progress?.today.failed || 0) > 0 ? 'bg-red-500' : isSending ? 'bg-emerald-500' : 'bg-blue-500';
   const lastLog = progress?.last_log || null;
+  const sessionStartedAt = parseProgressDate(sendingSession?.startedAt);
+  const activeStartedAt = parseProgressDate(manualSending?.created_at) || sessionStartedAt;
+  const elapsed = isSending && sessionStartedAt ? formatElapsed(nowMs - sessionStartedAt) : '';
+  const activeElapsed = isSending && activeStartedAt ? formatElapsed(nowMs - activeStartedAt) : '';
+  const nextPollSeconds = isSending ? 3 : 10;
+  const currentProduct = manualSending?.product_name || manualSending?.product_id || lastLog?.product_name || lastLog?.product_id || 'produto';
   const label = isSending
-    ? `Enviando agora ${manualDone}/${manualTotal}`
+    ? `Enviando agora ${manualFinished}/${manualTotal} finalizados`
     : `Programado hoje ${scheduled?.done || 0}/${scheduled?.total || campaign.daily_limit}`;
   const detail = isSending
-    ? (manualDone > 0 ? `${statusLabel(manualLogs[0]?.status)}: ${manualLogs[0]?.product_name || manualLogs[0]?.product_id || 'produto'}` : 'Iniciando envio e aguardando retorno da API')
+    ? (manualSending
+        ? `Aguardando Evolution: ${currentProduct} ha ${activeElapsed}`
+        : manualStarted > 0
+          ? `Ultima etapa: ${statusLabel(manualLogs[0]?.status)} - ${manualLogs[0]?.product_name || manualLogs[0]?.product_id || 'produto'}`
+          : 'Criando fila no servidor e preparando primeiro Status')
     : lastLog
       ? `${statusLabel(lastLog.status)} ${formatProgressTime(lastLog.created_at)} - ${lastLog.product_name || lastLog.product_id || 'produto'}`
       : scheduled?.next_scheduled_for
@@ -215,6 +236,25 @@ function CampaignProgressBar({
           </span>
         ) : null}
       </div>
+      {isSending && (
+        <div className="mt-3 grid gap-2 text-[11px] text-slate-500 sm:grid-cols-3">
+          <span className="rounded-md bg-white px-2 py-1 font-semibold">Iniciados: {manualStarted}/{manualTotal}</span>
+          <span className="rounded-md bg-white px-2 py-1 font-semibold">Tempo total: {elapsed || '0s'}</span>
+          <span className="rounded-md bg-white px-2 py-1 font-semibold">Atualiza em ~{nextPollSeconds}s</span>
+        </div>
+      )}
+      {isSending && manualLogs.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {manualLogs.slice(0, 3).map((log, index) => (
+            <div key={log.id || `${log.product_id}-${index}`} className="flex items-center justify-between gap-2 rounded-md bg-white px-2 py-1 text-[11px]">
+              <span className="min-w-0 truncate text-slate-600">{log.product_name || log.product_id || 'produto'}</span>
+              <span className={`shrink-0 font-bold ${log.status === 'failed' ? 'text-red-600' : log.status === 'sent' ? 'text-emerald-600' : 'text-slate-500'}`}>
+                {statusLabel(log.status)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -239,6 +279,7 @@ export default function WhatsAppStatusCampaignPanel() {
   const [progressByCampaign, setProgressByCampaign] = useState<Record<string, WhatsAppStatusCampaignProgress>>({});
   const [sendSessions, setSendSessions] = useState<Record<string, { startedAt: string; total: number }>>({});
   const [lastDebug, setLastDebug] = useState('');
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const selectedProductIds = useMemo(() => {
     const raw = form.product_ids;
@@ -295,6 +336,12 @@ export default function WhatsAppStatusCampaignPanel() {
 
   useEffect(() => {
     if (!sendingId) return;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [sendingId]);
+
+  useEffect(() => {
+    if (!sendingId) return;
     const session = sendSessions[sendingId];
     const progress = progressByCampaign[sendingId];
     if (!session || !progress) return;
@@ -305,7 +352,9 @@ export default function WhatsAppStatusCampaignPanel() {
     });
     const hasSending = manualLogs.some((log) => log.status === 'sending');
     const completed = manualLogs.filter((log) => ['sent', 'failed', 'skipped'].includes(String(log.status))).length;
-    if (manualLogs.length > 0 && completed >= session.total && !hasSending) {
+    const newestLogAt = Math.max(0, ...manualLogs.map((log) => parseProgressDate(log.created_at)));
+    const noActiveLogForAWhile = newestLogAt > 0 && Date.now() - newestLogAt > 10000;
+    if (manualLogs.length > 0 && !hasSending && (completed >= session.total || noActiveLogForAWhile)) {
       setSendingId(null);
     }
   }, [progressByCampaign, sendSessions, sendingId]);
@@ -503,6 +552,7 @@ export default function WhatsAppStatusCampaignPanel() {
   }
 
   async function sendNow(campaign: WhatsAppStatusCampaign) {
+    setNowMs(Date.now());
     setSendingId(campaign.id);
     setSendSessions((current) => ({
       ...current,
@@ -892,6 +942,7 @@ export default function WhatsAppStatusCampaignPanel() {
                       progress={progressByCampaign[campaign.id]}
                       sendingSession={sendSessions[campaign.id]}
                       isSending={sendingId === campaign.id}
+                      nowMs={nowMs}
                     />
                   </button>
 

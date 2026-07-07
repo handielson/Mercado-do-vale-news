@@ -23064,7 +23064,6 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   let statusAudienceLimit = 0;
 
   if (!image) {
-    const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
     const debug = buildWhatsAppStatusDebug({
       campaign,
       product,
@@ -23146,6 +23145,7 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
 
     return { productId: product.id, productName: product.name, status: 'sent' };
   } catch (error) {
+    const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
     const debug = buildWhatsAppStatusDebug({
       campaign,
       product,
@@ -23163,6 +23163,29 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
     });
     return { productId: product.id, productName: product.name, status: timedOut ? 'sent' : 'failed', debug };
   }
+}
+
+async function markStaleWhatsAppStatusSendingLogs(campaignId = null) {
+  const staleSeconds = Math.max(60, Number(process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || 180));
+  const debug = [
+    'WHATSAPP_STATUS_SEND_DEBUG',
+    'Erro: envio ficou preso em andamento e foi encerrado automaticamente.',
+    `Limite sem atualizacao: ${staleSeconds}s`,
+    'Acao: clique em Enviar agora novamente se o Status nao aparecer no WhatsApp.',
+  ].join('\n');
+  const params = [debug, staleSeconds];
+  let where = "status = 'sending' AND created_at < DATE_SUB(NOW(), INTERVAL ? SECOND)";
+  if (campaignId) {
+    where += ' AND campaign_id = ?';
+    params.push(campaignId);
+  }
+  await pool.query(
+    `UPDATE whatsapp_status_campaign_logs
+     SET status = 'failed',
+         debug_text = COALESCE(debug_text, ?)
+     WHERE ${where}`,
+    params
+  );
 }
 
 async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledFor = null, slotIndex = null } = {}) {
@@ -23275,6 +23298,7 @@ function buildWhatsAppStatusProgress(campaigns, logs) {
 }
 
 fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey }, async () => {
+  await markStaleWhatsAppStatusSendingLogs();
   const [campaigns] = await pool.query(
     `SELECT id, title, active, daily_limit, interval_minutes, start_time
      FROM whatsapp_status_campaigns
@@ -23300,6 +23324,7 @@ fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey 
 fastify.post('/whatsapp/status-campaigns/:id/send-now', { preHandler: requireSyncKey }, async (req, reply) => {
   const campaign = await getWhatsAppStatusCampaign(req.params.id);
   if (!campaign) return reply.code(404).send({ error: 'Campanha nao encontrada' });
+  await markStaleWhatsAppStatusSendingLogs(campaign.id);
   const [sendingLogs] = await pool.query(
     `SELECT id FROM whatsapp_status_campaign_logs
      WHERE campaign_id = ? AND status = 'sending' AND DATE(created_at) = CURDATE()

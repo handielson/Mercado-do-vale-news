@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.78-status-progress-fix
+version: v1.2.79-status-progresso-detalhado
 date: 2026-07-07
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260707-114500-v1278-status-progress-fix
+release_vps: /var/www/mdv-site/releases/20260707-122000-v1279-status-progresso-detalhado
 branch: main
-summary: Corrige tela de marketing ao acompanhar progresso do Status WhatsApp.
+summary: Detalha progresso do Status WhatsApp e limpa envios presos.
 ```
