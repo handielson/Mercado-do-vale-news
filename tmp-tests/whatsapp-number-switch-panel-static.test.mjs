@@ -38,5 +38,7 @@ assert.match(panel, /data:image\/png;base64/, 'panel must render bare QR base64 
 assert.match(panel, /status\?\.connect\?\.message/, 'panel must show backend connect guidance when QR is not available');
 assert.match(page, /import \{ WhatsAppNumberSwitchPanel \}/, 'WhatsApp page must import the switch panel');
 assert.match(page, /<WhatsAppNumberSwitchPanel \/>/, 'WhatsApp page must render the switch panel');
+assert.doesNotMatch(page, /import \{ WhatsAppConnectionPanel \}/, 'WhatsApp page must not import the legacy connection panel beside the guided switch flow');
+assert.doesNotMatch(page, /<WhatsAppConnectionPanel \/>/, 'WhatsApp page must not render two disconnect/connect panels');
 
 console.log('whatsapp number switch panel static checks passed');

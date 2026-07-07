@@ -33,8 +33,8 @@ assert.ok(
   'WhatsApp center must have an internal bot tester component',
 );
 assert.ok(
-  existsSync('components/whatsapp/WhatsAppResponseCenterPanel.tsx'),
-  'WhatsApp center must have a response center panel component',
+  existsSync('components/whatsapp/WhatsAppAutomationTemplatesPanel.tsx'),
+  'WhatsApp center must have an automation templates panel component',
 );
 
 const connectionPanel = readFileSync('components/whatsapp/WhatsAppConnectionPanel.tsx', 'utf8');
@@ -43,15 +43,14 @@ const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversatio
 const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPanel.tsx', 'utf8');
 const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPanel.tsx', 'utf8');
 const internalBotTester = readFileSync('components/whatsapp/WhatsAppInternalBotTester.tsx', 'utf8');
-const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCenterPanel.tsx', 'utf8');
+const automationTemplatesPanel = readFileSync('components/whatsapp/WhatsAppAutomationTemplatesPanel.tsx', 'utf8');
 
 [
-  'WhatsAppConnectionPanel',
   'WhatsAppMigrationChecklist',
   'WhatsAppBotSettingsPanel',
   'WhatsAppAttendantsPanel',
   'WhatsAppInternalBotTester',
-  'WhatsAppResponseCenterPanel',
+  'WhatsAppAutomationTemplatesPanel',
   'Centro WhatsApp',
   'Conexao WhatsApp',
   'Atendimento WhatsApp',
@@ -59,33 +58,10 @@ const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCe
   assert.ok(whatsappPage.includes(needle), `WhatsAppPage must include ${needle}`);
 });
 
-[
-  'getWhatsAppConnectionState',
-  'getWhatsAppDebug',
-  'connectWhatsApp',
-  'syncWhatsAppWebhook',
-  'disconnectWhatsApp',
-  'Gerar QR Code / Conectar',
-  'Sincronizar Evolution',
-  'syncStatus',
-  'Estado atual',
-  'Conectado',
-  'Desconectado',
-  'Sincronizacao',
-  'Webhook sincronizado com sucesso',
-  'Falha ao sincronizar webhook',
-  'Desconectar WhatsApp',
-  'pairingCode',
-  'base64',
-  'evolutionStatus',
-  'fetchInstances',
-  'connectionState',
-  'formatDebugValue',
-  'handleRefresh',
-  'A Evolution nao retornou QR Code para conexao.',
-].forEach((needle) => {
-  assert.ok(connectionPanel.includes(needle), `connection panel must include ${needle}`);
-});
+assert.ok(
+  !whatsappPage.includes('<WhatsAppConnectionPanel />'),
+  'WhatsApp page must not render the legacy connection panel together with the guided number switch panel',
+);
 
 [
   'listConversations',
@@ -161,23 +137,18 @@ const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCe
 });
 
 [
-  'WhatsAppResponseCenterPanel',
-  'Centro de respostas',
-  'Mensagens editaveis do bot',
-  'Mensagens padrao',
-  'Respostas por gatilho',
-  'getSettings',
-  'updateSettings',
-  'listRules',
-  'createRule',
-  'updateRule',
-  'uploadAttachment',
-  'RuleEditor',
-  'Carrinho abandonado',
-  'Nova resposta',
-  'Todas salvas na VPS',
+  'WhatsAppAutomationTemplatesPanel',
+  'Templates automaticos',
+  'Mensagens editaveis por evento',
+  'listWhatsAppAutomationTemplates',
+  'saveWhatsAppAutomationTemplate',
+  'sendWhatsAppAutomationTemplateTest',
+  'resetWhatsAppAutomationTemplate',
+  'Pausar envio deste template',
+  'Envio ligado',
+  'Envio pausado',
 ].forEach((needle) => {
-  assert.ok(responseCenterPanel.includes(needle), `response center panel must include ${needle}`);
+  assert.ok(automationTemplatesPanel.includes(needle), `automation templates panel must include ${needle}`);
 });
 
 [
@@ -219,7 +190,6 @@ const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCe
   'Lista de celulares',
   'Curadoria',
   'Configuracoes',
-  'sem depender do AutoResponder WA',
 ].forEach((needle) => {
   assert.ok(checklist.includes(needle), `migration checklist must include ${needle}`);
 });
@@ -228,7 +198,6 @@ const responseCenterPanel = readFileSync('components/whatsapp/WhatsAppResponseCe
   'getWhatsAppConnectionState',
   'getWhatsAppDebug',
   'connectWhatsApp',
-  'syncWhatsAppWebhook',
   'disconnectWhatsApp',
   'listConversations',
   'listConversationLogs',

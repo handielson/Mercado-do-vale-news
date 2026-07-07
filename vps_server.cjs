@@ -23843,7 +23843,7 @@ fastify.post('/n8n-bot/whatsapp-switch/disconnect', { preHandler: requireSyncKey
     return reply.code(409).send({ ok: false, error: 'BOT_NOT_PAUSED', message: 'Pause o bot antes de desconectar o WhatsApp.' });
   }
   const instanceName = getN8nBotEvolutionInstanceName();
-  const result = await callN8nBotEvolutionApi(`/instance/logout/${encodeURIComponent(instanceName)}`, 'POST');
+  const result = await callN8nBotEvolutionApi(`/instance/logout/${encodeURIComponent(instanceName)}`, 'DELETE');
   return getN8nBotWhatsAppSwitchStatus({ step: 'disconnecting', disconnect: { ok: result.ok, status: result.status } });
 });
 

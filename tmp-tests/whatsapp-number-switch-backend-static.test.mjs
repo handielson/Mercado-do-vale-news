@@ -26,5 +26,7 @@ assert.match(source, /setN8nBotGlobalControl\(\{\s*paused: true,\s*reason: 'Troc
 assert.match(source, /setN8nBotGlobalControl\(\{\s*paused: false,\s*reason: ''/s, 'confirm endpoint must be able to reactivate the bot after validation');
 assert.match(source, /before\.evolution\?\.state === 'open'/, 'switch connect endpoint must explain when the current WhatsApp is already connected');
 assert.match(source, /const connect = \{ ok: result\.ok, status: result\.status, \.\.\.sanitizeN8nBotEvolutionConnectResult\(result\.body\) \}/, 'switch connect endpoint must return sanitized Evolution connect payloads');
+assert.match(source, /callN8nBotEvolutionApi\(`\/instance\/logout\/\$\{encodeURIComponent\(instanceName\)\}`, 'DELETE'\)/, 'switch disconnect must use Evolution DELETE logout endpoint');
+assert.doesNotMatch(source, /callN8nBotEvolutionApi\(`\/instance\/logout\/\$\{encodeURIComponent\(instanceName\)\}`, 'POST'\)/, 'switch disconnect must not use POST logout');
 
 console.log('whatsapp number switch backend static checks passed');
