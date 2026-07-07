@@ -64,6 +64,25 @@ export type N8nBotManualMessageResult = {
   evolution?: unknown;
 };
 
+export type N8nBotAdminNumber = {
+  id: string;
+  remote_jid: string;
+  phone: string;
+  label?: string | null;
+  active: boolean | number;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type N8nBotGlobalControl = {
+  paused: boolean;
+  reason?: string | null;
+  changed_by?: string | null;
+  changed_by_remote_jid?: string | null;
+  changed_at?: string | null;
+  updated_at?: string | null;
+};
+
 function buildQuery(params: Record<string, string>): string {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -120,6 +139,35 @@ export const n8nBotControlService = {
         afterId: params.afterId ? String(params.afterId) : '',
       })}`,
     );
+  },
+
+  listAdminNumbers() {
+    return vpsClient.get<{ rows: N8nBotAdminNumber[] }>('/n8n-bot/admin-numbers');
+  },
+
+  saveAdminNumber(params: { phone?: string; remoteJid?: string; label?: string }) {
+    return vpsClient.post<{ adminNumber: N8nBotAdminNumber }>('/n8n-bot/admin-numbers', {
+      phone: params.phone,
+      remoteJid: params.remoteJid,
+      label: params.label,
+    });
+  },
+
+  removeAdminNumber(id: string) {
+    return vpsClient.delete<{ ok: boolean }>(`/n8n-bot/admin-numbers/${encodeURIComponent(id)}`);
+  },
+
+  getGlobalControl() {
+    return vpsClient.get<{ control: N8nBotGlobalControl; adminNumbers?: N8nBotAdminNumber[] }>('/n8n-bot/global-control');
+  },
+
+  setGlobalControl(params: { paused: boolean; reason?: string; changedBy?: string; changedByRemoteJid?: string }) {
+    return vpsClient.post<{ control: N8nBotGlobalControl }>('/n8n-bot/global-control', {
+      paused: params.paused,
+      reason: params.reason,
+      changedBy: params.changedBy,
+      changedByRemoteJid: params.changedByRemoteJid,
+    });
   },
 
   sendManualMessage(params: {
