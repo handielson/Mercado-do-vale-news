@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.72-status-jid-list",
+    "version": "v1.2.73-status-contatos-validos",
     "date": "2026-07-07",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260707-093500-v1272-status-jid-list",
+    "release_vps": "/var/www/mdv-site/releases/20260707-103000-v1273-status-contatos-validos",
     "branch": "main",
-    "summary": "Evita timeout no Status WhatsApp usando statusJidList em vez de allContacts.",
+    "summary": "Filtra contatos invalidos do Status WhatsApp e amplia o timeout do envio.",
     "totem_pix_android": {
         "latest_version_name": "1.22",
         "latest_version_code": 122,

@@ -22685,13 +22685,14 @@ function sanitizeWhatsAppStatusDebugText(value) {
     .slice(0, 1200);
 }
 
-function buildWhatsAppStatusDebug({ campaign, product, endpoint, httpStatus, errorMessage, responseBody, scheduledFor }) {
+function buildWhatsAppStatusDebug({ campaign, product, endpoint, httpStatus, errorMessage, responseBody, scheduledFor, extraLines = [] }) {
   return [
     'WHATSAPP_STATUS_SEND_DEBUG',
     `Campanha: ${campaign?.title || 'sem titulo'} (${campaign?.id || 'sem id'})`,
     `Produto: ${product?.name || 'sem produto'} (${product?.id || product?.sku || 'sem id'})`,
     `Horario: ${scheduledFor || 'envio manual/agora'}`,
     `Endpoint: ${endpoint || 'nao informado'}`,
+    ...extraLines.filter(Boolean).map((line) => sanitizeWhatsAppStatusDebugText(line)),
     `HTTP: ${httpStatus || 'sem resposta'}`,
     `Erro: ${sanitizeWhatsAppStatusDebugText(errorMessage || 'sem mensagem')}`,
     `Resposta: ${sanitizeWhatsAppStatusDebugText(responseBody || '')}`,
@@ -22983,7 +22984,8 @@ function buildWhatsAppStatusCaption(product, cardPlan) {
 
 function normalizeWhatsAppStatusContactNumber(value) {
   const text = String(value || '').trim();
-  if (!text || /@g\.us$/i.test(text)) return '';
+  if (!text || /@g\.us$/i.test(text) || /@lid$/i.test(text)) return '';
+  if (text.includes('@') && !/@s\.whatsapp\.net$/i.test(text)) return '';
   const digits = text.replace(/@s\.whatsapp\.net$/i, '').replace(/\D/g, '');
   return digits.length >= 10 ? digits : '';
 }
@@ -23037,7 +23039,9 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   const image = getWhatsAppStatusProductImage(product);
   const cardPlan = await getWhatsAppStatusCardPlan(product.price_retail);
   const caption = buildWhatsAppStatusCaption(product, cardPlan);
-  const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 25000));
+  const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 120000));
+  const startedAt = Date.now();
+  let statusAudienceCount = 0;
 
   if (!image) {
     const debug = buildWhatsAppStatusDebug({
@@ -23063,12 +23067,14 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
 
   try {
     const statusJidList = await fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance });
+    statusAudienceCount = statusJidList.length;
     if (!statusJidList.length) {
       const debug = buildWhatsAppStatusDebug({
         campaign,
         product,
         endpoint,
         scheduledFor,
+        extraLines: ['Contatos Status: 0'],
         errorMessage: 'Nenhum contato elegivel encontrado para visualizar o Status',
       });
       return { productId: product.id, productName: product.name, status: 'failed', debug };
@@ -23098,6 +23104,11 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
         responseBody: typeof body === 'string' ? body : JSON.stringify(body),
         errorMessage: body?.message || body?.response || response.statusText,
         scheduledFor,
+        extraLines: [
+          `Contatos Status: ${statusAudienceCount}`,
+          `Tempo decorrido: ${Date.now() - startedAt}ms`,
+          `Timeout configurado: ${timeoutMs}ms`,
+        ],
       });
       return { productId: product.id, productName: product.name, status: 'failed', debug };
     }
@@ -23109,6 +23120,11 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
       product,
       endpoint,
       scheduledFor,
+      extraLines: [
+        statusAudienceCount ? `Contatos Status: ${statusAudienceCount}` : '',
+        `Tempo decorrido: ${Date.now() - startedAt}ms`,
+        `Timeout configurado: ${timeoutMs}ms`,
+      ],
       errorMessage: error?.name === 'TimeoutError' || error?.name === 'AbortError'
         ? `Timeout ao enviar Status apos ${Math.round(timeoutMs / 1000)}s`
         : error?.message || String(error),
