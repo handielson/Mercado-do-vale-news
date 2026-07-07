@@ -14756,7 +14756,7 @@ fastify.get('/health', { config: { rateLimit: { max: 60, timeWindow: '1 minute' 
 // ─── Evolution API Proxies ──────────────────────────────────────────────────
 const EVOLUTION_GLOBAL_API_KEY = 'ChaveSecretaGeradaParaAutenticacaoEvolution123!';
 const EVOLUTION_BASE_URL = 'http://127.0.0.1:8080';
-const EVOLUTION_INSTANCE_NAME = 'mercado_do_vale';
+const EVOLUTION_INSTANCE_NAME = process.env.EVOLUTION_INSTANCE_NAME || process.env.EVOLUTION_API_INSTANCE || 'botmercadodovale';
 
 function formatEvolutionMessage(value) {
   if (value == null) return '';

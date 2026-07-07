@@ -21,6 +21,18 @@ assert.match(
   'typing presence must use the Evolution sendPresence endpoint'
 );
 
+assert.match(
+  source,
+  /const EVOLUTION_INSTANCE_NAME = process\.env\.EVOLUTION_INSTANCE_NAME \|\| process\.env\.EVOLUTION_API_INSTANCE \|\| 'botmercadodovale'/,
+  'legacy autoresponder Evolution fallback must use the official bot instance'
+);
+
+assert.doesNotMatch(
+  source,
+  /const EVOLUTION_INSTANCE_NAME = 'mercado_do_vale'/,
+  'legacy autoresponder must not default to the deleted Evolution instance'
+);
+
 const repliesFunctionMatch = source.match(
   /async function sendAutoresponderEvolutionReplies\(sender, replies\) \{[\s\S]*?\n\}/
 );
