@@ -121,6 +121,48 @@ const localBotMapFlows: AutoResponderBotMapFlow[] = [
     },
 ];
 
+export interface WhatsAppSwitchStatus {
+    ok: boolean;
+    step?: 'idle' | 'paused' | 'disconnecting' | 'awaiting_qr_scan' | 'connected_pending_confirmation' | 'completed' | 'paused_for_manual_test' | 'error';
+    instanceName: string;
+    expectedWebhookUrl: string;
+    control: {
+        paused: boolean;
+        reason?: string | null;
+        changed_by?: string | null;
+        changed_at?: string | null;
+    };
+    evolution: {
+        state?: string | null;
+        instance?: {
+            id?: string | null;
+            name?: string | null;
+            state?: string | null;
+            phone?: string | null;
+            ownerJid?: string | null;
+            profileName?: string | null;
+        };
+    };
+    webhook: {
+        enabled: boolean;
+        url: string;
+        webhookByEvents: boolean;
+        webhookBase64: boolean;
+        events: string[];
+        valid: boolean;
+    };
+    connect?: {
+        ok: boolean;
+        status: number;
+        base64?: string;
+        pairingCode?: string;
+        code?: string;
+        instance?: { instanceName?: string; state?: string | null };
+    };
+    error?: string;
+    message?: string;
+}
+
 export const autoResponderService = {
     getBotMap: async (): Promise<AutoResponderBotMapFlow[]> => {
         return localBotMapFlows.map((flow) => ({
@@ -319,5 +361,29 @@ export const autoResponderService = {
 
     disconnectWhatsApp: (): Promise<any> => {
         return vpsClient.post<any>('/autoresponder/whatsapp/disconnect', {});
+    },
+
+    getWhatsAppSwitchStatus: (): Promise<WhatsAppSwitchStatus> => {
+        return vpsClient.get<WhatsAppSwitchStatus>('/n8n-bot/whatsapp-switch/status');
+    },
+
+    startWhatsAppNumberSwitch: (): Promise<WhatsAppSwitchStatus> => {
+        return vpsClient.post<WhatsAppSwitchStatus>('/n8n-bot/whatsapp-switch/start', {});
+    },
+
+    disconnectWhatsAppForSwitch: (): Promise<WhatsAppSwitchStatus> => {
+        return vpsClient.post<WhatsAppSwitchStatus>('/n8n-bot/whatsapp-switch/disconnect', {});
+    },
+
+    connectWhatsAppForSwitch: (): Promise<WhatsAppSwitchStatus> => {
+        return vpsClient.post<WhatsAppSwitchStatus>('/n8n-bot/whatsapp-switch/connect', {});
+    },
+
+    confirmWhatsAppNumberSwitch: (reactivate = true): Promise<WhatsAppSwitchStatus> => {
+        return vpsClient.post<WhatsAppSwitchStatus>('/n8n-bot/whatsapp-switch/confirm', { reactivate });
+    },
+
+    keepWhatsAppSwitchPaused: (): Promise<WhatsAppSwitchStatus> => {
+        return vpsClient.post<WhatsAppSwitchStatus>('/n8n-bot/whatsapp-switch/keep-paused', {});
     },
 };

@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.88-whatsapp-evolution-env",
+    "version": "v1.2.89-whatsapp-troca-numero-guiada",
     "date": "2026-07-07",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260707-223230-whatsapp-evolution-env",
+    "release_vps": "/var/www/mdv-site/releases/20260707-232058-whatsapp-troca-numero-guiada",
     "branch": "main",
-    "summary": "Usa a chave Evolution do ambiente nos endpoints legados do WhatsApp oficial.",
+    "summary": "Adiciona fluxo guiado para troca segura do numero WhatsApp.",
     "totem_pix_android": {
         "latest_version_name": "1.23",
         "latest_version_code": 123,

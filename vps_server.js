@@ -2404,6 +2404,8 @@ const N8N_BOT_IDLE_CLOSE_MESSAGE = String(
   process.env.N8N_BOT_IDLE_CLOSE_MESSAGE
   || 'Vou encerrar este atendimento por enquanto, combinado? \uD83D\uDE0A\nQuando precisar, e so chamar por aqui que eu continuo te ajudando.'
 ).trim();
+const EXPECTED_N8N_BOT_WEBHOOK_URL = 'https://n8n.mercadodovale.com.br/webhook/whatsapp';
+const EXPECTED_N8N_BOT_WEBHOOK_EVENTS = ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'];
 
 async function getN8nBotEvolutionSettings() {
   let row = null;
@@ -2417,6 +2419,122 @@ async function getN8nBotEvolutionSettings() {
     baseUrl: String(process.env.EVOLUTION_SERVER_URL || row?.api_url || EVOLUTION_BASE_URL).replace(/\/+$/, ''),
     apiKey: String(process.env.EVOLUTION_API_KEY || row?.api_key || EVOLUTION_GLOBAL_API_KEY),
     instanceName: String(process.env.N8N_BOT_EVOLUTION_INSTANCE_NAME || N8N_BOT_EVOLUTION_INSTANCE_NAME),
+  };
+}
+
+function getN8nBotEvolutionInstanceName() {
+  return String(process.env.N8N_BOT_EVOLUTION_INSTANCE_NAME || N8N_BOT_EVOLUTION_INSTANCE_NAME || 'botmercadodovale').trim() || 'botmercadodovale';
+}
+
+async function callN8nBotEvolutionApi(endpoint, method = 'GET', body = null) {
+  const settings = await getN8nBotEvolutionSettings();
+  if (!settings.apiKey) {
+    const err = new Error('Evolution API key is not configured');
+    err.statusCode = 500;
+    throw err;
+  }
+  const response = await fetch(`${settings.baseUrl}${endpoint}`, {
+    method,
+    headers: {
+      apikey: settings.apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : null,
+  });
+  const text = await response.text();
+  let parsed = text;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = text;
+  }
+  return { ok: response.ok, status: response.status, body: parsed };
+}
+
+function extractN8nBotEvolutionInstance(raw) {
+  const instanceName = getN8nBotEvolutionInstanceName();
+  const list = Array.isArray(raw) ? raw : (Array.isArray(raw?.instances) ? raw.instances : []);
+  const found = list.find((item) => {
+    const inst = item?.instance || item || {};
+    return inst.instanceName === instanceName || inst.name === instanceName || item?.instanceName === instanceName || item?.name === instanceName;
+  }) || null;
+  const inst = found?.instance || found || {};
+  const ownerJid = inst.ownerJid || found?.ownerJid || inst.owner || found?.owner || '';
+  const phone = String(ownerJid || inst.number || found?.number || '').replace(/@.*/, '') || null;
+  return {
+    id: inst.id || found?.id || null,
+    name: inst.instanceName || inst.name || found?.instanceName || found?.name || instanceName,
+    state: inst.state || found?.state || found?.connectionStatus || null,
+    phone,
+    ownerJid: ownerJid || null,
+    profileName: inst.profileName || found?.profileName || null,
+  };
+}
+
+function sanitizeN8nBotWebhookConfig(raw) {
+  const webhook = raw?.webhook || raw || {};
+  return {
+    enabled: webhook.enabled === true,
+    url: webhook.url || '',
+    webhookByEvents: webhook.webhookByEvents === true,
+    webhookBase64: webhook.webhookBase64 === true,
+    events: Array.isArray(webhook.events) ? webhook.events : [],
+  };
+}
+
+function validateN8nBotWebhook(webhook) {
+  const events = Array.isArray(webhook?.events) ? webhook.events : [];
+  return Boolean(
+    webhook?.enabled === true
+    && webhook?.url === EXPECTED_N8N_BOT_WEBHOOK_URL
+    && webhook?.webhookByEvents === false
+    && webhook?.webhookBase64 === true
+    && EXPECTED_N8N_BOT_WEBHOOK_EVENTS.every((event) => events.includes(event))
+  );
+}
+
+function sanitizeN8nBotEvolutionConnectResult(raw) {
+  return {
+    base64: typeof raw?.base64 === 'string' ? raw.base64 : undefined,
+    pairingCode: typeof raw?.pairingCode === 'string' ? raw.pairingCode : undefined,
+    code: typeof raw?.code === 'string' ? raw.code : undefined,
+    instance: raw?.instance && typeof raw.instance === 'object'
+      ? {
+          instanceName: raw.instance.instanceName || getN8nBotEvolutionInstanceName(),
+          state: raw.instance.state || null,
+        }
+      : undefined,
+  };
+}
+
+async function getN8nBotWhatsAppSwitchStatus(extra = {}) {
+  const instanceName = getN8nBotEvolutionInstanceName();
+  const [control, stateResult, instancesResult, webhookResult] = await Promise.all([
+    getN8nBotGlobalControl(),
+    callN8nBotEvolutionApi(`/instance/connectionState/${encodeURIComponent(instanceName)}`).catch((err) => ({ ok: false, status: err.statusCode || 0, body: { message: err.message } })),
+    callN8nBotEvolutionApi('/instance/fetchInstances').catch((err) => ({ ok: false, status: err.statusCode || 0, body: [] })),
+    callN8nBotEvolutionApi(`/webhook/find/${encodeURIComponent(instanceName)}`).catch((err) => ({ ok: false, status: err.statusCode || 0, body: { message: err.message } })),
+  ]);
+  const instance = extractN8nBotEvolutionInstance(instancesResult.body);
+  const state = stateResult.body?.instance?.state || instance.state || null;
+  const webhook = sanitizeN8nBotWebhookConfig(webhookResult.body);
+  return {
+    ok: true,
+    instanceName,
+    expectedWebhookUrl: EXPECTED_N8N_BOT_WEBHOOK_URL,
+    control,
+    evolution: {
+      state,
+      instance: { ...instance, state },
+      connectionStatus: stateResult.status,
+      instancesStatus: instancesResult.status,
+    },
+    webhook: {
+      ...webhook,
+      valid: validateN8nBotWebhook(webhook),
+      status: webhookResult.status,
+    },
+    ...extra,
   };
 }
 
@@ -23694,6 +23812,72 @@ fastify.post('/n8n-bot/global-control', { preHandler: requireSyncKey }, async (r
     changedByRemoteJid: req.body?.changedByRemoteJid || '',
   });
   return { control };
+});
+
+fastify.get('/n8n-bot/whatsapp-switch/status', { preHandler: requireSyncKey }, async () => {
+  return getN8nBotWhatsAppSwitchStatus();
+});
+
+fastify.post('/n8n-bot/whatsapp-switch/start', { preHandler: requireSyncKey }, async () => {
+  await setN8nBotGlobalControl({
+    paused: true,
+    reason: 'Troca de numero WhatsApp iniciada',
+    changedBy: 'admin-whatsapp-switch',
+    changedByRemoteJid: '',
+  });
+  return getN8nBotWhatsAppSwitchStatus({ step: 'paused' });
+});
+
+fastify.post('/n8n-bot/whatsapp-switch/disconnect', { preHandler: requireSyncKey }, async (req, reply) => {
+  const control = await getN8nBotGlobalControl();
+  if (!control.paused) {
+    return reply.code(409).send({ ok: false, error: 'BOT_NOT_PAUSED', message: 'Pause o bot antes de desconectar o WhatsApp.' });
+  }
+  const instanceName = getN8nBotEvolutionInstanceName();
+  const result = await callN8nBotEvolutionApi(`/instance/logout/${encodeURIComponent(instanceName)}`, 'POST');
+  return getN8nBotWhatsAppSwitchStatus({ step: 'disconnecting', disconnect: { ok: result.ok, status: result.status } });
+});
+
+fastify.post('/n8n-bot/whatsapp-switch/connect', { preHandler: requireSyncKey }, async (req, reply) => {
+  const control = await getN8nBotGlobalControl();
+  if (!control.paused) {
+    return reply.code(409).send({ ok: false, error: 'BOT_NOT_PAUSED', message: 'Pause o bot antes de gerar QR Code.' });
+  }
+  const instanceName = getN8nBotEvolutionInstanceName();
+  const result = await callN8nBotEvolutionApi(`/instance/connect/${encodeURIComponent(instanceName)}`);
+  return getN8nBotWhatsAppSwitchStatus({
+    step: 'awaiting_qr_scan',
+    connect: { ok: result.ok, status: result.status, ...sanitizeN8nBotEvolutionConnectResult(result.body) },
+  });
+});
+
+fastify.post('/n8n-bot/whatsapp-switch/confirm', { preHandler: requireSyncKey }, async (req, reply) => {
+  const status = await getN8nBotWhatsAppSwitchStatus();
+  if (status.evolution.state !== 'open' || !status.evolution.instance.phone) {
+    return reply.code(409).send({ ok: false, error: 'INSTANCE_NOT_OPEN', message: 'Conecte um numero antes de confirmar.', status });
+  }
+  if (!status.webhook.valid) {
+    return reply.code(409).send({ ok: false, error: 'WEBHOOK_INVALID', message: 'Webhook da Evolution esta divergente.', status });
+  }
+  if (req.body?.reactivate !== false) {
+    await setN8nBotGlobalControl({
+      paused: false,
+      reason: '',
+      changedBy: 'admin-whatsapp-switch',
+      changedByRemoteJid: '',
+    });
+  }
+  return getN8nBotWhatsAppSwitchStatus({ step: req.body?.reactivate === false ? 'paused_for_manual_test' : 'completed' });
+});
+
+fastify.post('/n8n-bot/whatsapp-switch/keep-paused', { preHandler: requireSyncKey }, async () => {
+  await setN8nBotGlobalControl({
+    paused: true,
+    reason: 'Troca de numero WhatsApp mantida em teste manual',
+    changedBy: 'admin-whatsapp-switch',
+    changedByRemoteJid: '',
+  });
+  return getN8nBotWhatsAppSwitchStatus({ step: 'paused_for_manual_test' });
 });
 
 fastify.post('/n8n-bot/admin-command', { preHandler: requireSyncKey }, async (req) => {
