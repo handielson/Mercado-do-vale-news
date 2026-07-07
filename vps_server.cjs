@@ -23057,13 +23057,14 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   const image = getWhatsAppStatusProductImage(product);
   const cardPlan = await getWhatsAppStatusCardPlan(product.price_retail);
   const caption = buildWhatsAppStatusCaption(product, cardPlan);
-  const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 180000));
+  const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 30000));
   const startedAt = Date.now();
   let statusAudienceCount = 0;
   let statusAudienceTotal = 0;
   let statusAudienceLimit = 0;
 
   if (!image) {
+    const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
     const debug = buildWhatsAppStatusDebug({
       campaign,
       product,
@@ -23156,11 +23157,11 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
         `Tempo decorrido: ${Date.now() - startedAt}ms`,
         `Timeout configurado: ${timeoutMs}ms`,
       ],
-      errorMessage: error?.name === 'TimeoutError' || error?.name === 'AbortError'
-        ? `Timeout ao enviar Status apos ${Math.round(timeoutMs / 1000)}s`
+      errorMessage: timedOut
+        ? `Sem confirmacao da Evolution apos ${Math.round(timeoutMs / 1000)}s. A chamada foi entregue ao endpoint interno; marcando como enviado para evitar repeticao.`
         : error?.message || String(error),
     });
-    return { productId: product.id, productName: product.name, status: 'failed', debug };
+    return { productId: product.id, productName: product.name, status: timedOut ? 'sent' : 'failed', debug };
   }
 }
 

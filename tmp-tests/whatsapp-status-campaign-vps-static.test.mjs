@@ -37,7 +37,9 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /hashWhatsAppStatusAudienceSeed/);
   assert.match(source, /@lid/);
   assert.match(source, /Contatos Status/);
-  assert.match(source, /EVOLUTION_STATUS_TIMEOUT_MS \|\| 180000/);
+  assert.match(source, /EVOLUTION_STATUS_TIMEOUT_MS \|\| 30000/);
+  assert.match(source, /marcando como enviado para evitar repeticao/);
+  assert.match(source, /status: timedOut \? 'sent' : 'failed'/);
   assert.match(source, /\/chat\/findContacts\/\$\{encodeURIComponent\(instance\)\}/);
   assert.match(source, /statusJidList/);
   assert.match(source, /allContacts: false/);

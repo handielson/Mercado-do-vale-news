@@ -296,7 +296,7 @@ export default function WhatsAppStatusCampaignPanel() {
   useEffect(() => {
     if (!sendingId) return;
     const session = sendSessions[sendingId];
-    const progress = progressMap[sendingId];
+    const progress = progressByCampaign[sendingId];
     if (!session || !progress) return;
     const manualLogs = (progress.logs || []).filter((log) => {
       const createdAt = parseProgressDate(log.created_at);
@@ -308,7 +308,7 @@ export default function WhatsAppStatusCampaignPanel() {
     if (manualLogs.length > 0 && completed >= session.total && !hasSending) {
       setSendingId(null);
     }
-  }, [progressMap, sendSessions, sendingId]);
+  }, [progressByCampaign, sendSessions, sendingId]);
 
   useEffect(() => {
     if (form.source_type !== 'product') return;

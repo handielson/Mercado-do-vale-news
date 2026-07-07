@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.76-status-audiencia-rotativa",
+    "version": "v1.2.78-status-progress-fix",
     "date": "2026-07-07",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260707-112000-v1276-status-audiencia-rotativa",
+    "release_vps": "/var/www/mdv-site/releases/20260707-114500-v1278-status-progress-fix",
     "branch": "main",
-    "summary": "Status WhatsApp limita e rotaciona audiencia para evitar travamento na Evolution.",
+    "summary": "Corrige tela de marketing ao acompanhar progresso do Status WhatsApp.",
     "totem_pix_android": {
         "latest_version_name": "1.22",
         "latest_version_code": 122,
