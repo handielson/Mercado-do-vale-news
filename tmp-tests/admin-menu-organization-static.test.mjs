@@ -37,7 +37,9 @@ assertGroupContains('Produtos & Estoque', ['Produtos', 'Estoque', 'Locais de Est
 assertGroupContains('Financeiro', ['Financeiro', 'Contabilidade']);
 assertGroupContains('Loja Online & Marketing', ['Promoções', 'Cupons', 'Moedas do Vale', 'Banners', 'Criativos', 'Config. Catálogo']);
 assertGroupContains('Catálogo Técnico', ['Categorias', 'Marcas', 'Modelos', 'Campos Customizados', 'Tags do Sistema']);
-assertGroupContains('Integrações', ['Bling', 'Shopee', 'WhatsApp', 'Mensagens WhatsApp', 'Memoria IA', 'Automações Bot', 'E-mail', 'Gateways Pagamento']);
+assertGroupContains('Integrações', ['Bling', 'Shopee', 'WhatsApp', 'Mensagens WhatsApp', 'Automações Bot', 'E-mail', 'Gateways Pagamento']);
+assert.doesNotMatch(source, /Memoria IA/, 'legacy WhatsApp AI memory menu must be removed for n8n bot');
+assert.doesNotMatch(source, /\/admin\/whatsapp\/memoria-ia/, 'legacy WhatsApp AI memory menu route must be removed');
 assertGroupContains('Empresa & Sistema', ['Dados da Empresa', 'Equipe', 'Frete', 'Taxas', 'Displays Android', 'Documentos', 'Garantias', 'Permissões', 'Status VPS']);
 
 assert.doesNotMatch(source, /\/test-tabs/, 'development-only test tabs route must not appear in the admin sidebar');

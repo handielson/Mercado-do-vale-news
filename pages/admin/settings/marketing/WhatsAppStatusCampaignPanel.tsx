@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Copy, Play, Plus, RefreshCw, Save, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogService } from '../../../../services/catalogService';
@@ -41,29 +41,19 @@ export default function WhatsAppStatusCampaignPanel() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [productLoading, setProductLoading] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [lastDebug, setLastDebug] = useState('');
-
-  const filteredProducts = useMemo(() => {
-    const query = productSearch.trim().toLowerCase();
-    if (!query) return products.slice(0, 30);
-    return products.filter((product) => (
-      product.name?.toLowerCase().includes(query) ||
-      product.sku?.toLowerCase().includes(query)
-    )).slice(0, 30);
-  }, [productSearch, products]);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [campaignRows, categoryRows, productResult] = await Promise.all([
+      const [campaignRows, categoryRows] = await Promise.all([
         whatsappStatusCampaignService.list(),
         catalogService.getCategoriesWithNames(),
-        catalogService.getProducts({ inStockOnly: true }, 1, 200, true),
       ]);
       setCampaigns(campaignRows);
       setCategories(categoryRows);
-      setProducts(productResult.products);
     } catch (error) {
       toast.error('Erro ao carregar campanhas de Status');
     } finally {
@@ -74,6 +64,35 @@ export default function WhatsAppStatusCampaignPanel() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (form.source_type !== 'product') return;
+    let mounted = true;
+    const query = productSearch.trim();
+    const timer = window.setTimeout(() => {
+      setProductLoading(true);
+      catalogService.getProducts(
+        query ? { search: query, inStockOnly: true } : { inStockOnly: true },
+        1,
+        query ? 50 : 80,
+        true,
+      )
+        .then((result) => {
+          if (mounted) setProducts(result.products);
+        })
+        .catch(() => {
+          if (mounted) toast.error('Erro ao buscar produtos');
+        })
+        .finally(() => {
+          if (mounted) setProductLoading(false);
+        });
+    }, query ? 250 : 0);
+
+    return () => {
+      mounted = false;
+      window.clearTimeout(timer);
+    };
+  }, [form.source_type, productSearch]);
 
   function startEdit(campaign: WhatsAppStatusCampaign) {
     setEditingId(campaign.id);
@@ -239,7 +258,7 @@ export default function WhatsAppStatusCampaignPanel() {
                 <input
                   value={productSearch}
                   onChange={(event) => setProductSearch(event.target.value)}
-                  placeholder="Buscar produto"
+                  placeholder="Buscar por nome, SKU ou EAN"
                   className="mb-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
                 />
                 <select
@@ -247,9 +266,14 @@ export default function WhatsAppStatusCampaignPanel() {
                   onChange={(event) => updateForm('product_id', event.target.value || null)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="">Escolher produto</option>
-                  {filteredProducts.map((product) => (
-                    <option key={product.id} value={product.id}>{product.name}</option>
+                  <option value="">{productLoading ? 'Buscando produtos...' : 'Escolher produto'}</option>
+                  {!productLoading && products.length === 0 && productSearch.trim() && (
+                    <option value="" disabled>Nenhum produto encontrado</option>
+                  )}
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}{product.sku ? ` - ${product.sku}` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
