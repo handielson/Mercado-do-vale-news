@@ -19,8 +19,10 @@ import {
 } from 'lucide-react';
 import {
   n8nBotControlService,
+  type N8nBotAdminNumber,
   type N8nBotClientControl,
   type N8nBotConversation,
+  type N8nBotGlobalControl,
   type N8nBotMessage,
 } from '../../../services/n8nBotControlService';
 
@@ -80,6 +82,11 @@ export default function NovoBotPage() {
   const [manualReply, setManualReply] = useState('');
   const [manualPauseBot, setManualPauseBot] = useState(true);
   const [selectedReplyMessage, setSelectedReplyMessage] = useState<N8nBotMessage | null>(null);
+  const [adminNumbers, setAdminNumbers] = useState<N8nBotAdminNumber[]>([]);
+  const [adminPhone, setAdminPhone] = useState('');
+  const [adminLabel, setAdminLabel] = useState('');
+  const [globalControl, setGlobalControl] = useState<N8nBotGlobalControl | null>(null);
+  const [adminSettingsLoading, setAdminSettingsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -152,6 +159,74 @@ export default function NovoBotPage() {
     }
   }
 
+  async function loadAdminSettings() {
+    setAdminSettingsLoading(true);
+    try {
+      const [numbers, global] = await Promise.all([
+        n8nBotControlService.listAdminNumbers(),
+        n8nBotControlService.getGlobalControl(),
+      ]);
+      setAdminNumbers(numbers.rows || []);
+      setGlobalControl(global.control);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao carregar comandos por WhatsApp.');
+    } finally {
+      setAdminSettingsLoading(false);
+    }
+  }
+
+  async function saveAdminNumber() {
+    if (!adminPhone.trim() || loading) return;
+    setLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      await n8nBotControlService.saveAdminNumber({ phone: adminPhone, label: adminLabel });
+      setAdminPhone('');
+      setAdminLabel('');
+      setMessage('Numero admin salvo para comandos por WhatsApp.');
+      await loadAdminSettings();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao salvar numero admin.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function removeAdminNumber(id: string) {
+    setLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      await n8nBotControlService.removeAdminNumber(id);
+      setMessage('Numero admin removido.');
+      await loadAdminSettings();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao remover numero admin.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function setGlobalPaused(paused: boolean) {
+    setLoading(true);
+    setError('');
+    setMessage('');
+    try {
+      const data = await n8nBotControlService.setGlobalControl({
+        paused,
+        reason: paused ? 'Pausado pelo painel Novo Bot' : '',
+        changedBy: 'admin-panel',
+      });
+      setGlobalControl(data.control);
+      setMessage(paused ? 'Bot pausado para todos os clientes.' : 'Bot reativado para todos os clientes.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao alterar pausa geral.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function sendManualReply() {
     const text = manualReply.trim();
     if (!selectedRemoteJid || !text || loading) return;
@@ -212,6 +287,7 @@ export default function NovoBotPage() {
 
   useEffect(() => {
     void loadConversations(false);
+    void loadAdminSettings();
   }, []);
 
   useEffect(() => {
@@ -303,6 +379,101 @@ export default function NovoBotPage() {
           </div>
         </div>
       </div>
+
+      <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+              <ShieldCheck size={20} className="text-blue-600" />
+              Comandos por WhatsApp
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Numeros cadastrados podem enviar pausar, continuar e status pelo WhatsApp.
+            </p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">
+              Status geral: {globalControl?.paused ? 'Pausado' : 'Ativo'}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Alterado em {formatDate(globalControl?.changed_at, true)}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void setGlobalPaused(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:opacity-50"
+            >
+              <Ban size={16} />
+              Pausar geral
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => void setGlobalPaused(false)}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+            >
+              <CheckCircle2 size={16} />
+              Continuar geral
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[220px_1fr_auto]">
+          <label className="block text-xs font-bold uppercase text-slate-500">
+            Numero admin
+            <input
+              value={adminPhone}
+              onChange={(event) => setAdminPhone(event.target.value)}
+              placeholder="5587999999999"
+              className="mt-2 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm normal-case text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+          <label className="block text-xs font-bold uppercase text-slate-500">
+            Nome opcional
+            <input
+              value={adminLabel}
+              onChange={(event) => setAdminLabel(event.target.value)}
+              placeholder="Admin"
+              className="mt-2 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm normal-case text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={!adminPhone.trim() || loading}
+            onClick={() => void saveAdminNumber()}
+            className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50 lg:mt-[22px]"
+          >
+            Salvar admin
+          </button>
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
+          {adminSettingsLoading ? (
+            <div className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-500">
+              <Loader2 size={16} className="animate-spin" />
+              Carregando admins...
+            </div>
+          ) : adminNumbers.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-slate-500">Nenhum numero admin cadastrado.</p>
+          ) : adminNumbers.map((item) => (
+            <div key={item.id} className="flex flex-col gap-2 border-b border-slate-100 px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-mono text-sm font-bold text-slate-900">{displayPhone(item.phone)}</p>
+                <p className="text-xs text-slate-500">{item.label || item.remote_jid}</p>
+              </div>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => void removeAdminNumber(item.id)}
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+              >
+                Remover
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {(message || error) && (
         <div className="mb-4 space-y-2">
