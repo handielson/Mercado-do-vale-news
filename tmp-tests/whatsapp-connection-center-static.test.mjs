@@ -13,10 +13,6 @@ assert.ok(
   'WhatsApp center must have a focused connection panel component',
 );
 assert.ok(
-  existsSync('components/whatsapp/WhatsAppMigrationChecklist.tsx'),
-  'WhatsApp center must show a migration checklist component',
-);
-assert.ok(
   existsSync('components/whatsapp/WhatsAppConversationsPanel.tsx'),
   'WhatsApp center must have an essential attendance panel component',
 );
@@ -38,7 +34,6 @@ assert.ok(
 );
 
 const connectionPanel = readFileSync('components/whatsapp/WhatsAppConnectionPanel.tsx', 'utf8');
-const checklist = readFileSync('components/whatsapp/WhatsAppMigrationChecklist.tsx', 'utf8');
 const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversationsPanel.tsx', 'utf8');
 const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPanel.tsx', 'utf8');
 const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPanel.tsx', 'utf8');
@@ -46,7 +41,6 @@ const internalBotTester = readFileSync('components/whatsapp/WhatsAppInternalBotT
 const automationTemplatesPanel = readFileSync('components/whatsapp/WhatsAppAutomationTemplatesPanel.tsx', 'utf8');
 
 [
-  'WhatsAppMigrationChecklist',
   'WhatsAppBotSettingsPanel',
   'WhatsAppAttendantsPanel',
   'WhatsAppInternalBotTester',
@@ -61,6 +55,10 @@ const automationTemplatesPanel = readFileSync('components/whatsapp/WhatsAppAutom
 assert.ok(
   !whatsappPage.includes('<WhatsAppConnectionPanel />'),
   'WhatsApp page must not render the legacy connection panel together with the guided number switch panel',
+);
+assert.ok(
+  !whatsappPage.includes('<WhatsAppMigrationChecklist />'),
+  'WhatsApp page must not render the obsolete migration checklist block',
 );
 
 [
@@ -180,18 +178,6 @@ assert.ok(
   'Salvar configuracoes',
 ].forEach((needle) => {
   assert.ok(botSettingsPanel.includes(needle), `bot settings panel must include ${needle}`);
-});
-
-[
-  'Conexao',
-  'Atendimento',
-  "status: 'testing'",
-  'ChatGPT',
-  'Lista de celulares',
-  'Curadoria',
-  'Configuracoes',
-].forEach((needle) => {
-  assert.ok(checklist.includes(needle), `migration checklist must include ${needle}`);
 });
 
 [

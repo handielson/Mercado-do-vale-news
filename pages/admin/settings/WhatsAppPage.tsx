@@ -4,7 +4,6 @@ import { WhatsAppAttendantsPanel } from '../../../components/whatsapp/WhatsAppAt
 import { WhatsAppBotSettingsPanel } from '../../../components/whatsapp/WhatsAppBotSettingsPanel';
 import { WhatsAppChatGptPanel } from '../../../components/whatsapp/WhatsAppChatGptPanel';
 import { WhatsAppInternalBotTester } from '../../../components/whatsapp/WhatsAppInternalBotTester';
-import { WhatsAppMigrationChecklist } from '../../../components/whatsapp/WhatsAppMigrationChecklist';
 import { WhatsAppAutomationTemplatesPanel } from '../../../components/whatsapp/WhatsAppAutomationTemplatesPanel';
 import { WhatsAppNumberSwitchPanel } from '../../../components/whatsapp/WhatsAppNumberSwitchPanel';
 
@@ -22,7 +21,6 @@ export default function WhatsAppPage() {
       </div>
 
       <div className="space-y-4">
-        <WhatsAppMigrationChecklist />
         <WhatsAppNumberSwitchPanel />
         <WhatsAppBotSettingsPanel />
         <WhatsAppAutomationTemplatesPanel />

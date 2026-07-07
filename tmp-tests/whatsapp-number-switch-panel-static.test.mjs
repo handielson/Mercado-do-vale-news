@@ -36,9 +36,14 @@ assert.match(panel, /status\?\.control\?\.paused !== true/, 'dangerous actions m
 assert.match(panel, /status\?\.evolution\?\.state === 'open'/, 'confirmation must depend on Evolution open state');
 assert.match(panel, /data:image\/png;base64/, 'panel must render bare QR base64 as an image data URL');
 assert.match(panel, /status\?\.connect\?\.message/, 'panel must show backend connect guidance when QR is not available');
+assert.match(panel, /const \[qrCode, setQrCode\]/, 'panel must keep QR code in dedicated state so status polling does not erase it');
+assert.match(panel, /setQrCode\(nextQrCode\)/, 'panel must persist the QR received from the connect action');
+assert.match(panel, /visibleQrCode = qrCode \|\| getQrCode\(status\)/, 'panel must keep showing the last QR while polling connection status');
 assert.match(page, /import \{ WhatsAppNumberSwitchPanel \}/, 'WhatsApp page must import the switch panel');
 assert.match(page, /<WhatsAppNumberSwitchPanel \/>/, 'WhatsApp page must render the switch panel');
 assert.doesNotMatch(page, /import \{ WhatsAppConnectionPanel \}/, 'WhatsApp page must not import the legacy connection panel beside the guided switch flow');
 assert.doesNotMatch(page, /<WhatsAppConnectionPanel \/>/, 'WhatsApp page must not render two disconnect/connect panels');
+assert.doesNotMatch(page, /import \{ WhatsAppMigrationChecklist \}/, 'WhatsApp page must not import the obsolete migration checklist');
+assert.doesNotMatch(page, /<WhatsAppMigrationChecklist \/>/, 'WhatsApp page must not render the obsolete migration checklist block');
 
 console.log('whatsapp number switch panel static checks passed');

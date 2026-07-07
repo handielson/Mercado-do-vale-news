@@ -32,12 +32,16 @@ function StatusPill({ ok, children }: { ok: boolean; children: React.ReactNode }
 
 export function WhatsAppNumberSwitchPanel() {
   const [status, setStatus] = React.useState<WhatsAppSwitchStatus | null>(null);
+  const [qrCode, setQrCode] = React.useState<string | null>(null);
   const [busyAction, setBusyAction] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const loadStatus = React.useCallback(async () => {
     const next = await autoResponderService.getWhatsAppSwitchStatus();
     setStatus(next);
+    if (next.evolution?.state === 'open') {
+      setQrCode(null);
+    }
     return next;
   }, []);
 
@@ -63,6 +67,13 @@ export function WhatsAppNumberSwitchPanel() {
     try {
       const next = await action();
       setStatus(next);
+      const nextQrCode = getQrCode(next);
+      if (label === 'connect' && nextQrCode) {
+        setQrCode(nextQrCode);
+      }
+      if (label === 'disconnect' || label === 'start' || label === 'confirm') {
+        setQrCode(null);
+      }
       toast.success(successMessage);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Nao foi possivel concluir a acao.';
@@ -126,7 +137,7 @@ export function WhatsAppNumberSwitchPanel() {
     );
   }
 
-  const qrCode = getQrCode(status);
+  const visibleQrCode = qrCode || getQrCode(status);
   const isBusy = Boolean(busyAction);
   const botPaused = status?.control?.paused === true;
   const evolutionOpen = status?.evolution?.state === 'open';
@@ -245,9 +256,12 @@ export function WhatsAppNumberSwitchPanel() {
         <aside className="space-y-4">
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
             <h4 className="text-sm font-semibold text-slate-900">QR Code</h4>
-            {qrCode ? (
+            {visibleQrCode ? (
               <div className="mt-3 flex flex-col items-center gap-3 text-center">
-                <img src={qrCode} alt="QR Code do novo WhatsApp" className="h-56 w-56 rounded-lg border border-slate-200 bg-white p-2" />
+                <img src={visibleQrCode} alt="QR Code do novo WhatsApp" className="h-56 w-56 rounded-lg border border-slate-200 bg-white p-2" />
+                <p className="max-w-xs text-xs text-slate-500">
+                  O QR Code fica fixo aqui enquanto a Evolution conecta. Se o WhatsApp avisar que expirou, clique em gerar QR Code novamente.
+                </p>
                 {(status?.connect?.pairingCode || status?.connect?.code) && (
                   <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800">
                     Codigo: {status.connect.pairingCode || status.connect.code}
