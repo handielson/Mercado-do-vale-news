@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.83-bot-guia-celulares
+version: v1.2.84-comandos-admin-whatsapp
 date: 2026-07-07
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260707-173000-v1283-bot-guia-celulares
+release_vps: /var/www/mdv-site/releases/20260707-185105-v1284-comandos-admin-whatsapp
 branch: main
-summary: Bot confirma marcas ambiguas e oferece lista real de celulares quando aparelho pedido esta sem estoque.
+summary: Adiciona comandos admin por WhatsApp para pausar, continuar e consultar status do bot.
 ```
