@@ -41,6 +41,11 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /idle_closed_at/, 'server must persist n8n idle close state');
   assert.match(source, /runN8nBotIdleFollowups/, 'server must run n8n idle follow-ups');
   assert.match(source, /scheduleN8nBotIdleFollowups/, 'server must schedule n8n idle follow-ups automatically');
+  assert.match(source, /WHERE msg\.direction IN \('inbound', 'outbound'\)/, 'idle follow-up must evaluate the latest real customer/bot message');
+  assert.match(source, /WHERE latest\.direction = 'outbound'/, 'idle follow-up must run after the bot answered and the customer stayed silent');
+  assert.match(source, /latest\.source_node <> 'idle-followup'/, 'idle follow-up must not repeat after its own reminder');
+  assert.match(source, /N8N_BOT_IDLE_CLOSE_MESSAGE/, 'idle close must have an outbound message');
+  assert.match(source, /sourceNode: 'idle-close'/, 'idle close must be logged as an outbound close message');
   assert.match(source, /buildN8nBotMemorySessionKey\(remoteJid, resetCount\)/, 'server must return versioned memory session key');
 }
 

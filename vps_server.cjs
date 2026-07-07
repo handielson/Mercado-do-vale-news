@@ -2269,6 +2269,11 @@ const N8N_BOT_IDLE_FOLLOWUP_MESSAGE = String(
   || 'Oi! Ainda posso te ajudar a escolher seu produto? 😊\nSe quiser, me fala o modelo ou acessorio que voce esta procurando.'
 ).trim();
 
+const N8N_BOT_IDLE_CLOSE_MESSAGE = String(
+  process.env.N8N_BOT_IDLE_CLOSE_MESSAGE
+  || 'Vou encerrar este atendimento por enquanto, combinado? \uD83D\uDE0A\nQuando precisar, e so chamar por aqui que eu continuo te ajudando.'
+).trim();
+
 async function getN8nBotEvolutionSettings() {
   let row = null;
   try {
@@ -23627,11 +23632,14 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
      FROM (
        SELECT msg.remote_jid, MAX(msg.id) AS last_id
        FROM n8n_bot_messages msg
+       WHERE msg.direction IN ('inbound', 'outbound')
        GROUP BY msg.remote_jid
      ) agg
      JOIN n8n_bot_messages latest ON latest.id = agg.last_id
      LEFT JOIN n8n_bot_client_controls controls ON controls.remote_jid = latest.remote_jid
-     WHERE latest.direction = 'inbound'
+     WHERE latest.direction = 'outbound'
+       AND latest.source_node <> 'idle-followup'
+       AND latest.source_node <> 'idle-close'
        AND latest.created_at <= DATE_SUB(NOW(), INTERVAL ? MINUTE)
        AND (controls.blocked IS NULL OR controls.blocked = 0)
        AND (controls.idle_followup_sent_at IS NULL OR controls.idle_followup_sent_at < latest.created_at)
@@ -23676,6 +23684,7 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
      FROM (
        SELECT msg.remote_jid, MAX(msg.id) AS last_id
        FROM n8n_bot_messages msg
+       WHERE msg.direction IN ('inbound', 'outbound')
        GROUP BY msg.remote_jid
      ) agg
      JOIN n8n_bot_messages latest ON latest.id = agg.last_id
@@ -23696,6 +23705,20 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
     const identity = normalizeN8nBotClientIdentity(row);
     if (!identity) continue;
     if (!dryRun) {
+      const result = await sendN8nBotEvolutionTextMessage(identity, N8N_BOT_IDLE_CLOSE_MESSAGE);
+      if (!result.ok || result.body?.error === true) {
+        await logN8nBotInternalMessage(identity, `Falha ao enviar encerramento por inatividade: ${formatEvolutionMessage(result.body?.message || result.body?.response || result.body) || result.status}`, 'idle-close');
+        continue;
+      }
+      await insertN8nBotMessage({
+        remoteJid: identity.remoteJid,
+        phone: identity.phone,
+        direction: 'outbound',
+        message: N8N_BOT_IDLE_CLOSE_MESSAGE,
+        messageType: 'text',
+        sourceNode: 'idle-close',
+        waMessageId: String(result.body?.key?.id || result.body?.messageId || '').slice(0, 160) || null,
+      });
       await pool.query(
         `UPDATE n8n_bot_client_controls
          SET idle_closed_at = CURRENT_TIMESTAMP,
@@ -23703,7 +23726,6 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
          WHERE remote_jid = ?`,
         [identity.remoteJid]
       );
-      await logN8nBotInternalMessage(identity, 'Atendimento finalizado por inatividade. Se o cliente voltar a falar, o bot retoma o fluxo.', 'idle-close');
     }
     closed.push(identity.remoteJid);
   }
