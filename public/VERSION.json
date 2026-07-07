@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.84-comandos-admin-whatsapp",
+    "version": "v1.2.85-admin-whatsapp-nono-digito",
     "date": "2026-07-07",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260707-185105-v1284-comandos-admin-whatsapp",
+    "release_vps": "/var/www/mdv-site/releases/20260707-220829-admin-whatsapp-nono-digito",
     "branch": "main",
-    "summary": "Adiciona comandos admin por WhatsApp para pausar, continuar e consultar status do bot.",
+    "summary": "Corrige reconhecimento do admin WhatsApp com ou sem nono digito.",
     "totem_pix_android": {
         "latest_version_name": "1.23",
         "latest_version_code": 123,

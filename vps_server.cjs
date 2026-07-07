@@ -2165,6 +2165,57 @@ function normalizeN8nBotAdminIdentity(input = {}) {
   return normalizeN8nBotClientIdentity(input);
 }
 
+function getN8nBotBrazilianPhoneAliases(value) {
+  const rawDigits = String(value || '').replace(/\D/g, '');
+  if (!rawDigits) return [];
+  const phone = rawDigits.startsWith('55')
+    ? rawDigits
+    : ((rawDigits.length === 10 || rawDigits.length === 11) ? `55${rawDigits}` : rawDigits);
+  const aliases = new Set([phone]);
+  if (phone.startsWith('55') && phone.length === 12) {
+    aliases.add(`${phone.slice(0, 4)}9${phone.slice(4)}`);
+  }
+  if (phone.startsWith('55') && phone.length === 13 && phone[4] === '9') {
+    aliases.add(`${phone.slice(0, 4)}${phone.slice(5)}`);
+  }
+  return [...aliases];
+}
+
+function getN8nBotIdentityAliases(identity = {}) {
+  const phoneAliases = new Set();
+  const remoteJidAliases = new Set();
+  for (const value of [identity.phone, identity.remoteJid, identity.remote_jid]) {
+    for (const phone of getN8nBotBrazilianPhoneAliases(value)) {
+      phoneAliases.add(phone);
+      remoteJidAliases.add(`${phone}@s.whatsapp.net`);
+    }
+  }
+  if (identity.remoteJid) remoteJidAliases.add(String(identity.remoteJid));
+  if (identity.remote_jid) remoteJidAliases.add(String(identity.remote_jid));
+  return {
+    phoneAliases: [...phoneAliases],
+    remoteJidAliases: [...remoteJidAliases],
+  };
+}
+
+async function findN8nBotAdminByIdentity(identity) {
+  const aliases = getN8nBotIdentityAliases(identity);
+  const remoteJids = aliases.remoteJidAliases;
+  const phones = aliases.phoneAliases;
+  if (remoteJids.length === 0 && phones.length === 0) return null;
+  const remoteSql = remoteJids.length ? `remote_jid IN (${remoteJids.map(() => '?').join(',')})` : 'FALSE';
+  const phoneSql = phones.length ? `phone IN (${phones.map(() => '?').join(',')})` : 'FALSE';
+  const [rows] = await pool.query(
+    `SELECT id, remote_jid, phone, label, active
+     FROM n8n_bot_admin_numbers
+     WHERE active = 1 AND (${remoteSql} OR ${phoneSql})
+     ORDER BY updated_at DESC, created_at DESC
+     LIMIT 1`,
+    [...remoteJids, ...phones]
+  );
+  return rows?.[0] || null;
+}
+
 function normalizeN8nBotAdminCommand(text) {
   const normalized = String(text || '').trim().toLowerCase().replace(/\s+/g, ' ');
   const match = normalized.match(/^(pausar|continuar|status)(?:\s+(.+))?$/);
@@ -23623,11 +23674,7 @@ fastify.post('/n8n-bot/admin-command', { preHandler: requireSyncKey }, async (re
   const command = normalizeN8nBotAdminCommand(req.body?.message || req.body?.command || '');
   if (!identity || !command.valid) return { handled: false, reply: '' };
 
-  const [adminRows] = await pool.query(
-    'SELECT id, remote_jid, phone, label, active FROM n8n_bot_admin_numbers WHERE remote_jid = ? AND active = 1 LIMIT 1',
-    [identity.remoteJid]
-  );
-  const admin = adminRows?.[0] || null;
+  const admin = await findN8nBotAdminByIdentity(identity);
   if (!admin) return { handled: false, reply: '' };
 
   if (!command.remoteJid) {

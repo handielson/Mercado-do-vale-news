@@ -128,7 +128,27 @@ const remoteJid = String(source.remoteJid || '');
 const text = String(source.conversation || source.text || '').trim().toLowerCase().replace(/\\s+/g, ' ');
 const adminRows = Array.isArray(payload.adminNumbers) ? payload.adminNumbers : [];
 const globalControl = payload.control || {};
-const isAdmin = adminRows.some((row) => String(row.remote_jid || '') === remoteJid && Number(row.active ?? 1) === 1);
+const phoneAliases = (value) => {
+  const rawDigits = String(value || '').replace(/\\D/g, '');
+  if (!rawDigits) return [];
+  const phone = rawDigits.startsWith('55') ? rawDigits : ((rawDigits.length === 10 || rawDigits.length === 11) ? '55' + rawDigits : rawDigits);
+  const aliases = new Set([phone]);
+  if (phone.startsWith('55') && phone.length === 12) aliases.add(phone.slice(0, 4) + '9' + phone.slice(4));
+  if (phone.startsWith('55') && phone.length === 13 && phone[4] === '9') aliases.add(phone.slice(0, 4) + phone.slice(5));
+  return [...aliases];
+};
+const adminIdentityPhones = new Set(phoneAliases(remoteJid));
+const adminIdentityJids = new Set([...adminIdentityPhones].map((phone) => phone + '@s.whatsapp.net'));
+adminIdentityJids.add(remoteJid);
+const isAdmin = adminRows.some((row) => {
+  if (Number(row.active ?? 1) !== 1) return false;
+  const rowPhones = new Set([...phoneAliases(row.phone), ...phoneAliases(row.remote_jid)]);
+  const rowJids = new Set([...rowPhones].map((phone) => phone + '@s.whatsapp.net'));
+  if (row.remote_jid) rowJids.add(String(row.remote_jid));
+  for (const phone of adminIdentityPhones) if (rowPhones.has(phone)) return true;
+  for (const jid of adminIdentityJids) if (rowJids.has(jid)) return true;
+  return false;
+});
 const match = text.match(/^(pausar|continuar|status)(?:\\s+(.+))?$/);
 const normalizeTarget = (value) => {
   const digits = String(value || '').replace(/\\D/g, '');

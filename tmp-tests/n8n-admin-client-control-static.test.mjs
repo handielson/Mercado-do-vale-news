@@ -35,6 +35,7 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /fastify\.get\('\/n8n-bot\/global-control'/, 'server must expose global control lookup');
   assert.match(source, /fastify\.post\('\/n8n-bot\/global-control'/, 'server must expose global control update');
   assert.match(source, /normalizeN8nBotAdminCommand/, 'server must normalize admin command text');
+  assert.match(source, /findN8nBotAdminByIdentity/, 'server must match admin numbers with Brazilian ninth-digit aliases');
   assert.match(source, /CREATE TABLE IF NOT EXISTS n8n_bot_messages/, 'server must create n8n bot messages table');
   assert.match(source, /contact_name VARCHAR\(160\) NULL/, 'server must persist n8n bot contact names');
   assert.match(source, /normalizeN8nBotContactName/, 'server must normalize contact names from n8n logs');
@@ -101,6 +102,7 @@ assert.match(patch, /Controle Bot - E comando admin\?/, 'n8n patch must branch a
 assert.match(patch, /Controle Bot - Executar Comando Admin/, 'n8n patch must execute admin commands through VPS API');
 assert.match(patch, /Controle Bot - Responder Admin/, 'n8n patch must confirm admin commands via WhatsApp');
 assert.match(patch, /Controle Bot - Pausa global\?/, 'n8n patch must stop customer flow when global pause is active');
+assert.match(patch, /phoneAliases/, 'n8n admin command parser must match Brazilian ninth-digit aliases');
 assert.match(patch, /Controle Bot - Bloqueado\?/, 'n8n patch must add blocked IF node');
 assert.match(patch, /memorySessionKey/, 'n8n patch must use versioned memory session key');
 assert.match(patch, /SYNC_SECRET/, 'n8n patch must provide sync secret to workflow runtime');
