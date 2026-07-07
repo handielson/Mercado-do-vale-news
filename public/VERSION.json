@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.81-totem-brilho-maximo",
+    "version": "v1.2.82-bot-produto-indisponivel",
     "date": "2026-07-07",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260707-193000-totem-brilho-maximo",
+    "release_vps": "/var/www/mdv-site/releases/20260707-162000-v1282-bot-produto-indisponivel",
     "branch": "main",
-    "summary": "Totem Pix mantem brilho maximo enquanto a tela esta ativa.",
+    "summary": "Responde quando o bot nao encontra aparelho solicitado em estoque.",
     "totem_pix_android": {
         "latest_version_name": "1.23",
         "latest_version_code": 123,

@@ -12944,6 +12944,49 @@ function isAutoresponderAccessoryProduct(product) {
   return AUTORESPONDER_ACCESSORY_SEARCH_WORDS.some((word) => text.includes(word));
 }
 
+function getAutoresponderRequestedDeviceLabel(message = '', query = '') {
+  const text = normalizeAutoresponderText([message, query].filter(Boolean).join(' ')).trim();
+  const family = detectAutoresponderDeviceFamilyFromSearch(text);
+  const brandMap = [
+    ['samsung', 'Samsung'],
+    ['galaxy', 'Samsung Galaxy'],
+    ['iphone', 'iPhone'],
+    ['apple', 'Apple'],
+    ['xiaomi', 'Xiaomi'],
+    ['redmi', 'Redmi'],
+    ['poco', 'Poco'],
+    ['motorola', 'Motorola'],
+    ['moto', 'Motorola'],
+    ['realme', 'Realme'],
+  ];
+  const brand = brandMap.find(([token]) => new RegExp(`\\b${token}\\b`).test(text))?.[1] || '';
+  if (family === 'tablet') return brand ? `tablet ${brand}` : 'tablet';
+  if (family === 'receptor') return brand ? `receptor ${brand}` : 'receptor';
+  return brand ? `celular ${brand}` : 'celular';
+}
+
+function isAutoresponderDeviceAvailabilityRequest(message = '', query = '') {
+  const text = normalizeAutoresponderText([message, query].filter(Boolean).join(' ')).trim();
+  if (!text) return false;
+  if (isAutoresponderAccessorySearchKeyword(text)) return false;
+  return Boolean(detectAutoresponderDeviceFamilyFromSearch(text))
+    && /\b(tem|teria|vende|vendem|possui|quero|procuro|busco|valor|preco|celular|celulares|smartphone|smartphones|aparelho|aparelhos|iphone|samsung|galaxy|xiaomi|redmi|poco|motorola|moto|realme|apple)\b/.test(text);
+}
+
+function buildAutoresponderUnavailableDeviceReply({ message = '', query = '', products = [] } = {}) {
+  const label = getAutoresponderRequestedDeviceLabel(message, query);
+  const availableProducts = filterAutoresponderAvailableProducts(products);
+  const hasRelatedAccessories = availableProducts.some((product) => isAutoresponderAccessoryProduct(product));
+  const lines = [
+    `No momento nao encontrei ${label} disponivel em estoque.`,
+  ];
+  if (hasRelatedAccessories) {
+    lines.push('Encontrei apenas acessorios relacionados, como capas ou itens compativeis.');
+  }
+  lines.push('Posso te mostrar celulares de outras marcas disponiveis ou chamar um atendente para conferir uma alternativa parecida.');
+  return lines.join('\n');
+}
+
 function buildAutoresponderModelAccessorySearchTitle(products, keyword, total) {
   const family = detectAutoresponderDeviceFamilyFromSearch(keyword);
   if (!family || isAutoresponderAccessorySearchKeyword(keyword)) return null;
@@ -14115,6 +14158,33 @@ async function buildAutoresponderCatalogToolSearchData({ query, message = '', co
     rows = sortAutoresponderProductsForAiCatalogTool([...candidatesById.values()], searchKeyword);
     products = rows.slice(0, pageSize);
     usedBroadCandidateSearch = products.length > 0;
+  }
+  const deviceAvailabilityRequest = isAutoresponderDeviceAvailabilityRequest(message, safeQuery);
+  const availableProducts = filterAutoresponderAvailableProducts(products);
+  const onlyRelatedAccessories = availableProducts.length > 0
+    && availableProducts.every((product) => isAutoresponderAccessoryProduct(product));
+  if (deviceAvailabilityRequest && (products.length === 0 || availableProducts.length === 0 || onlyRelatedAccessories)) {
+    const replyMessages = buildAutoresponderReplyMessagesWithSeparateGreeting([
+      buildAutoresponderUnavailableDeviceReply({ message, query: safeQuery, products }),
+    ], {
+      message,
+      contactFirstName,
+      settings,
+      shouldIncludeGreeting: shouldPrefixGreeting || isAutoresponderGreeting(message),
+    });
+    return {
+      source: 'unavailable_device',
+      deterministicReply: true,
+      query: safeQuery,
+      productSearchTokens,
+      searchKeyword,
+      pageSize,
+      products: availableProducts,
+      productOptions: [],
+      hasMore: false,
+      total: 0,
+      replyMessages,
+    };
   }
   if (products.length === 0) return null;
 
@@ -16481,6 +16551,21 @@ fastify.route({
             shouldPrefixGreeting,
           });
           if (catalogToolData) {
+            if (catalogToolData.deterministicReply) {
+              const replyMessages = formatAutoresponderReplies(catalogToolData.replyMessages, settings, false);
+              const replyText = replyMessages.join('\n\n');
+              await logAutoresponderReply({
+                sender: senderKey,
+                message,
+                intent: 'ai_tool_unavailable_device',
+                replyText,
+                matchedCount: catalogToolData.products.length,
+                matchedProducts: catalogToolData.productOptions,
+                aiMeta: aiToolDecision.aiMeta,
+              });
+              await upsertAutoresponderSuccessConversation(senderKey);
+              return { replies: formatAutoresponderProReplies(replyMessages) };
+            }
             const officialContextText = catalogToolData.replyMessages.join('\n\n');
             console.log('[autoresponder-ai-context] catalog_search tool context found', {
               sender: senderKey,
