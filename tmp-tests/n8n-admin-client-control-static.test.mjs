@@ -36,6 +36,10 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /fastify\.post\('\/n8n-bot\/global-control'/, 'server must expose global control update');
   assert.match(source, /normalizeN8nBotAdminCommand/, 'server must normalize admin command text');
   assert.match(source, /findN8nBotAdminByIdentity/, 'server must match admin numbers with Brazilian ninth-digit aliases');
+  assert.match(source, /buildN8nBotAdminCommandReply/, 'server must centralize admin command confirmation replies');
+  assert.match(source, /Bot Pausado com sucesso/, 'server must confirm global pause commands to the admin');
+  assert.match(source, /Bot Continuado com sucesso/, 'server must confirm global continue commands to the admin');
+  assert.match(source, /Status consultado com sucesso/, 'server must have a status fallback confirmation');
   assert.match(source, /CREATE TABLE IF NOT EXISTS n8n_bot_messages/, 'server must create n8n bot messages table');
   assert.match(source, /contact_name VARCHAR\(160\) NULL/, 'server must persist n8n bot contact names');
   assert.match(source, /normalizeN8nBotContactName/, 'server must normalize contact names from n8n logs');
@@ -103,6 +107,10 @@ assert.match(patch, /Controle Bot - Executar Comando Admin/, 'n8n patch must exe
 assert.match(patch, /Controle Bot - Responder Admin/, 'n8n patch must confirm admin commands via WhatsApp');
 assert.match(patch, /Controle Bot - Pausa global\?/, 'n8n patch must stop customer flow when global pause is active');
 assert.match(patch, /phoneAliases/, 'n8n admin command parser must match Brazilian ninth-digit aliases');
+assert.match(patch, /adminCommandFallbackReply/, 'n8n admin reply node must have fallback confirmations');
+assert.match(patch, /Bot Pausado com sucesso/, 'n8n fallback must confirm pause commands');
+assert.match(patch, /Bot Continuado com sucesso/, 'n8n fallback must confirm continue commands');
+assert.match(patch, /Status consultado com sucesso/, 'n8n fallback must confirm status commands');
 assert.match(patch, /Controle Bot - Bloqueado\?/, 'n8n patch must add blocked IF node');
 assert.match(patch, /memorySessionKey/, 'n8n patch must use versioned memory session key');
 assert.match(patch, /SYNC_SECRET/, 'n8n patch must provide sync secret to workflow runtime');

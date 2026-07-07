@@ -173,10 +173,18 @@ return [{
 
 const adminReplyCode = `const source = $('Controle Bot - Comando Admin').first().json || {};
 const result = $json || {};
+const adminCommandFallbackReply = () => {
+  const action = String(source.adminCommandAction || '').toLowerCase();
+  const phone = String(source.adminCommandPhone || '').trim();
+  if (action === 'pausar') return phone ? 'Cliente ' + phone + ' pausado com sucesso' : 'Bot Pausado com sucesso';
+  if (action === 'continuar') return phone ? 'Cliente ' + phone + ' continuado com sucesso' : 'Bot Continuado com sucesso';
+  if (action === 'status') return 'Status consultado com sucesso';
+  return 'Comando recebido com sucesso';
+};
 return [{
   json: {
     ...source,
-    adminCommandReply: result.reply || 'Comando recebido.',
+    adminCommandReply: result.reply || adminCommandFallbackReply(),
   },
 }];`;
 

@@ -2228,6 +2228,33 @@ function normalizeN8nBotAdminCommand(text) {
   return { valid: true, action, phone: target.phone, remoteJid: target.remoteJid };
 }
 
+function buildN8nBotAdminCommandReply({ action, scope = 'global', phone = '', control = null }) {
+  const normalizedAction = String(action || '').toLowerCase();
+  const normalizedScope = String(scope || 'global').toLowerCase();
+  const targetPhone = String(phone || '').trim();
+  if (normalizedAction === 'pausar') {
+    return normalizedScope === 'client' && targetPhone
+      ? `Cliente ${targetPhone} pausado com sucesso`
+      : 'Bot Pausado com sucesso';
+  }
+  if (normalizedAction === 'continuar') {
+    return normalizedScope === 'client' && targetPhone
+      ? `Cliente ${targetPhone} continuado com sucesso`
+      : 'Bot Continuado com sucesso';
+  }
+  if (normalizedAction === 'status') {
+    if (normalizedScope === 'client' && targetPhone) {
+      return control?.blocked
+        ? `Status consultado com sucesso: cliente ${targetPhone} pausado`
+        : `Status consultado com sucesso: cliente ${targetPhone} liberado`;
+    }
+    return control?.paused
+      ? 'Status consultado com sucesso: bot pausado'
+      : 'Status consultado com sucesso: bot ativo';
+  }
+  return 'Comando recebido com sucesso';
+}
+
 function buildN8nBotMemorySessionKey(remoteJid, resetCount) {
   const count = Number(resetCount || 0);
   return count > 0 ? `${remoteJid}:r${count}` : remoteJid;
@@ -23690,7 +23717,7 @@ fastify.post('/n8n-bot/admin-command', { preHandler: requireSyncKey }, async (re
         handled: true,
         scope: 'global',
         action: command.action,
-        reply: paused ? 'Bot pausado para todos os clientes.' : 'Bot reativado para todos os clientes.',
+        reply: buildN8nBotAdminCommandReply({ action: command.action, scope: 'global', control }),
         control,
       };
     }
@@ -23700,9 +23727,7 @@ fastify.post('/n8n-bot/admin-command', { preHandler: requireSyncKey }, async (re
       handled: true,
       scope: 'global',
       action: command.action,
-      reply: control.paused
-        ? `Bot esta pausado desde ${control.changed_at || '-'} por ${control.changed_by || 'admin'}.`
-        : 'Bot esta ativo para todos os clientes.',
+      reply: buildN8nBotAdminCommandReply({ action: command.action, scope: 'global', control }),
       control,
     };
   }
@@ -23713,9 +23738,7 @@ fastify.post('/n8n-bot/admin-command', { preHandler: requireSyncKey }, async (re
       handled: true,
       scope: 'client',
       action: command.action,
-      reply: Number(lookup.control?.blocked || 0) === 1
-        ? `Cliente ${command.phone} esta pausado.`
-        : `Cliente ${command.phone} esta liberado.`,
+      reply: buildN8nBotAdminCommandReply({ action: command.action, scope: 'client', phone: command.phone, control: lookup.control }),
       control: lookup.control,
     };
   }
@@ -23739,7 +23762,7 @@ fastify.post('/n8n-bot/admin-command', { preHandler: requireSyncKey }, async (re
     handled: true,
     scope: 'client',
     action: command.action,
-    reply: blocked ? `Cliente ${command.phone} pausado.` : `Cliente ${command.phone} liberado.`,
+    reply: buildN8nBotAdminCommandReply({ action: command.action, scope: 'client', phone: command.phone, control: lookup.control }),
     control: lookup.control,
   };
 });
