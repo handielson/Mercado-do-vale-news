@@ -10,5 +10,7 @@ assert.ok(!layout.includes('AutoResponder'), 'legacy AutoResponder menu item mus
 assert.ok(!existsSync('pages/admin/AutoResponderPage.tsx'), 'legacy AutoResponderPage file must be deleted');
 assert.ok(!existsSync('components/autoresponder/BlockNumberModal.tsx'), 'unused legacy BlockNumberModal must be deleted');
 assert.ok(!existsSync('components/autoresponder/ConversationCard.tsx'), 'unused legacy ConversationCard must be deleted');
+assert.ok(!existsSync('components/autoresponder/AttachmentUpload.tsx'), 'unused legacy AttachmentUpload must be deleted');
+assert.ok(!existsSync('components/autoresponder/MessagePreview.tsx'), 'unused legacy MessagePreview must be deleted');
 
 console.log('autoresponder legacy admin removal static checks passed');

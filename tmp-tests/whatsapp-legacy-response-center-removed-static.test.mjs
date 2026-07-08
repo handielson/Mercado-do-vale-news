@@ -23,8 +23,23 @@ assert(
 );
 
 assert(
+  !fs.existsSync('components/autoresponder/AttachmentUpload.tsx'),
+  'unused legacy autoresponder attachment upload component must be removed'
+);
+
+assert(
+  !fs.existsSync('components/autoresponder/MessagePreview.tsx'),
+  'unused legacy autoresponder message preview component must be removed'
+);
+
+assert(
   !service.includes('/autoresponder/rules') && !service.includes('listRules') && !service.includes('createRule'),
   'frontend service must not expose legacy autoresponder rule endpoints'
+);
+
+assert(
+  !service.includes('uploadAttachment') && !service.includes('/autoresponder/upload-attachment'),
+  'frontend service must not expose the legacy attachment upload endpoint'
 );
 
 assert(

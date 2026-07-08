@@ -9,8 +9,12 @@ const server = readFileSync('vps_server.cjs', 'utf8');
 const deployedServer = readFileSync('vps_server.js', 'utf8');
 
 assert.ok(
-  existsSync('components/whatsapp/WhatsAppConnectionPanel.tsx'),
-  'WhatsApp center must have a focused connection panel component',
+  !existsSync('components/whatsapp/WhatsAppConnectionPanel.tsx'),
+  'legacy duplicate connection panel must stay removed',
+);
+assert.ok(
+  !existsSync('components/whatsapp/WhatsAppMigrationChecklist.tsx'),
+  'obsolete migration checklist component must stay removed',
 );
 assert.ok(
   existsSync('components/whatsapp/WhatsAppConversationsPanel.tsx'),
@@ -33,7 +37,6 @@ assert.ok(
   'WhatsApp center must have an automation templates panel component',
 );
 
-const connectionPanel = readFileSync('components/whatsapp/WhatsAppConnectionPanel.tsx', 'utf8');
 const conversationsPanel = readFileSync('components/whatsapp/WhatsAppConversationsPanel.tsx', 'utf8');
 const botSettingsPanel = readFileSync('components/whatsapp/WhatsAppBotSettingsPanel.tsx', 'utf8');
 const attendantsPanel = readFileSync('components/whatsapp/WhatsAppAttendantsPanel.tsx', 'utf8');
@@ -41,13 +44,14 @@ const internalBotTester = readFileSync('components/whatsapp/WhatsAppInternalBotT
 const automationTemplatesPanel = readFileSync('components/whatsapp/WhatsAppAutomationTemplatesPanel.tsx', 'utf8');
 
 [
+  'WhatsAppNumberSwitchPanel',
   'WhatsAppBotSettingsPanel',
   'WhatsAppAttendantsPanel',
   'WhatsAppInternalBotTester',
   'WhatsAppAutomationTemplatesPanel',
   'Centro WhatsApp',
-  'Conexao WhatsApp',
-  'Atendimento WhatsApp',
+  'Central do bot novo',
+  'atendimento',
 ].forEach((needle) => {
   assert.ok(whatsappPage.includes(needle), `WhatsAppPage must include ${needle}`);
 });
@@ -156,6 +160,8 @@ assert.ok(
   'enabled',
   'botEnabled',
   'toggleBotEnabled',
+  'Configuracoes do atendimento automatico',
+  'Atendimento automatico',
   'Bot ligado',
   'Bot desligado',
   'Ligar bot',

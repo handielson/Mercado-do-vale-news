@@ -20,12 +20,6 @@ const types = fs.readFileSync(typesPath, 'utf8');
 [
   'getSettings',
   'updateSettings',
-  'listRules',
-  'createRule',
-  'updateRule',
-  'deleteRule',
-  'createRuleFromQuestion',
-  'uploadAttachment',
   'listTags',
   'createTag',
   'updateTag',
@@ -58,7 +52,9 @@ assert(
   service.includes("import { vpsClient } from './vpsClient'"),
   'autoResponderService must use the shared vpsClient'
 );
-assert(service.includes('vpsClient.upload'), 'uploadAttachment must use vpsClient.upload');
+assert(!service.includes('uploadAttachment'), 'legacy attachment upload method must stay removed from the frontend service');
+assert(!service.includes('/autoresponder/upload-attachment'), 'legacy attachment upload endpoint must not be exposed by the frontend service');
+assert(!service.includes('listRules') && !service.includes('createRule') && !service.includes('/autoresponder/rules'), 'legacy autoresponder rule methods must stay removed');
 assert(service.includes('URLSearchParams'), 'list methods with filters must build URLSearchParams');
 assert(service.includes('AutoResponderBlocklistUpdate'), 'blocklist update method must use AutoResponderBlocklistUpdate');
 assert(
@@ -68,7 +64,6 @@ assert(
 
 [
   'AutoResponderSettings',
-  'AutoResponderRule',
   'AutoResponderTag',
   'AutoResponderAttendant',
   'AutoResponderConversation',

@@ -1,6 +1,3 @@
-export type AutoResponderRuleMatchType = 'exact' | 'contains' | 'any_keyword' | 'all_keywords' | string;
-export type AutoResponderRuleReplyType = 'text' | 'product_by_tag' | 'product_search' | string;
-
 export interface AutoResponderConversationState {
     flow: string;
     step: string;
@@ -60,27 +57,6 @@ export interface AutoResponderSettings {
     openai_api_key_masked?: string;
     has_openai_admin_api_key?: boolean | number;
     openai_admin_api_key_masked?: string;
-    created_at?: string;
-    updated_at?: string;
-}
-
-export interface AutoResponderRule {
-    id: number;
-    name: string;
-    match_type: AutoResponderRuleMatchType;
-    pattern: string;
-    reply_type: AutoResponderRuleReplyType;
-    reply_text: string;
-    reply_tag_id?: number | null;
-    reply_search_query?: string | null;
-    next_state?: AutoResponderConversationState | string | null;
-    attachment_url?: string | null;
-    attachment_caption?: string | null;
-    auto_apply_tag_id?: number | null;
-    tag_ids?: number[] | string | null;
-    priority: number;
-    active: boolean | number;
-    hits?: number;
     created_at?: string;
     updated_at?: string;
 }
@@ -309,20 +285,11 @@ export interface AutoResponderBotMapFlow {
     steps: AutoResponderBotMapFlowStep[];
 }
 
-export interface AutoResponderAttachmentUpload {
-    ok: boolean;
-    url: string;
-    filename: string;
-    storage?: 'synology' | 'local';
-}
-
 export interface AutoResponderOk {
     ok: boolean;
 }
 
 export type AutoResponderSettingsInput = Partial<Omit<AutoResponderSettings, 'id' | 'created_at' | 'updated_at'>>;
-export type AutoResponderRuleInput = Omit<AutoResponderRule, 'id' | 'hits' | 'created_at' | 'updated_at'>;
-export type AutoResponderRuleUpdate = Partial<AutoResponderRuleInput>;
 export type AutoResponderTagInput = Omit<AutoResponderTag, 'id' | 'created_at' | 'updated_at'>;
 export type AutoResponderTagUpdate = Partial<AutoResponderTagInput>;
 export type AutoResponderBlocklistInput = Omit<AutoResponderBlocklistEntry, 'id' | 'created_at' | 'updated_at'>;
@@ -336,23 +303,6 @@ export interface AutoResponderAiTrainingInput {
     active: boolean;
 }
 export type AutoResponderAiTrainingUpdate = Partial<AutoResponderAiTrainingInput>;
-
-export interface AutoResponderRuleFromQuestionInput {
-    log_id?: number;
-    question?: string;
-    name?: string;
-    match_type?: AutoResponderRuleMatchType;
-    pattern?: string;
-    reply_text?: string;
-    priority?: number;
-    active?: boolean | number;
-    tag_ids?: number[];
-}
-
-export interface AutoResponderRuleFilters {
-    active?: boolean;
-    tag_id?: number;
-}
 
 export interface AutoResponderTagFilters {
     scope?: AutoResponderTagScope;

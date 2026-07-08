@@ -16,7 +16,7 @@ export default function WhatsAppPage() {
           Centro WhatsApp
         </h2>
         <p className="mt-2 max-w-3xl text-sm text-slate-500">
-          Nova central para Conexao WhatsApp, Atendimento WhatsApp, ChatGPT, ferramentas oficiais e migracao gradual das funcoes do AutoResponder legado.
+          Central do bot novo para conexao WhatsApp, atendimento, ChatGPT, ferramentas oficiais e automacoes.
         </p>
       </div>
 

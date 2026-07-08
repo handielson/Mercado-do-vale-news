@@ -1,6 +1,5 @@
 import { vpsClient } from './vpsClient';
 import type {
-    AutoResponderAttachmentUpload,
     AutoResponderAiTraining,
     AutoResponderAiTrainingFilters,
     AutoResponderAiTrainingInput,
@@ -199,12 +198,6 @@ export const autoResponderService = {
 
     deleteAiTraining: (id: number): Promise<void> => {
         return vpsClient.delete(`/autoresponder/ai-training/${id}`);
-    },
-
-    uploadAttachment: (file: File): Promise<AutoResponderAttachmentUpload> => {
-        const formData = new FormData();
-        formData.append('file', file);
-        return vpsClient.upload<AutoResponderAttachmentUpload>('/autoresponder/upload-attachment', formData);
     },
 
     listTags: (filters: AutoResponderTagFilters = {}): Promise<AutoResponderTag[]> => {

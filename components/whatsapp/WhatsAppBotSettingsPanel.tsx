@@ -106,11 +106,11 @@ export function WhatsAppBotSettingsPanel() {
         <div>
           <p className="flex items-center gap-2 text-xs font-semibold uppercase text-emerald-600">
             <Bot size={15} />
-            Configuracoes do bot
+            Configuracoes do atendimento automatico
           </p>
-          <h3 className="mt-1 text-lg font-semibold text-slate-900">Tom das respostas</h3>
+          <h3 className="mt-1 text-lg font-semibold text-slate-900">Atendimento automatico</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Ajustes globais usados nas respostas automaticas e na finalizacao de atendimento.
+            Controle geral do bot novo, tom das respostas e pausa aplicada ao finalizar atendimento.
           </p>
           <p className={`mt-2 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
             botEnabled

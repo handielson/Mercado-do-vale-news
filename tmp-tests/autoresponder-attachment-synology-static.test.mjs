@@ -4,14 +4,12 @@ import { readBotWhatsappDoc } from '../tools/autoresponder-bot-doc.cjs';
 
 const root = process.cwd();
 const serverPath = path.join(root, 'vps_server.cjs');
-const typesPath = path.join(root, 'types', 'autoResponder.ts');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 const server = fs.readFileSync(serverPath, 'utf8');
-const types = fs.readFileSync(typesPath, 'utf8');
 const doc = readBotWhatsappDoc(root);
 
 [
@@ -41,10 +39,6 @@ assert(
 assert(
   server.includes("return { ok: true, url, filename, storage: 'local' };"),
   'Autoresponder attachment upload must keep local fallback response'
-);
-assert(
-  types.includes("storage?: 'synology' | 'local';"),
-  'AutoResponderAttachmentUpload must expose returned storage'
 );
 assert(
   doc.includes('- [x] Upload de imagem indo para Synology'),
