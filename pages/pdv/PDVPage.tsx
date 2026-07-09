@@ -808,7 +808,7 @@ export default function PDVPage() {
                 display_id: display_id || null,
                 cashier_key,
                 local_reference: `pdv:${customerReference}`,
-                description: 'Venda PDV Mercado do Vale',
+                description: `Venda PDV Mercado do Vale - Pedido ${customerReference}`,
                 payer_email: selectedCustomer?.email || undefined
             });
 

@@ -25451,9 +25451,10 @@ fastify.post('/pdv/pix-payments', { preHandler: requireSyncKey }, async (req, re
   const id = crypto.randomUUID();
   const localReference = String(body.local_reference || `pdv:${id}`);
   const displayId = body.display_id ? String(body.display_id) : null;
+  const pdvOrderReference = String(body.sale_draft_id || localReference.replace(/^pdv:/, '') || id).trim();
   const payload = {
     transaction_amount: Number((amount / 100).toFixed(2)),
-    description: String(body.description || 'Venda PDV Mercado do Vale').slice(0, 120),
+    description: `Venda PDV Mercado do Vale - Pedido ${pdvOrderReference}`.slice(0, 120),
     payment_method_id: 'pix',
     external_reference: localReference,
     metadata: {
@@ -25466,6 +25467,8 @@ fastify.post('/pdv/pix-payments', { preHandler: requireSyncKey }, async (req, re
     notification_url: 'https://www.mercadodovale.com.br/api/mercadopago-webhook',
     payer: {
       email: String(body.payer_email || 'cliente@mercadodovale.com.br'),
+      first_name: 'Cliente',
+      last_name: 'Balcão',
     },
   };
   if (body.expires_at) payload.date_of_expiration = new Date(body.expires_at).toISOString();

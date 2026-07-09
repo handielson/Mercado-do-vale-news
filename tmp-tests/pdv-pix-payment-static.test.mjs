@@ -9,6 +9,7 @@ const receiptPreview = read('components/pdv/ReceiptPreview.tsx');
 const saleTypes = read('types/sale.ts');
 const saleCalculations = read('utils/saleCalculations.ts');
 const plan = read('docs/planos/android.md');
+const vpsServer = read('vps_server.js');
 
 const requiredPdvPageSnippets = [
   "import { pdvDisplayService } from '../../services/pdvDisplayService'",
@@ -120,6 +121,26 @@ assert.match(
   pdvPage,
   /window\.setInterval\(pollPdvPixStatus, PDV_PIX_STATUS_POLLING_MS\)/,
   'PDVPage.tsx deve monitorar automaticamente o status do Pix pendente'
+);
+assert.match(
+  pdvPage,
+  /description:\s*`Venda PDV Mercado do Vale - Pedido \$\{customerReference\}`/,
+  'PDVPage.tsx deve enviar a referencia do pedido na descricao do Pix PDV'
+);
+assert.match(
+  vpsServer,
+  /const pdvOrderReference = String\(body\.sale_draft_id \|\| localReference\.replace\([^)]*\) \|\| id\)/,
+  'vps_server.js deve resolver o numero/referencia do pedido PDV antes de montar o payload Mercado Pago'
+);
+assert.match(
+  vpsServer,
+  /description:\s*`Venda PDV Mercado do Vale - Pedido \$\{pdvOrderReference\}`\.slice\(0,\s*120\)/,
+  'vps_server.js deve exibir o numero/referencia do pedido na descricao da venda do Mercado Pago'
+);
+assert.match(
+  vpsServer,
+  /first_name:\s*'Cliente'[\s\S]*last_name:\s*'Balcão'/,
+  'vps_server.js deve enviar Cliente Balcão como pagador do Pix PDV'
 );
 
 console.log('pdv pix payment static checks passed');
