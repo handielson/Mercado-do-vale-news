@@ -5,4 +5,4 @@ Disallow: /team/
 Disallow: /auth/
 Allow: /
 
-Sitemap: https://mercadodovale.com.br/sitemap.xml
+Sitemap: https://www.mercadodovale.com.br/sitemap.xml
