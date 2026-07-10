@@ -25303,8 +25303,13 @@ fastify.get('/pdv/cash-sessions/current', { preHandler: requireAdminBearerToken 
   );
   const session = rows?.[0] || null;
   if (!session) return { session: null };
-  const summary = await computeCashSessionSummary(pool, session.id);
-  return { session: mapCashSessionRow(session), summary };
+  let summary;
+  try {
+    summary = await computeCashSessionSummary(pool, session.id);
+  } catch (error) {
+    console.error('[cash-register] Current session summary unavailable:', error.message);
+  }
+  return { session: mapCashSessionRow(session), ...(summary ? { summary } : {}) };
 });
 
 fastify.get('/pdv/cash-sessions', { preHandler: requireAdminBearerToken }, async (req, reply) => {
