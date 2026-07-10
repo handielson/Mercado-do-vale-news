@@ -32,7 +32,7 @@ import { customerService } from '../../services/customers';
 import { productService } from '../../services/products';
 import { warrantyTemplateService } from '../../services/warrantyTemplates';
 import { teamService } from '../../services/team';
-import { getEffectiveCustomerPrice, normalizeCentValue } from '../../utils/promoPrice';
+import { getEffectiveRetailPrice, normalizeCentValue } from '../../utils/promoPrice';
 import { buildPdvProductName } from '../../utils/pdvProductDisplay';
 import type { PdvDisplay, PdvPixPayment } from '../../types/pdvDisplay';
 import {
@@ -43,7 +43,7 @@ import {
     updatePdvSaleFinalizationLog,
     type PdvSaleFinalizationLog
 } from '../../utils/pdvSaleFinalizationLog';
-import { useVpsAuth } from '../../contexts/VpsAuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useCashSession } from '../../hooks/useCashSession';
 import CashOpeningModal from '../../components/pdv/CashOpeningModal';
 
@@ -54,8 +54,6 @@ type FinalizeStep = {
     detail?: string;
     debug?: unknown;
 };
-
-const PDV_PIX_STATUS_POLLING_MS = 3000;
 
 function buildPdvPixCustomerReference(): string {
     const now = new Date();
@@ -199,7 +197,9 @@ function isWarrantyTermCategoryValue(value: unknown): boolean {
 
 export default function PDVPage() {
     const navigate = useNavigate();
-    const { user } = useVpsAuth();
+
+    // Caixa PDV: nenhuma venda pode ser finalizada sem caixa aberto.
+    const { user } = useAuth();
     const { session: cashSession, isLoading: isCashSessionLoading, refresh: refreshCashSession } = useCashSession();
     const [showCashOpeningModal, setShowCashOpeningModal] = useState(false);
 
@@ -230,7 +230,6 @@ export default function PDVPage() {
     const [pdvPixCashierKey, setPdvPixCashierKey] = useState(() => localStorage.getItem('pdv_pix_cashier_key') || 'caixa-01');
     const [pdvPixDisplayId, setPdvPixDisplayId] = useState(() => localStorage.getItem('pdv_pix_display_id') || '');
     const [pdvPixDisplays, setPdvPixDisplays] = useState<PdvDisplay[]>([]);
-    const pdvPixApprovedToastRef = useRef('');
 
     // Estado da entrega
     const [deliveryType, setDeliveryType] = useState<DeliveryType | undefined>();
@@ -415,7 +414,7 @@ export default function PDVPage() {
         }
 
         // Novo item (produto normal ou unidade serializada individual)
-        const unitPrice = getEffectiveCustomerPrice(product, selectedCustomer);
+        const unitPrice = getEffectiveRetailPrice(product);
         const unitCost = normalizeCentValue(product.price_cost);
 
         const newItem: SaleItem = {
@@ -737,45 +736,11 @@ export default function PDVPage() {
                     pix_payment_id: payment.id,
                     mercado_pago_payment_id: payment.mercado_pago_payment_id || undefined,
                     pix_status: 'approved',
-                    pix_paid_at: payment.approved_at || payment.updated_at || new Date().toISOString()
+                    pix_paid_at: payment.updated_at || new Date().toISOString()
                 }
             ];
         });
     };
-
-    const handleApprovedPdvPixPayment = React.useCallback((payment: PdvPixPayment, message = 'Pix aprovado e adicionado ao pagamento') => {
-        setPdvPixPayment(payment);
-        addApprovedPdvPixPayment(payment);
-        if (pdvPixApprovedToastRef.current !== payment.id) {
-            pdvPixApprovedToastRef.current = payment.id;
-            toast.success(message);
-        }
-    }, []);
-
-    React.useEffect(() => {
-        if (!pdvPixPayment || !['creating', 'pending'].includes(pdvPixPayment.status)) return;
-        let cancelled = false;
-
-        async function pollPdvPixStatus() {
-            try {
-                const payment = await pdvDisplayService.refreshPixPaymentStatus(pdvPixPayment.id);
-                if (cancelled) return;
-                setPdvPixPayment(payment);
-
-                if (payment.status === 'approved') {
-                    handleApprovedPdvPixPayment(payment);
-                }
-            } catch (error) {
-                console.error('Erro ao monitorar pagamento Pix PDV:', error);
-            }
-        }
-
-        const interval = window.setInterval(pollPdvPixStatus, PDV_PIX_STATUS_POLLING_MS);
-        return () => {
-            cancelled = true;
-            window.clearInterval(interval);
-        };
-    }, [handleApprovedPdvPixPayment, pdvPixPayment?.id, pdvPixPayment?.status]);
 
     const handleShowPdvPixOnDisplay = async () => {
         if (!pdvPixPayment) {
@@ -825,7 +790,8 @@ export default function PDVPage() {
             }
 
             if (payment.status === 'approved') {
-                handleApprovedPdvPixPayment(payment);
+                addApprovedPdvPixPayment(payment);
+                toast.success('Pix aprovado e adicionado ao pagamento');
             } else {
                 toast.success('Pix gerado. Aguarde o pagamento do cliente.');
             }
@@ -845,7 +811,11 @@ export default function PDVPage() {
             setPdvPixPayment(payment);
 
             if (payment.status === 'approved') {
-                handleApprovedPdvPixPayment(payment);
+                addApprovedPdvPixPayment(payment);
+                if (pdvPixDisplayId.trim()) {
+                    await pdvDisplayService.clearActivePix(pdvPixDisplayId.trim());
+                }
+                toast.success('Pix aprovado e adicionado ao pagamento');
                 return;
             }
 
@@ -897,59 +867,6 @@ export default function PDVPage() {
         }));
     };
 
-    const handleClearPdvTotemVisual = async () => {
-        const display_id = pdvPixDisplayId.trim();
-        if (!display_id) {
-            toast.error('Informe o Display ID vinculado ao caixa');
-            return;
-        }
-
-        try {
-            setPdvPixLoading(true);
-            await pdvDisplayService.clearDisplayVisual(display_id);
-            toast.success('Totem limpo');
-        } catch (error: any) {
-            toast.error(error?.message || 'Erro ao limpar totem');
-        } finally {
-            setPdvPixLoading(false);
-        }
-    };
-
-    const handleSharePdvPixReceipt = async () => {
-        if (!pdvPixPayment) {
-            toast.error('Gere um Pix antes de compartilhar comprovante');
-            return;
-        }
-        if (pdvPixPayment.status !== 'approved') {
-            toast.error('Comprovante disponivel somente apos aprovacao do Pix');
-            return;
-        }
-
-        const registeredPhone = selectedCustomer?.phone?.trim() || '';
-        const shouldUseRegisteredPhone = registeredPhone
-            ? window.confirm(`Enviar comprovante para ${selectedCustomer?.name || 'cliente'} no WhatsApp ${registeredPhone}?`)
-            : false;
-        const phone = shouldUseRegisteredPhone
-            ? registeredPhone
-            : window.prompt('Digite o WhatsApp para enviar o comprovante')?.trim();
-
-        if (!phone) return;
-
-        try {
-            setPdvPixLoading(true);
-            const result = await pdvDisplayService.sendPixReceiptWhatsApp(pdvPixPayment.id, {
-                phone,
-                customer_name: selectedCustomer?.name,
-                customer_phone: selectedCustomer?.phone,
-            });
-            toast.success(`Comprovante enviado para ${result.phone_mask || 'WhatsApp'}`);
-        } catch (error: any) {
-            toast.error(error?.message || 'Erro ao enviar comprovante');
-        } finally {
-            setPdvPixLoading(false);
-        }
-    };
-
     // Finalizar venda
     const handleFinalizeSale = async () => {
         if (isFinalizingRef.current || isFinalizing) return;
@@ -969,8 +886,8 @@ export default function PDVPage() {
             return;
         }
 
-        // Revalida imediatamente antes do POST para impedir venda durante
-        // fechamento concorrente em outra aba ou dispositivo.
+        // Gate do caixa: revalida a sessao imediatamente antes de finalizar
+        // (evita corrida com fechamento em outra aba/dispositivo).
         const activeCashSession = await refreshCashSession();
         if (!activeCashSession) {
             toast.error('Nenhum caixa aberto. Abra o caixa antes de registrar vendas.');
@@ -1476,7 +1393,40 @@ export default function PDVPage() {
 
             {/* Content */}
             <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {isCashSessionLoading && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm">
+                        Verificando abertura do caixa...
+                    </div>
+                )}
+
+                {!isCashSessionLoading && !cashSession && (
+                    <div
+                        role="alert"
+                        data-pdv-cash-register-warning
+                        className="mx-auto flex max-w-3xl flex-col items-center gap-5 rounded-2xl border-2 border-amber-300 bg-amber-50 p-8 text-center shadow-sm"
+                    >
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100">
+                                <AlertTriangle className="text-amber-600" size={30} />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-amber-950">PDV bloqueado: abra o caixa para iniciar</h2>
+                                <p className="mt-2 text-sm text-amber-800">
+                                    Depois da abertura, o PDV será liberado automaticamente para este operador.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowCashOpeningModal(true)}
+                            className="shrink-0 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-700"
+                        >
+                            Abrir caixa agora
+                        </button>
+                    </div>
+                )}
+
+                <div className={`${cashSession ? 'grid' : 'hidden'} grid-cols-1 gap-6 lg:grid-cols-2`}>
                     {/* Coluna Esquerda: Formulário (50%) */}
                     <div className="space-y-6">
                         <CustomerSection
@@ -1603,8 +1553,6 @@ export default function PDVPage() {
                             onShowPdvPixOnDisplay={handleShowPdvPixOnDisplay}
                             onPrintPdvPixQr={handlePrintPdvPixQr}
                             onCancelPdvPixPayment={handleCancelPdvPixPayment}
-                            onSharePdvPixReceipt={handleSharePdvPixReceipt}
-                            onClearPdvTotemVisual={handleClearPdvTotemVisual}
                             onFinalAdjustmentDiscountChange={setFinalAdjustmentDiscount}
                             onApplyFinalPaymentAmount={handleApplyFinalPaymentAmount}
                         />
@@ -1633,12 +1581,6 @@ export default function PDVPage() {
                     </div>
                 </div>
             </div>
-
-            <CashOpeningModal
-                isOpen={showCashOpeningModal}
-                onClose={() => setShowCashOpeningModal(false)}
-                onOpened={() => { void refreshCashSession(); }}
-            />
 
             {/* Warranty Term Modal */}
             <WarrantyTermModal
@@ -1738,6 +1680,14 @@ export default function PDVPage() {
                     </div>
                 </div>
             )}
+
+            <CashOpeningModal
+                isOpen={showCashOpeningModal}
+                onClose={() => setShowCashOpeningModal(false)}
+                onOpened={() => {
+                    void refreshCashSession();
+                }}
+            />
         </div>
     );
 }

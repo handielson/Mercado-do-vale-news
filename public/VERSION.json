@@ -1,15 +1,8 @@
 {
-    "version": "v1.2.97-caixa-auth-hotfix",
+    "version": "v1.2.6-caixa-pdv-bloqueio",
     "date": "2026-07-10",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260710-150948-caixa-auth-hotfix",
+    "release_vps": "/var/www/mdv-site/releases/20260710-152430-caixa-pdv-bloqueio",
     "branch": "main",
-    "summary": "Corrige o provider de autenticacao usado pelo PDV e pelo modal de abertura de caixa.",
-    "totem_pix_android": {
-        "latest_version_name": "1.23",
-        "latest_version_code": 123,
-        "minimum_recommended_version_name": "1.23",
-        "update_message": "V1.23\nCorrecoes\n- Totem Pix mantem brilho maximo enquanto a tela esta ativa\n- Modo Apagar tela manual continua reduzindo o brilho",
-        "update_url": "https://www.mercadodovale.com.br/totem-pix/atualizar"
-    }
+    "summary": "Bloqueia o PDV ate abrir o caixa e adiciona atalho de abertura no proprio PDV."
 }

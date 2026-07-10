@@ -1,7 +1,7 @@
 import React from 'react';
 import { X as XIcon, Unlock } from 'lucide-react';
 import { toast } from 'sonner';
-import { useVpsAuth } from '../../contexts/VpsAuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { cashRegisterService } from '../../services/cashRegisterService';
 import { computeDenominationTotalCents, type CashSession, type DenominationCount } from '../../types/cashRegister';
 import CashDenominationCounter, { type CashCountMode } from './CashDenominationCounter';
@@ -21,7 +21,7 @@ function getDeviceKey(): string {
  * saldo inicial em especie por valor total ou contagem por denominacao.
  */
 export default function CashOpeningModal({ isOpen, onClose, onOpened }: CashOpeningModalProps) {
-    const { user } = useVpsAuth();
+    const { user } = useAuth();
     const [mode, setMode] = React.useState<CashCountMode>('total');
     const [totalCents, setTotalCents] = React.useState(0);
     const [count, setCount] = React.useState<DenominationCount>({});
