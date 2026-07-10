@@ -70,7 +70,12 @@ export default function CashRegisterPage() {
                 </>
             )}
 
-            <CashOpeningModal isOpen={showOpening} onClose={() => setShowOpening(false)} onOpened={() => refresh()} />
+            <CashOpeningModal
+                isOpen={showOpening}
+                onClose={() => setShowOpening(false)}
+                onOpened={() => refresh()}
+                onAlreadyOpen={() => refresh()}
+            />
             {session && summary && <CashClosingWizard isOpen={showClosing} session={session} summary={summary} onClose={() => { setShowClosing(false); void refresh(); }} onClosed={() => undefined} />}
         </div>
     );

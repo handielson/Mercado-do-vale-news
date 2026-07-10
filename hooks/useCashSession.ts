@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cashRegisterService } from '../services/cashRegisterService';
 import type { CashSession, CashSessionSummary } from '../types/cashRegister';
+import { useVpsAuth } from './useVpsAuth';
 
 interface UseCashSessionResult {
     session: CashSession | null;
@@ -17,6 +18,7 @@ interface UseCashSessionResult {
 }
 
 export function useCashSession(): UseCashSessionResult {
+    const { user, isLoading: isAuthLoading } = useVpsAuth();
     const [session, setSession] = useState<CashSession | null>(null);
     const [summary, setSummary] = useState<CashSessionSummary | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -45,11 +47,20 @@ export function useCashSession(): UseCashSessionResult {
 
     useEffect(() => {
         mountedRef.current = true;
-        refresh();
+        if (isAuthLoading) return () => { mountedRef.current = false; };
+        if (!user) {
+            setSession(null);
+            setSummary(null);
+            setError(null);
+            setIsLoading(false);
+            return () => { mountedRef.current = false; };
+        }
+        setIsLoading(true);
+        void refresh();
         return () => {
             mountedRef.current = false;
         };
-    }, [refresh]);
+    }, [isAuthLoading, refresh, user?.id]);
 
     return { session, summary, isLoading, error, refresh };
 }

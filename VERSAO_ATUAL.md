@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.7-pdv-vps-auth
+version: v1.2.8-pdv-cash-session-sync
 date: 2026-07-10
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260710-145220-v127-pdv-vps-auth
+release_vps: /var/www/mdv-site/releases/20260710-150955-v128-pdv-cash-session-sync
 branch: main
-summary: Corrige a autenticacao do PDV para usar o provider ativo da VPS.
+summary: Sincroniza a sessao de caixa do PDV apos a autenticacao da VPS.
 ```

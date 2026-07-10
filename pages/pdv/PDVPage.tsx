@@ -1684,10 +1684,13 @@ export default function PDVPage() {
             <CashOpeningModal
                 isOpen={showCashOpeningModal}
                 onClose={() => setShowCashOpeningModal(false)}
-                onOpened={() => {
-                    void refreshCashSession();
-                }}
-            />
+            onOpened={() => {
+                void refreshCashSession();
+            }}
+            onAlreadyOpen={() => {
+                void refreshCashSession();
+            }}
+        />
         </div>
     );
 }

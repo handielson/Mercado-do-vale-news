@@ -10,6 +10,7 @@ interface CashOpeningModalProps {
     isOpen: boolean;
     onClose: () => void;
     onOpened: (session: CashSession) => void;
+    onAlreadyOpen: () => void;
 }
 
 function getDeviceKey(): string {
@@ -20,7 +21,7 @@ function getDeviceKey(): string {
  * Modal de abertura de caixa: operador (usuario logado), data/hora automaticas,
  * saldo inicial em especie por valor total ou contagem por denominacao.
  */
-export default function CashOpeningModal({ isOpen, onClose, onOpened }: CashOpeningModalProps) {
+export default function CashOpeningModal({ isOpen, onClose, onOpened, onAlreadyOpen }: CashOpeningModalProps) {
     const { user } = useAuth();
     const [mode, setMode] = React.useState<CashCountMode>('total');
     const [totalCents, setTotalCents] = React.useState(0);
@@ -49,6 +50,12 @@ export default function CashOpeningModal({ isOpen, onClose, onOpened }: CashOpen
             onClose();
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Erro ao abrir caixa';
+            if (message.includes('Ja existe')) {
+                toast.info('Este operador ja possui um caixa aberto. Atualizando o PDV...');
+                onAlreadyOpen();
+                onClose();
+                return;
+            }
             toast.error(message.includes('Ja existe') ? 'Já existe um caixa aberto para este operador' : message);
         } finally {
             setIsSaving(false);
