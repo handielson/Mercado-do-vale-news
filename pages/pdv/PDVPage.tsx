@@ -55,6 +55,8 @@ type FinalizeStep = {
     debug?: unknown;
 };
 
+const PDV_PIX_STATUS_POLLING_MS = 3000;
+
 function buildPdvPixCustomerReference(): string {
     const now = new Date();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -230,6 +232,7 @@ export default function PDVPage() {
     const [pdvPixCashierKey, setPdvPixCashierKey] = useState(() => localStorage.getItem('pdv_pix_cashier_key') || 'caixa-01');
     const [pdvPixDisplayId, setPdvPixDisplayId] = useState(() => localStorage.getItem('pdv_pix_display_id') || '');
     const [pdvPixDisplays, setPdvPixDisplays] = useState<PdvDisplay[]>([]);
+    const approvedPdvPixToastRef = useRef('');
 
     // Estado da entrega
     const [deliveryType, setDeliveryType] = useState<DeliveryType | undefined>();
@@ -741,6 +744,37 @@ export default function PDVPage() {
             ];
         });
     };
+
+    React.useEffect(() => {
+        if (!pdvPixPayment || !['creating', 'pending'].includes(pdvPixPayment.status)) return;
+        let cancelled = false;
+
+        async function pollPdvPixStatus() {
+            try {
+                const payment = await pdvDisplayService.refreshPixPaymentStatus(pdvPixPayment.id);
+                if (cancelled) return;
+                setPdvPixPayment(payment);
+
+                if (payment.status !== 'approved') return;
+                addApprovedPdvPixPayment(payment);
+                if (pdvPixDisplayId.trim()) {
+                    await pdvDisplayService.clearActivePix(pdvPixDisplayId.trim());
+                }
+                if (approvedPdvPixToastRef.current !== payment.id) {
+                    approvedPdvPixToastRef.current = payment.id;
+                    toast.success('Pix aprovado e adicionado ao pagamento');
+                }
+            } catch (error) {
+                console.error('Erro ao monitorar Pix do PDV:', error);
+            }
+        }
+
+        const interval = window.setInterval(pollPdvPixStatus, PDV_PIX_STATUS_POLLING_MS);
+        return () => {
+            cancelled = true;
+            window.clearInterval(interval);
+        };
+    }, [pdvPixPayment?.id, pdvPixPayment?.status, pdvPixDisplayId]);
 
     const handleShowPdvPixOnDisplay = async () => {
         if (!pdvPixPayment) {
