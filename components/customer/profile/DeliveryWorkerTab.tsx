@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useCashSession } from '../../../hooks/useCashSession';
 import { AlertTriangle, Bike, CreditCard, ExternalLink, Loader2, MessageCircle, MinusCircle, PlusCircle, ReceiptText } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Customer } from '../../../types/customer';
@@ -138,6 +139,7 @@ function getDeliveryAdminCompleteErrorMessage(error: unknown): string {
 }
 
 export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, mode = 'viewer' }) => {
+    const { session: cashSession } = useCashSession();
     const isAdminMode = mode === 'admin';
     const [ledger, setLedger] = useState<CustomerDeliveryLedgerEntry[]>([]);
     const [settlements, setSettlements] = useState<CustomerDeliverySettlement[]>([]);
@@ -230,7 +232,7 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
         if (!paymentMethod.trim()) return toast.error('Informe a forma de pagamento');
         setSaving(true);
         try {
-            const result = await registerCustomerDeliveryPayment(customer.id, { amount, description: paymentDescription.trim(), paid_at: paidAt, payment_method: paymentMethod });
+            const result = await registerCustomerDeliveryPayment(customer.id, { amount, description: paymentDescription.trim(), paid_at: paidAt, payment_method: paymentMethod, cash_session_id: cashSession?.id || null });
             toast.success(result.overpayment_debt_id ? 'Pagamento registrado e debito do excedente criado' : 'Pagamento do entregador registrado');
             setPaymentAmount('');
             await reload();
@@ -245,7 +247,7 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
         if (amount <= 0 || amount > payable) return toast.error('Valor de abatimento invalido');
         setSaving(true);
         try {
-            await offsetCustomerDeliveryBalance(customer.id, { debt_id: offsetDebtId, amount, description: 'Abatimento com saldo de entregas' });
+            await offsetCustomerDeliveryBalance(customer.id, { debt_id: offsetDebtId, amount, description: 'Abatimento com saldo de entregas', cash_session_id: cashSession?.id || null });
             toast.success('Saldo de entregas abatido do debito');
             setOffsetAmount('');
             await reload();
@@ -298,6 +300,7 @@ export const DeliveryWorkerTab: React.FC<DeliveryWorkerTabProps> = ({ customer, 
                 observation: adjustmentObservation.trim() || undefined,
                 sale_id: adjustmentSaleId.trim() || undefined,
                 order_number: adjustmentSaleId.trim() || undefined,
+                cash_session_id: cashSession?.id || null,
             });
             toast.success('Lancamento avulso registrado');
             setAdjustmentAmount('');

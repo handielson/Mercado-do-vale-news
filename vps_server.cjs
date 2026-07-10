@@ -22935,7 +22935,13 @@ async function getPrimaryKey(pool, tableName) {
 }
 
 // Validação de nome de tabela
+const TABLE_DATA_BLOCKED_TABLES = new Set([
+  'pdv_cash_sessions', 'pdv_cash_closings', 'pdv_cash_movements',
+  'pdv_cash_events', 'pdv_cash_rectifications', 'pdv_cash_documents',
+]);
+
 function isValidTable(name) {
+  if (TABLE_DATA_BLOCKED_TABLES.has(String(name || '').toLowerCase())) return false;
   return /^[a-zA-Z0-9_]+$/.test(name);
 }
 
@@ -24354,7 +24360,18 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
   await pool.query(`UPDATE \`${name}\` SET ${setClauses} WHERE \`${pkCol}\` = ?`, vals);
 
   const [rows] = await pool.query(`SELECT * FROM \`${name}\` WHERE \`${pkCol}\` = ? LIMIT 1`, [pkValue]);
-  return rows[0] || reply.code(404).send({ error: 'Not found' });
+  const updatedRow = rows[0];
+  if (name === 'sales' && updatedRow?.refund_cash_session_id && ['cancelled', 'refunded'].includes(String(updatedRow.status))) {
+    await recordCashEvent(pool, req, {
+      sessionId: updatedRow.refund_cash_session_id,
+      eventType: updatedRow.status === 'refunded' ? 'sale_refund' : 'sale_cancellation',
+      amountCents: updatedRow.total,
+      referenceType: 'sale',
+      referenceId: updatedRow.id,
+      payload: { status: updatedRow.status },
+    });
+  }
+  return updatedRow || reply.code(404).send({ error: 'Not found' });
 });
 
 // DELETE por PK
@@ -24686,6 +24703,7 @@ fastify.post('/customers/:customerId/delivery-payments', { preHandler: requireSy
   const amount = normalizeDeliveryLedgerAmount(req.body?.amount);
   const description = String(req.body?.description || '').trim();
   const paymentMethod = String(req.body?.payment_method || '').trim().slice(0, 40) || null;
+  const cashSessionId = String(req.body?.cash_session_id || '').trim().slice(0, 80) || null;
   const paidAt = formatDateTimeSql(req.body?.paid_at || new Date());
   if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
   if (amount <= 0) return reply.code(400).send({ error: 'valor invalido' });
@@ -24714,9 +24732,9 @@ fastify.post('/customers/:customerId/delivery-payments', { preHandler: requireSy
       id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
       await connection.query(
         `INSERT INTO customer_delivery_settlements
-          (id, customer_id, type, amount, paid_at, payment_method, description)
-         VALUES (?, ?, 'payment', ?, ?, ?, ?)`,
-        [id, customerId, settlementAmount, paidAt, paymentMethod, description]
+          (id, customer_id, type, amount, paid_at, payment_method, description, cash_session_id)
+         VALUES (?, ?, 'payment', ?, ?, ?, ?, ?)`,
+        [id, customerId, settlementAmount, paidAt, paymentMethod, description, cashSessionId]
       );
     }
 
@@ -24756,6 +24774,7 @@ fastify.post('/customers/:customerId/delivery-offsets', { preHandler: requireSyn
   const customerId = String(req.params.customerId || '').trim();
   const debtId = String(req.body?.debt_id || '').trim();
   const amount = normalizeDeliveryLedgerAmount(req.body?.amount);
+  const cashSessionId = String(req.body?.cash_session_id || '').trim().slice(0, 80) || null;
   const description = String(req.body?.description || 'Abatimento com saldo de entregas').trim();
   if (!customerId) return reply.code(400).send({ error: 'customer_id obrigatorio' });
   if (!debtId) return reply.code(400).send({ error: 'debt_id obrigatorio' });
@@ -24772,16 +24791,16 @@ fastify.post('/customers/:customerId/delivery-offsets', { preHandler: requireSyn
     const settlementId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
     const paidAt = formatDateTimeSql(new Date());
     await connection.query(
-      `INSERT INTO customer_debt_payments (id, debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes)
-       VALUES (?, ?, ?, CURDATE(), 'saldo_entregas', ?)`,
-      [paymentId, debtId, amount, description]
+      `INSERT INTO customer_debt_payments (id, debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes, cash_session_id)
+       VALUES (?, ?, ?, CURDATE(), 'saldo_entregas', ?, ?)`,
+      [paymentId, debtId, amount, description, cashSessionId]
     );
     const novoSaldo = Math.max(0, Number(debt.saldo_devedor || 0) - amount);
     await connection.query('UPDATE customer_debts SET saldo_devedor = ?, status = ? WHERE id = ?', [novoSaldo, novoSaldo <= 0 ? 'paid' : 'partial', debtId]);
     await connection.query(
-      `INSERT INTO customer_delivery_settlements (id, customer_id, debt_id, type, amount, paid_at, payment_method, description)
-       VALUES (?, ?, ?, 'debt_offset', ?, ?, 'saldo_entregas', ?)`,
-      [settlementId, customerId, debtId, amount, paidAt, description]
+      `INSERT INTO customer_delivery_settlements (id, customer_id, debt_id, type, amount, paid_at, payment_method, description, cash_session_id)
+       VALUES (?, ?, ?, 'debt_offset', ?, ?, 'saldo_entregas', ?, ?)`,
+      [settlementId, customerId, debtId, amount, paidAt, description, cashSessionId]
     );
     await connection.commit();
     return reply.code(201).send({ id: settlementId, customer_id: customerId, debt_id: debtId, type: 'debt_offset', amount, debt_payment_id: paymentId });
@@ -24806,12 +24825,13 @@ fastify.post('/customers/:customerId/delivery-adjustments', { preHandler: requir
 
   const id = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
   const deliveredAt = formatDateTimeSql(new Date());
+  const cashSessionId = String(req.body?.cash_session_id || '').trim().slice(0, 80) || null;
   const note = [observation, amount < 0 ? 'Lancamento negativo manual' : 'Lancamento positivo manual'].filter(Boolean).join('\n');
   await pool.query(
     `INSERT INTO customer_delivery_ledger
       (id, customer_id, sale_id, order_number, buyer_name, delivery_address_text,
-       delivery_person_note, amount, description, status, delivered_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
+       delivery_person_note, amount, description, status, delivered_at, cash_session_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
     [
       id,
       customerId,
@@ -24823,10 +24843,1300 @@ fastify.post('/customers/:customerId/delivery-adjustments', { preHandler: requir
       amount,
       description,
       deliveredAt,
+      cashSessionId,
     ]
   );
   const [rows] = await pool.query('SELECT * FROM customer_delivery_ledger WHERE id = ? LIMIT 1', [id]);
   return reply.code(201).send(rows?.[0] || { id, customer_id: customerId, amount, description, delivered_at: deliveredAt });
+});
+const CASH_DENOMINATIONS_CENTS = [10000, 5000, 2000, 1000, 500, 200, 100, 50, 25, 10, 5];
+
+function normalizeCashAmountCents(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n);
+}
+
+function normalizeCashCountJson(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const safe = {};
+  for (const denom of CASH_DENOMINATIONS_CENTS) {
+    const qty = Number(value[String(denom)] ?? value[denom] ?? 0);
+    if (!Number.isFinite(qty) || qty < 0) continue;
+    const intQty = Math.trunc(qty);
+    if (intQty > 0) safe[String(denom)] = intQty;
+  }
+  return Object.keys(safe).length > 0 ? safe : null;
+}
+
+function computeCashCountTotalCents(countJson) {
+  if (!countJson) return 0;
+  return CASH_DENOMINATIONS_CENTS.reduce((sum, denom) => {
+    const qty = Number(countJson[String(denom)] || 0);
+    return sum + (Number.isFinite(qty) && qty > 0 ? Math.trunc(qty) * denom : 0);
+  }, 0);
+}
+
+// Mapeia formas de pagamento de todas as origens para chaves unificadas.
+function normalizeCashMethodKey(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return 'other';
+  if (['money', 'dinheiro', 'cash', 'especie', 'espécie'].includes(raw)) return 'money';
+  if (raw === 'pix') return 'pix';
+  if (['debit', 'debito', 'débito', 'cartao_debito'].includes(raw)) return 'debit';
+  if (['credit', 'credito', 'crédito', 'cartao_credito'].includes(raw)) return 'credit';
+  if (['cartao', 'cartão', 'card'].includes(raw)) return 'card';
+  if (['a_prazo', 'prazo', 'crediario', 'crediário'].includes(raw)) return 'a_prazo';
+  if (raw === 'saldo_entregas') return 'saldo_entregas';
+  return 'other';
+}
+
+// Parser tolerante para sales.payment_methods (JSON legado pode variar de formato).
+// Valores sempre em centavos inteiros; fallback para total + payment_method string.
+function normalizeSalePaymentsForCash(saleRow) {
+  let parsed = saleRow.payment_methods;
+  if (typeof parsed === 'string') {
+    try { parsed = JSON.parse(parsed); } catch { parsed = null; }
+  }
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    const payments = parsed
+      .map((p) => ({
+        method: normalizeCashMethodKey(p?.method),
+        amount_cents: normalizeCashAmountCents(p?.total_with_fee ?? p?.amount ?? 0),
+        installments: Number(p?.installments || 1) || 1,
+      }))
+      .filter((p) => p.amount_cents > 0);
+    if (payments.length > 0) return payments;
+  }
+  const totalCents = normalizeCashAmountCents(saleRow.total);
+  if (totalCents <= 0) return [];
+  return [{ method: normalizeCashMethodKey(saleRow.payment_method), amount_cents: totalCents, installments: 1 }];
+}
+
+async function getCashAuthContext(request) {
+  const auth = await getVpsBearerAuthContext(request);
+  let name = null;
+  if (auth.customerId) {
+    try {
+      const [rows] = await pool.query('SELECT name FROM customers WHERE id = ? LIMIT 1', [auth.customerId]);
+      name = rows?.[0]?.name || null;
+    } catch { /* nome e informativo; falha nao bloqueia a operacao */ }
+  }
+  return { ...auth, name };
+}
+
+async function recordCashEvent(db, request, {
+  sessionId = null,
+  closingId = null,
+  eventType,
+  operatorUserId = null,
+  auth = null,
+  deviceKey = null,
+  amountCents = null,
+  referenceType = null,
+  referenceId = null,
+  payload = null,
+}) {
+  const context = auth || await getCashAuthContext(request);
+  const id = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO pdv_cash_events
+      (id, session_id, closing_id, event_type, operator_user_id, auth_user_id, auth_user_name,
+       device_key, ip_address, user_agent, amount_cents, reference_type, reference_id, payload_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      sessionId,
+      closingId,
+      eventType,
+      operatorUserId || context.userId || null,
+      context.userId || null,
+      context.name ? limitText(context.name, 200) : null,
+      deviceKey ? limitText(deviceKey, 120) : null,
+      limitText(request?.ip, 64) || null,
+      limitText(request?.headers?.['user-agent'], 1000) || null,
+      amountCents == null ? null : normalizeCashAmountCents(amountCents),
+      referenceType ? limitText(referenceType, 40) : null,
+      referenceId ? limitText(referenceId, 80) : null,
+      payload ? JSON.stringify(payload) : null,
+    ]
+  );
+  return id;
+}
+
+// Fonte unica do "valor esperado" por forma de pagamento de uma sessao de caixa.
+// Nao inclui avulso_receipts (valores em DECIMAL reais e ja representados por
+// customer_debt_payments/pix — incluir causaria dupla contagem).
+async function computeCashSessionSummary(db, sessionId) {
+  const byMethod = {};
+  const addToMethod = (method, cents) => {
+    if (!cents) return;
+    byMethod[method] = (byMethod[method] || 0) + cents;
+  };
+
+  const [salesRows] = await db.query(
+    `SELECT s.id, s.total, s.payment_methods, s.payment_method, s.status, s.created_at, s.customer_id,
+            c.name AS customer_name
+       FROM sales s
+       LEFT JOIN customers c ON c.id = s.customer_id
+      WHERE s.cash_session_id = ?
+      ORDER BY s.created_at ASC`,
+    [sessionId]
+  );
+  const sales = [];
+  for (const row of salesRows || []) {
+    const payments = normalizeSalePaymentsForCash(row);
+    const isCompleted = row.status === 'completed';
+    if (isCompleted) {
+      for (const p of payments) addToMethod(p.method, p.amount_cents);
+    }
+    sales.push({
+      id: row.id,
+      status: row.status,
+      created_at: row.created_at,
+      customer_id: row.customer_id,
+      customer_name: row.customer_name || null,
+      total_cents: normalizeCashAmountCents(row.total),
+      payments,
+    });
+  }
+
+  // Estornos realizados nesta sessao (venda pode ser de sessao anterior).
+  const [refundRows] = await db.query(
+    `SELECT id, total, payment_methods, payment_method, status FROM sales
+      WHERE refund_cash_session_id = ? AND status IN ('cancelled', 'refunded')`,
+    [sessionId]
+  );
+  const refunds = [];
+  for (const row of refundRows || []) {
+    const payments = normalizeSalePaymentsForCash(row);
+    for (const p of payments) addToMethod(p.method, -p.amount_cents);
+    refunds.push({ id: row.id, status: row.status, total_cents: normalizeCashAmountCents(row.total), payments });
+  }
+
+  // Pix avulso: somente source standalone (Pix de venda PDV ja esta em sales.payment_methods).
+  const [pixRows] = await db.query(
+    `SELECT id, amount, status, description, created_at FROM pdv_pix_payments
+      WHERE cash_session_id = ? AND source = 'standalone_pix' AND status = 'approved'
+      ORDER BY created_at ASC`,
+    [sessionId]
+  );
+  const pixAvulso = (pixRows || []).map((row) => {
+    const cents = normalizeCashAmountCents(row.amount);
+    addToMethod('pix', cents);
+    return { id: row.id, amount_cents: cents, description: row.description || null, created_at: row.created_at };
+  });
+
+  const [debtRows] = await db.query(
+    `SELECT p.id, p.debt_id, p.valor_pago, p.metodo_pagamento, p.data_pagamento, p.observacoes, d.customer_id,
+            c.name AS customer_name
+       FROM customer_debt_payments p
+       LEFT JOIN customer_debts d ON d.id = p.debt_id
+       LEFT JOIN customers c ON c.id = d.customer_id
+      WHERE p.cash_session_id = ?
+      ORDER BY p.data_pagamento ASC`,
+    [sessionId]
+  );
+  const debtPayments = (debtRows || []).map((row) => {
+    const method = normalizeCashMethodKey(row.metodo_pagamento);
+    const cents = normalizeCashAmountCents(row.valor_pago);
+    if (method !== 'saldo_entregas') addToMethod(method, cents);
+    return {
+      id: row.id,
+      debt_id: row.debt_id,
+      customer_id: row.customer_id || null,
+      customer_name: row.customer_name || null,
+      method,
+      amount_cents: cents,
+      paid_at: row.data_pagamento,
+      notes: row.observacoes || null,
+    };
+  });
+
+  // Pagamentos a entregadores: saida de caixa.
+  const [settlementRows] = await db.query(
+    `SELECT s.id, s.customer_id, s.type, s.amount, s.paid_at, s.payment_method, s.description,
+            c.name AS customer_name
+       FROM customer_delivery_settlements s
+       LEFT JOIN customers c ON c.id = s.customer_id
+      WHERE s.cash_session_id = ? AND s.type = 'payment'
+      ORDER BY s.paid_at ASC`,
+    [sessionId]
+  );
+  const deliverySettlements = (settlementRows || []).map((row) => {
+    const method = normalizeCashMethodKey(row.payment_method);
+    const cents = normalizeCashAmountCents(row.amount);
+    addToMethod(method, -cents);
+    return {
+      id: row.id,
+      customer_id: row.customer_id,
+      customer_name: row.customer_name || null,
+      method,
+      amount_cents: cents,
+      paid_at: row.paid_at,
+      description: row.description || null,
+    };
+  });
+
+  // Lancamentos avulsos do ledger de entregas: informativos no relatorio
+  // (nao movimentam dinheiro fisico do caixa).
+  const [ledgerRows] = await db.query(
+    `SELECT l.id, l.customer_id, l.amount, l.description, l.delivered_at, c.name AS customer_name
+       FROM customer_delivery_ledger l
+       LEFT JOIN customers c ON c.id = l.customer_id
+      WHERE l.cash_session_id = ?
+      ORDER BY l.delivered_at ASC`,
+    [sessionId]
+  );
+  const deliveryLedger = (ledgerRows || []).map((row) => ({
+    id: row.id,
+    customer_id: row.customer_id,
+    customer_name: row.customer_name || null,
+    amount_cents: normalizeCashAmountCents(row.amount),
+    description: row.description || null,
+    delivered_at: row.delivered_at,
+  }));
+
+  const [movementRows] = await db.query(
+    `SELECT id, type, direction, amount_cents, description, created_by_user_id, created_by_name,
+            reversed_movement_id, created_at
+       FROM pdv_cash_movements
+      WHERE session_id = ?
+      ORDER BY created_at ASC`,
+    [sessionId]
+  );
+  const movements = (movementRows || []).map((row) => ({
+    id: row.id,
+    type: row.type,
+    direction: row.direction,
+    amount_cents: normalizeCashAmountCents(row.amount_cents),
+    description: row.description || null,
+    created_by_user_id: row.created_by_user_id,
+    created_by_name: row.created_by_name || null,
+    reversed_movement_id: row.reversed_movement_id || null,
+    created_at: row.created_at,
+  }));
+  const movementsInCents = movements
+    .filter((m) => m.direction === 'in')
+    .reduce((sum, m) => sum + m.amount_cents, 0);
+  const movementsOutCents = movements
+    .filter((m) => m.direction === 'out')
+    .reduce((sum, m) => sum + m.amount_cents, 0);
+
+  // Esperado em especie: fundo (opening_float esta nos movimentos in) +
+  // entradas em dinheiro - saidas em dinheiro/movimentos.
+  const cashFromMethods = byMethod.money || 0;
+  const expectedCashCents = cashFromMethods + movementsInCents - movementsOutCents;
+
+  const totalInCents = Object.entries(byMethod)
+    .filter(([method]) => method !== 'a_prazo')
+    .reduce((sum, [, cents]) => sum + Math.max(0, cents), 0);
+
+  return {
+    by_method: byMethod,
+    expected_cash_cents: expectedCashCents,
+    total_in_cents: totalInCents,
+    movements_in_cents: movementsInCents,
+    movements_out_cents: movementsOutCents,
+    sales,
+    refunds,
+    pix_avulso: pixAvulso,
+    debt_payments: debtPayments,
+    delivery_settlements: deliverySettlements,
+    delivery_ledger: deliveryLedger,
+    movements,
+    counts: {
+      sales: sales.filter((s) => s.status === 'completed').length,
+      refunds: refunds.length,
+      pix_avulso: pixAvulso.length,
+      debt_payments: debtPayments.length,
+      delivery_settlements: deliverySettlements.length,
+      delivery_ledger: deliveryLedger.length,
+      movements: movements.length,
+    },
+  };
+}
+
+function parseCashJsonColumn(value, fallback = null) {
+  if (value == null || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function mapCashSessionRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    session_number: Number(row.session_number),
+    status: row.status,
+    operator_user_id: row.operator_user_id,
+    operator_name: row.operator_name || null,
+    device_key: row.device_key || null,
+    opened_at: row.opened_at,
+    opening_notes: row.opening_notes || null,
+    opening_amount_cents: normalizeCashAmountCents(row.opening_amount_cents),
+    opening_count_json: parseCashJsonColumn(row.opening_count_json),
+    created_at: row.created_at,
+  };
+}
+
+function mapCashClosingRow(row, { includeSnapshot = false } = {}) {
+  if (!row) return null;
+  const mapped = {
+    id: row.id,
+    session_id: row.session_id,
+    version: Number(row.version),
+    closed_by_user_id: row.closed_by_user_id,
+    closed_by_name: row.closed_by_name || null,
+    closed_at: row.closed_at,
+    expected_cash_cents: normalizeCashAmountCents(row.expected_cash_cents),
+    counted_cash_cents: normalizeCashAmountCents(row.counted_cash_cents),
+    counted_count_json: parseCashJsonColumn(row.counted_count_json),
+    difference_cents: normalizeCashAmountCents(row.difference_cents),
+    justification: row.justification || null,
+    expected_by_method_json: parseCashJsonColumn(row.expected_by_method_json, {}),
+  };
+  if (includeSnapshot) mapped.report_snapshot = parseCashJsonColumn(row.report_snapshot_json, null);
+  return mapped;
+}
+
+async function fetchOpenCashSessionForUpdate(connection, operatorUserId) {
+  const [rows] = await connection.query(
+    "SELECT * FROM pdv_cash_sessions WHERE operator_user_id = ? AND status = 'open' LIMIT 1 FOR UPDATE",
+    [operatorUserId]
+  );
+  return rows?.[0] || null;
+}
+
+fastify.post('/pdv/cash-sessions/open', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const auth = await getCashAuthContext(req);
+  if (!auth.userId) return reply.code(401).send({ error: 'Unauthorized' });
+
+  const countJson = normalizeCashCountJson(body.opening_count_json);
+  const declaredCents = normalizeCashAmountCents(body.opening_amount_cents);
+  let openingAmountCents = declaredCents;
+  if (countJson) {
+    const computed = computeCashCountTotalCents(countJson);
+    if (declaredCents > 0 && declaredCents !== computed) {
+      return reply.code(400).send({
+        error: `Total informado (${declaredCents}) difere da contagem (${computed})`,
+        computed_total_cents: computed,
+      });
+    }
+    openingAmountCents = computed;
+  }
+  if (openingAmountCents < 0) return reply.code(400).send({ error: 'Saldo inicial invalido' });
+
+  const deviceKey = limitText(body.device_key, 120) || null;
+  const notes = limitText(body.notes || body.opening_notes, 2000) || null;
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const existing = await fetchOpenCashSessionForUpdate(connection, auth.userId);
+    if (existing) {
+      await connection.rollback();
+      return reply.code(409).send({
+        error: 'Ja existe um caixa aberto para este operador',
+        session: mapCashSessionRow(existing),
+      });
+    }
+
+    const sessionId = crypto.randomUUID();
+    await connection.query(
+      `INSERT INTO pdv_cash_sessions
+        (id, status, operator_user_id, operator_name, device_key, opening_notes, opening_amount_cents, opening_count_json)
+       VALUES (?, 'open', ?, ?, ?, ?, ?, ?)`,
+      [
+        sessionId,
+        auth.userId,
+        auth.name ? limitText(auth.name, 200) : null,
+        deviceKey,
+        notes,
+        openingAmountCents,
+        countJson ? JSON.stringify(countJson) : null,
+      ]
+    );
+
+    if (openingAmountCents > 0) {
+      await connection.query(
+        `INSERT INTO pdv_cash_movements
+          (id, session_id, type, direction, amount_cents, description, created_by_user_id, created_by_name)
+         VALUES (?, ?, 'opening_float', 'in', ?, 'Fundo de abertura do caixa', ?, ?)`,
+        [crypto.randomUUID(), sessionId, openingAmountCents, auth.userId, auth.name ? limitText(auth.name, 200) : null]
+      );
+    }
+
+    await recordCashEvent(connection, req, {
+      sessionId,
+      eventType: 'opening',
+      operatorUserId: auth.userId,
+      auth,
+      deviceKey,
+      amountCents: openingAmountCents,
+      payload: { opening_count_json: countJson, notes },
+    });
+
+    await connection.commit();
+
+    const [rows] = await pool.query('SELECT * FROM pdv_cash_sessions WHERE id = ? LIMIT 1', [sessionId]);
+    return reply.code(201).send(mapCashSessionRow(rows?.[0]));
+  } catch (err) {
+    await connection.rollback().catch(() => {});
+    if (err && (err.code === 'ER_DUP_ENTRY' || String(err.message || '').includes('uniq_cash_session_open_operator'))) {
+      return reply.code(409).send({ error: 'Ja existe um caixa aberto para este operador' });
+    }
+    console.error('[cash-register] Erro ao abrir caixa:', err);
+    return reply.code(500).send({ error: err.message || 'Erro ao abrir caixa' });
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.get('/pdv/cash-sessions/current', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const auth = await getCashAuthContext(req);
+  if (!auth.userId) return reply.code(401).send({ error: 'Unauthorized' });
+  const [rows] = await pool.query(
+    "SELECT * FROM pdv_cash_sessions WHERE operator_user_id = ? AND status = 'open' LIMIT 1",
+    [auth.userId]
+  );
+  const session = rows?.[0] || null;
+  if (!session) return { session: null };
+  const summary = await computeCashSessionSummary(pool, session.id);
+  return { session: mapCashSessionRow(session), summary };
+});
+
+fastify.get('/pdv/cash-sessions', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const query = req.query || {};
+  const conditions = [];
+  const params = [];
+
+  if (query.date_from) {
+    conditions.push('s.opened_at >= ?');
+    params.push(`${String(query.date_from).slice(0, 10)} 00:00:00`);
+  }
+  if (query.date_to) {
+    conditions.push('s.opened_at <= ?');
+    params.push(`${String(query.date_to).slice(0, 10)} 23:59:59`);
+  }
+  if (query.session_number) {
+    conditions.push('s.session_number = ?');
+    params.push(Number(query.session_number) || 0);
+  }
+  if (query.operator) {
+    conditions.push('(s.operator_user_id = ? OR s.operator_name LIKE ?)');
+    params.push(String(query.operator), `%${String(query.operator)}%`);
+  }
+  if (query.status === 'open' || query.status === 'closed') {
+    conditions.push('s.status = ?');
+    params.push(query.status);
+  }
+  if (query.status === 'rectified') {
+    conditions.push('EXISTS (SELECT 1 FROM pdv_cash_rectifications r WHERE r.session_id = s.id)');
+  }
+  if (query.sale_id) {
+    conditions.push('EXISTS (SELECT 1 FROM sales sv WHERE sv.cash_session_id = s.id AND sv.id LIKE ?)');
+    params.push(`%${String(query.sale_id)}%`);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const limit = Math.min(Math.max(1, parseInt(query.limit) || 50), 200);
+  const offset = Math.max(0, parseInt(query.offset) || 0);
+
+  const [[countRow]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM pdv_cash_sessions s ${where}`,
+    params
+  );
+  const [rows] = await pool.query(
+    `SELECT s.*,
+            (SELECT COUNT(*) FROM pdv_cash_rectifications r WHERE r.session_id = s.id) AS rectification_count,
+            (SELECT c.closed_at FROM pdv_cash_closings c WHERE c.session_id = s.id ORDER BY c.version DESC LIMIT 1) AS last_closed_at,
+            (SELECT c.difference_cents FROM pdv_cash_closings c WHERE c.session_id = s.id ORDER BY c.version DESC LIMIT 1) AS last_difference_cents,
+            (SELECT c.counted_cash_cents FROM pdv_cash_closings c WHERE c.session_id = s.id ORDER BY c.version DESC LIMIT 1) AS last_counted_cash_cents
+       FROM pdv_cash_sessions s ${where}
+      ORDER BY s.opened_at DESC
+      LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+
+  let sessions = (rows || []).map((row) => ({
+    ...mapCashSessionRow(row),
+    rectification_count: Number(row.rectification_count || 0),
+    last_closed_at: row.last_closed_at || null,
+    last_difference_cents: row.last_difference_cents == null ? null : normalizeCashAmountCents(row.last_difference_cents),
+    last_counted_cash_cents: row.last_counted_cash_cents == null ? null : normalizeCashAmountCents(row.last_counted_cash_cents),
+  }));
+
+  const minTotal = query.min_total != null && query.min_total !== '' ? normalizeCashAmountCents(query.min_total) : null;
+  const maxTotal = query.max_total != null && query.max_total !== '' ? normalizeCashAmountCents(query.max_total) : null;
+  if (minTotal != null) sessions = sessions.filter((s) => (s.last_counted_cash_cents ?? s.opening_amount_cents) >= minTotal);
+  if (maxTotal != null) sessions = sessions.filter((s) => (s.last_counted_cash_cents ?? s.opening_amount_cents) <= maxTotal);
+
+  return { rows: sessions, total: Number(countRow.total), limit, offset };
+});
+
+fastify.get('/pdv/cash-sessions/:id', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const sessionId = String(req.params.id || '').trim();
+  const [rows] = await pool.query('SELECT * FROM pdv_cash_sessions WHERE id = ? LIMIT 1', [sessionId]);
+  const session = rows?.[0];
+  if (!session) return reply.code(404).send({ error: 'Caixa nao encontrado' });
+
+  const includeSnapshot = String(req.query?.include_snapshot || '') === '1';
+  const [closings] = await pool.query(
+    'SELECT * FROM pdv_cash_closings WHERE session_id = ? ORDER BY version ASC',
+    [sessionId]
+  );
+  const [rectifications] = await pool.query(
+    'SELECT * FROM pdv_cash_rectifications WHERE session_id = ? ORDER BY created_at ASC',
+    [sessionId]
+  );
+  const [events] = await pool.query(
+    'SELECT * FROM pdv_cash_events WHERE session_id = ? ORDER BY created_at ASC',
+    [sessionId]
+  );
+  const [documents] = await pool.query(
+    'SELECT * FROM pdv_cash_documents WHERE session_id = ? ORDER BY created_at ASC',
+    [sessionId]
+  );
+  const summary = await computeCashSessionSummary(pool, sessionId);
+
+  return {
+    session: mapCashSessionRow(session),
+    summary,
+    closings: (closings || []).map((row) => mapCashClosingRow(row, { includeSnapshot })),
+    rectifications: (rectifications || []).map((row) => ({
+      id: row.id,
+      session_id: row.session_id,
+      closing_id: row.closing_id,
+      reason: row.reason,
+      previous_values: parseCashJsonColumn(row.previous_values_json, {}),
+      new_values: parseCashJsonColumn(row.new_values_json, {}),
+      rectified_by_user_id: row.rectified_by_user_id,
+      rectified_by_name: row.rectified_by_name || null,
+      document_id: row.document_id || null,
+      created_at: row.created_at,
+    })),
+    events: (events || []).map((row) => ({
+      id: row.id,
+      session_id: row.session_id,
+      closing_id: row.closing_id,
+      event_type: row.event_type,
+      operator_user_id: row.operator_user_id,
+      auth_user_id: row.auth_user_id,
+      auth_user_name: row.auth_user_name || null,
+      device_key: row.device_key || null,
+      ip_address: row.ip_address || null,
+      user_agent: row.user_agent || null,
+      amount_cents: row.amount_cents == null ? null : normalizeCashAmountCents(row.amount_cents),
+      reference_type: row.reference_type || null,
+      reference_id: row.reference_id || null,
+      payload: parseCashJsonColumn(row.payload_json),
+      created_at: row.created_at,
+    })),
+    documents: (documents || []).map((row) => ({
+      id: row.id,
+      session_id: row.session_id,
+      closing_id: row.closing_id || null,
+      rectification_id: row.rectification_id || null,
+      kind: row.kind,
+      file_name: row.file_name,
+      syno_path: row.syno_path || null,
+      cdn_url: row.cdn_url || null,
+      status: row.status,
+      attempts: Number(row.attempts || 0),
+      last_error: row.last_error || null,
+      uploaded_at: row.uploaded_at || null,
+      created_at: row.created_at,
+    })),
+    rectified: (rectifications || []).length > 0,
+  };
+});
+
+fastify.get('/pdv/cash-sessions/:id/summary', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const sessionId = String(req.params.id || '').trim();
+  const [rows] = await pool.query('SELECT * FROM pdv_cash_sessions WHERE id = ? LIMIT 1', [sessionId]);
+  if (!rows?.[0]) return reply.code(404).send({ error: 'Caixa nao encontrado' });
+  const summary = await computeCashSessionSummary(pool, sessionId);
+  return { session: mapCashSessionRow(rows[0]), summary };
+});
+
+fastify.post('/pdv/cash-sessions/:id/close', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const sessionId = String(req.params.id || '').trim();
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const auth = await getCashAuthContext(req);
+  if (!auth.userId) return reply.code(401).send({ error: 'Unauthorized' });
+
+  const countJson = normalizeCashCountJson(body.counted_count_json);
+  const declaredCents = normalizeCashAmountCents(body.counted_cash_cents);
+  let countedCashCents = declaredCents;
+  if (countJson) {
+    const computed = computeCashCountTotalCents(countJson);
+    if (declaredCents > 0 && declaredCents !== computed) {
+      return reply.code(400).send({
+        error: `Total informado (${declaredCents}) difere da contagem (${computed})`,
+        computed_total_cents: computed,
+      });
+    }
+    countedCashCents = computed;
+  }
+  if (countedCashCents < 0) return reply.code(400).send({ error: 'Valor contado invalido' });
+
+  const justification = limitText(body.justification, 2000) || null;
+  const deviceKey = limitText(body.device_key, 120) || null;
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [sessionRows] = await connection.query(
+      'SELECT * FROM pdv_cash_sessions WHERE id = ? LIMIT 1 FOR UPDATE',
+      [sessionId]
+    );
+    const session = sessionRows?.[0];
+    if (!session) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Caixa nao encontrado' });
+    }
+    if (session.status !== 'open') {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'Caixa ja esta fechado' });
+    }
+
+    const summary = await computeCashSessionSummary(connection, sessionId);
+    const expectedCashCents = summary.expected_cash_cents;
+    const differenceCents = countedCashCents - expectedCashCents;
+    if (differenceCents !== 0 && !justification) {
+      await connection.rollback();
+      return reply.code(400).send({
+        error: 'Justificativa obrigatoria quando ha diferenca entre valor esperado e encontrado',
+        expected_cash_cents: expectedCashCents,
+        counted_cash_cents: countedCashCents,
+        difference_cents: differenceCents,
+      });
+    }
+
+    const [[versionRow]] = await connection.query(
+      'SELECT COALESCE(MAX(version), 0) AS max_version FROM pdv_cash_closings WHERE session_id = ?',
+      [sessionId]
+    );
+    const version = Number(versionRow.max_version || 0) + 1;
+    const closingId = crypto.randomUUID();
+    const closedAt = new Date();
+
+    const reportSnapshot = {
+      generated_at: closedAt.toISOString(),
+      company: 'Mercado do Vale',
+      session: mapCashSessionRow(session),
+      closing: {
+        id: closingId,
+        version,
+        closed_at: closedAt.toISOString(),
+        closed_by_user_id: auth.userId,
+        closed_by_name: auth.name || null,
+        expected_cash_cents: expectedCashCents,
+        counted_cash_cents: countedCashCents,
+        counted_count_json: countJson,
+        difference_cents: differenceCents,
+        justification,
+      },
+      totals: {
+        by_method: summary.by_method,
+        total_in_cents: summary.total_in_cents,
+        expected_cash_cents: expectedCashCents,
+        movements_in_cents: summary.movements_in_cents,
+        movements_out_cents: summary.movements_out_cents,
+      },
+      sales: summary.sales,
+      refunds: summary.refunds,
+      pix_avulso: summary.pix_avulso,
+      debt_payments: summary.debt_payments,
+      delivery_settlements: summary.delivery_settlements,
+      delivery_ledger: summary.delivery_ledger,
+      movements: summary.movements,
+      counts: summary.counts,
+    };
+
+    // Itens das vendas entram no snapshot para o relatorio completo.
+    const saleIds = summary.sales.map((s) => s.id);
+    if (saleIds.length > 0) {
+      const [itemRows] = await connection.query(
+        `SELECT sale_id, product_name, quantity, unit_price, total, is_gift
+           FROM sale_items WHERE sale_id IN (${saleIds.map(() => '?').join(',')})`,
+        saleIds
+      );
+      const itemsBySale = {};
+      for (const item of itemRows || []) {
+        if (!itemsBySale[item.sale_id]) itemsBySale[item.sale_id] = [];
+        itemsBySale[item.sale_id].push({
+          product_name: item.product_name,
+          quantity: Number(item.quantity || 0),
+          unit_price_cents: normalizeCashAmountCents(item.unit_price),
+          total_cents: normalizeCashAmountCents(item.total),
+          is_gift: Boolean(item.is_gift),
+        });
+      }
+      reportSnapshot.sales = reportSnapshot.sales.map((sale) => ({
+        ...sale,
+        items: itemsBySale[sale.id] || [],
+      }));
+    }
+
+    await connection.query(
+      `INSERT INTO pdv_cash_closings
+        (id, session_id, version, closed_by_user_id, closed_by_name, expected_cash_cents,
+         counted_cash_cents, counted_count_json, difference_cents, justification,
+         expected_by_method_json, report_snapshot_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        closingId,
+        sessionId,
+        version,
+        auth.userId,
+        auth.name ? limitText(auth.name, 200) : null,
+        expectedCashCents,
+        countedCashCents,
+        countJson ? JSON.stringify(countJson) : null,
+        differenceCents,
+        justification,
+        JSON.stringify(summary.by_method),
+        JSON.stringify(reportSnapshot),
+      ]
+    );
+
+    await connection.query(
+      "UPDATE pdv_cash_sessions SET status = 'closed' WHERE id = ?",
+      [sessionId]
+    );
+
+    await recordCashEvent(connection, req, {
+      sessionId,
+      closingId,
+      eventType: 'closing',
+      operatorUserId: session.operator_user_id,
+      auth,
+      deviceKey,
+      amountCents: countedCashCents,
+      payload: {
+        version,
+        expected_cash_cents: expectedCashCents,
+        difference_cents: differenceCents,
+        justification,
+      },
+    });
+
+    const documentId = crypto.randomUUID();
+    const fileName = buildCashDocumentFileName('fechamento-caixa', session.session_number, closedAt, documentId);
+    await connection.query(
+      `INSERT INTO pdv_cash_documents (id, session_id, closing_id, kind, file_name, status)
+       VALUES (?, ?, ?, 'closing_report', ?, 'pending')`,
+      [documentId, sessionId, closingId, fileName]
+    );
+
+    await connection.commit();
+
+    return reply.code(201).send({
+      closing: {
+        id: closingId,
+        session_id: sessionId,
+        version,
+        expected_cash_cents: expectedCashCents,
+        counted_cash_cents: countedCashCents,
+        difference_cents: differenceCents,
+        justification,
+      },
+      document_id: documentId,
+      report_snapshot: reportSnapshot,
+    });
+  } catch (err) {
+    await connection.rollback().catch(() => {});
+    console.error('[cash-register] Erro ao fechar caixa:', err);
+    return reply.code(500).send({ error: err.message || 'Erro ao fechar caixa' });
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.post('/pdv/cash-sessions/:id/reopen', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const sessionId = String(req.params.id || '').trim();
+  const reason = limitText(req.body?.reason, 2000);
+  if (!reason) return reply.code(400).send({ error: 'Motivo da reabertura obrigatorio' });
+  const auth = await getCashAuthContext(req);
+  if (!auth.userId) return reply.code(401).send({ error: 'Unauthorized' });
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      'SELECT * FROM pdv_cash_sessions WHERE id = ? LIMIT 1 FOR UPDATE',
+      [sessionId]
+    );
+    const session = rows?.[0];
+    if (!session) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Caixa nao encontrado' });
+    }
+    if (session.status !== 'closed') {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'Somente caixa fechado pode ser reaberto' });
+    }
+
+    const openConflict = await fetchOpenCashSessionForUpdate(connection, session.operator_user_id);
+    if (openConflict) {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'Operador ja possui outro caixa aberto' });
+    }
+
+    const [[lastClosing]] = await connection.query(
+      'SELECT id, version FROM pdv_cash_closings WHERE session_id = ? ORDER BY version DESC LIMIT 1',
+      [sessionId]
+    );
+
+    await connection.query("UPDATE pdv_cash_sessions SET status = 'open' WHERE id = ?", [sessionId]);
+
+    await recordCashEvent(connection, req, {
+      sessionId,
+      closingId: lastClosing?.id || null,
+      eventType: 'reopening',
+      operatorUserId: session.operator_user_id,
+      auth,
+      payload: { reason, previous_closing_id: lastClosing?.id || null, previous_version: lastClosing?.version || null },
+    });
+
+    await connection.commit();
+    const [updated] = await pool.query('SELECT * FROM pdv_cash_sessions WHERE id = ? LIMIT 1', [sessionId]);
+    return { session: mapCashSessionRow(updated?.[0]), reopened: true };
+  } catch (err) {
+    await connection.rollback().catch(() => {});
+    console.error('[cash-register] Erro ao reabrir caixa:', err);
+    return reply.code(500).send({ error: err.message || 'Erro ao reabrir caixa' });
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.post('/pdv/cash-sessions/:id/rectify', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const sessionId = String(req.params.id || '').trim();
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const reason = limitText(body.reason, 2000);
+  if (!reason) return reply.code(400).send({ error: 'Motivo da retificacao obrigatorio' });
+  const auth = await getCashAuthContext(req);
+  if (!auth.userId) return reply.code(401).send({ error: 'Unauthorized' });
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      'SELECT * FROM pdv_cash_sessions WHERE id = ? LIMIT 1 FOR UPDATE',
+      [sessionId]
+    );
+    const session = rows?.[0];
+    if (!session) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Caixa nao encontrado' });
+    }
+    if (session.status !== 'closed') {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'Somente caixa fechado pode ser retificado' });
+    }
+
+    const [[closing]] = await connection.query(
+      'SELECT * FROM pdv_cash_closings WHERE session_id = ? ORDER BY version DESC LIMIT 1',
+      [sessionId]
+    );
+    if (!closing) {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'Caixa nao possui fechamento para retificar' });
+    }
+
+    // Valores vigentes = fechamento + retificacoes anteriores aplicadas em ordem.
+    const [prevRects] = await connection.query(
+      'SELECT new_values_json FROM pdv_cash_rectifications WHERE closing_id = ? ORDER BY created_at ASC',
+      [closing.id]
+    );
+    const currentValues = {
+      counted_cash_cents: normalizeCashAmountCents(closing.counted_cash_cents),
+      difference_cents: normalizeCashAmountCents(closing.difference_cents),
+      justification: closing.justification || null,
+    };
+    for (const rect of prevRects || []) {
+      const values = parseCashJsonColumn(rect.new_values_json, {});
+      if (values.counted_cash_cents != null) currentValues.counted_cash_cents = normalizeCashAmountCents(values.counted_cash_cents);
+      if (values.difference_cents != null) currentValues.difference_cents = normalizeCashAmountCents(values.difference_cents);
+      if (values.justification !== undefined) currentValues.justification = values.justification;
+    }
+
+    const newValues = { ...currentValues };
+    if (body.new_counted_cash_cents != null) {
+      newValues.counted_cash_cents = normalizeCashAmountCents(body.new_counted_cash_cents);
+      newValues.difference_cents = newValues.counted_cash_cents - normalizeCashAmountCents(closing.expected_cash_cents);
+    }
+    if (body.new_justification !== undefined) {
+      newValues.justification = limitText(body.new_justification, 2000) || null;
+    }
+    if (newValues.difference_cents !== 0 && !newValues.justification) {
+      await connection.rollback();
+      return reply.code(400).send({ error: 'Justificativa obrigatoria quando a retificacao mantem diferenca' });
+    }
+
+    const rectificationId = crypto.randomUUID();
+    const documentId = crypto.randomUUID();
+    const now = new Date();
+    const fileName = buildCashDocumentFileName('retificacao-caixa', session.session_number, now, documentId);
+
+    await connection.query(
+      `INSERT INTO pdv_cash_documents (id, session_id, closing_id, rectification_id, kind, file_name, status)
+       VALUES (?, ?, ?, ?, 'rectification_report', ?, 'pending')`,
+      [documentId, sessionId, closing.id, rectificationId, fileName]
+    );
+
+    await connection.query(
+      `INSERT INTO pdv_cash_rectifications
+        (id, session_id, closing_id, reason, previous_values_json, new_values_json,
+         rectified_by_user_id, rectified_by_name, document_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        rectificationId,
+        sessionId,
+        closing.id,
+        reason,
+        JSON.stringify(currentValues),
+        JSON.stringify(newValues),
+        auth.userId,
+        auth.name ? limitText(auth.name, 200) : null,
+        documentId,
+      ]
+    );
+
+    await recordCashEvent(connection, req, {
+      sessionId,
+      closingId: closing.id,
+      eventType: 'rectification',
+      operatorUserId: session.operator_user_id,
+      auth,
+      amountCents: newValues.counted_cash_cents,
+      referenceType: 'rectification',
+      referenceId: rectificationId,
+      payload: { reason, previous_values: currentValues, new_values: newValues },
+    });
+
+    await connection.commit();
+    return reply.code(201).send({
+      rectification: {
+        id: rectificationId,
+        session_id: sessionId,
+        closing_id: closing.id,
+        reason,
+        previous_values: currentValues,
+        new_values: newValues,
+      },
+      document_id: documentId,
+    });
+  } catch (err) {
+    await connection.rollback().catch(() => {});
+    console.error('[cash-register] Erro ao retificar caixa:', err);
+    return reply.code(500).send({ error: err.message || 'Erro ao retificar caixa' });
+  } finally {
+    connection.release();
+  }
+});
+
+const CASH_MANUAL_MOVEMENT_TYPES = {
+  sangria: 'out',
+  suprimento: 'in',
+  deposito: 'out',
+  retirada: 'out',
+};
+
+fastify.post('/pdv/cash-sessions/:id/movements', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const sessionId = String(req.params.id || '').trim();
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const type = String(body.type || '').trim().toLowerCase();
+  const direction = CASH_MANUAL_MOVEMENT_TYPES[type];
+  if (!direction) return reply.code(400).send({ error: 'Tipo de movimento invalido (sangria, suprimento, deposito, retirada)' });
+
+  const amountCents = normalizeCashAmountCents(body.amount_cents);
+  if (amountCents <= 0) return reply.code(400).send({ error: 'Valor do movimento invalido' });
+  const description = limitText(body.description, 2000);
+  if (!description) return reply.code(400).send({ error: 'Descricao obrigatoria' });
+
+  const auth = await getCashAuthContext(req);
+  if (!auth.userId) return reply.code(401).send({ error: 'Unauthorized' });
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      'SELECT * FROM pdv_cash_sessions WHERE id = ? LIMIT 1 FOR UPDATE',
+      [sessionId]
+    );
+    const session = rows?.[0];
+    if (!session) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Caixa nao encontrado' });
+    }
+    if (session.status !== 'open') {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'Movimentos so podem ser lancados em caixa aberto' });
+    }
+
+    const movementId = crypto.randomUUID();
+    await connection.query(
+      `INSERT INTO pdv_cash_movements
+        (id, session_id, type, direction, amount_cents, description, created_by_user_id, created_by_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [movementId, sessionId, type, direction, amountCents, description, auth.userId, auth.name ? limitText(auth.name, 200) : null]
+    );
+
+    await recordCashEvent(connection, req, {
+      sessionId,
+      eventType: type,
+      operatorUserId: session.operator_user_id,
+      auth,
+      amountCents,
+      referenceType: 'cash_movement',
+      referenceId: movementId,
+      payload: { description, direction },
+    });
+
+    await connection.commit();
+    return reply.code(201).send({
+      id: movementId,
+      session_id: sessionId,
+      type,
+      direction,
+      amount_cents: amountCents,
+      description,
+    });
+  } catch (err) {
+    await connection.rollback().catch(() => {});
+    console.error('[cash-register] Erro ao lancar movimento:', err);
+    return reply.code(500).send({ error: err.message || 'Erro ao lancar movimento' });
+  } finally {
+    connection.release();
+  }
+});
+
+// Pastas Ano/Mes/Dia no fuso America/Recife (UTC-3 fixo, sem horario de verao).
+function getCashRecifeDateParts(dateValue) {
+  const date = dateValue ? new Date(dateValue) : new Date();
+  const shifted = new Date(date.getTime() - 3 * 60 * 60 * 1000);
+  return {
+    year: String(shifted.getUTCFullYear()),
+    month: String(shifted.getUTCMonth() + 1).padStart(2, '0'),
+    day: String(shifted.getUTCDate()).padStart(2, '0'),
+    hour: String(shifted.getUTCHours()).padStart(2, '0'),
+    minute: String(shifted.getUTCMinutes()).padStart(2, '0'),
+    second: String(shifted.getUTCSeconds()).padStart(2, '0'),
+  };
+}
+
+function buildCashDocumentFileName(prefix, sessionNumber, dateValue, documentId) {
+  const parts = getCashRecifeDateParts(dateValue);
+  const stamp = `${parts.year}${parts.month}${parts.day}-${parts.hour}${parts.minute}${parts.second}`;
+  const shortId = String(documentId || '').replace(/-/g, '').slice(0, 8);
+  return `${prefix}-${sessionNumber}-${stamp}-${shortId}.pdf`;
+}
+
+// Upload de relatorio de caixa para o Synology em /web/arquivos/caixa/YYYY/MM/DD.
+// overwrite=false: nunca sobrescreve documento existente.
+async function uploadCashReportToSynology({ fileName, fileBuf, dateValue }) {
+  if (!SYNO_USER || !SYNO_PASS) {
+    throw new Error('Synology nao configurado (SYNOLOGY_USER/SYNOLOGY_PASS)');
+  }
+  const parts = getCashRecifeDateParts(dateValue);
+  const folderPath = `${SYNO_FOLDERS.arquivos}/caixa/${parts.year}/${parts.month}/${parts.day}`;
+  const url = `${SYNO_CDN.arquivos}/caixa/${parts.year}/${parts.month}/${parts.day}/${fileName}`;
+  const sid = await synoLogin();
+  const boundary = `MDVCashReportBoundary${Date.now()}`;
+
+  const textFields = [
+    ['api', 'SYNO.FileStation.Upload'],
+    ['version', '2'],
+    ['method', 'upload'],
+    ['path', folderPath],
+    ['create_parents', 'true'],
+    ['overwrite', 'false'],
+    ['_sid', sid],
+  ].map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join('');
+
+  const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/pdf\r\n\r\n`;
+  const body = Buffer.concat([Buffer.from(textFields), Buffer.from(fileHeader), fileBuf, Buffer.from(`\r\n--${boundary}--\r\n`)]);
+  const https = require('https');
+  const urlObj = new URL(SYNO_URL);
+
+  const result = await new Promise((resolve, reject) => {
+    const options = {
+      hostname: urlObj.hostname,
+      port: getSynologyRequestPort(urlObj),
+      path: '/webapi/entry.cgi',
+      method: 'POST',
+      rejectUnauthorized: false,
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': body.length,
+      },
+    };
+    const r = https.request(options, (res) => {
+      let d = '';
+      res.on('data', (c) => d += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(d)); } catch (e) { reject(e); }
+      });
+    });
+    r.on('error', reject);
+    r.setTimeout(60000, () => r.destroy(new Error('Synology upload timeout para relatorio de caixa')));
+    r.write(body);
+    r.end();
+  });
+
+  if (!result.success) {
+    throw new Error(`Synology upload failed: ${JSON.stringify(result.error || result)}`);
+  }
+  return { ok: true, syno_path: `${folderPath}/${fileName}`, cdn_url: url };
+}
+
+fastify.post('/pdv/cash-documents/:id/upload', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const documentId = String(req.params.id || '').trim();
+  const pdfBase64 = String(req.body?.pdf_base64 || '').trim();
+  if (!pdfBase64) return reply.code(400).send({ error: 'pdf_base64 obrigatorio' });
+
+  const [rows] = await pool.query('SELECT * FROM pdv_cash_documents WHERE id = ? LIMIT 1', [documentId]);
+  const document = rows?.[0];
+  if (!document) return reply.code(404).send({ error: 'Documento nao encontrado' });
+  if (document.status === 'uploaded') {
+    return reply.code(409).send({ error: 'Documento ja foi arquivado', cdn_url: document.cdn_url });
+  }
+
+  const isRetry = Number(document.attempts || 0) > 0;
+  let fileBuf;
+  try {
+    fileBuf = Buffer.from(pdfBase64.replace(/^data:application\/pdf;base64,?/i, ''), 'base64');
+    if (!fileBuf.length) throw new Error('PDF vazio');
+  } catch (err) {
+    return reply.code(400).send({ error: 'pdf_base64 invalido' });
+  }
+
+  if (isRetry) {
+    await recordCashEvent(pool, req, {
+      sessionId: document.session_id,
+      closingId: document.closing_id || null,
+      eventType: 'report_upload_retry',
+      referenceType: 'document',
+      referenceId: documentId,
+      payload: { attempts: Number(document.attempts || 0) },
+    });
+  }
+
+  try {
+    const uploaded = await uploadCashReportToSynology({
+      fileName: document.file_name,
+      fileBuf,
+      dateValue: document.created_at,
+    });
+    await pool.query(
+      `UPDATE pdv_cash_documents
+          SET status = 'uploaded', attempts = attempts + 1, last_error = NULL,
+              syno_path = ?, cdn_url = ?, uploaded_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [uploaded.syno_path, uploaded.cdn_url, documentId]
+    );
+    await recordCashEvent(pool, req, {
+      sessionId: document.session_id,
+      closingId: document.closing_id || null,
+      eventType: 'report_uploaded',
+      referenceType: 'document',
+      referenceId: documentId,
+      payload: { syno_path: uploaded.syno_path, cdn_url: uploaded.cdn_url },
+    });
+    return { ok: true, document_id: documentId, status: 'uploaded', syno_path: uploaded.syno_path, cdn_url: uploaded.cdn_url };
+  } catch (err) {
+    const message = limitText(err.message || 'Erro ao enviar para o Synology', 2000);
+    await pool.query(
+      `UPDATE pdv_cash_documents
+          SET status = 'failed', attempts = attempts + 1, last_error = ?
+        WHERE id = ?`,
+      [message, documentId]
+    );
+    await recordCashEvent(pool, req, {
+      sessionId: document.session_id,
+      closingId: document.closing_id || null,
+      eventType: 'report_upload_failed',
+      referenceType: 'document',
+      referenceId: documentId,
+      payload: { error: message },
+    });
+    console.error('[cash-register] Falha no upload do relatorio:', err);
+    return reply.code(502).send({ error: message, document_id: documentId, status: 'failed' });
+  }
+});
+
+fastify.get('/pdv/cash-documents/:id/file', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const documentId = String(req.params.id || '').trim();
+  const [rows] = await pool.query('SELECT * FROM pdv_cash_documents WHERE id = ? LIMIT 1', [documentId]);
+  const document = rows?.[0];
+  if (!document) return reply.code(404).send({ error: 'Documento nao encontrado' });
+  if (document.status !== 'uploaded' || !document.syno_path) {
+    return reply.code(409).send({ error: 'Documento ainda nao arquivado no Synology', status: document.status });
+  }
+  if (!SYNO_USER || !SYNO_PASS) return reply.code(503).send({ error: 'Synology not configured' });
+
+  try {
+    const sid = await synoLogin();
+    const filePath = encodeURIComponent(document.syno_path);
+    const urlObj = new URL(SYNO_URL);
+    const https = require('https');
+    const downloadPath = `/webapi/entry.cgi?api=SYNO.FileStation.Download&version=2&method=download&path=${filePath}&mode=open&_sid=${sid}`;
+
+    const r = https.request({
+      hostname: urlObj.hostname,
+      port: getSynologyRequestPort(urlObj),
+      path: downloadPath,
+      method: 'GET',
+      rejectUnauthorized: false,
+    }, (res) => {
+      if (res.headers['content-type'] && res.headers['content-type'].includes('application/json')) {
+        reply.raw.writeHead(404, { 'Content-Type': 'application/json' });
+        res.pipe(reply.raw);
+        return;
+      }
+      reply.raw.writeHead(res.statusCode || 200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${document.file_name}"`,
+        ...(res.headers['content-length'] ? { 'Content-Length': res.headers['content-length'] } : {}),
+      });
+      res.pipe(reply.raw);
+    });
+    r.on('error', (err) => { console.error('[cash-register] proxy documento error:', err.message); });
+    r.end();
+    await new Promise((resolve) => reply.raw.on('finish', resolve));
+    return;
+  } catch (err) {
+    return reply.code(500).send({ error: 'Documento indisponivel' });
+  }
+});
+
+fastify.post('/pdv/cash-documents/:id/reprint', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const documentId = String(req.params.id || '').trim();
+  const [rows] = await pool.query('SELECT * FROM pdv_cash_documents WHERE id = ? LIMIT 1', [documentId]);
+  const document = rows?.[0];
+  if (!document) return reply.code(404).send({ error: 'Documento nao encontrado' });
+
+  await recordCashEvent(pool, req, {
+    sessionId: document.session_id,
+    closingId: document.closing_id || null,
+    eventType: 'reprint',
+    referenceType: 'document',
+    referenceId: documentId,
+    payload: { file_name: document.file_name, kind: document.kind },
+  });
+
+  return {
+    ok: true,
+    document_id: documentId,
+    status: document.status,
+    file_url: document.status === 'uploaded' ? `/pdv/cash-documents/${documentId}/file` : null,
+    cdn_url: document.cdn_url || null,
+  };
 });
 // --- Schema Inspector ---
 fastify.get('/schema/tables', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -25548,6 +26858,7 @@ fastify.post('/pix/standalone', { preHandler: requireSyncKey }, async (req, repl
   const id = crypto.randomUUID();
   const displayId = body.display_id ? String(body.display_id) : null;
   const cashierKey = body.cashier_key ? String(body.cashier_key) : null;
+  const cashSessionId = String(body.cash_session_id || '').trim().slice(0, 80) || null;
   const description = String(body.description || 'Pix avulso Mercado do Vale').slice(0, 120);
   const publicToken = buildPublicToken();
   const expiresAt = addMinutes(new Date(), STANDALONE_PIX_EXPIRATION_MINUTES);
@@ -25585,17 +26896,17 @@ fastify.post('/pix/standalone', { preHandler: requireSyncKey }, async (req, repl
   if (!response.ok) {
     await pool.query(
       `INSERT INTO pdv_pix_payments
-        (id, source, public_token, local_reference, cashier_key, display_id, amount, status, description, expires_at, raw_response_json)
-       VALUES (?, 'standalone_pix', ?, ?, ?, ?, ?, 'failed', ?, ?, ?)`,
-      [id, publicToken, `standalone_pix:${id}`, cashierKey, displayId, amount, description, formatDateTimeSql(expiresAt), JSON.stringify(raw)]
+        (id, source, public_token, local_reference, cashier_key, display_id, amount, status, description, expires_at, raw_response_json, cash_session_id)
+       VALUES (?, 'standalone_pix', ?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?)`,
+      [id, publicToken, `standalone_pix:${id}`, cashierKey, displayId, amount, description, formatDateTimeSql(expiresAt), JSON.stringify(raw), cashSessionId]
     );
     return reply.code(502).send({ error: 'Falha ao criar Pix Mercado Pago', detail: raw?.message || raw?.error || response.statusText });
   }
 
   await pool.query(
     `INSERT INTO pdv_pix_payments
-      (id, source, public_token, local_reference, cashier_key, display_id, mercado_pago_payment_id, amount, status, qr_code, qr_code_base64, ticket_url, description, expires_at, raw_response_json)
-     VALUES (?, 'standalone_pix', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, source, public_token, local_reference, cashier_key, display_id, mercado_pago_payment_id, amount, status, qr_code, qr_code_base64, ticket_url, description, expires_at, raw_response_json, cash_session_id)
+     VALUES (?, 'standalone_pix', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       publicToken,
@@ -25611,6 +26922,7 @@ fastify.post('/pix/standalone', { preHandler: requireSyncKey }, async (req, repl
       description,
       formatDateTimeSql(expiresAt),
       JSON.stringify(raw),
+      cashSessionId,
     ]
   );
 
@@ -31023,6 +32335,145 @@ async function runMigrations() {
   await addIndexIfMissing('sales', 'idx_sales_delivery_person_customer', 'delivery_person_customer_id');
   console.log('[migration] customer delivery tables: OK');
 
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_cash_sessions (
+      id CHAR(36) PRIMARY KEY,
+      session_number BIGINT NOT NULL AUTO_INCREMENT,
+      status ENUM('open','closed') NOT NULL DEFAULT 'open',
+      operator_user_id VARCHAR(64) NOT NULL,
+      operator_name VARCHAR(200) NULL,
+      device_key VARCHAR(120) NULL,
+      opened_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      opening_notes TEXT NULL,
+      opening_amount_cents BIGINT NOT NULL DEFAULT 0,
+      opening_count_json JSON NULL,
+      open_operator_key VARCHAR(80) GENERATED ALWAYS AS (IF(status = 'open', operator_user_id, NULL)) STORED,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_cash_session_number (session_number),
+      UNIQUE KEY uniq_cash_session_open_operator (open_operator_key),
+      INDEX idx_cash_sessions_status (status),
+      INDEX idx_cash_sessions_operator (operator_user_id),
+      INDEX idx_cash_sessions_opened (opened_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_cash_closings (
+      id CHAR(36) PRIMARY KEY,
+      session_id CHAR(36) NOT NULL,
+      version INT NOT NULL DEFAULT 1,
+      closed_by_user_id VARCHAR(64) NOT NULL,
+      closed_by_name VARCHAR(200) NULL,
+      closed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expected_cash_cents BIGINT NOT NULL,
+      counted_cash_cents BIGINT NOT NULL,
+      counted_count_json JSON NULL,
+      difference_cents BIGINT NOT NULL,
+      justification TEXT NULL,
+      expected_by_method_json JSON NOT NULL,
+      report_snapshot_json LONGTEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_cash_closing_session_version (session_id, version),
+      INDEX idx_cash_closings_session (session_id),
+      INDEX idx_cash_closings_closed_at (closed_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_cash_movements (
+      id CHAR(36) PRIMARY KEY,
+      session_id CHAR(36) NOT NULL,
+      type ENUM('opening_float','sangria','suprimento','deposito','retirada','ajuste') NOT NULL,
+      direction ENUM('in','out') NOT NULL,
+      amount_cents BIGINT NOT NULL,
+      description TEXT NULL,
+      created_by_user_id VARCHAR(64) NOT NULL,
+      created_by_name VARCHAR(200) NULL,
+      reversed_movement_id CHAR(36) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_cash_movements_session (session_id),
+      INDEX idx_cash_movements_type (type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_cash_events (
+      id CHAR(36) PRIMARY KEY,
+      session_id CHAR(36) NULL,
+      closing_id CHAR(36) NULL,
+      event_type ENUM('opening','closing','reopening','rectification','reprint',
+        'sangria','suprimento','deposito','retirada','sale_cancellation','sale_refund',
+        'report_uploaded','report_upload_failed','report_upload_retry') NOT NULL,
+      operator_user_id VARCHAR(64) NULL,
+      auth_user_id VARCHAR(64) NULL,
+      auth_user_name VARCHAR(200) NULL,
+      device_key VARCHAR(120) NULL,
+      ip_address VARCHAR(64) NULL,
+      user_agent TEXT NULL,
+      amount_cents BIGINT NULL,
+      reference_type VARCHAR(40) NULL,
+      reference_id VARCHAR(80) NULL,
+      payload_json JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_cash_events_session (session_id),
+      INDEX idx_cash_events_type (event_type),
+      INDEX idx_cash_events_created (created_at),
+      INDEX idx_cash_events_operator (operator_user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_cash_rectifications (
+      id CHAR(36) PRIMARY KEY,
+      session_id CHAR(36) NOT NULL,
+      closing_id CHAR(36) NOT NULL,
+      reason TEXT NOT NULL,
+      previous_values_json JSON NOT NULL,
+      new_values_json JSON NOT NULL,
+      rectified_by_user_id VARCHAR(64) NOT NULL,
+      rectified_by_name VARCHAR(200) NULL,
+      document_id CHAR(36) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_cash_rect_session (session_id),
+      INDEX idx_cash_rect_closing (closing_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdv_cash_documents (
+      id CHAR(36) PRIMARY KEY,
+      session_id CHAR(36) NOT NULL,
+      closing_id CHAR(36) NULL,
+      rectification_id CHAR(36) NULL,
+      kind ENUM('closing_report','rectification_report') NOT NULL,
+      file_name VARCHAR(255) NOT NULL,
+      syno_path VARCHAR(500) NULL,
+      cdn_url VARCHAR(600) NULL,
+      status ENUM('pending','uploaded','failed') NOT NULL DEFAULT 'pending',
+      attempts INT NOT NULL DEFAULT 0,
+      last_error TEXT NULL,
+      uploaded_at TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_cash_docs_session (session_id),
+      INDEX idx_cash_docs_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await addColumnIfMissing('sales', 'cash_session_id', 'VARCHAR(80) NULL');
+  await addIndexIfMissing('sales', 'idx_sales_cash_session', 'cash_session_id');
+  await addColumnIfMissing('sales', 'refund_cash_session_id', 'VARCHAR(80) NULL');
+  await addIndexIfMissing('sales', 'idx_sales_refund_cash_session', 'refund_cash_session_id');
+  await addColumnIfMissing('pdv_pix_payments', 'cash_session_id', 'VARCHAR(80) NULL');
+  await addIndexIfMissing('pdv_pix_payments', 'idx_pdv_pix_cash_session', 'cash_session_id');
+  await addColumnIfMissing('customer_debt_payments', 'cash_session_id', 'VARCHAR(80) NULL');
+  await addIndexIfMissing('customer_debt_payments', 'idx_debt_pay_cash_session', 'cash_session_id');
+  await addColumnIfMissing('customer_delivery_settlements', 'cash_session_id', 'VARCHAR(80) NULL');
+  await addIndexIfMissing('customer_delivery_settlements', 'idx_deliv_settle_cash_session', 'cash_session_id');
+  await addColumnIfMissing('customer_delivery_ledger', 'cash_session_id', 'VARCHAR(80) NULL');
+  await addIndexIfMissing('customer_delivery_ledger', 'idx_deliv_ledger_cash_session', 'cash_session_id');
+  console.log('[migration] pdv cash register tables: OK');
+
   await ensureDefaultAdminAccount();
 }
 
@@ -31863,10 +33314,11 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 
     // 2. Inserir o registro de pagamento
     const paymentId = crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID();
+    const cashSessionId = String(body.cash_session_id || '').trim().slice(0, 80) || null;
     await connection.query(
-      `INSERT INTO customer_debt_payments (id, debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [paymentId, debt_id, valorPagoCentavos, data_pagamento, metodo_pagamento, observacoes || null]
+      `INSERT INTO customer_debt_payments (id, debt_id, valor_pago, data_pagamento, metodo_pagamento, observacoes, cash_session_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [paymentId, debt_id, valorPagoCentavos, data_pagamento, metodo_pagamento, observacoes || null, cashSessionId]
     );
 
     // 3. Atualizar o saldo devedor e status do débito

@@ -76,6 +76,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       title: 'Financeiro',
       items: [
         { to: '/admin/financeiro', icon: <Banknote size={18} />, label: 'Financeiro', keywords: 'dinheiro pagamentos taxas contas' },
+        { to: '/admin/caixa', icon: <CreditCard size={18} />, label: 'Caixa', keywords: 'abertura fechamento sangria suprimento pdv' },
+        { to: '/admin/caixa/auditoria', icon: <Shield size={18} />, label: 'Auditoria de Caixa', keywords: 'historico retificacao reimpressao conferencia' },
         { to: '/admin/pix-avulso', icon: <QrCode size={18} />, label: 'Pix Avulso', keywords: 'pix mercado pago qr code caixa recebimento avulso' },
         { to: '/admin/contabilidade', icon: <BookOpen size={18} />, label: 'Contabilidade', keywords: 'imposto simples nacional das nfe faturamento tributavel' },
       ]

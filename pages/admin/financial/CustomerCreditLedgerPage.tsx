@@ -15,6 +15,7 @@ import {
 } from '../../../services/customerDebtService';
 import type { Customer } from '../../../types/customer';
 import type { SaleWithItems } from '../../../types/sale';
+import { useCashSession } from '../../../hooks/useCashSession';
 
 const paymentMethodOptions = [
     { value: 'pix', label: 'Pix' },
@@ -55,6 +56,7 @@ function statusClass(status?: string): string {
 }
 
 export default function CustomerCreditLedgerPage() {
+    const { session: cashSession } = useCashSession();
     const [searchParams, setSearchParams] = useSearchParams();
     const customerId = searchParams.get('customer_id') || '';
     const [customer, setCustomer] = useState<Customer | null>(null);
@@ -180,6 +182,7 @@ export default function CustomerCreditLedgerPage() {
                 data_pagamento: new Date().toISOString().slice(0, 10),
                 metodo_pagamento: paymentMethod,
                 observacoes: paymentNotes || undefined,
+                cash_session_id: cashSession?.id || null,
             });
             toast.success('Baixa registrada');
             setPaymentDebt(null);

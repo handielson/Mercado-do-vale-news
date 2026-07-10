@@ -9,6 +9,7 @@ import { printStandalonePixReceipt } from '../../../utils/printStandalonePixRece
 import type { PdvDisplay } from '../../../types/pdvDisplay';
 import type { GoogleContactOption, StandalonePixPayment } from '../../../types/standalonePix';
 import { formatStandalonePixStatus, isStandalonePixPayable } from '../../../types/standalonePix';
+import { useCashSession } from '../../../hooks/useCashSession';
 
 function formatCurrency(cents: number): string {
   return (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -31,6 +32,7 @@ function buildBrazilWhatsAppPhone(value: string): string {
 const STANDALONE_PIX_STATUS_POLLING_MS = 3000;
 
 export default function StandalonePixPage() {
+  const { session: cashSession } = useCashSession();
   const [amount, setAmount] = React.useState('');
   const [description, setDescription] = React.useState('Pix avulso Mercado do Vale');
   const [cashierKey, setCashierKey] = React.useState(() => localStorage.getItem('standalone_pix_cashier_key') || 'caixa-01');
@@ -151,6 +153,7 @@ export default function StandalonePixPage() {
         description: description.trim() || 'Pix avulso Mercado do Vale',
         cashier_key: cashierKey.trim() || 'caixa-01',
         display_id: targetDisplayId || null,
+        cash_session_id: cashSession?.id || null,
       });
       setCurrentPix(pix);
       await loadData();

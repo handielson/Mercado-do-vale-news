@@ -176,15 +176,16 @@ export async function createCustomerDeliveryAdjustment(customerId: string, input
     observation?: string;
     sale_id?: string;
     order_number?: string;
+    cash_session_id?: string | null;
 }): Promise<CustomerDeliveryLedgerEntry> {
     return vpsClient.post<CustomerDeliveryLedgerEntry>(`/customers/${customerId}/delivery-adjustments`, input);
 }
 
-export async function registerCustomerDeliveryPayment(customerId: string, input: { amount: number; description: string; paid_at?: string; payment_method?: string }): Promise<CustomerDeliveryPaymentResponse> {
+export async function registerCustomerDeliveryPayment(customerId: string, input: { amount: number; description: string; paid_at?: string; payment_method?: string; cash_session_id?: string | null }): Promise<CustomerDeliveryPaymentResponse> {
     return vpsClient.post<CustomerDeliveryPaymentResponse>(`/customers/${customerId}/delivery-payments`, input);
 }
 
-export async function offsetCustomerDeliveryBalance(customerId: string, input: { debt_id: string; amount: number; description: string }) {
+export async function offsetCustomerDeliveryBalance(customerId: string, input: { debt_id: string; amount: number; description: string; cash_session_id?: string | null }) {
     return vpsClient.post(`/customers/${customerId}/delivery-offsets`, input);
 }
 

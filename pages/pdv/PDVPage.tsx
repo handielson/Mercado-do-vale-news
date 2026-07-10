@@ -43,6 +43,9 @@ import {
     updatePdvSaleFinalizationLog,
     type PdvSaleFinalizationLog
 } from '../../utils/pdvSaleFinalizationLog';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCashSession } from '../../hooks/useCashSession';
+import CashOpeningModal from '../../components/pdv/CashOpeningModal';
 
 type FinalizeStep = {
     id: string;
@@ -196,6 +199,9 @@ function isWarrantyTermCategoryValue(value: unknown): boolean {
 
 export default function PDVPage() {
     const navigate = useNavigate();
+    const { user } = useAuth();
+    const { session: cashSession, isLoading: isCashSessionLoading, refresh: refreshCashSession } = useCashSession();
+    const [showCashOpeningModal, setShowCashOpeningModal] = useState(false);
 
     // Estado do carrinho
     const [cartItems, setCartItems] = useState<SaleItem[]>([]);
@@ -963,6 +969,15 @@ export default function PDVPage() {
             return;
         }
 
+        // Revalida imediatamente antes do POST para impedir venda durante
+        // fechamento concorrente em outra aba ou dispositivo.
+        const activeCashSession = await refreshCashSession();
+        if (!activeCashSession) {
+            toast.error('Nenhum caixa aberto. Abra o caixa antes de registrar vendas.');
+            setShowCashOpeningModal(true);
+            return;
+        }
+
         isFinalizingRef.current = true;
         setIsFinalizing(true);
         const initialFinalizeSteps: FinalizeStep[] = [
@@ -980,7 +995,8 @@ export default function PDVPage() {
 
         const saleInput: SaleInput = {
             customer_id: selectedCustomer.id,
-            // seller_id: TODO - pegar do usuário logado
+            seller_id: user?.id || undefined,
+            cash_session_id: activeCashSession.id,
             items: cartItems,
             payment_methods: payments,
             notes: undefined,
@@ -1617,6 +1633,12 @@ export default function PDVPage() {
                     </div>
                 </div>
             </div>
+
+            <CashOpeningModal
+                isOpen={showCashOpeningModal}
+                onClose={() => setShowCashOpeningModal(false)}
+                onOpened={() => { void refreshCashSession(); }}
+            />
 
             {/* Warranty Term Modal */}
             <WarrantyTermModal

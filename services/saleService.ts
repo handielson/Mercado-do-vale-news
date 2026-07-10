@@ -207,6 +207,8 @@ function serializeSaleRowForTable<T extends Record<string, unknown>>(row: T): Re
         finalization_status: row.finalization_status || 'success',
         finalization_log: row.finalization_log || null,
         finalization_error_summary: row.finalization_error_summary || null,
+        cash_session_id: row.cash_session_id || null,
+        refund_cash_session_id: row.refund_cash_session_id || null,
     };
 }
 
@@ -538,6 +540,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
             id: saleId,
             customer_id: saleInput.customer_id,
             seller_id: saleInput.seller_id,
+            cash_session_id: saleInput.cash_session_id || null,
             total: saleTotal,
             discount: discountTotal,
             payment_method: summarizePaymentMethodForSalesTable(saleInput.payment_methods),
@@ -873,6 +876,18 @@ export const updateSaleCostsAndProfit = async (saleId: string): Promise<SaleWith
     };
 };
 
+// Estornos pertencem ao caixa aberto no momento da operacao, nunca ao caixa
+// historico da venda original.
+async function resolveRefundCashSessionId(): Promise<string | null> {
+    try {
+        const { cashRegisterService } = await import('./cashRegisterService');
+        const current = await cashRegisterService.getCurrentSession();
+        return current.session?.id || null;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Cancel a sale
  */
@@ -880,8 +895,9 @@ export const cancelSale = async (id: string): Promise<void> => {
     try {
         // Fetch items before cancelling to restore stock
         const items = await loadSaleItemsBySaleId(id);
+        const refundCashSessionId = await resolveRefundCashSessionId();
 
-        await patchSale(id, { status: 'cancelled' });
+        await patchSale(id, { status: 'cancelled', refund_cash_session_id: refundCashSessionId } as Partial<Sale>);
 
         await restoreSaleStockForItems(id, items, `Cancelamento PDV #${id}`);
 
@@ -903,8 +919,9 @@ export const refundSale = async (id: string): Promise<void> => {
     try {
         // Fetch items before refunding to restore stock
         const items = await loadSaleItemsBySaleId(id);
+        const refundCashSessionId = await resolveRefundCashSessionId();
 
-        await patchSale(id, { status: 'refunded' });
+        await patchSale(id, { status: 'refunded', refund_cash_session_id: refundCashSessionId } as Partial<Sale>);
 
         await restoreSaleStockForItems(id, items, `Estorno PDV #${id}`);
 

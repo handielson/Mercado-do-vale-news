@@ -122,6 +122,10 @@ export interface Sale {
     finalization_log?: string;
     finalization_error_summary?: string;
 
+    // Caixa PDV (sessao vinculada e sessao do eventual estorno)
+    cash_session_id?: string | null;
+    refund_cash_session_id?: string | null;
+
     // Importação legada (MV-Gestao)
     legacy_sale_id?: string;
     legacy_pdf_url?: string;
@@ -161,6 +165,9 @@ export interface SaleInput {
     finalization_status?: 'success' | 'needs_review';
     finalization_log?: string;
     finalization_error_summary?: string;
+
+    // Caixa PDV (sessao vinculada)
+    cash_session_id?: string | null;
 }
 
 /**

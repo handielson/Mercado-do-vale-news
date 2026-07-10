@@ -45,6 +45,7 @@ export interface CustomerDebtPaymentInput {
     data_pagamento: string;
     metodo_pagamento: string;
     observacoes?: string;
+    cash_session_id?: string | null;
 }
 
 export interface CustomerDebtAllocationInput {

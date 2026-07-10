@@ -136,6 +136,8 @@ const PublicProductPage = lazy(() => import('../pages/store/PublicProductPage').
 const FinancialPage = lazy(() => import('../pages/admin/financial/FinancialPage'));
 const CustomerCreditLedgerPage = lazy(() => import('../pages/admin/financial/CustomerCreditLedgerPage'));
 const StandalonePixPage = lazy(() => import('../pages/admin/financial/StandalonePixPage'));
+const CashRegisterPage = lazy(() => import('../pages/admin/financial/CashRegisterPage'));
+const CashAuditPage = lazy(() => import('../pages/admin/financial/CashAuditPage'));
 const AccountingPage = lazy(() => import('../pages/admin/accounting/AccountingPage'));
 const MySQLExplorerPage = lazy(() => import('../pages/admin/settings/MySQLExplorerPage').then(module => ({ default: module.MySQLExplorerPage })));
 const PublicPixPage = lazy(() => import('../pages/store/PublicPixPage'));
@@ -278,6 +280,22 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><StandalonePixPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/caixa",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><CashRegisterPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/caixa/auditoria",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><CashAuditPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

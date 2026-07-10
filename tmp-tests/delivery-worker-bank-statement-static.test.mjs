@@ -23,7 +23,8 @@ assert.match(tab, /Pedido \{entry\.orderNumber\}/, 'DeliveryWorkerTab statement 
 assert.match(tab, /Cliente: \{entry\.customerName/, 'DeliveryWorkerTab statement must show customer name for delivery credits');
 
 assert.match(service, /payment_method\?:\s*string/, 'customer delivery settlement type must expose payment_method');
-assert.match(service, /input:\s*\{ amount: number; description: string; paid_at\?: string; payment_method\?: string \}/, 'registerCustomerDeliveryPayment must accept payment_method');
+assert.match(service, /input:\s*\{[^}]*amount: number;[^}]*payment_method\?: string;[^}]*\}/, 'registerCustomerDeliveryPayment must accept payment_method');
+assert.match(service, /payment_method\?: string; cash_session_id\?: string \| null/, 'delivery payment must accept the current cash session');
 
 for (const [file, server] of servers) {
   assert.match(server, /payment_method VARCHAR\(40\) NULL/, `${file} must create customer_delivery_settlements.payment_method`);

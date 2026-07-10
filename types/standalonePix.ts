@@ -33,6 +33,7 @@ export interface StandalonePixPayment {
   share_channel?: string | null;
   approved_at?: string | null;
   cash_closing_id?: string | null;
+  cash_session_id?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -43,6 +44,7 @@ export interface StandalonePixCreateInput {
   cashier_key?: string;
   display_id?: string | null;
   payer_email?: string;
+  cash_session_id?: string | null;
 }
 
 export interface StandalonePixListFilters {
