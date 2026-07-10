@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.5-tiktok-shop-oauth
+version: v1.2.7-pdv-vps-auth
 date: 2026-07-10
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260710-152430-caixa-pdv-bloqueio
+release_vps: /var/www/mdv-site/releases/20260710-145220-v127-pdv-vps-auth
 branch: main
-summary: Bloqueia o PDV ate abrir o caixa e adiciona atalho de abertura no proprio PDV.
+summary: Corrige a autenticacao do PDV para usar o provider ativo da VPS.
 ```

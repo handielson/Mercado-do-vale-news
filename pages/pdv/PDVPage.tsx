@@ -43,7 +43,7 @@ import {
     updatePdvSaleFinalizationLog,
     type PdvSaleFinalizationLog
 } from '../../utils/pdvSaleFinalizationLog';
-import { useAuth } from '../../contexts/AuthContext';
+import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 import { useCashSession } from '../../hooks/useCashSession';
 import CashOpeningModal from '../../components/pdv/CashOpeningModal';
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { X as XIcon, Unlock } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuth } from '../../contexts/AuthContext';
+import { useVpsAuth as useAuth } from '../../hooks/useVpsAuth';
 import { cashRegisterService } from '../../services/cashRegisterService';
 import { computeDenominationTotalCents, type CashSession, type DenominationCount } from '../../types/cashRegister';
 import CashDenominationCounter, { type CashCountMode } from './CashDenominationCounter';
