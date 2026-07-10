@@ -43,7 +43,7 @@ import {
     updatePdvSaleFinalizationLog,
     type PdvSaleFinalizationLog
 } from '../../utils/pdvSaleFinalizationLog';
-import { useAuth } from '../../contexts/AuthContext';
+import { useVpsAuth } from '../../contexts/VpsAuthContext';
 import { useCashSession } from '../../hooks/useCashSession';
 import CashOpeningModal from '../../components/pdv/CashOpeningModal';
 
@@ -199,7 +199,7 @@ function isWarrantyTermCategoryValue(value: unknown): boolean {
 
 export default function PDVPage() {
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user } = useVpsAuth();
     const { session: cashSession, isLoading: isCashSessionLoading, refresh: refreshCashSession } = useCashSession();
     const [showCashOpeningModal, setShowCashOpeningModal] = useState(false);
 

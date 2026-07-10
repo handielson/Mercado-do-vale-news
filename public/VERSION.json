@@ -1,10 +1,10 @@
 {
-    "version": "v1.2.96-caixa-pdv",
+    "version": "v1.2.97-caixa-auth-hotfix",
     "date": "2026-07-10",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260710-145147-caixa-pdv",
+    "release_vps": "/var/www/mdv-site/releases/20260710-150948-caixa-auth-hotfix",
     "branch": "main",
-    "summary": "Adiciona abertura, fechamento, movimentos e auditoria imutavel de caixa PDV.",
+    "summary": "Corrige o provider de autenticacao usado pelo PDV e pelo modal de abertura de caixa.",
     "totem_pix_android": {
         "latest_version_name": "1.23",
         "latest_version_code": 123,
