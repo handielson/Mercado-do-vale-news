@@ -23362,7 +23362,7 @@ function normalizeWhatsAppStatusContactNumber(value) {
   if (!text || /@g\.us$/i.test(text) || /@lid$/i.test(text)) return '';
   if (text.includes('@') && !/@s\.whatsapp\.net$/i.test(text)) return '';
   const digits = text.replace(/@s\.whatsapp\.net$/i, '').replace(/\D/g, '');
-  return digits.length >= 10 ? `${digits}@s.whatsapp.net` : '';
+  return digits.length >= 10 ? digits : '';
 }
 
 function hashWhatsAppStatusAudienceSeed(value) {

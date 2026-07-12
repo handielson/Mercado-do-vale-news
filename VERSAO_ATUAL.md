@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.15-whatsapp-status-jid
+version: v1.2.16-whatsapp-status-safe-test
 date: 2026-07-12
-status: deployed
-release_vps: /var/www/mdv-site/releases/20260712-054500-v1215-whatsapp-status-jid
+status: ready
+release_vps: pendente
 branch: main
-summary: Envia a audiencia do Status com JIDs validos exigidos pela Evolution.
+summary: Restaura o formato numerico da Evolution 2.3.7 e limita o teste de Status.
 ```
