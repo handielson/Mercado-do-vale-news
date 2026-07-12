@@ -180,6 +180,21 @@ function traceDetails(event: WhatsAppStatusTraceEvent) {
     .join(' · ');
 }
 
+function deduplicateProductOptions(products: CatalogProduct[]) {
+  const seen = new Set<string>();
+  return products.filter((product) => {
+    const key = formatProductOptionLabel(product)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function getCampaignCopyableDebug(
   campaign: WhatsAppStatusCampaign,
   progress?: WhatsAppStatusCampaignProgress,
@@ -497,7 +512,7 @@ export default function WhatsAppStatusCampaignPanel() {
   }, [categoryPreviewProducts, form.daily_limit, form.source_type, selectedProductIds, selectedProducts]);
 
   const selectableProducts = useMemo(
-    () => groupStatusProductsByVariation(products) as CatalogProduct[],
+    () => deduplicateProductOptions(groupStatusProductsByVariation(products) as CatalogProduct[]),
     [products],
   );
 

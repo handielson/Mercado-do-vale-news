@@ -94,6 +94,8 @@ assert.match(panel, /max=\{10\}/);
 assert.match(panel, /formatProductOptionLabel/);
 assert.match(panel, /const selectableProducts = useMemo/);
 assert.match(panel, /groupStatusProductsByVariation\(products\)/);
+assert.match(panel, /deduplicateProductOptions/);
+assert.match(panel, /seen\.has\(key\)/);
 assert.match(panel, /selectableProducts\.map/);
 assert.match(panel, /memoria_interna/);
 assert.match(panel, /Preview do Status/);
