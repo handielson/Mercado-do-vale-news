@@ -30,6 +30,10 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /EVOLUTION_STATUS_TIMEOUT_MS/);
   assert.match(source, /EVOLUTION_STATUS_SERVER_URL/);
   assert.match(source, /EVOLUTION_INTERNAL_SERVER_URL/);
+  assert.match(source, /EVOLUTION_STATUS_CONTACT_LIMIT/);
+  assert.match(source, /EVOLUTION_STATUS_AUDIENCE_LIMIT/);
+  assert.match(source, /selectWhatsAppStatusAudience/);
+  assert.match(source, /hashWhatsAppStatusAudienceSeed/);
   assert.match(source, /EVOLUTION_STATUS_TIMEOUT_MS \|\| 90000/);
   assert.match(source, /isConfirmedWhatsAppStatusResponse/);
   assert.match(source, /status@broadcast/);
@@ -40,12 +44,11 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /markStaleWhatsAppStatusSendingLogs/);
   assert.match(source, /WHATSAPP_STATUS_STALE_SENDING_SECONDS/);
   assert.match(source, /envio ficou preso em andamento/);
-  assert.match(source, /allContacts: true/);
-  assert.match(source, /Destino: Meu Status \(status@broadcast\)/);
-  assert.doesNotMatch(source, /fetchWhatsAppStatusAudience/);
-  assert.doesNotMatch(source, /\/chat\/findContacts\//);
-  assert.doesNotMatch(source, /statusJidList/);
-  assert.doesNotMatch(source, /Contatos Status/);
+  assert.match(source, /allContacts: false/);
+  assert.match(source, /fetchWhatsAppStatusAudience/);
+  assert.match(source, /\/chat\/findContacts\/\$\{encodeURIComponent\(instance\)\}/);
+  assert.match(source, /statusJidList/);
+  assert.match(source, /Contatos Status/);
   assert.match(source, /AbortSignal\.timeout\(timeoutMs\)/);
   assert.match(source, /VALUES \(\?, \?, \?, \?, 'sending', NULL, \?, \?\)/);
   assert.match(source, /CREATE TABLE IF NOT EXISTS whatsapp_status_campaign_trace_events/);
@@ -53,7 +56,7 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /sanitizeWhatsAppStatusTraceDetails/);
   assert.match(source, /safe\[key\] = sanitizeWhatsAppStatusDebugText/);
   assert.doesNotMatch(source, /safe\[key\] = sanitizeStatusDebugText/);
-  assert.doesNotMatch(source, /audience\.request/);
+  assert.match(source, /audience\.request/);
   assert.match(source, /evolution\.request/);
   assert.match(source, /evolution\.response/);
   assert.match(source, /confirmation\.checked/);

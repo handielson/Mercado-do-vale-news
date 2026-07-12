@@ -23357,6 +23357,34 @@ function buildWhatsAppStatusCaption(product, cardPlan) {
   ].join('\n');
 }
 
+function normalizeWhatsAppStatusContactNumber(value) {
+  const text = String(value || '').trim();
+  if (!text || /@g\.us$/i.test(text) || /@lid$/i.test(text)) return '';
+  if (text.includes('@') && !/@s\.whatsapp\.net$/i.test(text)) return '';
+  const digits = text.replace(/@s\.whatsapp\.net$/i, '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits : '';
+}
+
+function hashWhatsAppStatusAudienceSeed(value) {
+  const text = String(value || '');
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function selectWhatsAppStatusAudience(numbers, seed, limit) {
+  const unique = Array.from(new Set((Array.isArray(numbers) ? numbers : []).filter(Boolean)));
+  const max = Math.max(1, Math.min(unique.length || 1, Number(limit) || unique.length || 1));
+  if (unique.length <= max) return { selected: unique, total: unique.length };
+  const offset = hashWhatsAppStatusAudienceSeed(seed) % unique.length;
+  const rotated = unique.slice(offset).concat(unique.slice(0, offset));
+  return { selected: rotated.slice(0, max), total: unique.length };
+}
+
+const whatsappStatusAudienceCache = new Map();
+
 function sanitizeWhatsAppStatusTraceDetails(details = {}) {
   const safe = {};
   for (const [key, value] of Object.entries(details || {})) {
@@ -23385,6 +23413,55 @@ async function appendWhatsAppStatusTrace({ runId, logId = null, campaignId, prod
   }
 }
 
+async function fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance, trace }) {
+  const configured = String(process.env.EVOLUTION_STATUS_JID_LIST || '')
+    .split(',')
+    .map(normalizeWhatsAppStatusContactNumber)
+    .filter(Boolean);
+  if (configured.length > 0) {
+    const numbers = Array.from(new Set(configured));
+    await trace('audience.loaded', 'ok', 'Audiencia carregada da configuracao', { source: 'configured', unique_contacts: numbers.length });
+    return numbers;
+  }
+
+  const cacheKey = `${baseUrl}|${instance}`;
+  const cached = whatsappStatusAudienceCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    await trace('audience.loaded', 'ok', 'Audiencia carregada do cache', { source: 'cache', unique_contacts: cached.numbers.length });
+    return cached.numbers;
+  }
+
+  const take = Math.max(1, Math.min(5000, Number(process.env.EVOLUTION_STATUS_CONTACT_LIMIT || 2000)));
+  const endpoint = `${baseUrl}/chat/findContacts/${encodeURIComponent(instance)}`;
+  const audienceStartedAt = Date.now();
+  await trace('audience.request', 'started', 'Consultando contatos na Evolution', { source: 'evolution', take, timeout_ms: Math.max(5000, Number(process.env.EVOLUTION_STATUS_CONTACTS_TIMEOUT_MS || 15000)) });
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: apiKey,
+    },
+    body: JSON.stringify({ where: {}, take, skip: 0, orderBy: {} }),
+    signal: AbortSignal.timeout(Math.max(5000, Number(process.env.EVOLUTION_STATUS_CONTACTS_TIMEOUT_MS || 15000))),
+  });
+  const text = await response.text();
+  let body = text;
+  try {
+    body = text ? JSON.parse(text) : [];
+  } catch {}
+  if (!response.ok) {
+    throw new Error(`Falha ao buscar contatos para Status: HTTP ${response.status} ${typeof body === 'string' ? body.slice(0, 180) : JSON.stringify(body).slice(0, 180)}`);
+  }
+  const rows = Array.isArray(body) ? body : (Array.isArray(body?.contacts) ? body.contacts : (Array.isArray(body?.data) ? body.data : []));
+  const numbers = rows
+    .map((contact) => normalizeWhatsAppStatusContactNumber(contact?.number || contact?.remoteJid || contact?.id || contact?.jid))
+    .filter(Boolean);
+  const unique = Array.from(new Set(numbers));
+  whatsappStatusAudienceCache.set(cacheKey, { numbers: unique, expiresAt: Date.now() + 10 * 60 * 1000 });
+  await trace('audience.loaded', 'ok', 'Contatos recebidos e normalizados', { source: 'evolution', http_status: response.status, rows_received: rows.length, unique_contacts: unique.length }, Date.now() - audienceStartedAt);
+  return unique;
+}
+
 function isConfirmedWhatsAppStatusResponse(body) {
   const key = body?.key || body?.data?.key || body?.message?.key;
   return String(key?.remoteJid || '').toLowerCase() === 'status@broadcast'
@@ -23401,6 +23478,9 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
   const caption = buildWhatsAppStatusCaption(product, cardPlan);
   const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 90000));
   const startedAt = Date.now();
+  let statusAudienceCount = 0;
+  let statusAudienceTotal = 0;
+  let statusAudienceLimit = 0;
   const trace = async (stage, state, message, details = {}, elapsedMs = null) => appendWhatsAppStatusTrace({
     ...traceContext, campaignId: campaign.id, productId: product.id, stage, state, message, details, elapsedMs,
   });
@@ -23433,12 +23513,36 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
 
   try {
     await trace('config.validation', 'ok', 'Configuracao da Evolution validada', { instance, has_api_key: true, endpoint_host: new URL(endpoint).host });
-    const payload = { type: 'image', content: image, caption, allContacts: true };
+    const allStatusJidList = await fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance, trace });
+    const audienceLimit = Math.max(1, Math.min(5000, Number(process.env.EVOLUTION_STATUS_AUDIENCE_LIMIT || 250)));
+    statusAudienceLimit = audienceLimit;
+    const audience = selectWhatsAppStatusAudience(
+      allStatusJidList,
+      `${campaign?.id || ''}:${product?.id || product?.sku || ''}:${new Date().toISOString().slice(0, 10)}`,
+      audienceLimit,
+    );
+    const statusJidList = audience.selected;
+    statusAudienceCount = statusJidList.length;
+    statusAudienceTotal = audience.total;
+    await trace('audience.selected', 'ok', 'Audiencia selecionada para o Status', { available_contacts: audience.total, selected_contacts: statusJidList.length, audience_limit: audienceLimit });
+    if (!statusJidList.length) {
+      await trace('audience.selected', 'failed', 'Nenhum contato elegivel', { selected_contacts: 0 });
+      const debug = buildWhatsAppStatusDebug({
+        campaign,
+        product,
+        endpoint,
+        scheduledFor,
+        extraLines: ['Contatos Status: 0'],
+        errorMessage: 'Nenhum contato elegivel encontrado para visualizar o Status',
+      });
+      return { productId: product.id, productName: product.name, status: 'failed', debug };
+    }
+    const payload = { type: 'image', content: image, caption, allContacts: false, statusJidList };
     let imageHost = '';
     try { imageHost = new URL(image).host; } catch {}
-    await trace('payload.built', 'ok', 'Payload de Meu Status montado', { type: 'image', image_host: imageHost, caption_length: caption.length, all_contacts: true, destination: 'status@broadcast' });
+    await trace('payload.built', 'ok', 'Payload seguro montado', { type: 'image', image_host: imageHost, caption_length: caption.length, all_contacts: false, audience_count: statusJidList.length });
     const requestStartedAt = Date.now();
-    await trace('evolution.request', 'started', 'Requisicao enviada para Meu Status', { instance, destination: 'status@broadcast', timeout_ms: timeoutMs });
+    await trace('evolution.request', 'started', 'Requisicao enviada para sendStatus', { instance, audience_count: statusJidList.length, timeout_ms: timeoutMs });
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -23467,7 +23571,8 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
         errorMessage: body?.message || body?.response || response.statusText,
         scheduledFor,
         extraLines: [
-          'Destino: Meu Status (status@broadcast)',
+          `Contatos Status: ${statusAudienceCount} de ${audience.total}`,
+          `Limite de audiencia: ${audienceLimit}`,
           `Tempo decorrido: ${Date.now() - startedAt}ms`,
           `Timeout configurado: ${timeoutMs}ms`,
         ],
@@ -23487,7 +23592,8 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
         errorMessage: 'Evolution respondeu sem confirmar uma mensagem para status@broadcast',
         scheduledFor,
         extraLines: [
-          'Destino: Meu Status (status@broadcast)',
+          `Contatos Status: ${statusAudienceCount} de ${audience.total}`,
+          `Limite de audiencia: ${audienceLimit}`,
           `Tempo decorrido: ${Date.now() - startedAt}ms`,
         ],
       });
@@ -23504,7 +23610,8 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
       endpoint,
       scheduledFor,
       extraLines: [
-        'Destino: Meu Status (status@broadcast)',
+        statusAudienceCount ? `Contatos Status: ${statusAudienceCount} de ${statusAudienceTotal || statusAudienceCount}` : '',
+        statusAudienceLimit ? `Limite de audiencia: ${statusAudienceLimit}` : '',
         `Tempo decorrido: ${Date.now() - startedAt}ms`,
         `Timeout configurado: ${timeoutMs}ms`,
       ],

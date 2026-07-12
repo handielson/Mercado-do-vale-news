@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.18-status-debug-copiavel
+version: v1.2.19-status-audiencia-restaurada
 date: 2026-07-12
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260712-060654-v1218-status-debug-copiavel
+release_vps: /var/www/mdv-site/releases/20260712-061930-v1219-status-audiencia-restaurada
 branch: main
-summary: Restaura o botão para copiar o diagnóstico de envios assíncronos do Status WhatsApp.
+summary: Restaura a audiência necessária para a Evolution distribuir o Status aos visualizadores.
 ```
