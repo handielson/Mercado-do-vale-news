@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, Copy, ImageIcon, Loader2, MessageCircle, Play, Plus, RefreshCw, Save, Smartphone, Trash2, X, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogService } from '../../../../services/catalogService';
+import { vpsApiService } from '../../../../services/vpsApiService';
+import { normalizeProduct } from '../../../../services/productNormalizer';
 import type { CatalogProduct } from '../../../../types/catalog';
 import { calculateInstallmentFromFees } from '../../../../services/installmentCalculator';
 import { paymentFeesService, type PaymentFee } from '../../../../services/payment-fees';
@@ -435,6 +437,29 @@ export default function WhatsAppStatusCampaignPanel() {
       window.clearTimeout(timer);
     };
   }, [form.source_type, productSearch]);
+
+  useEffect(() => {
+    if (form.source_type !== 'product' || selectedProductIds.length === 0) return;
+    const knownIds = new Set([...selectedProducts, ...products].map((product) => product.id));
+    const missingIds = selectedProductIds.filter((id) => !knownIds.has(id));
+    if (missingIds.length === 0) return;
+
+    let mounted = true;
+    vpsApiService.getProductsByIds(missingIds)
+      .then((rows) => {
+        if (!mounted || !rows) return;
+        const resolved = rows.map(normalizeProduct) as unknown as CatalogProduct[];
+        setSelectedProducts((current) => [...current, ...resolved]
+          .filter((product, index, list) => list.findIndex((candidate) => candidate.id === product.id) === index));
+      })
+      .catch(() => {
+        // Mantem os IDs selecionados; uma nova tentativa ocorre ao reabrir a programacao.
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [form.source_type, products, selectedProductIds.join('|'), selectedProducts]);
 
   useEffect(() => {
     if (form.source_type !== 'category' || !form.category_id) {
