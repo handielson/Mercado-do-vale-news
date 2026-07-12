@@ -496,6 +496,11 @@ export default function WhatsAppStatusCampaignPanel() {
     }) as any[];
   }, [categoryPreviewProducts, form.daily_limit, form.source_type, selectedProductIds, selectedProducts]);
 
+  const selectableProducts = useMemo(
+    () => groupStatusProductsByVariation(products) as CatalogProduct[],
+    [products],
+  );
+
   useEffect(() => {
     setPreviewIndex(0);
   }, [form.source_type, selectedProductIds.join('|'), form.category_id]);
@@ -515,7 +520,7 @@ export default function WhatsAppStatusCampaignPanel() {
   }
 
   function addPendingProduct() {
-    const product = products.find((item) => item.id === pendingProductId);
+    const product = selectableProducts.find((item) => item.id === pendingProductId);
     if (!product) {
       toast.error('Escolha um produto para adicionar');
       return;
@@ -741,7 +746,7 @@ export default function WhatsAppStatusCampaignPanel() {
                     {!productLoading && products.length === 0 && productSearch.trim() && (
                       <option value="" disabled>Nenhum produto encontrado</option>
                     )}
-                    {products.map((product) => (
+                    {selectableProducts.map((product) => (
                       <option key={product.id} value={product.id} disabled={selectedProductIds.includes(product.id)}>
                         {formatProductOptionLabel(product)}
                       </option>

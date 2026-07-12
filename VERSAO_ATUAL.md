@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.20-status-nomes-selecionados
+version: v1.2.21-status-produtos-agrupados
 date: 2026-07-12
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260712-062350-v1220-status-nomes-selecionados
+release_vps: /var/www/mdv-site/releases/20260712-062620-v1221-status-produtos-agrupados
 branch: main
-summary: Restaura nomes e variações dos produtos selecionados na programação de Status.
+summary: Agrupa produtos visualmente repetidos no seletor da programação de Status.
 ```
