@@ -178,6 +178,14 @@ function traceDetails(event: WhatsAppStatusTraceEvent) {
     .join(' · ');
 }
 
+function getCampaignCopyableDebug(
+  campaign: WhatsAppStatusCampaign,
+  progress?: WhatsAppStatusCampaignProgress,
+) {
+  if (campaign.last_error_debug) return campaign.last_error_debug;
+  return (progress?.logs || []).find((log) => Boolean(log.debug_text))?.debug_text || '';
+}
+
 function CampaignProgressBar({
   campaign,
   progress,
@@ -934,7 +942,9 @@ export default function WhatsAppStatusCampaignPanel() {
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             {campaigns.length === 0 ? (
               <div className="p-8 text-center text-sm text-slate-400">Nenhuma programacao de Status cadastrada.</div>
-            ) : campaigns.map((campaign) => (
+            ) : campaigns.map((campaign) => {
+              const copyableDebug = getCampaignCopyableDebug(campaign, progressByCampaign[campaign.id]);
+              return (
               <div key={campaign.id} className="border-b border-slate-100 p-4 last:border-b-0">
                 <div className="flex items-start gap-3">
                   <button
@@ -970,12 +980,12 @@ export default function WhatsAppStatusCampaignPanel() {
                     <p className="mt-1 text-xs text-slate-500">
                       Inicio {normalizeTime(campaign.start_time)} - {campaign.frequency === 'daily' ? 'diaria' : campaign.frequency}
                     </p>
-                    {campaign.last_error_debug && (
+                    {copyableDebug && (
                       <button
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          copyDebug(campaign.last_error_debug);
+                          copyDebug(copyableDebug);
                         }}
                         className="mt-2 inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-xs font-bold text-red-700 hover:bg-red-100"
                       >
@@ -1013,7 +1023,8 @@ export default function WhatsAppStatusCampaignPanel() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
