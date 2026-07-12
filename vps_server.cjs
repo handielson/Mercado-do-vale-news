@@ -23424,6 +23424,12 @@ async function fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance }) {
   return unique;
 }
 
+function isConfirmedWhatsAppStatusResponse(body) {
+  const key = body?.key || body?.data?.key || body?.message?.key;
+  return String(key?.remoteJid || '').toLowerCase() === 'status@broadcast'
+    && Boolean(String(key?.id || '').trim());
+}
+
 async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null) {
   const baseUrl = String(process.env.EVOLUTION_STATUS_SERVER_URL || process.env.EVOLUTION_INTERNAL_SERVER_URL || process.env.EVOLUTION_SERVER_URL || process.env.EVOLUTION_API_URL || 'https://bot.mercadodovale.com.br').replace(/\/+$/, '');
   const apiKey = String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_GLOBAL_API_KEY || '');
@@ -23432,7 +23438,7 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   const image = getWhatsAppStatusProductImage(product);
   const cardPlan = await getWhatsAppStatusCardPlan(product.price_retail);
   const caption = buildWhatsAppStatusCaption(product, cardPlan);
-  const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 30000));
+  const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 90000));
   const startedAt = Date.now();
   let statusAudienceCount = 0;
   let statusAudienceTotal = 0;
@@ -23518,6 +23524,24 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
       return { productId: product.id, productName: product.name, status: 'failed', debug };
     }
 
+    if (!isConfirmedWhatsAppStatusResponse(body)) {
+      const debug = buildWhatsAppStatusDebug({
+        campaign,
+        product,
+        endpoint,
+        httpStatus: response.status,
+        responseBody: typeof body === 'string' ? body : JSON.stringify(body),
+        errorMessage: 'Evolution respondeu sem confirmar uma mensagem para status@broadcast',
+        scheduledFor,
+        extraLines: [
+          `Contatos Status: ${statusAudienceCount} de ${audience.total}`,
+          `Limite de audiencia: ${audienceLimit}`,
+          `Tempo decorrido: ${Date.now() - startedAt}ms`,
+        ],
+      });
+      return { productId: product.id, productName: product.name, status: 'failed', debug };
+    }
+
     return { productId: product.id, productName: product.name, status: 'sent' };
   } catch (error) {
     const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
@@ -23533,10 +23557,10 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
         `Timeout configurado: ${timeoutMs}ms`,
       ],
       errorMessage: timedOut
-        ? `Sem confirmacao da Evolution apos ${Math.round(timeoutMs / 1000)}s. A chamada foi entregue ao endpoint interno; marcando como enviado para evitar repeticao.`
+        ? `Sem confirmacao da Evolution apos ${Math.round(timeoutMs / 1000)}s. O Status nao foi marcado como enviado.`
         : error?.message || String(error),
     });
-    return { productId: product.id, productName: product.name, status: timedOut ? 'sent' : 'failed', debug };
+    return { productId: product.id, productName: product.name, status: 'failed', debug };
   }
 }
 

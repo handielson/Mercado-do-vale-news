@@ -38,10 +38,13 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /hashWhatsAppStatusAudienceSeed/);
   assert.match(source, /@lid/);
   assert.match(source, /Contatos Status/);
-  assert.match(source, /EVOLUTION_STATUS_TIMEOUT_MS \|\| 30000/);
-  assert.match(source, /marcando como enviado para evitar repeticao/);
+  assert.match(source, /EVOLUTION_STATUS_TIMEOUT_MS \|\| 90000/);
+  assert.match(source, /isConfirmedWhatsAppStatusResponse/);
+  assert.match(source, /status@broadcast/);
+  assert.match(source, /O Status nao foi marcado como enviado/);
   assert.match(source, /const timedOut = error\?\.name === 'TimeoutError'/);
-  assert.match(source, /status: timedOut \? 'sent' : 'failed'/);
+  assert.doesNotMatch(source, /status: timedOut \? 'sent' : 'failed'/);
+  assert.doesNotMatch(source, /marcando como enviado para evitar repeticao/);
   assert.match(source, /markStaleWhatsAppStatusSendingLogs/);
   assert.match(source, /WHATSAPP_STATUS_STALE_SENDING_SECONDS/);
   assert.match(source, /envio ficou preso em andamento/);
@@ -101,6 +104,7 @@ assert.match(panel, /categories: \[form\.category_id\]/);
 
 assert.match(deployServerOnly, /EVOLUTION_STATUS_SERVER_URL/);
 assert.match(deployServerOnly, /EVOLUTION_STATUS_TIMEOUT_MS/);
+assert.match(deployServerOnly, /EVOLUTION_STATUS_TIMEOUT_MS \|\| '90000'/);
 assert.match(deployServerOnly, /WHATSAPP_STATUS_STALE_SENDING_SECONDS/);
 
 console.log('whatsapp-status-campaign-vps-static.test.mjs: ok');

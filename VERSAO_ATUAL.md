@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.10-pdv-pix-auto-refresh
-date: 2026-07-10
-status: deployed
-release_vps: /var/www/mdv-site/releases/20260710-200451-v1210-pdv-pix-auto-refresh
+version: v1.2.11-whatsapp-status-confirmation
+date: 2026-07-11
+status: ready
+release_vps: /var/www/mdv-site/releases/20260711-212710-v1211-whatsapp-status-confirmation
 branch: main
-summary: Atualiza automaticamente o Pix Mercado Pago aprovado no PDV.
+summary: Exige confirmacao real da Evolution antes de marcar um Status do WhatsApp como enviado.
 ```
