@@ -24353,6 +24353,16 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
     const identity = normalizeN8nBotClientIdentity(row);
     if (!identity) continue;
     if (!dryRun) {
+      const [claimResult] = await pool.query(
+        `UPDATE n8n_bot_client_controls
+         SET idle_followup_sent_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE remote_jid = ?
+           AND (idle_followup_sent_at IS NULL OR idle_followup_sent_at < ?)
+           AND (idle_closed_at IS NULL OR idle_closed_at < ?)`,
+        [identity.remoteJid, row.last_message_at, row.last_message_at]
+      );
+      if (Number(claimResult?.affectedRows || 0) !== 1) continue;
       const result = await sendN8nBotEvolutionTextMessage(identity, N8N_BOT_IDLE_FOLLOWUP_MESSAGE);
       if (!result.ok || result.body?.error === true) {
         await logN8nBotInternalMessage(identity, `Falha no lembrete de inatividade: ${formatEvolutionMessage(result.body?.message || result.body?.response || result.body) || result.status}`, 'idle-followup');
@@ -24367,19 +24377,12 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
         sourceNode: 'idle-followup',
         waMessageId: String(result.body?.key?.id || result.body?.messageId || '').slice(0, 160) || null,
       });
-      await pool.query(
-        `UPDATE n8n_bot_client_controls
-         SET idle_followup_sent_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE remote_jid = ?`,
-        [identity.remoteJid]
-      );
     }
     sent.push(identity.remoteJid);
   }
 
   const [closeRows] = await pool.query(
-    `SELECT latest.remote_jid, latest.phone
+    `SELECT latest.remote_jid, latest.phone, controls.idle_followup_sent_at
      FROM (
        SELECT msg.remote_jid, MAX(msg.id) AS last_id
        FROM n8n_bot_messages msg
@@ -24404,6 +24407,16 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
     const identity = normalizeN8nBotClientIdentity(row);
     if (!identity) continue;
     if (!dryRun) {
+      const [claimResult] = await pool.query(
+        `UPDATE n8n_bot_client_controls
+         SET idle_closed_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE remote_jid = ?
+           AND idle_followup_sent_at = ?
+           AND (idle_closed_at IS NULL OR idle_closed_at < idle_followup_sent_at)`,
+        [identity.remoteJid, row.idle_followup_sent_at]
+      );
+      if (Number(claimResult?.affectedRows || 0) !== 1) continue;
       const result = await sendN8nBotEvolutionTextMessage(identity, N8N_BOT_IDLE_CLOSE_MESSAGE);
       if (!result.ok || result.body?.error === true) {
         await logN8nBotInternalMessage(identity, `Falha ao enviar encerramento por inatividade: ${formatEvolutionMessage(result.body?.message || result.body?.response || result.body) || result.status}`, 'idle-close');
@@ -24418,13 +24431,6 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
         sourceNode: 'idle-close',
         waMessageId: String(result.body?.key?.id || result.body?.messageId || '').slice(0, 160) || null,
       });
-      await pool.query(
-        `UPDATE n8n_bot_client_controls
-         SET idle_closed_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE remote_jid = ?`,
-        [identity.remoteJid]
-      );
     }
     closed.push(identity.remoteJid);
   }
@@ -33546,6 +33552,10 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 });
 
 function scheduleN8nBotIdleFollowups() {
+  if (['0', 'false', 'off', 'disabled'].includes(String(process.env.N8N_BOT_IDLE_JOB_ENABLED || '').trim().toLowerCase())) {
+    console.warn('[n8n-bot-idle] scheduled job disabled by N8N_BOT_IDLE_JOB_ENABLED');
+    return;
+  }
   const intervalMs = Math.max(60_000, Number(process.env.N8N_BOT_IDLE_JOB_INTERVAL_MS || 300_000));
   setInterval(() => {
     runN8nBotIdleFollowups({ limit: 50 }).catch((error) => {
