@@ -1,8 +1,8 @@
 {
-    "version": "v1.2.12-whatsapp-status-timeline",
+    "version": "v1.2.13-whatsapp-status-trace-hotfix",
     "date": "2026-07-11",
     "status": "deployed",
-    "release_vps": "/var/www/mdv-site/releases/20260711-214450-v1212-whatsapp-status-timeline",
+    "release_vps": "/var/www/mdv-site/releases/20260711-220723-v1213-whatsapp-status-trace-hotfix",
     "branch": "main",
-    "summary": "Exibe a timeline completa e sanitizada de cada envio de Status do WhatsApp."
+    "summary": "Corrige a persistencia das etapas detalhadas da timeline do Status do WhatsApp."
 }

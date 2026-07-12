@@ -56,6 +56,8 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /CREATE TABLE IF NOT EXISTS whatsapp_status_campaign_trace_events/);
   assert.match(source, /appendWhatsAppStatusTrace/);
   assert.match(source, /sanitizeWhatsAppStatusTraceDetails/);
+  assert.match(source, /safe\[key\] = sanitizeWhatsAppStatusDebugText/);
+  assert.doesNotMatch(source, /safe\[key\] = sanitizeStatusDebugText/);
   assert.match(source, /audience\.request/);
   assert.match(source, /evolution\.request/);
   assert.match(source, /evolution\.response/);

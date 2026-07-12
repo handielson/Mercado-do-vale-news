@@ -23392,7 +23392,7 @@ function sanitizeWhatsAppStatusTraceDetails(details = {}) {
       safe[key] = value;
       continue;
     }
-    safe[key] = sanitizeStatusDebugText(String(value))
+    safe[key] = sanitizeWhatsAppStatusDebugText(String(value))
       .replace(/\b\d{10,15}\b/g, '[contato]')
       .replace(/[\w.+-]+@(?:s\.whatsapp\.net|lid|g\.us)/gi, '[jid]')
       .slice(0, 240);
