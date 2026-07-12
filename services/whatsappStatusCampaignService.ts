@@ -31,6 +31,7 @@ export interface WhatsAppStatusSendNowResult {
   ok: boolean;
   queued?: boolean;
   already_running?: boolean;
+  run_id?: string | null;
   sent: number;
   failed: number;
   debug?: string;
@@ -44,6 +45,7 @@ export interface WhatsAppStatusSendNowResult {
 
 export interface WhatsAppStatusCampaignLog {
   id?: string;
+  run_id?: string | null;
   campaign_id?: string;
   product_id?: string | null;
   product_name?: string | null;
@@ -51,6 +53,20 @@ export interface WhatsAppStatusCampaignLog {
   debug_text?: string | null;
   scheduled_for?: string | null;
   slot_index?: number | null;
+  created_at?: string | null;
+}
+
+export interface WhatsAppStatusTraceEvent {
+  id: number;
+  run_id: string;
+  log_id?: string | null;
+  campaign_id: string;
+  product_id?: string | null;
+  stage: string;
+  state: 'started' | 'ok' | 'failed' | 'info' | string;
+  message?: string | null;
+  details_json?: Record<string, string | number | boolean | null> | string | null;
+  elapsed_ms?: number | null;
   created_at?: string | null;
 }
 
@@ -77,6 +93,7 @@ export interface WhatsAppStatusCampaignProgress {
     skipped: number;
   };
   last_log: WhatsAppStatusCampaignLog | null;
+  trace_events: WhatsAppStatusTraceEvent[];
   logs: WhatsAppStatusCampaignLog[];
 }
 
@@ -120,6 +137,14 @@ function normalizeCampaign(row: WhatsAppStatusCampaign): WhatsAppStatusCampaign 
   };
 }
 
+function normalizeTraceEvent(event: WhatsAppStatusTraceEvent): WhatsAppStatusTraceEvent {
+  let details = event.details_json;
+  if (typeof details === 'string' && details.trim()) {
+    try { details = JSON.parse(details); } catch { details = {}; }
+  }
+  return { ...event, details_json: details && typeof details === 'object' ? details : {} };
+}
+
 export const whatsappStatusCampaignService = {
   async list(): Promise<WhatsAppStatusCampaign[]> {
     const data = await vpsClient.get<TableDataResponse<WhatsAppStatusCampaign>>(
@@ -153,6 +178,13 @@ export const whatsappStatusCampaignService = {
   },
 
   async progress(): Promise<WhatsAppStatusProgressResponse> {
-    return vpsClient.get<WhatsAppStatusProgressResponse>('/whatsapp/status-campaigns/progress');
+    const result = await vpsClient.get<WhatsAppStatusProgressResponse>('/whatsapp/status-campaigns/progress');
+    return {
+      ...result,
+      campaigns: (result.campaigns || []).map((campaign) => ({
+        ...campaign,
+        trace_events: (campaign.trace_events || []).map(normalizeTraceEvent),
+      })),
+    };
   },
 };

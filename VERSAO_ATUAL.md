@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.11-whatsapp-status-confirmation
+version: v1.2.12-whatsapp-status-timeline
 date: 2026-07-11
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260711-213300-v1211-whatsapp-status-confirmation
+release_vps: /var/www/mdv-site/releases/20260711-214450-v1212-whatsapp-status-timeline
 branch: main
-summary: Exige confirmacao real da Evolution antes de marcar um Status do WhatsApp como enviado.
+summary: Exibe a timeline completa e sanitizada de cada envio de Status do WhatsApp.
 ```

@@ -23385,19 +23385,56 @@ function selectWhatsAppStatusAudience(numbers, seed, limit) {
 
 const whatsappStatusAudienceCache = new Map();
 
-async function fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance }) {
+function sanitizeWhatsAppStatusTraceDetails(details = {}) {
+  const safe = {};
+  for (const [key, value] of Object.entries(details || {})) {
+    if (value == null || typeof value === 'boolean' || typeof value === 'number') {
+      safe[key] = value;
+      continue;
+    }
+    safe[key] = sanitizeStatusDebugText(String(value))
+      .replace(/\b\d{10,15}\b/g, '[contato]')
+      .replace(/[\w.+-]+@(?:s\.whatsapp\.net|lid|g\.us)/gi, '[jid]')
+      .slice(0, 240);
+  }
+  return safe;
+}
+
+async function appendWhatsAppStatusTrace({ runId, logId = null, campaignId, productId = null, stage, state = 'info', message = '', details = {}, elapsedMs = null }) {
+  try {
+    await pool.query(
+      `INSERT INTO whatsapp_status_campaign_trace_events
+        (run_id, log_id, campaign_id, product_id, stage, state, message, details_json, elapsed_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [runId, logId, campaignId, productId, String(stage).slice(0, 64), state, String(message || '').slice(0, 255), JSON.stringify(sanitizeWhatsAppStatusTraceDetails(details)), elapsedMs]
+    );
+  } catch (error) {
+    console.warn('[whatsapp-status-trace] falha ao persistir etapa:', error?.message || error);
+  }
+}
+
+async function fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance, trace }) {
   const configured = String(process.env.EVOLUTION_STATUS_JID_LIST || '')
     .split(',')
     .map(normalizeWhatsAppStatusContactNumber)
     .filter(Boolean);
-  if (configured.length > 0) return Array.from(new Set(configured));
+  if (configured.length > 0) {
+    const numbers = Array.from(new Set(configured));
+    await trace('audience.loaded', 'ok', 'Audiencia carregada da configuracao', { source: 'configured', unique_contacts: numbers.length });
+    return numbers;
+  }
 
   const cacheKey = `${baseUrl}|${instance}`;
   const cached = whatsappStatusAudienceCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.numbers;
+  if (cached && cached.expiresAt > Date.now()) {
+    await trace('audience.loaded', 'ok', 'Audiencia carregada do cache', { source: 'cache', unique_contacts: cached.numbers.length });
+    return cached.numbers;
+  }
 
   const take = Math.max(1, Math.min(5000, Number(process.env.EVOLUTION_STATUS_CONTACT_LIMIT || 2000)));
   const endpoint = `${baseUrl}/chat/findContacts/${encodeURIComponent(instance)}`;
+  const audienceStartedAt = Date.now();
+  await trace('audience.request', 'started', 'Consultando contatos na Evolution', { source: 'evolution', take, timeout_ms: Math.max(5000, Number(process.env.EVOLUTION_STATUS_CONTACTS_TIMEOUT_MS || 15000)) });
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -23421,6 +23458,7 @@ async function fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance }) {
     .filter(Boolean);
   const unique = Array.from(new Set(numbers));
   whatsappStatusAudienceCache.set(cacheKey, { numbers: unique, expiresAt: Date.now() + 10 * 60 * 1000 });
+  await trace('audience.loaded', 'ok', 'Contatos recebidos e normalizados', { source: 'evolution', http_status: response.status, rows_received: rows.length, unique_contacts: unique.length }, Date.now() - audienceStartedAt);
   return unique;
 }
 
@@ -23430,7 +23468,7 @@ function isConfirmedWhatsAppStatusResponse(body) {
     && Boolean(String(key?.id || '').trim());
 }
 
-async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null) {
+async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null, traceContext = {}) {
   const baseUrl = String(process.env.EVOLUTION_STATUS_SERVER_URL || process.env.EVOLUTION_INTERNAL_SERVER_URL || process.env.EVOLUTION_SERVER_URL || process.env.EVOLUTION_API_URL || 'https://bot.mercadodovale.com.br').replace(/\/+$/, '');
   const apiKey = String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_GLOBAL_API_KEY || '');
   const instance = String(process.env.EVOLUTION_STATUS_INSTANCE || process.env.EVOLUTION_API_INSTANCE || 'botmercadodovale');
@@ -23443,8 +23481,14 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   let statusAudienceCount = 0;
   let statusAudienceTotal = 0;
   let statusAudienceLimit = 0;
+  const trace = async (stage, state, message, details = {}, elapsedMs = null) => appendWhatsAppStatusTrace({
+    ...traceContext, campaignId: campaign.id, productId: product.id, stage, state, message, details, elapsedMs,
+  });
+
+  await trace('product.prepared', 'ok', 'Produto e legenda preparados', { has_image: Boolean(image), caption_length: caption.length, scheduled: Boolean(scheduledFor) }, Date.now() - startedAt);
 
   if (!image) {
+    await trace('media.validation', 'failed', 'Produto sem imagem publica', { has_image: false });
     const debug = buildWhatsAppStatusDebug({
       campaign,
       product,
@@ -23456,6 +23500,7 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   }
 
   if (!apiKey) {
+    await trace('config.validation', 'failed', 'Chave da Evolution ausente', { instance, has_api_key: false });
     const debug = buildWhatsAppStatusDebug({
       campaign,
       product,
@@ -23467,7 +23512,8 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
   }
 
   try {
-    const allStatusJidList = await fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance });
+    await trace('config.validation', 'ok', 'Configuracao da Evolution validada', { instance, has_api_key: true, endpoint_host: new URL(endpoint).host });
+    const allStatusJidList = await fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance, trace });
     const audienceLimit = Math.max(1, Math.min(5000, Number(process.env.EVOLUTION_STATUS_AUDIENCE_LIMIT || 250)));
     statusAudienceLimit = audienceLimit;
     const audience = selectWhatsAppStatusAudience(
@@ -23478,7 +23524,9 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
     const statusJidList = audience.selected;
     statusAudienceCount = statusJidList.length;
     statusAudienceTotal = audience.total;
+    await trace('audience.selected', 'ok', 'Audiencia selecionada para o Status', { available_contacts: audience.total, selected_contacts: statusJidList.length, audience_limit: audienceLimit });
     if (!statusJidList.length) {
+      await trace('audience.selected', 'failed', 'Nenhum contato elegivel', { selected_contacts: 0 });
       const debug = buildWhatsAppStatusDebug({
         campaign,
         product,
@@ -23490,6 +23538,11 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
       return { productId: product.id, productName: product.name, status: 'failed', debug };
     }
     const payload = { type: 'image', content: image, caption, allContacts: false, statusJidList };
+    let imageHost = '';
+    try { imageHost = new URL(image).host; } catch {}
+    await trace('payload.built', 'ok', 'Payload seguro montado', { type: 'image', image_host: imageHost, caption_length: caption.length, all_contacts: false, audience_count: statusJidList.length });
+    const requestStartedAt = Date.now();
+    await trace('evolution.request', 'started', 'Requisicao enviada para sendStatus', { instance, audience_count: statusJidList.length, timeout_ms: timeoutMs });
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -23504,8 +23557,11 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
     try {
       body = text ? JSON.parse(text) : {};
     } catch {}
+    const responseKeys = body && typeof body === 'object' ? Object.keys(body).slice(0, 12).join(',') : typeof body;
+    await trace('evolution.response', response.ok ? 'ok' : 'failed', 'Resposta recebida da Evolution', { http_status: response.status, body_length: text.length, response_keys: responseKeys }, Date.now() - requestStartedAt);
 
     if (!response.ok || body?.error === true) {
+      await trace('confirmation.checked', 'failed', 'Evolution respondeu com erro', { http_status: response.status, error_flag: body?.error === true });
       const debug = buildWhatsAppStatusDebug({
         campaign,
         product,
@@ -23525,6 +23581,8 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
     }
 
     if (!isConfirmedWhatsAppStatusResponse(body)) {
+      const responseKey = body?.key || body?.data?.key || body?.message?.key;
+      await trace('confirmation.checked', 'failed', 'Resposta sem confirmacao de Status', { remote_jid_is_status: String(responseKey?.remoteJid || '').toLowerCase() === 'status@broadcast', message_id_present: Boolean(responseKey?.id) });
       const debug = buildWhatsAppStatusDebug({
         campaign,
         product,
@@ -23542,6 +23600,7 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
       return { productId: product.id, productName: product.name, status: 'failed', debug };
     }
 
+    await trace('confirmation.checked', 'ok', 'Status confirmado pela Evolution', { remote_jid_is_status: true, message_id_present: true }, Date.now() - startedAt);
     return { productId: product.id, productName: product.name, status: 'sent' };
   } catch (error) {
     const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
@@ -23560,6 +23619,7 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null)
         ? `Sem confirmacao da Evolution apos ${Math.round(timeoutMs / 1000)}s. O Status nao foi marcado como enviado.`
         : error?.message || String(error),
     });
+    await trace(timedOut ? 'evolution.timeout' : 'evolution.network', 'failed', timedOut ? 'Evolution nao confirmou dentro do limite' : 'Falha de comunicacao com a Evolution', { error_name: error?.name || 'Error', timeout_ms: timeoutMs }, Date.now() - startedAt);
     return { productId: product.id, productName: product.name, status: 'failed', debug };
   }
 }
@@ -23587,10 +23647,11 @@ async function markStaleWhatsAppStatusSendingLogs(campaignId = null) {
   );
 }
 
-async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledFor = null, slotIndex = null } = {}) {
+async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledFor = null, slotIndex = null, runId = crypto.randomUUID() } = {}) {
   const products = await getWhatsAppStatusCampaignProducts(campaign);
   const selected = rotateWhatsAppStatusProducts(products, campaign.last_product_id)
     .slice(0, clampWhatsAppStatusDailyLimit(maxProducts || campaign.daily_limit));
+  await appendWhatsAppStatusTrace({ runId, campaignId: campaign.id, stage: 'campaign.products', state: 'ok', message: 'Produtos elegiveis selecionados', details: { loaded_products: products.length, selected_products: selected.length, trigger: slotIndex == null ? 'manual' : 'scheduled' } });
 
   if (!selected.length) {
     const debug = buildWhatsAppStatusDebug({
@@ -23607,11 +23668,12 @@ async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledF
     const logId = crypto.randomUUID();
     await pool.query(
       `INSERT INTO whatsapp_status_campaign_logs
-        (id, campaign_id, product_id, status, debug_text, scheduled_for, slot_index)
-       VALUES (?, ?, ?, 'sending', NULL, ?, ?)`,
-      [logId, campaign.id, product.id, scheduledFor, slotIndex]
+        (id, run_id, campaign_id, product_id, status, debug_text, scheduled_for, slot_index)
+       VALUES (?, ?, ?, ?, 'sending', NULL, ?, ?)`,
+      [logId, runId, campaign.id, product.id, scheduledFor, slotIndex]
     );
-    const result = await sendWhatsAppStatusProduct(campaign, product, scheduledFor);
+    await appendWhatsAppStatusTrace({ runId, logId, campaignId: campaign.id, productId: product.id, stage: 'attempt.created', state: 'started', message: 'Tentativa de envio iniciada' });
+    const result = await sendWhatsAppStatusProduct(campaign, product, scheduledFor, { runId, logId });
     logs.push(result);
     await pool.query(
       `UPDATE whatsapp_status_campaign_logs
@@ -23619,6 +23681,7 @@ async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledF
        WHERE id = ?`,
       [result.status, result.debug || null, logId]
     );
+    await appendWhatsAppStatusTrace({ runId, logId, campaignId: campaign.id, productId: product.id, stage: 'attempt.finalized', state: result.status === 'sent' ? 'ok' : 'failed', message: result.status === 'sent' ? 'Envio finalizado com confirmacao' : 'Envio finalizado sem confirmacao' });
   }
 
   const failed = logs.filter((log) => log.status === 'failed').length;
@@ -23635,10 +23698,11 @@ async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledF
     [lastSent?.productId || null, debug, campaign.id]
   );
 
-  return { ok: failed === 0, sent, failed, debug: debug || undefined, logs };
+  await appendWhatsAppStatusTrace({ runId, campaignId: campaign.id, stage: 'run.completed', state: failed === 0 ? 'ok' : 'failed', message: 'Execucao da campanha finalizada', details: { sent, failed } });
+  return { ok: failed === 0, run_id: runId, sent, failed, debug: debug || undefined, logs };
 }
 
-function buildWhatsAppStatusProgress(campaigns, logs) {
+function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
   const logsByCampaign = new Map();
   for (const log of Array.isArray(logs) ? logs : []) {
     const campaignLogs = logsByCampaign.get(log.campaign_id) || [];
@@ -23691,6 +23755,9 @@ function buildWhatsAppStatusProgress(campaigns, logs) {
         skipped: countStatus(campaignLogs, 'skipped'),
       },
       last_log: campaignLogs[0] || null,
+      trace_events: campaignLogs[0]?.run_id
+        ? traceEvents.filter((event) => event.run_id === campaignLogs[0].run_id)
+        : [],
       logs: campaignLogs.slice(0, 10),
     };
   });
@@ -23705,7 +23772,7 @@ fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey 
      LIMIT 200`
   );
   const [logs] = await pool.query(
-    `SELECT l.id, l.campaign_id, l.product_id, p.name AS product_name, l.status, l.debug_text,
+    `SELECT l.id, l.run_id, l.campaign_id, l.product_id, p.name AS product_name, l.status, l.debug_text,
             l.scheduled_for, l.slot_index, l.created_at
      FROM whatsapp_status_campaign_logs l
      LEFT JOIN products p ON p.id = l.product_id
@@ -23713,11 +23780,38 @@ fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey 
      ORDER BY l.created_at DESC
      LIMIT 500`
   );
+  const runIds = Array.from(new Set(logs.map((log) => log.run_id).filter(Boolean)));
+  let traceEvents = [];
+  if (runIds.length > 0) {
+    const placeholders = runIds.map(() => '?').join(',');
+    [traceEvents] = await pool.query(
+      `SELECT id, run_id, log_id, campaign_id, product_id, stage, state, message, details_json, elapsed_ms, created_at
+       FROM whatsapp_status_campaign_trace_events
+       WHERE run_id IN (${placeholders})
+       ORDER BY id ASC
+       LIMIT 1500`,
+      runIds
+    );
+  }
   return {
     ok: true,
     generated_at: new Date().toISOString(),
-    campaigns: buildWhatsAppStatusProgress(campaigns, logs),
+    campaigns: buildWhatsAppStatusProgress(campaigns, logs, traceEvents),
   };
+});
+
+fastify.get('/whatsapp/status-campaigns/runs/:runId/trace', { preHandler: requireSyncKey }, async (req, reply) => {
+  const runId = String(req.params.runId || '').trim();
+  if (!/^[0-9a-f-]{36}$/i.test(runId)) return reply.code(400).send({ error: 'run_id invalido' });
+  const [events] = await pool.query(
+    `SELECT id, run_id, log_id, campaign_id, product_id, stage, state, message, details_json, elapsed_ms, created_at
+     FROM whatsapp_status_campaign_trace_events
+     WHERE run_id = ?
+     ORDER BY id ASC
+     LIMIT 300`,
+    [runId]
+  );
+  return { ok: true, run_id: runId, events };
 });
 
 fastify.post('/whatsapp/status-campaigns/:id/send-now', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -23731,11 +23825,14 @@ fastify.post('/whatsapp/status-campaigns/:id/send-now', { preHandler: requireSyn
     [campaign.id]
   );
   if (sendingLogs.length > 0) {
-    return { ok: true, queued: true, already_running: true, sent: 0, failed: 0 };
+    const [active] = await pool.query(`SELECT run_id FROM whatsapp_status_campaign_logs WHERE id = ? LIMIT 1`, [sendingLogs[0].id]);
+    return { ok: true, queued: true, already_running: true, run_id: active[0]?.run_id || null, sent: 0, failed: 0 };
   }
 
+  const runId = crypto.randomUUID();
+  await appendWhatsAppStatusTrace({ runId, campaignId: campaign.id, stage: 'request.accepted', state: 'ok', message: 'Envio manual aceito e colocado na fila' });
   setImmediate(() => {
-    executeWhatsAppStatusCampaign(campaign, { maxProducts: campaign.daily_limit }).catch(async (error) => {
+    executeWhatsAppStatusCampaign(campaign, { maxProducts: campaign.daily_limit, runId }).catch(async (error) => {
       const debug = buildWhatsAppStatusDebug({
         campaign,
         endpoint: 'envio manual/agora',
@@ -23747,7 +23844,7 @@ fastify.post('/whatsapp/status-campaigns/:id/send-now', { preHandler: requireSyn
     });
   });
 
-  return { ok: true, queued: true, sent: 0, failed: 0 };
+  return { ok: true, queued: true, run_id: runId, sent: 0, failed: 0 };
 });
 
 async function runDueWhatsAppStatusCampaigns() {
@@ -32126,6 +32223,7 @@ async function runMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS whatsapp_status_campaign_logs (
       id CHAR(36) PRIMARY KEY,
+      run_id CHAR(36) NULL,
       campaign_id CHAR(36) NOT NULL,
       product_id CHAR(36) NULL,
       status ENUM('sending','sent','failed','skipped') NOT NULL DEFAULT 'failed',
@@ -32139,7 +32237,28 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   await pool.query("ALTER TABLE whatsapp_status_campaign_logs MODIFY status ENUM('sending','sent','failed','skipped') NOT NULL DEFAULT 'failed'");
+  await addColumnIfMissing('whatsapp_status_campaign_logs', 'run_id', 'CHAR(36) NULL');
+  await addIndexIfMissing('whatsapp_status_campaign_logs', 'idx_whatsapp_status_logs_run', 'run_id');
   await addColumnIfMissing('whatsapp_status_campaign_logs', 'slot_index', 'INT NULL');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_status_campaign_trace_events (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      run_id CHAR(36) NOT NULL,
+      log_id CHAR(36) NULL,
+      campaign_id CHAR(36) NOT NULL,
+      product_id CHAR(36) NULL,
+      stage VARCHAR(64) NOT NULL,
+      state ENUM('started','ok','failed','info') NOT NULL DEFAULT 'info',
+      message VARCHAR(255) NULL,
+      details_json JSON NULL,
+      elapsed_ms INT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX idx_whatsapp_status_trace_run (run_id, id),
+      INDEX idx_whatsapp_status_trace_campaign (campaign_id, created_at),
+      INDEX idx_whatsapp_status_trace_log (log_id, id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
 
   const legacySaleCompletedPreferenceLine = ['Obrigado', 'pela', 'preferencia, {nome}! Seu pedido {pedido} ja esta registrado com a gente. 🚀'].join(' ');
   const nextSaleCompletedLine = '{nome}, seu pedido {pedido} ja esta registrado com a gente. 🚀';

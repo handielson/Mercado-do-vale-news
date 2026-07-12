@@ -17,6 +17,7 @@ import {
   type WhatsAppStatusCampaignProgress,
   type WhatsAppStatusCampaignInput,
   type WhatsAppStatusCampaignSourceType,
+  type WhatsAppStatusTraceEvent,
 } from '../../../../services/whatsappStatusCampaignService';
 
 const DEFAULT_FORM: WhatsAppStatusCampaignInput = {
@@ -163,6 +164,20 @@ function statusLabel(status?: string | null) {
   return status || 'Aguardando';
 }
 
+function traceStateClasses(state?: string) {
+  if (state === 'failed') return 'border-red-200 bg-red-50 text-red-700';
+  if (state === 'ok') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  if (state === 'started') return 'border-blue-200 bg-blue-50 text-blue-700';
+  return 'border-slate-200 bg-slate-50 text-slate-600';
+}
+
+function traceDetails(event: WhatsAppStatusTraceEvent) {
+  const details = event.details_json && typeof event.details_json === 'object' ? event.details_json : {};
+  return Object.entries(details)
+    .map(([key, value]) => `${key.replace(/_/g, ' ')}: ${String(value)}`)
+    .join(' · ');
+}
+
 function CampaignProgressBar({
   campaign,
   progress,
@@ -201,6 +216,7 @@ function CampaignProgressBar({
   const activeElapsed = isSending && activeStartedAt ? formatElapsed(nowMs - activeStartedAt) : '';
   const nextPollSeconds = isSending ? 3 : 10;
   const currentProduct = manualSending?.product_name || manualSending?.product_id || lastLog?.product_name || lastLog?.product_id || 'produto';
+  const traceEvents = progress?.trace_events || [];
   const label = isSending
     ? `Enviando agora ${manualFinished}/${manualTotal} finalizados`
     : `Programado hoje ${scheduled?.done || 0}/${scheduled?.total || campaign.daily_limit}`;
@@ -254,6 +270,30 @@ function CampaignProgressBar({
             </div>
           ))}
         </div>
+      )}
+      {traceEvents.length > 0 && (
+        <details className="mt-3 border-t border-slate-200 pt-3" onClick={(event) => event.stopPropagation()}>
+          <summary className="cursor-pointer select-none text-xs font-black text-slate-700">
+            Ver processo completo ({traceEvents.length} etapas)
+          </summary>
+          <div className="mt-3 space-y-2 border-l-2 border-slate-200 pl-3">
+            {traceEvents.map((event) => {
+              const detail = traceDetails(event);
+              return (
+                <div key={event.id} className={`rounded-md border px-3 py-2 text-[11px] ${traceStateClasses(event.state)}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-black">{event.stage.replace(/\./g, ' / ')}</span>
+                    <span className="font-semibold">
+                      {formatProgressTime(event.created_at)}{event.elapsed_ms != null ? ` · ${formatElapsed(event.elapsed_ms)}` : ''}
+                    </span>
+                  </div>
+                  {event.message && <p className="mt-1 font-semibold">{event.message}</p>}
+                  {detail && <p className="mt-1 break-words opacity-80">{detail}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </details>
       )}
     </div>
   );
@@ -908,7 +948,13 @@ export default function WhatsAppStatusCampaignPanel() {
                       : <ToggleLeft className="h-6 w-6 text-slate-300" />}
                   </button>
 
-                  <button type="button" onClick={() => startEdit(campaign)} className="min-w-0 flex-1 text-left">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => startEdit(campaign)}
+                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') startEdit(campaign); }}
+                    className="min-w-0 flex-1 text-left"
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-bold text-slate-900">{campaign.title}</span>
                       <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
@@ -944,7 +990,7 @@ export default function WhatsAppStatusCampaignPanel() {
                       isSending={sendingId === campaign.id}
                       nowMs={nowMs}
                     />
-                  </button>
+                  </div>
 
                   <div className="flex shrink-0 gap-1">
                     <button
