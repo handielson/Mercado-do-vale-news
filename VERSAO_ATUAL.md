@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.16-whatsapp-status-safe-test
+version: v1.2.17-status-somente-broadcast
 date: 2026-07-12
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260712-055000-v1216-whatsapp-status-safe-test
+release_vps: /var/www/mdv-site/releases/20260712-055526-v1217-status-somente-broadcast
 branch: main
-summary: Restaura o formato numerico da Evolution 2.3.7 e limita o teste de Status.
+summary: Publica somente no Meu Status da loja, sem buscar, selecionar ou contar contatos.
 ```

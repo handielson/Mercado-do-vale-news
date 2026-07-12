@@ -286,8 +286,7 @@ export function buildStatusPayload({ product, caption }) {
     type: 'image',
     content: String(image || '').trim(),
     caption,
-    allContacts: false,
-    statusJidList: [],
+    allContacts: true,
   };
 }
 
