@@ -130,6 +130,8 @@ assert.match(panel, /categories: \[form\.category_id\]/);
 assert.match(deployServerOnly, /EVOLUTION_STATUS_SERVER_URL/);
 assert.match(deployServerOnly, /EVOLUTION_STATUS_TIMEOUT_MS/);
 assert.match(deployServerOnly, /EVOLUTION_STATUS_TIMEOUT_MS \|\| '90000'/);
+assert.match(deployServerOnly, /EVOLUTION_STATUS_AUDIENCE_LIMIT/);
+assert.match(deployServerOnly, /EVOLUTION_STATUS_AUDIENCE_LIMIT \|\| '250'/);
 assert.match(deployServerOnly, /WHATSAPP_STATUS_STALE_SENDING_SECONDS/);
 
 console.log('whatsapp-status-campaign-vps-static.test.mjs: ok');

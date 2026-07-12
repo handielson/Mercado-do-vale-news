@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.22-status-duplicados-exatos
+version: v1.2.23-status-audiencia-250
 date: 2026-07-12
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260712-062740-v1222-status-duplicados-exatos
+release_vps: /var/www/mdv-site/releases/20260712-221858-v1223-status-audiencia-250
 branch: main
-summary: Remove registros duplicados exatos do seletor da programação de Status.
+summary: Remove o limite temporário de 10 e restaura 250 visualizadores por Status.
 ```

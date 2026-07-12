@@ -143,6 +143,7 @@ async function ensureRemoteAdminEnv(appDir) {
     const entries = {
       EVOLUTION_STATUS_SERVER_URL: evolutionStatusServerUrl,
       EVOLUTION_STATUS_TIMEOUT_MS: process.env.EVOLUTION_STATUS_TIMEOUT_MS || '90000',
+      EVOLUTION_STATUS_AUDIENCE_LIMIT: process.env.EVOLUTION_STATUS_AUDIENCE_LIMIT || '250',
       WHATSAPP_STATUS_STALE_SENDING_SECONDS: process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || '120',
     };
     if (adminEmail && adminPassword) {
