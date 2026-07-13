@@ -2281,6 +2281,9 @@ function mapN8nBotControlRow(row, identity) {
       reset_consumed_at: row?.reset_consumed_at || null,
       reset_count: resetCount,
       last_seen_at: row?.last_seen_at || null,
+      human_handoff_until: row?.human_handoff_until || null,
+      human_handoff_by: row?.human_handoff_by || null,
+      human_handoff_active: Number(row?.human_handoff_active || 0) === 1,
       updated_at: row?.updated_at || null,
     },
     memorySessionKey: remoteJid ? buildN8nBotMemorySessionKey(remoteJid, resetCount) : '',
@@ -2290,10 +2293,38 @@ function mapN8nBotControlRow(row, identity) {
 
 async function getN8nBotClientControl(identity) {
   const [rows] = await pool.query(
-    'SELECT * FROM n8n_bot_client_controls WHERE remote_jid = ? LIMIT 1',
+    `SELECT *,
+            (human_handoff_until IS NOT NULL AND human_handoff_until > CURRENT_TIMESTAMP) AS human_handoff_active
+       FROM n8n_bot_client_controls
+      WHERE remote_jid = ?
+      LIMIT 1`,
     [identity.remoteJid]
   );
-  return mapN8nBotControlRow(rows?.[0] || null, identity);
+  const result = mapN8nBotControlRow(rows?.[0] || null, identity);
+  const [messageRows] = await pool.query(
+    `SELECT direction, message_text, source_node, created_at
+       FROM n8n_bot_messages
+      WHERE remote_jid = ?
+        AND direction IN ('inbound', 'outbound')
+      ORDER BY id DESC
+      LIMIT 12`,
+    [identity.remoteJid]
+  );
+  const recentMessages = [...(messageRows || [])].reverse().map((row) => {
+    const direction = String(row.direction || 'inbound');
+    const sourceNode = String(row.source_node || '');
+    const role = direction === 'inbound'
+      ? 'Cliente'
+      : (/manual|atendente/i.test(sourceNode) ? 'Atendente humano' : 'Loja');
+    const text = String(row.message_text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+    return { role, text, direction, source_node: sourceNode, created_at: row.created_at || null };
+  }).filter((row) => row.text);
+  return {
+    ...result,
+    humanHandoffPaused: Boolean(result.control.human_handoff_active),
+    recentMessages,
+    conversationHistory: recentMessages.map((row) => `${row.role}: ${row.text}`).join('\n'),
+  };
 }
 
 async function getN8nBotGlobalControl() {
@@ -24069,6 +24100,58 @@ fastify.post('/n8n-bot/client-control/block', { preHandler: requireSyncKey }, as
   });
 });
 
+fastify.post('/n8n-bot/client-control/handoff', { preHandler: requireSyncKey }, async (req, reply) => {
+  const body = req.body || {};
+  const identity = normalizeN8nBotClientIdentity(body);
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  const durationSeconds = Math.min(Math.max(Number(body.durationSeconds) || 7200, 300), 86400);
+  const message = String(body.message || body.text || '').trim();
+  const waMessageId = String(body.waMessageId || body.messageId || '').trim().slice(0, 160);
+  const handoffBy = String(body.handoffBy || 'whatsapp-manual').trim().slice(0, 120) || 'whatsapp-manual';
+
+  await pool.query(
+    `INSERT INTO n8n_bot_client_controls
+      (id, remote_jid, phone, human_handoff_until, human_handoff_by, last_seen_at)
+     VALUES (?, ?, ?, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL ? SECOND), ?, CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       phone = VALUES(phone),
+       human_handoff_until = GREATEST(COALESCE(human_handoff_until, CURRENT_TIMESTAMP), VALUES(human_handoff_until)),
+       human_handoff_by = VALUES(human_handoff_by),
+       last_seen_at = CURRENT_TIMESTAMP,
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID(),
+      identity.remoteJid,
+      identity.phone,
+      durationSeconds,
+      handoffBy,
+    ]
+  );
+
+  if (message) {
+    const [duplicateRows] = waMessageId
+      ? await pool.query(
+        'SELECT id FROM n8n_bot_messages WHERE remote_jid = ? AND wa_message_id = ? LIMIT 1',
+        [identity.remoteJid, waMessageId]
+      )
+      : [[]];
+    if (!duplicateRows?.length) {
+      await insertN8nBotMessage({
+        remoteJid: identity.remoteJid,
+        phone: identity.phone,
+        direction: 'outbound',
+        message,
+        messageType: body.messageType || 'text',
+        sourceNode: 'whatsapp-manual-handoff',
+        waMessageId,
+        payload: { manual: true, handoffBy },
+      });
+    }
+  }
+
+  return getN8nBotClientControl(identity);
+});
+
 fastify.post('/n8n-bot/client-control/reset', { preHandler: requireSyncKey }, async (req, reply) => {
   const identity = normalizeN8nBotClientIdentity(req.body || {});
   if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
@@ -32332,6 +32415,8 @@ async function runMigrations() {
   await addColumnIfMissing('n8n_bot_client_controls', 'last_seen_at', 'DATETIME NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'idle_followup_sent_at', 'DATETIME NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'idle_closed_at', 'DATETIME NULL');
+  await addColumnIfMissing('n8n_bot_client_controls', 'human_handoff_until', 'DATETIME NULL');
+  await addColumnIfMissing('n8n_bot_client_controls', 'human_handoff_by', 'VARCHAR(120) NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS n8n_bot_messages (

@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.27-produto-url-nome
+version: v1.2.28-n8n-contexto-handoff
 date: 2026-07-13
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260713-110844-v1227-produto-url-nome
+release_vps: /var/www/mdv-site/releases/20260713-124234-v1228-n8n-contexto-handoff
 branch: main
-summary: Usa o slug nominal nas URLs publicas de produto e preserva IDs apenas na troca de variantes ambiguas.
+summary: Entrega o historico recente completo a IA e persiste a pausa do atendimento humano sem condicao de corrida.
 ```
