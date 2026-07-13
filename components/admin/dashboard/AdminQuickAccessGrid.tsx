@@ -59,6 +59,14 @@ const productItems: QuickAccessItem[] = [
 
 const dailyItems: QuickAccessItem[] = [
   {
+    label: 'Pix Avulso',
+    description: 'Gerar cobranca Pix',
+    path: '/admin/pix-avulso',
+    icon: 'Pix',
+    cardClassName: 'bg-white border-slate-200 hover:border-cyan-400',
+    iconClassName: 'bg-cyan-100 group-hover:bg-cyan-200',
+  },
+  {
     label: 'PDV',
     description: 'Ponto de venda',
     path: '/admin/pdv',
@@ -144,7 +152,7 @@ export const AdminQuickAccessGrid: React.FC<AdminQuickAccessGridProps> = ({ onNa
         <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
           <span>⚡</span> Operações Diárias
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-3">
           {dailyItems.map((item) => (
             <QuickAccessCard key={item.label} item={item} onNavigate={onNavigate} />
           ))}

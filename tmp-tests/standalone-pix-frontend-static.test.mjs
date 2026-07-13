@@ -9,6 +9,7 @@ const adminPage = read('pages/admin/financial/StandalonePixPage.tsx');
 const publicPage = read('pages/store/PublicPixPage.tsx');
 const routes = read('routes/index.tsx');
 const layout = read('layouts/AdminLayout.tsx');
+const dashboard = read('components/admin/dashboard/AdminQuickAccessGrid.tsx');
 
 for (const snippet of [
   "vpsClient.post<StandalonePixPayment>('/pix/standalone'",
@@ -78,5 +79,7 @@ assert.ok(routes.includes("const PublicPixPage = lazy(() => import('../pages/sto
 assert.ok(routes.includes('path: "/admin/pix-avulso"'), 'routes must expose /admin/pix-avulso');
 assert.ok(routes.includes('path: "/pix/:token"'), 'routes must expose /pix/:token');
 assert.ok(layout.includes("to: '/admin/pix-avulso'"), 'AdminLayout must add Pix Avulso menu item');
+assert.ok(dashboard.includes("label: 'Pix Avulso'"), 'dashboard must show Pix Avulso quick access');
+assert.ok(dashboard.includes("path: '/admin/pix-avulso'"), 'dashboard Pix Avulso quick access must use the admin route');
 
 console.log('standalone pix frontend static checks passed');

@@ -1,4 +1,4 @@
-const SITE_ORIGIN = 'https://mercadodovale.com.br';
+const SITE_ORIGIN = 'https://www.mercadodovale.com.br';
 
 export const DEFAULT_CATALOG_SEO = {
   title: 'Mercado do Vale | Smartphones e Eletronicos em Petrolina-PE',

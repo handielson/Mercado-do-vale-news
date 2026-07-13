@@ -41,11 +41,11 @@ assert.equal(isCatalogCollectionPath('/produtos'), false);
 
 const seo = getCatalogSeoConfig(bestSellers);
 assert.equal(seo.title, 'Mais vendidos | Mercado do Vale em Petrolina-PE');
-assert.equal(seo.canonical, 'https://mercadodovale.com.br/produtos/mais-vendidos');
+assert.equal(seo.canonical, 'https://www.mercadodovale.com.br/produtos/mais-vendidos');
 assert.match(seo.description, /populares/i);
 
 const defaultSeo = getCatalogSeoConfig(null);
 assert.equal(defaultSeo.title, 'Mercado do Vale | Smartphones e Eletronicos em Petrolina-PE');
-assert.equal(defaultSeo.canonical, 'https://mercadodovale.com.br/');
+assert.equal(defaultSeo.canonical, 'https://www.mercadodovale.com.br/');
 
 console.log('catalogCollections.test.mjs: ok');
