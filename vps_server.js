@@ -8797,7 +8797,7 @@ function isUuidLike(value) {
 }
 
 async function loadSeoProductBySlug(slug) {
-  const select = `SELECT id, name, description, meta_title, meta_description, keywords, images,
+  const select = `SELECT id, company_id, model_id, name, description, meta_title, meta_description, keywords, images, image_url, specs,
       price_retail, stock_quantity, sku, slug, status, is_parent, exclude_from_seo,
       ${comboStockSql('products')} AS computed_stock_quantity
      FROM products`;
@@ -8826,6 +8826,35 @@ async function loadSeoProductBySlug(slug) {
   }
 
   return rows[0] || null;
+}
+
+async function loadSeoProductImages(product, baseUrl) {
+  const specs = parsePublicJson(product?.specs, {});
+  const color = String(specs?.color || specs?.cor || '').trim();
+  let modelColorImages = [];
+
+  if (product?.model_id && color) {
+    const [rows] = await pool.query(
+      `SELECT mci.images, mci.image_url
+       FROM model_color_images mci
+       INNER JOIN colors c ON c.id = mci.color_id
+       WHERE mci.model_id = ?
+         AND (c.id = ? OR LOWER(TRIM(c.name)) = LOWER(TRIM(?)))
+         AND (mci.company_id = ? OR mci.company_id IS NULL)
+       ORDER BY (mci.company_id = ?) DESC, COALESCE(mci.display_order, 2147483647), mci.updated_at DESC
+       LIMIT 1`,
+      [product.model_id, color, color, product.company_id, product.company_id]
+    );
+    if (rows[0]) {
+      modelColorImages = [...normalizeSeoImages(rows[0].images), ...normalizeSeoImages(rows[0].image_url)];
+    }
+  }
+
+  return normalizeSeoPublicImages([
+    ...modelColorImages,
+    ...normalizeSeoImages(product?.images),
+    ...normalizeSeoImages(product?.image_url),
+  ], baseUrl);
 }
 
 function readSeoIndexHtml() {
@@ -8906,7 +8935,7 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     }
 
     const baseUrl = buildSeoBaseUrl(request);
-    const publicImages = normalizeSeoPublicImages(product.images, baseUrl);
+    const publicImages = await loadSeoProductImages(product, baseUrl);
     const keywords = normalizeSeoKeywords(product.keywords || product.seo_keywords);
     const title = product.meta_title || `${product.name} | Mercado do Vale`;
     const cleanDescription = stripSeoHtml(product.meta_description || product.description || '');

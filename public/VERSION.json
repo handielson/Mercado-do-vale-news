@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.24-status-waha-agenda-30-dias",
-  "date": "2026-07-12",
+  "version": "v1.2.25-whatsapp-produto-slug-imagem",
+  "date": "2026-07-13",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260712-221859-v1224-status-waha-agenda",
+  "release_vps": "/var/www/mdv-site/releases/20260713-035120-v1225-whatsapp-produto-share",
   "branch": "main",
-  "summary": "Publica Status pelo WAHA com foto, video, legenda comercial, repeticao de 1 a 30 dias e diagrama visual."
+  "summary": "Corrige o compartilhamento de produtos no WhatsApp para usar o slug e a imagem correspondente ao modelo e cor."
 }

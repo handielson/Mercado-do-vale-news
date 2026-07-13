@@ -971,6 +971,7 @@ export const PublicProductPage: React.FC = () => {
     const getShareText = () => {
         const shareableVariants = sellableVariantOptions;
         const variantNames = shareableVariants.map(v => (v as any)._displayLabel).join(', ');
+        const shareUrl = `https://www.mercadodovale.com.br/produto/${encodeURIComponent(product.slug || product.id)}`;
         
         let text = `*${publicProductTitle}*\n`;
         if (variantNames) {
@@ -983,7 +984,7 @@ export const PublicProductPage: React.FC = () => {
             text += `Ganhe ${estimatedCoins} Moedas do Vale nessa compra!\n\n`;
         }
 
-        text += `${window.location.href}\n\n`;
+        text += `${shareUrl}\n\n`;
         text += `Visite o nosso site para ver essa e muitas outras opções de produtos!\n`;
         text += `_www.mercadodovale.com.br_`;
         return text;
@@ -995,7 +996,8 @@ export const PublicProductPage: React.FC = () => {
     };
 
     const handleShareFacebook = () => {
-        const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}&quote=${encodeURIComponent(getShareText())}`;
+        const productUrl = `https://www.mercadodovale.com.br/produto/${encodeURIComponent(product.slug || product.id)}`;
+        const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(productUrl)}&quote=${encodeURIComponent(getShareText())}`;
         window.open(url, '_blank');
     };
 
