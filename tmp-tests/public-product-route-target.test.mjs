@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { getPublicProductRouteTarget } from '../pages/store/productRouteTarget.js';
+import {
+  getPublicProductRouteTarget,
+  getPublicProductVariantRouteTarget,
+} from '../pages/store/productRouteTarget.js';
 
 const greenVariant = {
   id: '0e381a4b-fcdd-4989-9dee-c73ed0f12f77',
@@ -14,7 +17,13 @@ const purpleVariant = {
 };
 
 assert.equal(
-  getPublicProductRouteTarget(greenVariant, [greenVariant, purpleVariant]),
+  getPublicProductRouteTarget(greenVariant),
+  'poco-c85',
+  'catalog links must keep the readable slug even when duplicate records share it',
+);
+
+assert.equal(
+  getPublicProductVariantRouteTarget(greenVariant, [greenVariant, purpleVariant]),
   greenVariant.id,
   'variant navigation must use id when another product shares the same slug',
 );
@@ -26,9 +35,9 @@ assert.equal(
 );
 
 assert.equal(
-  getPublicProductRouteTarget({ id: 'no-slug-id' }, []),
-  'no-slug-id',
-  'products without slug should route by id',
+  getPublicProductRouteTarget({ id: 'no-slug-id', name: 'Athomics Inspire Lite' }),
+  'athomics-inspire-lite',
+  'products without a saved slug should derive one from the product name',
 );
 
 console.log('public product route target checks passed');

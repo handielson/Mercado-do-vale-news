@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.26-canonical-www-pix-avulso
+version: v1.2.27-produto-url-nome
 date: 2026-07-13
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260713-043030-v1226-canonical-www-pix-avulso
+release_vps: /var/www/mdv-site/releases/20260713-110844-v1227-produto-url-nome
 branch: main
-summary: Padroniza o canonical das colecoes com www e adiciona o atalho Pix Avulso ao dashboard administrativo.
+summary: Usa o slug nominal nas URLs publicas de produto e preserva IDs apenas na troca de variantes ambiguas.
 ```

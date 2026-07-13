@@ -310,8 +310,7 @@ export function ModernProductCard({
             }
         }
 
-        const routePeers = productGroup?.variants?.flatMap(variant => variant.products || []) || relatedProducts;
-        navigate(`/produto/${getPublicProductRouteTarget(targetProduct, routePeers)}`);
+        navigate(`/produto/${getPublicProductRouteTarget(targetProduct)}`);
     };
 
     const handleInfoClick = (e: React.MouseEvent) => {

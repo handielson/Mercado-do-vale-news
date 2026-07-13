@@ -32,7 +32,7 @@ import { modelColorImagesService } from '@/services/model-color-images';
 import { colorService } from '@/services/colors';
 import { buildProductVideoPlaylist, isMp4VideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
-import { getPublicProductRouteTarget } from './productRouteTarget.js';
+import { getPublicProductVariantRouteTarget } from './productRouteTarget.js';
 import { customFieldsService } from '@/services/custom-fields';
 /**
  * PublicProductPage
@@ -1039,7 +1039,7 @@ export const PublicProductPage: React.FC = () => {
         }
 
         // Atualiza a URL na barra do navegador (sem triggerar novo fetch)
-        const newUrl = `/produto/${getPublicProductRouteTarget(sib, variantPool)}`;
+        const newUrl = `/produto/${getPublicProductVariantRouteTarget(sib, variantPool)}`;
         window.history.pushState(null, '', newUrl);
 
         // Scroll suave para o topo
