@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.28-n8n-contexto-handoff",
+  "version": "v1.2.29-n8n-localizacao-concorrencia",
   "date": "2026-07-13",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260713-124234-v1228-n8n-contexto-handoff",
+  "release_vps": "/var/www/mdv-site/releases/20260713-131153-v1229-n8n-localizacao-concorrencia",
   "branch": "main",
-  "summary": "Entrega o historico recente completo a IA e persiste a pausa do atendimento humano sem condicao de corrida."
+  "summary": "Restaura a localizacao da loja, descarta respostas antigas concorrentes e corrige a confirmacao do nome do contato."
 }

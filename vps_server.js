@@ -24269,6 +24269,27 @@ fastify.get('/n8n-bot/messages', { preHandler: requireSyncKey }, async (req, rep
   return { rows: rows.reverse() };
 });
 
+fastify.get('/n8n-bot/messages/is-current', { preHandler: requireSyncKey }, async (req, reply) => {
+  const identity = normalizeN8nBotClientIdentity(req.query || {});
+  if (!identity) return reply.code(400).send({ error: 'phone ou remoteJid obrigatorio' });
+  const waMessageId = String(req.query?.waMessageId || req.query?.messageId || '').trim();
+  const [rows] = await pool.query(
+    `SELECT wa_message_id
+       FROM n8n_bot_messages
+      WHERE remote_jid = ?
+        AND direction = 'inbound'
+      ORDER BY id DESC
+      LIMIT 1`,
+    [identity.remoteJid]
+  );
+  const latestWaMessageId = String(rows?.[0]?.wa_message_id || '').trim();
+  return {
+    isCurrent: !waMessageId || !latestWaMessageId || waMessageId === latestWaMessageId,
+    waMessageId,
+    latestWaMessageId,
+  };
+});
+
 fastify.post('/n8n-bot/messages/manual', { preHandler: requireSyncKey }, async (req, reply) => {
   const body = req.body || {};
   const identity = normalizeN8nBotClientIdentity(body);
