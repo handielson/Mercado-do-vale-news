@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.25-whatsapp-produto-slug-imagem",
+  "version": "v1.2.26-canonical-www-pix-avulso",
   "date": "2026-07-13",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260713-035120-v1225-whatsapp-produto-share",
+  "release_vps": "/var/www/mdv-site/releases/20260713-043030-v1226-canonical-www-pix-avulso",
   "branch": "main",
-  "summary": "Corrige o compartilhamento de produtos no WhatsApp para usar o slug e a imagem correspondente ao modelo e cor."
+  "summary": "Padroniza o canonical das colecoes com www e adiciona o atalho Pix Avulso ao dashboard administrativo."
 }
