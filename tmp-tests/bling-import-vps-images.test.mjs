@@ -23,8 +23,14 @@ assert.match(
 
 assert.match(
   source,
+  /fetch\(directVpsImageUrl\('\/images\/upload'\)/,
+  'materialized multipart images must be uploaded directly to the VPS image bank',
+);
+
+assert.doesNotMatch(
+  source,
   /buildVpsUrl\('\/images\/upload', \{ method: 'POST' \}\)/,
-  'materialized images must be uploaded to the VPS image bank',
+  'Bling multipart uploads must not pass through the production VPS proxy',
 );
 
 assert.match(
@@ -43,6 +49,12 @@ assert.doesNotMatch(
   source,
   /row\.images = normalizeExternalImageUrls\(Array\.isArray\(row\.images\) \? row\.images : \[\]\);/,
   'bulk imports must not save raw Bling image URLs directly',
+);
+
+assert.doesNotMatch(
+  source,
+  /mantendo-url-original|uploaded\.push\(sourceUrl\)/,
+  'failed materialization must not silently persist temporary Bling URLs',
 );
 
 console.log('bling-import-vps-images ok');

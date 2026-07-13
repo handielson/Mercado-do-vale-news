@@ -1153,6 +1153,11 @@ function isVpsImageUrl(value: string): boolean {
     }
 }
 
+function directVpsImageUrl(path: string): string {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${VPS_DIRECT_BASE_URL}${normalizedPath}`;
+}
+
 function safeBlingImageSku(sku: unknown, blingId: unknown): string {
     const source = String(sku || blingId || 'bling')
         .normalize('NFD')
@@ -1222,7 +1227,9 @@ async function uploadBlingImageToVps(
     formData.append('file', file);
     formData.append('path', storagePath);
 
-    const response = await fetch(buildVpsUrl('/images/upload', { method: 'POST' }), {
+    // Multipart nao pode passar por /api/vps-proxy: o proxy Fastify nao preserva
+    // file/path ao reinjetar o request. Os uploads de imagem usam a VPS direta.
+    const response = await fetch(directVpsImageUrl('/images/upload'), {
         method: 'POST',
         headers: await blingImageUploadHeaders(),
         body: formData,
@@ -1245,18 +1252,7 @@ async function materializeBlingImagesToVps(
 
     for (let index = 0; index < normalized.length; index++) {
         const sourceUrl = normalized[index];
-        try {
-            uploaded.push(await uploadBlingImageToVps(sourceUrl, { ...context, index }));
-        } catch (error: any) {
-            console.warn('[bling:images-to-vps] mantendo-url-original', {
-                blingId: context.blingId,
-                sku: context.sku,
-                index,
-                sourceUrl,
-                reason: error?.message || String(error),
-            });
-            uploaded.push(sourceUrl);
-        }
+        uploaded.push(await uploadBlingImageToVps(sourceUrl, { ...context, index }));
     }
 
     return uploaded;
@@ -1677,7 +1673,8 @@ export async function importBlingProducts(
             if (!row.brand && modelBrandName && finalModelId === validImportModelId) row.brand = modelBrandName;
 
             row.model_id = finalModelId || null;
-            // Materializa as imagens do Bling na VPS; se uma falhar, preserva a URL original para nao quebrar o produto.
+            // Materializa as imagens do Bling na VPS. Se falhar, o item deve falhar
+            // explicitamente para nunca persistir uma URL temporaria do Bling.
             row.images = await materializeBlingImagesToVps(Array.isArray(row.images) ? row.images : [], {
                 sku: row.sku || item.codigo,
                 blingId: item.id,
