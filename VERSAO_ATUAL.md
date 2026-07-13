@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.23-status-audiencia-250
+version: v1.2.24-status-waha-agenda-30-dias
 date: 2026-07-12
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260712-221858-v1223-status-audiencia-250
+release_vps: /var/www/mdv-site/releases/20260712-221859-v1224-status-waha-agenda
 branch: main
-summary: Remove o limite temporário de 10 e restaura 250 visualizadores por Status.
+summary: Publica Status pelo WAHA com foto, video, legenda comercial, repeticao de 1 a 30 dias e diagrama visual.
 ```

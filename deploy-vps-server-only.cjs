@@ -26,7 +26,7 @@ const autoresponderEngineFiles = [
 ];
 const adminEmail = process.env.MDV_ADMIN_EMAIL || process.env.ADMIN_EMAIL || process.env.VPS_ADMIN_EMAIL || process.env.DEFAULT_ADMIN_EMAIL;
 const adminPassword = process.env.MDV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || process.env.VPS_ADMIN_PASSWORD || process.env.DEFAULT_ADMIN_PASSWORD;
-const evolutionStatusServerUrl = process.env.EVOLUTION_STATUS_SERVER_URL || process.env.EVOLUTION_INTERNAL_SERVER_URL || 'http://127.0.0.1:8080';
+const wahaStatusServerUrl = process.env.WAHA_STATUS_SERVER_URL || 'http://127.0.0.1:18082';
 
 if (!host || !username || (!password && !privateKey)) {
   throw new Error('Missing VPS SSH env vars');
@@ -138,14 +138,26 @@ function upsertEnv(content, entries) {
 
 async function ensureRemoteAdminEnv(appDir) {
   const remoteEnv = `${appDir}/.env`;
+  let wahaStatusApiKey = String(process.env.WAHA_STATUS_API_KEY || '').trim();
+  if (!wahaStatusApiKey) {
+    try {
+      wahaStatusApiKey = String(await exec(
+        "docker inspect waha_status_canary --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^WAHA_API_KEY=//p' | head -1"
+      )).trim();
+    } catch {
+      // Mantem o valor remoto atual; a validacao pos-deploy acusara se a chave estiver ausente.
+    }
+  }
   await withSftp(async (sftp) => {
     const current = await readRemoteText(sftp, remoteEnv);
     const entries = {
-      EVOLUTION_STATUS_SERVER_URL: evolutionStatusServerUrl,
-      EVOLUTION_STATUS_TIMEOUT_MS: process.env.EVOLUTION_STATUS_TIMEOUT_MS || '90000',
-      EVOLUTION_STATUS_AUDIENCE_LIMIT: process.env.EVOLUTION_STATUS_AUDIENCE_LIMIT || '250',
+      WAHA_STATUS_SERVER_URL: wahaStatusServerUrl,
+      WAHA_STATUS_TIMEOUT_MS: process.env.WAHA_STATUS_TIMEOUT_MS || '300000',
+      WAHA_STATUS_MEDIA_INTERVAL_MS: process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || '3000',
       WHATSAPP_STATUS_STALE_SENDING_SECONDS: process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || '120',
     };
+    if (wahaStatusApiKey) entries.WAHA_STATUS_API_KEY = wahaStatusApiKey;
+    entries.WAHA_STATUS_SESSION = process.env.WAHA_STATUS_SESSION || 'statusloja-wpp';
     if (adminEmail && adminPassword) {
       entries.MDV_ADMIN_EMAIL = adminEmail;
       entries.MDV_ADMIN_PASSWORD = adminPassword;

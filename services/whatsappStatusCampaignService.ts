@@ -2,6 +2,7 @@ import { vpsClient } from './vpsClient';
 
 export type WhatsAppStatusCampaignSourceType = 'product' | 'category';
 export type WhatsAppStatusCampaignFrequency = 'once' | 'daily' | 'weekly';
+export type WhatsAppStatusRepeatMode = 'full_day' | 'single_product';
 
 export interface WhatsAppStatusCampaign {
   id: string;
@@ -14,6 +15,10 @@ export interface WhatsAppStatusCampaign {
   interval_minutes: number;
   start_time: string;
   frequency: WhatsAppStatusCampaignFrequency;
+  start_date: string | null;
+  repeat_days: number;
+  repeat_mode: WhatsAppStatusRepeatMode;
+  repeat_product_id: string | null;
   active: boolean | number;
   last_product_id: string | null;
   last_run_at: string | null;
@@ -75,6 +80,10 @@ export interface WhatsAppStatusCampaignProgress {
   daily_limit: number;
   interval_minutes: number;
   start_time: string;
+  start_date: string | null;
+  repeat_days: number;
+  repeat_mode: WhatsAppStatusRepeatMode;
+  repeat_product_id: string | null;
   active: boolean;
   scheduled: {
     total: number;
@@ -133,6 +142,10 @@ function normalizeCampaign(row: WhatsAppStatusCampaign): WhatsAppStatusCampaign 
     product_ids: productIds,
     daily_limit: Math.max(1, Math.min(10, Number(row.daily_limit || 1))),
     interval_minutes: Math.max(1, Number(row.interval_minutes || 30)),
+    start_date: row.start_date ? String(row.start_date).slice(0, 10) : null,
+    repeat_days: Math.max(1, Math.min(30, Number(row.repeat_days || 1))),
+    repeat_mode: row.repeat_mode === 'single_product' ? 'single_product' : 'full_day',
+    repeat_product_id: row.repeat_product_id || null,
     active: row.active === true || row.active === 1,
   };
 }

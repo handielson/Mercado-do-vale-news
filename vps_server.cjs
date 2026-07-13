@@ -23283,7 +23283,7 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
     if (!productIds.length) return [];
     const placeholders = productIds.map(() => '?').join(',');
     const [rows] = await pool.query(
-      `SELECT id, model_id, brand, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
+      `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
        FROM products WHERE id IN (${placeholders})`,
       productIds
     );
@@ -23294,7 +23294,7 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
     if (!modelIds.length) return selectedProducts;
     const modelPlaceholders = modelIds.map(() => '?').join(',');
     const [siblings] = await pool.query(
-      `SELECT id, model_id, brand, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
+      `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
        FROM products
        WHERE model_id IN (${modelPlaceholders}) AND status = 'active'
        ORDER BY name ASC
@@ -23311,7 +23311,7 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
   }
 
   const [rows] = await pool.query(
-    `SELECT id, model_id, brand, name, sku, slug, images, image_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
+    `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
      FROM products
      WHERE category_id = ? AND status = 'active'
      ORDER BY updated_at DESC, name ASC
@@ -23357,34 +23357,6 @@ function buildWhatsAppStatusCaption(product, cardPlan) {
   ].join('\n');
 }
 
-function normalizeWhatsAppStatusContactNumber(value) {
-  const text = String(value || '').trim();
-  if (!text || /@g\.us$/i.test(text) || /@lid$/i.test(text)) return '';
-  if (text.includes('@') && !/@s\.whatsapp\.net$/i.test(text)) return '';
-  const digits = text.replace(/@s\.whatsapp\.net$/i, '').replace(/\D/g, '');
-  return digits.length >= 10 ? digits : '';
-}
-
-function hashWhatsAppStatusAudienceSeed(value) {
-  const text = String(value || '');
-  let hash = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
-  }
-  return Math.abs(hash);
-}
-
-function selectWhatsAppStatusAudience(numbers, seed, limit) {
-  const unique = Array.from(new Set((Array.isArray(numbers) ? numbers : []).filter(Boolean)));
-  const max = Math.max(1, Math.min(unique.length || 1, Number(limit) || unique.length || 1));
-  if (unique.length <= max) return { selected: unique, total: unique.length };
-  const offset = hashWhatsAppStatusAudienceSeed(seed) % unique.length;
-  const rotated = unique.slice(offset).concat(unique.slice(0, offset));
-  return { selected: rotated.slice(0, max), total: unique.length };
-}
-
-const whatsappStatusAudienceCache = new Map();
-
 function sanitizeWhatsAppStatusTraceDetails(details = {}) {
   const safe = {};
   for (const [key, value] of Object.entries(details || {})) {
@@ -23413,213 +23385,125 @@ async function appendWhatsAppStatusTrace({ runId, logId = null, campaignId, prod
   }
 }
 
-async function fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance, trace }) {
-  const configured = String(process.env.EVOLUTION_STATUS_JID_LIST || '')
-    .split(',')
-    .map(normalizeWhatsAppStatusContactNumber)
-    .filter(Boolean);
-  if (configured.length > 0) {
-    const numbers = Array.from(new Set(configured));
-    await trace('audience.loaded', 'ok', 'Audiencia carregada da configuracao', { source: 'configured', unique_contacts: numbers.length });
-    return numbers;
-  }
+function buildWhatsAppStatusVideoCandidates(product) {
+  const candidates = [];
+  const configured = String(product?.video_url || '').trim();
+  if (/^https?:\/\//i.test(configured)) candidates.push(configured);
+  const sku = String(product?.sku || '').trim().replace(/\s+/g, '');
+  if (sku) candidates.push(`https://videos.mercadodovale.com.br/${encodeURIComponent(sku)}.mp4`);
+  return Array.from(new Set(candidates));
+}
 
-  const cacheKey = `${baseUrl}|${instance}`;
-  const cached = whatsappStatusAudienceCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    await trace('audience.loaded', 'ok', 'Audiencia carregada do cache', { source: 'cache', unique_contacts: cached.numbers.length });
-    return cached.numbers;
-  }
+function normalizeWhatsAppStatusRepeatDays(value) {
+  const parsed = Math.floor(Number(value) || 1);
+  return Math.max(1, Math.min(30, parsed));
+}
 
-  const take = Math.max(1, Math.min(5000, Number(process.env.EVOLUTION_STATUS_CONTACT_LIMIT || 2000)));
-  const endpoint = `${baseUrl}/chat/findContacts/${encodeURIComponent(instance)}`;
-  const audienceStartedAt = Date.now();
-  await trace('audience.request', 'started', 'Consultando contatos na Evolution', { source: 'evolution', take, timeout_ms: Math.max(5000, Number(process.env.EVOLUTION_STATUS_CONTACTS_TIMEOUT_MS || 15000)) });
+function getWhatsAppStatusEffectiveDailyLimit(campaign) {
+  return campaign?.repeat_mode === 'single_product' && campaign?.repeat_product_id
+    ? 1
+    : clampWhatsAppStatusDailyLimit(campaign?.daily_limit);
+}
+
+async function resolveWhatsAppStatusVideoUrl(product) {
+  const timeoutMs = Math.max(1000, Number(process.env.WAHA_STATUS_MEDIA_CHECK_TIMEOUT_MS || 5000));
+  for (const candidate of buildWhatsAppStatusVideoCandidates(product)) {
+    try {
+      const response = await fetch(candidate, { method: 'HEAD', signal: AbortSignal.timeout(timeoutMs) });
+      if (response.ok && String(response.headers.get('content-type') || '').toLowerCase().includes('video')) return candidate;
+    } catch {}
+  }
+  return '';
+}
+
+async function sendWahaStatusMedia({ baseUrl, apiKey, session, type, mediaUrl, caption, timeoutMs }) {
+  const endpoint = `${baseUrl}/api/${encodeURIComponent(session)}/status/${type}`;
+  const payload = {
+    file: { url: mediaUrl },
+    caption,
+    ...(type === 'video' ? { convert: true } : {}),
+  };
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      apikey: apiKey,
+      'X-Api-Key': apiKey,
     },
-    body: JSON.stringify({ where: {}, take, skip: 0, orderBy: {} }),
-    signal: AbortSignal.timeout(Math.max(5000, Number(process.env.EVOLUTION_STATUS_CONTACTS_TIMEOUT_MS || 15000))),
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const text = await response.text();
   let body = text;
-  try {
-    body = text ? JSON.parse(text) : [];
-  } catch {}
+  try { body = text ? JSON.parse(text) : {}; } catch {}
   if (!response.ok) {
-    throw new Error(`Falha ao buscar contatos para Status: HTTP ${response.status} ${typeof body === 'string' ? body.slice(0, 180) : JSON.stringify(body).slice(0, 180)}`);
+    const message = body?.exception?.message || body?.message || body?.error || response.statusText;
+    throw new Error(`WAHA ${type} HTTP ${response.status}: ${String(message || '').slice(0, 300)}`);
   }
-  const rows = Array.isArray(body) ? body : (Array.isArray(body?.contacts) ? body.contacts : (Array.isArray(body?.data) ? body.data : []));
-  const numbers = rows
-    .map((contact) => normalizeWhatsAppStatusContactNumber(contact?.number || contact?.remoteJid || contact?.id || contact?.jid))
-    .filter(Boolean);
-  const unique = Array.from(new Set(numbers));
-  whatsappStatusAudienceCache.set(cacheKey, { numbers: unique, expiresAt: Date.now() + 10 * 60 * 1000 });
-  await trace('audience.loaded', 'ok', 'Contatos recebidos e normalizados', { source: 'evolution', http_status: response.status, rows_received: rows.length, unique_contacts: unique.length }, Date.now() - audienceStartedAt);
-  return unique;
-}
-
-function isConfirmedWhatsAppStatusResponse(body) {
-  const key = body?.key || body?.data?.key || body?.message?.key;
-  return String(key?.remoteJid || '').toLowerCase() === 'status@broadcast'
-    && Boolean(String(key?.id || '').trim());
+  return { endpoint, status: response.status, body, bodyText: text };
 }
 
 async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null, traceContext = {}) {
-  const baseUrl = String(process.env.EVOLUTION_STATUS_SERVER_URL || process.env.EVOLUTION_INTERNAL_SERVER_URL || process.env.EVOLUTION_SERVER_URL || process.env.EVOLUTION_API_URL || 'https://bot.mercadodovale.com.br').replace(/\/+$/, '');
-  const apiKey = String(process.env.EVOLUTION_API_KEY || process.env.EVOLUTION_GLOBAL_API_KEY || '');
-  const instance = String(process.env.EVOLUTION_STATUS_INSTANCE || process.env.EVOLUTION_API_INSTANCE || 'botmercadodovale');
-  const endpoint = `${baseUrl}/message/sendStatus/${encodeURIComponent(instance)}`;
+  const baseUrl = String(process.env.WAHA_STATUS_SERVER_URL || 'http://127.0.0.1:18082').replace(/\/+$/, '');
+  const apiKey = String(process.env.WAHA_STATUS_API_KEY || '');
+  const session = String(process.env.WAHA_STATUS_SESSION || '').trim();
   const image = getWhatsAppStatusProductImage(product);
+  const video = await resolveWhatsAppStatusVideoUrl(product);
   const cardPlan = await getWhatsAppStatusCardPlan(product.price_retail);
   const caption = buildWhatsAppStatusCaption(product, cardPlan);
-  const timeoutMs = Math.max(5000, Number(process.env.EVOLUTION_STATUS_TIMEOUT_MS || 90000));
+  const timeoutMs = Math.max(10000, Number(process.env.WAHA_STATUS_TIMEOUT_MS || 300000));
+  const mediaIntervalMs = Math.max(0, Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 3000));
   const startedAt = Date.now();
-  let statusAudienceCount = 0;
-  let statusAudienceTotal = 0;
-  let statusAudienceLimit = 0;
   const trace = async (stage, state, message, details = {}, elapsedMs = null) => appendWhatsAppStatusTrace({
     ...traceContext, campaignId: campaign.id, productId: product.id, stage, state, message, details, elapsedMs,
   });
+  const debugEndpoint = `${baseUrl}/api/${encodeURIComponent(session || 'sessao-ausente')}/status/{image|video}`;
 
-  await trace('product.prepared', 'ok', 'Produto e legenda preparados', { has_image: Boolean(image), caption_length: caption.length, scheduled: Boolean(scheduledFor) }, Date.now() - startedAt);
+  await trace('product.prepared', 'ok', 'Produto e legenda preparados', {
+    has_image: Boolean(image), has_video: Boolean(video), caption_length: caption.length, scheduled: Boolean(scheduledFor),
+  }, Date.now() - startedAt);
 
   if (!image) {
-    await trace('media.validation', 'failed', 'Produto sem imagem publica', { has_image: false });
-    const debug = buildWhatsAppStatusDebug({
-      campaign,
-      product,
-      endpoint,
-      scheduledFor,
-      errorMessage: 'Produto sem imagem publica para enviar no Status',
-    });
+    await trace('media.validation', 'failed', 'Produto sem imagem publica', { has_image: false, has_video: Boolean(video) });
+    const debug = buildWhatsAppStatusDebug({ campaign, product, endpoint: debugEndpoint, scheduledFor, errorMessage: 'Produto sem imagem publica para enviar no Status' });
+    return { productId: product.id, productName: product.name, status: 'failed', debug };
+  }
+  if (!apiKey || !session) {
+    await trace('config.validation', 'failed', 'Configuracao WAHA ausente', { has_api_key: Boolean(apiKey), has_session: Boolean(session) });
+    const debug = buildWhatsAppStatusDebug({ campaign, product, endpoint: debugEndpoint, scheduledFor, errorMessage: 'WAHA_STATUS_API_KEY ou WAHA_STATUS_SESSION ausente no ambiente da VPS' });
     return { productId: product.id, productName: product.name, status: 'failed', debug };
   }
 
-  if (!apiKey) {
-    await trace('config.validation', 'failed', 'Chave da Evolution ausente', { instance, has_api_key: false });
-    const debug = buildWhatsAppStatusDebug({
-      campaign,
-      product,
-      endpoint,
-      scheduledFor,
-      errorMessage: 'EVOLUTION_API_KEY ausente no ambiente da VPS',
-    });
-    return { productId: product.id, productName: product.name, status: 'failed', debug };
-  }
-
+  const sentMedia = [];
   try {
-    await trace('config.validation', 'ok', 'Configuracao da Evolution validada', { instance, has_api_key: true, endpoint_host: new URL(endpoint).host });
-    const allStatusJidList = await fetchWhatsAppStatusAudience({ baseUrl, apiKey, instance, trace });
-    const audienceLimit = Math.max(1, Math.min(5000, Number(process.env.EVOLUTION_STATUS_AUDIENCE_LIMIT || 250)));
-    statusAudienceLimit = audienceLimit;
-    const audience = selectWhatsAppStatusAudience(
-      allStatusJidList,
-      `${campaign?.id || ''}:${product?.id || product?.sku || ''}:${new Date().toISOString().slice(0, 10)}`,
-      audienceLimit,
-    );
-    const statusJidList = audience.selected;
-    statusAudienceCount = statusJidList.length;
-    statusAudienceTotal = audience.total;
-    await trace('audience.selected', 'ok', 'Audiencia selecionada para o Status', { available_contacts: audience.total, selected_contacts: statusJidList.length, audience_limit: audienceLimit });
-    if (!statusJidList.length) {
-      await trace('audience.selected', 'failed', 'Nenhum contato elegivel', { selected_contacts: 0 });
-      const debug = buildWhatsAppStatusDebug({
-        campaign,
-        product,
-        endpoint,
-        scheduledFor,
-        extraLines: ['Contatos Status: 0'],
-        errorMessage: 'Nenhum contato elegivel encontrado para visualizar o Status',
-      });
-      return { productId: product.id, productName: product.name, status: 'failed', debug };
+    await trace('config.validation', 'ok', 'Configuracao WAHA validada', { session, endpoint_host: new URL(baseUrl).host, has_api_key: true });
+    for (const media of [{ type: 'image', url: image }, ...(video ? [{ type: 'video', url: video }] : [])]) {
+      if (sentMedia.length && mediaIntervalMs > 0) await new Promise((resolve) => setTimeout(resolve, mediaIntervalMs));
+      const requestStartedAt = Date.now();
+      let mediaHost = '';
+      try { mediaHost = new URL(media.url).host; } catch {}
+      await trace(`waha.${media.type}.request`, 'started', `Enviando ${media.type} para o Status pelo WAHA`, { media_host: mediaHost, timeout_ms: timeoutMs, convert: media.type === 'video' });
+      const result = await sendWahaStatusMedia({ baseUrl, apiKey, session, type: media.type, mediaUrl: media.url, caption, timeoutMs });
+      sentMedia.push(media.type);
+      await trace(`waha.${media.type}.accepted`, 'ok', `${media.type} aceito para publicacao assincrona`, { http_status: result.status, response_id_present: Boolean(result.body?.id) }, Date.now() - requestStartedAt);
     }
-    const payload = { type: 'image', content: image, caption, allContacts: false, statusJidList };
-    let imageHost = '';
-    try { imageHost = new URL(image).host; } catch {}
-    await trace('payload.built', 'ok', 'Payload seguro montado', { type: 'image', image_host: imageHost, caption_length: caption.length, all_contacts: false, audience_count: statusJidList.length });
-    const requestStartedAt = Date.now();
-    await trace('evolution.request', 'started', 'Requisicao enviada para sendStatus', { instance, audience_count: statusJidList.length, timeout_ms: timeoutMs });
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: apiKey,
-      },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    const text = await response.text();
-    let body = text;
-    try {
-      body = text ? JSON.parse(text) : {};
-    } catch {}
-    const responseKeys = body && typeof body === 'object' ? Object.keys(body).slice(0, 12).join(',') : typeof body;
-    await trace('evolution.response', response.ok ? 'ok' : 'failed', 'Resposta recebida da Evolution', { http_status: response.status, body_length: text.length, response_keys: responseKeys }, Date.now() - requestStartedAt);
-
-    if (!response.ok || body?.error === true) {
-      await trace('confirmation.checked', 'failed', 'Evolution respondeu com erro', { http_status: response.status, error_flag: body?.error === true });
-      const debug = buildWhatsAppStatusDebug({
-        campaign,
-        product,
-        endpoint,
-        httpStatus: response.status,
-        responseBody: typeof body === 'string' ? body : JSON.stringify(body),
-        errorMessage: body?.message || body?.response || response.statusText,
-        scheduledFor,
-        extraLines: [
-          `Contatos Status: ${statusAudienceCount} de ${audience.total}`,
-          `Limite de audiencia: ${audienceLimit}`,
-          `Tempo decorrido: ${Date.now() - startedAt}ms`,
-          `Timeout configurado: ${timeoutMs}ms`,
-        ],
-      });
-      return { productId: product.id, productName: product.name, status: 'failed', debug };
-    }
-
-    if (!isConfirmedWhatsAppStatusResponse(body)) {
-      const responseKey = body?.key || body?.data?.key || body?.message?.key;
-      await trace('confirmation.checked', 'failed', 'Resposta sem confirmacao de Status', { remote_jid_is_status: String(responseKey?.remoteJid || '').toLowerCase() === 'status@broadcast', message_id_present: Boolean(responseKey?.id) });
-      const debug = buildWhatsAppStatusDebug({
-        campaign,
-        product,
-        endpoint,
-        httpStatus: response.status,
-        responseBody: typeof body === 'string' ? body : JSON.stringify(body),
-        errorMessage: 'Evolution respondeu sem confirmar uma mensagem para status@broadcast',
-        scheduledFor,
-        extraLines: [
-          `Contatos Status: ${statusAudienceCount} de ${audience.total}`,
-          `Limite de audiencia: ${audienceLimit}`,
-          `Tempo decorrido: ${Date.now() - startedAt}ms`,
-        ],
-      });
-      return { productId: product.id, productName: product.name, status: 'failed', debug };
-    }
-
-    await trace('confirmation.checked', 'ok', 'Status confirmado pela Evolution', { remote_jid_is_status: true, message_id_present: true }, Date.now() - startedAt);
-    return { productId: product.id, productName: product.name, status: 'sent' };
+    await trace('confirmation.checked', 'ok', 'Midias aceitas pelo WAHA para publicacao assincrona', { sent_media: sentMedia.join(','), has_video: Boolean(video) }, Date.now() - startedAt);
+    return { productId: product.id, productName: product.name, status: 'sent', media: sentMedia };
   } catch (error) {
     const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError';
     const debug = buildWhatsAppStatusDebug({
       campaign,
       product,
-      endpoint,
+      endpoint: debugEndpoint,
       scheduledFor,
       extraLines: [
-        statusAudienceCount ? `Contatos Status: ${statusAudienceCount} de ${statusAudienceTotal || statusAudienceCount}` : '',
-        statusAudienceLimit ? `Limite de audiencia: ${statusAudienceLimit}` : '',
+        `Midias aceitas antes da falha: ${sentMedia.join(', ') || 'nenhuma'}`,
+        `Video encontrado: ${video ? 'sim' : 'nao'}`,
         `Tempo decorrido: ${Date.now() - startedAt}ms`,
         `Timeout configurado: ${timeoutMs}ms`,
       ],
-      errorMessage: timedOut
-        ? `Sem confirmacao da Evolution apos ${Math.round(timeoutMs / 1000)}s. O Status nao foi marcado como enviado.`
-        : error?.message || String(error),
+      errorMessage: timedOut ? `WAHA nao respondeu apos ${Math.round(timeoutMs / 1000)}s` : error?.message || String(error),
     });
-    await trace(timedOut ? 'evolution.timeout' : 'evolution.network', 'failed', timedOut ? 'Evolution nao confirmou dentro do limite' : 'Falha de comunicacao com a Evolution', { error_name: error?.name || 'Error', timeout_ms: timeoutMs }, Date.now() - startedAt);
+    await trace(timedOut ? 'waha.timeout' : 'waha.error', 'failed', timedOut ? 'WAHA nao respondeu dentro do limite' : 'Falha ao publicar Status pelo WAHA', { error_name: error?.name || 'Error', sent_media: sentMedia.join(',') }, Date.now() - startedAt);
     return { productId: product.id, productName: product.name, status: 'failed', debug };
   }
 }
@@ -23648,9 +23532,15 @@ async function markStaleWhatsAppStatusSendingLogs(campaignId = null) {
 }
 
 async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledFor = null, slotIndex = null, runId = crypto.randomUUID() } = {}) {
-  const products = await getWhatsAppStatusCampaignProducts(campaign);
-  const selected = rotateWhatsAppStatusProducts(products, campaign.last_product_id)
-    .slice(0, clampWhatsAppStatusDailyLimit(maxProducts || campaign.daily_limit));
+  const loadedProducts = await getWhatsAppStatusCampaignProducts(campaign);
+  const products = campaign.repeat_mode === 'single_product' && campaign.repeat_product_id
+    ? loadedProducts.filter((product) => product.id === campaign.repeat_product_id)
+    : loadedProducts;
+  const stableDayProducts = rotateWhatsAppStatusProducts(products, null);
+  const selected = scheduledFor && slotIndex !== null && campaign.start_date
+    ? stableDayProducts.slice(slotIndex, slotIndex + 1)
+    : rotateWhatsAppStatusProducts(products, campaign.last_product_id)
+      .slice(0, clampWhatsAppStatusDailyLimit(maxProducts || getWhatsAppStatusEffectiveDailyLimit(campaign)));
   await appendWhatsAppStatusTrace({ runId, campaignId: campaign.id, stage: 'campaign.products', state: 'ok', message: 'Produtos elegiveis selecionados', details: { loaded_products: products.length, selected_products: selected.length, trigger: slotIndex == null ? 'manual' : 'scheduled' } });
 
   if (!selected.length) {
@@ -23715,7 +23605,7 @@ function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
     const campaignLogs = logsByCampaign.get(campaign.id) || [];
     const scheduledLogs = campaignLogs.filter((log) => log.slot_index !== null && log.slot_index !== undefined);
     const completedSlots = new Set(scheduledLogs.map((log) => Number(log.slot_index)).filter((slot) => Number.isFinite(slot)));
-    const total = clampWhatsAppStatusDailyLimit(campaign.daily_limit);
+    const total = getWhatsAppStatusEffectiveDailyLimit(campaign);
     let nextSlotIndex = null;
     for (let slot = 0; slot < total; slot += 1) {
       if (!completedSlots.has(slot)) {
@@ -23735,6 +23625,10 @@ function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
     return {
       campaign_id: campaign.id,
       daily_limit: total,
+      start_date: campaign.start_date || null,
+      repeat_days: normalizeWhatsAppStatusRepeatDays(campaign.repeat_days),
+      repeat_mode: campaign.repeat_mode || 'full_day',
+      repeat_product_id: campaign.repeat_product_id || null,
       interval_minutes: interval,
       start_time: String(campaign.start_time || '08:00').slice(0, 5),
       active: campaign.active === 1 || campaign.active === true,
@@ -23766,7 +23660,8 @@ function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
 fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey }, async () => {
   await markStaleWhatsAppStatusSendingLogs();
   const [campaigns] = await pool.query(
-    `SELECT id, title, active, daily_limit, interval_minutes, start_time
+    `SELECT id, title, active, daily_limit, interval_minutes, start_time,
+            start_date, repeat_days, repeat_mode, repeat_product_id
      FROM whatsapp_status_campaigns
      ORDER BY updated_at DESC
      LIMIT 200`
@@ -23848,11 +23743,22 @@ fastify.post('/whatsapp/status-campaigns/:id/send-now', { preHandler: requireSyn
 });
 
 async function runDueWhatsAppStatusCampaigns() {
+  await pool.query(
+    `UPDATE whatsapp_status_campaigns
+     SET active = 0
+     WHERE active = 1
+       AND start_date IS NOT NULL
+       AND CURDATE() >= DATE_ADD(start_date, INTERVAL repeat_days DAY)`
+  );
   const [campaigns] = await pool.query(
-    `SELECT *
+    `SELECT *, IF(start_date IS NULL, NULL, DATEDIFF(CURDATE(), start_date)) AS repeat_day_index
      FROM whatsapp_status_campaigns
      WHERE active = 1
        AND frequency IN ('daily', 'weekly', 'once')
+       AND (start_date IS NULL OR (
+         CURDATE() >= start_date
+         AND CURDATE() < DATE_ADD(start_date, INTERVAL repeat_days DAY)
+       ))
        AND start_time <= CURTIME()
      ORDER BY start_time ASC
      LIMIT 20`
@@ -23861,7 +23767,7 @@ async function runDueWhatsAppStatusCampaigns() {
   const now = new Date();
   for (const campaign of campaigns) {
     const interval = normalizeWhatsAppStatusInterval(campaign.interval_minutes);
-    const limit = clampWhatsAppStatusDailyLimit(campaign.daily_limit);
+    const limit = getWhatsAppStatusEffectiveDailyLimit(campaign);
     const [startHours, startMinutes] = String(campaign.start_time || '08:00').split(':').map((part) => Number(part) || 0);
     const startTotal = startHours * 60 + startMinutes;
     const nowTotal = now.getHours() * 60 + now.getMinutes();
@@ -23886,7 +23792,9 @@ async function runDueWhatsAppStatusCampaigns() {
     });
     results.push({ campaignId: campaign.id, slotIndex, ...result });
 
-    if (campaign.frequency === 'once' && slotIndex >= limit - 1) {
+    const repeatDays = normalizeWhatsAppStatusRepeatDays(campaign.repeat_days);
+    const boundedDayIndex = campaign.repeat_day_index == null ? -1 : Number(campaign.repeat_day_index);
+    if ((campaign.frequency === 'once' || (boundedDayIndex === repeatDays - 1)) && slotIndex >= limit - 1) {
       await pool.query('UPDATE whatsapp_status_campaigns SET active = 0 WHERE id = ?', [campaign.id]);
     }
   }
@@ -32211,6 +32119,10 @@ async function runMigrations() {
       interval_minutes INT NOT NULL DEFAULT 30,
       start_time TIME NOT NULL DEFAULT '08:00:00',
       frequency ENUM('once','daily','weekly') NOT NULL DEFAULT 'daily',
+      start_date DATE NULL,
+      repeat_days TINYINT UNSIGNED NOT NULL DEFAULT 1,
+      repeat_mode ENUM('full_day','single_product') NOT NULL DEFAULT 'full_day',
+      repeat_product_id CHAR(36) NULL,
       active TINYINT(1) NOT NULL DEFAULT 1,
       last_product_id CHAR(36) NULL,
       last_run_at DATETIME NULL,
@@ -32225,6 +32137,10 @@ async function runMigrations() {
   await addColumnIfMissing('whatsapp_status_campaigns', 'daily_limit', 'INT NOT NULL DEFAULT 10');
   await addColumnIfMissing('whatsapp_status_campaigns', 'interval_minutes', 'INT NOT NULL DEFAULT 30');
   await addColumnIfMissing('whatsapp_status_campaigns', 'last_error_debug', 'TEXT NULL');
+  await addColumnIfMissing('whatsapp_status_campaigns', 'start_date', 'DATE NULL');
+  await addColumnIfMissing('whatsapp_status_campaigns', 'repeat_days', 'TINYINT UNSIGNED NOT NULL DEFAULT 1');
+  await addColumnIfMissing('whatsapp_status_campaigns', 'repeat_mode', "ENUM('full_day','single_product') NOT NULL DEFAULT 'full_day'");
+  await addColumnIfMissing('whatsapp_status_campaigns', 'repeat_product_id', 'CHAR(36) NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS whatsapp_status_campaign_logs (

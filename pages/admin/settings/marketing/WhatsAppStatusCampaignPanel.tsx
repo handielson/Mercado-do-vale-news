@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, Copy, ImageIcon, Loader2, MessageCircle, Play, Plus, RefreshCw, Save, Smartphone, Trash2, X, ToggleLeft, ToggleRight } from 'lucide-react';
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Copy, ImageIcon, Loader2, MessageCircle, Play, Plus, RefreshCw, Save, Smartphone, Trash2, X, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogService } from '../../../../services/catalogService';
 import { vpsApiService } from '../../../../services/vpsApiService';
@@ -18,9 +18,16 @@ import {
   type WhatsAppStatusCampaign,
   type WhatsAppStatusCampaignProgress,
   type WhatsAppStatusCampaignInput,
+  type WhatsAppStatusRepeatMode,
   type WhatsAppStatusCampaignSourceType,
   type WhatsAppStatusTraceEvent,
 } from '../../../../services/whatsappStatusCampaignService';
+
+function todayDateValue() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
 
 const DEFAULT_FORM: WhatsAppStatusCampaignInput = {
   title: 'Status diario de produtos',
@@ -32,6 +39,10 @@ const DEFAULT_FORM: WhatsAppStatusCampaignInput = {
   interval_minutes: 30,
   start_time: '08:00',
   frequency: 'daily',
+  start_date: todayDateValue(),
+  repeat_days: 1,
+  repeat_mode: 'full_day',
+  repeat_product_id: null,
   active: true,
 };
 
@@ -180,6 +191,63 @@ function traceDetails(event: WhatsAppStatusTraceEvent) {
     .join(' · ');
 }
 
+function addScheduleDays(value: string | null | undefined, offset: number) {
+  const [year, month, day] = String(value || todayDateValue()).slice(0, 10).split('-').map(Number);
+  const date = new Date(year, Math.max(0, month - 1), day || 1);
+  date.setDate(date.getDate() + offset);
+  return date;
+}
+
+function scheduleSlotTime(startTime: string, intervalMinutes: number, slotIndex: number) {
+  const [hours, minutes] = normalizeTime(startTime).split(':').map(Number);
+  const total = hours * 60 + minutes + intervalMinutes * slotIndex;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function ScheduleDiagram({ form, products }: { form: WhatsAppStatusCampaignInput; products: CatalogProduct[] }) {
+  const repeatDays = Math.max(1, Math.min(30, Number(form.repeat_days || 1)));
+  const totalSlots = form.repeat_mode === 'single_product' ? 1 : Math.max(1, Math.min(10, Number(form.daily_limit || 1)));
+  const interval = Math.max(1, Number(form.interval_minutes || 30));
+  const specific = products.find((product) => product.id === form.repeat_product_id);
+  const labels = form.repeat_mode === 'single_product'
+    ? [specific?.name || 'Produto especifico']
+    : products.map((product) => product.name).filter(Boolean);
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-4 w-4 text-emerald-600" />
+          <h4 className="font-bold text-slate-800">Diagrama da programacao</h4>
+        </div>
+        <span className="text-xs font-semibold text-slate-500">{repeatDays} dia(s) · {totalSlots} Status por dia</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+        {Array.from({ length: repeatDays }, (_, dayIndex) => {
+          const date = addScheduleDays(form.start_date, dayIndex);
+          return (
+            <div key={dayIndex} className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+              <div className="mb-2 flex items-center justify-between gap-1">
+                <span className="text-xs font-black text-slate-700">Dia {dayIndex + 1}</span>
+                <span className="text-[11px] font-semibold text-slate-500">{date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+              </div>
+              <div className="space-y-1">
+                {Array.from({ length: Math.min(totalSlots, 3) }, (_, slotIndex) => (
+                  <div key={slotIndex} className="flex min-w-0 items-center gap-1.5 text-[11px] text-slate-600">
+                    <span className="shrink-0 font-bold text-emerald-700">{scheduleSlotTime(form.start_time, interval, slotIndex)}</span>
+                    <span className="truncate">{labels[slotIndex % Math.max(1, labels.length)] || `Produto ${slotIndex + 1}`}</span>
+                  </div>
+                ))}
+                {totalSlots > 3 && <div className="text-[11px] font-semibold text-slate-400">+ {totalSlots - 3} horario(s)</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function deduplicateProductOptions(products: CatalogProduct[]) {
   const seen = new Set<string>();
   return products.filter((product) => {
@@ -247,7 +315,7 @@ function CampaignProgressBar({
     : `Programado hoje ${scheduled?.done || 0}/${scheduled?.total || campaign.daily_limit}`;
   const detail = isSending
     ? (manualSending
-        ? `Aguardando Evolution: ${currentProduct} ha ${activeElapsed}`
+        ? `Aguardando WAHA: ${currentProduct} ha ${activeElapsed}`
         : manualStarted > 0
           ? `Ultima etapa: ${statusLabel(manualLogs[0]?.status)} - ${manualLogs[0]?.product_name || manualLogs[0]?.product_id || 'produto'}`
           : 'Criando fila no servidor e preparando primeiro Status')
@@ -559,6 +627,9 @@ export default function WhatsAppStatusCampaignPanel() {
   function removeSelectedProduct(productId: string) {
     updateSelectedProductIds(selectedProductIds.filter((id) => id !== productId));
     setSelectedProducts((current) => current.filter((product) => product.id !== productId));
+    setForm((current) => current.repeat_product_id === productId
+      ? { ...current, repeat_product_id: null, repeat_mode: 'full_day' }
+      : current);
   }
 
   function startEdit(campaign: WhatsAppStatusCampaign) {
@@ -573,6 +644,10 @@ export default function WhatsAppStatusCampaignPanel() {
       interval_minutes: campaign.interval_minutes,
       start_time: normalizeTime(campaign.start_time),
       frequency: campaign.frequency,
+      start_date: campaign.start_date || todayDateValue(),
+      repeat_days: campaign.repeat_days || 1,
+      repeat_mode: campaign.repeat_mode || 'full_day',
+      repeat_product_id: campaign.repeat_product_id || null,
       active: Boolean(campaign.active),
     });
     setSelectedProducts([]);
@@ -581,7 +656,7 @@ export default function WhatsAppStatusCampaignPanel() {
 
   function resetForm() {
     setEditingId(null);
-    setForm(DEFAULT_FORM);
+    setForm({ ...DEFAULT_FORM, start_date: todayDateValue() });
     setSelectedProducts([]);
     setPendingProductId('');
   }
@@ -595,8 +670,13 @@ export default function WhatsAppStatusCampaignPanel() {
     try {
       const payload = {
         ...form,
-        daily_limit: Math.max(1, Math.min(10, Number(form.daily_limit || 1))),
+        daily_limit: form.repeat_mode === 'single_product' ? 1 : Math.max(1, Math.min(10, Number(form.daily_limit || 1))),
         interval_minutes: Math.max(1, Number(form.interval_minutes || 30)),
+        start_date: form.start_date || todayDateValue(),
+        repeat_days: Math.max(1, Math.min(30, Number(form.repeat_days || 1))),
+        repeat_mode: form.repeat_mode === 'single_product' ? 'single_product' as WhatsAppStatusRepeatMode : 'full_day' as WhatsAppStatusRepeatMode,
+        repeat_product_id: form.repeat_mode === 'single_product' ? (form.repeat_product_id || selectedProductIds[0] || null) : null,
+        frequency: 'daily' as const,
         product_id: form.source_type === 'product' ? (selectedProductIds[0] || null) : null,
         product_ids: form.source_type === 'product' ? selectedProductIds : [],
         category_id: form.source_type === 'category' ? form.category_id : null,
@@ -604,6 +684,10 @@ export default function WhatsAppStatusCampaignPanel() {
 
       if (payload.source_type === 'product' && selectedProductIds.length === 0) {
         toast.error('Adicione pelo menos um produto');
+        return;
+      }
+      if (payload.repeat_mode === 'single_product' && !payload.repeat_product_id) {
+        toast.error('Escolha o produto que sera repetido');
         return;
       }
 
@@ -720,7 +804,12 @@ export default function WhatsAppStatusCampaignPanel() {
               <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Origem</span>
               <select
                 value={form.source_type}
-                onChange={(event) => updateForm('source_type', event.target.value as WhatsAppStatusCampaignSourceType)}
+                onChange={(event) => setForm((current) => ({
+                  ...current,
+                  source_type: event.target.value as WhatsAppStatusCampaignSourceType,
+                  repeat_mode: event.target.value === 'category' ? 'full_day' : current.repeat_mode,
+                  repeat_product_id: event.target.value === 'category' ? null : current.repeat_product_id,
+                }))}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="category">Categoria</option>
@@ -845,18 +934,57 @@ export default function WhatsAppStatusCampaignPanel() {
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Frequencia</span>
+                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Data inicial</span>
+                <input
+                  type="date"
+                  value={form.start_date || todayDateValue()}
+                  onChange={(event) => updateForm('start_date', event.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Repetir por dias</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={form.repeat_days}
+                  onChange={(event) => updateForm('repeat_days', Number(event.target.value))}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">O que repetir</span>
                 <select
-                  value={form.frequency}
-                  onChange={(event) => updateForm('frequency', event.target.value as any)}
+                  value={form.repeat_mode}
+                  onChange={(event) => updateForm('repeat_mode', event.target.value as WhatsAppStatusRepeatMode)}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="daily">Diaria</option>
-                  <option value="weekly">Semanal</option>
-                  <option value="once">Uma vez</option>
+                  <option value="full_day">Programacao completa</option>
+                  {form.source_type === 'product' && <option value="single_product">Produto especifico</option>}
                 </select>
               </label>
             </div>
+
+            {form.repeat_mode === 'single_product' && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Produto que sera repetido</span>
+                <select
+                  value={form.repeat_product_id || ''}
+                  onChange={(event) => updateForm('repeat_product_id', event.target.value || null)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="">Escolher produto</option>
+                  {selectedProductIds.map((productId) => {
+                    const product = selectedProducts.find((item) => item.id === productId) || products.find((item) => item.id === productId);
+                    return <option key={productId} value={productId}>{product?.name || productId}</option>;
+                  })}
+                </select>
+              </label>
+            )}
 
             <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
               <input
@@ -892,6 +1020,7 @@ export default function WhatsAppStatusCampaignPanel() {
         </div>
 
         <div className="space-y-3">
+          <ScheduleDiagram form={form} products={previewProducts as CatalogProduct[]} />
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -1023,7 +1152,8 @@ export default function WhatsAppStatusCampaignPanel() {
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      Inicio {normalizeTime(campaign.start_time)} - {campaign.frequency === 'daily' ? 'diaria' : campaign.frequency}
+                      {campaign.start_date ? `De ${new Date(`${campaign.start_date}T00:00:00`).toLocaleDateString('pt-BR')} por ${campaign.repeat_days} dia(s)` : `Inicio ${normalizeTime(campaign.start_time)} - ${campaign.frequency === 'daily' ? 'diaria' : campaign.frequency}`}
+                      {' · '}{campaign.repeat_mode === 'single_product' ? 'repete um produto' : 'repete o dia completo'}
                     </p>
                     {copyableDebug && (
                       <button
