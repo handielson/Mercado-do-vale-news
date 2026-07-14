@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.30-bling-imagens-vps",
-  "date": "2026-07-13",
+  "version": "v1.2.31-idle-stop-reply",
+  "date": "2026-07-14",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260713-212432-bling-images-vps",
+  "release_vps": "/var/www/mdv-site/releases/20260714-165125-v1231-idle-stop-reply",
   "branch": "main",
-  "summary": "Corrige o upload permanente das imagens do Bling e recupera os produtos com fotos temporarias ou expiradas."
+  "summary": "Interrompe lembretes de inatividade quando o cliente encerra a conversa e evita convite de nome após uma recusa."
 }

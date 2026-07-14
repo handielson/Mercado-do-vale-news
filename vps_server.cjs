@@ -2629,6 +2629,28 @@ async function logN8nBotInternalMessage(identity, text, sourceNode = 'admin') {
   });
 }
 
+function normalizeN8nBotIdleReplyText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getN8nBotIdleReplyAction(text, previousSourceNode = '') {
+  const normalized = normalizeN8nBotIdleReplyText(text);
+  if (!normalized) return 'keep';
+
+  const shortDecline = /^(?:n|na+o+)(?: (?:obrigad[oa]|obg|valeu|agora|por enquanto))?$/.test(normalized);
+  const explicitClose = /\b(?:por enquanto (?:nao|nada)|nao (?:quero|preciso) mais|nao preciso de mais nada|pode (?:encerrar|parar)|so isso|deixa pra la|ate mais|tchau)\b/.test(normalized);
+  const repliedToIdleFollowup = String(previousSourceNode || '').trim() === 'idle-followup';
+
+  if (explicitClose || (repliedToIdleFollowup && shortDecline)) return 'suppress';
+  return 'reopen';
+}
+
 async function insertN8nBotMessage(input = {}) {
   const identity = normalizeN8nBotClientIdentity(input);
   if (!identity) {
@@ -2643,6 +2665,18 @@ async function insertN8nBotMessage(input = {}) {
     throw error;
   }
   const direction = normalizeN8nBotMessageDirection(input.direction);
+  let idleReplyAction = 'keep';
+  if (direction === 'inbound') {
+    const [previousRows] = await pool.query(
+      `SELECT source_node
+       FROM n8n_bot_messages
+       WHERE remote_jid = ? AND direction IN ('inbound', 'outbound')
+       ORDER BY id DESC
+       LIMIT 1`,
+      [identity.remoteJid]
+    );
+    idleReplyAction = getN8nBotIdleReplyAction(text, previousRows?.[0]?.source_node || '');
+  }
   let payload = null;
   if (input.payload && typeof input.payload === 'object') {
     payload = JSON.stringify(input.payload);
@@ -2683,6 +2717,25 @@ async function insertN8nBotMessage(input = {}) {
       direction,
     ]
   );
+  if (idleReplyAction === 'suppress') {
+    await pool.query(
+      `UPDATE n8n_bot_client_controls
+       SET idle_suppressed_at = CURRENT_TIMESTAMP,
+           idle_suppressed_reason = 'customer-ended-conversation',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE remote_jid = ?`,
+      [identity.remoteJid]
+    );
+  } else if (idleReplyAction === 'reopen') {
+    await pool.query(
+      `UPDATE n8n_bot_client_controls
+       SET idle_suppressed_at = NULL,
+           idle_suppressed_reason = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE remote_jid = ?`,
+      [identity.remoteJid]
+    );
+  }
   return { ok: true };
 }
 
@@ -24382,6 +24435,7 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
        AND latest.source_node <> 'idle-close'
        AND latest.created_at <= DATE_SUB(NOW(), INTERVAL ? MINUTE)
        AND (controls.blocked IS NULL OR controls.blocked = 0)
+       AND controls.idle_suppressed_at IS NULL
        AND (controls.idle_followup_sent_at IS NULL OR controls.idle_followup_sent_at < latest.created_at)
        AND (controls.idle_closed_at IS NULL OR controls.idle_closed_at < latest.created_at)
      ORDER BY latest.created_at ASC
@@ -24398,8 +24452,9 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
         `UPDATE n8n_bot_client_controls
          SET idle_followup_sent_at = CURRENT_TIMESTAMP,
              updated_at = CURRENT_TIMESTAMP
-         WHERE remote_jid = ?
-           AND (idle_followup_sent_at IS NULL OR idle_followup_sent_at < ?)
+          WHERE remote_jid = ?
+            AND idle_suppressed_at IS NULL
+            AND (idle_followup_sent_at IS NULL OR idle_followup_sent_at < ?)
            AND (idle_closed_at IS NULL OR idle_closed_at < ?)`,
         [identity.remoteJid, row.last_message_at, row.last_message_at]
       );
@@ -24436,6 +24491,7 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
        AND latest.source_node = 'idle-followup'
        AND latest.created_at <= DATE_SUB(NOW(), INTERVAL ? MINUTE)
        AND (controls.blocked IS NULL OR controls.blocked = 0)
+       AND controls.idle_suppressed_at IS NULL
        AND controls.idle_followup_sent_at IS NOT NULL
        AND (controls.idle_closed_at IS NULL OR controls.idle_closed_at < controls.idle_followup_sent_at)
      ORDER BY latest.created_at ASC
@@ -24452,8 +24508,9 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
         `UPDATE n8n_bot_client_controls
          SET idle_closed_at = CURRENT_TIMESTAMP,
              updated_at = CURRENT_TIMESTAMP
-         WHERE remote_jid = ?
-           AND idle_followup_sent_at = ?
+          WHERE remote_jid = ?
+            AND idle_suppressed_at IS NULL
+            AND idle_followup_sent_at = ?
            AND (idle_closed_at IS NULL OR idle_closed_at < idle_followup_sent_at)`,
         [identity.remoteJid, row.idle_followup_sent_at]
       );
@@ -32436,6 +32493,8 @@ async function runMigrations() {
   await addColumnIfMissing('n8n_bot_client_controls', 'last_seen_at', 'DATETIME NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'idle_followup_sent_at', 'DATETIME NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'idle_closed_at', 'DATETIME NULL');
+  await addColumnIfMissing('n8n_bot_client_controls', 'idle_suppressed_at', 'DATETIME NULL');
+  await addColumnIfMissing('n8n_bot_client_controls', 'idle_suppressed_reason', 'VARCHAR(160) NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'human_handoff_until', 'DATETIME NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'human_handoff_by', 'VARCHAR(120) NULL');
 
