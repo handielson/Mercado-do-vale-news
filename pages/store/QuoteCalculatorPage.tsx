@@ -1,8 +1,9 @@
 import React from 'react';
-import { Calculator, CreditCard, Smartphone } from 'lucide-react';
+import { Calculator, Check, Copy, CreditCard, MessageCircle, Smartphone } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { formatPrice } from '../../services/installmentCalculator';
 import { paymentFeesService } from '../../services/payment-fees';
+import { publicCompanySettingsService } from '../../services/publicCompanySettings';
 import type { PaymentFee } from '../../types/payment-fees';
 
 function centsFromParam(value: string | null): number {
@@ -29,14 +30,21 @@ export default function QuoteCalculatorPage() {
   const initialTotal = centsFromParam(searchParams.get('total'));
   const initialEntry = Math.min(initialTotal, centsFromParam(searchParams.get('entrada')));
   const initialInstallment = Number(searchParams.get('parcela')) || null;
+  const productName = (searchParams.get('produto') || '').trim();
+  const productVariation = (searchParams.get('variacao') || '').trim();
 
   const [totalInput, setTotalInput] = React.useState(formatInput(initialTotal));
   const [entryInput, setEntryInput] = React.useState(formatInput(initialEntry));
   const [selectedInstallment, setSelectedInstallment] = React.useState<number | null>(initialInstallment);
   const [fees, setFees] = React.useState<PaymentFee[]>([]);
+  const [storePhone, setStorePhone] = React.useState('');
+  const [copied, setCopied] = React.useState(false);
 
   React.useEffect(() => {
     paymentFeesService.list().then(setFees).catch(() => setFees([]));
+    publicCompanySettingsService.get()
+      .then((settings) => setStorePhone(settings?.phone || ''))
+      .catch(() => setStorePhone(''));
   }, []);
 
   const totalCents = parseMoneyInput(totalInput);
@@ -71,6 +79,45 @@ export default function QuoteCalculatorPage() {
 
   const selectedOption = options.find((option) => option.installments === selectedInstallment) || null;
   const grandTotal = entryCents + (selectedOption?.totalWithFee || cardCents);
+  const productLabel = [productName, productVariation].filter(Boolean).join(' - ');
+  const currentCalculatorUrl = React.useMemo(() => {
+    const params = new URLSearchParams({
+      total: String(totalCents),
+      entrada: String(entryCents),
+    });
+    if (selectedInstallment) params.set('parcela', String(selectedInstallment));
+    if (productName) params.set('produto', productName);
+    if (productVariation) params.set('variacao', productVariation);
+    return `https://mercadodovale.com.br/calculadora-orcamento?${params.toString()}`;
+  }, [entryCents, productName, productVariation, selectedInstallment, totalCents]);
+
+  const shareMessage = React.useMemo(() => {
+    let text = 'Olá! Fiz uma simulação de orçamento.\n\n';
+    if (productLabel) text += `Produto: ${productLabel}\n`;
+    text += `Valor do orçamento: ${formatPrice(totalCents)}\n`;
+    text += `Entrada Pix/Dinheiro: ${formatPrice(entryCents)}\n`;
+    text += `Restante no cartão: ${formatPrice(cardCents)}\n`;
+    if (selectedOption) {
+      text += `Opção escolhida: ${selectedOption.installments}x de ${formatPrice(selectedOption.monthlyValue)} = ${formatPrice(selectedOption.totalWithFee)}\n`;
+      text += `Total geral: ${formatPrice(entryCents + selectedOption.totalWithFee)}\n`;
+    }
+    text += `\nLink da simulação: ${currentCalculatorUrl}`;
+    return text;
+  }, [cardCents, currentCalculatorUrl, entryCents, productLabel, selectedOption, totalCents]);
+
+  const handleCopySimulation = async () => {
+    await navigator.clipboard.writeText(shareMessage);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShareStore = () => {
+    const cleanPhone = storePhone.replace(/\D/g, '');
+    const phone = cleanPhone ? `55${cleanPhone}` : '';
+    const encoded = encodeURIComponent(shareMessage);
+    const href = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+    window.open(href, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900">
@@ -86,6 +133,14 @@ export default function QuoteCalculatorPage() {
         </div>
 
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          {productLabel && (
+            <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3">
+              <div className="text-xs font-bold uppercase text-blue-600">Produto da simulação</div>
+              <div className="mt-1 text-base font-black text-blue-950">{productName || 'Produto'}</div>
+              {productVariation && <div className="text-sm font-semibold text-blue-800">{productVariation}</div>}
+            </div>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1 flex items-center gap-1 text-xs font-bold uppercase text-slate-500">
@@ -154,6 +209,34 @@ export default function QuoteCalculatorPage() {
             Pagamento completo no Pix/Dinheiro.
           </section>
         )}
+
+        <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 text-sm font-bold text-slate-700">Compartilhar simulação</div>
+          {!selectedOption && cardCents > 0 && (
+            <p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+              Escolha uma opção de parcelamento para enviar a simulação selecionada para a loja.
+            </p>
+          )}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleShareStore}
+              disabled={cardCents > 0 && !selectedOption}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Compartilhar com a loja
+            </button>
+            <button
+              type="button"
+              onClick={handleCopySimulation}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border-2 border-blue-200 px-4 py-3 text-sm font-bold text-blue-700 transition hover:bg-blue-50"
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? 'Copiado' : 'Copiar simulação'}
+            </button>
+          </div>
+        </section>
       </div>
     </main>
   );

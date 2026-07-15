@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.37-orcamento-carrinho-modos
+version: v1.2.38-orcamento-parcelas-calculadora
 date: 2026-07-15
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260715-215840-v1237-orcamento-carrinho-modos
+release_vps: /var/www/mdv-site/releases/20260715-222331-v1238-orcamento-parcelas-calculadora
 branch: main
-summary: Corrige o orcamento copiado do carrinho com link da calculadora e modo separado ou somado para multiplos aparelhos.
+summary: Lista simulacoes de parcelas no orcamento e permite compartilhar a escolha da calculadora com produto e variacao.
 ```

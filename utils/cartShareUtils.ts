@@ -272,7 +272,13 @@ function brl(cents: number): string {
     return formatPrice(cents);
 }
 
-function buildQuoteCalculatorUrl(totalCents: number, cashCents = 0, selectedInstallment?: number | null): string {
+function buildQuoteCalculatorUrl(
+    totalCents: number,
+    cashCents = 0,
+    selectedInstallment?: number | null,
+    productName?: string,
+    variation?: string
+): string {
     const params = new URLSearchParams({
         total: String(Math.max(0, Math.round(totalCents))),
         entrada: String(Math.max(0, Math.round(cashCents))),
@@ -281,32 +287,77 @@ function buildQuoteCalculatorUrl(totalCents: number, cashCents = 0, selectedInst
     if (selectedInstallment) {
         params.set('parcela', String(selectedInstallment));
     }
+    if (productName) params.set('produto', productName);
+    if (variation) params.set('variacao', variation);
 
     return `${SITE_BASE}/calculadora-orcamento?${params.toString()}`;
 }
 
-function appendMixedPaymentLines(lines: string[], totalBudgetCents: number, mixedPaymentState?: MixedPaymentState | null): void {
+function installmentLabel(installments: number): string {
+    const labels: Record<number, string> = {
+        1: '1️⃣',
+        2: '2️⃣',
+        3: '3️⃣',
+        4: '4️⃣',
+        5: '5️⃣',
+        6: '6️⃣',
+        7: '7️⃣',
+        8: '8️⃣',
+        9: '9️⃣',
+        10: '10️⃣',
+        11: '11️⃣',
+        12: '12️⃣',
+    };
+    return labels[installments] || `${installments}`;
+}
+
+function formatInstallmentLine(option: { installments: number; monthlyValue: number; totalWithFee: number }): string {
+    return `${installmentLabel(option.installments)}x de ${brl(option.monthlyValue)} = ${brl(option.totalWithFee)}`;
+}
+
+function appendMixedPaymentLines(
+    lines: string[],
+    totalBudgetCents: number,
+    mixedPaymentState?: MixedPaymentState | null,
+    productName?: string,
+    variation?: string
+): void {
     if (!mixedPaymentState) {
-        lines.push(`   🔗 Calculadora: ${buildQuoteCalculatorUrl(totalBudgetCents)}`);
+        lines.push('');
+        lines.push(`   🔗 Faça sua simulação:`);
+        lines.push(`   ${buildQuoteCalculatorUrl(totalBudgetCents, 0, null, productName, variation)}`);
         return;
     }
 
     const cashCents = Math.max(0, mixedPaymentState.cashCents || 0);
     const cardCents = Math.max(0, mixedPaymentState.cardCents || 0);
     const selectedOption = mixedPaymentState.cardOption;
+    const options = mixedPaymentState.cardOptions || [];
 
+    lines.push('');
+    lines.push('   Pagamento');
     lines.push(`   📊 Valor do orçamento: ${brl(totalBudgetCents)}`);
     if (cashCents > 0) lines.push(`   💵 Entrada Pix/Dinheiro: ${brl(cashCents)}`);
     if (cardCents > 0) lines.push(`   💳 Restante no cartão: ${brl(cardCents)}`);
 
     if (selectedOption) {
-        lines.push(`   💳 Cartão: ${selectedOption.installments}x de ${brl(selectedOption.monthlyValue)} (total cartão ${brl(selectedOption.totalWithFee)})`);
+        lines.push('');
+        lines.push('   💳 Cartão:');
+        lines.push(`   ${formatInstallmentLine(selectedOption)}`);
         lines.push(`   📊 Total geral: ${brl(cashCents + selectedOption.totalWithFee)}`);
+    } else if (cardCents > 0 && options.length > 0) {
+        lines.push('');
+        lines.push('   💳 Cartão:');
+        options.forEach((option) => {
+            lines.push(`   ${formatInstallmentLine(option)}`);
+        });
     } else if (cardCents === 0 && cashCents > 0) {
         lines.push('   ✅ Pagamento completo no Pix/Dinheiro');
     }
 
-    lines.push(`   🔗 Calculadora: ${buildQuoteCalculatorUrl(totalBudgetCents, cashCents, mixedPaymentState.selectedInstallment)}`);
+    lines.push('');
+    lines.push('   🔗 Faça sua simulação:');
+    lines.push(`   ${buildQuoteCalculatorUrl(totalBudgetCents, cashCents, mixedPaymentState.selectedInstallment, productName, variation)}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -389,7 +440,9 @@ export async function generateBudgetText(
             appendMixedPaymentLines(
                 lines,
                 total,
-                categoryRows.length === 1 ? options.mixedPaymentState : null
+                categoryRows.length === 1 ? options.mixedPaymentState : null,
+                row.name,
+                row.specLine
             );
         }
         lines.push('');
@@ -407,7 +460,7 @@ export async function generateBudgetText(
         if (plan12) {
             lines.push(`💳 Cartão total: 12x de ${brl(plan12.value)} (total ${brl(plan12.total)})`);
         }
-        appendMixedPaymentLines(lines, totalBudgetCents, options.mixedPaymentState);
+        appendMixedPaymentLines(lines, totalBudgetCents, options.mixedPaymentState, 'Orcamento somado', `${categoryRows.length} aparelho(s)`);
         lines.push('');
     }
 

@@ -7,6 +7,7 @@ const singleQuote = readFileSync('utils/whatsappMessageGenerator.ts', 'utf8');
 const cartShare = readFileSync('utils/cartShareUtils.ts', 'utf8');
 const cartPage = readFileSync('pages/store/CartPage.tsx', 'utf8');
 const routes = readFileSync('routes/index.tsx', 'utf8');
+const calculatorPage = readFileSync('pages/store/QuoteCalculatorPage.tsx', 'utf8');
 const quoteModal = readFileSync('components/catalog/QuoteModal.tsx', 'utf8');
 const sendWhatsAppBlock = quoteModal.split('const handleSendWhatsApp = async () => {')[1]?.split('// Buy online:')[0] || '';
 
@@ -22,9 +23,9 @@ assert.match(multiQuote, /Valor do orcamento:/, 'multi-product WhatsApp quote mu
 assert.match(multiQuote, /Parcelamento do restante no cartao:/, 'multi-product WhatsApp quote must list card installments when none is selected');
 assert.match(multiQuote, /options\.forEach/, 'multi-product WhatsApp quote must iterate all installment options');
 
-assert.match(singleQuote, /Calculadora:/, 'single-product WhatsApp quote must include calculator link');
+assert.match(singleQuote, /Faça sua simulação:/, 'single-product WhatsApp quote must include calculator link');
 assert.match(singleQuote, /Valor do orcamento:/, 'single-product WhatsApp quote must include original quote value');
-assert.match(singleQuote, /Parcelamento do restante no cartao:/, 'single-product WhatsApp quote must list card installments when none is selected');
+assert.match(singleQuote, /formatInstallmentLine/, 'single-product WhatsApp quote must format selected and unselected installments consistently');
 assert.doesNotMatch(
   sendWhatsAppBlock,
   /selectedInstallment\s*===\s*null[\s\S]{0,180}alert\(/,
@@ -35,8 +36,17 @@ assert.match(cartShare, /buildQuoteCalculatorUrl/, 'cart budget sharing must inc
 assert.match(cartShare, /mode\?:\s*BudgetTextMode/, 'cart budget sharing must accept a separated or totalized budget mode');
 assert.match(cartShare, /Modo:\s*orçamento separado por aparelho/, 'cart budget sharing must label separated multi-device budgets');
 assert.match(cartShare, /Resumo somado/, 'cart budget sharing must support a totalized multi-device summary');
+assert.match(cartShare, /options\.forEach/, 'cart budget sharing must list 1-12 installments when no installment is selected');
+assert.match(cartShare, /formatInstallmentLine/, 'cart budget sharing must use one consistent installment line format');
+assert.match(cartShare, /params\.set\('produto'/, 'cart budget calculator links must include the product name');
+assert.match(cartShare, /params\.set\('variacao'/, 'cart budget calculator links must include the selected variation');
 assert.match(cartPage, /budgetMode/, 'cart page must let admins choose separated or totalized budget mode');
 assert.match(cartPage, /mixedPaymentState:\s*cartMixedPaymentState/, 'cart page copied budget must use the current Pix/card simulation');
 assert.match(quoteModal, /onMixedPaymentChange\?\.\(mixedPaymentState\)/, 'QuoteModal inline simulator must expose mixed payment state to CartPage');
+assert.match(calculatorPage, /Produto da simulação/, 'public calculator must show product and variation context');
+assert.match(calculatorPage, /searchParams\.get\('produto'\)/, 'public calculator must read product name from URL');
+assert.match(calculatorPage, /searchParams\.get\('variacao'\)/, 'public calculator must read product variation from URL');
+assert.match(calculatorPage, /Compartilhar com a loja/, 'public calculator must let the customer share the selected option with the store');
+assert.match(calculatorPage, /Opção escolhida:/, 'public calculator share message must include the selected installment option');
 
 console.log('Quote calculator static checks passed');

@@ -12,41 +12,80 @@ function brl(cents: number): string {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 }
 
-function buildQuoteCalculatorUrl(totalCents: number, cashCents: number, selectedInstallment?: number | null): string {
+function buildQuoteCalculatorUrl(
+    totalCents: number,
+    cashCents: number,
+    selectedInstallment?: number | null,
+    productName?: string,
+    variation?: string
+): string {
     const params = new URLSearchParams({
         total: String(Math.max(0, Math.round(totalCents))),
         entrada: String(Math.max(0, Math.round(cashCents))),
     });
 
     if (selectedInstallment) params.set('parcela', String(selectedInstallment));
+    if (productName) params.set('produto', productName);
+    if (variation) params.set('variacao', variation);
 
     return `${SITE_BASE}/calculadora-orcamento?${params.toString()}`;
 }
 
-function formatMixedPaymentLines(state: MixedPaymentState, totalBudgetCents: number, indent = ''): string {
+function installmentLabel(installments: number): string {
+    const labels: Record<number, string> = {
+        1: '1️⃣',
+        2: '2️⃣',
+        3: '3️⃣',
+        4: '4️⃣',
+        5: '5️⃣',
+        6: '6️⃣',
+        7: '7️⃣',
+        8: '8️⃣',
+        9: '9️⃣',
+        10: '10️⃣',
+        11: '11️⃣',
+        12: '12️⃣',
+    };
+    return labels[installments] || `${installments}`;
+}
+
+function formatInstallmentLine(option: { installments: number; monthlyValue: number; totalWithFee: number }): string {
+    return `${installmentLabel(option.installments)}x de ${brl(option.monthlyValue)} = ${brl(option.totalWithFee)}`;
+}
+
+function formatMixedPaymentLines(
+    state: MixedPaymentState,
+    totalBudgetCents: number,
+    indent = '',
+    productName?: string,
+    variation?: string
+): string {
     let text = '';
     const cashCents = Math.max(0, state.cashCents || 0);
     const cardCents = Math.max(0, state.cardCents || 0);
     const selectedOption = state.cardOption;
     const options = state.cardOptions || [];
 
+    text += `${indent}Pagamento\n`;
     text += `${indent}Valor do orcamento: ${brl(totalBudgetCents)}\n`;
     if (cashCents > 0) text += `${indent}Entrada Pix/Dinheiro: ${brl(cashCents)}\n`;
     if (cardCents > 0) text += `${indent}Restante no cartao: ${brl(cardCents)}\n`;
 
     if (selectedOption) {
-        text += `${indent}Cartao: ${selectedOption.installments}x de ${brl(selectedOption.monthlyValue)} (total cartao: ${brl(selectedOption.totalWithFee)})\n`;
+        text += `\n${indent}Cartao:\n`;
+        text += `${indent}${formatInstallmentLine(selectedOption)}\n`;
         text += `${indent}Total geral: ${brl(cashCents + selectedOption.totalWithFee)}\n`;
     } else if (cardCents > 0 && options.length > 0) {
-        text += `${indent}Parcelamento do restante no cartao:\n`;
+        text += `\n${indent}Cartao:\n`;
         options.forEach((option) => {
-            text += `${indent}${option.installments}x de ${brl(option.monthlyValue)} - total ${brl(option.totalWithFee)}\n`;
+            text += `${indent}${formatInstallmentLine(option)}\n`;
         });
     } else if (cardCents === 0 && cashCents > 0) {
         text += `${indent}Pagamento completo no Pix/Dinheiro\n`;
     }
 
-    text += `${indent}Calculadora: ${buildQuoteCalculatorUrl(totalBudgetCents, cashCents, state.selectedInstallment)}\n`;
+    text += `\n${indent}Faça sua simulação:\n`;
+    text += `${indent}${buildQuoteCalculatorUrl(totalBudgetCents, cashCents, state.selectedInstallment, productName, variation)}\n`;
 
     return text;
 }
@@ -129,7 +168,13 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
             message += `  📱 ${variant.ram}/${variant.storage}\n`;
         }
         if (quote.mixedPaymentState) {
-            message += formatMixedPaymentLines(quote.mixedPaymentState, quote.cashPrice || installmentPlan.total, '  ');
+            message += formatMixedPaymentLines(
+                quote.mixedPaymentState,
+                quote.cashPrice || installmentPlan.total,
+                '  ',
+                productName,
+                [variant.ram && variant.storage ? `${variant.ram}/${variant.storage}` : '', variant.color].filter(Boolean).join(' ')
+            );
         } else if (false) {
             if (quote.mixedPaymentState.cashCents > 0 && quote.mixedPaymentState.selectedInstallment) {
                 const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
@@ -200,7 +245,13 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
 
         message += `\n*💳 PAGAMENTO*\n`;
         if (quote.mixedPaymentState) {
-            message += formatMixedPaymentLines(quote.mixedPaymentState, quote.cashPrice || installmentPlan.total);
+            message += formatMixedPaymentLines(
+                quote.mixedPaymentState,
+                quote.cashPrice || installmentPlan.total,
+                '',
+                productName,
+                specs.join(' ')
+            );
         } else if (false) {
             if (quote.mixedPaymentState.cashCents > 0 && quote.mixedPaymentState.selectedInstallment) {
                 const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
