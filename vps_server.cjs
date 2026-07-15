@@ -24433,8 +24433,10 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
      WHERE latest.direction = 'outbound'
        AND latest.source_node <> 'idle-followup'
        AND latest.source_node <> 'idle-close'
+       AND latest.source_node <> 'whatsapp-manual-handoff'
        AND latest.created_at <= DATE_SUB(NOW(), INTERVAL ? MINUTE)
        AND (controls.blocked IS NULL OR controls.blocked = 0)
+       AND (controls.human_handoff_until IS NULL OR controls.human_handoff_until <= CURRENT_TIMESTAMP)
        AND controls.idle_suppressed_at IS NULL
        AND (controls.idle_followup_sent_at IS NULL OR controls.idle_followup_sent_at < latest.created_at)
        AND (controls.idle_closed_at IS NULL OR controls.idle_closed_at < latest.created_at)
@@ -24454,6 +24456,7 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
              updated_at = CURRENT_TIMESTAMP
           WHERE remote_jid = ?
             AND idle_suppressed_at IS NULL
+            AND (human_handoff_until IS NULL OR human_handoff_until <= CURRENT_TIMESTAMP)
             AND (idle_followup_sent_at IS NULL OR idle_followup_sent_at < ?)
            AND (idle_closed_at IS NULL OR idle_closed_at < ?)`,
         [identity.remoteJid, row.last_message_at, row.last_message_at]
@@ -24491,6 +24494,7 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
        AND latest.source_node = 'idle-followup'
        AND latest.created_at <= DATE_SUB(NOW(), INTERVAL ? MINUTE)
        AND (controls.blocked IS NULL OR controls.blocked = 0)
+       AND (controls.human_handoff_until IS NULL OR controls.human_handoff_until <= CURRENT_TIMESTAMP)
        AND controls.idle_suppressed_at IS NULL
        AND controls.idle_followup_sent_at IS NOT NULL
        AND (controls.idle_closed_at IS NULL OR controls.idle_closed_at < controls.idle_followup_sent_at)
@@ -24510,6 +24514,7 @@ async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
              updated_at = CURRENT_TIMESTAMP
           WHERE remote_jid = ?
             AND idle_suppressed_at IS NULL
+            AND (human_handoff_until IS NULL OR human_handoff_until <= CURRENT_TIMESTAMP)
             AND idle_followup_sent_at = ?
            AND (idle_closed_at IS NULL OR idle_closed_at < idle_followup_sent_at)`,
         [identity.remoteJid, row.idle_followup_sent_at]
