@@ -6,6 +6,51 @@ import type { ShippingOption } from '@/types/shipping';
 import type { MixedPaymentState } from '@/components/catalog/MixedPaymentSimulator';
 import { publicCompanySettingsService } from '@/services/publicCompanySettings';
 
+const SITE_BASE = 'https://mercadodovale.com.br';
+
+function brl(cents: number): string {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+}
+
+function buildQuoteCalculatorUrl(totalCents: number, cashCents: number, selectedInstallment?: number | null): string {
+    const params = new URLSearchParams({
+        total: String(Math.max(0, Math.round(totalCents))),
+        entrada: String(Math.max(0, Math.round(cashCents))),
+    });
+
+    if (selectedInstallment) params.set('parcela', String(selectedInstallment));
+
+    return `${SITE_BASE}/calculadora-orcamento?${params.toString()}`;
+}
+
+function formatMixedPaymentLines(state: MixedPaymentState, totalBudgetCents: number, indent = ''): string {
+    let text = '';
+    const cashCents = Math.max(0, state.cashCents || 0);
+    const cardCents = Math.max(0, state.cardCents || 0);
+    const selectedOption = state.cardOption;
+    const options = state.cardOptions || [];
+
+    text += `${indent}Valor do orcamento: ${brl(totalBudgetCents)}\n`;
+    if (cashCents > 0) text += `${indent}Entrada Pix/Dinheiro: ${brl(cashCents)}\n`;
+    if (cardCents > 0) text += `${indent}Restante no cartao: ${brl(cardCents)}\n`;
+
+    if (selectedOption) {
+        text += `${indent}Cartao: ${selectedOption.installments}x de ${brl(selectedOption.monthlyValue)} (total cartao: ${brl(selectedOption.totalWithFee)})\n`;
+        text += `${indent}Total geral: ${brl(cashCents + selectedOption.totalWithFee)}\n`;
+    } else if (cardCents > 0 && options.length > 0) {
+        text += `${indent}Parcelamento do restante no cartao:\n`;
+        options.forEach((option) => {
+            text += `${indent}${option.installments}x de ${brl(option.monthlyValue)} - total ${brl(option.totalWithFee)}\n`;
+        });
+    } else if (cardCents === 0 && cashCents > 0) {
+        text += `${indent}Pagamento completo no Pix/Dinheiro\n`;
+    }
+
+    text += `${indent}Calculadora: ${buildQuoteCalculatorUrl(totalBudgetCents, cashCents, state.selectedInstallment)}\n`;
+
+    return text;
+}
+
 /**
  * Delivery option type
  */
@@ -84,6 +129,8 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
             message += `  📱 ${variant.ram}/${variant.storage}\n`;
         }
         if (quote.mixedPaymentState) {
+            message += formatMixedPaymentLines(quote.mixedPaymentState, quote.cashPrice || installmentPlan.total, '  ');
+        } else if (false) {
             if (quote.mixedPaymentState.cashCents > 0 && quote.mixedPaymentState.selectedInstallment) {
                 const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
                 message += `  À Vista (Pix): ${cashFmt}\n`;
@@ -153,6 +200,8 @@ export function generateQuoteMessage(quote: QuoteRequest): string {
 
         message += `\n*💳 PAGAMENTO*\n`;
         if (quote.mixedPaymentState) {
+            message += formatMixedPaymentLines(quote.mixedPaymentState, quote.cashPrice || installmentPlan.total);
+        } else if (false) {
             if (quote.mixedPaymentState.cashCents > 0 && quote.mixedPaymentState.selectedInstallment) {
                 const cashFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(quote.mixedPaymentState.cashCents / 100);
                 message += `À Vista (Pix): ${cashFmt}\n`;

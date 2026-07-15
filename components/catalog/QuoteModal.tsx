@@ -437,12 +437,6 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
     const handleSendWhatsApp = async () => {
         if (!selectedPlan) return;
 
-        // Validação estrita de pagamento misto/simulador
-        if (mixedPaymentState && mixedPaymentState.cardCents > 0 && mixedPaymentState.selectedInstallment === null) {
-            alert('Por favor, informe como deseja pagar o pedido: clique em "À VISTA (PIX)" ou escolha em quantas vezes no cartão.');
-            return;
-        }
-
         setIsLoading(true);
         try {
             const message = generateQuoteMessage({

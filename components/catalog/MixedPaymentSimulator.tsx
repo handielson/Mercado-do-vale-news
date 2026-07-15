@@ -22,6 +22,7 @@ export interface MixedPaymentState {
     cardCents: number;
     selectedInstallment: number | null;
     cardOption?: CardOption;
+    cardOptions?: CardOption[];
 }
 
 function formatCents(cents: number): string {
@@ -64,7 +65,11 @@ export function MixedPaymentSimulator({ totalPrice, onChange }: MixedPaymentSimu
             .sort((a, b) => a.installments - b.installments)
             .filter((fee, idx, arr) => idx === arr.findIndex(f => f.installments === fee.installments));
 
-        return creditFees.map(fee => {
+        const feeRows = creditFees.length > 0
+            ? creditFees
+            : Array.from({ length: 12 }, (_, index) => ({ installments: index + 1, applied_fee: 0, applied_fee_pct: 0 }));
+
+        return feeRows.map(fee => {
             const feePercent = parseFloat(String(fee.applied_fee_pct ?? fee.applied_fee ?? 0));
             const feeAmount = Math.round(cardCents * (feePercent / 100));
             const totalWithFee = cardCents + feeAmount;
@@ -92,10 +97,11 @@ export function MixedPaymentSimulator({ totalPrice, onChange }: MixedPaymentSimu
                 cashCents,
                 cardCents,
                 selectedInstallment,
-                cardOption: selectedOption
+                cardOption: selectedOption,
+                cardOptions
             });
         }
-    }, [cashCents, cardCents, selectedInstallment, selectedOption, onChange]);
+    }, [cashCents, cardCents, selectedInstallment, selectedOption, cardOptions, onChange]);
 
     return (
         <div className="bg-gradient-to-br from-slate-50 to-blue-50 border-2 border-blue-100 rounded-xl p-4 space-y-4">
@@ -103,6 +109,11 @@ export function MixedPaymentSimulator({ totalPrice, onChange }: MixedPaymentSimu
             <div className="flex items-center gap-2">
                 <span className="text-lg">💡</span>
                 <h4 className="font-semibold text-slate-800 text-sm">Simular Pagamento Combinado</h4>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                <span className="font-semibold text-slate-600">Valor do orçamento</span>
+                <span className="font-black text-slate-900">{formatCents(totalPrice)}</span>
             </div>
 
             {/* Botão Rápido: Pagar tudo no PIX */}

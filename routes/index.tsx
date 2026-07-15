@@ -133,6 +133,7 @@ const ShopeeTemplatesPage = lazy(() => import('../pages/admin/settings/ShopeeTem
 const TikTokShopPage = lazy(() => import('../pages/admin/settings/TikTokShopPage'));
 const CheckoutPage = lazy(() => import('../pages/store/CheckoutPage'));
 const PublicProductPage = lazy(() => import('../pages/store/PublicProductPage').then(module => ({ default: module.PublicProductPage })));
+const QuoteCalculatorPage = lazy(() => import('../pages/store/QuoteCalculatorPage'));
 const FinancialPage = lazy(() => import('../pages/admin/financial/FinancialPage'));
 const CustomerCreditLedgerPage = lazy(() => import('../pages/admin/financial/CustomerCreditLedgerPage'));
 const StandalonePixPage = lazy(() => import('../pages/admin/financial/StandalonePixPage'));
@@ -242,6 +243,14 @@ export const router = createBrowserRouter([
   {
     path: "/receipt-share/:token",
     element: <PixReceiptSharePage />
+  },
+  {
+    path: "/calculadora-orcamento",
+    element: (
+      <MaintenanceGuard>
+        <QuoteCalculatorPage />
+      </MaintenanceGuard>
+    )
   },
   {
     path: "/admin",

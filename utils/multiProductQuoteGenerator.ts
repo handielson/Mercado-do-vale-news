@@ -12,6 +12,63 @@ export interface MultiQuoteOptions {
     mixedPaymentState?: MixedPaymentState | null;
 }
 
+const SITE_BASE = 'https://mercadodovale.com.br';
+
+function buildQuoteCalculatorUrl(totalCents: number, cashCents: number, selectedInstallment?: number | null): string {
+    const params = new URLSearchParams({
+        total: String(Math.max(0, Math.round(totalCents))),
+        entrada: String(Math.max(0, Math.round(cashCents))),
+    });
+
+    if (selectedInstallment) {
+        params.set('parcela', String(selectedInstallment));
+    }
+
+    return `${SITE_BASE}/calculadora-orcamento?${params.toString()}`;
+}
+
+function getBudgetCashTotal(items: QuoteCartItem[]): number {
+    return items.reduce((sum, item) => sum + item.price + (item.warranty?.price || 0), 0);
+}
+
+function appendMixedPaymentSummary(
+    message: string,
+    totalBudgetCents: number,
+    mixedPaymentState: MixedPaymentState
+): string {
+    const cashCents = Math.max(0, mixedPaymentState.cashCents || 0);
+    const cardCents = Math.max(0, mixedPaymentState.cardCents || 0);
+    const options = mixedPaymentState.cardOptions || [];
+    const selectedOption = mixedPaymentState.cardOption;
+
+    message += `\ud83d\udcca Valor do orcamento: *${formatPrice(totalBudgetCents)}*\n`;
+
+    if (cashCents > 0) {
+        message += `\ud83d\udcb5 Entrada Pix/Dinheiro: *${formatPrice(cashCents)}*\n`;
+    }
+
+    if (cardCents > 0) {
+        message += `\ud83d\udcb3 Restante no cartao: *${formatPrice(cardCents)}*\n`;
+    }
+
+    if (selectedOption) {
+        message += `\ud83d\udcb3 Cartao: *${selectedOption.installments}x de ${formatPrice(selectedOption.monthlyValue)}*`;
+        message += ` (total cartao ${formatPrice(selectedOption.totalWithFee)})\n`;
+        message += `\ud83d\udcca Total geral: *${formatPrice(cashCents + selectedOption.totalWithFee)}*\n`;
+    } else if (cardCents > 0 && options.length > 0) {
+        message += `\n*Parcelamento do restante no cartao:*\n`;
+        options.forEach((option) => {
+            message += `${option.installments}x de ${formatPrice(option.monthlyValue)} - total ${formatPrice(option.totalWithFee)}\n`;
+        });
+    } else if (cardCents === 0 && cashCents > 0) {
+        message += `\u2705 Pagamento completo no Pix/Dinheiro\n`;
+    }
+
+    message += `\nCalculadora do orcamento: ${buildQuoteCalculatorUrl(totalBudgetCents, cashCents, mixedPaymentState.selectedInstallment)}\n`;
+
+    return message;
+}
+
 /**
  * Generate WhatsApp quote message for multiple products
  * Respects payment options selected for each item
@@ -61,6 +118,7 @@ export function generateMultiProductQuoteMessage(
         }
     });
 
+    const totalBudgetCents = getBudgetCashTotal(items);
     const cashItems = items.filter(i => !((i.paymentOptions?.showInstallment ?? true) && i.installmentPlan.installments > 1));
     const installmentItems = items.filter(i => (i.paymentOptions?.showInstallment ?? true) && i.installmentPlan.installments > 1);
 
@@ -73,8 +131,9 @@ export function generateMultiProductQuoteMessage(
 
     message += `\n*\u2501\u2501\u2501 RESUMO DO OR\u00c7AMENTO \u2501\u2501\u2501*\n`;
 
-    // Subtotal
-    if (onlyCash) {
+    if (quoteOptions?.mixedPaymentState) {
+        message = appendMixedPaymentSummary(message, totalBudgetCents, quoteOptions.mixedPaymentState);
+    } else if (onlyCash) {
         message += `\ud83d\udcb0 Total \u00e0 vista: *${formatPrice(grandTotal)}*\n`;
     } else if (!isMixed) {
         const maxInstallments = Math.max(...installmentItems.map(i => i.installmentPlan.installments));
