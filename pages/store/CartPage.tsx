@@ -10,6 +10,7 @@ import { formatCurrency, calculateCartVolume } from '@/utils/saleCalculations';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { extractVariants } from '@/services/productVariants';
 import { QuoteModal } from '@/components/catalog/QuoteModal';
+import type { MixedPaymentState } from '@/components/catalog/MixedPaymentSimulator';
 import { DeliveryOptions, type DeliveryOption } from '@/components/catalog/DeliveryOptions';
 import { useVpsAuth } from '@/contexts/VpsAuthContext';
 import { useCoupon } from '@/hooks/useCoupon';
@@ -20,7 +21,7 @@ import { useDeviceType } from '@/hooks/useDeviceType';
 import { categoryService } from '@/services/categories';
 import { brandService } from '@/services/brands';
 import { warrantyTemplateService } from '@/services/warrantyTemplates';
-import { generateBudgetText } from '@/utils/cartShareUtils';
+import { generateBudgetText, type BudgetTextMode } from '@/utils/cartShareUtils';
 import { NewOrderModal } from '@/components/cart/NewOrderModal';
 import { vpsApiService } from '@/services/vpsApiService';
 
@@ -64,6 +65,8 @@ function CartPageContent() {
     // Share / Order
     const [budgetCopied, setBudgetCopied] = useState(false);
     const [generatingBudget, setGeneratingBudget] = useState(false);
+    const [budgetMode, setBudgetMode] = useState<BudgetTextMode>('separate');
+    const [cartMixedPaymentState, setCartMixedPaymentState] = useState<MixedPaymentState | null>(null);
     const [showNewOrderModal, setShowNewOrderModal] = useState(false);
     const [companyPhone, setCompanyPhone] = useState('');
     const [companyName, setCompanyName] = useState('Mercado do Vale');
@@ -105,6 +108,27 @@ function CartPageContent() {
     const handleCoinDiscountChange = useCallback((discountBrl: number) => {
         setCartCoinDiscount(Math.round(discountBrl * 100));
     }, []);
+
+    const handleCopyBudget = async () => {
+        setGeneratingBudget(true);
+        try {
+            const text = await generateBudgetText(
+                items.map(i => ({ product: i.product, unit_price: i.unit_price, quantity: i.quantity })),
+                {
+                    mode: items.length > 1 ? budgetMode : 'separate',
+                    totalBudgetCents: grandTotal,
+                    mixedPaymentState: cartMixedPaymentState,
+                }
+            );
+            await navigator.clipboard.writeText(text);
+            setBudgetCopied(true);
+            setTimeout(() => setBudgetCopied(false), 2500);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setGeneratingBudget(false);
+        }
+    };
 
     const applyReferral = async () => {
         if (!referralInput.trim()) return;
@@ -827,6 +851,7 @@ function CartPageContent() {
                             externalWarrantyProductId={eligibleProductId}
                             externalWarrantyImageUrl={eligibleImageUrl}
                             onCoinDiscountChange={handleCoinDiscountChange}
+                            onMixedPaymentChange={setCartMixedPaymentState}
                         />
                     </div>
                 )}
@@ -868,26 +893,34 @@ function CartPageContent() {
 
             {/* ── Botão ADMIN: Copiar Orçamento ── */}
             {customer?.customer_type === 'ADMIN' && (
-                <button
-                    onClick={async () => {
-                        setGeneratingBudget(true);
-                        try {
-                            const text = await generateBudgetText(items.map(i => ({ product: i.product, unit_price: i.unit_price, quantity: i.quantity })));
-                            await navigator.clipboard.writeText(text);
-                            setBudgetCopied(true);
-                            setTimeout(() => setBudgetCopied(false), 2500);
-                        } catch (e) {
-                            console.error(e);
-                        } finally {
-                            setGeneratingBudget(false);
-                        }
-                    }}
-                    disabled={generatingBudget}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-blue-300 text-blue-700 font-medium text-sm bg-blue-50/60 hover:bg-blue-100 active:scale-95 transition-all disabled:opacity-60"
-                >
-                    {budgetCopied ? <Check className="w-4 h-4 text-green-600" /> : <ClipboardCopy className="w-4 h-4" />}
-                    {generatingBudget ? 'Gerando...' : budgetCopied ? 'Copiado!' : '📋 Copiar Orçamento'}
-                </button>
+                <div className="space-y-2">
+                    {items.length > 1 && (
+                        <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
+                            <button
+                                type="button"
+                                onClick={() => setBudgetMode('separate')}
+                                className={`rounded-xl px-3 py-2 text-xs font-bold transition ${budgetMode === 'separate' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
+                            >
+                                Separado
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setBudgetMode('total')}
+                                className={`rounded-xl px-3 py-2 text-xs font-bold transition ${budgetMode === 'total' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
+                            >
+                                Somar tudo
+                            </button>
+                        </div>
+                    )}
+                    <button
+                        onClick={handleCopyBudget}
+                        disabled={generatingBudget}
+                        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-blue-300 text-blue-700 font-medium text-sm bg-blue-50/60 hover:bg-blue-100 active:scale-95 transition-all disabled:opacity-60"
+                    >
+                        {budgetCopied ? <Check className="w-4 h-4 text-green-600" /> : <ClipboardCopy className="w-4 h-4" />}
+                        {generatingBudget ? 'Gerando...' : budgetCopied ? 'Copiado!' : '📋 Copiar Orçamento'}
+                    </button>
+                </div>
             )}
 
             {/* ── Botão Novo Pedido (cliente) ── */}
@@ -958,26 +991,34 @@ function CartPageContent() {
 
                     {/* ── Botão ADMIN: Copiar Orçamento ── */}
                     {customer?.customer_type === 'ADMIN' && (
-                        <button
-                            onClick={async () => {
-                                setGeneratingBudget(true);
-                                try {
-                                    const text = await generateBudgetText(items.map(i => ({ product: i.product, unit_price: i.unit_price, quantity: i.quantity })));
-                                    await navigator.clipboard.writeText(text);
-                                    setBudgetCopied(true);
-                                    setTimeout(() => setBudgetCopied(false), 2500);
-                                } catch (e) {
-                                    console.error(e);
-                                } finally {
-                                    setGeneratingBudget(false);
-                                }
-                            }}
-                            disabled={generatingBudget}
-                            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-blue-300 text-blue-700 font-medium text-sm bg-blue-50/60 hover:bg-blue-100 active:scale-95 transition-all disabled:opacity-60"
-                        >
-                            {budgetCopied ? <Check className="w-4 h-4 text-green-600" /> : <ClipboardCopy className="w-4 h-4" />}
-                            {generatingBudget ? 'Gerando...' : budgetCopied ? 'Copiado!' : '📋 Copiar Orçamento'}
-                        </button>
+                        <div className="space-y-2">
+                            {items.length > 1 && (
+                                <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setBudgetMode('separate')}
+                                        className={`rounded-xl px-3 py-2 text-xs font-bold transition ${budgetMode === 'separate' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
+                                    >
+                                        Separado
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setBudgetMode('total')}
+                                        className={`rounded-xl px-3 py-2 text-xs font-bold transition ${budgetMode === 'total' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
+                                    >
+                                        Somar tudo
+                                    </button>
+                                </div>
+                            )}
+                            <button
+                                onClick={handleCopyBudget}
+                                disabled={generatingBudget}
+                                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-blue-300 text-blue-700 font-medium text-sm bg-blue-50/60 hover:bg-blue-100 active:scale-95 transition-all disabled:opacity-60"
+                            >
+                                {budgetCopied ? <Check className="w-4 h-4 text-green-600" /> : <ClipboardCopy className="w-4 h-4" />}
+                                {generatingBudget ? 'Gerando...' : budgetCopied ? 'Copiado!' : '📋 Copiar Orçamento'}
+                            </button>
+                        </div>
                     )}
 
                     {continueShoppingBtn}
@@ -1048,6 +1089,7 @@ function CartPageContent() {
                                                 externalWarrantyProductId={eligibleProductId}
                                                 externalWarrantyImageUrl={eligibleImageUrl}
                                                 onCoinDiscountChange={handleCoinDiscountChange}
+                                                onMixedPaymentChange={setCartMixedPaymentState}
                                             />
                                         </div>
                                     )}

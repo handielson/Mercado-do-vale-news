@@ -8,6 +8,7 @@
 import { calculateInstallments, formatPrice } from '@/services/installmentCalculator';
 import { vpsApiService } from '@/services/vpsApiService';
 import { getMemorySpecs, normalizeSpecValue, readSpecValue } from '@/utils/productSpecUtils';
+import type { MixedPaymentState } from '@/components/catalog/MixedPaymentSimulator';
 
 const SITE_BASE = 'https://mercadodovale.com.br';
 
@@ -27,6 +28,13 @@ type BudgetVariantGroup = {
     colors: string[];
     products: any[];
 };
+export type BudgetTextMode = 'separate' | 'total';
+
+export interface BudgetTextOptions {
+    mode?: BudgetTextMode;
+    totalBudgetCents?: number;
+    mixedPaymentState?: MixedPaymentState | null;
+}
 
 const VARIATION_LABELS: Record<string, string> = {
     color: 'Cores',
@@ -264,13 +272,52 @@ function brl(cents: number): string {
     return formatPrice(cents);
 }
 
+function buildQuoteCalculatorUrl(totalCents: number, cashCents = 0, selectedInstallment?: number | null): string {
+    const params = new URLSearchParams({
+        total: String(Math.max(0, Math.round(totalCents))),
+        entrada: String(Math.max(0, Math.round(cashCents))),
+    });
+
+    if (selectedInstallment) {
+        params.set('parcela', String(selectedInstallment));
+    }
+
+    return `${SITE_BASE}/calculadora-orcamento?${params.toString()}`;
+}
+
+function appendMixedPaymentLines(lines: string[], totalBudgetCents: number, mixedPaymentState?: MixedPaymentState | null): void {
+    if (!mixedPaymentState) {
+        lines.push(`   🔗 Calculadora: ${buildQuoteCalculatorUrl(totalBudgetCents)}`);
+        return;
+    }
+
+    const cashCents = Math.max(0, mixedPaymentState.cashCents || 0);
+    const cardCents = Math.max(0, mixedPaymentState.cardCents || 0);
+    const selectedOption = mixedPaymentState.cardOption;
+
+    lines.push(`   📊 Valor do orçamento: ${brl(totalBudgetCents)}`);
+    if (cashCents > 0) lines.push(`   💵 Entrada Pix/Dinheiro: ${brl(cashCents)}`);
+    if (cardCents > 0) lines.push(`   💳 Restante no cartão: ${brl(cardCents)}`);
+
+    if (selectedOption) {
+        lines.push(`   💳 Cartão: ${selectedOption.installments}x de ${brl(selectedOption.monthlyValue)} (total cartão ${brl(selectedOption.totalWithFee)})`);
+        lines.push(`   📊 Total geral: ${brl(cashCents + selectedOption.totalWithFee)}`);
+    } else if (cardCents === 0 && cashCents > 0) {
+        lines.push('   ✅ Pagamento completo no Pix/Dinheiro');
+    }
+
+    lines.push(`   🔗 Calculadora: ${buildQuoteCalculatorUrl(totalBudgetCents, cashCents, mixedPaymentState.selectedInstallment)}`);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN: Budget text
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function generateBudgetText(
-    items: Array<{ product: any; unit_price: number; quantity: number }>
+    items: Array<{ product: any; unit_price: number; quantity: number }>,
+    options: BudgetTextOptions = {}
 ): Promise<string> {
+    const mode = options.mode || 'separate';
     const lines: string[] = [
         '📱 Orçamento',
         `📅 Data: ${formatDate()}`,
@@ -316,6 +363,12 @@ export async function generateBudgetText(
         });
     }
 
+    const shouldTotalize = mode === 'total' && categoryRows.length > 1;
+    if (categoryRows.length > 1) {
+        lines.push(shouldTotalize ? 'Modo: orçamento somado' : 'Modo: orçamento separado por aparelho');
+        lines.push('');
+    }
+
     for (let index = 0; index < categoryRows.length; index += 1) {
         const row = categoryRows[index];
         const total = row.price * row.quantity;
@@ -332,6 +385,29 @@ export async function generateBudgetText(
         }
         lines.push(`   🎨 Cores: ${row.colors.length > 0 ? row.colors.join(', ') : 'Consultar'}`);
         lines.push(`   🔗 ${row.url}`);
+        if (!shouldTotalize) {
+            appendMixedPaymentLines(
+                lines,
+                total,
+                categoryRows.length === 1 ? options.mixedPaymentState : null
+            );
+        }
+        lines.push('');
+    }
+
+    if (shouldTotalize) {
+        const totalBudgetCents = options.totalBudgetCents ?? categoryRows.reduce((sum, row) => sum + row.price * row.quantity, 0);
+        const plans = await calculateInstallments(totalBudgetCents, 12);
+        const pixPlan = plans[0];
+        const plan12 = plans.find(p => p.installments === 12);
+
+        lines.push('━━━━━━━━━━━━━━━━━━━━━━');
+        lines.push('Resumo somado');
+        lines.push(`💰 Total à vista no PIX: ${brl(pixPlan?.total ?? totalBudgetCents)}`);
+        if (plan12) {
+            lines.push(`💳 Cartão total: 12x de ${brl(plan12.value)} (total ${brl(plan12.total)})`);
+        }
+        appendMixedPaymentLines(lines, totalBudgetCents, options.mixedPaymentState);
         lines.push('');
     }
 

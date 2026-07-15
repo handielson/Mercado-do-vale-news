@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.36-caixa-resumo-fechamento
+version: v1.2.37-orcamento-carrinho-modos
 date: 2026-07-15
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260715-205639-v1236-caixa-resumo-fechamento
+release_vps: /var/www/mdv-site/releases/20260715-215840-v1237-orcamento-carrinho-modos
 branch: main
-summary: Corrige resumo e fechamento do caixa PDV, preservando o valor de abertura quando o resumo vem ausente.
+summary: Corrige o orcamento copiado do carrinho com link da calculadora e modo separado ou somado para multiplos aparelhos.
 ```

@@ -4,6 +4,8 @@ import { readFileSync, existsSync } from 'node:fs';
 const mixedSimulator = readFileSync('components/catalog/MixedPaymentSimulator.tsx', 'utf8');
 const multiQuote = readFileSync('utils/multiProductQuoteGenerator.ts', 'utf8');
 const singleQuote = readFileSync('utils/whatsappMessageGenerator.ts', 'utf8');
+const cartShare = readFileSync('utils/cartShareUtils.ts', 'utf8');
+const cartPage = readFileSync('pages/store/CartPage.tsx', 'utf8');
 const routes = readFileSync('routes/index.tsx', 'utf8');
 const quoteModal = readFileSync('components/catalog/QuoteModal.tsx', 'utf8');
 const sendWhatsAppBlock = quoteModal.split('const handleSendWhatsApp = async () => {')[1]?.split('// Buy online:')[0] || '';
@@ -28,5 +30,13 @@ assert.doesNotMatch(
   /selectedInstallment\s*===\s*null[\s\S]{0,180}alert\(/,
   'single-product quote must not block WhatsApp sending when no card installment is selected',
 );
+
+assert.match(cartShare, /buildQuoteCalculatorUrl/, 'cart budget sharing must include quote calculator links');
+assert.match(cartShare, /mode\?:\s*BudgetTextMode/, 'cart budget sharing must accept a separated or totalized budget mode');
+assert.match(cartShare, /Modo:\s*orçamento separado por aparelho/, 'cart budget sharing must label separated multi-device budgets');
+assert.match(cartShare, /Resumo somado/, 'cart budget sharing must support a totalized multi-device summary');
+assert.match(cartPage, /budgetMode/, 'cart page must let admins choose separated or totalized budget mode');
+assert.match(cartPage, /mixedPaymentState:\s*cartMixedPaymentState/, 'cart page copied budget must use the current Pix/card simulation');
+assert.match(quoteModal, /onMixedPaymentChange\?\.\(mixedPaymentState\)/, 'QuoteModal inline simulator must expose mixed payment state to CartPage');
 
 console.log('Quote calculator static checks passed');

@@ -50,9 +50,10 @@ interface QuoteModalProps {
     externalWarrantyProductId?: string;
     externalWarrantyImageUrl?: string;
     onCoinDiscountChange?: (discountBrl: number, coinsToSpend: number) => void;
+    onMixedPaymentChange?: (state: MixedPaymentState | null) => void;
 }
 
-export function QuoteModal({ product, variants, isOpen, onClose, initialVariant, inline, totalOverride, selectedWarranty: externalWarranty, onWarrantyChange, selectedDelivery: externalDelivery, onDeliveryChange, externalCouponCode, externalCouponDiscount, externalReferralCode, externalReferralName, externalWarrantyPrice, externalWarrantyProductName, externalWarrantyProductId, externalWarrantyImageUrl, onCoinDiscountChange }: QuoteModalProps) {
+export function QuoteModal({ product, variants, isOpen, onClose, initialVariant, inline, totalOverride, selectedWarranty: externalWarranty, onWarrantyChange, selectedDelivery: externalDelivery, onDeliveryChange, externalCouponCode, externalCouponDiscount, externalReferralCode, externalReferralName, externalWarrantyPrice, externalWarrantyProductName, externalWarrantyProductId, externalWarrantyImageUrl, onCoinDiscountChange, onMixedPaymentChange }: QuoteModalProps) {
     const [selectedVariant, setSelectedVariant] = useState<VariantSpecs>(initialVariant || {});
     const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([]);
     const [selectedPlan, setSelectedPlan] = useState<InstallmentPlan | null>(null);
@@ -100,6 +101,10 @@ export function QuoteModal({ product, variants, isOpen, onClose, initialVariant,
     // Pagamento Online
     const [onlinePayMethod, setOnlinePayMethod] = useState<'pix' | 'card' | 'on_delivery'>('on_delivery');
     const [hasOnlineGateway, setHasOnlineGateway] = useState(false);
+
+    useEffect(() => {
+        onMixedPaymentChange?.(mixedPaymentState);
+    }, [mixedPaymentState, onMixedPaymentChange]);
 
     // Criar pedido online (pague na entrega)
     const handleCreateDeliveryOrder = async () => {
