@@ -295,6 +295,63 @@ export function computeDenominationTotalCents(count: DenominationCount | null | 
     }, 0);
 }
 
+const EMPTY_CASH_SUMMARY_COUNTS: CashSessionSummary['counts'] = {
+    sales: 0,
+    refunds: 0,
+    pix_avulso: 0,
+    debt_payments: 0,
+    delivery_settlements: 0,
+    delivery_ledger: 0,
+    movements: 0,
+};
+
+function normalizeCashNumber(value: unknown, fallback = 0): number {
+    const amount = Number(value);
+    return Number.isFinite(amount) ? amount : fallback;
+}
+
+export function createEmptyCashSessionSummary(session?: CashSession | null): CashSessionSummary {
+    const openingAmountCents = normalizeCashNumber(session?.opening_amount_cents);
+    return {
+        by_method: {},
+        expected_cash_cents: openingAmountCents,
+        total_in_cents: 0,
+        movements_in_cents: openingAmountCents,
+        movements_out_cents: 0,
+        sales: [],
+        refunds: [],
+        pix_avulso: [],
+        debt_payments: [],
+        delivery_settlements: [],
+        delivery_ledger: [],
+        movements: [],
+        counts: { ...EMPTY_CASH_SUMMARY_COUNTS },
+    };
+}
+
+export function normalizeCashSessionSummary(
+    summary: CashSessionSummary | null | undefined,
+    session?: CashSession | null
+): CashSessionSummary {
+    const fallback = createEmptyCashSessionSummary(session);
+    if (!summary) return fallback;
+    return {
+        by_method: summary.by_method && typeof summary.by_method === 'object' ? summary.by_method : fallback.by_method,
+        expected_cash_cents: normalizeCashNumber(summary.expected_cash_cents, fallback.expected_cash_cents),
+        total_in_cents: normalizeCashNumber(summary.total_in_cents, fallback.total_in_cents),
+        movements_in_cents: normalizeCashNumber(summary.movements_in_cents, fallback.movements_in_cents),
+        movements_out_cents: normalizeCashNumber(summary.movements_out_cents, fallback.movements_out_cents),
+        sales: Array.isArray(summary.sales) ? summary.sales : [],
+        refunds: Array.isArray(summary.refunds) ? summary.refunds : [],
+        pix_avulso: Array.isArray(summary.pix_avulso) ? summary.pix_avulso : [],
+        debt_payments: Array.isArray(summary.debt_payments) ? summary.debt_payments : [],
+        delivery_settlements: Array.isArray(summary.delivery_settlements) ? summary.delivery_settlements : [],
+        delivery_ledger: Array.isArray(summary.delivery_ledger) ? summary.delivery_ledger : [],
+        movements: Array.isArray(summary.movements) ? summary.movements : [],
+        counts: { ...EMPTY_CASH_SUMMARY_COUNTS, ...(summary.counts || {}) },
+    };
+}
+
 export function formatCashCents(cents: number | null | undefined): string {
     return (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }

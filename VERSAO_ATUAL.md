@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.35-orcamento-calculadora
+version: v1.2.36-caixa-resumo-fechamento
 date: 2026-07-15
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260715-204120-v1235-orcamento-calculadora
+release_vps: /var/www/mdv-site/releases/20260715-205639-v1236-caixa-resumo-fechamento
 branch: main
-summary: Exibe o valor total do orcamento, envia entrada Pix com parcelamento completo e adiciona calculadora publica.
+summary: Corrige resumo e fechamento do caixa PDV, preservando o valor de abertura quando o resumo vem ausente.
 ```

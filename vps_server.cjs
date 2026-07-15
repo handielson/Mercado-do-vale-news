@@ -24996,6 +24996,11 @@ async function computeCashSessionSummary(db, sessionId) {
     if (!cents) return;
     byMethod[method] = (byMethod[method] || 0) + cents;
   };
+  const [[cashSessionRow]] = await db.query(
+    'SELECT opening_amount_cents FROM pdv_cash_sessions WHERE id = ? LIMIT 1',
+    [sessionId]
+  );
+  const openingAmountCents = normalizeCashAmountCents(cashSessionRow?.opening_amount_cents);
 
   const [salesRows] = await db.query(
     `SELECT s.id, s.total, s.payment_methods, s.payment_method, s.status, s.created_at, s.customer_id,
@@ -25145,11 +25150,13 @@ async function computeCashSessionSummary(db, sessionId) {
   const movementsOutCents = movements
     .filter((m) => m.direction === 'out')
     .reduce((sum, m) => sum + m.amount_cents, 0);
+  const hasOpeningFloatMovement = movements.some((m) => m.type === 'opening_float');
+  const missingOpeningFloatCents = hasOpeningFloatMovement ? 0 : openingAmountCents;
 
   // Esperado em especie: fundo (opening_float esta nos movimentos in) +
   // entradas em dinheiro - saidas em dinheiro/movimentos.
   const cashFromMethods = byMethod.money || 0;
-  const expectedCashCents = cashFromMethods + movementsInCents - movementsOutCents;
+  const expectedCashCents = cashFromMethods + movementsInCents + missingOpeningFloatCents - movementsOutCents;
 
   const totalInCents = Object.entries(byMethod)
     .filter(([method]) => method !== 'a_prazo')
