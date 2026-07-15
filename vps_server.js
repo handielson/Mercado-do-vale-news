@@ -2421,20 +2421,6 @@ function normalizeN8nBotContactName(input = {}) {
 }
 
 const N8N_BOT_EVOLUTION_INSTANCE_NAME = process.env.N8N_BOT_EVOLUTION_INSTANCE_NAME || 'botmercadodovale';
-const N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES = Math.max(5, Number(process.env.N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES || 20));
-const N8N_BOT_IDLE_CLOSE_AFTER_MINUTES = Math.max(
-  N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES + 5,
-  Number(process.env.N8N_BOT_IDLE_CLOSE_AFTER_MINUTES || 60)
-);
-const N8N_BOT_IDLE_FOLLOWUP_MESSAGE = String(
-  process.env.N8N_BOT_IDLE_FOLLOWUP_MESSAGE
-  || 'Oi! Ainda posso te ajudar a escolher seu produto? 😊\nSe quiser, me fala o modelo ou acessorio que voce esta procurando.'
-).trim();
-
-const N8N_BOT_IDLE_CLOSE_MESSAGE = String(
-  process.env.N8N_BOT_IDLE_CLOSE_MESSAGE
-  || 'Vou encerrar este atendimento por enquanto, combinado? \uD83D\uDE0A\nQuando precisar, e so chamar por aqui que eu continuo te ajudando.'
-).trim();
 const EXPECTED_N8N_BOT_WEBHOOK_URL = 'https://n8n.mercadodovale.com.br/webhook/whatsapp';
 const EXPECTED_N8N_BOT_WEBHOOK_EVENTS = ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'];
 
@@ -2629,28 +2615,6 @@ async function logN8nBotInternalMessage(identity, text, sourceNode = 'admin') {
   });
 }
 
-function normalizeN8nBotIdleReplyText(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function getN8nBotIdleReplyAction(text, previousSourceNode = '') {
-  const normalized = normalizeN8nBotIdleReplyText(text);
-  if (!normalized) return 'keep';
-
-  const shortDecline = /^(?:n|na+o+)(?: (?:obrigad[oa]|obg|valeu|agora|por enquanto))?$/.test(normalized);
-  const explicitClose = /\b(?:por enquanto (?:nao|nada)|nao (?:quero|preciso) mais|nao preciso de mais nada|pode (?:encerrar|parar)|so isso|deixa pra la|ate mais|tchau)\b/.test(normalized);
-  const repliedToIdleFollowup = String(previousSourceNode || '').trim() === 'idle-followup';
-
-  if (explicitClose || (repliedToIdleFollowup && shortDecline)) return 'suppress';
-  return 'reopen';
-}
-
 async function insertN8nBotMessage(input = {}) {
   const identity = normalizeN8nBotClientIdentity(input);
   if (!identity) {
@@ -2665,18 +2629,6 @@ async function insertN8nBotMessage(input = {}) {
     throw error;
   }
   const direction = normalizeN8nBotMessageDirection(input.direction);
-  let idleReplyAction = 'keep';
-  if (direction === 'inbound') {
-    const [previousRows] = await pool.query(
-      `SELECT source_node
-       FROM n8n_bot_messages
-       WHERE remote_jid = ? AND direction IN ('inbound', 'outbound')
-       ORDER BY id DESC
-       LIMIT 1`,
-      [identity.remoteJid]
-    );
-    idleReplyAction = getN8nBotIdleReplyAction(text, previousRows?.[0]?.source_node || '');
-  }
   let payload = null;
   if (input.payload && typeof input.payload === 'object') {
     payload = JSON.stringify(input.payload);
@@ -2706,36 +2658,13 @@ async function insertN8nBotMessage(input = {}) {
      ON DUPLICATE KEY UPDATE
        phone = VALUES(phone),
        last_seen_at = CURRENT_TIMESTAMP,
-       idle_followup_sent_at = IF(? = 'inbound', NULL, idle_followup_sent_at),
-       idle_closed_at = IF(? = 'inbound', NULL, idle_closed_at),
        updated_at = CURRENT_TIMESTAMP`,
     [
       crypto.randomUUID ? crypto.randomUUID() : require('crypto').randomUUID(),
       identity.remoteJid,
       identity.phone,
-      direction,
-      direction,
     ]
   );
-  if (idleReplyAction === 'suppress') {
-    await pool.query(
-      `UPDATE n8n_bot_client_controls
-       SET idle_suppressed_at = CURRENT_TIMESTAMP,
-           idle_suppressed_reason = 'customer-ended-conversation',
-           updated_at = CURRENT_TIMESTAMP
-       WHERE remote_jid = ?`,
-      [identity.remoteJid]
-    );
-  } else if (idleReplyAction === 'reopen') {
-    await pool.query(
-      `UPDATE n8n_bot_client_controls
-       SET idle_suppressed_at = NULL,
-           idle_suppressed_reason = NULL,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE remote_jid = ?`,
-      [identity.remoteJid]
-    );
-  }
   return { ok: true };
 }
 
@@ -24418,142 +24347,6 @@ fastify.post('/n8n-bot/messages/manual', { preHandler: requireSyncKey }, async (
   };
 });
 
-async function runN8nBotIdleFollowups({ dryRun = false, limit = 50 } = {}) {
-  const maxRows = Math.min(Math.max(Number(limit) || 50, 1), 200);
-  const [followupRows] = await pool.query(
-    `SELECT latest.remote_jid, latest.phone, latest.created_at AS last_message_at, latest.direction AS last_direction
-     FROM (
-       SELECT msg.remote_jid, MAX(msg.id) AS last_id
-       FROM n8n_bot_messages msg
-       WHERE msg.direction IN ('inbound', 'outbound')
-       GROUP BY msg.remote_jid
-     ) agg
-     JOIN n8n_bot_messages latest ON latest.id = agg.last_id
-     LEFT JOIN n8n_bot_client_controls controls ON controls.remote_jid = latest.remote_jid
-     WHERE latest.direction = 'outbound'
-       AND latest.source_node <> 'idle-followup'
-       AND latest.source_node <> 'idle-close'
-       AND latest.source_node <> 'whatsapp-manual-handoff'
-       AND latest.created_at <= DATE_SUB(NOW(), INTERVAL ? MINUTE)
-       AND (controls.blocked IS NULL OR controls.blocked = 0)
-       AND (controls.human_handoff_until IS NULL OR controls.human_handoff_until <= CURRENT_TIMESTAMP)
-       AND controls.idle_suppressed_at IS NULL
-       AND (controls.idle_followup_sent_at IS NULL OR controls.idle_followup_sent_at < latest.created_at)
-       AND (controls.idle_closed_at IS NULL OR controls.idle_closed_at < latest.created_at)
-     ORDER BY latest.created_at ASC
-     LIMIT ?`,
-    [N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES, maxRows]
-  );
-
-  const sent = [];
-  for (const row of followupRows) {
-    const identity = normalizeN8nBotClientIdentity(row);
-    if (!identity) continue;
-    if (!dryRun) {
-      const [claimResult] = await pool.query(
-        `UPDATE n8n_bot_client_controls
-         SET idle_followup_sent_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-          WHERE remote_jid = ?
-            AND idle_suppressed_at IS NULL
-            AND (human_handoff_until IS NULL OR human_handoff_until <= CURRENT_TIMESTAMP)
-            AND (idle_followup_sent_at IS NULL OR idle_followup_sent_at < ?)
-           AND (idle_closed_at IS NULL OR idle_closed_at < ?)`,
-        [identity.remoteJid, row.last_message_at, row.last_message_at]
-      );
-      if (Number(claimResult?.affectedRows || 0) !== 1) continue;
-      const result = await sendN8nBotEvolutionTextMessage(identity, N8N_BOT_IDLE_FOLLOWUP_MESSAGE);
-      if (!result.ok || result.body?.error === true) {
-        await logN8nBotInternalMessage(identity, `Falha no lembrete de inatividade: ${formatEvolutionMessage(result.body?.message || result.body?.response || result.body) || result.status}`, 'idle-followup');
-        continue;
-      }
-      await insertN8nBotMessage({
-        remoteJid: identity.remoteJid,
-        phone: identity.phone,
-        direction: 'outbound',
-        message: N8N_BOT_IDLE_FOLLOWUP_MESSAGE,
-        messageType: 'text',
-        sourceNode: 'idle-followup',
-        waMessageId: String(result.body?.key?.id || result.body?.messageId || '').slice(0, 160) || null,
-      });
-    }
-    sent.push(identity.remoteJid);
-  }
-
-  const [closeRows] = await pool.query(
-    `SELECT latest.remote_jid, latest.phone, controls.idle_followup_sent_at
-     FROM (
-       SELECT msg.remote_jid, MAX(msg.id) AS last_id
-       FROM n8n_bot_messages msg
-       WHERE msg.direction IN ('inbound', 'outbound')
-       GROUP BY msg.remote_jid
-     ) agg
-     JOIN n8n_bot_messages latest ON latest.id = agg.last_id
-     JOIN n8n_bot_client_controls controls ON controls.remote_jid = latest.remote_jid
-     WHERE latest.direction = 'outbound'
-       AND latest.source_node = 'idle-followup'
-       AND latest.created_at <= DATE_SUB(NOW(), INTERVAL ? MINUTE)
-       AND (controls.blocked IS NULL OR controls.blocked = 0)
-       AND (controls.human_handoff_until IS NULL OR controls.human_handoff_until <= CURRENT_TIMESTAMP)
-       AND controls.idle_suppressed_at IS NULL
-       AND controls.idle_followup_sent_at IS NOT NULL
-       AND (controls.idle_closed_at IS NULL OR controls.idle_closed_at < controls.idle_followup_sent_at)
-     ORDER BY latest.created_at ASC
-     LIMIT ?`,
-    [N8N_BOT_IDLE_CLOSE_AFTER_MINUTES - N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES, maxRows]
-  );
-
-  const closed = [];
-  for (const row of closeRows) {
-    const identity = normalizeN8nBotClientIdentity(row);
-    if (!identity) continue;
-    if (!dryRun) {
-      const [claimResult] = await pool.query(
-        `UPDATE n8n_bot_client_controls
-         SET idle_closed_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-          WHERE remote_jid = ?
-            AND idle_suppressed_at IS NULL
-            AND (human_handoff_until IS NULL OR human_handoff_until <= CURRENT_TIMESTAMP)
-            AND idle_followup_sent_at = ?
-           AND (idle_closed_at IS NULL OR idle_closed_at < idle_followup_sent_at)`,
-        [identity.remoteJid, row.idle_followup_sent_at]
-      );
-      if (Number(claimResult?.affectedRows || 0) !== 1) continue;
-      const result = await sendN8nBotEvolutionTextMessage(identity, N8N_BOT_IDLE_CLOSE_MESSAGE);
-      if (!result.ok || result.body?.error === true) {
-        await logN8nBotInternalMessage(identity, `Falha ao enviar encerramento por inatividade: ${formatEvolutionMessage(result.body?.message || result.body?.response || result.body) || result.status}`, 'idle-close');
-        continue;
-      }
-      await insertN8nBotMessage({
-        remoteJid: identity.remoteJid,
-        phone: identity.phone,
-        direction: 'outbound',
-        message: N8N_BOT_IDLE_CLOSE_MESSAGE,
-        messageType: 'text',
-        sourceNode: 'idle-close',
-        waMessageId: String(result.body?.key?.id || result.body?.messageId || '').slice(0, 160) || null,
-      });
-    }
-    closed.push(identity.remoteJid);
-  }
-
-  return {
-    ok: true,
-    dryRun,
-    followupAfterMinutes: N8N_BOT_IDLE_FOLLOWUP_AFTER_MINUTES,
-    closeAfterMinutes: N8N_BOT_IDLE_CLOSE_AFTER_MINUTES,
-    sent,
-    closed,
-  };
-}
-
-fastify.post('/n8n-bot/idle-followups/run', { preHandler: requireSyncKey }, async (req) => {
-  return runN8nBotIdleFollowups({
-    dryRun: req.body?.dryRun === true,
-    limit: req.body?.limit,
-  });
-});
 
 fastify.post('/whatsapp/automation/customer-registered', { preHandler: requireSyncKey }, async (req, reply) => {
   const customerId = String(req.body?.customer_id || '').trim();
@@ -32496,10 +32289,6 @@ async function runMigrations() {
   `);
   await addColumnIfMissing('n8n_bot_client_controls', 'reset_count', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('n8n_bot_client_controls', 'last_seen_at', 'DATETIME NULL');
-  await addColumnIfMissing('n8n_bot_client_controls', 'idle_followup_sent_at', 'DATETIME NULL');
-  await addColumnIfMissing('n8n_bot_client_controls', 'idle_closed_at', 'DATETIME NULL');
-  await addColumnIfMissing('n8n_bot_client_controls', 'idle_suppressed_at', 'DATETIME NULL');
-  await addColumnIfMissing('n8n_bot_client_controls', 'idle_suppressed_reason', 'VARCHAR(160) NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'human_handoff_until', 'DATETIME NULL');
   await addColumnIfMissing('n8n_bot_client_controls', 'human_handoff_by', 'VARCHAR(120) NULL');
 
@@ -33666,24 +33455,11 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
   }
 });
 
-function scheduleN8nBotIdleFollowups() {
-  if (['0', 'false', 'off', 'disabled'].includes(String(process.env.N8N_BOT_IDLE_JOB_ENABLED || '').trim().toLowerCase())) {
-    console.warn('[n8n-bot-idle] scheduled job disabled by N8N_BOT_IDLE_JOB_ENABLED');
-    return;
-  }
-  const intervalMs = Math.max(60_000, Number(process.env.N8N_BOT_IDLE_JOB_INTERVAL_MS || 300_000));
-  setInterval(() => {
-    runN8nBotIdleFollowups({ limit: 50 }).catch((error) => {
-      console.warn('[n8n-bot-idle] scheduled run failed:', error?.message || error);
-    });
-  }, intervalMs).unref?.();
-}
 
 // Start
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {
-  scheduleN8nBotIdleFollowups();
   scheduleSignedWarrantySync();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }

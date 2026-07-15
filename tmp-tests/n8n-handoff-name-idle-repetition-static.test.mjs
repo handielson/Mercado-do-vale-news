@@ -3,9 +3,7 @@ import fs from 'node:fs';
 
 for (const file of ['vps_server.js', 'vps_server.cjs']) {
   const source = fs.readFileSync(file, 'utf8');
-  assert.match(source, /latest\.source_node <> 'whatsapp-manual-handoff'/, `${file} must not schedule idle follow-up from a manual reply`);
-  const handoffGuards = source.match(/human_handoff_until IS NULL OR (?:controls\.)?human_handoff_until <= CURRENT_TIMESTAMP/g) || [];
-  assert.ok(handoffGuards.length >= 4, `${file} must guard idle selection and atomic claims while human handoff is active`);
+  assert.doesNotMatch(source, /runN8nBotIdleFollowups|idle-followup|idle-close/, `${file} must not retain the removed idle-message flow`);
 }
 
 const patchScript = fs.readFileSync('tmp-tests/n8n-fix-handoff-name-idle-repetition.cjs', 'utf8');
@@ -16,4 +14,4 @@ assert.match(patchScript, /botRequestsHumanV135/, 'name invitation must be suppr
 assert.match(patchScript, /Handoff - Persistir solicitado/, 'bot handoff request must persist a pause before future inbound messages');
 assert.match(patchScript, /deterministicServiceDecisionV135/, 'delivery scheduling and payment simulation must override the repeated legacy policy route');
 
-console.log('n8n handoff/name/idle repetition static regression tests passed');
+console.log('n8n handoff/name repetition static regression tests passed');

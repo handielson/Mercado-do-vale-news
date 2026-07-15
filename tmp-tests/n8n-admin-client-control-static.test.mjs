@@ -50,15 +50,8 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /fastify\.post\('\/n8n-bot\/messages\/manual'/, 'server must expose n8n manual reply endpoint');
   assert.match(source, /payload\.quoted = quoted/, 'manual n8n replies must support WhatsApp quoted replies');
   assert.match(source, /N8N_BOT_EVOLUTION_INSTANCE_NAME \|\| 'botmercadodovale'/, 'manual n8n replies must target the current n8n Evolution instance by default');
-  assert.match(source, /idle_followup_sent_at/, 'server must persist n8n idle follow-up state');
-  assert.match(source, /idle_closed_at/, 'server must persist n8n idle close state');
-  assert.match(source, /runN8nBotIdleFollowups/, 'server must run n8n idle follow-ups');
-  assert.match(source, /scheduleN8nBotIdleFollowups/, 'server must schedule n8n idle follow-ups automatically');
-  assert.match(source, /WHERE msg\.direction IN \('inbound', 'outbound'\)/, 'idle follow-up must evaluate the latest real customer/bot message');
-  assert.match(source, /WHERE latest\.direction = 'outbound'/, 'idle follow-up must run after the bot answered and the customer stayed silent');
-  assert.match(source, /latest\.source_node <> 'idle-followup'/, 'idle follow-up must not repeat after its own reminder');
-  assert.match(source, /N8N_BOT_IDLE_CLOSE_MESSAGE/, 'idle close must have an outbound message');
-  assert.match(source, /sourceNode: 'idle-close'/, 'idle close must be logged as an outbound close message');
+  assert.doesNotMatch(source, /runN8nBotIdleFollowups|scheduleN8nBotIdleFollowups/, 'server must not run idle follow-ups');
+  assert.doesNotMatch(source, /N8N_BOT_IDLE_|idle-followup|idle-close/, 'server must not retain idle reminder or close behavior');
   assert.match(source, /buildN8nBotMemorySessionKey\(remoteJid, resetCount\)/, 'server must return versioned memory session key');
 }
 

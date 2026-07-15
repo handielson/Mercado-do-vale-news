@@ -12,10 +12,6 @@ export type N8nBotClientControl = {
   reset_consumed_at?: string | null;
   reset_count: number;
   last_seen_at?: string | null;
-  idle_followup_sent_at?: string | null;
-  idle_closed_at?: string | null;
-  idle_suppressed_at?: string | null;
-  idle_suppressed_reason?: string | null;
   updated_at?: string | null;
 };
 

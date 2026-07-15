@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.33-note-model-catalog
-date: 2026-07-14
+version: v1.2.34-remove-idle-messages
+date: 2026-07-15
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260714-231813-v1233-note-model-catalog
+release_vps: /var/www/mdv-site/releases/20260715-083517-v1234-remove-idle-messages
 branch: main
-summary: Reconhece Note 15 Pro+, preserva o contexto de preço e oferece a lista completa de celulares disponíveis.
+summary: Remove lembretes e encerramentos automáticos por inatividade das conversas do WhatsApp.
 ```
