@@ -9586,10 +9586,11 @@ async function createOrUpdateGoogleContact({ sender, name }) {
     const searchData = await searchResponse.json();
     people.push(...(Array.isArray(searchData.results) ? searchData.results : []).map((item) => item?.person).filter(Boolean));
   }
-  const existing = people
-    .find((person) => (person?.phoneNumbers || []).some((phone) => (
-      getGoogleContactPhoneMatchKeys(phone?.canonicalForm || phone?.value).some((candidate) => expectedPhones.includes(candidate))
-    ))) || null;
+  let existing = people.find((person) => googleContactPersonMatchesPhone(person, phoneNumber)) || null;
+  if (!existing) {
+    const connections = await listGoogleContactConnections(accessToken);
+    existing = connections.find((person) => googleContactPersonMatchesPhone(person, phoneNumber)) || null;
+  }
 
   const payload = {
     names: [{ givenName: cleanName }],
@@ -9657,6 +9658,35 @@ function getGoogleContactPhoneMatchKeys(value) {
   return [...keys];
 }
 
+function googleContactPersonMatchesPhone(person, value) {
+  const expected = getGoogleContactPhoneMatchKeys(value);
+  return (person?.phoneNumbers || []).some((phone) => (
+    getGoogleContactPhoneMatchKeys(phone?.canonicalForm || phone?.value).some((candidate) => expected.includes(candidate))
+  ));
+}
+
+async function listGoogleContactConnections(accessToken, maxPages = 5) {
+  const people = [];
+  let pageToken = '';
+  for (let page = 0; page < maxPages; page += 1) {
+    const url = new URL('https://people.googleapis.com/v1/people/me/connections');
+    url.searchParams.set('personFields', 'names,phoneNumbers,biographies,metadata');
+    url.searchParams.set('pageSize', '1000');
+    url.searchParams.set('sortOrder', 'LAST_MODIFIED_DESCENDING');
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) throw new Error(`Google contacts connections failed: ${response.status} ${await response.text()}`);
+    const data = await response.json();
+    people.push(...(Array.isArray(data.connections) ? data.connections : []));
+    pageToken = String(data.nextPageToken || '');
+    if (!pageToken) break;
+  }
+  return people;
+}
+
 function mapGoogleContactPerson(person) {
   const phone = person?.phoneNumbers?.find((item) => item?.value)?.value || '';
   const phoneDigits = normalizeGoogleContactPhoneDigits(phone);
@@ -9696,6 +9726,11 @@ async function searchGoogleContacts(query, limit = 8) {
   }
   const data = await res.json();
   const people = Array.isArray(data.results) ? data.results.map((item) => item.person).filter(Boolean) : [];
+  if (/\d{10,}/.test(normalizedQuery) && !people.some((person) => googleContactPersonMatchesPhone(person, normalizedQuery))) {
+    const connections = await listGoogleContactConnections(accessToken);
+    const matched = connections.find((person) => googleContactPersonMatchesPhone(person, normalizedQuery));
+    if (matched) people.unshift(matched);
+  }
   return {
     configured: true,
     data: people.map(mapGoogleContactPerson).filter((contact) => contact.phone_digits),

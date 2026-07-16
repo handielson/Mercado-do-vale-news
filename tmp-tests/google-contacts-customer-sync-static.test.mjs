@@ -12,6 +12,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /query', ''[\s\S]*pageSize', '1'/, `${file} must warm the Google contact search cache before matching`);
   assert.match(source, /existing\?\.metadata \? \{ metadata: existing\.metadata \}/, `${file} must send contact source metadata required by updateContact`);
   assert.match(source, /getGoogleContactPhoneMatchKeys[\s\S]*digits\.length === 12[\s\S]*digits\.length === 13/, `${file} must match Brazilian phones with or without the ninth digit`);
+  assert.match(source, /async function listGoogleContactConnections[\s\S]*people\/me\/connections/, `${file} must bypass delayed search indexing before creating duplicates`);
+  assert.match(source, /if \(!existing\)[\s\S]*listGoogleContactConnections\(accessToken\)/, `${file} must check direct connections before creating a contact`);
 }
 
 console.log('Google Contacts customer sync static checks passed');
