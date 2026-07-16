@@ -315,6 +315,60 @@ function formatInstallmentLine(option: { installments: number; monthlyValue: num
     return `${installmentLabel(option.installments)}x de ${brl(option.monthlyValue)} = ${brl(option.totalWithFee)}`;
 }
 
+function getOptionFeePercent(option: NonNullable<MixedPaymentState['cardOptions']>[number], sourceCardCents: number): number {
+    if (Number.isFinite(option.feePercent)) return Number(option.feePercent);
+    if (sourceCardCents <= 0) return 0;
+    return Math.max(0, ((option.totalWithFee / sourceCardCents) - 1) * 100);
+}
+
+function buildRowMixedPaymentState(
+    sourceState: MixedPaymentState | null | undefined,
+    rowTotalCents: number,
+    allRowsTotalCents: number
+): MixedPaymentState | null {
+    if (!sourceState) return null;
+
+    const safeRowTotal = Math.max(0, Math.round(rowTotalCents));
+    const safeAllRowsTotal = Math.max(0, Math.round(allRowsTotalCents));
+    if (safeRowTotal <= 0 || safeAllRowsTotal <= 0) return null;
+
+    const sourceCashCents = Math.min(safeAllRowsTotal, Math.max(0, sourceState.cashCents || 0));
+    const sourceCardCents = Math.max(0, sourceState.cardCents || 0);
+    const rowCashCents = sourceCashCents >= safeAllRowsTotal
+        ? safeRowTotal
+        : Math.min(safeRowTotal, Math.round((safeRowTotal * sourceCashCents) / safeAllRowsTotal));
+    const rowCardCents = Math.max(0, safeRowTotal - rowCashCents);
+
+    const sourceOptions = sourceState.cardOptions?.length
+        ? sourceState.cardOptions
+        : sourceState.cardOption
+            ? [sourceState.cardOption]
+            : [];
+
+    const cardOptions = sourceOptions.map((option) => {
+        const installments = Math.max(1, Math.round(option.installments));
+        const feePercent = getOptionFeePercent(option, sourceCardCents);
+        const totalWithFee = Math.round(rowCardCents * (1 + feePercent / 100));
+        return {
+            installments,
+            monthlyValue: Math.round(totalWithFee / installments),
+            totalWithFee,
+            feePercent,
+        };
+    });
+    const cardOption = sourceState.selectedInstallment
+        ? cardOptions.find(option => option.installments === sourceState.selectedInstallment)
+        : undefined;
+
+    return {
+        cashCents: rowCashCents,
+        cardCents: rowCardCents,
+        selectedInstallment: sourceState.selectedInstallment,
+        cardOption,
+        cardOptions,
+    };
+}
+
 function appendMixedPaymentLines(
     lines: string[],
     totalBudgetCents: number,
@@ -337,7 +391,7 @@ function appendMixedPaymentLines(
     lines.push('');
     lines.push('   Pagamento');
     lines.push(`   📊 Valor do orçamento: ${brl(totalBudgetCents)}`);
-    if (cashCents > 0) lines.push(`   💵 Entrada Pix/Dinheiro: ${brl(cashCents)}`);
+    lines.push(`   💵 Entrada Pix/Dinheiro: ${brl(cashCents)}`);
     if (cardCents > 0) lines.push(`   💳 Restante no cartão: ${brl(cardCents)}`);
 
     if (selectedOption) {
@@ -420,6 +474,8 @@ export async function generateBudgetText(
         lines.push('');
     }
 
+    const categoryRowsTotalCents = categoryRows.reduce((sum, row) => sum + row.price * row.quantity, 0);
+
     for (let index = 0; index < categoryRows.length; index += 1) {
         const row = categoryRows[index];
         const total = row.price * row.quantity;
@@ -437,10 +493,15 @@ export async function generateBudgetText(
         lines.push(`   🎨 Cores: ${row.colors.length > 0 ? row.colors.join(', ') : 'Consultar'}`);
         lines.push(`   🔗 ${row.url}`);
         if (!shouldTotalize) {
+            const rowMixedPaymentState = buildRowMixedPaymentState(
+                options.mixedPaymentState,
+                total,
+                categoryRowsTotalCents
+            );
             appendMixedPaymentLines(
                 lines,
                 total,
-                categoryRows.length === 1 ? options.mixedPaymentState : null,
+                rowMixedPaymentState,
                 row.name,
                 row.specLine
             );

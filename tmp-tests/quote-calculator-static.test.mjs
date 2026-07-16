@@ -38,6 +38,13 @@ assert.match(cartShare, /Modo:\s*orçamento separado por aparelho/, 'cart budget
 assert.match(cartShare, /Resumo somado/, 'cart budget sharing must support a totalized multi-device summary');
 assert.match(cartShare, /options\.forEach/, 'cart budget sharing must list 1-12 installments when no installment is selected');
 assert.match(cartShare, /formatInstallmentLine/, 'cart budget sharing must use one consistent installment line format');
+assert.match(cartShare, /buildRowMixedPaymentState/, 'separated cart budgets must derive Pix/card simulation for each device');
+assert.doesNotMatch(
+  cartShare,
+  /categoryRows\.length\s*===\s*1\s*\?\s*options\.mixedPaymentState\s*:\s*null/,
+  'separated multi-device budgets must not drop Pix/card payment details',
+);
+assert.match(cartShare, /Entrada Pix\/Dinheiro:\s*\$\{brl\(cashCents\)\}/, 'cart budget sharing must always show the Pix/Dinheiro entry value');
 assert.match(cartShare, /params\.set\('produto'/, 'cart budget calculator links must include the product name');
 assert.match(cartShare, /params\.set\('variacao'/, 'cart budget calculator links must include the selected variation');
 assert.match(cartPage, /budgetMode/, 'cart page must let admins choose separated or totalized budget mode');

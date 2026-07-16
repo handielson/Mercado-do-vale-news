@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.38-orcamento-parcelas-calculadora",
-  "date": "2026-07-15",
+  "version": "v1.2.39-orcamento-parcelas-separado",
+  "date": "2026-07-16",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260715-222331-v1238-orcamento-parcelas-calculadora",
+  "release_vps": "/var/www/mdv-site/releases/20260716-111903-v1239-orcamento-parcelas-separado",
   "branch": "main",
-  "summary": "Lista simulacoes de parcelas no orcamento e permite compartilhar a escolha da calculadora com produto e variacao."
+  "summary": "Mostra entrada Pix e parcelas por aparelho no orcamento separado."
 }
