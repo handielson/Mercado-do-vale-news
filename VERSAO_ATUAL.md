@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.43-orcamento-opcoes-calculadora
+version: v1.2.44-shopee-stock-sync
 date: 2026-07-16
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260716-144926-v1243-orcamento-opcoes-calculadora
+release_vps: /var/www/mdv-site/releases/20260716-190326-v1244-shopee-stock-sync
 branch: main
-summary: Adiciona opcoes de parcelas e calculadora no orcamento e envia um unico link por simulacao.
+summary: Ativa sincronizacao dinamica de estoque do Bling para anuncios Shopee vinculados.
 ```

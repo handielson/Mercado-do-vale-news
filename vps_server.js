@@ -6261,8 +6261,109 @@ async function patchVpsJsonForWebhookVps(request, pathname, body) {
   }
 }
 
-async function syncShopeeStockFromBlingTargetsVps(_stockTargets) {
-  return { ok: true, skipped: 'vps_webhook_local_shopee_sync_pending', updated: 0, errors: [] };
+function safeShopeeStockFromBlingTargetVps(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.trunc(parsed);
+}
+
+function groupShopeeStockTargetsByItemVps(stockTargets = [], links = []) {
+  const targetById = new Map(
+    (stockTargets || [])
+      .filter((target) => target?.id)
+      .map((target) => [String(target.id), target])
+  );
+  const grouped = new Map();
+
+  for (const link of links || []) {
+    const productId = String(link?.product_id || '').trim();
+    const target = targetById.get(productId);
+    const itemId = Number(link?.shopee_item_id);
+    if (!target || !Number.isFinite(itemId) || itemId <= 0) continue;
+
+    const modelId = Number(link?.shopee_model_id);
+    const stockEntry = {
+      model_id: Number.isFinite(modelId) && modelId > 0 ? modelId : 0,
+      seller_stock: [{ stock: safeShopeeStockFromBlingTargetVps(target.stock_quantity) }],
+    };
+
+    if (!grouped.has(itemId)) grouped.set(itemId, []);
+    grouped.get(itemId).push({ ...stockEntry, product_id: productId, sku: target.sku || null });
+  }
+
+  return grouped;
+}
+
+async function loadShopeeStockLinksForBlingTargetsVps(stockTargets = []) {
+  const productIds = [...new Set((stockTargets || []).map((target) => String(target?.id || '').trim()).filter(Boolean))];
+  if (!productIds.length) return [];
+  const placeholders = productIds.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT product_id, shopee_item_id, shopee_model_id
+       FROM shopee_products
+      WHERE product_id IN (${placeholders})
+        AND shopee_item_id IS NOT NULL`,
+    productIds
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function markShopeeStockLinksSyncedFromBlingVps(productIds = []) {
+  const ids = [...new Set((productIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!ids.length) return;
+  const placeholders = ids.map(() => '?').join(',');
+  await pool.query(
+    `UPDATE shopee_products
+        SET last_synced_at = CURRENT_TIMESTAMP,
+            status = COALESCE(status, 'synced')
+      WHERE product_id IN (${placeholders})`,
+    ids
+  );
+}
+
+async function syncShopeeStockFromBlingTargetsVps(stockTargets = []) {
+  const targets = Array.isArray(stockTargets) ? stockTargets.filter((target) => target?.id) : [];
+  if (!targets.length) return { ok: true, skipped: 'no_stock_targets', updated: 0, errors: [] };
+
+  let creds;
+  try {
+    creds = await getShopeeCatalogCredentialsVps();
+  } catch (err) {
+    return { ok: false, skipped: 'missing_shopee_credentials', updated: 0, errors: [{ message: err.message }] };
+  }
+
+  const links = await loadShopeeStockLinksForBlingTargetsVps(targets);
+  if (!links.length) return { ok: true, skipped: 'no_shopee_links', updated: 0, errors: [] };
+
+  const grouped = groupShopeeStockTargetsByItemVps(targets, links);
+  const results = { ok: true, updated: 0, skipped: null, errors: [] };
+
+  for (const [itemId, stockRows] of grouped.entries()) {
+    const stockList = stockRows.map(({ model_id, seller_stock }) => ({ model_id, seller_stock }));
+    try {
+      const result = await shopeeCatalogPostVps('/api/v2/product/update_stock', creds, {
+        item_id: itemId,
+        stock_list: stockList,
+      });
+      if (!result.ok || result.data?.error) {
+        results.ok = false;
+        results.errors.push({
+          item_id: itemId,
+          status: result.status,
+          error: result.data?.error || 'shopee_update_stock_failed',
+          message: result.data?.message || '',
+        });
+        continue;
+      }
+      results.updated += stockList.length;
+      await markShopeeStockLinksSyncedFromBlingVps(stockRows.map((row) => row.product_id));
+    } catch (err) {
+      results.ok = false;
+      results.errors.push({ item_id: itemId, error: err.message });
+    }
+  }
+
+  return results;
 }
 
 function isLocalBlingNameManagedVps(product) {
