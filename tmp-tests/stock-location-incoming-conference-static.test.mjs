@@ -33,6 +33,22 @@ assert.ok(
   'VPS must materialize existing product stock that has no location'
 );
 assert.ok(
+  server.includes('async function resetProductStockLocationsToIncoming'),
+  'VPS must reset zero-stock reentries into the incoming/conference location'
+);
+assert.ok(
+  server.includes("'external_stock_reentry'"),
+  'zero-stock reentry movements must have an explicit audit reference type'
+);
+assert.ok(
+  server.includes('previousStock <= 0 && qty > 0'),
+  'Bling stock updates must detect a product reentering stock from zero'
+);
+assert.ok(
+  server.includes('resetProductStockLocationsToIncoming(row.id, qty'),
+  'Bling stock reentries must recreate the whole balance in Entrada / Conferencia'
+);
+assert.ok(
   server.includes("reference_type, previous_to_quantity, new_to_quantity, notes)"),
   'materialized stock must write a movement history row'
 );

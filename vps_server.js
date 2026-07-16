@@ -20798,6 +20798,98 @@ async function materializeProductUndistributedStock(productId, reason = 'undistr
   return { ok: true, materialized: delta };
 }
 
+async function resetProductStockLocationsToIncoming(productId, targetQuantity, reason = 'external_stock_reentry', notes = null) {
+  const target = Math.max(0, Math.trunc(stockNumber(targetQuantity)));
+  const [[product]] = await pool.query('SELECT id, company_id FROM products WHERE id = ? LIMIT 1', [productId]);
+  if (!product) return { ok: false, appliedDelta: 0, resetToIncoming: false };
+
+  const companyId = product.company_id || await getDefaultStockCompanyId();
+  const incoming = await ensureIncomingStockLocation(companyId);
+  const [sources] = await pool.query(
+    `SELECT *
+       FROM product_stock_locations
+      WHERE product_id = ? AND quantity > 0
+      FOR UPDATE`,
+    [productId]
+  );
+
+  let cleared = 0;
+  for (const source of sources || []) {
+    const previous = stockNumber(source.quantity);
+    if (previous <= 0) continue;
+    const reserved = stockNumber(source.reserved_quantity);
+    const isIncoming = source.location_id === incoming.locationId && source.deposit_id === incoming.depositId;
+    const next = isIncoming ? target : 0;
+    await upsertStockLocationBalance({
+      companyId,
+      productId,
+      depositId: source.deposit_id,
+      locationId: source.location_id,
+      quantity: next,
+      reservedQuantity: reserved,
+    });
+    if (previous !== next) {
+      cleared += Math.max(0, previous - next);
+      await pool.query(
+        `INSERT INTO stock_location_movements
+          (id, company_id, product_id, from_deposit_id, from_location_id, to_deposit_id, to_location_id, quantity,
+           movement_type, reason, reference_type, previous_from_quantity, new_from_quantity, previous_to_quantity, new_to_quantity, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sync', ?, 'external_stock_reentry', ?, ?, ?, ?, ?)`,
+        [
+          crypto.randomUUID(),
+          companyId,
+          productId,
+          source.deposit_id,
+          source.location_id,
+          incoming.depositId,
+          incoming.locationId,
+          Math.abs(next - previous),
+          reason,
+          previous,
+          next,
+          isIncoming ? previous : null,
+          isIncoming ? next : null,
+          notes || 'Produto estava zerado; nova entrada externa recriada em Deposito / Entrada-Conferencia para conferencia fisica.',
+        ]
+      );
+    }
+  }
+
+  const incomingRow = await getStockLocationRow(productId, incoming.depositId, incoming.locationId, true);
+  const previousIncoming = stockNumber(incomingRow?.quantity);
+  if (!incomingRow || previousIncoming !== target) {
+    await upsertStockLocationBalance({
+      companyId,
+      productId,
+      depositId: incoming.depositId,
+      locationId: incoming.locationId,
+      quantity: target,
+      reservedQuantity: stockNumber(incomingRow?.reserved_quantity),
+    });
+    await pool.query(
+      `INSERT INTO stock_location_movements
+        (id, company_id, product_id, to_deposit_id, to_location_id, quantity, movement_type, reason,
+         reference_type, previous_to_quantity, new_to_quantity, notes)
+       VALUES (?, ?, ?, ?, ?, ?, 'sync', ?, 'external_stock_reentry', ?, ?, ?)`,
+      [
+        crypto.randomUUID(),
+        companyId,
+        productId,
+        incoming.depositId,
+        incoming.locationId,
+        Math.abs(target - previousIncoming),
+        reason,
+        previousIncoming,
+        target,
+        notes || 'Produto estava zerado; nova entrada externa recriada em Deposito / Entrada-Conferencia para conferencia fisica.',
+      ]
+    );
+  }
+
+  const syncedTotal = await syncProductStockFromLocations(productId);
+  return { ok: syncedTotal === target, appliedDelta: target, syncedTotal, resetToIncoming: true, cleared };
+}
+
 async function reconcileProductStockLocationsToTotal(productId, targetQuantity, reason = 'external_stock_sync', notes = null) {
   const target = Math.max(0, Math.trunc(stockNumber(targetQuantity)));
   const [[product]] = await pool.query('SELECT id, company_id FROM products WHERE id = ? LIMIT 1', [productId]);
@@ -22221,12 +22313,12 @@ fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, rep
   const whereSql = sku ? 'p.sku = ?' : 'p.bling_id = ?';
   const whereValue = sku || String(bling_id);
   const [matchedRows] = await pool.query(
-    `SELECT p.id, p.sku, p.bling_id, p.specs,
+    `SELECT p.id, p.sku, p.bling_id, p.specs, p.stock_quantity,
             COUNT(u.id) AS unit_count
        FROM products p
        LEFT JOIN units u ON u.product_id = p.id
       WHERE ${whereSql}
-      GROUP BY p.id, p.sku, p.bling_id, p.specs
+      GROUP BY p.id, p.sku, p.bling_id, p.specs, p.stock_quantity
       ORDER BY CASE WHEN p.status = 'active' THEN 0 ELSE 1 END,
                COUNT(u.id) DESC,
                p.created_at ASC`,
@@ -22265,6 +22357,7 @@ fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, rep
 
   let result;
   let changedRows = [];
+  const previousStockByProductId = new Map((matchedRows || []).map((row) => [row.id, stockNumber(row.stock_quantity)]));
   [result] = await pool.query(
     `UPDATE products SET stock_quantity=?, updated_at=CURRENT_TIMESTAMP WHERE ${sku ? 'sku=?' : 'bling_id=?'}`,
     [qty, whereValue]
@@ -22272,7 +22365,12 @@ fastify.patch('/products/stock', { preHandler: requireSyncKey }, async (req, rep
   [changedRows] = await pool.query(`SELECT id FROM products WHERE ${sku ? 'sku=?' : 'bling_id=?'}`, [whereValue]);
   const locationSync = [];
   for (const row of changedRows || []) {
-    locationSync.push(await reconcileProductStockLocationsToTotal(row.id, qty, 'bling_stock_sync', 'Total externo de estoque sincronizado para manter a distribuicao por local.'));
+    const previousStock = previousStockByProductId.get(row.id);
+    locationSync.push(
+      previousStock <= 0 && qty > 0
+        ? await resetProductStockLocationsToIncoming(row.id, qty, 'bling_stock_reentry', 'Produto estava zerado no sistema; nova entrada do Bling nasceu em Deposito / Entrada-Conferencia.')
+        : await reconcileProductStockLocationsToTotal(row.id, qty, 'bling_stock_sync', 'Total externo de estoque sincronizado para manter a distribuicao por local.')
+    );
   }
   const stockTargets = await getShopeeStockTargetsForProductIds(changedRows.map(row => row.id));
   return { ok: true, affectedRows: result.affectedRows, locationSync, stockTargets };
