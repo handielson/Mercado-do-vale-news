@@ -32,7 +32,40 @@ type QuoteCalculatorItem = {
   entrada: number;
 };
 
-function parseQuoteItems(value: string | null, fallback: QuoteCalculatorItem): QuoteCalculatorItem[] {
+function decodeCompactQuoteItems(value: string | null): unknown {
+  if (!value) return null;
+  try {
+    const normalized = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+    return JSON.parse(decodeURIComponent(escape(atob(normalized))));
+  } catch {
+    return null;
+  }
+}
+
+function encodeCompactQuoteItems(items: QuoteCalculatorItem[]): string {
+  const compactItems = items.map((item) => [item.produto, item.variacao, item.total, item.entrada]);
+  return btoa(unescape(encodeURIComponent(JSON.stringify(compactItems))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function normalizeQuoteItem(row: unknown, fallback: QuoteCalculatorItem): QuoteCalculatorItem | null {
+  const candidate = Array.isArray(row)
+    ? { produto: row[0], variacao: row[1], total: row[2], entrada: row[3] }
+    : row as Partial<QuoteCalculatorItem>;
+  const total = Number(candidate.total);
+  if (!Number.isFinite(total) || total <= 0) return null;
+  const entrada = Math.min(total, Math.max(0, Number(candidate.entrada) || 0));
+  return {
+    produto: String(candidate.produto || '').trim() || fallback.produto,
+    variacao: String(candidate.variacao || '').trim(),
+    total: Math.round(total),
+    entrada: Math.round(entrada),
+  };
+}
+
+function parseQuoteItems(value: string | null, compactValue: string | null, fallback: QuoteCalculatorItem): QuoteCalculatorItem[] {
   let parsed: unknown = null;
   try {
     parsed = value ? JSON.parse(value) : null;
@@ -40,20 +73,10 @@ function parseQuoteItems(value: string | null, fallback: QuoteCalculatorItem): Q
     parsed = null;
   }
 
-  const rows = Array.isArray(parsed) ? parsed : [];
+  const compactParsed = decodeCompactQuoteItems(compactValue);
+  const rows = Array.isArray(compactParsed) ? compactParsed : Array.isArray(parsed) ? parsed : [];
   const validRows = rows
-    .map((row) => {
-      const candidate = row as Partial<QuoteCalculatorItem>;
-      const total = Number(candidate.total);
-      if (!Number.isFinite(total) || total <= 0) return null;
-      const entrada = Math.min(total, Math.max(0, Number(candidate.entrada) || 0));
-      return {
-        produto: String(candidate.produto || '').trim() || fallback.produto,
-        variacao: String(candidate.variacao || '').trim(),
-        total: Math.round(total),
-        entrada: Math.round(entrada),
-      };
-    })
+    .map((row) => normalizeQuoteItem(row, fallback))
     .filter(Boolean) as QuoteCalculatorItem[];
 
   if (validRows.length > 0) return validRows;
@@ -62,12 +85,12 @@ function parseQuoteItems(value: string | null, fallback: QuoteCalculatorItem): Q
 
 export default function QuoteCalculatorPage() {
   const [searchParams] = useSearchParams();
-  const initialTotal = centsFromParam(searchParams.get('total'));
-  const initialEntry = Math.min(initialTotal, centsFromParam(searchParams.get('entrada')));
-  const initialInstallment = Number(searchParams.get('parcela')) || null;
-  const initialProductName = (searchParams.get('produto') || '').trim();
-  const initialProductVariation = (searchParams.get('variacao') || '').trim();
-  const quoteItems = React.useMemo(() => parseQuoteItems(searchParams.get('itens'), {
+  const initialTotal = centsFromParam(searchParams.get('t') || searchParams.get('total'));
+  const initialEntry = Math.min(initialTotal, centsFromParam(searchParams.get('e') || searchParams.get('entrada')));
+  const initialInstallment = Number(searchParams.get('n') || searchParams.get('parcela')) || null;
+  const initialProductName = (searchParams.get('p') || searchParams.get('produto') || '').trim();
+  const initialProductVariation = (searchParams.get('v') || searchParams.get('variacao') || '').trim();
+  const quoteItems = React.useMemo(() => parseQuoteItems(searchParams.get('itens'), searchParams.get('q'), {
     produto: initialProductName,
     variacao: initialProductVariation,
     total: initialTotal,
@@ -138,14 +161,14 @@ export default function QuoteCalculatorPage() {
   };
   const currentCalculatorUrl = React.useMemo(() => {
     const params = new URLSearchParams({
-      total: String(totalCents),
-      entrada: String(entryCents),
+      t: String(totalCents),
+      e: String(entryCents),
     });
-    if (selectedInstallment) params.set('parcela', String(selectedInstallment));
-    if (productName) params.set('produto', productName);
-    if (productVariation) params.set('variacao', productVariation);
-    if (quoteItems.length > 0) params.set('itens', JSON.stringify(quoteItems));
-    return `https://mercadodovale.com.br/calculadora-orcamento?${params.toString()}`;
+    if (selectedInstallment) params.set('n', String(selectedInstallment));
+    if (productName) params.set('p', productName);
+    if (productVariation) params.set('v', productVariation);
+    if (quoteItems.length > 0) params.set('q', encodeCompactQuoteItems(quoteItems));
+    return `https://mercadodovale.com.br/c?${params.toString()}`;
   }, [entryCents, productName, productVariation, quoteItems, selectedInstallment, totalCents]);
 
   const shareMessage = React.useMemo(() => {

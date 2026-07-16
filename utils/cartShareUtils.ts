@@ -288,38 +288,31 @@ function buildQuoteCalculatorUrl(
     quoteItems?: QuoteCalculatorItem[]
 ): string {
     const params = new URLSearchParams({
-        total: String(Math.max(0, Math.round(totalCents))),
-        entrada: String(Math.max(0, Math.round(cashCents))),
+        t: String(Math.max(0, Math.round(totalCents))),
+        e: String(Math.max(0, Math.round(cashCents))),
     });
 
     if (selectedInstallment) {
-        params.set('parcela', String(selectedInstallment));
+        params.set('n', String(selectedInstallment));
     }
-    if (productName) params.set('produto', productName);
-    if (variation) params.set('variacao', variation);
+    if (productName) params.set('p', productName);
+    if (variation) params.set('v', variation);
     if (quoteItems && quoteItems.length > 0) {
-        params.set('itens', JSON.stringify(quoteItems));
+        const compactItems = quoteItems.map(item => [item.produto, item.variacao, item.total, item.entrada]);
+        params.set('q', btoa(unescape(encodeURIComponent(JSON.stringify(compactItems))))
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/g, ''));
     }
 
-    return `${SITE_BASE}/calculadora-orcamento?${params.toString()}`;
+    return `${SITE_BASE}/c?${params.toString()}`;
 }
 
 function installmentLabel(installments: number): string {
-    const labels: Record<number, string> = {
-        1: '1️⃣',
-        2: '2️⃣',
-        3: '3️⃣',
-        4: '4️⃣',
-        5: '5️⃣',
-        6: '6️⃣',
-        7: '7️⃣',
-        8: '8️⃣',
-        9: '9️⃣',
-        10: '10️⃣',
-        11: '11️⃣',
-        12: '12️⃣',
-    };
-    return labels[installments] || `${installments}`;
+    return String(installments)
+        .split('')
+        .map(char => /\d/.test(char) ? `${char}\uFE0F\u20E3` : char)
+        .join('');
 }
 
 function formatInstallmentLine(option: { installments: number; monthlyValue: number; totalWithFee: number }): string {

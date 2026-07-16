@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.40-calculadora-aparelhos
+version: v1.2.41-calculadora-link-curto
 date: 2026-07-16
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260716-112818-v1240-calculadora-aparelhos
+release_vps: /var/www/mdv-site/releases/20260716-114709-v1241-calculadora-link-curto
 branch: main
-summary: Adiciona selecao de aparelhos e variacoes na calculadora de orcamento.
+summary: Encurta link da calculadora e corrige emojis das parcelas com dois digitos.
 ```

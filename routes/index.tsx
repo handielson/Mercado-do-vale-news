@@ -253,6 +253,14 @@ export const router = createBrowserRouter([
     )
   },
   {
+    path: "/c",
+    element: (
+      <MaintenanceGuard>
+        <QuoteCalculatorPage />
+      </MaintenanceGuard>
+    )
+  },
+  {
     path: "/admin",
     element: (
       <ProtectedRoute requireAdmin={true}>
