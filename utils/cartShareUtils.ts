@@ -36,6 +36,13 @@ export interface BudgetTextOptions {
     mixedPaymentState?: MixedPaymentState | null;
 }
 
+type QuoteCalculatorItem = {
+    produto: string;
+    variacao: string;
+    total: number;
+    entrada: number;
+};
+
 const VARIATION_LABELS: Record<string, string> = {
     color: 'Cores',
     cor: 'Cores',
@@ -277,7 +284,8 @@ function buildQuoteCalculatorUrl(
     cashCents = 0,
     selectedInstallment?: number | null,
     productName?: string,
-    variation?: string
+    variation?: string,
+    quoteItems?: QuoteCalculatorItem[]
 ): string {
     const params = new URLSearchParams({
         total: String(Math.max(0, Math.round(totalCents))),
@@ -289,6 +297,9 @@ function buildQuoteCalculatorUrl(
     }
     if (productName) params.set('produto', productName);
     if (variation) params.set('variacao', variation);
+    if (quoteItems && quoteItems.length > 0) {
+        params.set('itens', JSON.stringify(quoteItems));
+    }
 
     return `${SITE_BASE}/calculadora-orcamento?${params.toString()}`;
 }
@@ -374,12 +385,13 @@ function appendMixedPaymentLines(
     totalBudgetCents: number,
     mixedPaymentState?: MixedPaymentState | null,
     productName?: string,
-    variation?: string
+    variation?: string,
+    quoteItems?: QuoteCalculatorItem[]
 ): void {
     if (!mixedPaymentState) {
         lines.push('');
         lines.push(`   🔗 Faça sua simulação:`);
-        lines.push(`   ${buildQuoteCalculatorUrl(totalBudgetCents, 0, null, productName, variation)}`);
+        lines.push(`   ${buildQuoteCalculatorUrl(totalBudgetCents, 0, null, productName, variation, quoteItems)}`);
         return;
     }
 
@@ -411,7 +423,7 @@ function appendMixedPaymentLines(
 
     lines.push('');
     lines.push('   🔗 Faça sua simulação:');
-    lines.push(`   ${buildQuoteCalculatorUrl(totalBudgetCents, cashCents, mixedPaymentState.selectedInstallment, productName, variation)}`);
+    lines.push(`   ${buildQuoteCalculatorUrl(totalBudgetCents, cashCents, mixedPaymentState.selectedInstallment, productName, variation, quoteItems)}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -475,6 +487,20 @@ export async function generateBudgetText(
     }
 
     const categoryRowsTotalCents = categoryRows.reduce((sum, row) => sum + row.price * row.quantity, 0);
+    const calculatorItems: QuoteCalculatorItem[] = categoryRows.map((row) => {
+        const total = row.price * row.quantity;
+        const rowMixedPaymentState = buildRowMixedPaymentState(
+            options.mixedPaymentState,
+            total,
+            categoryRowsTotalCents
+        );
+        return {
+            produto: row.name,
+            variacao: row.specLine,
+            total: Math.max(0, Math.round(total)),
+            entrada: Math.max(0, Math.round(rowMixedPaymentState?.cashCents || 0)),
+        };
+    });
 
     for (let index = 0; index < categoryRows.length; index += 1) {
         const row = categoryRows[index];
@@ -503,7 +529,8 @@ export async function generateBudgetText(
                 total,
                 rowMixedPaymentState,
                 row.name,
-                row.specLine
+                row.specLine,
+                calculatorItems
             );
         }
         lines.push('');
@@ -521,7 +548,7 @@ export async function generateBudgetText(
         if (plan12) {
             lines.push(`💳 Cartão total: 12x de ${brl(plan12.value)} (total ${brl(plan12.total)})`);
         }
-        appendMixedPaymentLines(lines, totalBudgetCents, options.mixedPaymentState, 'Orcamento somado', `${categoryRows.length} aparelho(s)`);
+        appendMixedPaymentLines(lines, totalBudgetCents, options.mixedPaymentState, 'Orcamento somado', `${categoryRows.length} aparelho(s)`, calculatorItems);
         lines.push('');
     }
 

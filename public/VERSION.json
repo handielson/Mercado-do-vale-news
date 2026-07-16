@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.39-orcamento-parcelas-separado",
+  "version": "v1.2.40-calculadora-aparelhos",
   "date": "2026-07-16",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260716-111903-v1239-orcamento-parcelas-separado",
+  "release_vps": "/var/www/mdv-site/releases/20260716-112818-v1240-calculadora-aparelhos",
   "branch": "main",
-  "summary": "Mostra entrada Pix e parcelas por aparelho no orcamento separado."
+  "summary": "Adiciona selecao de aparelhos e variacoes na calculadora de orcamento."
 }

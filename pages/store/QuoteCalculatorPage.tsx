@@ -25,17 +25,66 @@ function getFeePercent(fee: PaymentFee | undefined): number {
   return Number((fee as any)?.applied_fee_pct ?? fee?.applied_fee ?? 0) || 0;
 }
 
+type QuoteCalculatorItem = {
+  produto: string;
+  variacao: string;
+  total: number;
+  entrada: number;
+};
+
+function parseQuoteItems(value: string | null, fallback: QuoteCalculatorItem): QuoteCalculatorItem[] {
+  let parsed: unknown = null;
+  try {
+    parsed = value ? JSON.parse(value) : null;
+  } catch {
+    parsed = null;
+  }
+
+  const rows = Array.isArray(parsed) ? parsed : [];
+  const validRows = rows
+    .map((row) => {
+      const candidate = row as Partial<QuoteCalculatorItem>;
+      const total = Number(candidate.total);
+      if (!Number.isFinite(total) || total <= 0) return null;
+      const entrada = Math.min(total, Math.max(0, Number(candidate.entrada) || 0));
+      return {
+        produto: String(candidate.produto || '').trim() || fallback.produto,
+        variacao: String(candidate.variacao || '').trim(),
+        total: Math.round(total),
+        entrada: Math.round(entrada),
+      };
+    })
+    .filter(Boolean) as QuoteCalculatorItem[];
+
+  if (validRows.length > 0) return validRows;
+  return fallback.total > 0 || fallback.produto || fallback.variacao ? [fallback] : [];
+}
+
 export default function QuoteCalculatorPage() {
   const [searchParams] = useSearchParams();
   const initialTotal = centsFromParam(searchParams.get('total'));
   const initialEntry = Math.min(initialTotal, centsFromParam(searchParams.get('entrada')));
   const initialInstallment = Number(searchParams.get('parcela')) || null;
-  const productName = (searchParams.get('produto') || '').trim();
-  const productVariation = (searchParams.get('variacao') || '').trim();
+  const initialProductName = (searchParams.get('produto') || '').trim();
+  const initialProductVariation = (searchParams.get('variacao') || '').trim();
+  const quoteItems = React.useMemo(() => parseQuoteItems(searchParams.get('itens'), {
+    produto: initialProductName,
+    variacao: initialProductVariation,
+    total: initialTotal,
+    entrada: initialEntry,
+  }), [initialEntry, initialProductName, initialProductVariation, initialTotal, searchParams]);
 
   const [totalInput, setTotalInput] = React.useState(formatInput(initialTotal));
   const [entryInput, setEntryInput] = React.useState(formatInput(initialEntry));
   const [selectedInstallment, setSelectedInstallment] = React.useState<number | null>(initialInstallment);
+  const [selectedItemIndex, setSelectedItemIndex] = React.useState(() => Math.max(0, quoteItems.findIndex((item) => (
+    item.total === initialTotal
+    && item.entrada === initialEntry
+    && item.produto === initialProductName
+    && item.variacao === initialProductVariation
+  ))));
+  const [productName, setProductName] = React.useState(initialProductName);
+  const [productVariation, setProductVariation] = React.useState(initialProductVariation);
   const [fees, setFees] = React.useState<PaymentFee[]>([]);
   const [storePhone, setStorePhone] = React.useState('');
   const [copied, setCopied] = React.useState(false);
@@ -80,6 +129,13 @@ export default function QuoteCalculatorPage() {
   const selectedOption = options.find((option) => option.installments === selectedInstallment) || null;
   const grandTotal = entryCents + (selectedOption?.totalWithFee || cardCents);
   const productLabel = [productName, productVariation].filter(Boolean).join(' - ');
+  const selectQuoteItem = (item: QuoteCalculatorItem, index: number) => {
+    setSelectedItemIndex(index);
+    setProductName(item.produto);
+    setProductVariation(item.variacao);
+    setTotalInput(formatInput(item.total));
+    setEntryInput(formatInput(Math.min(item.total, item.entrada)));
+  };
   const currentCalculatorUrl = React.useMemo(() => {
     const params = new URLSearchParams({
       total: String(totalCents),
@@ -88,8 +144,9 @@ export default function QuoteCalculatorPage() {
     if (selectedInstallment) params.set('parcela', String(selectedInstallment));
     if (productName) params.set('produto', productName);
     if (productVariation) params.set('variacao', productVariation);
+    if (quoteItems.length > 0) params.set('itens', JSON.stringify(quoteItems));
     return `https://mercadodovale.com.br/calculadora-orcamento?${params.toString()}`;
-  }, [entryCents, productName, productVariation, selectedInstallment, totalCents]);
+  }, [entryCents, productName, productVariation, quoteItems, selectedInstallment, totalCents]);
 
   const shareMessage = React.useMemo(() => {
     let text = 'Olá! Fiz uma simulação de orçamento.\n\n';
@@ -133,7 +190,37 @@ export default function QuoteCalculatorPage() {
         </div>
 
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          {productLabel && (
+          {quoteItems.length > 1 ? (
+            <div className="mb-4">
+              <div className="mb-2 text-xs font-bold uppercase text-slate-500">Escolha o aparelho</div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {quoteItems.map((item, index) => {
+                  const selected = index === selectedItemIndex;
+                  return (
+                    <button
+                      key={`${item.produto}-${item.variacao}-${index}`}
+                      type="button"
+                      onClick={() => selectQuoteItem(item, index)}
+                      className={`rounded-lg border-2 p-3 text-left transition ${selected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-300'}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-black text-slate-950">{item.produto || 'Produto'}</div>
+                          {item.variacao && <div className="mt-0.5 text-xs font-semibold text-blue-700">{item.variacao}</div>}
+                        </div>
+                        {selected && <Check className="h-4 w-4 shrink-0 text-blue-600" />}
+                      </div>
+                      <div className="mt-2 text-xs text-slate-500">Orçamento</div>
+                      <div className="text-sm font-black text-slate-900">{formatPrice(item.total)}</div>
+                      {item.entrada > 0 && (
+                        <div className="mt-1 text-xs font-semibold text-cyan-700">Entrada {formatPrice(item.entrada)}</div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : productLabel && (
             <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3">
               <div className="text-xs font-bold uppercase text-blue-600">Produto da simulação</div>
               <div className="mt-1 text-base font-black text-blue-950">{productName || 'Produto'}</div>
