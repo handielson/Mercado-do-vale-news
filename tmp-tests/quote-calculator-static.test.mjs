@@ -35,12 +35,15 @@ assert.doesNotMatch(
 
 assert.match(cartShare, /buildQuoteCalculatorUrl/, 'cart budget sharing must include quote calculator links');
 assert.match(cartShare, /mode\?:\s*BudgetTextMode/, 'cart budget sharing must accept a separated or totalized budget mode');
-assert.match(cartShare, /Modo:\s*orçamento separado por aparelho/, 'cart budget sharing must label separated multi-device budgets');
+assert.match(cartShare, /includeInstallments\?:\s*boolean/, 'cart budget sharing must allow hiding installment lines');
+assert.match(cartShare, /includeCalculatorLink\?:\s*boolean/, 'cart budget sharing must allow hiding calculator links');
+assert.match(cartShare, /filter\(line => !line\.startsWith\('Modo: '\)\)/, 'cart budget sharing must remove internal budget mode labels from customer messages');
 assert.match(cartShare, /Resumo somado/, 'cart budget sharing must support a totalized multi-device summary');
 assert.match(cartShare, /options\.forEach/, 'cart budget sharing must list 1-12 installments when no installment is selected');
 assert.match(cartShare, /formatInstallmentLine/, 'cart budget sharing must use one consistent installment line format');
 assert.match(cartShare, /map\(char => \/\\d\/\.test\(char\)/, 'cart budget sharing must build installment emoji digit by digit');
 assert.match(cartShare, /buildRowMixedPaymentState/, 'separated cart budgets must derive Pix/card simulation for each device');
+assert.match(cartShare, /appendCalculatorLink\([\s\S]*calculatorItems,[\s\S]*''[\s\S]*\)/, 'separated cart budgets must append one shared calculator link after all devices');
 assert.doesNotMatch(
   cartShare,
   /categoryRows\.length\s*===\s*1\s*\?\s*options\.mixedPaymentState\s*:\s*null/,
@@ -53,7 +56,13 @@ assert.match(cartShare, /params\.set\('q'[\s\S]*compactItems/, 'cart budget calc
 assert.match(cartShare, /return `\$\{SITE_BASE\}\/c\?\$\{params\.toString\(\)\}`/, 'cart budget calculator links must use the short calculator route');
 assert.match(cartShare, /calculatorItems:\s*QuoteCalculatorItem\[\]\s*=\s*categoryRows\.map/, 'cart budget sharing must build calculator item cards from budget rows');
 assert.match(cartPage, /budgetMode/, 'cart page must let admins choose separated or totalized budget mode');
+assert.match(cartPage, /budgetIncludeInstallments/, 'cart page must let admins choose whether to send installments');
+assert.match(cartPage, /budgetIncludeCalculator/, 'cart page must let admins choose whether to send the calculator link');
+assert.match(cartPage, /Parcelas 1-12x/, 'cart page must show the installment toggle label');
+assert.match(cartPage, /Calculadora/, 'cart page must show the calculator toggle label');
 assert.match(cartPage, /mixedPaymentState:\s*cartMixedPaymentState/, 'cart page copied budget must use the current Pix/card simulation');
+assert.match(cartPage, /includeInstallments:\s*budgetIncludeInstallments/, 'cart page copied budget must pass the installment toggle');
+assert.match(cartPage, /includeCalculatorLink:\s*budgetIncludeCalculator/, 'cart page copied budget must pass the calculator toggle');
 assert.match(quoteModal, /onMixedPaymentChange\?\.\(mixedPaymentState\)/, 'QuoteModal inline simulator must expose mixed payment state to CartPage');
 assert.match(calculatorPage, /Produto da simulação/, 'public calculator must show product and variation context');
 assert.match(calculatorPage, /searchParams\.get\('produto'\)/, 'public calculator must read product name from URL');

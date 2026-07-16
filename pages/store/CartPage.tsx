@@ -66,6 +66,8 @@ function CartPageContent() {
     const [budgetCopied, setBudgetCopied] = useState(false);
     const [generatingBudget, setGeneratingBudget] = useState(false);
     const [budgetMode, setBudgetMode] = useState<BudgetTextMode>('separate');
+    const [budgetIncludeInstallments, setBudgetIncludeInstallments] = useState(true);
+    const [budgetIncludeCalculator, setBudgetIncludeCalculator] = useState(true);
     const [cartMixedPaymentState, setCartMixedPaymentState] = useState<MixedPaymentState | null>(null);
     const [showNewOrderModal, setShowNewOrderModal] = useState(false);
     const [companyPhone, setCompanyPhone] = useState('');
@@ -118,6 +120,8 @@ function CartPageContent() {
                     mode: items.length > 1 ? budgetMode : 'separate',
                     totalBudgetCents: grandTotal,
                     mixedPaymentState: cartMixedPaymentState,
+                    includeInstallments: budgetIncludeInstallments,
+                    includeCalculatorLink: budgetIncludeCalculator,
                 }
             );
             await navigator.clipboard.writeText(text);
@@ -912,6 +916,26 @@ function CartPageContent() {
                             </button>
                         </div>
                     )}
+                    <div className="grid grid-cols-2 gap-2">
+                        <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                            <input
+                                type="checkbox"
+                                checked={budgetIncludeInstallments}
+                                onChange={(event) => setBudgetIncludeInstallments(event.target.checked)}
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            Parcelas 1-12x
+                        </label>
+                        <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                            <input
+                                type="checkbox"
+                                checked={budgetIncludeCalculator}
+                                onChange={(event) => setBudgetIncludeCalculator(event.target.checked)}
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            Calculadora
+                        </label>
+                    </div>
                     <button
                         onClick={handleCopyBudget}
                         disabled={generatingBudget}
@@ -1010,6 +1034,26 @@ function CartPageContent() {
                                     </button>
                                 </div>
                             )}
+                            <div className="grid grid-cols-2 gap-2">
+                                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={budgetIncludeInstallments}
+                                        onChange={(event) => setBudgetIncludeInstallments(event.target.checked)}
+                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    Parcelas 1-12x
+                                </label>
+                                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={budgetIncludeCalculator}
+                                        onChange={(event) => setBudgetIncludeCalculator(event.target.checked)}
+                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    Calculadora
+                                </label>
+                            </div>
                             <button
                                 onClick={handleCopyBudget}
                                 disabled={generatingBudget}
