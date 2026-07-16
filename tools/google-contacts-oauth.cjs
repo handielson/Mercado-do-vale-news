@@ -1,14 +1,19 @@
 #!/usr/bin/env node
-require('dotenv').config();
-
 const crypto = require('crypto');
+const fs = require('fs');
 const http = require('http');
+const path = require('path');
+for (const root of [path.join(__dirname, '..'), path.join(__dirname, '..', '..', '..', 'mercado-do-vale')]) {
+  require('dotenv').config({ path: path.join(root, '.env.vps.local'), quiet: true });
+  require('dotenv').config({ path: path.join(root, '.env.local'), quiet: true });
+}
 
 const CLIENT_ID = process.env.GOOGLE_CONTACTS_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.GOOGLE_CONTACTS_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '';
 const PORT = Number(process.env.GOOGLE_CONTACTS_OAUTH_PORT || 8765);
 const REDIRECT_URI = `http://127.0.0.1:${PORT}/oauth2callback`;
 const SCOPE = 'https://www.googleapis.com/auth/contacts';
+const OUTPUT_FILE = String(process.env.GOOGLE_CONTACTS_OAUTH_OUTPUT || '').trim();
 
 function fail(message) {
   console.error(`\n[google-contacts-oauth] ${message}`);
@@ -96,12 +101,17 @@ async function main() {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end('<h1>Google Contacts conectado</h1><p>Pode fechar esta janela e voltar ao terminal.</p>');
 
-      console.log('\nGoogle Contacts OAuth conectado.\n');
-      console.log('Configure estas variaveis na VPS:');
-      console.log(`GOOGLE_CONTACTS_CLIENT_ID=${CLIENT_ID}`);
-      console.log(`GOOGLE_CONTACTS_CLIENT_SECRET=${CLIENT_SECRET}`);
-      console.log(`GOOGLE_CONTACTS_REFRESH_TOKEN=${refreshToken}`);
-      console.log('\nGuarde o refresh token como segredo. Nao commitar em arquivo do repo.\n');
+      if (OUTPUT_FILE) {
+        fs.writeFileSync(OUTPUT_FILE, JSON.stringify({
+          clientId: CLIENT_ID,
+          clientSecret: CLIENT_SECRET,
+          refreshToken,
+        }), { encoding: 'utf8', mode: 0o600 });
+        console.log('\nGoogle Contacts OAuth conectado e salvo no arquivo temporario seguro.\n');
+      } else {
+        console.log('\nGoogle Contacts OAuth conectado.\n');
+        console.log('Defina GOOGLE_CONTACTS_OAUTH_OUTPUT para salvar o refresh token sem exibi-lo no terminal.');
+      }
       server.close(() => process.exit(0));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });

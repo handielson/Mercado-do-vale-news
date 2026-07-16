@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.41-calculadora-link-curto",
+  "version": "v1.2.42-google-contacts-sync",
   "date": "2026-07-16",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260716-114709-v1241-calculadora-link-curto",
+  "release_vps": "/var/www/mdv-site/releases/20260716-143522-v1242-google-contacts-sync",
   "branch": "main",
-  "summary": "Encurta link da calculadora e corrige emojis das parcelas com dois digitos."
+  "summary": "Sincroniza Google Contacts no bot e no cadastro de clientes, com confirmacao real de sucesso."
 }

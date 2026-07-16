@@ -1248,6 +1248,8 @@ fastify.post('/auth/register', async (request, reply) => {
     [customer.id, email, cpfCnpj, hash, salt]
   );
 
+  await syncCustomerGoogleContactRecord(customer, 'site-register');
+
   notifyCustomerRegisteredWhatsApp(customer.id, 'site').catch((notifyError) => {
     console.error('[whatsapp-automation] Site registration notification failed:', buildCopyableDebug('whatsapp-automation', {
       step: 'notify customer registered from site',
@@ -9554,26 +9556,88 @@ async function createOrUpdateGoogleContact({ sender, name }) {
   if (!accessToken) return { ok: false, skipped: true, reason: 'google_contacts_not_configured' };
 
   const phoneNumber = formatAutoresponderPhoneForGoogle(sender);
-  if (!phoneNumber || !name) return { ok: false, skipped: true, reason: 'missing_contact_data' };
+  const cleanName = normalizeAutoresponderContactName(name);
+  if (!phoneNumber || !cleanName) return { ok: false, skipped: true, reason: 'missing_contact_data' };
 
-  const res = await fetch('https://people.googleapis.com/v1/people:createContact', {
-    method: 'POST',
+  const expectedPhones = getGoogleContactPhoneMatchKeys(phoneNumber);
+  const people = [];
+  const warmupUrl = new URL('https://people.googleapis.com/v1/people:searchContacts');
+  warmupUrl.searchParams.set('query', '');
+  warmupUrl.searchParams.set('pageSize', '1');
+  warmupUrl.searchParams.set('readMask', 'names,phoneNumbers,metadata');
+  warmupUrl.searchParams.set('sources', 'READ_SOURCE_TYPE_CONTACT');
+  await fetch(warmupUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(10000),
+  });
+  for (const queryPhone of expectedPhones) {
+    const searchUrl = new URL('https://people.googleapis.com/v1/people:searchContacts');
+    searchUrl.searchParams.set('query', `+${queryPhone}`);
+    searchUrl.searchParams.set('pageSize', '10');
+    searchUrl.searchParams.set('readMask', 'names,phoneNumbers,biographies,metadata');
+    searchUrl.searchParams.set('sources', 'READ_SOURCE_TYPE_CONTACT');
+    const searchResponse = await fetch(searchUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!searchResponse.ok) {
+      throw new Error(`Google contact search before sync failed: ${searchResponse.status} ${await searchResponse.text()}`);
+    }
+    const searchData = await searchResponse.json();
+    people.push(...(Array.isArray(searchData.results) ? searchData.results : []).map((item) => item?.person).filter(Boolean));
+  }
+  const existing = people
+    .find((person) => (person?.phoneNumbers || []).some((phone) => (
+      getGoogleContactPhoneMatchKeys(phone?.canonicalForm || phone?.value).some((candidate) => expectedPhones.includes(candidate))
+    ))) || null;
+
+  const payload = {
+    names: [{ givenName: cleanName }],
+    phoneNumbers: [{ value: phoneNumber, type: 'mobile' }],
+    biographies: [{ value: 'Cliente Mercado do Vale' }],
+    ...(existing?.metadata ? { metadata: existing.metadata } : {}),
+  };
+  const updateUrl = existing?.resourceName
+    ? `https://people.googleapis.com/v1/${existing.resourceName}:updateContact?updatePersonFields=names,phoneNumbers,biographies`
+    : 'https://people.googleapis.com/v1/people:createContact';
+
+  const res = await fetch(updateUrl, {
+    method: existing?.resourceName ? 'PATCH' : 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      names: [{ givenName: name }],
-      phoneNumbers: [{ value: phoneNumber }],
-      biographies: [{ value: 'Cliente WhatsApp Mercado do Vale' }],
-    }),
+    body: JSON.stringify(payload),
     signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) {
-    throw new Error(`Google contact create failed: ${res.status} ${await res.text()}`);
+    throw new Error(`Google contact sync failed: ${res.status} ${await res.text()}`);
   }
   const contact = await res.json();
-  return { ok: true, resourceName: contact.resourceName || null };
+  return {
+    ok: true,
+    action: existing?.resourceName ? 'updated' : 'created',
+    resourceName: contact.resourceName || existing?.resourceName || null,
+  };
+}
+
+async function syncCustomerGoogleContactRecord(customer, source = 'system') {
+  const customerId = String(customer?.id || '').trim();
+  const name = normalizeAutoresponderContactName(customer?.name);
+  const phone = String(customer?.phone || '').trim();
+  if (!name || !phone) {
+    return { ok: false, skipped: true, reason: 'missing_contact_data', customerId };
+  }
+  try {
+    const result = await createOrUpdateGoogleContact({ sender: phone, name });
+    if (!result?.ok) {
+      console.warn('[google-contacts/sync-customer] skipped', { customerId, source, reason: result?.reason || 'unknown' });
+    }
+    return { ...result, customerId };
+  } catch (error) {
+    console.warn('[google-contacts/sync-customer] failed', { customerId, source, error: error?.message || String(error) });
+    return { ok: false, reason: 'google_contact_error', customerId };
+  }
 }
 
 function normalizeGoogleContactPhoneDigits(value) {
@@ -9582,6 +9646,15 @@ function normalizeGoogleContactPhoneDigits(value) {
   if (digits.startsWith('55')) return digits;
   if (digits.length >= 10 && digits.length <= 11) return `55${digits}`;
   return digits;
+}
+
+function getGoogleContactPhoneMatchKeys(value) {
+  const digits = normalizeGoogleContactPhoneDigits(value);
+  if (!digits) return [];
+  const keys = new Set([digits]);
+  if (digits.startsWith('55') && digits.length === 12) keys.add(`${digits.slice(0, 4)}9${digits.slice(4)}`);
+  if (digits.startsWith('55') && digits.length === 13 && digits[4] === '9') keys.add(`${digits.slice(0, 4)}${digits.slice(5)}`);
+  return [...keys];
 }
 
 function mapGoogleContactPerson(person) {
@@ -15070,6 +15143,20 @@ fastify.get('/google-contacts/search', { preHandler: requireSyncKey }, async (re
     return result;
   } catch (err) {
     return reply.code(502).send({ error: 'Falha ao buscar agenda Google', detail: err?.message || String(err) });
+  }
+});
+
+fastify.post('/google-contacts/sync', { preHandler: requireSyncKey }, async (req, reply) => {
+  const sender = String(req.body?.phone || req.body?.sender || '').trim();
+  const name = normalizeAutoresponderContactName(req.body?.name);
+  if (!sender || !name) return reply.code(400).send({ ok: false, error: 'phone_and_name_required' });
+  try {
+    const result = await createOrUpdateGoogleContact({ sender, name });
+    if (!result?.ok) return reply.code(503).send(result);
+    return result;
+  } catch (error) {
+    console.warn('[google-contacts/sync] failed', error?.message || error);
+    return reply.code(502).send({ ok: false, error: 'google_contact_sync_failed' });
   }
 });
 
@@ -23025,6 +23112,10 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
     [insertBody[pk] ?? vals[0]]
   );
 
+  if (name === 'customers' && rows[0]) {
+    await syncCustomerGoogleContactRecord(rows[0], 'table-data-create');
+  }
+
   reply.code(201);
   return rows[0] || { ok: true };
 });
@@ -24384,6 +24475,9 @@ fastify.patch('/table-data/:name/:pkValue', { preHandler: requireSyncKey }, asyn
 
   const [rows] = await pool.query(`SELECT * FROM \`${name}\` WHERE \`${pkCol}\` = ? LIMIT 1`, [pkValue]);
   const updatedRow = rows[0];
+  if (name === 'customers' && updatedRow) {
+    await syncCustomerGoogleContactRecord(updatedRow, 'table-data-update');
+  }
   if (name === 'sales' && updatedRow?.refund_cash_session_id && ['cancelled', 'refunded'].includes(String(updatedRow.status))) {
     await recordCashEvent(pool, req, {
       sessionId: updatedRow.refund_cash_session_id,
