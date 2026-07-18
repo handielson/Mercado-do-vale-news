@@ -32,7 +32,7 @@ import { modelColorImagesService } from '@/services/model-color-images';
 import { colorService } from '@/services/colors';
 import { buildProductVideoPlaylist, isMp4VideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
-import { getPublicProductVariantRouteTarget } from './productRouteTarget.js';
+import { getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
 import { customFieldsService } from '@/services/custom-fields';
 /**
  * PublicProductPage
@@ -331,6 +331,11 @@ export const PublicProductPage: React.FC = () => {
                     toast.error('Produto não encontrado');
                     navigate('/');
                     return;
+                }
+
+                const canonicalRouteTarget = getPublicProductRouteTarget(data);
+                if (canonicalRouteTarget && canonicalRouteTarget !== slug) {
+                    window.history.replaceState(null, '', `/produto/${encodeURIComponent(canonicalRouteTarget)}`);
                 }
 
                 if (data.offer_type && data.offer_visibility === 'hidden') {
@@ -734,7 +739,8 @@ export const PublicProductPage: React.FC = () => {
     const isInCompare = product ? isComparing(product.id) : false;
     const isAdmin = customer?.customer_type === 'ADMIN';
     const productModelId = String(product.model_id || '').trim();
-    const productSlug = product.slug || product.id;
+    const productSlug = getPublicProductRouteTarget(product);
+    const publicProductUrl = `https://www.mercadodovale.com.br/produto/${encodeURIComponent(productSlug)}`;
     const adminProductUrl = isAdmin && product?.id
         ? `/admin/products/${encodeURIComponent(product.id)}/${encodeURIComponent(productSlug)}`
         : '';
@@ -971,7 +977,7 @@ export const PublicProductPage: React.FC = () => {
     const getShareText = () => {
         const shareableVariants = sellableVariantOptions;
         const variantNames = shareableVariants.map(v => (v as any)._displayLabel).join(', ');
-        const shareUrl = `https://www.mercadodovale.com.br/produto/${encodeURIComponent(product.slug || product.id)}`;
+        const shareUrl = publicProductUrl;
         
         let text = `*${publicProductTitle}*\n`;
         if (variantNames) {
@@ -996,7 +1002,7 @@ export const PublicProductPage: React.FC = () => {
     };
 
     const handleShareFacebook = () => {
-        const productUrl = `https://www.mercadodovale.com.br/produto/${encodeURIComponent(product.slug || product.id)}`;
+        const productUrl = publicProductUrl;
         const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(productUrl)}&quote=${encodeURIComponent(getShareText())}`;
         window.open(url, '_blank');
     };
@@ -1146,7 +1152,7 @@ export const PublicProductPage: React.FC = () => {
             <Helmet>
                 <title>{title}</title>
                 <meta name="description" content={description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 160)} />
-                <link rel="canonical" href={`https://www.mercadodovale.com.br/produto/${product.slug || product.id}`} />
+                <link rel="canonical" href={publicProductUrl} />
 
                 {/* Open Graph — WhatsApp, Facebook, LinkedIn */}
                 <meta property="og:type" content="product" />
@@ -1154,7 +1160,7 @@ export const PublicProductPage: React.FC = () => {
                 <meta property="og:title" content={title} />
                 <meta property="og:description" content={description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 200)} />
                 <meta property="og:image" content={product.images?.[0] || 'https://www.mercadodovale.com.br/og-cover.jpg'} />
-                <meta property="og:url" content={`https://www.mercadodovale.com.br/produto/${product.slug || product.id}`} />
+                <meta property="og:url" content={publicProductUrl} />
                 <meta property="og:locale" content="pt_BR" />
 
                 {/* Twitter Card */}
@@ -1180,7 +1186,7 @@ export const PublicProductPage: React.FC = () => {
                         },
                         "offers": {
                             "@type": "Offer",
-                            "url": `https://www.mercadodovale.com.br/produto/${product.slug || product.id}`,
+                            "url": publicProductUrl,
                             "priceCurrency": "BRL",
                             "price": displayPrice.toString(),
                             "availability": product.stock_quantity && product.stock_quantity > 0

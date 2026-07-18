@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.45-stock-reentry-conference",
-  "date": "2026-07-16",
+  "version": "v1.2.46-product-link-order-number",
+  "date": "2026-07-18",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260716-152600-v1245-stock-reentry-conference",
+  "release_vps": "/var/www/mdv-site/releases/20260718-211125-product-link-order-number",
   "branch": "main",
-  "summary": "Faz entradas novas de produtos zerados nascerem em Deposito / Entrada-Conferencia."
+  "summary": "Corrige links publicos de produto para usar nome e mensagens de venda para usar numero do comprovante."
 }

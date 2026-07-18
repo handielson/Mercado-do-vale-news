@@ -9793,9 +9793,25 @@ function shouldAutoresponderSendProductImages(settings) {
   return Number(settings?.send_product_images) === 1 && Number(settings?.max_images_per_response || 0) > 0;
 }
 
+function slugifyPublicProductRouteTargetVps(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function getPublicProductRouteTargetVps(product) {
+  const slug = String(product?.slug || '').trim();
+  if (slug) return slug;
+  return slugifyPublicProductRouteTargetVps(product?.name) || String(product?.id || '').trim();
+}
+
 function getAutoresponderProductUrl(product) {
-  const slug = product?.slug || product?.id;
-  return slug ? `https://www.mercadodovale.com.br/produto/${slug}` : null;
+  const routeTarget = getPublicProductRouteTargetVps(product);
+  return routeTarget ? `https://www.mercadodovale.com.br/produto/${encodeURIComponent(routeTarget)}` : null;
 }
 
 function getAutoresponderCatalogSearchUrl(keyword) {

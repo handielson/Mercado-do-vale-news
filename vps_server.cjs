@@ -3129,6 +3129,7 @@ async function notifySaleCompletedWhatsApp(saleId) {
     .map((item) => item.imei ? `- ${item.product_name || 'Item'}: ${maskAutomationSerial(item.imei)}` : '')
     .filter(Boolean)
     .join('\n') || 'Sem itens serializados informados';
+  const receiptOrderNumber = String(sale.id || '').trim().slice(0, 8).toUpperCase();
 
   return sendWhatsAppAutomationMessageVps({
     templateKey: 'sale_completed',
@@ -3138,7 +3139,7 @@ async function notifySaleCompletedWhatsApp(saleId) {
     customerId: customer?.id || sale.customer_id || null,
     variables: {
       nome: customer?.name || 'Cliente',
-      pedido: sale.order_number || sale.id,
+      pedido: receiptOrderNumber,
       data: sale.created_at ? new Date(sale.created_at).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR'),
       itens: itemLines,
       pagamento: formatAutomationPaymentMethods(sale.payment_methods),
@@ -13365,9 +13366,25 @@ function shouldAutoresponderSendProductImages(settings) {
   return Number(settings?.send_product_images) === 1 && Number(settings?.max_images_per_response || 0) > 0;
 }
 
+function slugifyPublicProductRouteTargetVps(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function getPublicProductRouteTargetVps(product) {
+  const slug = String(product?.slug || '').trim();
+  if (slug) return slug;
+  return slugifyPublicProductRouteTargetVps(product?.name) || String(product?.id || '').trim();
+}
+
 function getAutoresponderProductUrl(product) {
-  const slug = product?.slug || product?.id;
-  return slug ? `https://www.mercadodovale.com.br/produto/${slug}` : null;
+  const routeTarget = getPublicProductRouteTargetVps(product);
+  return routeTarget ? `https://www.mercadodovale.com.br/produto/${encodeURIComponent(routeTarget)}` : null;
 }
 
 function getAutoresponderCatalogSearchUrl(keyword) {
@@ -23704,7 +23721,8 @@ async function getWhatsAppStatusCardPlan(priceRetailCents) {
 
 function buildWhatsAppStatusCaption(product, cardPlan) {
   const siteBaseUrl = String(process.env.PUBLIC_SITE_URL || 'https://mercadodovale.com.br').replace(/\/+$/, '');
-  const link = product.slug ? `${siteBaseUrl}/produto/${product.slug}` : siteBaseUrl;
+  const routeTarget = getPublicProductRouteTargetVps(product);
+  const link = routeTarget ? `${siteBaseUrl}/produto/${encodeURIComponent(routeTarget)}` : siteBaseUrl;
   const variation = product.status_variation || getWhatsAppStatusProductVariation(product);
   const memoryLine = [
     variation?.ram ? `${variation.ram} RAM` : '',
