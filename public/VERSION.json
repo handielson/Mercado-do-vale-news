@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.46-product-link-order-number",
-  "date": "2026-07-18",
+  "version": "v1.2.47-seo-indexacao-google",
+  "date": "2026-07-19",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260718-211125-product-link-order-number",
+  "release_vps": "/var/www/mdv-site/releases/20260719-184310-v1247-seo-indexacao-google",
   "branch": "main",
-  "summary": "Corrige links publicos de produto para usar nome e mensagens de venda para usar numero do comprovante."
+  "summary": "Padroniza os sinais SEO da loja, preserva o titulo da pagina e elimina marcacoes duplicadas de produto."
 }

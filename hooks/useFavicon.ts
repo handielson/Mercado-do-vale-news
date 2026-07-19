@@ -37,9 +37,6 @@ export const useFavicon = () => {
                     }
                 }
 
-                if (companyData.name) {
-                    document.title = `${companyData.name} - Sistema de Gestao`;
-                }
             } catch (error) {
                 console.error('Erro ao carregar favicon:', error);
             }

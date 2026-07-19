@@ -621,6 +621,10 @@ export const PublicProductPage: React.FC = () => {
     // NBSP ou só whitespace) e sequências de <br> que viram linhas em branco.
     const cleanRichHtml = (html: string): string => {
         let result = html
+            // A página já possui um H1 com o nome do produto. Conteúdo vindo do
+            // cadastro pode conter outro H1; rebaixe-o para preservar a hierarquia.
+            .replace(/<h1\b([^>]*)>/gi, '<h2$1>')
+            .replace(/<\/h1>/gi, '</h2>')
             // <p>&nbsp;</p>, <p> </p>, <p><br></p>, <p> </p> etc — parágrafo vazio
             .replace(/<p\b[^>]*>(?:\s|&nbsp;|&#160;| |Â |<br\s*\/?\s*>)*<\/p>/gi, '')
             // 3+ <br> consecutivos viram apenas 2 (= 1 linha em branco)
@@ -1172,30 +1176,6 @@ export const PublicProductPage: React.FC = () => {
                 {product.exclude_from_seo && (
                     <meta name="robots" content="noindex, nofollow" />
                 )}
-                <script type="application/ld+json">
-                    {JSON.stringify({
-                        "@context": "https://schema.org/",
-                        "@type": "Product",
-                        "name": publicProductTitle,
-                        "image": product.images || [],
-                        "description": description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(),
-                        "sku": product.sku || '',
-                        "brand": {
-                            "@type": "Brand",
-                            "name": typeof product.brand === 'string' && product.brand ? toTitleCase(product.brand) : 'Mercado do Vale'
-                        },
-                        "offers": {
-                            "@type": "Offer",
-                            "url": publicProductUrl,
-                            "priceCurrency": "BRL",
-                            "price": displayPrice.toString(),
-                            "availability": product.stock_quantity && product.stock_quantity > 0
-                                ? "https://schema.org/InStock"
-                                : "https://schema.org/OutOfStock",
-                            "itemCondition": "https://schema.org/NewCondition"
-                        }
-                    })}
-                </script>
             </Helmet>
 
             <PublicHeader />
