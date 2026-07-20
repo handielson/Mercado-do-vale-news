@@ -6204,9 +6204,9 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     if (!product) {
       return reply
         .header('Content-Type', 'text/html; charset=utf-8')
-        .header('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
-        .code(200)
-        .send(baseHtml);
+        .header('Cache-Control', 'no-store')
+        .code(410)
+        .send('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="robots" content="noindex, follow"><title>Produto indisponivel | Mercado do Vale</title></head><body><h1>Produto indisponivel</h1><p>Este produto nao esta mais disponivel em nosso catalogo.</p><a href="/produtos">Ver produtos atuais</a></body></html>');
     }
 
     const baseUrl = buildSeoBaseUrl(request);

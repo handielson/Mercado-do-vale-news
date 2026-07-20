@@ -20,6 +20,9 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /name=\["'\]twitter:/, `${file} must explicitly remove old Twitter card tags`);
   assert.match(source, /rel=\["'\]canonical/, `${file} must explicitly remove old canonical tags`);
   assert.match(source, /s-maxage=60, stale-while-revalidate=300/, `${file} must preserve product SEO cache policy`);
+  assert.match(source, /if \(!product\)[\s\S]*\.code\(410\)/, `${file} must return 410 for products that no longer exist`);
+  assert.match(source, /name="robots" content="noindex, follow"/, `${file} must mark gone product HTML as noindex`);
+  assert.match(source, /href="\/produtos"/, `${file} must guide visitors from gone products to the current catalog`);
   assert.match(source, /buildCopyableDebug\('seo-produto'/, `${file} must return copyable debug details on failures`);
 }
 
