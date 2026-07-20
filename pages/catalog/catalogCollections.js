@@ -68,8 +68,12 @@ export function getCatalogCollectionFilters(collection) {
   return collection?.filters ? { ...collection.filters } : {};
 }
 
-export function getCatalogSeoConfig(collection) {
-  if (!collection) return DEFAULT_CATALOG_SEO;
+export function getCatalogSeoConfig(collection, pathname = '/') {
+  if (!collection) {
+    return pathname === '/produtos'
+      ? { ...DEFAULT_CATALOG_SEO, canonical: `${SITE_ORIGIN}/produtos` }
+      : DEFAULT_CATALOG_SEO;
+  }
 
   return {
     title: collection.title,

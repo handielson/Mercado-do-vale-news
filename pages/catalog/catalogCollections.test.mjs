@@ -48,4 +48,7 @@ const defaultSeo = getCatalogSeoConfig(null);
 assert.equal(defaultSeo.title, 'Mercado do Vale | Smartphones e Eletronicos em Petrolina-PE');
 assert.equal(defaultSeo.canonical, 'https://www.mercadodovale.com.br/');
 
+const allProductsSeo = getCatalogSeoConfig(null, '/produtos');
+assert.equal(allProductsSeo.canonical, 'https://www.mercadodovale.com.br/produtos');
+
 console.log('catalogCollections.test.mjs: ok');

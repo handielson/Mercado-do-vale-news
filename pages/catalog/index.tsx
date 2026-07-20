@@ -127,7 +127,7 @@ function CatalogContent() {
     const currentPage = normalizeCatalogPage(searchParams.get('page'));
     const isAllProductsPage = location.pathname === '/produtos';
     const activeCollection = getCatalogCollectionByPathname(location.pathname);
-    const catalogSeo = getCatalogSeoConfig(activeCollection);
+    const catalogSeo = getCatalogSeoConfig(activeCollection, location.pathname);
     const isCollectionPage = !!activeCollection;
     const isHomeCatalogPage = location.pathname === '/';
     const restoreScrollRef = useRef(false);
