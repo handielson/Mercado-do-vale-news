@@ -2,6 +2,35 @@ function toCleanString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function normalizeKeyPart(value) {
+  return toCleanString(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function generateFamilySignature(product) {
+  const specs = product?.specs || {};
+  let baseName = toCleanString(product?.name || product?.model || 'unknown');
+  const variantValues = [specs.color, specs.ram, specs.storage]
+    .map(toCleanString)
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  for (const value of variantValues) {
+    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    baseName = baseName.replace(new RegExp(`(?:[,/\\s-]+)?${escaped}(?=$|[,/\\s-])`, 'ig'), ' ');
+  }
+
+  const commonColors = ['preto', 'preta', 'branco', 'branca', 'azul', 'vermelho', 'vermelha', 'rosa', 'verde', 'amarelo', 'amarela', 'cinza', 'prata', 'dourado', 'ouro', 'incolor', 'transparente', 'grafite', 'lilas', 'lilás', 'roxo', 'roxa'];
+  const trailingColor = new RegExp(`(?:[,/\\s-]+)(?:${commonColors.join('|')})$`, 'i');
+  baseName = baseName.replace(trailingColor, ' ');
+
+  return `${normalizeKeyPart(product?.brand || 'unknown')}_${normalizeKeyPart(baseName)}`;
+}
+
 export function hasCatalogVariantSpecs(product) {
   const specs = product?.specs || {};
   return Boolean(
@@ -46,7 +75,7 @@ export function generateFallbackGroupKey(product) {
 
 export function generateCatalogGroupKey(product) {
   if (product?.model_id && hasCatalogVariantSpecs(product)) {
-    return product.model_id;
+    return `${product.model_id}_${generateFamilySignature(product)}`;
   }
 
   if (product?.model_id) {

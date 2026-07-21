@@ -53,9 +53,9 @@ const colorVariants = [
   },
 ];
 
-assert.deepEqual(
-  colorVariants.map(generateCatalogGroupKey),
-  ['real-variant-model', 'real-variant-model'],
+assert.equal(
+  new Set(colorVariants.map(generateCatalogGroupKey)).size,
+  1,
   'real color variants should still share the same PDP grouping key'
 );
 

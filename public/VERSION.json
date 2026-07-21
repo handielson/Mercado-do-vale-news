@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.50-seo-produtos-inexistentes",
-  "date": "2026-07-20",
+  "version": "v1.2.51-product-family-page-jump",
+  "date": "2026-07-21",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260720-192000-v1250-seo-produtos-inexistentes",
+  "release_vps": "/var/www/mdv-site/releases/20260721-143334-v1251-product-family-page-jump",
   "branch": "main",
-  "summary": "Consolida URLs canonicas e retorna 410 para produtos antigos que nao existem mais."
+  "summary": "Separa familias de produtos diferentes e adiciona salto direto para uma pagina no admin."
 }

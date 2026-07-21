@@ -49,9 +49,25 @@ const colorVariantProducts = [
 ];
 
 assert.equal(hasCatalogVariantSpecs(colorVariantProducts[0]), true);
-assert.deepEqual(colorVariantProducts.map(generateCatalogGroupKey), [
-  'real-phone-model',
-  'real-phone-model',
-]);
+assert.equal(new Set(colorVariantProducts.map(generateCatalogGroupKey)).size, 1);
+
+const unrelatedColoredProducts = [
+  {
+    model_id: 'shared-cable-model',
+    brand: 'Baseus',
+    name: 'Cabo USB-c Baseus Dynamic 4 100W Branco',
+    sku: 'DYN4100WB',
+    specs: { color: 'Branco' },
+  },
+  {
+    model_id: 'shared-cable-model',
+    brand: 'Toocki',
+    name: 'Cabo USB-c Toocki 100W Pd Fast Charging Ponta Azul',
+    sku: 'CC100TOA',
+    specs: { color: 'Ponta Azul' },
+  },
+];
+
+assert.equal(new Set(unrelatedColoredProducts.map(generateCatalogGroupKey)).size, 2);
 
 console.log('catalog-product-grouping-generic-model.test.mjs: ok');

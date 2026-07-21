@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Package, Share2, Images, ChevronLeft, ChevronRight, RefreshCw, Video, CheckSquare, XSquare, Barcode, Store } from 'lucide-react';
 import { useProducts } from '../../../hooks/useProducts';
@@ -27,6 +27,7 @@ export const ProductListPage: React.FC = () => {
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [pageInput, setPageInput] = useState('1');
 
     const {
         products,
@@ -44,6 +45,22 @@ export const ProductListPage: React.FC = () => {
         allFilteredProducts,
         cacheAge,
     } = useProducts();
+
+    useEffect(() => {
+        setPageInput(String(currentPage));
+    }, [currentPage]);
+
+    const goToTypedPage = () => {
+        const requestedPage = Number.parseInt(pageInput, 10);
+        if (!Number.isFinite(requestedPage)) {
+            setPageInput(String(currentPage));
+            return;
+        }
+
+        const safePage = Math.min(Math.max(1, requestedPage), Math.max(1, totalPages));
+        setCurrentPage(safePage);
+        setPageInput(String(safePage));
+    };
 
     const handleNewProduct = () => {
         navigate('/admin/products/new');
@@ -355,6 +372,35 @@ export const ProductListPage: React.FC = () => {
                                     <ChevronRight size={20} />
                                 </button>
                             </div>
+
+                            <form
+                                className="flex items-center gap-2"
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    goToTypedPage();
+                                }}
+                            >
+                                <label htmlFor="product-page-input" className="text-sm text-slate-500 whitespace-nowrap">
+                                    Ir para:
+                                </label>
+                                <input
+                                    id="product-page-input"
+                                    type="number"
+                                    min={1}
+                                    max={Math.max(1, totalPages)}
+                                    value={pageInput}
+                                    onChange={(event) => setPageInput(event.target.value)}
+                                    onBlur={goToTypedPage}
+                                    aria-label="Número da página"
+                                    className="w-16 p-1.5 border border-slate-300 rounded text-sm bg-slate-50 text-center"
+                                />
+                                <button
+                                    type="submit"
+                                    className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+                                >
+                                    Ir
+                                </button>
+                            </form>
                         </div>
                     )}
                 </div>
