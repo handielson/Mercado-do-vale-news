@@ -92,7 +92,7 @@ const minutesOf = (value) => {
   return Number.isFinite(h) ? h * 60 + (Number.isFinite(m) ? m : 0) : 0;
 };
 const now = new Date();
-const local = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+const local = new Date(now.toLocaleString('en-US', { timeZone: 'America/Recife' }));
 const todayKey = days[local.getDay()];
 const currentMinutes = local.getHours() * 60 + local.getMinutes();
 async function getSettings() {

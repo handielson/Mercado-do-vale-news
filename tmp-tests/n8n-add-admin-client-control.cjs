@@ -545,10 +545,7 @@ const selectedNumber = requestedQuantity ? Number(activeState?.selectedOptionNum
 
 const periodGreeting = () => {
   if (source.saudacaoDetectada !== true) return '';
-  if (normalized.includes('bom dia')) return 'Bom dia! 😊';
-  if (normalized.includes('boa tarde')) return 'Boa tarde! 😊';
-  if (normalized.includes('boa noite')) return 'Boa noite! 😊';
-  const hour = Number(new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }));
+  const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Recife', hour: '2-digit', hourCycle: 'h23' }).format(new Date()));
   if (hour >= 5 && hour < 12) return 'Bom dia! 😊';
   if (hour >= 12 && hour < 18) return 'Boa tarde! 😊';
   return 'Boa noite! 😊';
