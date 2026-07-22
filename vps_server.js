@@ -20477,7 +20477,9 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   // Ordena por estoque (preferindo com estoque) e nome.
   if (Number(r.is_parent) === 1) {
     const [variantRows] = await pool.query(
-      `SELECT slug FROM products
+      `SELECT *,
+        ${comboStockSql('products')} AS stock_quantity
+       FROM products
        WHERE parent_id = ?
          AND status = 'active'
          AND id != ?
@@ -20487,9 +20489,25 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
       [r.id, r.id]
     );
     if (variantRows.length > 0 && variantRows[0].slug) {
+      const variant = variantRows[0];
+
+      // Alguns agrupadores antigos e suas variacoes compartilham o mesmo slug.
+      // Redirecionar nesse caso criaria um loop para a propria URL; entregue a
+      // variacao escolhida diretamente para a pagina publica.
+      if (variant.slug === slugParam) {
+        return {
+          ...variant,
+          images:           typeof variant.images === 'string'           ? JSON.parse(variant.images)           : (variant.images ?? []),
+          specs:            typeof variant.specs === 'string'            ? JSON.parse(variant.specs)            : variant.specs,
+          alternative_eans: typeof variant.alternative_eans === 'string' ? JSON.parse(variant.alternative_eans) : variant.alternative_eans,
+          custom_fields:    typeof variant.custom_fields === 'string'    ? JSON.parse(variant.custom_fields)    : variant.custom_fields,
+          kits:             typeof variant.kits === 'string'             ? JSON.parse(variant.kits)             : variant.kits,
+        };
+      }
+
       return {
         is_parent_redirect: true,
-        redirect_to_slug: variantRows[0].slug,
+        redirect_to_slug: variant.slug,
       };
     }
     // Pai sem filhos disponiveis - retorna 404

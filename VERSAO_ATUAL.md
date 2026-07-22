@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.52-saudacao-horario-recife
+version: v1.2.53-produto-slug-variacao
 date: 2026-07-22
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260722-124649-v1252-saudacao-horario-recife
+release_vps: /var/www/mdv-site/releases/20260722-152828-produto-slug-variacao
 branch: main
-summary: Centraliza as saudacoes do WhatsApp pelo horario oficial de Recife.
+summary: Evita redirecionamento circular quando produto pai e variacoes compartilham o mesmo slug publico.
 ```
