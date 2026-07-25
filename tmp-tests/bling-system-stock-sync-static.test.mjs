@@ -20,7 +20,8 @@ assert.match(orderService, /combo_selections\)/);
 const checkoutPage = readFileSync(new URL('../pages/store/CheckoutPage.tsx', import.meta.url), 'utf8');
 assert.match(checkoutPage, /comboSelections: i\.comboSelections/);
 
-const migration = readFileSync(new URL('../supabase/migrations/20260516194000_add_combo_selections_to_order_items.sql', import.meta.url), 'utf8');
-assert.match(migration, /ADD COLUMN IF NOT EXISTS combo_selections JSONB/);
+assert.match(orderService, /\/table-data\/order_items\/bulk/, 'order items must be persisted through the VPS table-data endpoint');
+assert.match(orderService, /serializeOrderItemRowForTable/, 'combo selections must be serialized before VPS persistence');
+assert.doesNotMatch(orderService, /supabase\.(?:from|rpc)|from ['"]\.\/supabase['"]/, 'online orders must not restore Supabase persistence');
 
 console.log('bling system stock sync static tests passed');
