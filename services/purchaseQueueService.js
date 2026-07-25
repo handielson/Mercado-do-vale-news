@@ -3,6 +3,7 @@ import { vpsClient } from './vpsClient';
 
 export const PURCHASE_QUEUE_TABLE = 'purchase_queue_items';
 export const PURCHASE_QUOTES_TABLE = 'purchase_quotes';
+export const PURCHASE_SUPPLIERS_TABLE = 'purchase_suppliers';
 export const PURCHASE_QUEUE_STATUSES = ['pending', 'quoted', 'purchased', 'not_purchased', 'removed'];
 
 function normalizeText(value, fallback = '') {
@@ -133,6 +134,22 @@ async function loadRows(table) {
 
 async function loadPurchaseQueueRows() { return loadRows(PURCHASE_QUEUE_TABLE); }
 
+export async function getPurchaseSuppliers({ includeInactive = false } = {}) {
+  const rows = await loadRows(PURCHASE_SUPPLIERS_TABLE);
+  return rows
+    .filter((supplier) => includeInactive || Number(supplier.active) !== 0)
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+}
+
+export async function createPurchaseSupplier({ name, websiteUrl = '', whatsapp = '' }) {
+  const supplierName = normalizeText(name);
+  if (!supplierName) throw new Error('Informe o nome do fornecedor.');
+  const now = new Date().toISOString();
+  const row = { id: createId(), name: supplierName, website_url: normalizeText(websiteUrl), whatsapp: normalizeText(whatsapp), active: 1, created_at: now, updated_at: now };
+  await vpsClient.post(`/table-data/${PURCHASE_SUPPLIERS_TABLE}`, row);
+  return row;
+}
+
 export function enrichPurchaseQueueItems(items = [], quotes = []) {
   const quotesByItem = new Map();
   quotes.forEach((quote) => {
@@ -192,13 +209,15 @@ export async function createManualPurchaseRequest({ productId = null, model, sku
   return getPurchaseQueueItem(id);
 }
 
-export async function createPurchaseQuote({ queueItemId, supplierName, unitPriceCents, quantity = 1, notes = '', quotedAt = new Date() }) {
+export async function createPurchaseQuote({ queueItemId, supplierId, supplierName, unitPriceCents, quantity = 1, notes = '', quotedAt = new Date() }) {
   const item = await getPurchaseQueueItem(queueItemId);
   if (!item) throw new Error('Item da fila de compra nao encontrado.');
-  const supplier = normalizeText(supplierName);
+  const suppliers = await getPurchaseSuppliers();
+  const selectedSupplier = suppliers.find((candidate) => String(candidate.id) === String(supplierId));
+  const supplier = normalizeText(selectedSupplier?.name || supplierName);
   if (!supplier) throw new Error('Informe a loja ou fornecedor.');
   if (toInteger(unitPriceCents) < 0) throw new Error('Informe um preço válido.');
-  const quote = { id: createId(), queue_item_id: String(queueItemId), supplier_name: supplier, unit_price_cents: clampToZero(unitPriceCents), quantity: Math.max(1, clampToZero(quantity)), notes: normalizeText(notes), quoted_at: new Date(quotedAt).toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  const quote = { id: createId(), queue_item_id: String(queueItemId), supplier_id: selectedSupplier?.id || null, supplier_name: supplier, unit_price_cents: clampToZero(unitPriceCents), quantity: Math.max(1, clampToZero(quantity)), notes: normalizeText(notes), quoted_at: new Date(quotedAt).toISOString(), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
   await vpsClient.post(`/table-data/${PURCHASE_QUOTES_TABLE}`, quote);
   if (item.status === 'pending') await vpsClient.patch(`/table-data/${PURCHASE_QUEUE_TABLE}/${encodeURIComponent(queueItemId)}?pk=id`, { status: 'quoted', updated_at: new Date().toISOString() });
   return getPurchaseQueueItem(queueItemId);

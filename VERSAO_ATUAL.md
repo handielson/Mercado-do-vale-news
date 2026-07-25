@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.57-compras-orcamentos
+version: v1.2.58-fornecedores-compras
 date: 2026-07-25
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260725-180725-compras-orcamentos
+release_vps: /var/www/mdv-site/releases/20260725-183113-fornecedores-compras
 branch: main
-summary: Adiciona pedidos manuais, orcamentos por loja, menor preco e compras efetuadas.
+summary: Adiciona fornecedores, atalhos de site e WhatsApp e historico de itens retirados.
 ```

@@ -109,6 +109,7 @@ const FavoritesRankingReport = lazy(() => import('../pages/admin/reports/Favorit
 const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })));
 const PurchaseQueuePage = lazy(() => import('../pages/admin/purchases/PurchaseQueuePage').then(module => ({ default: module.PurchaseQueuePage })));
 const PurchaseQuotePage = lazy(() => import('../pages/admin/purchases/PurchaseQuotePage').then(module => ({ default: module.PurchaseQuotePage })));
+const PurchaseSuppliersPage = lazy(() => import('../pages/admin/purchases/PurchaseSuppliersPage').then(module => ({ default: module.PurchaseSuppliersPage })));
 const AdminLayout = lazy(() => import('../layouts/AdminLayout').then(module => ({ default: module.AdminLayout })));
 
 const ProductListPage = lazy(() => import('../pages/admin/products/ProductListPage').then(module => ({ default: module.ProductListPage })));
@@ -275,6 +276,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><PurchaseQueuePage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/compras/fornecedores",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><PurchaseSuppliersPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

@@ -32952,9 +32952,24 @@ async function runMigrations() {
   await addIndexIfMissing('purchase_queue_items', 'idx_purchase_queue_product', 'product_id');
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS purchase_suppliers (
+      id CHAR(36) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      website_url VARCHAR(600) NULL,
+      whatsapp VARCHAR(40) NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_purchase_suppliers_active (active),
+      INDEX idx_purchase_suppliers_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS purchase_quotes (
       id CHAR(36) PRIMARY KEY,
       queue_item_id CHAR(36) NOT NULL,
+      supplier_id CHAR(36) NULL,
       supplier_name VARCHAR(255) NOT NULL,
       unit_price_cents BIGINT NOT NULL,
       quantity INT NOT NULL DEFAULT 1,
@@ -32967,6 +32982,8 @@ async function runMigrations() {
       INDEX idx_purchase_quotes_date (quoted_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await addColumnIfMissing('purchase_quotes', 'supplier_id', 'CHAR(36) NULL');
+  await addIndexIfMissing('purchase_quotes', 'idx_purchase_quotes_supplier', 'supplier_id');
   console.log('[migration] purchase queue and quotes tables: OK');
 
   await ensureDefaultAdminAccount();
