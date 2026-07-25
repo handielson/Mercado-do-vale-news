@@ -2,9 +2,9 @@ package br.com.mercadodovale.adminestoque
 
 import android.Manifest
 import android.app.Activity
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
+import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -16,6 +16,7 @@ import br.com.mercadodovale.adminestoque.data.VpsApiClient
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 
@@ -34,7 +35,7 @@ class MainActivity : Activity() {
         setPadding(dp(24), dp(20), dp(24), dp(28))
         setBackgroundColor(Color.rgb(248, 250, 248))
         setOnApplyWindowInsetsListener { view, insets ->
-            view.setPadding(dp(24), insets.systemWindowInsetTop + dp(24), dp(24), dp(28))
+            view.setPadding(dp(24), systemBarTop(insets) + dp(24), dp(24), dp(28))
             insets
         }
     }
@@ -105,6 +106,7 @@ class MainActivity : Activity() {
         root.addView(back("Imprimir etiquetas") { showDashboard() })
         val product = field("SKU, EAN ou código do produto")
         val copies = field("Quantidade de etiquetas")
+        copies.inputType = android.text.InputType.TYPE_CLASS_NUMBER
         val sizes = Spinner(this).apply { adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("20 × 20 mm", "30 × 30 mm", "40 × 30 mm", "50 × 30 mm")) }
         val status = text("", 14, Color.DKGRAY)
         root.addView(product); root.addView(text("Tamanho da etiqueta", 15, Color.DKGRAY)); root.addView(sizes); root.addView(copies)
@@ -118,15 +120,35 @@ class MainActivity : Activity() {
                 connectP50(status)
             }
         })
+        root.addView(button("Imprimir etiquetas") {
+            val quantity = copies.text.toString().toIntOrNull()
+            status.text = when {
+                product.text.isBlank() -> "Escolha um produto antes de imprimir."
+                quantity == null || quantity < 1 -> "Informe uma quantidade válida."
+                else -> "Etiqueta preparada: ${sizes.selectedItem}, $quantity cópia(s). O envio permanece bloqueado até validarmos o protocolo da P50."
+            }
+        })
         root.addView(status)
         root.addView(text("A impressão só será liberada após validarmos os comandos proprietários da P50 em uma impressora física.", 14, Color.DKGRAY))
         setContentView(root)
     }
 
     private fun summarizeProducts(body: String): String = try {
-        val item = JSONObject(body)
-        if (item.has("error")) item.getString("error") else "Consulta recebida. Selecione o produto no próximo passo."
-    } catch (_: Exception) { "Consulta concluída. ${body.take(600)}" }
+        val products = JSONArray(body)
+        if (products.length() == 0) "Nenhum produto encontrado." else buildString {
+            append("Produtos encontrados:\n")
+            for (index in 0 until minOf(products.length(), 10)) {
+                val product = products.getJSONObject(index)
+                append("\n• ").append(product.optString("name", "Sem nome"))
+                product.optString("sku").takeIf { it.isNotBlank() }?.let { append("\n  SKU: ").append(it) }
+                product.optString("ean").takeIf { it.isNotBlank() }?.let { append(" | EAN: ").append(it) }
+                product.optDouble("price_retail", Double.NaN).takeIf { !it.isNaN() }?.let { append(" | R$ ").append("%.2f".format(it)) }
+                append('\n')
+            }
+        }
+    } catch (_: Exception) {
+        try { JSONObject(body).optString("error", "Resposta inválida da API.") } catch (_: Exception) { "Resposta inválida da API." }
+    }
 
     private fun searchProduct(rawQuery: String, result: TextView) {
         val value = rawQuery.trim()
@@ -134,7 +156,7 @@ class MainActivity : Activity() {
         result.text = "Consultando estoque..."
         runAsync {
             val encoded = URLEncoder.encode(value, "UTF-8")
-            val response = VpsApiClient(token.orEmpty()).get("/products?search=$encoded")
+            val response = VpsApiClient(token.orEmpty()).get("/products?search=$encoded&compact=true&limit=10")
             runOnUiThread { result.text = response.fold({ summarizeProducts(it) }, { it.message ?: "Falha na consulta." }) }
         }
     }
@@ -150,7 +172,8 @@ class MainActivity : Activity() {
     }
 
     private fun connectP50(status: TextView) {
-        val printer = BluetoothAdapter.getDefaultAdapter()?.bondedDevices?.firstOrNull {
+        val bluetoothAdapter = getSystemService(BluetoothManager::class.java)?.adapter
+        val printer = bluetoothAdapter?.bondedDevices?.firstOrNull {
             it.name?.contains("P50", true) == true || it.name?.contains("MARKLIFE", true) == true
         }
         if (printer == null) { status.text = "P50 não encontrada. Ligue e pareie a impressora primeiro."; return }
@@ -193,5 +216,9 @@ class MainActivity : Activity() {
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(16) }
     }
     private fun runAsync(work: () -> Unit) = Thread(work).start()
+    @Suppress("DEPRECATION")
+    private fun systemBarTop(insets: WindowInsets): Int =
+        if (android.os.Build.VERSION.SDK_INT >= 30) insets.getInsets(WindowInsets.Type.systemBars()).top
+        else insets.systemWindowInsetTop
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 }

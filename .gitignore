@@ -21,6 +21,9 @@ android/totem-pix/keystore.properties
 android/totem-pix/*.jks
 android/totem-pix/.gradle/
 android/totem-pix/local.properties
+android/admin-estoque/.gradle/
+android/admin-estoque/.kotlin/
+android/admin-estoque/local.properties
 
 # Logs
 npm-debug.log*

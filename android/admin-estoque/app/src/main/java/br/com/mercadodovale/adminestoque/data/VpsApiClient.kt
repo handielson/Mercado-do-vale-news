@@ -25,7 +25,12 @@ class VpsApiClient(private val accessToken: String) {
         fun login(identifier: String, password: String): Result<String> {
             if (identifier.isBlank() || password.isBlank()) return Result.failure(IllegalArgumentException("Informe usuário e senha."))
             return VpsApiClient("").request("/auth/login", "POST", JSONObject().put("email", identifier).put("cpf_cnpj", identifier).put("password", password)).map {
-                JSONObject(it).getString("token")
+                val response = JSONObject(it)
+                val customerType = response.optJSONObject("customer")?.optString("customer_type").orEmpty()
+                if (!customerType.equals("ADMIN", ignoreCase = true)) {
+                    throw IllegalAccessException("Acesso restrito a contas administrativas.")
+                }
+                response.getString("token")
             }
         }
     }
