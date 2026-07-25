@@ -14,5 +14,7 @@ assert.match(routes, /path: "\/admin\/compras"/, 'router must expose the purchas
 assert.match(purchasePage, /DashboardPurchaseQueue/, 'purchase page must render the queue');
 assert.match(purchasePage, /Como a fila e alimentada/, 'purchase page must explain how the queue is fed');
 assert.match(purchaseQueue, /syncPurchaseQueueFromSummary/, 'queue must synchronize from the daily sales digest');
+assert.match(quickAccess, /label: 'Pedidos'[\s\S]*?path: '\/admin\/pedidos-online'/, 'Pedidos shortcut must target the existing online orders route');
+assert.doesNotMatch(quickAccess, /path: '\/admin\/orders'/, 'Pedidos shortcut must not point to the removed route');
 
 console.log('dashboard purchase shortcut static checks passed');

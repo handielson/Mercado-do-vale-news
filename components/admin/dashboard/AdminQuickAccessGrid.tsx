@@ -93,7 +93,7 @@ const dailyItems: QuickAccessItem[] = [
   {
     label: 'Pedidos',
     description: 'Pedidos online',
-    path: '/admin/orders',
+    path: '/admin/pedidos-online',
     icon: '🛒',
     cardClassName: 'bg-white border-slate-200 hover:border-teal-400',
     iconClassName: 'bg-teal-100 group-hover:bg-teal-200',
