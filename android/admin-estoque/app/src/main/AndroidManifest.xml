@@ -7,7 +7,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="MDV Admin Estoque"
+        android:label="Gestão MDV"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <meta-data
