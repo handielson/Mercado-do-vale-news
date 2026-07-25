@@ -23,7 +23,7 @@ const requiredPdvPageSnippets = [
   'pdvDisplayService.refreshPixPaymentStatus',
   'PDV_PIX_STATUS_POLLING_MS',
   'pollPdvPixStatus',
-  'handleApprovedPdvPixPayment',
+  'addApprovedPdvPixPayment',
   'pdvDisplayService.setActivePix',
   'pdvDisplayService.clearActivePix',
   'pdvDisplayService.listDisplays',

@@ -12,7 +12,9 @@ const files = {
 assert.match(files.index, /<link rel="canonical" href="https:\/\/www\.mercadodovale\.com\.br\/" \/>/);
 assert.doesNotMatch(files.index, /https:\/\/mercadodovale\.com\.br\//);
 
-assert.match(files.productPage, /https:\/\/www\.mercadodovale\.com\.br\/produto\/\$\{product\.slug \|\| product\.id\}/);
+assert.match(files.productPage, /const productSlug = getPublicProductRouteTarget\(product\);/);
+assert.match(files.productPage, /const publicProductUrl = `https:\/\/www\.mercadodovale\.com\.br\/produto\/\$\{encodeURIComponent\(productSlug\)\}`;/);
+assert.match(files.productPage, /<link rel="canonical" href=\{publicProductUrl\} \/>/);
 assert.doesNotMatch(files.productPage, /https:\/\/mercadodovale\.com\.br\/produto/);
 
 for (const [name, source] of Object.entries({ server: files.server, vpsJs: files.vpsJs, vpsCjs: files.vpsCjs })) {

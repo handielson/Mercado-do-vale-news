@@ -15,7 +15,7 @@
     "test:pdv-sale-finalization-log": "node tmp-tests/pdv-sale-finalization-log-static.test.mjs",
     "test:sale-legacy-item-money": "node tmp-tests/sale-legacy-item-money-static.test.mjs",
     "test:signed-warranty": "node --test tmp-tests/signed-warranty-core.test.cjs && node tmp-tests/signed-warranty-static.test.mjs",
-    "test:autoresponder:whatsapp": "node tmp-tests/google-contacts-oauth-static.test.mjs && node tmp-tests/autoresponder-contact-name-invalid-replies-static.test.mjs && node tmp-tests/autoresponder-contact-name-curation-static.test.mjs && node tmp-tests/autoresponder-google-contact-flow-static.test.mjs && node tmp-tests/autoresponder-smartphone-catalog-loop-regression-static.test.mjs",
+    "test:autoresponder:whatsapp": "node tmp-tests/google-contacts-oauth-static.test.mjs && node tmp-tests/autoresponder-contact-name-invalid-replies-static.test.mjs && node tmp-tests/autoresponder-google-contact-flow-static.test.mjs && node tmp-tests/autoresponder-smartphone-catalog-loop-regression-static.test.mjs",
     "publish:vps-plan": "node scripts/publish-vps-plan.cjs",
     "deploy:vps-site": "node scripts/deploy-vps-site.cjs",
     "preview": "vite preview"

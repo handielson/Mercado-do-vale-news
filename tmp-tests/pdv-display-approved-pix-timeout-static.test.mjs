@@ -65,13 +65,13 @@ assert.match(
 
 assert.match(
   source,
-  /const showPix = shouldShowPixPayment\(active_pix, now\);/,
+  /const showPix = shouldShowPixPayment\(active_pix, now\) && !\(activePixDismissalId && dismissedApprovedReceipts\[activePixDismissalId\]\);/,
   'Display rendering must use the capped Pix visibility rule'
 );
 
 assert.match(
   source,
-  /<PixView payment=\{active_pix\} display=\{display\} now=\{now\} displayToken=\{token\} \/>/,
+  /<PixView payment=\{active_pix\} display=\{display\} now=\{now\} displayToken=\{token\} onDismissApprovedReceipt=\{dismissApprovedReceipt\} \/>/,
   'Display must pass its pairing token to the approved receipt view'
 );
 

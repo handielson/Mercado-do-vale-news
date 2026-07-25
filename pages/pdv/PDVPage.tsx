@@ -739,7 +739,7 @@ export default function PDVPage() {
                     pix_payment_id: payment.id,
                     mercado_pago_payment_id: payment.mercado_pago_payment_id || undefined,
                     pix_status: 'approved',
-                    pix_paid_at: payment.updated_at || new Date().toISOString()
+                    pix_paid_at: payment.approved_at || payment.updated_at || new Date().toISOString()
                 }
             ];
         });
