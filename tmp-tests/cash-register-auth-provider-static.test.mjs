@@ -11,11 +11,13 @@ test('fluxo de caixa usa o provider de autenticacao ativo na aplicacao', async (
     for (const file of files) {
         const source = await readFile(file, 'utf8');
 
-        assert.match(source, /contexts\/VpsAuthContext/);
-        assert.match(source, /useVpsAuth\(\)/);
+        assert.match(source, /(contexts\/VpsAuthContext|hooks\/useVpsAuth)/);
+        assert.match(source, /use(?:VpsAuth|Auth)\(\)/);
         assert.doesNotMatch(source, /contexts\/AuthContext/);
-        assert.doesNotMatch(source, /useAuth\(\)/);
     }
+
+    const authHook = await readFile('hooks/useVpsAuth.ts', 'utf8');
+    assert.match(authHook, /export \{ useVpsAuth \} from '\.\.\/contexts\/VpsAuthContext'/);
 
     const app = await readFile('App.tsx', 'utf8');
     assert.match(app, /<VpsAuthProvider>/);

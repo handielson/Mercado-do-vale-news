@@ -18,7 +18,7 @@ assert.match(
 
 assert.match(
   pdvPage,
-  /const unitPrice = getEffectiveCustomerPrice\(product, selectedCustomer\);\s*const unitCost = normalizeCentValue\(product\.price_cost\);/s,
+  /const unitPrice = getEffectiveRetailPrice\(product\);\s*const unitCost = normalizeCentValue\(product\.price_cost\);/s,
   'PDV cart items must normalize VPS price strings before sale creation.'
 );
 
