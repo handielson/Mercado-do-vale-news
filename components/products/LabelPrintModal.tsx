@@ -4,6 +4,7 @@ import Barcode from 'react-barcode';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
 import { Product } from '../../types/product';
+import { labelPrintTemplatesService } from '../../services/labelPrintTemplatesService';
 
 interface LabelPrintModalProps {
     isOpen: boolean;
@@ -28,17 +29,6 @@ interface LabelSize {
 
 // Tamanhos comuns. As opções até 50mm de largura são compatíveis com a Marklife P50/P50S.
 // fontPrice já vem dobrado (preço grande, conforme pedido).
-const LABEL_SIZES: LabelSize[] = [
-    { id: '40x30',  label: '40 × 30 mm  (P50S padrão)', width: 40, height: 30, fontStore: 9,  fontName: 7,  fontPrice: 26, fontPriceCurrency: 12, barcodeWidth: 0.9, barcodeHeight: 18, barcodeFont: 8,  padding: 1 },
-    { id: '50x30',  label: '50 × 30 mm  (P50S)',        width: 50, height: 30, fontStore: 10, fontName: 8,  fontPrice: 28, fontPriceCurrency: 14, barcodeWidth: 1.0, barcodeHeight: 20, barcodeFont: 9,  padding: 1 },
-    { id: '30x40',  label: '30 × 40 mm  (P50S)',        width: 30, height: 40, fontStore: 8,  fontName: 7,  fontPrice: 24, fontPriceCurrency: 12, barcodeWidth: 0.8, barcodeHeight: 24, barcodeFont: 7,  padding: 0.8 },
-    { id: '40x25',  label: '40 × 25 mm  (P50S)',        width: 40, height: 25, fontStore: 8,  fontName: 7,  fontPrice: 24, fontPriceCurrency: 12, barcodeWidth: 0.9, barcodeHeight: 14, barcodeFont: 7,  padding: 0.8 },
-    { id: '30x20',  label: '30 × 20 mm  (rolo 20×30 P50S)', width: 30, height: 20, fontStore: 7,  fontName: 6,  fontPrice: 20, fontPriceCurrency: 10, barcodeWidth: 0.55, barcodeHeight: 10, barcodeFont: 6, padding: 0.5 },
-    { id: '60x40',  label: '60 × 40 mm',                width: 60, height: 40, fontStore: 11, fontName: 9,  fontPrice: 36, fontPriceCurrency: 16, barcodeWidth: 1.2, barcodeHeight: 26, barcodeFont: 10, padding: 1.5 },
-    { id: '80x40',  label: '80 × 40 mm',                width: 80, height: 40, fontStore: 13, fontName: 10, fontPrice: 44, fontPriceCurrency: 18, barcodeWidth: 1.5, barcodeHeight: 30, barcodeFont: 11, padding: 1.5 },
-    { id: '80x50',  label: '80 × 50 mm',                width: 80, height: 50, fontStore: 14, fontName: 11, fontPrice: 48, fontPriceCurrency: 20, barcodeWidth: 1.6, barcodeHeight: 40, barcodeFont: 12, padding: 2 },
-];
-
 const MAX_COPIES = 500;
 const LABEL_SIZE_STORAGE_KEY = 'mdv.labelPrint.preferredSizeId';
 const DEFAULT_LABEL_SIZE_ID = '30x20';
@@ -48,7 +38,7 @@ function getPreferredLabelSizeId(): string {
 
     try {
         const stored = localStorage.getItem(LABEL_SIZE_STORAGE_KEY);
-        return LABEL_SIZES.some((size) => size.id === stored) ? stored! : DEFAULT_LABEL_SIZE_ID;
+        return stored || DEFAULT_LABEL_SIZE_ID;
     } catch {
         return DEFAULT_LABEL_SIZE_ID;
     }
@@ -408,7 +398,32 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     );
     const [copies, setCopies] = useState<number>(1);
     const [sizeId, setSizeId] = useState<string>(() => getPreferredLabelSizeId());
+    const [labelSizes, setLabelSizes] = useState<LabelSize[]>([]);
+    const [labelSizesError, setLabelSizesError] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
+
+    React.useEffect(() => {
+        let cancelled = false;
+
+        labelPrintTemplatesService.get()
+            .then((response) => {
+                if (cancelled) return;
+                const templates = Array.isArray(response?.templates) ? response.templates : [];
+                if (templates.length === 0) {
+                    setLabelSizesError('Nenhum modelo de etiqueta foi configurado no sistema.');
+                    return;
+                }
+                setLabelSizes(templates);
+                setSizeId((current) => templates.some((template) => template.id === current) ? current : templates[0].id);
+            })
+            .catch(() => {
+                if (!cancelled) setLabelSizesError('Nao foi possivel carregar os modelos de etiqueta. Tente novamente.');
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     React.useEffect(() => {
         if (product) {
@@ -420,8 +435,8 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
     }, [product]);
 
     const size = useMemo(
-        () => LABEL_SIZES.find((s) => s.id === sizeId) || LABEL_SIZES[0],
-        [sizeId]
+        () => labelSizes.find((template) => template.id === sizeId) || null,
+        [labelSizes, sizeId]
     );
 
     const stockQty = product?.stock_quantity ?? 0;
@@ -456,6 +471,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
 
     const handlePrint = async () => {
         if (isGenerating) return;
+        if (!size) return;
         setIsGenerating(true);
         try {
             const doc = buildPdf({
@@ -519,15 +535,17 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                             <select
                                 value={sizeId}
                                 onChange={(e) => handleSizeChange(e.target.value)}
+                                disabled={!size}
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
                             >
-                                {LABEL_SIZES.map((s) => (
+                                {labelSizes.map((s) => (
                                     <option key={s.id} value={s.id}>{s.label}</option>
                                 ))}
                             </select>
                             <p className="text-xs text-slate-500 mt-1">
                                 Selecione o mesmo tamanho de papel na janela da impressora.
                             </p>
+                            {labelSizesError && <p className="text-xs text-red-600 mt-1">{labelSizesError}</p>}
                         </div>
 
                         <div>
@@ -638,19 +656,23 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                     <div className="w-full md:w-1/2 p-6 bg-slate-100 flex flex-col">
                         <div className="mb-4 text-sm font-medium text-slate-500 flex justify-between items-center">
                             <span>Visualização:</span>
-                            <span className="text-xs px-2 py-1 bg-slate-200 rounded-md">{size.label}</span>
+                            <span className="text-xs px-2 py-1 bg-slate-200 rounded-md">{size?.label || 'Carregando...'}</span>
                         </div>
 
                         <div className="flex-1 flex items-center justify-center border-2 border-dashed border-slate-300 rounded-xl bg-white p-4 overflow-auto">
                             <div className="shadow-sm border border-slate-200">
-                                <LabelContent
-                                    size={size}
-                                    labelName={labelName}
-                                    sku={product.sku}
-                                    showPrice={showPrice}
-                                    labelPrice={labelPrice}
-                                    barcodeValue={barcodeValue}
-                                />
+                                {size ? (
+                                    <LabelContent
+                                        size={size}
+                                        labelName={labelName}
+                                        sku={product.sku}
+                                        showPrice={showPrice}
+                                        labelPrice={labelPrice}
+                                        barcodeValue={barcodeValue}
+                                    />
+                                ) : (
+                                    <p className="p-6 text-sm text-slate-500">Carregando modelo de etiqueta...</p>
+                                )}
                             </div>
                         </div>
 
@@ -669,7 +691,7 @@ export const LabelPrintModal: React.FC<LabelPrintModalProps> = ({ isOpen, onClos
                     </button>
                     <button
                         onClick={handlePrint}
-                        disabled={isGenerating}
+                        disabled={isGenerating || !size}
                         className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed font-medium transition-colors flex items-center gap-2"
                     >
                         <Printer size={18} />

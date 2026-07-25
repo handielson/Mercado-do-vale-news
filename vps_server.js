@@ -1432,6 +1432,39 @@ function normalizeNavigationMetadata(value) {
 }
 
 const ADMIN_PREFERENCE_KEY_RE = /^[a-z0-9._:-]{1,80}$/i;
+const LABEL_TEMPLATES_PREFERENCE_KEY = 'label.templates';
+const DEFAULT_LABEL_TEMPLATES = [
+  { id: '40x30', label: '40 x 30 mm (P50 padrao)', width: 40, height: 30, fontStore: 9, fontName: 7, fontPrice: 26, fontPriceCurrency: 12, barcodeWidth: 0.9, barcodeHeight: 18, barcodeFont: 8, padding: 1 },
+  { id: '50x30', label: '50 x 30 mm (P50)', width: 50, height: 30, fontStore: 10, fontName: 8, fontPrice: 28, fontPriceCurrency: 14, barcodeWidth: 1, barcodeHeight: 20, barcodeFont: 9, padding: 1 },
+  { id: '30x40', label: '30 x 40 mm (P50)', width: 30, height: 40, fontStore: 8, fontName: 7, fontPrice: 24, fontPriceCurrency: 12, barcodeWidth: 0.8, barcodeHeight: 24, barcodeFont: 7, padding: 0.8 },
+  { id: '40x25', label: '40 x 25 mm (P50)', width: 40, height: 25, fontStore: 8, fontName: 7, fontPrice: 24, fontPriceCurrency: 12, barcodeWidth: 0.9, barcodeHeight: 14, barcodeFont: 7, padding: 0.8 },
+  { id: '30x20', label: '30 x 20 mm (P50)', width: 30, height: 20, fontStore: 7, fontName: 6, fontPrice: 20, fontPriceCurrency: 10, barcodeWidth: 0.55, barcodeHeight: 10, barcodeFont: 6, padding: 0.5 },
+  { id: '60x40', label: '60 x 40 mm', width: 60, height: 40, fontStore: 11, fontName: 9, fontPrice: 36, fontPriceCurrency: 16, barcodeWidth: 1.2, barcodeHeight: 26, barcodeFont: 10, padding: 1.5 },
+  { id: '80x40', label: '80 x 40 mm', width: 80, height: 40, fontStore: 13, fontName: 10, fontPrice: 44, fontPriceCurrency: 18, barcodeWidth: 1.5, barcodeHeight: 30, barcodeFont: 11, padding: 1.5 },
+  { id: '80x50', label: '80 x 50 mm', width: 80, height: 50, fontStore: 14, fontName: 11, fontPrice: 48, fontPriceCurrency: 20, barcodeWidth: 1.6, barcodeHeight: 40, barcodeFont: 12, padding: 2 },
+];
+
+function normalizeLabelTemplates(value) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 50) return null;
+  const ids = new Set();
+  const numberFields = ['width', 'height', 'fontStore', 'fontName', 'fontPrice', 'fontPriceCurrency', 'barcodeWidth', 'barcodeHeight', 'barcodeFont', 'padding'];
+  const templates = [];
+  for (const raw of value) {
+    const id = String(raw?.id || '').trim();
+    const label = String(raw?.label || '').trim();
+    if (!/^[a-z0-9-]{2,40}$/i.test(id) || !label || label.length > 100 || ids.has(id)) return null;
+    const template = { id, label };
+    for (const field of numberFields) {
+      const number = Number(raw?.[field]);
+      if (!Number.isFinite(number) || number < 0 || number > 500) return null;
+      template[field] = number;
+    }
+    if (template.width < 10 || template.width > 120 || template.height < 10 || template.height > 200) return null;
+    ids.add(id);
+    templates.push(template);
+  }
+  return templates;
+}
 
 function normalizeAdminPreferenceKey(value) {
   const key = String(value || '').trim();
@@ -1550,6 +1583,29 @@ fastify.patch('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, 
     key,
     value: JSON.parse(valueJson),
   };
+});
+
+fastify.get('/admin/label-templates', { preHandler: requireSyncKeyOrAdmin }, async () => {
+  const [rows] = await pool.query(
+    'SELECT value_json, updated_at FROM admin_preferences WHERE preference_key = ? LIMIT 1',
+    [LABEL_TEMPLATES_PREFERENCE_KEY]
+  );
+  const row = rows?.[0] || null;
+  const templates = normalizeLabelTemplates(parseAdminPreferenceValue(row?.value_json)?.templates) || DEFAULT_LABEL_TEMPLATES;
+  return { templates, updated_at: row?.updated_at || null };
+});
+
+fastify.patch('/admin/label-templates', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const templates = normalizeLabelTemplates(req.body?.templates);
+  if (!templates) return reply.code(400).send({ error: 'Invalid label templates' });
+  const valueJson = JSON.stringify({ templates });
+  await pool.query(
+    `INSERT INTO admin_preferences (preference_key, value_json)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE value_json = VALUES(value_json), updated_at = CURRENT_TIMESTAMP`,
+    [LABEL_TEMPLATES_PREFERENCE_KEY, valueJson]
+  );
+  return { templates, updated_at: null };
 });
 
 function normalizeVpsProxyPath(input) {
@@ -21454,54 +21510,98 @@ fastify.post('/stock-locations/adjustments', { preHandler: requireSyncKey }, asy
   return row;
 });
 
-fastify.post('/stock-locations/transfers', { preHandler: requireSyncKey }, async (req, reply) => {
+fastify.post('/stock-locations/transfers', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const input = req.body || {};
   const quantity = stockNumber(input.quantity);
   if (quantity <= 0) return reply.code(400).send({ error: 'Informe uma quantidade valida para a transferencia.' });
   if (input.from_location_id === input.to_location_id) return reply.code(400).send({ error: 'A origem e destino precisam ser diferentes.' });
 
-  const [[product]] = await pool.query('SELECT company_id FROM products WHERE id = ? LIMIT 1', [input.product_id]);
-  if (!product) return reply.code(404).send({ error: 'Produto nao encontrado.' });
-  const source = await getStockLocationRow(input.product_id, input.from_deposit_id, input.from_location_id, true);
-  const sourceQuantity = stockNumber(source?.quantity);
-  const sourceReserved = stockNumber(source?.reserved_quantity);
-  if (sourceQuantity - sourceReserved < quantity) return reply.code(400).send({ error: 'Saldo disponivel insuficiente na origem.' });
-  const target = await getStockLocationRow(input.product_id, input.to_deposit_id, input.to_location_id, true);
-  const targetQuantity = stockNumber(target?.quantity);
-  const targetReserved = stockNumber(target?.reserved_quantity);
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [[product]] = await connection.query('SELECT company_id FROM products WHERE id = ? LIMIT 1 FOR UPDATE', [input.product_id]);
+    if (!product) {
+      const error = new Error('Produto nao encontrado.');
+      error.statusCode = 404;
+      throw error;
+    }
 
-  await upsertStockLocationBalance({
-    companyId: product.company_id || await getDefaultStockCompanyId(),
-    productId: input.product_id,
-    depositId: input.from_deposit_id,
-    locationId: input.from_location_id,
-    quantity: sourceQuantity - quantity,
-    reservedQuantity: sourceReserved,
-  });
-  await upsertStockLocationBalance({
-    companyId: product.company_id || await getDefaultStockCompanyId(),
-    productId: input.product_id,
-    depositId: input.to_deposit_id,
-    locationId: input.to_location_id,
-    quantity: targetQuantity + quantity,
-    reservedQuantity: targetReserved,
-  });
-  await pool.query(
-    `INSERT INTO stock_location_movements
-      (id, company_id, product_id, from_deposit_id, from_location_id, to_deposit_id, to_location_id, quantity,
-       movement_type, reason, reference_type, previous_from_quantity, new_from_quantity, previous_to_quantity, new_to_quantity, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'transfer', ?, 'manual_transfer', ?, ?, ?, ?, ?)`,
-    [crypto.randomUUID(), product.company_id, input.product_id, input.from_deposit_id, input.from_location_id, input.to_deposit_id, input.to_location_id,
-      quantity, String(input.reason || 'Transferencia interna').trim(), sourceQuantity, sourceQuantity - quantity, targetQuantity, targetQuantity + quantity, input.notes || null]
-  );
-  await syncProductStockFromLocations(input.product_id);
-  const [rows] = await pool.query(`
-    SELECT psl.*
-    FROM product_stock_locations psl
-    WHERE psl.product_id = ? AND psl.location_id IN (?, ?)
-    ORDER BY psl.updated_at DESC
-  `, [input.product_id, input.from_location_id, input.to_location_id]);
-  return rows;
+    const getLockedBalance = async (depositId, locationId) => {
+      const [rows] = await connection.query(
+        `SELECT * FROM product_stock_locations
+         WHERE product_id = ? AND deposit_id = ? AND location_id = ?
+         FOR UPDATE`,
+        [input.product_id, depositId, locationId]
+      );
+      return rows?.[0] || null;
+    };
+    const upsertBalance = async ({ depositId, locationId, nextQuantity, reservedQuantity }) => {
+      await connection.query(
+        `INSERT INTO product_stock_locations
+          (id, company_id, product_id, deposit_id, location_id, quantity, reserved_quantity)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           quantity = VALUES(quantity),
+           reserved_quantity = VALUES(reserved_quantity),
+           updated_at = CURRENT_TIMESTAMP`,
+        [crypto.randomUUID(), product.company_id || await getDefaultStockCompanyId(), input.product_id, depositId, locationId, nextQuantity, reservedQuantity]
+      );
+    };
+
+    const source = await getLockedBalance(input.from_deposit_id, input.from_location_id);
+    const sourceQuantity = stockNumber(source?.quantity);
+    const sourceReserved = stockNumber(source?.reserved_quantity);
+    if (sourceQuantity - sourceReserved < quantity) {
+      const error = new Error('Saldo disponivel insuficiente na origem.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const target = await getLockedBalance(input.to_deposit_id, input.to_location_id);
+    const targetQuantity = stockNumber(target?.quantity);
+    const targetReserved = stockNumber(target?.reserved_quantity);
+
+    await upsertBalance({
+      depositId: input.from_deposit_id,
+      locationId: input.from_location_id,
+      nextQuantity: sourceQuantity - quantity,
+      reservedQuantity: sourceReserved,
+    });
+    await upsertBalance({
+      depositId: input.to_deposit_id,
+      locationId: input.to_location_id,
+      nextQuantity: targetQuantity + quantity,
+      reservedQuantity: targetReserved,
+    });
+    await connection.query(
+      `INSERT INTO stock_location_movements
+        (id, company_id, product_id, from_deposit_id, from_location_id, to_deposit_id, to_location_id, quantity,
+         movement_type, reason, reference_type, previous_from_quantity, new_from_quantity, previous_to_quantity, new_to_quantity, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'transfer', ?, 'manual_transfer', ?, ?, ?, ?, ?)`,
+      [crypto.randomUUID(), product.company_id, input.product_id, input.from_deposit_id, input.from_location_id, input.to_deposit_id, input.to_location_id,
+        quantity, String(input.reason || 'Transferencia interna').trim(), sourceQuantity, sourceQuantity - quantity, targetQuantity, targetQuantity + quantity, input.notes || null]
+    );
+    const [[total]] = await connection.query(
+      'SELECT COALESCE(SUM(quantity), 0) AS quantity FROM product_stock_locations WHERE product_id = ?',
+      [input.product_id]
+    );
+    await connection.query(
+      'UPDATE products SET stock_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [stockNumber(total?.quantity), input.product_id]
+    );
+    const [rows] = await connection.query(`
+      SELECT psl.*
+      FROM product_stock_locations psl
+      WHERE psl.product_id = ? AND psl.location_id IN (?, ?)
+      ORDER BY psl.updated_at DESC
+    `, [input.product_id, input.from_location_id, input.to_location_id]);
+    await connection.commit();
+    return rows;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 });
 
 async function getPriorityStockSources(productId) {
