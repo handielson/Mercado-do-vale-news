@@ -108,6 +108,7 @@ const SynologyConfigPage = lazy(() => import('../pages/admin/settings/SynologyCo
 const FavoritesRankingReport = lazy(() => import('../pages/admin/reports/FavoritesRankingReport'));
 const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })));
 const PurchaseQueuePage = lazy(() => import('../pages/admin/purchases/PurchaseQueuePage').then(module => ({ default: module.PurchaseQueuePage })));
+const PurchaseQuotePage = lazy(() => import('../pages/admin/purchases/PurchaseQuotePage').then(module => ({ default: module.PurchaseQuotePage })));
 const AdminLayout = lazy(() => import('../layouts/AdminLayout').then(module => ({ default: module.AdminLayout })));
 
 const ProductListPage = lazy(() => import('../pages/admin/products/ProductListPage').then(module => ({ default: module.ProductListPage })));
@@ -274,6 +275,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><PurchaseQueuePage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/compras/:itemId/orcamentos",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><PurchaseQuotePage /></AdminLayout>
       </ProtectedRoute>
     )
   },

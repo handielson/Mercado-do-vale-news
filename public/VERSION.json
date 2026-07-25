@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.56-compras-pagina-propria",
+  "version": "v1.2.57-compras-orcamentos",
   "date": "2026-07-25",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260725-145439-compras-pagina-propria",
+  "release_vps": "/var/www/mdv-site/releases/20260725-180725-compras-orcamentos",
   "branch": "main",
-  "summary": "Move a Fila de Compras para pagina propria e deixa apenas o atalho no dashboard."
+  "summary": "Adiciona pedidos manuais, orcamentos por loja, menor preco e compras efetuadas."
 }

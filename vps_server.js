@@ -32903,6 +32903,72 @@ async function runMigrations() {
   await addIndexIfMissing('customer_delivery_ledger', 'idx_deliv_ledger_cash_session', 'cash_session_id');
   console.log('[migration] pdv cash register tables: OK');
 
+  // Compras: a fila existente continua sendo preservada. Estas colunas permitem
+  // pedidos manuais, várias cotações e o resumo da compra efetivamente realizada.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS purchase_queue_items (
+      id CHAR(36) PRIMARY KEY,
+      item_key VARCHAR(255) NOT NULL,
+      source_type VARCHAR(32) NOT NULL DEFAULT 'daily_sales',
+      product_id VARCHAR(255) NULL,
+      model VARCHAR(255) NOT NULL,
+      sku VARCHAR(160) NULL,
+      current_stock INT NOT NULL DEFAULT 0,
+      last_purchase_price_cents BIGINT NOT NULL DEFAULT 0,
+      last_sale_price_cents BIGINT NOT NULL DEFAULT 0,
+      accumulated_quantity INT NOT NULL DEFAULT 0,
+      requested_quantity INT NOT NULL DEFAULT 0,
+      origin_channels JSON NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      reason TEXT NULL,
+      first_seen_at DATETIME NULL,
+      last_seen_at DATETIME NULL,
+      last_digest_date VARCHAR(10) NULL,
+      last_digest_quantity INT NOT NULL DEFAULT 0,
+      purchased_quote_id CHAR(36) NULL,
+      purchased_supplier_name VARCHAR(255) NULL,
+      purchased_unit_price_cents BIGINT NULL,
+      purchased_quantity INT NULL,
+      purchased_total_cents BIGINT NULL,
+      purchased_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_purchase_queue_item_key (item_key),
+      INDEX idx_purchase_queue_status (status),
+      INDEX idx_purchase_queue_source (source_type),
+      INDEX idx_purchase_queue_product (product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('purchase_queue_items', 'source_type', "VARCHAR(32) NOT NULL DEFAULT 'daily_sales'");
+  await addColumnIfMissing('purchase_queue_items', 'requested_quantity', 'INT NOT NULL DEFAULT 0');
+  await addColumnIfMissing('purchase_queue_items', 'purchased_quote_id', 'CHAR(36) NULL');
+  await addColumnIfMissing('purchase_queue_items', 'purchased_supplier_name', 'VARCHAR(255) NULL');
+  await addColumnIfMissing('purchase_queue_items', 'purchased_unit_price_cents', 'BIGINT NULL');
+  await addColumnIfMissing('purchase_queue_items', 'purchased_quantity', 'INT NULL');
+  await addColumnIfMissing('purchase_queue_items', 'purchased_total_cents', 'BIGINT NULL');
+  await pool.query("ALTER TABLE purchase_queue_items MODIFY COLUMN status VARCHAR(32) NOT NULL DEFAULT 'pending'");
+  await addIndexIfMissing('purchase_queue_items', 'idx_purchase_queue_status', 'status');
+  await addIndexIfMissing('purchase_queue_items', 'idx_purchase_queue_source', 'source_type');
+  await addIndexIfMissing('purchase_queue_items', 'idx_purchase_queue_product', 'product_id');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS purchase_quotes (
+      id CHAR(36) PRIMARY KEY,
+      queue_item_id CHAR(36) NOT NULL,
+      supplier_name VARCHAR(255) NOT NULL,
+      unit_price_cents BIGINT NOT NULL,
+      quantity INT NOT NULL DEFAULT 1,
+      notes TEXT NULL,
+      quoted_at DATETIME NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_purchase_quotes_item (queue_item_id),
+      INDEX idx_purchase_quotes_price (unit_price_cents),
+      INDEX idx_purchase_quotes_date (quoted_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] purchase queue and quotes tables: OK');
+
   await ensureDefaultAdminAccount();
 }
 
