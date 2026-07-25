@@ -1,27 +1,19 @@
 import React from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { feedbackService } from '../../../services/feedbackService';
 import { AdminUnreadFeedbackAlert } from '../../../components/admin/dashboard/AdminUnreadFeedbackAlert';
 import { AdminQuickAccessGrid } from '../../../components/admin/dashboard/AdminQuickAccessGrid';
 import { DashboardKpiCards } from '../../../components/admin/dashboard/DashboardKpiCards';
 import { DashboardShopeePanel } from '../../../components/admin/dashboard/DashboardShopeePanel';
 import { DashboardSalesDigest } from '../../../components/admin/dashboard/DashboardSalesDigest';
-import { DashboardPurchaseQueue } from '../../../components/admin/dashboard/DashboardPurchaseQueue';
 
 export const AdminDashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const [unreadFeedbacks, setUnreadFeedbacks] = React.useState(0);
 
   React.useEffect(() => {
     feedbackService.getUnreadCount().then(setUnreadFeedbacks).catch(() => {});
   }, []);
-
-  React.useEffect(() => {
-    if (location.hash !== '#fila-de-compras') return;
-
-    document.getElementById('fila-de-compras')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [location.hash]);
 
   return (
     <div className="animate-in fade-in duration-500 space-y-8">
@@ -45,7 +37,6 @@ export const AdminDashboardPage: React.FC = () => {
       <DashboardKpiCards />
       <DashboardShopeePanel />
       <DashboardSalesDigest />
-      <DashboardPurchaseQueue />
     </div>
   );
 };

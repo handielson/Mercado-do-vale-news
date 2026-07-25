@@ -107,6 +107,7 @@ const SynologyFilesPage = lazy(() => import('../pages/admin/settings/SynologyFil
 const SynologyConfigPage = lazy(() => import('../pages/admin/settings/SynologyConfigPage'));
 const FavoritesRankingReport = lazy(() => import('../pages/admin/reports/FavoritesRankingReport'));
 const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard/AdminDashboardPage').then(module => ({ default: module.AdminDashboardPage })));
+const PurchaseQueuePage = lazy(() => import('../pages/admin/purchases/PurchaseQueuePage').then(module => ({ default: module.PurchaseQueuePage })));
 const AdminLayout = lazy(() => import('../layouts/AdminLayout').then(module => ({ default: module.AdminLayout })));
 
 const ProductListPage = lazy(() => import('../pages/admin/products/ProductListPage').then(module => ({ default: module.ProductListPage })));
@@ -265,6 +266,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><AdminDashboardPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/compras",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><PurchaseQueuePage /></AdminLayout>
       </ProtectedRoute>
     )
   },

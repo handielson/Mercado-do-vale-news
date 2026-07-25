@@ -61,7 +61,7 @@ const dailyItems: QuickAccessItem[] = [
   {
     label: 'Compras',
     description: 'Fila e reposicao',
-    path: '/admin#fila-de-compras',
+    path: '/admin/compras',
     icon: '🛒',
     cardClassName: 'bg-white border-slate-200 hover:border-amber-400',
     iconClassName: 'bg-amber-100 group-hover:bg-amber-200',
