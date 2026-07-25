@@ -10,6 +10,9 @@ import android.view.View
 import android.view.WindowInsets
 import android.widget.*
 import br.com.mercadodovale.adminestoque.data.VpsApiClient
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import org.json.JSONObject
 import java.net.URLEncoder
 
@@ -74,18 +77,22 @@ class MainActivity : Activity() {
         val result = text("", 14, Color.DKGRAY)
         root.addView(query)
         root.addView(button("Buscar produto") {
-            val value = query.text.toString().trim()
-            if (value.isBlank()) { result.text = "Informe um código ou nome."; return@button }
-            result.text = "Consultando estoque..."
-            runAsync {
-                val encoded = URLEncoder.encode(value, "UTF-8")
-                val response = VpsApiClient(token.orEmpty()).get("/products?search=$encoded")
-                runOnUiThread { result.text = response.fold({ summarizeProducts(it) }, { it.message ?: "Falha na consulta." }) }
-            }
+            searchProduct(query.text.toString(), result)
+        })
+        root.addView(button("Ler QR ou código de barras") {
+            val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(
+                Barcode.FORMAT_QR_CODE, Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8,
+                Barcode.FORMAT_CODE_128, Barcode.FORMAT_CODE_39
+            ).build()
+            GmsBarcodeScanning.getClient(this, options).startScan()
+                .addOnSuccessListener { barcode ->
+                    query.setText(barcode.rawValue.orEmpty())
+                    searchProduct(barcode.rawValue.orEmpty(), result)
+                }
+                .addOnFailureListener { error -> result.text = "Não foi possível abrir o leitor: ${error.message}" }
         })
         root.addView(result)
-        root.addView(text("Leitura QR", 18, green))
-        root.addView(text("A câmera será usada para preencher este campo quando o leitor QR for integrado. Por enquanto, leitores Bluetooth que enviam texto funcionam diretamente neste campo.", 14, Color.DKGRAY))
+        root.addView(text("O leitor usa a câmera do aparelho e também reconhece EAN e Code 128.", 14, Color.DKGRAY))
         setContentView(root)
     }
 
@@ -114,6 +121,17 @@ class MainActivity : Activity() {
         val item = JSONObject(body)
         if (item.has("error")) item.getString("error") else "Consulta recebida. Selecione o produto no próximo passo."
     } catch (_: Exception) { "Consulta concluída. ${body.take(600)}" }
+
+    private fun searchProduct(rawQuery: String, result: TextView) {
+        val value = rawQuery.trim()
+        if (value.isBlank()) { result.text = "Informe ou leia um código."; return }
+        result.text = "Consultando estoque..."
+        runAsync {
+            val encoded = URLEncoder.encode(value, "UTF-8")
+            val response = VpsApiClient(token.orEmpty()).get("/products?search=$encoded")
+            runOnUiThread { result.text = response.fold({ summarizeProducts(it) }, { it.message ?: "Falha na consulta." }) }
+        }
+    }
 
     private fun field(hint: String, secret: Boolean = false) = EditText(this).apply {
         this.hint = hint
