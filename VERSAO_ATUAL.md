@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.54-pdv-pix-vps-guards
+version: v1.2.55-dashboard-compras
 date: 2026-07-25
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260725-174206-pdv-pix-vps-guards
+release_vps: /var/www/mdv-site/releases/20260725-144800-dashboard-compras
 branch: main
-summary: Registra o horario de aprovacao do Pix no PDV e atualiza guardas de regressao para a arquitetura VPS.
+summary: Adiciona atalho de Compras no dashboard com acesso direto a Fila de Compras.
 ```

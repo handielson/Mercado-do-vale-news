@@ -205,7 +205,7 @@ export const DashboardPurchaseQueue: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div id="fila-de-compras" className="scroll-mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Fila de Compra</h3>
