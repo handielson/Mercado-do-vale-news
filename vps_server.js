@@ -21134,7 +21134,7 @@ function mapProductStockLocation(row) {
   };
 }
 
-fastify.get('/stock-locations/deposits', { preHandler: requireSyncKey }, async () => {
+fastify.get('/stock-locations/deposits', { preHandler: requireSyncKeyOrAdmin }, async () => {
   const companyId = await getDefaultStockCompanyId();
   const [rows] = await pool.query(`
     SELECT *
@@ -21283,7 +21283,7 @@ fastify.patch('/stock-locations/deposits/:id', { preHandler: requireSyncKey }, a
   return mapStockDeposit(rows[0]);
 });
 
-fastify.get('/stock-locations/locations', { preHandler: requireSyncKey }, async (req) => {
+fastify.get('/stock-locations/locations', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
   const params = [];
   let where = 'WHERE is_active = 1';
   if (req.query?.deposit_id) {
@@ -21349,7 +21349,7 @@ fastify.patch('/stock-locations/locations/:id', { preHandler: requireSyncKey }, 
   return rows[0] ? mapStockLocation(rows[0]) : reply.code(404).send({ error: 'Local nao encontrado.' });
 });
 
-fastify.get('/stock-locations/products/:productId/distribution', { preHandler: requireSyncKey }, async (req) => {
+fastify.get('/stock-locations/products/:productId/distribution', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
   await materializeProductUndistributedStock(
     req.params.productId,
     'distribution_open',
@@ -21373,7 +21373,7 @@ fastify.get('/stock-locations/products/:productId/distribution', { preHandler: r
   return rows.map(mapProductStockLocation);
 });
 
-fastify.get('/stock-locations/locations/:locationId/contents', { preHandler: requireSyncKey }, async (req) => {
+fastify.get('/stock-locations/locations/:locationId/contents', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
   const [rows] = await pool.query(`
     SELECT
       psl.product_id, psl.quantity, psl.reserved_quantity,
