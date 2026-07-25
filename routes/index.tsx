@@ -126,6 +126,9 @@ const FinancialPage = lazy(() => import('../pages/admin/financial/FinancialPage'
 const AccountingPage = lazy(() => import('../pages/admin/accounting/AccountingPage'));
 const DataImportExportPage = lazy(() => import('../pages/admin/import/DataImportExportPage').then(module => ({ default: module.DataImportExportPage })));
 const MySQLExplorerPage = lazy(() => import('../pages/admin/settings/MySQLExplorerPage').then(module => ({ default: module.MySQLExplorerPage })));
+const ShoppingListPage = lazy(() => import('../pages/admin/shopping/ShoppingListPage'));
+const ShoppingQuotesPage = lazy(() => import('../pages/admin/shopping/ShoppingQuotesPage'));
+const ShoppingPurchasesPage = lazy(() => import('../pages/admin/shopping/ShoppingPurchasesPage'));
 
 const StorePage = () => (
   <div className="p-8 animate-in slide-in-from-bottom-4 duration-500">
@@ -307,6 +310,38 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><InventoryPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/compras",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ShoppingListPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/compras/orcamentos",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ShoppingQuotesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/compras/efetuadas",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ShoppingPurchasesPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/compras/:id/orcamentos",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><ShoppingQuotesPage /></AdminLayout>
       </ProtectedRoute>
     )
   },

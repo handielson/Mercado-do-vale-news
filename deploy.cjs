@@ -65,6 +65,10 @@ conn.on('ready', () => {
             remote: `${appDir}/server.js`,
           },
           {
+            local: path.join(__dirname, 'core', 'shopping-list-routes.cjs'),
+            remote: `${appDir}/core/shopping-list-routes.cjs`,
+          },
+          {
             local: path.join(__dirname, 'services', 'synologyNasStatusService.js'),
             remote: `${appDir}/services/synologyNasStatusService.js`,
           },
@@ -80,7 +84,7 @@ conn.on('ready', () => {
 
         console.log(`PM2 app found at ${appDir}`);
 
-        conn.exec(`mkdir -p ${appDir}/services`, (mkdirErr, mkdirStream) => {
+        conn.exec(`mkdir -p ${appDir}/services ${appDir}/core`, (mkdirErr, mkdirStream) => {
           if (mkdirErr) throw mkdirErr;
 
           mkdirStream.on('close', () => {
