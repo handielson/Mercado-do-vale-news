@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, PackageSearch, Search, Send } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Loader2, PackageSearch, Search, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { productService } from '../../../../services/products';
 import { categoryService } from '../../../../services/categories';
@@ -7,10 +7,12 @@ import {
   tiktokShopService,
   type TikTokShopCategoryReadiness,
   type TikTokShopCategorySummary,
+  type TikTokShopDraftJobStep,
   type TikTokShopSafeStatus,
   type TikTokShopWarehouseSummary,
 } from '../../../../services/tiktokShopService';
 import type { Product } from '../../../../types/product';
+import TikTokShopListingPreview from './TikTokShopListingPreview';
 
 type Props = {
   status: TikTokShopSafeStatus | null;
@@ -54,6 +56,23 @@ function normalizeCategoryName(value: string): string {
     .toLowerCase();
 }
 
+const INITIAL_DRAFT_STEPS: TikTokShopDraftJobStep[] = [
+  ['validate_product', 'Validar produto'],
+  ['validate_warehouse', 'Validar armazem'],
+  ['prepare_images', 'Preparar imagens'],
+  ['upload_images', 'Enviar imagens'],
+  ['prepare_video', 'Preparar video'],
+  ['upload_video', 'Enviar video'],
+  ['create_draft', 'Criar rascunho'],
+  ['save_link', 'Salvar vinculo'],
+].map(([key, label]) => ({
+  key,
+  label,
+  status: 'idle',
+  detail: '',
+  updated_at: null,
+}));
+
 export default function TikTokShopProductPreparation({
   status,
   initialProductId,
@@ -77,6 +96,8 @@ export default function TikTokShopProductPreparation({
   const [loadingWarehouses, setLoadingWarehouses] = useState(false);
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [createdTikTokProductId, setCreatedTikTokProductId] = useState('');
+  const [draftSteps, setDraftSteps] = useState<TikTokShopDraftJobStep[]>(INITIAL_DRAFT_STEPS);
+  const [draftError, setDraftError] = useState('');
 
   React.useEffect(() => {
     let cancelled = false;
@@ -118,6 +139,10 @@ export default function TikTokShopProductPreparation({
   );
   const canWriteProducts = Boolean(status?.granted_scopes?.includes('seller.product.write'));
   const canReadWarehouses = Boolean(status?.granted_scopes?.includes('seller.logistics'));
+  const selectedWarehouseName = useMemo(
+    () => warehouses.find((warehouse) => warehouse.id === selectedWarehouseId)?.name || '',
+    [selectedWarehouseId, warehouses],
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -306,13 +331,27 @@ export default function TikTokShopProductPreparation({
     )) return;
 
     setCreatingDraft(true);
+    setCreatedTikTokProductId('');
+    setDraftError('');
+    setDraftSteps(INITIAL_DRAFT_STEPS.map((step) => ({ ...step })));
     try {
-      const result = await tiktokShopService.createDraft({
+      let job = await tiktokShopService.startDraftJob({
         product_id: selectedProduct.id,
         category_id: selectedCategory.id,
         category_name: selectedCategory.name,
         warehouse_id: selectedWarehouseId,
       });
+      setDraftSteps(job.steps);
+      for (let attempt = 0; attempt < 900 && !['completed', 'error'].includes(job.status); attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 650));
+        job = await tiktokShopService.getDraftJob(job.job_id);
+        setDraftSteps(job.steps);
+      }
+      if (job.status !== 'completed' || !job.result) {
+        const reference = job.error?.request_id ? ` (request ${job.error.request_id})` : '';
+        throw new Error(`${job.error?.message || 'O acompanhamento do envio nao foi concluido.'}${reference}`);
+      }
+      const result = job.result;
       setCreatedTikTokProductId(result.tiktok_product_id);
       toast.success(
         result.already_exists
@@ -322,14 +361,17 @@ export default function TikTokShopProductPreparation({
       onDraftCreated?.(result.tiktok_product_id);
     } catch (error: any) {
       console.error('[TikTokShopProductPreparation] draft creation error:', error);
-      toast.error(error?.message || 'Nao foi possivel criar o rascunho no TikTok Shop.');
+      const message = error?.message || 'Nao foi possivel criar o rascunho no TikTok Shop.';
+      setDraftError(message);
+      toast.error(message);
     } finally {
       setCreatingDraft(false);
     }
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start gap-3">
         <PackageSearch className="mt-0.5 h-5 w-5 text-teal-700" />
         <div>
@@ -530,9 +572,52 @@ export default function TikTokShopProductPreparation({
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {creatingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {creatingDraft ? 'Enviando imagens e produto...' : 'Criar rascunho no TikTok'}
+            {creatingDraft ? 'Acompanhando envio...' : 'Criar rascunho no TikTok'}
           </button>
         </div>
+        {(creatingDraft || draftSteps.some((step) => step.status !== 'idle') || draftError) && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-bold text-slate-900">Acompanhamento do envio</p>
+              <span className="text-[11px] text-slate-500">
+                Cada etapa muda para OK assim que o TikTok responde.
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {draftSteps.map((step) => (
+                <div
+                  key={step.key}
+                  className={`rounded-lg border px-3 py-2 ${
+                    step.status === 'error'
+                      ? 'border-red-200 bg-red-50'
+                      : step.status === 'done'
+                        ? 'border-emerald-200 bg-emerald-50'
+                        : step.status === 'running'
+                          ? 'border-cyan-200 bg-cyan-50'
+                          : 'border-slate-200 bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                    {step.status === 'running' && <Loader2 className="h-4 w-4 animate-spin text-cyan-700" />}
+                    {step.status === 'done' && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                    {step.status === 'error' && <AlertCircle className="h-4 w-4 text-red-600" />}
+                    {step.status === 'skipped' && <Circle className="h-4 w-4 text-slate-400" />}
+                    {step.status === 'idle' && <Circle className="h-4 w-4 text-slate-300" />}
+                    {step.label}
+                    {step.status === 'done' && <span className="ml-auto text-emerald-700">OK</span>}
+                  </div>
+                  {step.detail && <p className="mt-1 text-[11px] leading-snug text-slate-600">{step.detail}</p>}
+                </div>
+              ))}
+            </div>
+            {draftError && (
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{draftError}</span>
+              </div>
+            )}
+          </div>
+        )}
         {!canWriteProducts && (
           <p className="mt-2 text-xs text-amber-800">
             Ative o escopo seller.product.write e reconecte a loja para liberar o envio.
@@ -554,5 +639,12 @@ export default function TikTokShopProductPreparation({
         </p>
       </div>
     </section>
+    <TikTokShopListingPreview
+      product={selectedProduct}
+      category={selectedCategory}
+      readiness={readiness}
+      warehouseName={selectedWarehouseName}
+    />
+    </div>
   );
 }

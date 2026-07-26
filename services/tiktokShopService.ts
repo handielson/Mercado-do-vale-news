@@ -81,6 +81,38 @@ export interface TikTokShopDraftResponse {
   request_id: string | null;
 }
 
+export type TikTokShopDraftStepStatus = 'idle' | 'running' | 'done' | 'skipped' | 'error';
+
+export interface TikTokShopDraftJobStep {
+  key: string;
+  label: string;
+  status: TikTokShopDraftStepStatus;
+  detail: string;
+  updated_at: string | null;
+}
+
+export interface TikTokShopDraftJob {
+  job_id: string;
+  status: 'queued' | 'running' | 'completed' | 'error';
+  product_id: string;
+  steps: TikTokShopDraftJobStep[];
+  result: TikTokShopDraftResponse | null;
+  error: {
+    message: string;
+    code: string | number | null;
+    request_id: string | null;
+  } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TikTokShopDraftInput {
+  product_id: string;
+  category_id: string;
+  category_name: string;
+  warehouse_id: string;
+}
+
 export const tiktokShopService = {
   getStatus(): Promise<TikTokShopSafeStatus> {
     return vpsClient.get<TikTokShopSafeStatus>('/tiktok-shop/settings');
@@ -147,13 +179,18 @@ export const tiktokShopService = {
     return vpsClient.get('/tiktok-shop/logistics/warehouses');
   },
 
-  createDraft(input: {
-    product_id: string;
-    category_id: string;
-    category_name: string;
-    warehouse_id: string;
-  }): Promise<TikTokShopDraftResponse> {
+  createDraft(input: TikTokShopDraftInput): Promise<TikTokShopDraftResponse> {
     return vpsClient.post('/tiktok-shop/products/drafts', input);
+  },
+
+  startDraftJob(input: TikTokShopDraftInput): Promise<TikTokShopDraftJob> {
+    return vpsClient.post('/tiktok-shop/products/draft-jobs', input);
+  },
+
+  getDraftJob(jobId: string): Promise<TikTokShopDraftJob> {
+    return vpsClient.get(
+      `/tiktok-shop/products/draft-jobs/${encodeURIComponent(jobId)}`,
+    );
   },
 
   getProductLinks(productIds: string[]): Promise<{ links: TikTokShopProductLink[] }> {

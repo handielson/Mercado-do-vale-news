@@ -54,6 +54,21 @@ Regras aplicadas:
 - Persistir produto, SKU, categoria, estado, imagens enviadas e falha sanitizada na tabela TikTok propria.
 - A criacao como rascunho nao torna o item visivel para compradores.
 
+### Midia e acompanhamento do envio
+
+Fontes verificadas em 26 de julho de 2026:
+
+- https://partner.tiktokshop.com/docv2/page/upload-product-file-202309
+- https://partner.tiktokshop.com/docv2/page/upload-product-image-and-upload-product-file-support-more-file-formats
+
+Regras aplicadas:
+
+- Imagens HTTPS controladas e imagens locais `data:image/...;base64` passam pela mesma validacao de formato e limite de 10 MB antes do upload.
+- Videos cadastrados sao baixados somente dos dominios controlados, limitados a 100 MB e enviados por `POST /product/202309/files/upload`.
+- O ID retornado pelo upload de arquivo e associado ao campo `video` do rascunho.
+- A criacao longa roda como um processo de backend consultado pelo painel; cada etapa exibe estado real (`running`, `done`, `skipped` ou `error`).
+- O processo expira da memoria em 30 minutos e nunca expoe tokens, segredos ou shop cipher.
+
 ### Assinatura das APIs
 
 Fonte: https://partner.tiktokshop.com/docv2/page/sign-your-api-request

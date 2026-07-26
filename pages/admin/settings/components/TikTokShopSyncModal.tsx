@@ -44,7 +44,7 @@ export default function TikTokShopSyncModal({ productId, onClose, onSuccess }: P
       aria-label="Sincronizar produto com TikTok Shop"
     >
       <div
-        className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-slate-50 shadow-2xl"
+        className="max-h-[94vh] w-full max-w-[1500px] overflow-y-auto rounded-2xl bg-slate-50 shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">

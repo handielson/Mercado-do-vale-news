@@ -1936,7 +1936,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                     onClose={() => setIsTikTokModalOpen(false)}
                     onSuccess={(createdProductId) => {
                         setCurrentTikTokProductId(createdProductId);
-                        setIsTikTokModalOpen(false);
                     }}
                 />
             )}

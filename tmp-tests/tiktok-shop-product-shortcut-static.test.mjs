@@ -42,6 +42,14 @@ for (const file of serverFiles) {
     /pathname: '\/product\/202309\/images\/upload'/,
     `${file} must upload local images before product creation`,
   );
+  assert.match(source, /\^data:\(image/, `${file} must accept controlled local base64 product images`);
+  assert.match(
+    source,
+    /pathname: '\/product\/202309\/files\/upload'/,
+    `${file} must upload product video with the official file endpoint`,
+  );
+  assert.match(source, /video_url, price_retail/, `${file} must load the product video`);
+  assert.match(source, /\{ video: uploadedVideo \}/, `${file} must associate the uploaded video`);
   assert.match(
     source,
     /pathname: '\/product\/202309\/products'/,
@@ -53,6 +61,16 @@ for (const file of serverFiles) {
     source,
     /fastify\.post\('\/tiktok-shop\/products\/drafts', \{ preHandler: requireSyncKeyOrAdmin \}/,
     `${file} must protect the proxy-safe draft write route`,
+  );
+  assert.match(
+    source,
+    /fastify\.post\('\/tiktok-shop\/products\/draft-jobs', \{ preHandler: requireSyncKeyOrAdmin \}/,
+    `${file} must start protected asynchronous draft jobs`,
+  );
+  assert.match(
+    source,
+    /fastify\.get\('\/tiktok-shop\/products\/draft-jobs\/:jobId', \{ preHandler: requireSyncKeyOrAdmin \}/,
+    `${file} must expose protected live job progress`,
   );
   assert.match(
     source,
@@ -81,6 +99,8 @@ assert.match(service, /getCategoryMapping\(localCategoryId: string\)/, 'frontend
 assert.match(service, /saveCategoryMapping\(input:/, 'frontend service must persist confirmed category mappings');
 assert.match(service, /getWarehouses\(\)/, 'frontend service must discover TikTok warehouses');
 assert.match(service, /createDraft\(input:/, 'frontend service must expose draft creation');
+assert.match(service, /startDraftJob\(input:/, 'frontend service must start asynchronous draft creation');
+assert.match(service, /getDraftJob\(jobId: string\)/, 'frontend service must poll live draft progress');
 assert.doesNotMatch(
   service,
   /['"]\/api\/tiktok-shop\/products\/links/,
@@ -148,6 +168,8 @@ assert.match(
   /window\.confirm/,
   'TikTok preparation must require explicit confirmation before the external write',
 );
+assert.match(preparation, /Acompanhamento do envio/, 'TikTok modal must display live sending steps');
+assert.match(preparation, /getDraftJob\(job\.job_id\)/, 'TikTok modal must poll actual backend progress');
 assert.match(
   preparation,
   /seller\.product\.write/,
@@ -161,5 +183,15 @@ assert.match(
 assert.match(modal, /role="dialog"/, 'TikTok synchronization must open as a dialog');
 assert.match(modal, /initialProductId=\{productId\}/, 'TikTok modal must load the clicked product');
 assert.match(modal, /onDraftCreated=\{onSuccess\}/, 'TikTok modal must report successful draft creation');
+
+const preview = readFileSync(
+  'pages/admin/settings/components/TikTokShopListingPreview.tsx',
+  'utf8',
+);
+assert.match(preview, /Previa do anuncio TikTok Shop/, 'modal must show a full listing preview');
+assert.match(preview, /<video[\s\S]*controls/, 'listing preview must include the product video');
+assert.match(preview, /Descricao/, 'listing preview must include the description');
+assert.match(preview, /Campos TikTok do anuncio/, 'listing preview must expose TikTok listing fields');
+assert.match(preview, /required_attributes/, 'listing preview must identify mandatory category attributes');
 
 console.log('TikTok Shop product shortcut static checks ok');

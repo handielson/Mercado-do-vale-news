@@ -4438,7 +4438,7 @@ async function callTikTokShopOpenApiVps(settings, { method = 'GET', pathname, qu
   return { payload, settings: authorized };
 }
 
-async function callTikTokShopMultipartVps(settings, { pathname, fields = {}, file }) {
+async function callTikTokShopMultipartVps(settings, { pathname, fields = {}, file, timeoutMs = 30000 }) {
   const authorized = await ensureTikTokShopAccessTokenVps(settings);
   if (!authorized.appKey || !authorized.appSecret || !authorized.accessToken) {
     throw new Error('TikTok Shop app or token is incomplete');
@@ -4462,7 +4462,7 @@ async function callTikTokShopMultipartVps(settings, { pathname, fields = {}, fil
       'x-tts-access-token': authorized.accessToken,
     },
     body: formData,
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || Number(payload?.code) !== 0) {
@@ -4963,6 +4963,28 @@ function isTrustedTikTokDraftImageUrlVps(value) {
 }
 
 async function fetchTikTokDraftImageFileVps(imageUrl, index) {
+  const supported = new Map([
+    ['image/jpeg', 'jpg'],
+    ['image/png', 'png'],
+    ['image/webp', 'webp'],
+    ['image/heic', 'heic'],
+    ['image/bmp', 'bmp'],
+  ]);
+  const dataImage = String(imageUrl || '').match(
+    /^data:(image\/(?:jpeg|png|webp|heic|bmp));base64,([a-zA-Z0-9+/=\r\n]+)$/,
+  );
+  if (dataImage) {
+    const contentType = dataImage[1].toLowerCase();
+    const buffer = Buffer.from(dataImage[2].replace(/\s+/g, ''), 'base64');
+    if (buffer.length < 1 || buffer.length > 10 * 1024 * 1024) {
+      throw new Error('Imagem local vazia ou maior que 10 MB.');
+    }
+    return {
+      buffer,
+      contentType,
+      filename: `produto-${index + 1}.${supported.get(contentType)}`,
+    };
+  }
   if (!isTrustedTikTokDraftImageUrlVps(imageUrl)) {
     throw new Error('Imagem fora dos dominios autorizados do Mercado do Vale.');
   }
@@ -4976,13 +4998,6 @@ async function fetchTikTokDraftImageFileVps(imageUrl, index) {
   }
   if (!response.ok) throw new Error(`Falha ao baixar imagem do produto: HTTP ${response.status}`);
   const contentType = String(response.headers.get('content-type') || '').split(';')[0].toLowerCase();
-  const supported = new Map([
-    ['image/jpeg', 'jpg'],
-    ['image/png', 'png'],
-    ['image/webp', 'webp'],
-    ['image/heic', 'heic'],
-    ['image/bmp', 'bmp'],
-  ]);
   const extension = supported.get(contentType);
   if (!extension) throw new Error(`Formato de imagem nao suportado pelo TikTok: ${contentType || 'desconhecido'}`);
   const buffer = Buffer.from(await response.arrayBuffer());
@@ -5008,6 +5023,54 @@ async function uploadTikTokDraftImagesVps(settings, imageUrls) {
   return uploaded;
 }
 
+async function fetchTikTokDraftVideoFileVps(videoUrl) {
+  if (!isTrustedTikTokDraftImageUrlVps(videoUrl)) {
+    throw new Error('Video fora dos dominios autorizados do Mercado do Vale.');
+  }
+  const response = await fetch(videoUrl, {
+    headers: { Accept: 'video/mp4,video/quicktime,video/webm,video/x-matroska,video/mpeg,video/*' },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!isTrustedTikTokDraftImageUrlVps(response.url)) {
+    throw new Error('Redirecionamento de video fora dos dominios autorizados.');
+  }
+  if (!response.ok) throw new Error(`Falha ao baixar video do produto: HTTP ${response.status}`);
+  const contentType = String(response.headers.get('content-type') || '').split(';')[0].toLowerCase();
+  const supported = new Map([
+    ['video/mp4', 'mp4'],
+    ['video/quicktime', 'mov'],
+    ['video/webm', 'webm'],
+    ['video/x-matroska', 'mkv'],
+    ['video/x-ms-wmv', 'wmv'],
+    ['video/x-msvideo', 'avi'],
+    ['video/3gpp', '3gp'],
+    ['video/x-flv', 'flv'],
+    ['video/mpeg', 'mpeg'],
+  ]);
+  const extension = supported.get(contentType);
+  if (!extension) throw new Error(`Formato de video nao suportado pelo TikTok: ${contentType || 'desconhecido'}`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length < 1 || buffer.length > 100 * 1024 * 1024) {
+    throw new Error('Video vazio ou maior que 100 MB.');
+  }
+  return { buffer, contentType, filename: `produto-video.${extension}` };
+}
+
+async function uploadTikTokDraftVideoVps(settings, videoUrl, onPrepared = () => {}) {
+  const file = await fetchTikTokDraftVideoFileVps(videoUrl);
+  onPrepared();
+  const result = await callTikTokShopMultipartVps(settings, {
+    pathname: '/product/202309/files/upload',
+    fields: { name: file.filename },
+    file,
+    timeoutMs: 120000,
+  });
+  const id = String(result.payload?.data?.id || '').trim();
+  if (!id) throw new Error('TikTok Shop nao retornou o ID do video enviado.');
+  return { id };
+}
+
 function buildTikTokDraftPackageVps(product) {
   const dimensions = parseTikTokDraftJsonVps(product?.dimensions, {});
   const weightGrams = Number(product?.shipping_weight || 0) > 0
@@ -5031,6 +5094,10 @@ function buildTikTokDraftPackageVps(product) {
 }
 
 async function handleTikTokShopCreateDraftVps(request, reply) {
+  const reportProgress = typeof request.tiktokProgress === 'function'
+    ? request.tiktokProgress
+    : () => {};
+  reportProgress('validate_product', 'running', 'Conferindo os dados locais do produto.');
   const productId = String(request.body?.product_id || '').trim();
   const categoryId = String(request.body?.category_id || '').trim();
   const categoryName = String(request.body?.category_name || '').trim().slice(0, 255);
@@ -5048,7 +5115,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
   try {
     const [[product]] = await pool.query(
       `SELECT id, company_id, name, sku, description, images, image_url,
-              price_retail, stock_quantity, weight_kg, dimensions
+              video_url, price_retail, stock_quantity, weight_kg, dimensions
        FROM products
        WHERE id = ?
        LIMIT 1`,
@@ -5065,6 +5132,14 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       [productId],
     );
     if (existing?.tiktok_product_id) {
+      reportProgress('validate_product', 'done', 'Produto ja vinculado ao TikTok Shop.');
+      reportProgress('validate_warehouse', 'skipped', 'Validacao ja concluida no envio anterior.');
+      reportProgress('prepare_images', 'skipped', 'Imagens ja enviadas.');
+      reportProgress('upload_images', 'skipped', 'Imagens ja enviadas.');
+      reportProgress('prepare_video', 'skipped', 'Video ja processado.');
+      reportProgress('upload_video', 'skipped', 'Video ja processado.');
+      reportProgress('create_draft', 'skipped', 'Rascunho ja existente.');
+      reportProgress('save_link', 'done', 'Vinculo local confirmado.');
       return reply.code(200).send({
         ok: true,
         already_exists: true,
@@ -5083,7 +5158,9 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
     if (!title || !descriptionText || !sellerSku || priceCents <= 0) {
       return reply.code(400).send({ error: 'Nome, descricao, SKU e preco de varejo sao obrigatorios.' });
     }
+    reportProgress('validate_product', 'done', 'Nome, SKU, descricao, preco, estoque e pacote conferidos.');
 
+    reportProgress('validate_warehouse', 'running', 'Consultando os armazens habilitados da loja.');
     const settings = await loadTikTokShopOAuthSettingsVps();
     const { warehouses } = await loadTikTokShopWarehousesVps(settings);
     const warehouse = warehouses.find((item) => (
@@ -5092,15 +5169,45 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       (!item.type || item.type === 'SALES_WAREHOUSE')
     ));
     if (!warehouse) return reply.code(400).send({ error: 'O armazem selecionado nao esta disponivel para venda.' });
+    reportProgress('validate_warehouse', 'done', `Armazem confirmado: ${warehouse.name}.`);
 
+    reportProgress('prepare_images', 'running', 'Preparando a galeria local para o TikTok.');
     const imageUrls = normalizeTikTokDraftImagesVps(product);
     if (imageUrls.length === 0) return reply.code(400).send({ error: 'O produto precisa de pelo menos uma imagem.' });
-    const imageSourceHash = crypto.createHash('sha256').update(JSON.stringify(imageUrls)).digest('hex');
+    reportProgress('prepare_images', 'done', `${imageUrls.length} imagem(ns) preparada(s), inclusive imagens locais.`);
+    const videoUrl = String(product.video_url || '').trim();
+    const mediaSourceHash = crypto.createHash('sha256')
+      .update(JSON.stringify({ imageUrls, videoUrl }))
+      .digest('hex');
     const cachedImages = parseTikTokDraftJsonVps(existing?.uploaded_images, {});
-    const mainImages = cachedImages?.source_hash === imageSourceHash && Array.isArray(cachedImages?.items)
+    reportProgress('upload_images', 'running', 'Enviando imagens para a biblioteca do TikTok Shop.');
+    const mainImages = cachedImages?.source_hash === mediaSourceHash && Array.isArray(cachedImages?.items)
       ? cachedImages.items.filter((item) => item?.uri).slice(0, 9)
       : await uploadTikTokDraftImagesVps(settings, imageUrls);
     if (mainImages.length === 0) throw new Error('Nenhuma imagem foi aceita pelo TikTok Shop.');
+    reportProgress('upload_images', 'done', `${mainImages.length} imagem(ns) aceita(s) pelo TikTok Shop.`);
+
+    let uploadedVideo = null;
+    if (videoUrl) {
+      const cachedVideoId = cachedImages?.source_hash === mediaSourceHash
+        ? String(cachedImages?.video?.id || '').trim()
+        : '';
+      if (cachedVideoId) {
+        uploadedVideo = { id: cachedVideoId };
+        reportProgress('prepare_video', 'skipped', 'Video ja validado no envio anterior.');
+        reportProgress('upload_video', 'done', 'Video ja armazenado no TikTok Shop.');
+      } else {
+        reportProgress('prepare_video', 'running', 'Baixando e validando o video do produto.');
+        uploadedVideo = await uploadTikTokDraftVideoVps(settings, videoUrl, () => {
+          reportProgress('prepare_video', 'done', 'Video valido e pronto para envio.');
+          reportProgress('upload_video', 'running', 'Enviando o video para o TikTok Shop.');
+        });
+        reportProgress('upload_video', 'done', 'Video aceito pelo TikTok Shop.');
+      }
+    } else {
+      reportProgress('prepare_video', 'skipped', 'Produto sem video cadastrado.');
+      reportProgress('upload_video', 'skipped', 'Nenhum video para enviar.');
+    }
 
     const packageData = buildTikTokDraftPackageVps(product);
     const payload = {
@@ -5111,6 +5218,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       category_id: categoryId,
       category_version: 'v1',
       main_images: mainImages,
+      ...(uploadedVideo ? { video: uploadedVideo } : {}),
       skus: [{
         seller_sku: sellerSku,
         price: { amount: (priceCents / 100).toFixed(2), currency: 'BRL' },
@@ -5150,10 +5258,11 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
         payloadHash,
         categoryId,
         categoryName,
-        JSON.stringify({ source_hash: imageSourceHash, items: mainImages }),
+        JSON.stringify({ source_hash: mediaSourceHash, items: mainImages, video: uploadedVideo }),
       ],
     );
 
+    reportProgress('create_draft', 'running', 'Criando o anuncio em modo rascunho no TikTok Shop.');
     const result = await callTikTokShopOpenApiVps(settings, {
       method: 'POST',
       pathname: '/product/202309/products',
@@ -5162,7 +5271,9 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
     const remoteProductId = String(result.payload?.data?.product_id || '').trim();
     const remoteSkuId = String(result.payload?.data?.skus?.[0]?.id || '').trim() || null;
     if (!remoteProductId) throw new Error('TikTok Shop criou o rascunho sem retornar product_id.');
+    reportProgress('create_draft', 'done', `Rascunho ${remoteProductId} criado pelo TikTok Shop.`);
 
+    reportProgress('save_link', 'running', 'Salvando o vinculo no Mercado do Vale.');
     await pool.query(
       `UPDATE tiktok_shop_products
        SET tiktok_product_id = ?, tiktok_sku_id = ?, status = 'DRAFT',
@@ -5170,6 +5281,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
        WHERE product_id = ?`,
       [remoteProductId, remoteSkuId, productId],
     );
+    reportProgress('save_link', 'done', 'Produto local vinculado ao rascunho TikTok.');
     return reply.code(200).send({
       ok: true,
       product_id: productId,
@@ -5200,6 +5312,107 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       request_id: err.requestId || null,
     });
   }
+}
+
+const TIKTOK_DRAFT_JOB_STEPS_VPS = [
+  ['validate_product', 'Validar produto'],
+  ['validate_warehouse', 'Validar armazem'],
+  ['prepare_images', 'Preparar imagens'],
+  ['upload_images', 'Enviar imagens'],
+  ['prepare_video', 'Preparar video'],
+  ['upload_video', 'Enviar video'],
+  ['create_draft', 'Criar rascunho'],
+  ['save_link', 'Salvar vinculo'],
+];
+const tiktokDraftJobsVps = new Map();
+
+function mapTikTokDraftJobVps(job) {
+  return {
+    job_id: job.id, status: job.status, product_id: job.productId,
+    steps: job.steps.map((step) => ({ ...step })),
+    result: job.result, error: job.error,
+    created_at: job.createdAt, updated_at: job.updatedAt,
+  };
+}
+
+function pruneTikTokDraftJobsVps() {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (const [jobId, job] of tiktokDraftJobsVps.entries()) {
+    if (Date.parse(job.updatedAt) < cutoff) tiktokDraftJobsVps.delete(jobId);
+  }
+}
+
+function updateTikTokDraftJobStepVps(job, key, status, detail) {
+  const step = job.steps.find((item) => item.key === key);
+  if (!step) return;
+  step.status = status;
+  step.detail = String(detail || '').slice(0, 500);
+  step.updated_at = new Date().toISOString();
+  job.updatedAt = step.updated_at;
+}
+
+async function runTikTokDraftJobVps(job, body) {
+  let responseStatus = 200;
+  let responsePayload = null;
+  const fakeReply = {
+    header() { return this; },
+    code(statusCode) { responseStatus = Number(statusCode); return this; },
+    send(payload) { responsePayload = payload; return payload; },
+  };
+  try {
+    job.status = 'running';
+    job.updatedAt = new Date().toISOString();
+    const returned = await handleTikTokShopCreateDraftVps({
+      body,
+      tiktokProgress: (key, status, detail) => updateTikTokDraftJobStepVps(job, key, status, detail),
+    }, fakeReply);
+    if (responsePayload === null && returned && typeof returned === 'object') responsePayload = returned;
+    if (responseStatus >= 400) {
+      const detail = String(responsePayload?.detail || responsePayload?.error || 'Falha ao criar rascunho.');
+      const runningStep = job.steps.find((step) => step.status === 'running');
+      if (runningStep) updateTikTokDraftJobStepVps(job, runningStep.key, 'error', detail);
+      job.status = 'error';
+      job.error = { message: detail, code: responsePayload?.code ?? null, request_id: responsePayload?.request_id ?? null };
+    } else {
+      job.status = 'completed';
+      job.result = responsePayload;
+    }
+  } catch (err) {
+    const detail = String(err.message || 'Falha inesperada ao criar rascunho.').slice(0, 1000);
+    const runningStep = job.steps.find((step) => step.status === 'running');
+    if (runningStep) updateTikTokDraftJobStepVps(job, runningStep.key, 'error', detail);
+    job.status = 'error';
+    job.error = { message: detail, code: err.tiktokCode ?? null, request_id: err.requestId ?? null };
+  }
+  job.updatedAt = new Date().toISOString();
+}
+
+async function handleTikTokShopDraftJobStartVps(request, reply) {
+  pruneTikTokDraftJobsVps();
+  const body = request.body || {};
+  const productId = String(body.product_id || '').trim();
+  if (!productId || productId.length > 255 || !/^[a-zA-Z0-9_-]+$/.test(productId)) {
+    return reply.code(400).send({ error: 'Produto local invalido.' });
+  }
+  const now = new Date().toISOString();
+  const job = {
+    id: crypto.randomUUID(), productId, status: 'queued',
+    steps: TIKTOK_DRAFT_JOB_STEPS_VPS.map(([key, label]) => ({
+      key, label, status: 'idle', detail: '', updated_at: null,
+    })),
+    result: null, error: null, createdAt: now, updatedAt: now,
+  };
+  tiktokDraftJobsVps.set(job.id, job);
+  setImmediate(() => { void runTikTokDraftJobVps(job, body); });
+  return reply.code(202).send(mapTikTokDraftJobVps(job));
+}
+
+async function handleTikTokShopDraftJobGetVps(request, reply) {
+  pruneTikTokDraftJobsVps();
+  const job = tiktokDraftJobsVps.get(String(request.params?.jobId || '').trim());
+  if (!job) return reply.code(404).send({ error: 'Processo de envio nao encontrado ou expirado.' });
+  reply.header('Cache-Control', 'no-store');
+  return reply.code(200).send(mapTikTokDraftJobVps(job));
 }
 
 async function handleTikTokShopUpdatePriceVps(request, reply) {
@@ -9813,6 +10026,8 @@ fastify.get('/api/tiktok-shop/catalog/category-mappings/:localCategoryId', { pre
 fastify.put('/api/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryMappingPutVps);
 fastify.get('/api/tiktok-shop/logistics/warehouses', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopWarehousesVps);
 fastify.post('/api/tiktok-shop/products/drafts', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCreateDraftVps);
+fastify.post('/api/tiktok-shop/products/draft-jobs', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopDraftJobStartVps);
+fastify.get('/api/tiktok-shop/products/draft-jobs/:jobId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopDraftJobGetVps);
 fastify.get('/api/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/api/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.get('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
@@ -9825,6 +10040,8 @@ fastify.get('/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHand
 fastify.put('/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryMappingPutVps);
 fastify.get('/tiktok-shop/logistics/warehouses', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopWarehousesVps);
 fastify.post('/tiktok-shop/products/drafts', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCreateDraftVps);
+fastify.post('/tiktok-shop/products/draft-jobs', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopDraftJobStartVps);
+fastify.get('/tiktok-shop/products/draft-jobs/:jobId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopDraftJobGetVps);
 fastify.get('/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);

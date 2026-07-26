@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.69-tiktok-draft-product-query
+version: v1.2.70-tiktok-draft-progress
 date: 2026-07-26
 status: ready
-release_vps: /var/www/mdv-site/releases/20260726-231715-tiktok-draft-product-query
+release_vps: /var/www/mdv-site/releases/20260726-235053-tiktok-draft-progress
 branch: main
-summary: Corrige a consulta local usada para criar rascunhos no TikTok Shop.
+summary: Corrige midia do rascunho TikTok e adiciona progresso online com previa completa.
 ```
