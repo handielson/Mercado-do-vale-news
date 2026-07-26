@@ -64,6 +64,15 @@ for (const file of serverFiles) {
     /hostname\.endsWith\('\.mercadodovale\.com\.br'\)[\s\S]*hostname\.endsWith\('\.xiaomipetrolina\.com\.br'\)/,
     `${file} must restrict server-side image downloads to controlled domains`,
   );
+  const draftProductQuery = source.match(
+    /SELECT id, company_id, name, sku, description, images, image_url,[\s\S]*?FROM products[\s\S]*?WHERE id = \?[\s\S]*?LIMIT 1/,
+  )?.[0] || '';
+  assert.ok(draftProductQuery, `${file}: consulta do produto para rascunho ausente`);
+  assert.doesNotMatch(
+    draftProductQuery,
+    /\bshipping_(?:weight|height|width|length)\b/,
+    `${file}: a consulta nao pode depender de colunas shipping_* ausentes no banco`,
+  );
 }
 
 const service = readFileSync('services/tiktokShopService.ts', 'utf8');

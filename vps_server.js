@@ -5048,8 +5048,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
   try {
     const [[product]] = await pool.query(
       `SELECT id, company_id, name, sku, description, images, image_url,
-              price_retail, stock_quantity, shipping_weight, shipping_height,
-              shipping_width, shipping_length, weight_kg, dimensions
+              price_retail, stock_quantity, weight_kg, dimensions
        FROM products
        WHERE id = ?
        LIMIT 1`,
