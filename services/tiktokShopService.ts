@@ -29,6 +29,25 @@ export interface TikTokAuthorizedShopsResponse {
   status: TikTokShopSafeStatus;
 }
 
+export interface TikTokShopCategorySummary {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  is_leaf: boolean;
+  permission_statuses: string[];
+}
+
+export interface TikTokShopCategoryReadiness {
+  category: TikTokShopCategorySummary;
+  rules: Record<string, unknown>;
+  attributes: Array<Record<string, any>>;
+  required_attributes: Array<Record<string, any>>;
+  request_ids: {
+    rules: string | null;
+    attributes: string | null;
+  };
+}
+
 export const tiktokShopService = {
   getStatus(): Promise<TikTokShopSafeStatus> {
     return vpsClient.get<TikTokShopSafeStatus>('/tiktok-shop/settings');
@@ -50,6 +69,21 @@ export const tiktokShopService = {
 
   refreshAuthorizedShops(): Promise<TikTokAuthorizedShopsResponse> {
     return vpsClient.get<TikTokAuthorizedShopsResponse>('/tiktok-shop/shops');
+  },
+
+  getCategories(keyword = ''): Promise<{
+    count: number;
+    categories: TikTokShopCategorySummary[];
+    request_id: string | null;
+  }> {
+    const query = keyword.trim() ? `?keyword=${encodeURIComponent(keyword.trim())}` : '';
+    return vpsClient.get(`/tiktok-shop/catalog/categories${query}`);
+  },
+
+  getCategoryReadiness(categoryId: string): Promise<TikTokShopCategoryReadiness> {
+    return vpsClient.get(
+      `/tiktok-shop/catalog/categories/${encodeURIComponent(categoryId)}/readiness`,
+    );
   },
 
   updatePrice(input: {

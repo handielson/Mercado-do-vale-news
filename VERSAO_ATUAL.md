@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.63-tiktok-shop-proxy-fix
+version: v1.2.64-tiktok-catalog-readiness
 date: 2026-07-26
-status: deployed
-release_vps: /var/www/mdv-site/releases/20260726-204500-v1263-tiktok-shop-proxy-fix
+status: ready
+release_vps: /var/www/mdv-site/releases/20260726-215137-tiktok-catalog-readiness
 branch: main
-summary: Corrige o acesso do painel às rotas protegidas do TikTok Shop pelo proxy da VPS.
+summary: Adiciona preparacao de produto e leitura segura do catalogo TikTok Shop.
 ```

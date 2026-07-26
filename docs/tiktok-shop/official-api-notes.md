@@ -12,6 +12,25 @@ Consulta realizada em 26 de julho de 2026 nas páginas oficiais do TikTok Shop P
 
 Produtos, estoque, pedidos, logística, webhooks e conciliação financeira ficam fora desta versão.
 
+## Descoberta de catalogo para o Brasil
+
+Fontes verificadas em 26 de julho de 2026:
+
+- https://partner.tiktokshop.com/docv2/page/get-categories-202309
+- https://partner.tiktokshop.com/docv2/page/get-category-rules-202309
+- https://partner.tiktokshop.com/docv2/page/get-attributes-202309
+- https://partner.tiktokshop.com/docv2/page/upload-product-image
+- https://partner.tiktokshop.com/docv2/page/create-product-api-now-supports-an-idempotency-key
+
+Regras aplicadas:
+
+- A loja BR usa `category_version=v1` e `locale=pt-BR`.
+- A categoria selecionada deve ser folha e estar disponivel para o seller.
+- Regras e atributos obrigatorios devem ser consultados em tempo real antes da criacao.
+- Imagens externas precisam ser enviadas pelo endpoint oficial de upload antes de criar o produto.
+- A futura criacao sera feita como `AS_DRAFT` e usara UUID v4 em `idempotency_key`.
+- A primeira etapa do painel e somente leitura: produto local, categoria, regras e lacunas de cadastro.
+
 ## Contrato oficial usado
 
 ### Assinatura das APIs

@@ -4685,6 +4685,110 @@ async function handleTikTokShopAuthorizedShopsVps(_request, reply) {
   }
 }
 
+function mapTikTokShopCategoryVps(category) {
+  return {
+    id: String(category?.id || ''),
+    parent_id: category?.parent_id ? String(category.parent_id) : null,
+    name: String(category?.local_name || category?.name || ''),
+    is_leaf: Boolean(category?.is_leaf),
+    permission_statuses: Array.isArray(category?.permission_statuses)
+      ? category.permission_statuses.map(String)
+      : [],
+  };
+}
+
+async function handleTikTokShopCategoriesVps(request, reply) {
+  const keyword = String(request.query?.keyword || '').trim().slice(0, 100);
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const result = await callTikTokShopOpenApiVps(settings, {
+      pathname: '/product/202309/categories',
+      query: {
+        category_version: 'v1',
+        locale: 'pt-BR',
+        listing_platform: 'TIKTOK_SHOP',
+        include_prohibited_categories: 'false',
+        ...(keyword ? { keyword } : {}),
+      },
+    });
+    const categories = Array.isArray(result.payload?.data?.categories)
+      ? result.payload.data.categories.map(mapTikTokShopCategoryVps).filter((category) => category.id)
+      : [];
+    return reply.code(200).send({
+      count: categories.length,
+      categories,
+      request_id: result.payload?.request_id || null,
+    });
+  } catch (err) {
+    console.warn('[tiktok-shop-catalog] categories failed', {
+      detail: err.message || 'unknown',
+      status: err.statusCode || null,
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+    return reply.code(err.statusCode || 502).send({
+      error: 'Falha ao consultar categorias do TikTok Shop.',
+      detail: err.message || 'unknown',
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+  }
+}
+
+async function handleTikTokShopCategoryReadinessVps(request, reply) {
+  const categoryId = String(request.params?.categoryId || '').trim();
+  if (!/^\d{3,30}$/.test(categoryId)) {
+    return reply.code(400).send({ error: 'categoryId invalido.' });
+  }
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const commonQuery = { category_version: 'v1', locale: 'pt-BR' };
+    const [rulesResult, attributesResult] = await Promise.all([
+      callTikTokShopOpenApiVps(settings, {
+        pathname: `/product/202309/categories/${encodeURIComponent(categoryId)}/rules`,
+        query: commonQuery,
+      }),
+      callTikTokShopOpenApiVps(settings, {
+        pathname: `/product/202309/categories/${encodeURIComponent(categoryId)}/attributes`,
+        query: commonQuery,
+      }),
+    ]);
+    const attributes = Array.isArray(attributesResult.payload?.data?.attributes)
+      ? attributesResult.payload.data.attributes
+      : [];
+    return reply.code(200).send({
+      category: {
+        id: categoryId,
+        parent_id: null,
+        name: categoryId,
+        is_leaf: true,
+        permission_statuses: [],
+      },
+      rules: rulesResult.payload?.data || {},
+      attributes,
+      required_attributes: attributes.filter((attribute) => attribute?.is_required === true),
+      request_ids: {
+        rules: rulesResult.payload?.request_id || null,
+        attributes: attributesResult.payload?.request_id || null,
+      },
+    });
+  } catch (err) {
+    console.warn('[tiktok-shop-catalog] readiness failed', {
+      category_id: categoryId,
+      detail: err.message || 'unknown',
+      status: err.statusCode || null,
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+    return reply.code(err.statusCode || 502).send({
+      error: 'Falha ao consultar regras da categoria TikTok Shop.',
+      detail: err.message || 'unknown',
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+  }
+}
+
 async function handleTikTokShopUpdatePriceVps(request, reply) {
   const body = request.body || {};
   const productId = String(body.product_id || '').trim();
@@ -9216,11 +9320,15 @@ fastify.patch('/api/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }
 fastify.get('/api/tiktok-shop/oauth/auth', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopOAuthAuthVps);
 fastify.get('/api/tiktok-shop/oauth/callback', handleTikTokShopOAuthCallbackVps);
 fastify.get('/api/tiktok-shop/shops', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopAuthorizedShopsVps);
+fastify.get('/api/tiktok-shop/catalog/categories', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoriesVps);
+fastify.get('/api/tiktok-shop/catalog/categories/:categoryId/readiness', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryReadinessVps);
 fastify.post('/api/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.get('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
 fastify.patch('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsPatchVps);
 fastify.get('/tiktok-shop/oauth/auth', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopOAuthAuthVps);
 fastify.get('/tiktok-shop/shops', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopAuthorizedShopsVps);
+fastify.get('/tiktok-shop/catalog/categories', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoriesVps);
+fastify.get('/tiktok-shop/catalog/categories/:categoryId/readiness', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryReadinessVps);
 fastify.post('/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);
 fastify.all('/api/telegram-webhook', handleTelegramWebhookVps);
