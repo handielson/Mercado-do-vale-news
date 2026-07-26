@@ -64,7 +64,11 @@ const component = readFileSync(
 assert.match(component, /productService\.search\(query\)/, 'preparation UI must search local products');
 assert.match(component, /tiktokShopService\.getCategories\(query\)/, 'preparation UI must search TikTok categories');
 assert.match(component, /required_attributes/, 'preparation UI must display required category attributes');
-assert.match(component, /Esta etapa e somente leitura/, 'preparation UI must identify the read-only phase');
+assert.match(
+  component,
+  /O envio usa AS_DRAFT/,
+  'preparation UI must explain that draft creation does not publish the product',
+);
 assert.match(
   component,
   /Array\.isArray\(result\?\.categories\) \? result\.categories : \[\]/,

@@ -63,6 +63,24 @@ export interface TikTokShopCategoryMapping {
   updated_at: string | null;
 }
 
+export interface TikTokShopWarehouseSummary {
+  id: string;
+  name: string;
+  effect_status: string;
+  type: string;
+  is_default: boolean;
+}
+
+export interface TikTokShopDraftResponse {
+  ok: boolean;
+  already_exists?: boolean;
+  product_id: string;
+  tiktok_product_id: string;
+  tiktok_sku_id: string | null;
+  status: string;
+  request_id: string | null;
+}
+
 export const tiktokShopService = {
   getStatus(): Promise<TikTokShopSafeStatus> {
     return vpsClient.get<TikTokShopSafeStatus>('/tiktok-shop/settings');
@@ -119,6 +137,23 @@ export const tiktokShopService = {
         tiktok_category_name: input.tiktok_category_name,
       },
     );
+  },
+
+  getWarehouses(): Promise<{
+    count: number;
+    warehouses: TikTokShopWarehouseSummary[];
+    request_id: string | null;
+  }> {
+    return vpsClient.get('/tiktok-shop/logistics/warehouses');
+  },
+
+  createDraft(input: {
+    product_id: string;
+    category_id: string;
+    category_name: string;
+    warehouse_id: string;
+  }): Promise<TikTokShopDraftResponse> {
+    return vpsClient.post('/tiktok-shop/products/drafts', input);
   },
 
   getProductLinks(productIds: string[]): Promise<{ links: TikTokShopProductLink[] }> {

@@ -10,9 +10,10 @@ import TikTokShopProductPreparation from './TikTokShopProductPreparation';
 type Props = {
   productId: string;
   onClose: () => void;
+  onSuccess?: (tiktokProductId: string) => void;
 };
 
-export default function TikTokShopSyncModal({ productId, onClose }: Props) {
+export default function TikTokShopSyncModal({ productId, onClose, onSuccess }: Props) {
   const [status, setStatus] = useState<TikTokShopSafeStatus | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -68,7 +69,11 @@ export default function TikTokShopSyncModal({ productId, onClose }: Props) {
               Preparando TikTok Shop...
             </div>
           ) : (
-            <TikTokShopProductPreparation status={status} initialProductId={productId} />
+            <TikTokShopProductPreparation
+              status={status}
+              initialProductId={productId}
+              onDraftCreated={onSuccess}
+            />
           )}
         </div>
       </div>

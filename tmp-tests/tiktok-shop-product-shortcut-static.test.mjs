@@ -15,6 +15,8 @@ for (const file of serverFiles) {
     /CREATE TABLE IF NOT EXISTS tiktok_shop_category_mappings/,
     `${file} must persist local-to-TikTok category mappings`,
   );
+  assert.match(source, /idempotency_key VARCHAR\(128\)/, `${file} must persist draft idempotency`);
+  assert.match(source, /uploaded_images JSON/, `${file} must cache TikTok image URIs`);
   assert.match(
     source,
     /fastify\.put\('\/tiktok-shop\/catalog\/category-mappings\/:localCategoryId', \{ preHandler: requireSyncKeyOrAdmin \}/,
@@ -35,12 +37,41 @@ for (const file of serverFiles) {
     /AND COALESCE\(status, ''\) <> 'DELETED'/,
     `${file} must not light deleted TikTok links`,
   );
+  assert.match(
+    source,
+    /pathname: '\/product\/202309\/images\/upload'/,
+    `${file} must upload local images before product creation`,
+  );
+  assert.match(
+    source,
+    /pathname: '\/product\/202309\/products'/,
+    `${file} must use the official Create Product endpoint`,
+  );
+  assert.match(source, /save_mode: 'AS_DRAFT'/, `${file} must create a safe draft, never a live listing`);
+  assert.match(source, /idempotency_key: crypto\.randomUUID\(\)/, `${file} must use UUID v4 idempotency`);
+  assert.match(
+    source,
+    /fastify\.post\('\/tiktok-shop\/products\/drafts', \{ preHandler: requireSyncKeyOrAdmin \}/,
+    `${file} must protect the proxy-safe draft write route`,
+  );
+  assert.match(
+    source,
+    /fastify\.get\('\/tiktok-shop\/logistics\/warehouses', \{ preHandler: requireSyncKeyOrAdmin \}/,
+    `${file} must protect the proxy-safe warehouse route`,
+  );
+  assert.match(
+    source,
+    /hostname\.endsWith\('\.mercadodovale\.com\.br'\)[\s\S]*hostname\.endsWith\('\.xiaomipetrolina\.com\.br'\)/,
+    `${file} must restrict server-side image downloads to controlled domains`,
+  );
 }
 
 const service = readFileSync('services/tiktokShopService.ts', 'utf8');
 assert.match(service, /getProductLinks\(productIds: string\[\]\)/, 'frontend service must read TikTok links in bulk');
 assert.match(service, /getCategoryMapping\(localCategoryId: string\)/, 'frontend service must read category mappings');
 assert.match(service, /saveCategoryMapping\(input:/, 'frontend service must persist confirmed category mappings');
+assert.match(service, /getWarehouses\(\)/, 'frontend service must discover TikTok warehouses');
+assert.match(service, /createDraft\(input:/, 'frontend service must expose draft creation');
 assert.doesNotMatch(
   service,
   /['"]\/api\/tiktok-shop\/products\/links/,
@@ -98,7 +129,28 @@ assert.match(
   /tiktokShopService\.saveCategoryMapping/,
   'TikTok preparation must persist the category after confirmation',
 );
+assert.match(
+  preparation,
+  /Criar rascunho no TikTok/,
+  'TikTok preparation must expose draft creation in the product modal',
+);
+assert.match(
+  preparation,
+  /window\.confirm/,
+  'TikTok preparation must require explicit confirmation before the external write',
+);
+assert.match(
+  preparation,
+  /seller\.product\.write/,
+  'TikTok preparation must require product write scope',
+);
+assert.match(
+  preparation,
+  /seller\.logistics/,
+  'TikTok preparation must require logistics scope for a valid warehouse',
+);
 assert.match(modal, /role="dialog"/, 'TikTok synchronization must open as a dialog');
 assert.match(modal, /initialProductId=\{productId\}/, 'TikTok modal must load the clicked product');
+assert.match(modal, /onDraftCreated=\{onSuccess\}/, 'TikTok modal must report successful draft creation');
 
 console.log('TikTok Shop product shortcut static checks ok');

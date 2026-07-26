@@ -33,6 +33,27 @@ Regras aplicadas:
 
 ## Contrato oficial usado
 
+### Criacao segura de rascunho
+
+Fontes verificadas em 26 de julho de 2026:
+
+- https://partner.tiktokshop.com/docv2/page/create-product-202309
+- https://partner.tiktokshop.com/docv2/page/draft-status-available-for-create-product-api
+- https://partner.tiktokshop.com/docv2/page/create-product-api-now-supports-an-idempotency-key
+- https://partner.tiktokshop.com/docv2/page/upload-product-image
+- https://partner.tiktokshop.com/docv2/page/get-warehouse-list-202309
+
+Regras aplicadas:
+
+- Criar o produto local pelo `POST /product/202309/products` com `save_mode=AS_DRAFT`.
+- Usar UUID v4 em `idempotency_key` e reutiliza-lo quando o mesmo payload precisar ser repetido.
+- Fazer upload de cada imagem pelo `POST /product/202309/images/upload`; URLs locais nao podem ser usadas diretamente no produto.
+- Aceitar no servidor somente imagens HTTPS dos dominios controlados pelo Mercado do Vale.
+- Consultar o armazem pelo `GET /logistics/202309/warehouses` e usar somente armazem de venda habilitado.
+- Exigir os escopos `seller.product.write` e `seller.logistics` no painel antes de liberar o envio.
+- Persistir produto, SKU, categoria, estado, imagens enviadas e falha sanitizada na tabela TikTok propria.
+- A criacao como rascunho nao torna o item visivel para compradores.
+
 ### Assinatura das APIs
 
 Fonte: https://partner.tiktokshop.com/docv2/page/sign-your-api-request

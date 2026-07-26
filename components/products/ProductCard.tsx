@@ -349,12 +349,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     });
     const [isShopeeModalOpen, setIsShopeeModalOpen] = useState(false);
     const [isTikTokModalOpen, setIsTikTokModalOpen] = useState(false);
+    const [currentTikTokProductId, setCurrentTikTokProductId] = useState<string | null>(
+        () => String(tiktokProductId || '').trim() || null,
+    );
     const [isPreparingShopeeModal, setIsPreparingShopeeModal] = useState(false);
     const [shopeeCompany, setShopeeCompany] = useState<Company | null>(null);
     const [shopeeModalProductSource, setShopeeModalProductSource] = useState<Product & Record<string, any>>(product as Product & Record<string, any>);
 
     const shopeeVisualState = getShopeeButtonVisualState({ shopee_item_id: shopeeItemId });
-    const isTikTokSynced = Boolean(String(tiktokProductId || '').trim());
+    const isTikTokSynced = Boolean(currentTikTokProductId);
+
+    useEffect(() => {
+        setCurrentTikTokProductId(String(tiktokProductId || '').trim() || null);
+    }, [tiktokProductId]);
     const shopeeModalProduct = mapProductToShopeeLocalProduct(shopeeModalProductSource as Product & Record<string, any>) as LocalProduct;
     const emptyShopeeHistory: ShopeeProduct[] = [];
     const currentStockQuantity = Math.max(0, Number(currentStock || 0));
@@ -1927,6 +1934,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 <TikTokShopSyncModal
                     productId={product.id}
                     onClose={() => setIsTikTokModalOpen(false)}
+                    onSuccess={(createdProductId) => {
+                        setCurrentTikTokProductId(createdProductId);
+                        setIsTikTokModalOpen(false);
+                    }}
                 />
             )}
         </div>

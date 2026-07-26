@@ -1956,6 +1956,43 @@ async function callTikTokShopOpenApiVps(settings, { method = 'GET', pathname, qu
   return { payload, settings: authorized };
 }
 
+async function callTikTokShopMultipartVps(settings, { pathname, fields = {}, file }) {
+  const authorized = await ensureTikTokShopAccessTokenVps(settings);
+  if (!authorized.appKey || !authorized.appSecret || !authorized.accessToken) {
+    throw new Error('TikTok Shop app or token is incomplete');
+  }
+  const requestQuery = {
+    app_key: authorized.appKey,
+    timestamp: String(Math.floor(Date.now() / 1000)),
+  };
+  const sign = buildTikTokShopApiSignVps(pathname, requestQuery, authorized.appSecret);
+  const url = new URL(pathname, process.env.TIKTOK_SHOP_OPEN_API_URL || TIKTOK_SHOP_OPEN_API_ORIGIN);
+  for (const [key, value] of Object.entries(requestQuery)) url.searchParams.set(key, String(value));
+  url.searchParams.set('sign', sign);
+
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(fields)) formData.append(key, String(value));
+  formData.append('data', new Blob([file.buffer], { type: file.contentType }), file.filename);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'x-tts-access-token': authorized.accessToken,
+    },
+    body: formData,
+    signal: AbortSignal.timeout(30000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || Number(payload?.code) !== 0) {
+    const error = new Error(`TikTok Shop API failed: ${sanitizeTikTokShopOAuthError(payload)}`);
+    error.statusCode = response.ok ? 502 : response.status;
+    error.requestId = payload?.request_id || null;
+    error.tiktokCode = payload?.code ?? null;
+    throw error;
+  }
+  return { payload, settings: authorized };
+}
+
 async function refreshTikTokShopAccessTokenVps(settings) {
   if (!settings?.id || !settings?.appKey || !settings?.appSecret || !settings?.refreshToken) {
     throw new Error('TikTok Shop refresh credentials are incomplete');
@@ -2337,6 +2374,347 @@ async function handleTikTokShopCategoryReadinessVps(request, reply) {
     return reply.code(err.statusCode || 502).send({
       error: 'Falha ao consultar regras da categoria TikTok Shop.',
       detail: err.message || 'unknown',
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+  }
+}
+
+function mapTikTokShopWarehouseVps(warehouse) {
+  return {
+    id: String(warehouse?.id || ''),
+    name: String(warehouse?.name || 'Armazem TikTok'),
+    effect_status: String(warehouse?.effect_status || ''),
+    type: String(warehouse?.type || ''),
+    is_default: Boolean(warehouse?.is_default),
+  };
+}
+
+async function loadTikTokShopWarehousesVps(settings) {
+  const result = await callTikTokShopOpenApiVps(settings, {
+    pathname: '/logistics/202309/warehouses',
+  });
+  const warehouses = Array.isArray(result.payload?.data?.warehouses)
+    ? result.payload.data.warehouses.map(mapTikTokShopWarehouseVps).filter((warehouse) => warehouse.id)
+    : [];
+  return { result, warehouses };
+}
+
+async function handleTikTokShopWarehousesVps(_request, reply) {
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const { result, warehouses } = await loadTikTokShopWarehousesVps(settings);
+    return reply.code(200).send({
+      count: warehouses.length,
+      warehouses,
+      request_id: result.payload?.request_id || null,
+    });
+  } catch (err) {
+    console.warn('[tiktok-shop-logistics] warehouses failed', {
+      detail: err.message || 'unknown',
+      status: err.statusCode || null,
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+    return reply.code(err.statusCode || 502).send({
+      error: 'Falha ao consultar armazens do TikTok Shop.',
+      detail: err.message || 'unknown',
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+  }
+}
+
+function parseTikTokDraftJsonVps(value, fallback) {
+  if (value && typeof value === 'object') return value;
+  try {
+    return JSON.parse(String(value || ''));
+  } catch {
+    return fallback;
+  }
+}
+
+function cleanTikTokDraftTextVps(value) {
+  return String(value || '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function escapeTikTokDraftHtmlVps(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeTikTokDraftImagesVps(product) {
+  const storedImages = parseTikTokDraftJsonVps(product?.images, []);
+  const values = [
+    ...(Array.isArray(storedImages) ? storedImages : []),
+    product?.image_url,
+  ];
+  return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean))).slice(0, 9);
+}
+
+function isTrustedTikTokDraftImageUrlVps(value) {
+  try {
+    const url = new URL(String(value || ''));
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === 'https:' && (
+      hostname === 'mercadodovale.com.br' ||
+      hostname.endsWith('.mercadodovale.com.br') ||
+      hostname === 'xiaomipetrolina.com.br' ||
+      hostname.endsWith('.xiaomipetrolina.com.br')
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function fetchTikTokDraftImageFileVps(imageUrl, index) {
+  if (!isTrustedTikTokDraftImageUrlVps(imageUrl)) {
+    throw new Error('Imagem fora dos dominios autorizados do Mercado do Vale.');
+  }
+  const response = await fetch(imageUrl, {
+    headers: { Accept: 'image/jpeg,image/png,image/webp,image/heic,image/bmp' },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!isTrustedTikTokDraftImageUrlVps(response.url)) {
+    throw new Error('Redirecionamento de imagem fora dos dominios autorizados.');
+  }
+  if (!response.ok) throw new Error(`Falha ao baixar imagem do produto: HTTP ${response.status}`);
+  const contentType = String(response.headers.get('content-type') || '').split(';')[0].toLowerCase();
+  const supported = new Map([
+    ['image/jpeg', 'jpg'],
+    ['image/png', 'png'],
+    ['image/webp', 'webp'],
+    ['image/heic', 'heic'],
+    ['image/bmp', 'bmp'],
+  ]);
+  const extension = supported.get(contentType);
+  if (!extension) throw new Error(`Formato de imagem nao suportado pelo TikTok: ${contentType || 'desconhecido'}`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.length < 1 || buffer.length > 10 * 1024 * 1024) {
+    throw new Error('Imagem vazia ou maior que 10 MB.');
+  }
+  return { buffer, contentType, filename: `produto-${index + 1}.${extension}` };
+}
+
+async function uploadTikTokDraftImagesVps(settings, imageUrls) {
+  const uploaded = [];
+  for (let index = 0; index < imageUrls.length; index += 1) {
+    const file = await fetchTikTokDraftImageFileVps(imageUrls[index], index);
+    const result = await callTikTokShopMultipartVps(settings, {
+      pathname: '/product/202309/images/upload',
+      fields: { use_case: 'MAIN_IMAGE' },
+      file,
+    });
+    const uri = String(result.payload?.data?.uri || '').trim();
+    if (!uri) throw new Error('TikTok Shop nao retornou a URI da imagem enviada.');
+    uploaded.push({ uri });
+  }
+  return uploaded;
+}
+
+function buildTikTokDraftPackageVps(product) {
+  const dimensions = parseTikTokDraftJsonVps(product?.dimensions, {});
+  const weightGrams = Number(product?.shipping_weight || 0) > 0
+    ? Number(product.shipping_weight)
+    : Number(product?.weight_kg || 0) * 1000;
+  const length = Number(product?.shipping_length || dimensions?.depth_cm || 0);
+  const width = Number(product?.shipping_width || dimensions?.width_cm || 0);
+  const height = Number(product?.shipping_height || dimensions?.height_cm || 0);
+  if (!(weightGrams > 0 && length > 0 && width > 0 && height > 0)) {
+    throw new Error('Peso e medidas de envio sao obrigatorios para criar o rascunho.');
+  }
+  return {
+    package_weight: { value: String(Math.round(weightGrams)), unit: 'GRAM' },
+    package_dimensions: {
+      length: String(length),
+      width: String(width),
+      height: String(height),
+      unit: 'CENTIMETER',
+    },
+  };
+}
+
+async function handleTikTokShopCreateDraftVps(request, reply) {
+  const productId = String(request.body?.product_id || '').trim();
+  const categoryId = String(request.body?.category_id || '').trim();
+  const categoryName = String(request.body?.category_name || '').trim().slice(0, 255);
+  const warehouseId = String(request.body?.warehouse_id || '').trim();
+  if (!productId || productId.length > 255 || !/^[a-zA-Z0-9_-]+$/.test(productId)) {
+    return reply.code(400).send({ error: 'Produto local invalido.' });
+  }
+  if (!/^\d{3,30}$/.test(categoryId) || !categoryName) {
+    return reply.code(400).send({ error: 'Categoria TikTok invalida.' });
+  }
+  if (!/^\d{3,40}$/.test(warehouseId)) {
+    return reply.code(400).send({ error: 'Armazem TikTok invalido.' });
+  }
+
+  try {
+    const [[product]] = await pool.query(
+      `SELECT id, company_id, name, sku, description, images, image_url,
+              price_retail, stock_quantity, shipping_weight, shipping_height,
+              shipping_width, shipping_length, weight_kg, dimensions
+       FROM products
+       WHERE id = ?
+       LIMIT 1`,
+      [productId],
+    );
+    if (!product) return reply.code(404).send({ error: 'Produto local nao encontrado.' });
+
+    const [[existing]] = await pool.query(
+      `SELECT tiktok_product_id, tiktok_sku_id, status, idempotency_key,
+              payload_hash, uploaded_images
+       FROM tiktok_shop_products
+       WHERE product_id = ?
+       LIMIT 1`,
+      [productId],
+    );
+    if (existing?.tiktok_product_id) {
+      return reply.code(200).send({
+        ok: true,
+        already_exists: true,
+        product_id: productId,
+        tiktok_product_id: String(existing.tiktok_product_id),
+        tiktok_sku_id: existing.tiktok_sku_id ? String(existing.tiktok_sku_id) : null,
+        status: String(existing.status || 'DRAFT'),
+        request_id: null,
+      });
+    }
+
+    const title = cleanTikTokDraftTextVps(product.name).slice(0, 300);
+    const descriptionText = cleanTikTokDraftTextVps(product.description).slice(0, 9900);
+    const sellerSku = cleanTikTokDraftTextVps(product.sku).slice(0, 255);
+    const priceCents = Math.round(Number(product.price_retail || 0));
+    if (!title || !descriptionText || !sellerSku || priceCents <= 0) {
+      return reply.code(400).send({ error: 'Nome, descricao, SKU e preco de varejo sao obrigatorios.' });
+    }
+
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const { warehouses } = await loadTikTokShopWarehousesVps(settings);
+    const warehouse = warehouses.find((item) => (
+      item.id === warehouseId &&
+      item.effect_status === 'ENABLED' &&
+      (!item.type || item.type === 'SALES_WAREHOUSE')
+    ));
+    if (!warehouse) return reply.code(400).send({ error: 'O armazem selecionado nao esta disponivel para venda.' });
+
+    const imageUrls = normalizeTikTokDraftImagesVps(product);
+    if (imageUrls.length === 0) return reply.code(400).send({ error: 'O produto precisa de pelo menos uma imagem.' });
+    const imageSourceHash = crypto.createHash('sha256').update(JSON.stringify(imageUrls)).digest('hex');
+    const cachedImages = parseTikTokDraftJsonVps(existing?.uploaded_images, {});
+    const mainImages = cachedImages?.source_hash === imageSourceHash && Array.isArray(cachedImages?.items)
+      ? cachedImages.items.filter((item) => item?.uri).slice(0, 9)
+      : await uploadTikTokDraftImagesVps(settings, imageUrls);
+    if (mainImages.length === 0) throw new Error('Nenhuma imagem foi aceita pelo TikTok Shop.');
+
+    const packageData = buildTikTokDraftPackageVps(product);
+    const payload = {
+      save_mode: 'AS_DRAFT',
+      idempotency_key: crypto.randomUUID(),
+      title,
+      description: `<p>${escapeTikTokDraftHtmlVps(descriptionText)}</p>`,
+      category_id: categoryId,
+      category_version: 'v1',
+      main_images: mainImages,
+      skus: [{
+        seller_sku: sellerSku,
+        price: { amount: (priceCents / 100).toFixed(2), currency: 'BRL' },
+        inventory: [{
+          warehouse_id: warehouseId,
+          quantity: Math.max(0, Math.floor(Number(product.stock_quantity || 0))),
+        }],
+      }],
+      external_product_id: productId,
+      ...packageData,
+    };
+    const payloadHash = crypto.createHash('sha256')
+      .update(JSON.stringify({ ...payload, idempotency_key: '' }))
+      .digest('hex');
+    if (existing?.idempotency_key && existing?.payload_hash === payloadHash) {
+      payload.idempotency_key = String(existing.idempotency_key);
+    }
+
+    await pool.query(
+      `INSERT INTO tiktok_shop_products
+         (company_id, product_id, status, idempotency_key, payload_hash,
+          tiktok_category_id, tiktok_category_name, uploaded_images, last_error)
+       VALUES (?, ?, 'CREATING', ?, ?, ?, ?, ?, NULL)
+       ON DUPLICATE KEY UPDATE
+         status = 'CREATING',
+         idempotency_key = VALUES(idempotency_key),
+         payload_hash = VALUES(payload_hash),
+         tiktok_category_id = VALUES(tiktok_category_id),
+         tiktok_category_name = VALUES(tiktok_category_name),
+         uploaded_images = VALUES(uploaded_images),
+         last_error = NULL,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        product.company_id || null,
+        productId,
+        payload.idempotency_key,
+        payloadHash,
+        categoryId,
+        categoryName,
+        JSON.stringify({ source_hash: imageSourceHash, items: mainImages }),
+      ],
+    );
+
+    const result = await callTikTokShopOpenApiVps(settings, {
+      method: 'POST',
+      pathname: '/product/202309/products',
+      body: payload,
+    });
+    const remoteProductId = String(result.payload?.data?.product_id || '').trim();
+    const remoteSkuId = String(result.payload?.data?.skus?.[0]?.id || '').trim() || null;
+    if (!remoteProductId) throw new Error('TikTok Shop criou o rascunho sem retornar product_id.');
+
+    await pool.query(
+      `UPDATE tiktok_shop_products
+       SET tiktok_product_id = ?, tiktok_sku_id = ?, status = 'DRAFT',
+           last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE product_id = ?`,
+      [remoteProductId, remoteSkuId, productId],
+    );
+    return reply.code(200).send({
+      ok: true,
+      product_id: productId,
+      tiktok_product_id: remoteProductId,
+      tiktok_sku_id: remoteSkuId,
+      status: 'DRAFT',
+      request_id: result.payload?.request_id || null,
+    });
+  } catch (err) {
+    const safeError = String(err.message || 'unknown').slice(0, 1000);
+    await pool.query(
+      `UPDATE tiktok_shop_products
+       SET status = 'ERROR', last_error = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE product_id = ?`,
+      [safeError, productId],
+    ).catch(() => {});
+    console.warn('[tiktok-shop-product] draft creation failed', {
+      product_id: productId,
+      detail: safeError,
+      status: err.statusCode || null,
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+    return reply.code(err.statusCode || 502).send({
+      error: 'Falha ao criar rascunho no TikTok Shop.',
+      detail: safeError,
       code: err.tiktokCode || null,
       request_id: err.requestId || null,
     });
@@ -6565,6 +6943,8 @@ fastify.get('/api/tiktok-shop/catalog/categories', { preHandler: requireSyncKeyO
 fastify.get('/api/tiktok-shop/catalog/categories/:categoryId/readiness', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryReadinessVps);
 fastify.get('/api/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryMappingGetVps);
 fastify.put('/api/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryMappingPutVps);
+fastify.get('/api/tiktok-shop/logistics/warehouses', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopWarehousesVps);
+fastify.post('/api/tiktok-shop/products/drafts', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCreateDraftVps);
 fastify.get('/api/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/api/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.get('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
@@ -6575,6 +6955,8 @@ fastify.get('/tiktok-shop/catalog/categories', { preHandler: requireSyncKeyOrAdm
 fastify.get('/tiktok-shop/catalog/categories/:categoryId/readiness', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryReadinessVps);
 fastify.get('/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryMappingGetVps);
 fastify.put('/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryMappingPutVps);
+fastify.get('/tiktok-shop/logistics/warehouses', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopWarehousesVps);
+fastify.post('/tiktok-shop/products/drafts', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCreateDraftVps);
 fastify.get('/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);
@@ -20758,7 +21140,13 @@ async function runMigrations() {
       product_id VARCHAR(255) NOT NULL,
       tiktok_product_id VARCHAR(80) NULL,
       tiktok_sku_id VARCHAR(80) NULL,
+      tiktok_category_id VARCHAR(80) NULL,
+      tiktok_category_name VARCHAR(255) NULL,
       status VARCHAR(40) NULL,
+      idempotency_key VARCHAR(128) NULL,
+      payload_hash CHAR(64) NULL,
+      uploaded_images JSON NULL,
+      last_error TEXT NULL,
       last_synced_at DATETIME NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -20768,6 +21156,27 @@ async function runMigrations() {
       INDEX idx_tiktok_shop_products_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  for (const [columnName, definition] of [
+    ['tiktok_category_id', 'VARCHAR(80) NULL'],
+    ['tiktok_category_name', 'VARCHAR(255) NULL'],
+    ['idempotency_key', 'VARCHAR(128) NULL'],
+    ['payload_hash', 'CHAR(64) NULL'],
+    ['uploaded_images', 'JSON NULL'],
+    ['last_error', 'TEXT NULL'],
+  ]) {
+    const [existingColumns] = await pool.query(
+      `SELECT 1
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tiktok_shop_products'
+         AND COLUMN_NAME = ?
+       LIMIT 1`,
+      [columnName],
+    );
+    if (!existingColumns.length) {
+      await pool.query(`ALTER TABLE tiktok_shop_products ADD COLUMN ${columnName} ${definition}`);
+    }
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tiktok_shop_category_mappings (
       id CHAR(36) PRIMARY KEY DEFAULT (UUID()),

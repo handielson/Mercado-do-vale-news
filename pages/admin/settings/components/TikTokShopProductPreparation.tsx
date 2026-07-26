@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, PackageSearch, Search } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, PackageSearch, Search, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { productService } from '../../../../services/products';
 import { categoryService } from '../../../../services/categories';
@@ -8,12 +8,14 @@ import {
   type TikTokShopCategoryReadiness,
   type TikTokShopCategorySummary,
   type TikTokShopSafeStatus,
+  type TikTokShopWarehouseSummary,
 } from '../../../../services/tiktokShopService';
 import type { Product } from '../../../../types/product';
 
 type Props = {
   status: TikTokShopSafeStatus | null;
   initialProductId?: string | null;
+  onDraftCreated?: (tiktokProductId: string) => void;
 };
 
 function getProductIssues(product: Product | null): string[] {
@@ -52,7 +54,11 @@ function normalizeCategoryName(value: string): string {
     .toLowerCase();
 }
 
-export default function TikTokShopProductPreparation({ status, initialProductId }: Props) {
+export default function TikTokShopProductPreparation({
+  status,
+  initialProductId,
+  onDraftCreated,
+}: Props) {
   const [productQuery, setProductQuery] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -66,6 +72,11 @@ export default function TikTokShopProductPreparation({ status, initialProductId 
   const [loadingInitialProduct, setLoadingInitialProduct] = useState(Boolean(initialProductId));
   const [autoMappingCategory, setAutoMappingCategory] = useState(false);
   const [categoryMappingMessage, setCategoryMappingMessage] = useState('');
+  const [warehouses, setWarehouses] = useState<TikTokShopWarehouseSummary[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
+  const [loadingWarehouses, setLoadingWarehouses] = useState(false);
+  const [creatingDraft, setCreatingDraft] = useState(false);
+  const [createdTikTokProductId, setCreatedTikTokProductId] = useState('');
 
   React.useEffect(() => {
     let cancelled = false;
@@ -105,6 +116,38 @@ export default function TikTokShopProductPreparation({ status, initialProductId 
     status?.shop_cipher_configured &&
     status?.granted_scopes?.includes('seller.product.basic'),
   );
+  const canWriteProducts = Boolean(status?.granted_scopes?.includes('seller.product.write'));
+  const canReadWarehouses = Boolean(status?.granted_scopes?.includes('seller.logistics'));
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!status?.connected || !canReadWarehouses) {
+      setWarehouses([]);
+      setSelectedWarehouseId('');
+      return;
+    }
+    setLoadingWarehouses(true);
+    tiktokShopService.getWarehouses()
+      .then((result) => {
+        if (cancelled) return;
+        const available = (Array.isArray(result?.warehouses) ? result.warehouses : [])
+          .filter((warehouse) => warehouse.effect_status === 'ENABLED')
+          .filter((warehouse) => !warehouse.type || warehouse.type === 'SALES_WAREHOUSE');
+        setWarehouses(available);
+        const preferred = available.find((warehouse) => warehouse.is_default) || available[0];
+        setSelectedWarehouseId(preferred?.id || '');
+      })
+      .catch((error) => {
+        console.error('[TikTokShopProductPreparation] warehouse loading error:', error);
+        if (!cancelled) toast.error('Nao foi possivel consultar os armazens do TikTok Shop.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingWarehouses(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canReadWarehouses, status?.connected]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -246,6 +289,42 @@ export default function TikTokShopProductPreparation({ status, initialProductId 
       toast.error('Nao foi possivel consultar regras e atributos da categoria.');
     } finally {
       setLoadingReadiness(false);
+    }
+  }
+
+  async function createTikTokDraft() {
+    if (!selectedProduct || !selectedCategory || !selectedWarehouseId) {
+      toast.info('Selecione produto, categoria e armazem antes de criar o rascunho.');
+      return;
+    }
+    if (productIssues.length > 0) {
+      toast.warning('Complete os dados locais obrigatorios antes de enviar.');
+      return;
+    }
+    if (!window.confirm(
+      `Criar "${selectedProduct.name}" como rascunho no TikTok Shop? O produto ainda nao ficara visivel para clientes.`,
+    )) return;
+
+    setCreatingDraft(true);
+    try {
+      const result = await tiktokShopService.createDraft({
+        product_id: selectedProduct.id,
+        category_id: selectedCategory.id,
+        category_name: selectedCategory.name,
+        warehouse_id: selectedWarehouseId,
+      });
+      setCreatedTikTokProductId(result.tiktok_product_id);
+      toast.success(
+        result.already_exists
+          ? 'Este produto ja possui rascunho no TikTok Shop.'
+          : 'Rascunho criado no TikTok Shop.',
+      );
+      onDraftCreated?.(result.tiktok_product_id);
+    } catch (error: any) {
+      console.error('[TikTokShopProductPreparation] draft creation error:', error);
+      toast.error(error?.message || 'Nao foi possivel criar o rascunho no TikTok Shop.');
+    } finally {
+      setCreatingDraft(false);
     }
   }
 
@@ -418,9 +497,61 @@ export default function TikTokShopProductPreparation({ status, initialProductId 
         </div>
       )}
 
-      <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-        Esta etapa e somente leitura. A criacao do rascunho sera liberada depois que os
-        campos locais e os atributos obrigatorios da categoria estiverem completos.
+      <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <label className="text-sm font-semibold text-slate-800">3. Armazem e envio</label>
+        <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+          <select
+            value={selectedWarehouseId}
+            onChange={(event) => setSelectedWarehouseId(event.target.value)}
+            disabled={!canReadWarehouses || loadingWarehouses || creatingDraft}
+            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
+          >
+            <option value="">
+              {loadingWarehouses ? 'Consultando armazens...' : 'Selecione o armazem TikTok'}
+            </option>
+            {warehouses.map((warehouse) => (
+              <option key={warehouse.id} value={warehouse.id}>
+                {warehouse.name}{warehouse.is_default ? ' (padrao)' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => void createTikTokDraft()}
+            disabled={
+              creatingDraft ||
+              !canWriteProducts ||
+              !canReadWarehouses ||
+              !selectedProduct ||
+              !selectedCategory ||
+              !selectedWarehouseId ||
+              productIssues.length > 0
+            }
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {creatingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {creatingDraft ? 'Enviando imagens e produto...' : 'Criar rascunho no TikTok'}
+          </button>
+        </div>
+        {!canWriteProducts && (
+          <p className="mt-2 text-xs text-amber-800">
+            Ative o escopo seller.product.write e reconecte a loja para liberar o envio.
+          </p>
+        )}
+        {!canReadWarehouses && (
+          <p className="mt-2 text-xs text-amber-800">
+            Ative o escopo seller.logistics e reconecte a loja para consultar o armazem.
+          </p>
+        )}
+        {createdTikTokProductId && (
+          <p className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-emerald-800">
+            <CheckCircle2 className="h-4 w-4" />
+            Rascunho TikTok {createdTikTokProductId} criado e vinculado.
+          </p>
+        )}
+        <p className="mt-2 text-xs text-slate-600">
+          O envio usa AS_DRAFT: nada fica visivel para clientes ate a publicacao posterior no Seller Center.
+        </p>
       </div>
     </section>
   );
