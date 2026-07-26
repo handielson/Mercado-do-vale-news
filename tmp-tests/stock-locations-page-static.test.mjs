@@ -41,6 +41,10 @@ assert.ok(page.includes('setLocationOpen(true)'), 'page should open location mod
 assert.ok(page.includes('formatLocationName(event.target.value)'), 'location name input should title-case typed or pasted values');
 assert.ok(page.includes("toLocaleUpperCase('pt-BR')"), 'location name formatter should uppercase word initials with pt-BR locale');
 assert.ok(page.includes('getLocationDisplayName'), 'page should use a combined location label helper');
+assert.ok(page.includes('QRCodeSVG'), 'each stock box should expose a printable QR label');
+assert.ok(page.includes('mdv://stock-location/'), 'box QR must use the Android-readable stock location protocol');
+assert.ok(page.includes('A impressão contém somente o nome e o QR da caixa.'), 'box print must not include the product list');
+assert.ok(page.includes('window.print()'), 'box QR label should expose a print action');
 assert.ok(page.includes('return `${name} ${code}`'), 'numeric location codes should appear beside the location name, e.g. Caixa 35');
 assert.ok(page.includes('locationLabel.includes(term)'), 'location search should match combined labels like Caixa 35');
 assert.ok(page.includes('setLocationsExpanded(true)'), 'creating/editing a location should reveal the locations list');

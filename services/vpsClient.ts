@@ -74,6 +74,7 @@ async function buildHeaders(extra?: Record<string, string>): Promise<HeadersInit
 
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
+        'X-MDV-Client': 'web',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...getVpsSyncHeaders(),
         ...extra,

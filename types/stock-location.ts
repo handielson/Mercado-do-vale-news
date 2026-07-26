@@ -118,6 +118,10 @@ export interface StockLocationMovement {
     ean?: string | null;
     specs?: Record<string, unknown> | null;
   } | null;
+  from_deposit?: StockDeposit | null;
+  from_location?: StockLocation | null;
+  to_deposit?: StockDeposit | null;
+  to_location?: StockLocation | null;
   from_deposit_id?: string | null;
   from_location_id?: string | null;
   to_deposit_id?: string | null;
@@ -133,6 +137,8 @@ export interface StockLocationMovement {
   new_to_quantity?: number | null;
   notes?: string | null;
   created_by?: string | null;
+  source_device?: 'mobile' | 'computer' | 'system';
+  sale_order_number?: string | null;
   created_at: string;
 }
 

@@ -23,6 +23,13 @@ for (const snippet of [
   'movement.movement_type',
   'movement.reason',
   'product.name ||',
+  'MovementSourceIcon',
+  'Smartphone',
+  'Monitor',
+  'formatMovementReason',
+  'formatMovementReferenceType',
+  '/admin/sales?sale=',
+  'Pedido #',
 ]) {
   assert(page.includes(snippet), `missing ${snippet}`);
 }
@@ -32,6 +39,9 @@ assert(typeSource.includes('name: string'), 'StockLocationMovement product data 
 assert(vpsSource.includes('LEFT JOIN products p ON p.id = slm.product_id'), 'VPS movements endpoint should join products');
 assert(vpsSource.includes('product_name'), 'VPS movements endpoint should return product_name');
 assert(vpsSource.includes('product: row.product_name ?'), 'VPS movements endpoint should hydrate movement.product');
+assert(vpsSource.includes('source_device:'), 'VPS movements endpoint should identify mobile or computer');
+assert(vpsSource.includes('sale_order_number:'), 'VPS movements endpoint should expose the receipt sale number');
+assert(vpsSource.includes('LEFT JOIN stock_locations fl'), 'VPS movements endpoint should hydrate source and target locations');
 assert(!page.includes('if (!product) return movement.product_id;'), 'movement table should not prefer raw product id as the visible product label');
 
 assert(!page.includes('recordMovement('), 'page must not create movements yet');

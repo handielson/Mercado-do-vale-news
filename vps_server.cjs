@@ -806,7 +806,7 @@ async function getVpsBearerAuthContext(request) {
     return {
       userId: payload.userId || customer?.user_id || customer?.id || null,
       customerId: customer?.id || null,
-      isAdmin: customer?.customer_type === 'ADMIN',
+      isAdmin: normalizeAuthCustomerType(customer?.customer_type) === 'ADMIN',
     };
   } catch (err) {
     console.warn('[auth] VPS Bearer validation failed:', err.message);
@@ -21422,9 +21422,17 @@ fastify.get('/stock-locations/movements', { preHandler: requireSyncKey }, async 
   const limit = Math.min(Math.max(Number(req.query?.limit || 50), 1), 200);
   const [rows] = await pool.query(`
     SELECT slm.*,
-      p.name AS product_name, p.sku AS product_sku, p.ean AS product_ean, p.specs AS product_specs
+      p.name AS product_name, p.sku AS product_sku, p.ean AS product_ean, p.specs AS product_specs,
+      fd.name AS from_deposit_name, fd.code AS from_deposit_code,
+      fl.name AS from_location_name, fl.code AS from_location_code,
+      td.name AS to_deposit_name, td.code AS to_deposit_code,
+      tl.name AS to_location_name, tl.code AS to_location_code
     FROM stock_location_movements slm
     LEFT JOIN products p ON p.id = slm.product_id
+    LEFT JOIN stock_deposits fd ON fd.id = slm.from_deposit_id
+    LEFT JOIN stock_locations fl ON fl.id = slm.from_location_id
+    LEFT JOIN stock_deposits td ON td.id = slm.to_deposit_id
+    LEFT JOIN stock_locations tl ON tl.id = slm.to_location_id
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY slm.created_at DESC
     LIMIT ${limit}
@@ -21436,6 +21444,30 @@ fastify.get('/stock-locations/movements', { preHandler: requireSyncKey }, async 
     new_from_quantity: row.new_from_quantity == null ? null : stockNumber(row.new_from_quantity),
     previous_to_quantity: row.previous_to_quantity == null ? null : stockNumber(row.previous_to_quantity),
     new_to_quantity: row.new_to_quantity == null ? null : stockNumber(row.new_to_quantity),
+    source_device: /android|mobile|celular/i.test(String(row.created_by || '')) ? 'mobile' : 'computer',
+    sale_order_number: row.reference_type === 'sale' && row.reference_id
+      ? String(row.reference_id).slice(0, 8).toUpperCase()
+      : null,
+    from_deposit: row.from_deposit_id ? {
+      id: row.from_deposit_id,
+      name: row.from_deposit_name || '-',
+      code: row.from_deposit_code || '',
+    } : null,
+    from_location: row.from_location_id ? {
+      id: row.from_location_id,
+      name: row.from_location_name || '-',
+      code: row.from_location_code || '',
+    } : null,
+    to_deposit: row.to_deposit_id ? {
+      id: row.to_deposit_id,
+      name: row.to_deposit_name || '-',
+      code: row.to_deposit_code || '',
+    } : null,
+    to_location: row.to_location_id ? {
+      id: row.to_location_id,
+      name: row.to_location_name || '-',
+      code: row.to_location_code || '',
+    } : null,
     product: row.product_name ? {
       id: row.product_id,
       name: row.product_name,
@@ -21512,6 +21544,7 @@ fastify.post('/stock-locations/adjustments', { preHandler: requireSyncKey }, asy
 
 fastify.post('/stock-locations/transfers', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
   const input = req.body || {};
+  const movementCreatedBy = String(req.headers['x-mdv-client'] || 'web').trim().slice(0, 120) || 'web';
   const quantity = stockNumber(input.quantity);
   if (quantity <= 0) return reply.code(400).send({ error: 'Informe uma quantidade valida para a transferencia.' });
   if (input.from_location_id === input.to_location_id) return reply.code(400).send({ error: 'A origem e destino precisam ser diferentes.' });
@@ -21575,10 +21608,11 @@ fastify.post('/stock-locations/transfers', { preHandler: requireSyncKeyOrAdmin }
     await connection.query(
       `INSERT INTO stock_location_movements
         (id, company_id, product_id, from_deposit_id, from_location_id, to_deposit_id, to_location_id, quantity,
-         movement_type, reason, reference_type, previous_from_quantity, new_from_quantity, previous_to_quantity, new_to_quantity, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'transfer', ?, 'manual_transfer', ?, ?, ?, ?, ?)`,
+         movement_type, reason, reference_type, previous_from_quantity, new_from_quantity, previous_to_quantity, new_to_quantity, notes, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'transfer', ?, 'manual_transfer', ?, ?, ?, ?, ?, ?)`,
       [crypto.randomUUID(), product.company_id, input.product_id, input.from_deposit_id, input.from_location_id, input.to_deposit_id, input.to_location_id,
-        quantity, String(input.reason || 'Transferencia interna').trim(), sourceQuantity, sourceQuantity - quantity, targetQuantity, targetQuantity + quantity, input.notes || null]
+        quantity, String(input.reason || 'Transferencia interna').trim(), sourceQuantity, sourceQuantity - quantity, targetQuantity, targetQuantity + quantity,
+        input.notes || null, movementCreatedBy]
     );
     const [[total]] = await connection.query(
       'SELECT COALESCE(SUM(quantity), 0) AS quantity FROM product_stock_locations WHERE product_id = ?',

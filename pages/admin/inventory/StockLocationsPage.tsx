@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowRightLeft, Boxes, Building2, ChevronDown, ChevronRight, Copy, Eye, FileDown, History, Loader2, MapPin, PackageSearch, Pencil, Plus, RefreshCw, RotateCcw, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, Boxes, Building2, ChevronDown, ChevronRight, Copy, Eye, FileDown, History, Loader2, MapPin, Monitor, PackageSearch, Pencil, Plus, Printer, QrCode, RefreshCw, RotateCcw, Search, Smartphone, Trash2, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { stockLocationService } from '../../../services/stockLocationService';
 import {
@@ -117,6 +118,7 @@ export function StockLocationsPage() {
   const [contentsLoading, setContentsLoading] = useState(false);
   const [contentsError, setContentsError] = useState<string | null>(null);
   const [contentsActionProductId, setContentsActionProductId] = useState<string | null>(null);
+  const [qrLocation, setQrLocation] = useState<StockLocation | null>(null);
 
   // Batch transfer: carrinho de produtos pra mandar todos pra mesmo destino.
   type BatchItem = {
@@ -2050,6 +2052,15 @@ export function StockLocationsPage() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => setQrLocation(location)}
+                          className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition hover:border-violet-300 hover:bg-violet-50"
+                          title="Imprimir etiqueta com nome e QR da caixa"
+                        >
+                          <QrCode size={14} />
+                          QR da caixa
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => openLocationDeactivation(location)}
                           className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-300 hover:bg-red-50"
                           title="Desativar local"
@@ -2714,6 +2725,7 @@ export function StockLocationsPage() {
               <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-5 py-3">Data</th>
+                  <th className="px-5 py-3">Origem</th>
                   <th className="px-5 py-3">Tipo</th>
                   <th className="px-5 py-3">Produto</th>
                   <th className="px-5 py-3">Caminho</th>
@@ -2727,6 +2739,9 @@ export function StockLocationsPage() {
                   <tr key={movement.id} className="hover:bg-slate-50">
                     <td className="px-5 py-4 text-slate-600">{formatMovementDate(movement.created_at)}</td>
                     <td className="px-5 py-4">
+                      <MovementSourceIcon source={movement.source_device} />
+                    </td>
+                    <td className="px-5 py-4">
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
                         {formatMovementType(movement.movement_type)}
                       </span>
@@ -2734,9 +2749,9 @@ export function StockLocationsPage() {
                     <td className="px-5 py-4 text-sm text-slate-700">{formatMovementProduct(movement)}</td>
                     <td className="px-5 py-4 text-xs text-slate-600">{formatMovementPath(movement)}</td>
                     <td className="px-5 py-4 text-right font-bold text-slate-900">{movement.quantity}</td>
-                    <td className="px-5 py-4 text-slate-700">{movement.reason}</td>
+                    <td className="px-5 py-4 text-slate-700">{formatMovementReason(movement.reason)}</td>
                     <td className="px-5 py-4 text-xs text-slate-500">
-                      {movement.reference_type || '-'}{movement.reference_id ? ` / ${movement.reference_id}` : ''}
+                      {renderMovementReference(movement)}
                     </td>
                   </tr>
                 ))}
@@ -2745,6 +2760,63 @@ export function StockLocationsPage() {
           </div>
         )}
       </section>
+
+      {qrLocation && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4">
+          <style>{`
+            @media print {
+              body * { visibility: hidden !important; }
+              #stock-location-qr-label, #stock-location-qr-label * { visibility: visible !important; }
+              #stock-location-qr-label {
+                position: fixed !important;
+                inset: 0 auto auto 0 !important;
+                width: 80mm !important;
+                min-height: 50mm !important;
+                margin: 0 !important;
+                border: 0 !important;
+                box-shadow: none !important;
+              }
+            }
+          `}</style>
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl">
+            <div
+              id="stock-location-qr-label"
+              className="flex min-h-[300px] flex-col items-center justify-center rounded-lg border-2 border-slate-900 bg-white p-6 text-center"
+            >
+              <h2 className="mb-5 text-3xl font-black text-slate-950">
+                {getLocationDisplayName(qrLocation)}
+              </h2>
+              <QRCodeSVG
+                value={buildStockLocationQrValue(qrLocation)}
+                size={220}
+                level="H"
+                includeMargin
+                aria-label={`QR da ${getLocationDisplayName(qrLocation)}`}
+              />
+            </div>
+            <p className="mt-4 text-center text-sm text-slate-500">
+              A impressão contém somente o nome e o QR da caixa.
+            </p>
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setQrLocation(null)}
+                className="flex-1 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
+              >
+                <Printer size={17} />
+                Imprimir QR
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {depositOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
@@ -3711,6 +3783,28 @@ const EmptyBlock: React.FC<{ label: string }> = ({ label }) => (
   <div className="px-5 py-10 text-center text-sm text-slate-500">{label}</div>
 );
 
+function buildStockLocationQrValue(location: StockLocation): string {
+  return `mdv://stock-location/${location.id}`;
+}
+
+const MovementSourceIcon: React.FC<{ source?: StockLocationMovement['source_device'] }> = ({ source }) => {
+  if (source === 'mobile') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700" title="Movimentação feita pelo celular">
+        <Smartphone size={17} />
+        Celular
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700" title="Movimentação feita pelo computador">
+      <Monitor size={17} />
+      Computador
+    </span>
+  );
+};
+
 function formatMovementType(type: StockLocationMovement['movement_type']): string {
   const labels: Record<StockLocationMovement['movement_type'], string> = {
     in: 'Entrada',
@@ -3725,6 +3819,71 @@ function formatMovementType(type: StockLocationMovement['movement_type']): strin
   };
 
   return labels[type] || type;
+}
+
+function formatMovementReason(reason: string): string {
+  const clean = String(reason || '').trim();
+  const labels: Record<string, string> = {
+    distribution_open: 'Abertura da distribuição por local',
+    inventory: 'Inventário de estoque',
+    undistributed_stock: 'Estoque ainda não distribuído',
+    initial_migration: 'Migração inicial do estoque',
+    external_stock_total: 'Sincronização do estoque total',
+  };
+  if (labels[clean]) return labels[clean];
+
+  const pdvSale = clean.match(/^Venda PDV #([0-9a-f-]{8,})$/i);
+  if (pdvSale) return `Venda PDV #${pdvSale[1].slice(0, 8).toUpperCase()}`;
+  return clean || '-';
+}
+
+function formatMovementReferenceType(type?: string | null): string {
+  const clean = String(type || '').trim();
+  const labels: Record<string, string> = {
+    sale: 'Venda PDV',
+    sale_restore: 'Estorno de venda',
+    order: 'Pedido',
+    order_reservation: 'Reserva de pedido',
+    order_release: 'Liberação de pedido',
+    distribution_open: 'Abertura da distribuição',
+    inventory: 'Inventário',
+    undistributed_stock: 'Estoque sem local',
+    initial_migration: 'Migração inicial',
+    external_stock_total: 'Sincronização externa',
+  };
+  return labels[clean] || clean || '-';
+}
+
+function renderMovementReference(movement: StockLocationMovement): React.ReactNode {
+  const typeLabel = formatMovementReferenceType(movement.reference_type);
+  if (!movement.reference_id) return typeLabel;
+
+  if (movement.reference_type === 'sale') {
+    const orderNumber = movement.sale_order_number || movement.reference_id.slice(0, 8).toUpperCase();
+    return (
+      <span>
+        {typeLabel}{' / '}
+        <a
+          href={`/admin/sales?sale=${encodeURIComponent(movement.reference_id)}`}
+          className="font-bold text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900"
+        >
+          Pedido #{orderNumber}
+        </a>
+      </span>
+    );
+  }
+
+  return `${typeLabel} / ${movement.reference_id}`;
+}
+
+function formatMovementReferenceText(movement: StockLocationMovement): string {
+  const typeLabel = formatMovementReferenceType(movement.reference_type);
+  if (!movement.reference_id) return typeLabel;
+  if (movement.reference_type === 'sale') {
+    const orderNumber = movement.sale_order_number || movement.reference_id.slice(0, 8).toUpperCase();
+    return `${typeLabel} / Pedido #${orderNumber}`;
+  }
+  return `${typeLabel} / ${movement.reference_id}`;
 }
 
 function formatMovementDate(value: string): string {
@@ -3789,15 +3948,16 @@ function getMovementCreatedAfter(periodDays: string): string | undefined {
 function buildMovementLogText(movements: StockLocationMovement[]): string {
   if (movements.length === 0) return '';
 
-  const header = 'Data\tTipo\tProduto\tCaminho\tQtd.\tMotivo\tReferencia';
+  const header = 'Data\tOrigem\tTipo\tProduto\tCaminho\tQtd.\tMotivo\tReferencia';
   const rows = movements.map((movement) => [
     formatMovementDate(movement.created_at),
+    movement.source_device === 'mobile' ? 'Celular' : 'Computador',
     formatMovementType(movement.movement_type),
     formatMovementProduct(movement),
     formatMovementPath(movement),
     movement.quantity,
-    movement.reason || '-',
-    `${movement.reference_type || '-'}${movement.reference_id ? ` / ${movement.reference_id}` : ''}`,
+    formatMovementReason(movement.reason),
+    formatMovementReferenceText(movement),
   ].join('\t'));
 
   return [header, ...rows].join('\n');

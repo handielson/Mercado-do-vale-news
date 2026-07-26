@@ -15,8 +15,8 @@ android {
         applicationId = "br.com.mercadodovale.adminestoque"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 37
+        versionName = "0.6.2"
         buildConfigField("String", "VPS_BASE_URL", "\"${vpsBaseUrl.trimEnd('/')}\"")
     }
 
@@ -31,4 +31,5 @@ android {
 
 dependencies {
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("com.google.zxing:core:3.5.3")
 }
