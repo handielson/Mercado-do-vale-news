@@ -3824,16 +3824,27 @@ function formatMovementType(type: StockLocationMovement['movement_type']): strin
 function formatMovementReason(reason: string): string {
   const clean = String(reason || '').trim();
   const labels: Record<string, string> = {
+    manual_transfer: 'Transferência manual',
+    manual_entry: 'Entrada manual de estoque',
+    manual_adjustment: 'Ajuste manual de estoque',
     distribution_open: 'Abertura da distribuição por local',
     inventory: 'Inventário de estoque',
     undistributed_stock: 'Estoque ainda não distribuído',
     initial_migration: 'Migração inicial do estoque',
     external_stock_total: 'Sincronização do estoque total',
+    external_stock_reentry: 'Reentrada por sincronização externa',
+    bling_stock_sync: 'Sincronização de estoque Bling/Shopee',
+    bling_stock_reentry: 'Reentrada de estoque Bling/Shopee',
+    prices_stock_update: 'Atualização comercial do estoque',
   };
   if (labels[clean]) return labels[clean];
 
   const pdvSale = clean.match(/^Venda PDV #([0-9a-f-]{8,})$/i);
   if (pdvSale) return `Venda PDV #${pdvSale[1].slice(0, 8).toUpperCase()}`;
+  const onlineOrder = clean.match(/^(Pedido online|Reserva pedido online|Baixa de reserva pedido online|Libera(?:ç|c)[aã]o reserva pedido online) #([0-9a-f-]{8,})$/i);
+  if (onlineOrder) return `${onlineOrder[1]} #${onlineOrder[2].slice(0, 8).toUpperCase()}`;
+  const shopeeOrder = clean.match(/^(Venda|Pedido|Reserva)(?: da)? Shopee #([A-Z0-9-]+)$/i);
+  if (shopeeOrder) return `${shopeeOrder[1]} Shopee #${shopeeOrder[2]}`;
   return clean || '-';
 }
 
@@ -3842,14 +3853,23 @@ function formatMovementReferenceType(type?: string | null): string {
   const labels: Record<string, string> = {
     sale: 'Venda PDV',
     sale_restore: 'Estorno de venda',
-    order: 'Pedido',
-    order_reservation: 'Reserva de pedido',
-    order_release: 'Liberação de pedido',
+    order: 'Pedido online',
+    order_reservation: 'Reserva de pedido online',
+    order_release: 'Liberação de pedido online',
+    order_restore: 'Estorno de pedido online',
+    shopee: 'Venda Shopee',
+    shopee_sale: 'Venda Shopee',
+    shopee_order: 'Pedido Shopee',
+    shopee_order_reservation: 'Reserva de pedido Shopee',
+    manual_transfer: 'Transferência manual',
+    manual_entry: 'Entrada manual',
+    manual_adjustment: 'Ajuste manual',
     distribution_open: 'Abertura da distribuição',
     inventory: 'Inventário',
     undistributed_stock: 'Estoque sem local',
     initial_migration: 'Migração inicial',
-    external_stock_total: 'Sincronização externa',
+    external_stock_total: 'Sincronização externa (Bling/Shopee)',
+    external_stock_reentry: 'Reentrada externa (Bling/Shopee)',
   };
   return labels[clean] || clean || '-';
 }
@@ -3873,6 +3893,14 @@ function renderMovementReference(movement: StockLocationMovement): React.ReactNo
     );
   }
 
+  if (movement.reference_type === 'order' || movement.reference_type === 'order_reservation' || movement.reference_type === 'order_release' || movement.reference_type === 'order_restore') {
+    return `${typeLabel} / Pedido #${movement.reference_id.slice(0, 8).toUpperCase()}`;
+  }
+
+  if (movement.reference_type === 'shopee' || movement.reference_type === 'shopee_sale' || movement.reference_type === 'shopee_order' || movement.reference_type === 'shopee_order_reservation') {
+    return `${typeLabel} / Pedido #${movement.reference_id}`;
+  }
+
   return `${typeLabel} / ${movement.reference_id}`;
 }
 
@@ -3882,6 +3910,12 @@ function formatMovementReferenceText(movement: StockLocationMovement): string {
   if (movement.reference_type === 'sale') {
     const orderNumber = movement.sale_order_number || movement.reference_id.slice(0, 8).toUpperCase();
     return `${typeLabel} / Pedido #${orderNumber}`;
+  }
+  if (movement.reference_type === 'order' || movement.reference_type === 'order_reservation' || movement.reference_type === 'order_release' || movement.reference_type === 'order_restore') {
+    return `${typeLabel} / Pedido #${movement.reference_id.slice(0, 8).toUpperCase()}`;
+  }
+  if (movement.reference_type === 'shopee' || movement.reference_type === 'shopee_sale' || movement.reference_type === 'shopee_order' || movement.reference_type === 'shopee_order_reservation') {
+    return `${typeLabel} / Pedido #${movement.reference_id}`;
   }
   return `${typeLabel} / ${movement.reference_id}`;
 }

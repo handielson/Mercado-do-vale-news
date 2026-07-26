@@ -30,6 +30,11 @@ for (const snippet of [
   'formatMovementReferenceType',
   '/admin/sales?sale=',
   'Pedido #',
+  "manual_transfer: 'Transferência manual'",
+  "order: 'Pedido online'",
+  "shopee_sale: 'Venda Shopee'",
+  "external_stock_total: 'Sincronização externa (Bling/Shopee)'",
+  "bling_stock_sync: 'Sincronização de estoque Bling/Shopee'",
 ]) {
   assert(page.includes(snippet), `missing ${snippet}`);
 }
