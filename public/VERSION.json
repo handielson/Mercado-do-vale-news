@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.61-stock-history-channels",
-  "date": "2026-07-25",
+  "version": "v1.2.62-tiktok-shop-foundation",
+  "date": "2026-07-26",
   "status": "deployed",
-  "release_vps": "/var/www/mdv-site/releases/20260725-235414-v1261-stock-history-channels",
+  "release_vps": "/var/www/mdv-site/releases/20260726-203701-v1262-tiktok-shop-foundation",
   "branch": "main",
-  "summary": "Traduz as operações do histórico de estoque e identifica PDV, pedidos online e integrações Bling/Shopee."
+  "summary": "Adiciona a base segura do TikTok Shop, conexão OAuth e calculadora comercial com sincronização protegida de preço."
 }

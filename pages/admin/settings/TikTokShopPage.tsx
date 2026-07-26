@@ -1,31 +1,24 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, KeyRound, Loader2, Save, ShieldCheck, Store } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ExternalLink, KeyRound, Loader2, RefreshCw, Save, ShieldCheck, Store } from 'lucide-react';
 import { toast } from 'sonner';
-import { companySettingsService } from '../../../services/companySettingsService';
-import type { CompanySettings } from '../../../types/companySettings';
-import { buildTikTokShopSellerAuthUrl } from '../../../services/tiktokShopAuthUrlService.js';
+import {
+  tiktokShopService,
+  type TikTokAuthorizedShopSummary,
+  type TikTokShopSafeStatus,
+} from '../../../services/tiktokShopService';
+import TikTokShopSaleCalculator from './components/TikTokShopSaleCalculator';
 
-type TikTokShopDraft = Pick<
-  CompanySettings,
-  | 'tiktok_app_key'
-  | 'tiktok_app_secret'
-  | 'tiktok_service_id'
-  | 'tiktok_shop_cipher'
->;
-
-const emptyDraft: TikTokShopDraft = {
-  tiktok_app_key: '',
-  tiktok_app_secret: '',
-  tiktok_service_id: '',
-  tiktok_shop_cipher: '',
+type TikTokShopDraft = {
+  app_key: string;
+  app_secret: string;
+  service_id: string;
 };
 
-function maskValue(value?: string | null) {
-  const text = String(value || '').trim();
-  if (!text) return 'Nao configurado';
-  if (text.length <= 8) return 'Configurado';
-  return `${text.slice(0, 4)}...${text.slice(-4)}`;
-}
+const emptyDraft: TikTokShopDraft = {
+  app_key: '',
+  app_secret: '',
+  service_id: '',
+};
 
 function formatTokenDate(value?: string | null) {
   if (!value) return 'Nao conectado';
@@ -41,64 +34,50 @@ function formatTokenDate(value?: string | null) {
 }
 
 export default function TikTokShopPage() {
-  const [settings, setSettings] = useState<CompanySettings | null>(null);
+  const [status, setStatus] = useState<TikTokShopSafeStatus | null>(null);
+  const [shops, setShops] = useState<TikTokAuthorizedShopSummary[]>([]);
   const [draft, setDraft] = useState<TikTokShopDraft>(emptyDraft);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
-
-  const isConfigured = Boolean(draft.tiktok_app_key && draft.tiktok_app_secret && draft.tiktok_service_id);
-  const isConnected = Boolean(settings?.tiktok_access_token);
-  const sellerAuthUrl = useMemo(
-    () => buildTikTokShopSellerAuthUrl({ serviceId: draft.tiktok_service_id, market: 'ROW' }),
-    [draft.tiktok_service_id],
-  );
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const params = new URLSearchParams(window.location.search);
-    if (params.get('connected') === 'true' || params.get('error')) {
-      companySettingsService.clearCache();
-    }
 
-    async function loadSettings() {
+    async function initialize() {
       setLoading(true);
       try {
-        const data = await companySettingsService.get();
+        const data = await tiktokShopService.getStatus();
         if (cancelled) return;
-        setSettings(data);
+        setStatus(data);
         setDraft({
-          tiktok_app_key: data?.tiktok_app_key || '',
-          tiktok_app_secret: data?.tiktok_app_secret || '',
-          tiktok_service_id: data?.tiktok_service_id || '',
-          tiktok_shop_cipher: data?.tiktok_shop_cipher || '',
+          app_key: data.app_key || '',
+          app_secret: '',
+          service_id: data.service_id || '',
         });
       } catch (error) {
-        console.error('[TikTokShopPage] load error:', error);
-        if (!cancelled) toast.error('Nao foi possivel carregar a configuracao TikTok Shop.');
+        console.error('[TikTokShopPage] status error:', error);
+        if (!cancelled) toast.error('Nao foi possivel carregar o status do TikTok Shop.');
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
 
-    loadSettings();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    initialize();
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
     if (params.get('connected') === 'true') {
       toast.success('TikTok Shop conectado com sucesso.');
       window.history.replaceState({}, document.title, window.location.pathname);
-    }
-    const error = params.get('error');
-    if (error) {
-      const detail = params.get('detail');
-      toast.error(`Falha ao conectar TikTok Shop: ${detail || error}`);
+    } else if (params.get('error')) {
+      toast.error(`Falha ao conectar TikTok Shop: ${params.get('detail') || params.get('error')}`);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function updateDraft(key: keyof TikTokShopDraft, value: string) {
@@ -108,14 +87,14 @@ export default function TikTokShopPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      const updated = await companySettingsService.update({
-        tiktok_app_key: draft.tiktok_app_key?.trim() || null,
-        tiktok_app_secret: draft.tiktok_app_secret?.trim() || null,
-        tiktok_service_id: draft.tiktok_service_id?.trim() || null,
-        tiktok_shop_cipher: draft.tiktok_shop_cipher?.trim() || null,
+      const updated = await tiktokShopService.updateSettings({
+        app_key: draft.app_key.trim() || null,
+        service_id: draft.service_id.trim() || null,
+        ...(draft.app_secret.trim() ? { app_secret: draft.app_secret.trim() } : {}),
       });
-      setSettings(updated);
-      toast.success('Configuracao TikTok Shop salva.');
+      setStatus(updated);
+      setDraft((current) => ({ ...current, app_secret: '' }));
+      toast.success('Configuracao TikTok Shop salva sem expor o segredo.');
     } catch (error) {
       console.error('[TikTokShopPage] save error:', error);
       toast.error('Nao foi possivel salvar a configuracao TikTok Shop.');
@@ -127,17 +106,29 @@ export default function TikTokShopPage() {
   async function handleConnect() {
     setConnecting(true);
     try {
-      const response = await fetch('/api/tiktok-shop/oauth/auth', { cache: 'no-store' });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || !data?.url) {
-        throw new Error(data?.error || 'Nao foi possivel gerar a URL de autorizacao.');
-      }
+      const data = await tiktokShopService.getAuthorizationUrl();
+      if (!data?.url) throw new Error('Nao foi possivel gerar a URL de autorizacao.');
       window.location.href = data.url;
     } catch (error: any) {
       console.error('[TikTokShopPage] connect error:', error);
       toast.error(error?.message || 'Nao foi possivel iniciar a autorizacao TikTok Shop.');
     } finally {
       setConnecting(false);
+    }
+  }
+
+  async function handleRefreshShops() {
+    setRefreshing(true);
+    try {
+      const result = await tiktokShopService.refreshAuthorizedShops();
+      setShops(result.shops || []);
+      setStatus(result.status);
+      toast.success(`${result.count} loja(s) autorizada(s) encontrada(s).`);
+    } catch (error) {
+      console.error('[TikTokShopPage] shops error:', error);
+      toast.error('Nao foi possivel consultar as lojas autorizadas.');
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -150,6 +141,9 @@ export default function TikTokShopPage() {
     );
   }
 
+  const isConfigured = Boolean(status?.configured);
+  const isConnected = Boolean(status?.connected);
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -157,7 +151,8 @@ export default function TikTokShopPage() {
           <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Marketplace</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900">TikTok Shop</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-600">
-            Base inicial para credenciais, autorizacao e identidade da loja. Sync de produtos, pedidos e webhooks fica desligado nesta fase.
+            Conexao segura, renovacao de token, lojas autorizadas e calculadora comercial.
+            Pedidos, estoque, etiquetas e catalogo serao liberados por etapas.
           </p>
         </div>
         <div className={`rounded-lg border px-4 py-3 text-sm ${isConnected ? 'border-green-200 bg-green-50 text-green-800' : isConfigured ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200 bg-white text-slate-600'}`}>
@@ -166,7 +161,7 @@ export default function TikTokShopPage() {
             {isConnected ? 'Conectado' : isConfigured ? 'Credenciais prontas' : 'Pendente'}
           </div>
           <p className="mt-1 text-xs opacity-80">
-            {isConnected ? 'Token salvo para uso futuro.' : isConfigured ? 'Proximo passo: callback OAuth.' : 'Informe App Key, App Secret e Service ID.'}
+            {isConnected ? 'Token protegido no backend.' : isConfigured ? 'Pronto para autorizar a loja.' : 'Informe App Key, App Secret e Service ID.'}
           </p>
         </div>
       </div>
@@ -183,8 +178,8 @@ export default function TikTokShopPage() {
               <span className="text-sm font-medium text-slate-700">App Key</span>
               <input
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none"
-                value={draft.tiktok_app_key || ''}
-                onChange={(event) => updateDraft('tiktok_app_key', event.target.value)}
+                value={draft.app_key}
+                onChange={(event) => updateDraft('app_key', event.target.value)}
                 placeholder="App key do Partner Center"
               />
             </label>
@@ -194,32 +189,27 @@ export default function TikTokShopPage() {
               <input
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none"
                 type="password"
-                value={draft.tiktok_app_secret || ''}
-                onChange={(event) => updateDraft('tiktok_app_secret', event.target.value)}
-                placeholder="Nunca expor em logs"
+                autoComplete="new-password"
+                value={draft.app_secret}
+                onChange={(event) => updateDraft('app_secret', event.target.value)}
+                placeholder={status?.app_secret_configured ? 'Configurado; deixe vazio para manter' : 'Informe o segredo uma vez'}
               />
             </label>
 
-            <label className="block">
+            <label className="block sm:col-span-2">
               <span className="text-sm font-medium text-slate-700">Service ID</span>
               <input
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none"
-                value={draft.tiktok_service_id || ''}
-                onChange={(event) => updateDraft('tiktok_service_id', event.target.value)}
-                placeholder="ID do aplicativo online"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-sm font-medium text-slate-700">Shop Cipher</span>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-slate-500 focus:outline-none"
-                value={draft.tiktok_shop_cipher || ''}
-                onChange={(event) => updateDraft('tiktok_shop_cipher', event.target.value)}
-                placeholder="Necessario para APIs da loja"
+                value={draft.service_id}
+                onChange={(event) => updateDraft('service_id', event.target.value)}
+                placeholder="ID do aplicativo personalizado"
               />
             </label>
           </div>
+
+          <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+            O App Secret, access token, refresh token e shop cipher permanecem somente no backend e nunca retornam para o navegador.
+          </p>
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button
@@ -234,21 +224,21 @@ export default function TikTokShopPage() {
             <button
               type="button"
               onClick={handleConnect}
-              disabled={connecting}
+              disabled={connecting || !isConfigured}
               className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
               Conectar com TikTok Shop
             </button>
-            <a
-              href="https://partner.tiktokshop.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            <button
+              type="button"
+              onClick={handleRefreshShops}
+              disabled={refreshing || !isConnected}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Abrir Partner Center
-              <ExternalLink className="h-4 w-4" />
-            </a>
+              {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Consultar lojas
+            </button>
           </div>
         </section>
 
@@ -256,41 +246,63 @@ export default function TikTokShopPage() {
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <Store className="h-5 w-5 text-slate-600" />
-              <h2 className="text-base font-semibold text-slate-900">Status</h2>
+              <h2 className="text-base font-semibold text-slate-900">Status seguro</h2>
             </div>
             <dl className="space-y-3 text-sm">
               <div>
-                <dt className="text-slate-500">Seller</dt>
-                <dd className="font-medium text-slate-900">{settings?.tiktok_seller_name || 'Nao autorizado'}</dd>
+                <dt className="text-slate-500">Seller / loja</dt>
+                <dd className="font-medium text-slate-900">{status?.seller_name || 'Nao autorizado'}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Regiao</dt>
-                <dd className="font-medium text-slate-900">{settings?.tiktok_seller_base_region || 'Nao definida'}</dd>
+                <dd className="font-medium text-slate-900">{status?.seller_base_region || 'Nao definida'}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Open ID</dt>
-                <dd className="font-mono text-xs text-slate-700">{maskValue(settings?.tiktok_open_id)}</dd>
+                <dd className="font-mono text-xs text-slate-700">{status?.open_id_masked || 'Nao configurado'}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Access token expira</dt>
-                <dd className="font-medium text-slate-900">{formatTokenDate(settings?.tiktok_access_token_expires_at)}</dd>
+                <dd className="font-medium text-slate-900">{formatTokenDate(status?.access_token_expires_at)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Shop cipher</dt>
+                <dd className="font-medium text-slate-900">{status?.shop_cipher_configured ? 'Obtido com seguranca' : 'Pendente'}</dd>
               </div>
             </dl>
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-slate-900">Proxima URL OAuth</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Previa sem assinatura de seguranca. Use o botao Conectar para gerar a URL oficial com state pelo backend.
-            </p>
-            <textarea
-              readOnly
-              className="mt-3 h-24 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-700"
-              value={sellerAuthUrl || 'Informe o Service ID para gerar a URL.'}
-            />
+            <h2 className="text-base font-semibold text-slate-900">Callback OAuth</h2>
+            <p className="mt-2 break-all font-mono text-xs text-slate-700">{status?.redirect_url}</p>
+            <a
+              href="https://partner.tiktokshop.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-700 hover:text-teal-800"
+            >
+              Abrir Partner Center
+              <ExternalLink className="h-4 w-4" />
+            </a>
           </section>
         </aside>
       </div>
+
+      {shops.length > 0 && (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Lojas autorizadas</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {shops.map((shop, index) => (
+              <div key={`${shop.code || shop.name || 'shop'}-${index}`} className="rounded-lg border border-slate-200 p-4">
+                <p className="font-semibold text-slate-900">{shop.name || 'Loja TikTok Shop'}</p>
+                <p className="mt-1 text-sm text-slate-600">{shop.region || 'Regiao nao informada'} · {shop.seller_type || 'Tipo nao informado'}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <TikTokShopSaleCalculator status={status} />
     </div>
   );
 }

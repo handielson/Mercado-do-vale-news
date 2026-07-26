@@ -16,19 +16,31 @@ const MEM_TTL = 5 * 60 * 1000; // 5 min
 
 let _memCache: { data: CompanySettings; expiresAt: number } | null = null;
 
+function stripTikTokShopSecrets(data: CompanySettings): CompanySettings {
+    const safe = { ...data } as CompanySettings & Record<string, unknown>;
+    delete safe.tiktok_app_secret;
+    delete safe.tiktok_access_token;
+    delete safe.tiktok_refresh_token;
+    delete safe.tiktok_shop_cipher;
+    return safe;
+}
+
 function _readLocalStorage(): CompanySettings | null {
     try {
         const raw = localStorage.getItem(LS_KEY);
         if (!raw) return null;
         const { data, expiresAt } = JSON.parse(raw);
         if (Date.now() > expiresAt) { localStorage.removeItem(LS_KEY); return null; }
-        return data as CompanySettings;
+        const safe = stripTikTokShopSecrets(data as CompanySettings);
+        localStorage.setItem(LS_KEY, JSON.stringify({ data: safe, expiresAt }));
+        return safe;
     } catch { return null; }
 }
 
 function _writeLocalStorage(data: CompanySettings): void {
     try {
-        localStorage.setItem(LS_KEY, JSON.stringify({ data, expiresAt: Date.now() + LS_TTL }));
+        const safe = stripTikTokShopSecrets(data);
+        localStorage.setItem(LS_KEY, JSON.stringify({ data: safe, expiresAt: Date.now() + LS_TTL }));
     } catch { /* quota exceeded — silenciar */ }
 }
 
@@ -39,7 +51,7 @@ function _invalidateCache(): void {
 
 function normalizeCompanySettings(data: CompanySettings | null, defaults: Partial<CompanySettings>): CompanySettings | null {
     if (!data) return null;
-    const normalized = { ...data } as any;
+    const normalized = stripTikTokShopSecrets(data) as any;
     if (!normalized.address && normalized.address_street) {
         const parts = [];
         parts.push(`${normalized.address_street}, ${normalized.address_number || 'S/N'}`);

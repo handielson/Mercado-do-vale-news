@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const page = readFileSync('pages/admin/settings/TikTokShopPage.tsx', 'utf8');
+const service = readFileSync('services/tiktokShopService.ts', 'utf8');
+const companySettingsService = readFileSync('services/companySettingsService.ts', 'utf8');
 const routes = readFileSync('routes/index.tsx', 'utf8');
 const layout = readFileSync('layouts/AdminLayout.tsx', 'utf8');
 const vpsServer = readFileSync('vps_server.js', 'utf8');
@@ -15,11 +17,16 @@ assert.doesNotMatch(
   'TikTokShopPage must not read company_settings through Supabase',
 );
 
-assert.match(
-  page,
-  /companySettingsService\.get\(\)/,
-  'TikTokShopPage must load company settings through the shared VPS service',
-);
+assert.doesNotMatch(page, /companySettingsService/, 'TikTokShopPage must use its secret-safe service');
+assert.match(page, /tiktokShopService\.getStatus\(\)/, 'TikTokShopPage must load a safe status');
+assert.match(service, /\/api\/tiktok-shop\/settings/, 'TikTok service must use the protected settings route');
+assert.match(service, /\/api\/tiktok-shop\/shops/, 'TikTok service must expose shop discovery');
+assert.doesNotMatch(service, /tiktok_access_token:/, 'Frontend service must not model a raw access token');
+assert.doesNotMatch(service, /tiktok_refresh_token:/, 'Frontend service must not model a raw refresh token');
+assert.match(companySettingsService, /delete safe\.tiktok_app_secret/, 'Legacy cache must strip app secret');
+assert.match(companySettingsService, /delete safe\.tiktok_access_token/, 'Legacy cache must strip access token');
+assert.match(companySettingsService, /delete safe\.tiktok_refresh_token/, 'Legacy cache must strip refresh token');
+assert.match(companySettingsService, /delete safe\.tiktok_shop_cipher/, 'Legacy cache must strip shop cipher');
 
 assert.match(routes, /TikTokShopPage/, 'TikTok Shop page must be lazy-loaded in routes');
 assert.match(routes, /\/admin\/settings\/tiktok-shop/, 'TikTok Shop route must be registered');

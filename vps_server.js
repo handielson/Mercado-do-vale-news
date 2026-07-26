@@ -4240,6 +4240,12 @@ function normalizeTikTokShopMarketVps(value) {
   return String(value || '').trim().toUpperCase() === 'US' ? 'US' : 'ROW';
 }
 
+const tiktokShopOAuthStateNoncesVps = new Map();
+const TIKTOK_SHOP_OAUTH_STATE_TTL_MS = 30 * 60 * 1000;
+const TIKTOK_SHOP_AUTH_API_ORIGIN = 'https://auth.tiktok-shops.com';
+const TIKTOK_SHOP_OPEN_API_ORIGIN = 'https://open-api.tiktokglobalshop.com';
+const TIKTOK_SHOP_AUTHORIZED_SHOPS_PATH = '/authorization/202309/shops';
+
 function getTikTokShopSellerAuthOriginVps(market) {
   return normalizeTikTokShopMarketVps(market) === 'US'
     ? 'https://services.us.tiktokshop.com'
@@ -4265,11 +4271,19 @@ function base64UrlDecodeVps(value) {
   return Buffer.from(String(value), 'base64url').toString('utf8');
 }
 
+function pruneTikTokShopOAuthStatesVps(now = Date.now()) {
+  for (const [nonce, expiresAt] of tiktokShopOAuthStateNoncesVps.entries()) {
+    if (expiresAt <= now) tiktokShopOAuthStateNoncesVps.delete(nonce);
+  }
+}
+
 function buildTikTokShopOAuthStateVps(appSecret) {
+  pruneTikTokShopOAuthStatesVps();
   const issuedAt = Math.floor(Date.now() / 1000);
   const nonce = crypto.randomBytes(16).toString('hex');
   const payload = `${issuedAt}.${nonce}`;
   const signature = crypto.createHmac('sha256', appSecret).update(payload).digest('base64url');
+  tiktokShopOAuthStateNoncesVps.set(nonce, Date.now() + TIKTOK_SHOP_OAUTH_STATE_TTL_MS);
   return `${base64UrlEncodeVps(payload)}.${signature}`;
 }
 
@@ -4282,14 +4296,21 @@ function verifyTikTokShopOAuthStateVps(state, appSecret) {
   } catch {
     return false;
   }
-  const [issuedAtText] = payload.split('.');
+  const [issuedAtText, nonce] = payload.split('.');
   const issuedAt = Number(issuedAtText);
-  if (!Number.isFinite(issuedAt)) return false;
+  if (!Number.isFinite(issuedAt) || !nonce) return false;
   if (Math.abs(Math.floor(Date.now() / 1000) - issuedAt) > 30 * 60) return false;
   const expected = crypto.createHmac('sha256', appSecret).update(payload).digest('base64url');
   const actualBuffer = Buffer.from(parts[1]);
   const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+  const signatureValid = actualBuffer.length === expectedBuffer.length &&
+    crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+  if (!signatureValid) return false;
+  pruneTikTokShopOAuthStatesVps();
+  const nonceExpiresAt = tiktokShopOAuthStateNoncesVps.get(nonce);
+  if (!nonceExpiresAt || nonceExpiresAt <= Date.now()) return false;
+  tiktokShopOAuthStateNoncesVps.delete(nonce);
+  return true;
 }
 
 function sanitizeTikTokShopOAuthError(data) {
@@ -4301,7 +4322,7 @@ function sanitizeTikTokShopOAuthError(data) {
 async function loadTikTokShopOAuthSettingsVps() {
   const rows = await vpsDbSelect(
     'company_settings',
-    'select=id,tiktok_app_key,tiktok_app_secret,tiktok_service_id,tiktok_shop_cipher&limit=1'
+    'select=id,tiktok_app_key,tiktok_app_secret,tiktok_service_id,tiktok_shop_cipher,tiktok_access_token,tiktok_refresh_token,tiktok_access_token_expires_at,tiktok_refresh_token_expires_at,tiktok_open_id,tiktok_seller_name,tiktok_seller_base_region,tiktok_granted_scopes&limit=1'
   );
   const settings = Array.isArray(rows) ? rows[0] : null;
   return {
@@ -4310,7 +4331,239 @@ async function loadTikTokShopOAuthSettingsVps() {
     appSecret: getTikTokShopSetting(settings, 'tiktok_app_secret', 'TIKTOK_SHOP_APP_SECRET'),
     serviceId: getTikTokShopSetting(settings, 'tiktok_service_id', 'TIKTOK_SHOP_SERVICE_ID'),
     shopCipher: getTikTokShopSetting(settings, 'tiktok_shop_cipher', 'TIKTOK_SHOP_CIPHER'),
+    accessToken: getTikTokShopSetting(settings, 'tiktok_access_token', 'TIKTOK_SHOP_ACCESS_TOKEN'),
+    refreshToken: getTikTokShopSetting(settings, 'tiktok_refresh_token', 'TIKTOK_SHOP_REFRESH_TOKEN'),
+    accessTokenExpiresAt: String(settings?.tiktok_access_token_expires_at || '').trim(),
+    refreshTokenExpiresAt: String(settings?.tiktok_refresh_token_expires_at || '').trim(),
+    openId: String(settings?.tiktok_open_id || '').trim(),
+    sellerName: String(settings?.tiktok_seller_name || '').trim(),
+    sellerBaseRegion: String(settings?.tiktok_seller_base_region || '').trim(),
+    grantedScopes: settings?.tiktok_granted_scopes || null,
   };
+}
+
+function parseTikTokShopGrantedScopesVps(value) {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return String(value).split(',').map((scope) => scope.trim()).filter(Boolean);
+  }
+}
+
+function maskTikTokShopIdentifierVps(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (text.length <= 8) return 'Configurado';
+  return `${text.slice(0, 4)}...${text.slice(-4)}`;
+}
+
+function buildTikTokShopSafeStatusVps(settings) {
+  return {
+    configured: Boolean(settings?.appKey && settings?.appSecret && settings?.serviceId),
+    connected: Boolean(settings?.accessToken),
+    app_key: settings?.appKey || null,
+    app_secret_configured: Boolean(settings?.appSecret),
+    service_id: settings?.serviceId || null,
+    redirect_url: buildTikTokShopRedirectUrlVps(),
+    shop_cipher_configured: Boolean(settings?.shopCipher),
+    seller_name: settings?.sellerName || null,
+    seller_base_region: settings?.sellerBaseRegion || null,
+    open_id_masked: maskTikTokShopIdentifierVps(settings?.openId),
+    access_token_expires_at: settings?.accessTokenExpiresAt || null,
+    refresh_token_expires_at: settings?.refreshTokenExpiresAt || null,
+    granted_scopes: parseTikTokShopGrantedScopesVps(settings?.grantedScopes),
+  };
+}
+
+function redactTikTokShopSecretsFromCompanySettingsVps(row) {
+  if (!row || typeof row !== 'object') return row;
+  const safe = { ...row };
+  delete safe.tiktok_app_secret;
+  delete safe.tiktok_access_token;
+  delete safe.tiktok_refresh_token;
+  delete safe.tiktok_shop_cipher;
+  return safe;
+}
+
+function buildTikTokShopApiSignVps(pathname, query, appSecret, body = '') {
+  const parameterString = Object.keys(query || {})
+    .filter((key) => key !== 'sign' && key !== 'access_token')
+    .sort()
+    .map((key) => `${key}${query[key]}`)
+    .join('');
+  const signPayload = `${pathname}${parameterString}${body || ''}`;
+  const wrappedPayload = `${appSecret}${signPayload}${appSecret}`;
+  return crypto.createHmac('sha256', appSecret).update(wrappedPayload).digest('hex');
+}
+
+async function callTikTokShopOpenApiVps(settings, { method = 'GET', pathname, query = {}, body = null }) {
+  const authorized = await ensureTikTokShopAccessTokenVps(settings);
+  if (!authorized.appKey || !authorized.appSecret || !authorized.shopCipher) {
+    throw new Error('TikTok Shop app, token or shop cipher is incomplete');
+  }
+  const requestQuery = {
+    ...query,
+    app_key: authorized.appKey,
+    timestamp: String(Math.floor(Date.now() / 1000)),
+    shop_cipher: authorized.shopCipher,
+  };
+  const bodyText = body === null ? '' : JSON.stringify(body);
+  const sign = buildTikTokShopApiSignVps(pathname, requestQuery, authorized.appSecret, bodyText);
+  const url = new URL(pathname, process.env.TIKTOK_SHOP_OPEN_API_URL || TIKTOK_SHOP_OPEN_API_ORIGIN);
+  for (const [key, value] of Object.entries(requestQuery)) {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+  }
+  url.searchParams.set('sign', sign);
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'x-tts-access-token': authorized.accessToken,
+    },
+    ...(bodyText ? { body: bodyText } : {}),
+    signal: AbortSignal.timeout(20000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || Number(payload?.code) !== 0) {
+    const error = new Error(`TikTok Shop API failed: ${sanitizeTikTokShopOAuthError(payload)}`);
+    error.statusCode = response.status;
+    error.requestId = payload?.request_id || null;
+    error.tiktokCode = payload?.code ?? null;
+    throw error;
+  }
+  return { payload, settings: authorized };
+}
+
+async function refreshTikTokShopAccessTokenVps(settings) {
+  if (!settings?.id || !settings?.appKey || !settings?.appSecret || !settings?.refreshToken) {
+    throw new Error('TikTok Shop refresh credentials are incomplete');
+  }
+  const params = new URLSearchParams();
+  params.set('app_key', settings.appKey);
+  params.set('app_secret', settings.appSecret);
+  params.set('refresh_token', settings.refreshToken);
+  params.set('grant_type', 'refresh_token');
+  const response = await fetch(`${TIKTOK_SHOP_AUTH_API_ORIGIN}/api/v2/token/refresh?${params.toString()}`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(15000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || Number(payload?.code) !== 0 || !payload?.data?.access_token) {
+    const error = new Error(`TikTok Shop token refresh failed: ${sanitizeTikTokShopOAuthError(payload)}`);
+    error.statusCode = response.status;
+    error.requestId = payload?.request_id || null;
+    throw error;
+  }
+  const data = payload.data;
+  const patch = {
+    tiktok_access_token: data.access_token,
+    tiktok_refresh_token: data.refresh_token || settings.refreshToken,
+    tiktok_access_token_expires_at: data.access_token_expire_in ? String(data.access_token_expire_in) : null,
+    tiktok_refresh_token_expires_at: data.refresh_token_expire_in ? String(data.refresh_token_expire_in) : settings.refreshTokenExpiresAt || null,
+    tiktok_granted_scopes: Array.isArray(data.granted_scopes)
+      ? JSON.stringify(data.granted_scopes)
+      : settings.grantedScopes || null,
+  };
+  await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, patch);
+  return {
+    ...settings,
+    accessToken: patch.tiktok_access_token,
+    refreshToken: patch.tiktok_refresh_token,
+    accessTokenExpiresAt: patch.tiktok_access_token_expires_at,
+    refreshTokenExpiresAt: patch.tiktok_refresh_token_expires_at,
+    grantedScopes: patch.tiktok_granted_scopes,
+  };
+}
+
+async function ensureTikTokShopAccessTokenVps(settings) {
+  if (!settings?.accessToken) throw new Error('TikTok Shop is not connected');
+  const expiresAt = Number(settings.accessTokenExpiresAt);
+  const shouldRefresh = Number.isFinite(expiresAt) && expiresAt > 0 &&
+    expiresAt <= Math.floor(Date.now() / 1000) + 300;
+  return shouldRefresh ? refreshTikTokShopAccessTokenVps(settings) : settings;
+}
+
+async function fetchTikTokShopAuthorizedShopsVps(settings) {
+  const authorized = await ensureTikTokShopAccessTokenVps(settings);
+  const timestamp = Math.floor(Date.now() / 1000);
+  const query = { app_key: authorized.appKey, timestamp: String(timestamp) };
+  const sign = buildTikTokShopApiSignVps(
+    TIKTOK_SHOP_AUTHORIZED_SHOPS_PATH,
+    query,
+    authorized.appSecret,
+  );
+  const url = new URL(
+    TIKTOK_SHOP_AUTHORIZED_SHOPS_PATH,
+    process.env.TIKTOK_SHOP_OPEN_API_URL || TIKTOK_SHOP_OPEN_API_ORIGIN,
+  );
+  url.searchParams.set('app_key', authorized.appKey);
+  url.searchParams.set('timestamp', String(timestamp));
+  url.searchParams.set('sign', sign);
+  const response = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'x-tts-access-token': authorized.accessToken,
+    },
+    signal: AbortSignal.timeout(15000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || Number(payload?.code) !== 0) {
+    const error = new Error(`TikTok Shop authorized shops failed: ${sanitizeTikTokShopOAuthError(payload)}`);
+    error.statusCode = response.status;
+    error.requestId = payload?.request_id || null;
+    throw error;
+  }
+  const shops = Array.isArray(payload?.data?.shops) ? payload.data.shops : [];
+  if (shops[0] && authorized.id) {
+    await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(authorized.id)}`, {
+      tiktok_shop_cipher: shops[0].cipher || authorized.shopCipher || null,
+      tiktok_seller_name: shops[0].name || authorized.sellerName || null,
+      tiktok_seller_base_region: shops[0].region || authorized.sellerBaseRegion || null,
+    });
+  }
+  return { shops, settings: authorized };
+}
+
+function mapTikTokShopSafeShopVps(shop) {
+  return {
+    name: shop?.name || null,
+    region: shop?.region || null,
+    seller_type: shop?.seller_type || null,
+    code: shop?.code || null,
+  };
+}
+
+async function handleTikTokShopSettingsGetVps(_request, reply) {
+  const settings = await loadTikTokShopOAuthSettingsVps();
+  reply.header('Cache-Control', 'no-store');
+  return buildTikTokShopSafeStatusVps(settings);
+}
+
+async function handleTikTokShopSettingsPatchVps(request, reply) {
+  const settings = await loadTikTokShopOAuthSettingsVps();
+  if (!settings.id) return reply.code(404).send({ error: 'Configuracao da empresa nao encontrada.' });
+  const body = request.body || {};
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(body, 'app_key')) {
+    patch.tiktok_app_key = String(body.app_key || '').trim() || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'service_id')) {
+    patch.tiktok_service_id = String(body.service_id || '').trim() || null;
+  }
+  if (String(body.app_secret || '').trim()) {
+    patch.tiktok_app_secret = String(body.app_secret).trim();
+  }
+  if (Object.keys(patch).length > 0) {
+    await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, patch);
+  }
+  const updated = await loadTikTokShopOAuthSettingsVps();
+  reply.header('Cache-Control', 'no-store');
+  return buildTikTokShopSafeStatusVps(updated);
 }
 
 async function handleTikTokShopOAuthAuthVps(request, reply) {
@@ -4355,7 +4608,7 @@ async function handleTikTokShopOAuthCallbackVps(request, reply) {
     params.set('auth_code', String(query.code));
     params.set('grant_type', 'authorized_code');
 
-    const tokenResponse = await fetch(`https://auth.tiktok-shops.com/api/v2/token/get?${params.toString()}`, {
+    const tokenResponse = await fetch(`${TIKTOK_SHOP_AUTH_API_ORIGIN}/api/v2/token/get?${params.toString()}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(15000),
@@ -4372,7 +4625,7 @@ async function handleTikTokShopOAuthCallbackVps(request, reply) {
     }
 
     const data = tokenData?.data || {};
-    await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, {
+    const tokenPatch = {
       tiktok_access_token: data.access_token || null,
       tiktok_refresh_token: data.refresh_token || null,
       tiktok_access_token_expires_at: data.access_token_expire_in ? String(data.access_token_expire_in) : null,
@@ -4382,12 +4635,104 @@ async function handleTikTokShopOAuthCallbackVps(request, reply) {
       tiktok_seller_base_region: data.seller_base_region || null,
       tiktok_granted_scopes: Array.isArray(data.granted_scopes) ? JSON.stringify(data.granted_scopes) : null,
       ...(settings.shopCipher ? { tiktok_shop_cipher: settings.shopCipher } : {}),
-    });
+    };
+    await vpsDbPatch('company_settings', `id=eq.${encodeURIComponent(settings.id)}`, tokenPatch);
+
+    try {
+      await fetchTikTokShopAuthorizedShopsVps({
+        ...settings,
+        accessToken: tokenPatch.tiktok_access_token,
+        refreshToken: tokenPatch.tiktok_refresh_token,
+        accessTokenExpiresAt: tokenPatch.tiktok_access_token_expires_at,
+        refreshTokenExpiresAt: tokenPatch.tiktok_refresh_token_expires_at,
+        grantedScopes: tokenPatch.tiktok_granted_scopes,
+      });
+    } catch (shopError) {
+      console.warn('[tiktok-shop-oauth] shop discovery pending', {
+        detail: shopError.message || 'unknown',
+        status: shopError.statusCode || null,
+        request_id: shopError.requestId || null,
+      });
+    }
 
     return blingRedirect(reply, '/admin/settings/tiktok-shop?connected=true');
   } catch (err) {
     console.warn('[tiktok-shop-oauth] callback failed', { detail: err.message || 'unknown' });
     return blingRedirect(reply, `/admin/settings/tiktok-shop?error=network_error&detail=${encodeURIComponent(err.message || 'unknown')}`);
+  }
+}
+
+async function handleTikTokShopAuthorizedShopsVps(_request, reply) {
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const result = await fetchTikTokShopAuthorizedShopsVps(settings);
+    const updated = await loadTikTokShopOAuthSettingsVps();
+    reply.header('Cache-Control', 'no-store');
+    return {
+      count: result.shops.length,
+      shops: result.shops.map(mapTikTokShopSafeShopVps),
+      status: buildTikTokShopSafeStatusVps(updated),
+    };
+  } catch (err) {
+    console.warn('[tiktok-shop-api] authorized shops failed', {
+      detail: err.message || 'unknown',
+      status: err.statusCode || null,
+      request_id: err.requestId || null,
+    });
+    return reply.code(err.statusCode === 401 ? 401 : 502).send({
+      error: 'Nao foi possivel consultar as lojas autorizadas no TikTok Shop.',
+    });
+  }
+}
+
+async function handleTikTokShopUpdatePriceVps(request, reply) {
+  const body = request.body || {};
+  const productId = String(body.product_id || '').trim();
+  const skuId = String(body.sku_id || '').trim();
+  const amountCents = Math.round(Number(body.amount_cents));
+  const currency = String(body.currency || 'BRL').trim().toUpperCase();
+  if (!productId || !skuId || !Number.isInteger(amountCents) || amountCents <= 0) {
+    return reply.code(400).send({ error: 'product_id, sku_id e amount_cents positivo sao obrigatorios.' });
+  }
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    return reply.code(400).send({ error: 'Moeda invalida.' });
+  }
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const result = await callTikTokShopOpenApiVps(settings, {
+      method: 'POST',
+      pathname: `/product/202309/products/${encodeURIComponent(productId)}/prices/update`,
+      body: {
+        skus: [{
+          id: skuId,
+          price: {
+            amount: (amountCents / 100).toFixed(2),
+            currency,
+          },
+        }],
+      },
+    });
+    return reply.code(200).send({
+      ok: true,
+      product_id: productId,
+      sku_id: skuId,
+      amount_cents: amountCents,
+      currency,
+      request_id: result.payload?.request_id || null,
+    });
+  } catch (err) {
+    console.warn('[tiktok-shop-price] update failed', {
+      detail: err.message || 'unknown',
+      status: err.statusCode || null,
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+    return reply.code(err.statusCode || 502).send({
+      error: 'Falha ao sincronizar preco com TikTok Shop.',
+      detail: err.message || 'unknown',
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
   }
 }
 
@@ -8866,8 +9211,12 @@ fastify.all('/api/shopee', handleShopeeOAuthVps);
 fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);
 fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
 fastify.all('/api/shopee-actions', handleShopeeActionsVps);
-fastify.get('/api/tiktok-shop/oauth/auth', handleTikTokShopOAuthAuthVps);
+fastify.get('/api/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
+fastify.patch('/api/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsPatchVps);
+fastify.get('/api/tiktok-shop/oauth/auth', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopOAuthAuthVps);
 fastify.get('/api/tiktok-shop/oauth/callback', handleTikTokShopOAuthCallbackVps);
+fastify.get('/api/tiktok-shop/shops', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopAuthorizedShopsVps);
+fastify.post('/api/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);
 fastify.all('/api/telegram-webhook', handleTelegramWebhookVps);
 
@@ -23121,7 +23470,7 @@ fastify.delete('/images/file', { preHandler: requireSyncKey }, async (req, reply
 fastify.get('/company-settings', { preHandler: requireSyncKey }, async (req, reply) => {
   const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
   reply.header('Cache-Control', 'no-store');
-  return rows[0] || null;
+  return redactTikTokShopSecretsFromCompanySettingsVps(rows[0] || null);
 });
 
 fastify.get('/public/company-settings', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -23196,7 +23545,7 @@ fastify.patch('/company-settings', { preHandler: requireSyncKey }, async (req, r
   await pool.query(`UPDATE company_settings SET ${updates.join(', ')} WHERE id = ?`, params);
   clearAutoresponderStoreStatusCache();
   const [rows] = await pool.query('SELECT * FROM company_settings WHERE id = ?', [existing[0].id]);
-  return rows[0];
+  return redactTikTokShopSecretsFromCompanySettingsVps(rows[0]);
 });
 
 // ─── Versions CRUD ───────────────────────────────────────────────────────────
