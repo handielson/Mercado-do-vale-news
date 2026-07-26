@@ -19,8 +19,13 @@ assert.doesNotMatch(
 
 assert.doesNotMatch(page, /companySettingsService/, 'TikTokShopPage must use its secret-safe service');
 assert.match(page, /tiktokShopService\.getStatus\(\)/, 'TikTokShopPage must load a safe status');
-assert.match(service, /\/api\/tiktok-shop\/settings/, 'TikTok service must use the protected settings route');
-assert.match(service, /\/api\/tiktok-shop\/shops/, 'TikTok service must expose shop discovery');
+assert.match(service, /['"]\/tiktok-shop\/settings['"]/, 'TikTok service must use the proxy-safe settings route');
+assert.match(service, /['"]\/tiktok-shop\/shops['"]/, 'TikTok service must expose proxy-safe shop discovery');
+assert.doesNotMatch(
+  service,
+  /vpsClient\.(?:get|post|patch)\([^)]*['"]\/api\/tiktok-shop\//s,
+  'TikTok vpsClient paths must not include the /api prefix rejected by the VPS proxy',
+);
 assert.doesNotMatch(service, /tiktok_access_token:/, 'Frontend service must not model a raw access token');
 assert.doesNotMatch(service, /tiktok_refresh_token:/, 'Frontend service must not model a raw refresh token');
 assert.match(companySettingsService, /delete safe\.tiktok_app_secret/, 'Legacy cache must strip app secret');
@@ -33,6 +38,9 @@ assert.match(routes, /\/admin\/settings\/tiktok-shop/, 'TikTok Shop route must b
 assert.match(layout, /TikTok Shop/, 'TikTok Shop must be visible in admin navigation');
 
 for (const source of [vpsServer, vpsServerCjs, server]) {
+  assert.match(source, /fastify\.get\('\/tiktok-shop\/settings'/, 'VPS proxy-safe TikTok settings alias must exist');
+  assert.match(source, /fastify\.get\('\/tiktok-shop\/oauth\/auth'/, 'VPS proxy-safe TikTok OAuth alias must exist');
+  assert.match(source, /fastify\.post\('\/tiktok-shop\/products\/price'/, 'VPS proxy-safe TikTok price alias must exist');
   for (const field of [
     'tiktok_app_key',
     'tiktok_app_secret',

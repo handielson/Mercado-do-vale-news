@@ -6348,6 +6348,11 @@ fastify.get('/api/tiktok-shop/oauth/auth', { preHandler: requireSyncKeyOrAdmin }
 fastify.get('/api/tiktok-shop/oauth/callback', handleTikTokShopOAuthCallbackVps);
 fastify.get('/api/tiktok-shop/shops', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopAuthorizedShopsVps);
 fastify.post('/api/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
+fastify.get('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
+fastify.patch('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsPatchVps);
+fastify.get('/tiktok-shop/oauth/auth', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopOAuthAuthVps);
+fastify.get('/tiktok-shop/shops', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopAuthorizedShopsVps);
+fastify.post('/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);
 fastify.all('/api/telegram-webhook', handleTelegramWebhookVps);
 

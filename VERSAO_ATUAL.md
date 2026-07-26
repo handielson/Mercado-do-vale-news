@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.62-tiktok-shop-foundation
+version: v1.2.63-tiktok-shop-proxy-fix
 date: 2026-07-26
 status: deployed
-release_vps: /var/www/mdv-site/releases/20260726-203701-v1262-tiktok-shop-foundation
+release_vps: /var/www/mdv-site/releases/20260726-204500-v1263-tiktok-shop-proxy-fix
 branch: main
-summary: Adiciona a base segura do TikTok Shop, conexão OAuth e calculadora comercial com sincronização protegida de preço.
+summary: Corrige o acesso do painel às rotas protegidas do TikTok Shop pelo proxy da VPS.
 ```

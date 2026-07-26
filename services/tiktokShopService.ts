@@ -31,7 +31,7 @@ export interface TikTokAuthorizedShopsResponse {
 
 export const tiktokShopService = {
   getStatus(): Promise<TikTokShopSafeStatus> {
-    return vpsClient.get<TikTokShopSafeStatus>('/api/tiktok-shop/settings');
+    return vpsClient.get<TikTokShopSafeStatus>('/tiktok-shop/settings');
   },
 
   updateSettings(input: {
@@ -39,17 +39,17 @@ export const tiktokShopService = {
     app_secret?: string | null;
     service_id?: string | null;
   }): Promise<TikTokShopSafeStatus> {
-    return vpsClient.patch<TikTokShopSafeStatus>('/api/tiktok-shop/settings', input);
+    return vpsClient.patch<TikTokShopSafeStatus>('/tiktok-shop/settings', input);
   },
 
   getAuthorizationUrl(): Promise<{ url: string; redirect_url: string; market: string }> {
     return vpsClient.get<{ url: string; redirect_url: string; market: string }>(
-      '/api/tiktok-shop/oauth/auth',
+      '/tiktok-shop/oauth/auth',
     );
   },
 
   refreshAuthorizedShops(): Promise<TikTokAuthorizedShopsResponse> {
-    return vpsClient.get<TikTokAuthorizedShopsResponse>('/api/tiktok-shop/shops');
+    return vpsClient.get<TikTokAuthorizedShopsResponse>('/tiktok-shop/shops');
   },
 
   updatePrice(input: {
@@ -65,6 +65,6 @@ export const tiktokShopService = {
     currency: string;
     request_id: string | null;
   }> {
-    return vpsClient.post('/api/tiktok-shop/products/price', input);
+    return vpsClient.post('/tiktok-shop/products/price', input);
   },
 };
