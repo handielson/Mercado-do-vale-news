@@ -31,6 +31,21 @@ for (const file of serverFiles) {
     `${file} must expose the proxy-safe category discovery alias`,
   );
   assert.match(source, /category_version: 'v1'/, `${file} must use the BR category tree version`);
+  assert.match(
+    source,
+    /filterTikTokShopCategoriesVps\(allCategories, keyword\)/,
+    `${file} must search the official tree locally when TikTok rejects a non-literal keyword`,
+  );
+  assert.doesNotMatch(
+    source,
+    /\.\.\.\(keyword \? \{ keyword \} : \{\}\)/,
+    `${file} must not forward free-text keywords to TikTok`,
+  );
+  assert.match(
+    source,
+    /error\.statusCode = response\.ok \? 502 : response\.status/,
+    `${file} must convert TikTok business errors returned over HTTP 200 into gateway errors`,
+  );
 }
 
 const service = readFileSync('services/tiktokShopService.ts', 'utf8');
@@ -50,5 +65,10 @@ assert.match(component, /productService\.search\(query\)/, 'preparation UI must 
 assert.match(component, /tiktokShopService\.getCategories\(query\)/, 'preparation UI must search TikTok categories');
 assert.match(component, /required_attributes/, 'preparation UI must display required category attributes');
 assert.match(component, /Esta etapa e somente leitura/, 'preparation UI must identify the read-only phase');
+assert.match(
+  component,
+  /Array\.isArray\(result\?\.categories\) \? result\.categories : \[\]/,
+  'preparation UI must tolerate an invalid category response without crashing',
+);
 
 console.log('TikTok Shop catalog readiness static checks ok');

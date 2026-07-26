@@ -144,7 +144,8 @@ export default function TikTokShopProductPreparation({ status, initialProductId 
         setCategoryQuery(localCategory.name);
         const result = await tiktokShopService.getCategories(localCategory.name);
         if (cancelled) return;
-        const candidates = result.categories
+        const categoryResults = Array.isArray(result?.categories) ? result.categories : [];
+        const candidates = categoryResults
           .filter((category) => category.is_leaf)
           .filter((category) => (
             category.permission_statuses.length === 0 ||
@@ -213,8 +214,9 @@ export default function TikTokShopProductPreparation({ status, initialProductId 
     setSearchingCategories(true);
     try {
       const result = await tiktokShopService.getCategories(query);
-      setCategories(result.categories.filter((category) => category.is_leaf).slice(0, 40));
-      if (result.categories.length === 0) toast.info('Nenhuma categoria TikTok encontrada.');
+      const categoryResults = Array.isArray(result?.categories) ? result.categories : [];
+      setCategories(categoryResults.filter((category) => category.is_leaf).slice(0, 40));
+      if (categoryResults.length === 0) toast.info('Nenhuma categoria TikTok encontrada.');
     } catch (error) {
       console.error('[TikTokShopProductPreparation] category search error:', error);
       toast.error('Nao foi possivel consultar as categorias do TikTok Shop.');

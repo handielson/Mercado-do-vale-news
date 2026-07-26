@@ -1948,7 +1948,7 @@ async function callTikTokShopOpenApiVps(settings, { method = 'GET', pathname, qu
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || Number(payload?.code) !== 0) {
     const error = new Error(`TikTok Shop API failed: ${sanitizeTikTokShopOAuthError(payload)}`);
-    error.statusCode = response.status;
+    error.statusCode = response.ok ? 502 : response.status;
     error.requestId = payload?.request_id || null;
     error.tiktokCode = payload?.code ?? null;
     throw error;
@@ -2215,6 +2215,42 @@ function mapTikTokShopCategoryVps(category) {
   };
 }
 
+function normalizeTikTokShopCategorySearchVps(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function filterTikTokShopCategoriesVps(categories, keyword) {
+  const normalizedKeyword = normalizeTikTokShopCategorySearchVps(keyword);
+  if (!normalizedKeyword) return categories;
+  const ignoredWords = new Set(['a', 'as', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'o', 'os', 'para', 'por']);
+  const tokens = normalizedKeyword
+    .split(/\s+/)
+    .filter((token) => token.length >= 3 && !ignoredWords.has(token));
+
+  return categories
+    .map((category) => {
+      const normalizedName = normalizeTikTokShopCategorySearchVps(category.name);
+      let score = 0;
+      if (normalizedName === normalizedKeyword) score += 1000;
+      if (normalizedName.includes(normalizedKeyword)) score += 500;
+      if (tokens.length > 0 && tokens.every((token) => normalizedName.includes(token))) score += 250;
+      for (const token of tokens) {
+        if (normalizedName.includes(token)) score += 30;
+        if (normalizedName.startsWith(token)) score += 15;
+      }
+      return { category, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score || left.category.name.localeCompare(right.category.name, 'pt-BR'))
+    .slice(0, 80)
+    .map((entry) => entry.category);
+}
+
 async function handleTikTokShopCategoriesVps(request, reply) {
   const keyword = String(request.query?.keyword || '').trim().slice(0, 100);
   try {
@@ -2226,12 +2262,12 @@ async function handleTikTokShopCategoriesVps(request, reply) {
         locale: 'pt-BR',
         listing_platform: 'TIKTOK_SHOP',
         include_prohibited_categories: 'false',
-        ...(keyword ? { keyword } : {}),
       },
     });
-    const categories = Array.isArray(result.payload?.data?.categories)
+    const allCategories = Array.isArray(result.payload?.data?.categories)
       ? result.payload.data.categories.map(mapTikTokShopCategoryVps).filter((category) => category.id)
       : [];
+    const categories = filterTikTokShopCategoriesVps(allCategories, keyword);
     return reply.code(200).send({
       count: categories.length,
       categories,
