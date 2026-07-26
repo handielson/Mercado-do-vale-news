@@ -12,6 +12,7 @@ interface ProductListProps {
     selectionMode?: boolean;
     selectedIds?: Set<string>;
     onToggleSelect?: (product: Product) => void;
+    tiktokProductLinks?: Record<string, string>;
 }
 
 /**
@@ -26,6 +27,7 @@ export const ProductList: React.FC<ProductListProps> = ({
     selectionMode = false,
     selectedIds = new Set(),
     onToggleSelect,
+    tiktokProductLinks = {},
 }) => {
     // Loading State: Show skeleton cards
     if (isLoading) {
@@ -84,6 +86,7 @@ export const ProductList: React.FC<ProductListProps> = ({
                     selectionMode={selectionMode}
                     isSelected={selectedIds.has(product.id)}
                     onToggleSelect={onToggleSelect}
+                    tiktokProductId={tiktokProductLinks[product.id] || null}
                 />
             ))}
         </div>

@@ -4840,6 +4840,31 @@ async function handleTikTokShopUpdatePriceVps(request, reply) {
   }
 }
 
+async function handleTikTokShopProductLinksVps(request, reply) {
+  const rawIds = String(request.query?.product_ids || '');
+  const productIds = Array.from(new Set(
+    rawIds.split(',')
+      .map((value) => value.trim())
+      .filter((value) => value && value.length <= 255 && /^[a-zA-Z0-9_-]+$/.test(value))
+  )).slice(0, 100);
+
+  reply.header('Cache-Control', 'no-store');
+  if (productIds.length === 0) return { links: [] };
+
+  const placeholders = productIds.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT product_id, tiktok_product_id, tiktok_sku_id, status, last_synced_at
+     FROM tiktok_shop_products
+     WHERE product_id IN (${placeholders})
+       AND tiktok_product_id IS NOT NULL
+       AND tiktok_product_id <> ''
+       AND COALESCE(status, '') <> 'DELETED'`,
+    productIds,
+  );
+
+  return { links: rows || [] };
+}
+
 async function handleShopeeOAuthVps(request, reply) {
   const action = String(request.query?.action || '');
 
@@ -9322,6 +9347,7 @@ fastify.get('/api/tiktok-shop/oauth/callback', handleTikTokShopOAuthCallbackVps)
 fastify.get('/api/tiktok-shop/shops', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopAuthorizedShopsVps);
 fastify.get('/api/tiktok-shop/catalog/categories', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoriesVps);
 fastify.get('/api/tiktok-shop/catalog/categories/:categoryId/readiness', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryReadinessVps);
+fastify.get('/api/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/api/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.get('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
 fastify.patch('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsPatchVps);
@@ -9329,6 +9355,7 @@ fastify.get('/tiktok-shop/oauth/auth', { preHandler: requireSyncKeyOrAdmin }, ha
 fastify.get('/tiktok-shop/shops', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopAuthorizedShopsVps);
 fastify.get('/tiktok-shop/catalog/categories', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoriesVps);
 fastify.get('/tiktok-shop/catalog/categories/:categoryId/readiness', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryReadinessVps);
+fastify.get('/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);
 fastify.all('/api/telegram-webhook', handleTelegramWebhookVps);
@@ -32032,6 +32059,23 @@ async function runMigrations() {
       INDEX idx_shopee_products_item_model (shopee_item_id, shopee_model_id),
       INDEX idx_shopee_products_status (status),
       INDEX idx_shopee_products_synced_at (last_synced_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tiktok_shop_products (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      company_id VARCHAR(255) NULL,
+      product_id VARCHAR(255) NOT NULL,
+      tiktok_product_id VARCHAR(80) NULL,
+      tiktok_sku_id VARCHAR(80) NULL,
+      status VARCHAR(40) NULL,
+      last_synced_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY idx_tiktok_shop_products_product (product_id),
+      INDEX idx_tiktok_shop_products_company (company_id),
+      INDEX idx_tiktok_shop_products_remote (tiktok_product_id),
+      INDEX idx_tiktok_shop_products_status (status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   await pool.query(`

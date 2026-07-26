@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.64-tiktok-catalog-readiness",
+  "version": "v1.2.65-tiktok-product-shortcut",
   "date": "2026-07-26",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260726-215137-tiktok-catalog-readiness",
+  "release_vps": "/var/www/mdv-site/releases/20260726-220949-tiktok-product-shortcut",
   "branch": "main",
-  "summary": "Adiciona preparacao de produto e leitura segura do catalogo TikTok Shop."
+  "summary": "Adiciona atalho TikTok nos produtos com selecao direta e estado de sincronizacao."
 }

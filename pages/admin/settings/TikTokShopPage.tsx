@@ -35,6 +35,7 @@ function formatTokenDate(value?: string | null) {
 }
 
 export default function TikTokShopPage() {
+  const initialProductId = new URLSearchParams(window.location.search).get('product_id');
   const [status, setStatus] = useState<TikTokShopSafeStatus | null>(null);
   const [shops, setShops] = useState<TikTokAuthorizedShopSummary[]>([]);
   const [draft, setDraft] = useState<TikTokShopDraft>(emptyDraft);
@@ -303,7 +304,7 @@ export default function TikTokShopPage() {
         </section>
       )}
 
-      <TikTokShopProductPreparation status={status} />
+      <TikTokShopProductPreparation status={status} initialProductId={initialProductId} />
       <TikTokShopSaleCalculator status={status} />
     </div>
   );

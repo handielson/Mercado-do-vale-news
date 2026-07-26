@@ -12,6 +12,7 @@ import type { Product } from '../../../../types/product';
 
 type Props = {
   status: TikTokShopSafeStatus | null;
+  initialProductId?: string | null;
 };
 
 function getProductIssues(product: Product | null): string[] {
@@ -42,7 +43,7 @@ function attributeLabel(attribute: Record<string, any>): string {
   return String(attribute?.name || attribute?.id || 'Atributo obrigatorio');
 }
 
-export default function TikTokShopProductPreparation({ status }: Props) {
+export default function TikTokShopProductPreparation({ status, initialProductId }: Props) {
   const [productQuery, setProductQuery] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -53,6 +54,39 @@ export default function TikTokShopProductPreparation({ status }: Props) {
   const [searchingProducts, setSearchingProducts] = useState(false);
   const [searchingCategories, setSearchingCategories] = useState(false);
   const [loadingReadiness, setLoadingReadiness] = useState(false);
+  const [loadingInitialProduct, setLoadingInitialProduct] = useState(Boolean(initialProductId));
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!initialProductId) {
+      setLoadingInitialProduct(false);
+      return;
+    }
+
+    setLoadingInitialProduct(true);
+    productService.getById(initialProductId)
+      .then((product) => {
+        if (cancelled) return;
+        if (!product) {
+          toast.error('O produto selecionado nao foi encontrado.');
+          return;
+        }
+        setProductQuery(product.sku || product.name);
+        setProducts([product]);
+        setSelectedProduct(product);
+      })
+      .catch((error) => {
+        console.error('[TikTokShopProductPreparation] initial product error:', error);
+        if (!cancelled) toast.error('Nao foi possivel carregar o produto selecionado.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingInitialProduct(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialProductId]);
 
   const productIssues = useMemo(() => getProductIssues(selectedProduct), [selectedProduct]);
   const canReadCatalog = Boolean(
@@ -136,6 +170,12 @@ export default function TikTokShopProductPreparation({ status }: Props) {
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <div>
           <label className="text-sm font-semibold text-slate-800">1. Produto do sistema</label>
+          {loadingInitialProduct && (
+            <p className="mt-2 inline-flex items-center gap-2 text-xs text-teal-700">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Carregando produto selecionado...
+            </p>
+          )}
           <div className="mt-2 flex gap-2">
             <input
               value={productQuery}

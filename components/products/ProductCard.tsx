@@ -29,6 +29,7 @@ interface ProductCardProps {
     selectionMode?: boolean;
     isSelected?: boolean;
     onToggleSelect?: (product: Product) => void;
+    tiktokProductId?: string | null;
 }
 
 type VideoUploadPhase = 'idle' | 'uploading' | 'processing' | 'verifying' | 'success' | 'error';
@@ -307,7 +308,7 @@ const pollSynologyUploadStatus = async (uploadId: string, token: string | undefi
  * ProductCard Component
  * Displays product information in a card format with image, prices, and status
  */
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductId = null }) => {
     const [fetchedImages, setFetchedImages] = useState<string[]>([]);
     const [productImages, setProductImages] = useState<string[]>(() => normalizeImageList(product.images));
     const [isImageGalleryExpanded, setIsImageGalleryExpanded] = useState(false);
@@ -351,6 +352,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const [shopeeModalProductSource, setShopeeModalProductSource] = useState<Product & Record<string, any>>(product as Product & Record<string, any>);
 
     const shopeeVisualState = getShopeeButtonVisualState({ shopee_item_id: shopeeItemId });
+    const isTikTokSynced = Boolean(String(tiktokProductId || '').trim());
     const shopeeModalProduct = mapProductToShopeeLocalProduct(shopeeModalProductSource as Product & Record<string, any>) as LocalProduct;
     const emptyShopeeHistory: ShopeeProduct[] = [];
     const currentStockQuantity = Math.max(0, Number(currentStock || 0));
@@ -795,6 +797,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         } finally {
             setIsPreparingShopeeModal(false);
         }
+    };
+
+    const handleOpenTikTokPreparation = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        window.location.href = `/admin/settings/tiktok-shop?product_id=${encodeURIComponent(product.id)}`;
     };
 
     const handleCopyProductField = async (e: React.MouseEvent, value: string | undefined | null, label: string) => {
@@ -1311,6 +1318,59 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                     )}
                                 </svg>
                             )}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleOpenTikTokPreparation}
+                            className={cn(
+                                "relative shrink-0 p-1.5 rounded-lg transition-all duration-200 group border",
+                                isTikTokSynced
+                                    ? "border-cyan-200 bg-slate-950 shadow-[0_0_0_3px_rgba(37,244,238,0.12),0_0_18px_rgba(254,44,85,0.22)]"
+                                    : "border-transparent hover:border-cyan-100 hover:bg-slate-100"
+                            )}
+                            title={isTikTokSynced ? 'Sincronizado com TikTok Shop. Abrir produto.' : 'Enviar para o TikTok Shop'}
+                            aria-label={isTikTokSynced ? 'Produto sincronizado com TikTok Shop' : 'Enviar produto para TikTok Shop'}
+                        >
+                            {isTikTokSynced && (
+                                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
+                            )}
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                className={cn(
+                                    "h-4 w-4",
+                                    isTikTokSynced ? "text-white" : "text-slate-400 group-hover:text-slate-950"
+                                )}
+                                aria-hidden="true"
+                            >
+                                <path
+                                    d="M14.1 4.2v10.35a4.05 4.05 0 1 1-3.15-3.94"
+                                    stroke="currentColor"
+                                    strokeWidth="2.4"
+                                    strokeLinecap="round"
+                                />
+                                <path
+                                    d="M14.1 4.2c.62 2.55 2.25 4.02 4.65 4.35"
+                                    stroke="currentColor"
+                                    strokeWidth="2.4"
+                                    strokeLinecap="round"
+                                />
+                                <path
+                                    d="M13.15 4.65v9.6a3.2 3.2 0 1 1-2.45-3.12"
+                                    stroke="#25f4ee"
+                                    strokeWidth="1.15"
+                                    strokeLinecap="round"
+                                    opacity={isTikTokSynced ? 1 : 0}
+                                />
+                                <path
+                                    d="M15.05 3.75c.6 2.18 1.92 3.42 4.05 3.8"
+                                    stroke="#fe2c55"
+                                    strokeWidth="1.15"
+                                    strokeLinecap="round"
+                                    opacity={isTikTokSynced ? 1 : 0}
+                                />
+                            </svg>
                         </button>
 
                         {product.bling_id && (

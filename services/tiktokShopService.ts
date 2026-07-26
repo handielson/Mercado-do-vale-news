@@ -48,6 +48,14 @@ export interface TikTokShopCategoryReadiness {
   };
 }
 
+export interface TikTokShopProductLink {
+  product_id: string;
+  tiktok_product_id: string;
+  tiktok_sku_id: string | null;
+  status: string | null;
+  last_synced_at: string | null;
+}
+
 export const tiktokShopService = {
   getStatus(): Promise<TikTokShopSafeStatus> {
     return vpsClient.get<TikTokShopSafeStatus>('/tiktok-shop/settings');
@@ -83,6 +91,14 @@ export const tiktokShopService = {
   getCategoryReadiness(categoryId: string): Promise<TikTokShopCategoryReadiness> {
     return vpsClient.get(
       `/tiktok-shop/catalog/categories/${encodeURIComponent(categoryId)}/readiness`,
+    );
+  },
+
+  getProductLinks(productIds: string[]): Promise<{ links: TikTokShopProductLink[] }> {
+    const ids = Array.from(new Set(productIds.map((id) => String(id || '').trim()).filter(Boolean)));
+    if (ids.length === 0) return Promise.resolve({ links: [] });
+    return vpsClient.get(
+      `/tiktok-shop/products/links?product_ids=${encodeURIComponent(ids.slice(0, 100).join(','))}`,
     );
   },
 

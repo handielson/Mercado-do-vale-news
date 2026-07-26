@@ -11,6 +11,7 @@ import { BulkCategoryModal } from '../../../components/products/BulkCategoryModa
 import { vpsApiService } from '../../../services/vpsApiService';
 import { toast } from 'sonner';
 import { buildProductVideoUrl } from '../../../utils/video-url';
+import { tiktokShopService } from '../../../services/tiktokShopService';
 
 /**
  * ProductListPage
@@ -28,6 +29,7 @@ export const ProductListPage: React.FC = () => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [pageInput, setPageInput] = useState('1');
+    const [tiktokProductLinks, setTikTokProductLinks] = useState<Record<string, string>>({});
 
     const {
         products,
@@ -45,10 +47,38 @@ export const ProductListPage: React.FC = () => {
         allFilteredProducts,
         cacheAge,
     } = useProducts();
+    const visibleProductIdsKey = products.map((product) => product.id).filter(Boolean).join(',');
 
     useEffect(() => {
         setPageInput(String(currentPage));
     }, [currentPage]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const productIds = visibleProductIdsKey.split(',').filter(Boolean);
+        if (productIds.length === 0) {
+            setTikTokProductLinks({});
+            return;
+        }
+
+        tiktokShopService.getProductLinks(productIds)
+            .then(({ links }) => {
+                if (cancelled) return;
+                setTikTokProductLinks(Object.fromEntries(
+                    links
+                        .filter((link) => link.product_id && link.tiktok_product_id)
+                        .map((link) => [link.product_id, link.tiktok_product_id]),
+                ));
+            })
+            .catch((error) => {
+                console.warn('[ProductListPage] Falha ao carregar vinculos TikTok Shop:', error);
+                if (!cancelled) setTikTokProductLinks({});
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [visibleProductIdsKey]);
 
     const goToTypedPage = () => {
         const requestedPage = Number.parseInt(pageInput, 10);
@@ -305,6 +335,7 @@ export const ProductListPage: React.FC = () => {
                 selectionMode={selectionMode}
                 selectedIds={selectedIds}
                 onToggleSelect={handleToggleSelect}
+                tiktokProductLinks={tiktokProductLinks}
             />
 
             {/* Bulk Action Bar */}
