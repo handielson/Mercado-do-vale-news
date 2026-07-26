@@ -56,6 +56,13 @@ export interface TikTokShopProductLink {
   last_synced_at: string | null;
 }
 
+export interface TikTokShopCategoryMapping {
+  local_category_id: string;
+  tiktok_category_id: string;
+  tiktok_category_name: string;
+  updated_at: string | null;
+}
+
 export const tiktokShopService = {
   getStatus(): Promise<TikTokShopSafeStatus> {
     return vpsClient.get<TikTokShopSafeStatus>('/tiktok-shop/settings');
@@ -91,6 +98,26 @@ export const tiktokShopService = {
   getCategoryReadiness(categoryId: string): Promise<TikTokShopCategoryReadiness> {
     return vpsClient.get(
       `/tiktok-shop/catalog/categories/${encodeURIComponent(categoryId)}/readiness`,
+    );
+  },
+
+  getCategoryMapping(localCategoryId: string): Promise<{ mapping: TikTokShopCategoryMapping | null }> {
+    return vpsClient.get(
+      `/tiktok-shop/catalog/category-mappings/${encodeURIComponent(localCategoryId)}`,
+    );
+  },
+
+  saveCategoryMapping(input: {
+    local_category_id: string;
+    tiktok_category_id: string;
+    tiktok_category_name: string;
+  }): Promise<{ mapping: TikTokShopCategoryMapping }> {
+    return vpsClient.put(
+      `/tiktok-shop/catalog/category-mappings/${encodeURIComponent(input.local_category_id)}`,
+      {
+        tiktok_category_id: input.tiktok_category_id,
+        tiktok_category_name: input.tiktok_category_name,
+      },
     );
   },
 

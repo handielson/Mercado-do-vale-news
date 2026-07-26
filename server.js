@@ -2383,6 +2383,55 @@ async function handleTikTokShopProductLinksVps(request, reply) {
   return { links: rows || [] };
 }
 
+async function handleTikTokShopCategoryMappingGetVps(request, reply) {
+  const localCategoryId = String(request.params?.localCategoryId || '').trim();
+  if (!localCategoryId || localCategoryId.length > 255 || !/^[a-zA-Z0-9_-]+$/.test(localCategoryId)) {
+    return reply.code(400).send({ error: 'Categoria local invalida.' });
+  }
+  const [rows] = await pool.query(
+    `SELECT local_category_id, tiktok_category_id, tiktok_category_name, updated_at
+     FROM tiktok_shop_category_mappings
+     WHERE local_category_id = ?
+     LIMIT 1`,
+    [localCategoryId],
+  );
+  reply.header('Cache-Control', 'no-store');
+  return { mapping: rows?.[0] || null };
+}
+
+async function handleTikTokShopCategoryMappingPutVps(request, reply) {
+  const localCategoryId = String(request.params?.localCategoryId || '').trim();
+  const tiktokCategoryId = String(request.body?.tiktok_category_id || '').trim();
+  const tiktokCategoryName = String(request.body?.tiktok_category_name || '').trim();
+  if (!localCategoryId || localCategoryId.length > 255 || !/^[a-zA-Z0-9_-]+$/.test(localCategoryId)) {
+    return reply.code(400).send({ error: 'Categoria local invalida.' });
+  }
+  if (!tiktokCategoryId || tiktokCategoryId.length > 80 || !/^[0-9]+$/.test(tiktokCategoryId)) {
+    return reply.code(400).send({ error: 'Categoria TikTok invalida.' });
+  }
+  if (!tiktokCategoryName || tiktokCategoryName.length > 255) {
+    return reply.code(400).send({ error: 'Nome da categoria TikTok invalido.' });
+  }
+  await pool.query(
+    `INSERT INTO tiktok_shop_category_mappings
+       (local_category_id, tiktok_category_id, tiktok_category_name)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       tiktok_category_id = VALUES(tiktok_category_id),
+       tiktok_category_name = VALUES(tiktok_category_name),
+       updated_at = CURRENT_TIMESTAMP`,
+    [localCategoryId, tiktokCategoryId, tiktokCategoryName],
+  );
+  return {
+    mapping: {
+      local_category_id: localCategoryId,
+      tiktok_category_id: tiktokCategoryId,
+      tiktok_category_name: tiktokCategoryName,
+      updated_at: new Date().toISOString(),
+    },
+  };
+}
+
 async function handleShopeeOAuthVps(request, reply) {
   const action = String(request.query?.action || '');
 
@@ -6478,6 +6527,8 @@ fastify.get('/api/tiktok-shop/oauth/callback', handleTikTokShopOAuthCallbackVps)
 fastify.get('/api/tiktok-shop/shops', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopAuthorizedShopsVps);
 fastify.get('/api/tiktok-shop/catalog/categories', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoriesVps);
 fastify.get('/api/tiktok-shop/catalog/categories/:categoryId/readiness', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryReadinessVps);
+fastify.get('/api/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryMappingGetVps);
+fastify.put('/api/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryMappingPutVps);
 fastify.get('/api/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/api/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.get('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
@@ -6486,6 +6537,8 @@ fastify.get('/tiktok-shop/oauth/auth', { preHandler: requireSyncKeyOrAdmin }, ha
 fastify.get('/tiktok-shop/shops', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopAuthorizedShopsVps);
 fastify.get('/tiktok-shop/catalog/categories', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoriesVps);
 fastify.get('/tiktok-shop/catalog/categories/:categoryId/readiness', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryReadinessVps);
+fastify.get('/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryMappingGetVps);
+fastify.put('/tiktok-shop/catalog/category-mappings/:localCategoryId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCategoryMappingPutVps);
 fastify.get('/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);
@@ -20677,6 +20730,20 @@ async function runMigrations() {
       INDEX idx_tiktok_shop_products_company (company_id),
       INDEX idx_tiktok_shop_products_remote (tiktok_product_id),
       INDEX idx_tiktok_shop_products_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tiktok_shop_category_mappings (
+      id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+      company_id VARCHAR(255) NULL,
+      local_category_id VARCHAR(255) NOT NULL,
+      tiktok_category_id VARCHAR(80) NOT NULL,
+      tiktok_category_name VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY idx_tiktok_category_mapping_local (local_category_id),
+      INDEX idx_tiktok_category_mapping_remote (tiktok_category_id),
+      INDEX idx_tiktok_category_mapping_company (company_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   await addColumnIfMissing('products', 'exclude_from_seo', "TINYINT(1) DEFAULT 0");

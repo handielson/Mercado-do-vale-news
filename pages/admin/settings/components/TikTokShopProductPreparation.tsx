@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, PackageSearch, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { productService } from '../../../../services/products';
+import { categoryService } from '../../../../services/categories';
 import {
   tiktokShopService,
   type TikTokShopCategoryReadiness,
@@ -43,6 +44,14 @@ function attributeLabel(attribute: Record<string, any>): string {
   return String(attribute?.name || attribute?.id || 'Atributo obrigatorio');
 }
 
+function normalizeCategoryName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 export default function TikTokShopProductPreparation({ status, initialProductId }: Props) {
   const [productQuery, setProductQuery] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
@@ -55,6 +64,8 @@ export default function TikTokShopProductPreparation({ status, initialProductId 
   const [searchingCategories, setSearchingCategories] = useState(false);
   const [loadingReadiness, setLoadingReadiness] = useState(false);
   const [loadingInitialProduct, setLoadingInitialProduct] = useState(Boolean(initialProductId));
+  const [autoMappingCategory, setAutoMappingCategory] = useState(false);
+  const [categoryMappingMessage, setCategoryMappingMessage] = useState('');
 
   React.useEffect(() => {
     let cancelled = false;
@@ -95,6 +106,85 @@ export default function TikTokShopProductPreparation({ status, initialProductId 
     status?.granted_scopes?.includes('seller.product.basic'),
   );
 
+  React.useEffect(() => {
+    let cancelled = false;
+    const localCategoryId = String(selectedProduct?.category_id || '').trim();
+    if (!localCategoryId || !canReadCatalog) {
+      setCategoryMappingMessage('');
+      return;
+    }
+
+    async function autoMapCategory() {
+      setAutoMappingCategory(true);
+      setCategoryMappingMessage('Buscando o mapeamento automatico da categoria...');
+      try {
+        const saved = await tiktokShopService.getCategoryMapping(localCategoryId);
+        if (cancelled) return;
+        if (saved.mapping) {
+          const mappedCategory: TikTokShopCategorySummary = {
+            id: saved.mapping.tiktok_category_id,
+            parent_id: null,
+            name: saved.mapping.tiktok_category_name,
+            is_leaf: true,
+            permission_statuses: ['AVAILABLE'],
+          };
+          setCategoryQuery(mappedCategory.name);
+          setCategories([mappedCategory]);
+          setCategoryMappingMessage(`Mapeamento salvo: ${mappedCategory.name}`);
+          await chooseCategory(mappedCategory, false);
+          return;
+        }
+
+        const localCategory = await categoryService.getById(localCategoryId);
+        if (cancelled || !localCategory?.name) {
+          setCategoryMappingMessage('Categoria local sem nome para mapear automaticamente.');
+          return;
+        }
+
+        setCategoryQuery(localCategory.name);
+        const result = await tiktokShopService.getCategories(localCategory.name);
+        if (cancelled) return;
+        const candidates = result.categories
+          .filter((category) => category.is_leaf)
+          .filter((category) => (
+            category.permission_statuses.length === 0 ||
+            category.permission_statuses.includes('AVAILABLE')
+          ))
+          .slice(0, 40);
+        setCategories(candidates);
+
+        const normalizedLocalName = normalizeCategoryName(localCategory.name);
+        const exactMatch = candidates.find(
+          (category) => normalizeCategoryName(category.name) === normalizedLocalName,
+        );
+        if (exactMatch) {
+          setCategoryMappingMessage(`Categoria reconhecida automaticamente: ${exactMatch.name}`);
+          await chooseCategory(exactMatch, true);
+        } else if (candidates.length > 0) {
+          setCategoryMappingMessage(
+            `Encontramos sugestoes para "${localCategory.name}". Confirme uma vez; os proximos produtos serao automaticos.`,
+          );
+        } else {
+          setCategoryMappingMessage(
+            `Nenhuma categoria TikTok exata para "${localCategory.name}". Busque e confirme uma vez.`,
+          );
+        }
+      } catch (error) {
+        console.error('[TikTokShopProductPreparation] automatic category mapping error:', error);
+        if (!cancelled) {
+          setCategoryMappingMessage('Nao foi possivel mapear automaticamente. Use a busca manual.');
+        }
+      } finally {
+        if (!cancelled) setAutoMappingCategory(false);
+      }
+    }
+
+    void autoMapCategory();
+    return () => {
+      cancelled = true;
+    };
+  }, [canReadCatalog, selectedProduct?.category_id]);
+
   async function searchProducts() {
     const query = productQuery.trim();
     if (query.length < 2) {
@@ -133,13 +223,22 @@ export default function TikTokShopProductPreparation({ status, initialProductId 
     }
   }
 
-  async function chooseCategory(category: TikTokShopCategorySummary) {
+  async function chooseCategory(category: TikTokShopCategorySummary, persistMapping = true) {
     setSelectedCategory(category);
     setReadiness(null);
     setLoadingReadiness(true);
     try {
       const result = await tiktokShopService.getCategoryReadiness(category.id);
       setReadiness(result);
+      const localCategoryId = String(selectedProduct?.category_id || '').trim();
+      if (persistMapping && localCategoryId) {
+        await tiktokShopService.saveCategoryMapping({
+          local_category_id: localCategoryId,
+          tiktok_category_id: category.id,
+          tiktok_category_name: category.name,
+        });
+        setCategoryMappingMessage(`Mapeamento salvo: ${category.name}`);
+      }
     } catch (error) {
       console.error('[TikTokShopProductPreparation] category readiness error:', error);
       toast.error('Nao foi possivel consultar regras e atributos da categoria.');
@@ -219,6 +318,12 @@ export default function TikTokShopProductPreparation({ status, initialProductId 
 
         <div>
           <label className="text-sm font-semibold text-slate-800">2. Categoria TikTok Shop</label>
+          {categoryMappingMessage && (
+            <p className="mt-2 inline-flex items-center gap-2 rounded-md bg-cyan-50 px-2.5 py-1.5 text-xs text-cyan-900">
+              {autoMappingCategory && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {categoryMappingMessage}
+            </p>
+          )}
           <div className="mt-2 flex gap-2">
             <input
               value={categoryQuery}

@@ -20,6 +20,7 @@ import { deleteImageFromBank, uploadImagesToBank } from '../../services/productI
 import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLocalProduct, validateShopeeItemForProduct } from './productCardShopee.js';
 import { getAdminProductCardStatus } from './productCardStatus.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
+import TikTokShopSyncModal from '../../pages/admin/settings/components/TikTokShopSyncModal';
 import type { ProductStockLocation } from '../../types/stock-location';
 
 interface ProductCardProps {
@@ -347,6 +348,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     });
     const [isShopeeModalOpen, setIsShopeeModalOpen] = useState(false);
+    const [isTikTokModalOpen, setIsTikTokModalOpen] = useState(false);
     const [isPreparingShopeeModal, setIsPreparingShopeeModal] = useState(false);
     const [shopeeCompany, setShopeeCompany] = useState<Company | null>(null);
     const [shopeeModalProductSource, setShopeeModalProductSource] = useState<Product & Record<string, any>>(product as Product & Record<string, any>);
@@ -801,7 +803,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
 
     const handleOpenTikTokPreparation = (e: React.MouseEvent) => {
         e.stopPropagation();
-        window.location.href = `/admin/settings/tiktok-shop?product_id=${encodeURIComponent(product.id)}`;
+        setIsTikTokModalOpen(true);
     };
 
     const handleCopyProductField = async (e: React.MouseEvent, value: string | undefined | null, label: string) => {
@@ -1918,6 +1920,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                         setIsShopeeModalOpen(false);
                         refreshShopeeLinkState();
                     }}
+                />
+            )}
+
+            {isTikTokModalOpen && (
+                <TikTokShopSyncModal
+                    productId={product.id}
+                    onClose={() => setIsTikTokModalOpen(false)}
                 />
             )}
         </div>
