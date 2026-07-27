@@ -5081,7 +5081,7 @@ async function uploadTikTokDraftImagesVps(settings, imageUrls) {
 async function resolveTikTokDraftVideoUrlVps(product) {
   const configured = String(product?.video_url || '').trim();
   if (/^https?:\/\//i.test(configured)) return configured;
-  const parentId = String(product?.parent_id || '').trim();
+  const parentId = String(product?.is_parent ? product?.id : product?.parent_id || '').trim();
   if (parentId) {
     const [[variationWithVideo]] = await pool.query(
       `SELECT video_url FROM products
@@ -5224,6 +5224,27 @@ function buildTikTokDraftPackageVps(product) {
   };
 }
 
+function buildTikTokDraftSkusVps(products, warehouseId) {
+  const hasVariations = products.length > 1;
+  const values = new Set();
+  return products.map((product) => {
+    const sellerSku = cleanTikTokDraftTextVps(product.sku).slice(0, 255);
+    const priceCents = Math.round(Number(product.price_retail || 0));
+    if (!sellerSku || priceCents <= 0) throw new Error('Cada variacao precisa de SKU e preco de varejo.');
+    const specs = parseTikTokDraftJsonVps(product.specs, {});
+    const color = cleanTikTokDraftTextVps(specs?.color || specs?.cor || specs?.colour || '');
+    if (hasVariations && !color) throw new Error(`Informe a cor da variacao ${sellerSku}.`);
+    if (hasVariations && values.has(color.toLowerCase())) throw new Error(`A cor da variacao esta duplicada: ${color}.`);
+    if (hasVariations) values.add(color.toLowerCase());
+    return {
+      seller_sku: sellerSku,
+      price: { amount: (priceCents / 100).toFixed(2), currency: 'BRL' },
+      inventory: [{ warehouse_id: warehouseId, quantity: Math.max(0, Math.floor(Number(product.stock_quantity || 0))) }],
+      ...(hasVariations ? { sales_attributes: [{ name: 'Cor', value_name: color }] } : {}),
+    };
+  });
+}
+
 async function handleTikTokShopCreateDraftVps(request, reply) {
   const reportProgress = typeof request.tiktokProgress === 'function'
     ? request.tiktokProgress
@@ -5246,13 +5267,22 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
   try {
     const [[product]] = await pool.query(
       `SELECT id, company_id, name, sku, description, images, image_url,
-              video_url, parent_id, price_retail, stock_quantity, weight_kg, dimensions
+              video_url, parent_id, is_parent, specs, price_retail, stock_quantity, weight_kg, dimensions
        FROM products
        WHERE id = ?
        LIMIT 1`,
       [productId],
     );
     if (!product) return reply.code(404).send({ error: 'Produto local nao encontrado.' });
+    const [variations] = Number(product.is_parent) === 1
+      ? await pool.query(
+        `SELECT id, sku, specs, price_retail, stock_quantity FROM products
+         WHERE parent_id = ? AND (is_parent = 0 OR is_parent IS NULL)
+         ORDER BY sku ASC`,
+        [product.id],
+      )
+      : [[product]];
+    if (variations.length === 0) return reply.code(400).send({ error: 'O grupo nao possui variacoes para enviar.' });
 
     const [[existing]] = await pool.query(
       `SELECT tiktok_product_id, tiktok_sku_id, status, idempotency_key,
@@ -5285,10 +5315,8 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
     const title = cleanTikTokDraftTitleVps(product.name).slice(0, 300);
     const descriptionText = cleanTikTokDraftTextVps(product.description).slice(0, 9900);
     const descriptionHtml = formatTikTokDraftDescriptionHtmlVps(product.description);
-    const sellerSku = cleanTikTokDraftTextVps(product.sku).slice(0, 255);
-    const priceCents = Math.round(Number(product.price_retail || 0));
-    if (!title || !descriptionText || !sellerSku || priceCents <= 0) {
-      return reply.code(400).send({ error: 'Nome, descricao, SKU e preco de varejo sao obrigatorios.' });
+    if (!title || !descriptionText) {
+      return reply.code(400).send({ error: 'Nome e descricao sao obrigatorios.' });
     }
     reportProgress('validate_product', 'done', 'Nome, SKU, descricao, preco, estoque e pacote conferidos.');
 
@@ -5301,6 +5329,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       (!item.type || item.type === 'SALES_WAREHOUSE')
     ));
     if (!warehouse) return reply.code(400).send({ error: 'O armazem selecionado nao esta disponivel para venda.' });
+    const draftSkus = buildTikTokDraftSkusVps(variations, warehouseId);
     reportProgress('validate_warehouse', 'done', `Armazem confirmado: ${warehouse.name}.`);
 
     reportProgress('prepare_images', 'running', 'Preparando a galeria local para o TikTok.');
@@ -5351,14 +5380,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       category_version: 'v1',
       main_images: mainImages,
       ...(uploadedVideo ? { video: uploadedVideo } : {}),
-      skus: [{
-        seller_sku: sellerSku,
-        price: { amount: (priceCents / 100).toFixed(2), currency: 'BRL' },
-        inventory: [{
-          warehouse_id: warehouseId,
-          quantity: Math.max(0, Math.floor(Number(product.stock_quantity || 0))),
-        }],
-      }],
+      skus: draftSkus,
       external_product_id: productId,
       ...packageData,
     };

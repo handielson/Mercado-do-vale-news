@@ -14,12 +14,13 @@ function titleNeedsCompatibilityWording(name?: string | null) {
 function diagnostic(product: Product, link?: TikTokShopProductLink, correction?: string) {
   if (correction) return { label: 'Corrigir antes de enviar', detail: correction, ok: false };
   if (link?.status === 'ACTIVE') return { label: 'Atualizar', detail: 'Anuncio ja enviado: sera atualizado no TikTok Shop.', ok: true };
+  if (product.is_parent) return { label: 'Grupo de variacoes', detail: 'Sera criado um unico anuncio com todos os SKUs filhos.', ok: true };
+  if (product.parent_id) return { label: 'Enviar pelo grupo pai', detail: 'Esta variacao sera incluida no anuncio do produto pai.', ok: false };
   if (titleNeedsCompatibilityWording(product.name)) return { label: 'Titulo ajustado', detail: 'O envio troca “para” por “Compativel com”.', ok: true };
   if (!product.category_id) return { label: 'Categoria nao mapeada', detail: 'Mapeie a categoria TikTok no preparo.', ok: false };
   if (!product.sku || !(product.eans || []).some(Boolean)) return { label: 'Identificador obrigatorio ausente', detail: 'Informe SKU e EAN.', ok: false };
   if (!product.images?.length) return { label: 'Sem midia', detail: 'Inclua ao menos uma imagem.', ok: false };
   if (!product.description?.trim()) return { label: 'Precisa de dados', detail: 'Adicione a descricao do anuncio.', ok: false };
-  if (product.is_parent) return { label: 'Precisa conversao para variacoes', detail: 'Revise o grupo e seus SKUs.', ok: false };
   if (Number(product.stock_quantity || 0) <= 0) return { label: 'Precisa de dados', detail: 'Informe estoque positivo.', ok: false };
   return { label: 'Pronto', detail: link?.status === 'DRAFT' ? 'Rascunho pronto para publicar.' : 'Pronto para criar rascunho.', ok: true };
 }

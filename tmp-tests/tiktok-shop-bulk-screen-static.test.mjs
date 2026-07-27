@@ -34,5 +34,8 @@ assert.match(vpsServer, /replace\(\/\\bpara\\b\/gi, 'Compatível com'\)/, 'API m
 assert.match(vpsServer, /cleanTikTokDraftTitleVps\(product\.name\)/, 'TikTok draft creation must use the normalized title');
 assert.match(vpsServer, /variationWithVideo/, 'TikTok drafts must reuse a configured video from a sibling variation');
 assert.match(vpsServer, /WHERE parent_id = \? AND id <> \?/, 'TikTok drafts must find a sibling video within the same variation group');
+assert.match(vpsServer, /buildTikTokDraftSkusVps/, 'TikTok drafts must build all SKUs for a variation group');
+assert.match(vpsServer, /sales_attributes/, 'TikTok variation SKUs must include sales attributes');
+assert.match(bulk, /Grupo de variacoes/, 'bulk screen must allow a parent product to create variation listings');
 
 console.log('TikTok Shop bulk screen static checks passed');
