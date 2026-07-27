@@ -11,7 +11,7 @@ import { BulkCategoryModal } from '../../../components/products/BulkCategoryModa
 import { vpsApiService } from '../../../services/vpsApiService';
 import { toast } from 'sonner';
 import { buildProductVideoUrl } from '../../../utils/video-url';
-import { tiktokShopService } from '../../../services/tiktokShopService';
+import { tiktokShopService, type TikTokShopProductLink } from '../../../services/tiktokShopService';
 
 /**
  * ProductListPage
@@ -29,7 +29,7 @@ export const ProductListPage: React.FC = () => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
     const [pageInput, setPageInput] = useState('1');
-    const [tiktokProductLinks, setTikTokProductLinks] = useState<Record<string, string>>({});
+    const [tiktokProductLinks, setTikTokProductLinks] = useState<Record<string, TikTokShopProductLink>>({});
 
     const {
         products,
@@ -67,7 +67,7 @@ export const ProductListPage: React.FC = () => {
                 setTikTokProductLinks(Object.fromEntries(
                     links
                         .filter((link) => link.product_id && link.tiktok_product_id)
-                        .map((link) => [link.product_id, link.tiktok_product_id]),
+                        .map((link) => [link.product_id, link]),
                 ));
             })
             .catch((error) => {

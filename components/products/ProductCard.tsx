@@ -21,6 +21,7 @@ import { buildShopeeProductUrl, getShopeeButtonVisualState, mapProductToShopeeLo
 import { getAdminProductCardStatus } from './productCardStatus.js';
 import { ShopeeSyncModal, type LocalProduct, type ShopeeProduct } from '../../pages/admin/settings/ShopeePage';
 import TikTokShopSyncModal from '../../pages/admin/settings/components/TikTokShopSyncModal';
+import type { TikTokShopProductLink } from '../../services/tiktokShopService';
 import type { ProductStockLocation } from '../../types/stock-location';
 
 interface ProductCardProps {
@@ -30,7 +31,7 @@ interface ProductCardProps {
     selectionMode?: boolean;
     isSelected?: boolean;
     onToggleSelect?: (product: Product) => void;
-    tiktokProductId?: string | null;
+    tiktokProductLink?: TikTokShopProductLink | null;
 }
 
 type VideoUploadPhase = 'idle' | 'uploading' | 'processing' | 'verifying' | 'success' | 'error';
@@ -309,7 +310,7 @@ const pollSynologyUploadStatus = async (uploadId: string, token: string | undefi
  * ProductCard Component
  * Displays product information in a card format with image, prices, and status
  */
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductId = null }) => {
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDelete, selectionMode = false, isSelected = false, onToggleSelect, tiktokProductLink = null }) => {
     const [fetchedImages, setFetchedImages] = useState<string[]>([]);
     const [productImages, setProductImages] = useState<string[]>(() => normalizeImageList(product.images));
     const [isImageGalleryExpanded, setIsImageGalleryExpanded] = useState(false);
@@ -349,19 +350,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     });
     const [isShopeeModalOpen, setIsShopeeModalOpen] = useState(false);
     const [isTikTokModalOpen, setIsTikTokModalOpen] = useState(false);
-    const [currentTikTokProductId, setCurrentTikTokProductId] = useState<string | null>(
-        () => String(tiktokProductId || '').trim() || null,
+    const [currentTikTokProductLink, setCurrentTikTokProductLink] = useState<TikTokShopProductLink | null>(
+        () => tiktokProductLink,
     );
     const [isPreparingShopeeModal, setIsPreparingShopeeModal] = useState(false);
     const [shopeeCompany, setShopeeCompany] = useState<Company | null>(null);
     const [shopeeModalProductSource, setShopeeModalProductSource] = useState<Product & Record<string, any>>(product as Product & Record<string, any>);
 
     const shopeeVisualState = getShopeeButtonVisualState({ shopee_item_id: shopeeItemId });
-    const isTikTokSynced = Boolean(currentTikTokProductId);
+    const currentTikTokStatus = String(currentTikTokProductLink?.status || '').toUpperCase();
+    const hasTikTokLink = Boolean(currentTikTokProductLink?.tiktok_product_id);
+    const isTikTokSynced = currentTikTokStatus === 'ACTIVATE';
+    const isTikTokPending = currentTikTokStatus === 'PENDING';
 
     useEffect(() => {
-        setCurrentTikTokProductId(String(tiktokProductId || '').trim() || null);
-    }, [tiktokProductId]);
+        setCurrentTikTokProductLink(tiktokProductLink);
+    }, [tiktokProductLink]);
     const shopeeModalProduct = mapProductToShopeeLocalProduct(shopeeModalProductSource as Product & Record<string, any>) as LocalProduct;
     const emptyShopeeHistory: ShopeeProduct[] = [];
     const currentStockQuantity = Math.max(0, Number(currentStock || 0));
@@ -1336,13 +1340,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                 "relative shrink-0 p-1.5 rounded-lg transition-all duration-200 group border",
                                 isTikTokSynced
                                     ? "border-cyan-200 bg-slate-950 shadow-[0_0_0_3px_rgba(37,244,238,0.12),0_0_18px_rgba(254,44,85,0.22)]"
+                                    : hasTikTokLink
+                                        ? "border-cyan-200 bg-cyan-50"
                                     : "border-transparent hover:border-cyan-100 hover:bg-slate-100"
                             )}
-                            title={isTikTokSynced ? 'Sincronizado com TikTok Shop. Abrir produto.' : 'Enviar para o TikTok Shop'}
+                            title={
+                                isTikTokSynced
+                                    ? 'Anuncio ativo no TikTok Shop. Abrir produto.'
+                                    : isTikTokPending
+                                        ? 'Anuncio em analise no TikTok Shop.'
+                                        : hasTikTokLink
+                                            ? 'Rascunho vinculado ao TikTok Shop.'
+                                            : 'Enviar para o TikTok Shop'
+                            }
                             aria-label={isTikTokSynced ? 'Produto sincronizado com TikTok Shop' : 'Enviar produto para TikTok Shop'}
                         >
-                            {isTikTokSynced && (
-                                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white" />
+                            {hasTikTokLink && (
+                                <span className={cn(
+                                    "absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white",
+                                    isTikTokSynced
+                                        ? "bg-emerald-400"
+                                        : isTikTokPending
+                                            ? "bg-amber-400"
+                                            : "bg-cyan-400",
+                                )} />
                             )}
                             <svg
                                 viewBox="0 0 24 24"
@@ -1934,8 +1955,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                 <TikTokShopSyncModal
                     productId={product.id}
                     onClose={() => setIsTikTokModalOpen(false)}
-                    onSuccess={(createdProductId) => {
-                        setCurrentTikTokProductId(createdProductId);
+                    onSuccess={(link) => {
+                        setCurrentTikTokProductLink(link);
                     }}
                 />
             )}

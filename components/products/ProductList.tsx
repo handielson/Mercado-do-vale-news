@@ -2,6 +2,7 @@
 import React from 'react';
 import { Package } from 'lucide-react';
 import { Product } from '../../types/product';
+import type { TikTokShopProductLink } from '../../services/tiktokShopService';
 import { ProductCard } from './ProductCard';
 
 interface ProductListProps {
@@ -12,7 +13,7 @@ interface ProductListProps {
     selectionMode?: boolean;
     selectedIds?: Set<string>;
     onToggleSelect?: (product: Product) => void;
-    tiktokProductLinks?: Record<string, string>;
+    tiktokProductLinks?: Record<string, TikTokShopProductLink>;
 }
 
 /**
@@ -86,7 +87,7 @@ export const ProductList: React.FC<ProductListProps> = ({
                     selectionMode={selectionMode}
                     isSelected={selectedIds.has(product.id)}
                     onToggleSelect={onToggleSelect}
-                    tiktokProductId={tiktokProductLinks[product.id] || null}
+                    tiktokProductLink={tiktokProductLinks[product.id] || null}
                 />
             ))}
         </div>

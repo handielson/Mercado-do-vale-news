@@ -5465,6 +5465,184 @@ async function handleTikTokShopDraftJobGetVps(request, reply) {
   return reply.code(200).send(mapTikTokDraftJobVps(job));
 }
 
+function buildTikTokShopListingPayloadVps(remoteProduct) {
+  if (!remoteProduct || typeof remoteProduct !== 'object') {
+    throw new Error('O TikTok Shop nao retornou os dados atuais do rascunho.');
+  }
+  const editableFields = [
+    'description', 'category_id', 'brand_id', 'main_images', 'skus', 'title',
+    'is_cod_allowed', 'certifications', 'package_weight', 'product_attributes',
+    'size_chart', 'package_dimensions', 'external_product_id', 'delivery_option_ids',
+    'video', 'category_version', 'manufacturer_ids', 'responsible_person_ids',
+    'listing_platforms', 'shipping_insurance_requirement', 'is_pre_owned',
+    'minimum_order_quantity', 'replicated_products', 'subscribe_info_edit',
+    'shipping_template_id', 'scheduled_sale', 'locale', 'auto_translate_enabled',
+    'search_terms', 'key_product_features', 'inventory_mode', 'product_tag_operations',
+    'purchase_order_quantity_limit',
+  ];
+  const payload = { save_mode: 'LISTING' };
+  for (const field of editableFields) {
+    if (Object.prototype.hasOwnProperty.call(remoteProduct, field) && remoteProduct[field] !== null) {
+      payload[field] = remoteProduct[field];
+    }
+  }
+  for (const required of ['description', 'category_id', 'main_images', 'skus', 'title']) {
+    if (!payload[required] || (Array.isArray(payload[required]) && payload[required].length === 0)) {
+      throw new Error(`O rascunho retornado pelo TikTok esta sem o campo obrigatorio ${required}.`);
+    }
+  }
+  return payload;
+}
+
+function formatTikTokShopBusinessErrorsVps(errors) {
+  if (!Array.isArray(errors) || errors.length === 0) return '';
+  return errors.slice(0, 10).map((item) => {
+    const code = item?.code ?? item?.detail?.extra_errors?.[0]?.code ?? 'sem codigo';
+    const message = item?.message || item?.detail?.extra_errors?.[0]?.message || 'Falha de validacao';
+    return `${code}: ${message}`;
+  }).join('; ');
+}
+
+async function loadTikTokShopRemoteProductVps(settings, remoteProductId, returnDraftVersion = false) {
+  const result = await callTikTokShopOpenApiVps(settings, {
+    method: 'GET',
+    pathname: `/product/202309/products/${encodeURIComponent(remoteProductId)}`,
+    query: {
+      locale: 'pt-BR',
+      ...(returnDraftVersion ? { return_draft_version: 'true' } : {}),
+    },
+  });
+  const product = result.payload?.data;
+  if (!product || typeof product !== 'object') {
+    throw new Error('O TikTok Shop nao retornou os dados do produto.');
+  }
+  return { product, requestId: result.payload?.request_id || null };
+}
+
+async function handleTikTokShopProductStatusVps(request, reply) {
+  const productId = String(request.params?.productId || '').trim();
+  if (!productId || productId.length > 255 || !/^[a-zA-Z0-9_-]+$/.test(productId)) {
+    return reply.code(400).send({ error: 'Produto local invalido.' });
+  }
+  const [[link]] = await pool.query(
+    `SELECT product_id, tiktok_product_id, tiktok_sku_id, status, last_synced_at
+     FROM tiktok_shop_products WHERE product_id = ? LIMIT 1`,
+    [productId],
+  );
+  if (!link?.tiktok_product_id) return reply.code(404).send({ error: 'Produto ainda nao vinculado ao TikTok Shop.' });
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const { product, requestId } = await loadTikTokShopRemoteProductVps(
+      settings,
+      String(link.tiktok_product_id),
+      String(link.status || '').toUpperCase() === 'DRAFT',
+    );
+    const remoteStatus = String(product.status || link.status || 'DRAFT').toUpperCase();
+    await pool.query(
+      `UPDATE tiktok_shop_products
+       SET status = ?, last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE product_id = ?`,
+      [remoteStatus, productId],
+    );
+    reply.header('Cache-Control', 'no-store');
+    return reply.code(200).send({
+      ...link,
+      status: remoteStatus,
+      last_synced_at: new Date().toISOString(),
+      request_id: requestId,
+    });
+  } catch (err) {
+    console.warn('[tiktok-shop-product] status refresh failed', {
+      product_id: productId,
+      detail: err.message || 'unknown',
+      status: err.statusCode || null,
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+    return reply.code(err.statusCode || 502).send({
+      error: 'Falha ao consultar o status do produto no TikTok Shop.',
+      detail: err.message || 'unknown',
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+  }
+}
+
+async function handleTikTokShopPublishDraftVps(request, reply) {
+  const productId = String(request.params?.productId || '').trim();
+  if (!productId || productId.length > 255 || !/^[a-zA-Z0-9_-]+$/.test(productId)) {
+    return reply.code(400).send({ error: 'Produto local invalido.' });
+  }
+  const [[link]] = await pool.query(
+    `SELECT product_id, tiktok_product_id, tiktok_sku_id, status, last_synced_at
+     FROM tiktok_shop_products WHERE product_id = ? LIMIT 1`,
+    [productId],
+  );
+  const remoteProductId = String(link?.tiktok_product_id || '').trim();
+  if (!remoteProductId) return reply.code(404).send({ error: 'Crie o rascunho antes de publicar.' });
+  const currentStatus = String(link.status || 'DRAFT').toUpperCase();
+  if (currentStatus === 'ACTIVATE') {
+    return reply.code(200).send({ ok: true, already_active: true, ...link, status: 'ACTIVATE' });
+  }
+  if (currentStatus === 'PENDING') {
+    return reply.code(200).send({ ok: true, already_pending: true, ...link, status: 'PENDING' });
+  }
+  if (currentStatus !== 'DRAFT') {
+    return reply.code(409).send({ error: `O produto esta em ${currentStatus}; somente rascunhos podem ser publicados por esta acao.` });
+  }
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const { product: remoteDraft } = await loadTikTokShopRemoteProductVps(settings, remoteProductId, true);
+    const payload = buildTikTokShopListingPayloadVps(remoteDraft);
+    const result = await callTikTokShopOpenApiVps(settings, {
+      method: 'PUT',
+      pathname: `/product/202509/products/${encodeURIComponent(remoteProductId)}`,
+      body: payload,
+    });
+    const businessError = formatTikTokShopBusinessErrorsVps(result.payload?.data?.errors);
+    if (businessError) {
+      const error = new Error(`TikTok Shop recusou a publicacao: ${businessError}`);
+      error.statusCode = 422;
+      error.requestId = result.payload?.request_id || null;
+      throw error;
+    }
+    await pool.query(
+      `UPDATE tiktok_shop_products
+       SET status = 'PENDING', last_synced_at = CURRENT_TIMESTAMP,
+           last_error = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE product_id = ?`,
+      [productId],
+    );
+    return reply.code(200).send({
+      ok: true,
+      product_id: productId,
+      tiktok_product_id: remoteProductId,
+      tiktok_sku_id: link.tiktok_sku_id || null,
+      status: 'PENDING',
+      request_id: result.payload?.request_id || null,
+    });
+  } catch (err) {
+    const safeError = String(err.message || 'unknown').slice(0, 1000);
+    await pool.query(
+      `UPDATE tiktok_shop_products SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE product_id = ?`,
+      [safeError, productId],
+    ).catch(() => {});
+    console.warn('[tiktok-shop-product] draft publication failed', {
+      product_id: productId,
+      detail: safeError,
+      status: err.statusCode || null,
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+    return reply.code(err.statusCode || 502).send({
+      error: 'Falha ao publicar o rascunho no TikTok Shop.',
+      detail: safeError,
+      code: err.tiktokCode || null,
+      request_id: err.requestId || null,
+    });
+  }
+}
+
 async function handleTikTokShopUpdatePriceVps(request, reply) {
   const body = request.body || {};
   const productId = String(body.product_id || '').trim();
@@ -10078,6 +10256,8 @@ fastify.get('/api/tiktok-shop/logistics/warehouses', { preHandler: requireSyncKe
 fastify.post('/api/tiktok-shop/products/drafts', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCreateDraftVps);
 fastify.post('/api/tiktok-shop/products/draft-jobs', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopDraftJobStartVps);
 fastify.get('/api/tiktok-shop/products/draft-jobs/:jobId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopDraftJobGetVps);
+fastify.get('/api/tiktok-shop/products/:productId/status', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductStatusVps);
+fastify.post('/api/tiktok-shop/products/:productId/publish', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopPublishDraftVps);
 fastify.get('/api/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/api/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.get('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
@@ -10092,6 +10272,8 @@ fastify.get('/tiktok-shop/logistics/warehouses', { preHandler: requireSyncKeyOrA
 fastify.post('/tiktok-shop/products/drafts', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopCreateDraftVps);
 fastify.post('/tiktok-shop/products/draft-jobs', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopDraftJobStartVps);
 fastify.get('/tiktok-shop/products/draft-jobs/:jobId', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopDraftJobGetVps);
+fastify.get('/tiktok-shop/products/:productId/status', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductStatusVps);
+fastify.post('/tiktok-shop/products/:productId/publish', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopPublishDraftVps);
 fastify.get('/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.all('/api/cron-dispatcher', handleCronDispatcherVps);

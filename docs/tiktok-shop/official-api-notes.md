@@ -71,6 +71,25 @@ Regras aplicadas:
 - A criacao longa roda como um processo de backend consultado pelo painel; cada etapa exibe estado real (`running`, `done`, `skipped` ou `error`).
 - O processo expira da memoria em 30 minutos e nunca expoe tokens, segredos ou shop cipher.
 
+### Publicacao do rascunho e acompanhamento do anuncio
+
+Fontes verificadas em 27 de julho de 2026:
+
+- https://partner.tiktokshop.com/docv2/page/edit-product-202509
+- https://partner.tiktokshop.com/docv2/page/activate-product-202309
+- https://partner.tiktokshop.com/docv2/page/get-product-202309
+- https://seller-br.tiktok.com/university/essay?knowledge_id=4339061972092689&lang=pt-BR
+
+Regras aplicadas:
+
+- `Activate Product` nao publica produtos em `DRAFT`; esse endpoint aceita produtos anteriormente desativados.
+- Para publicar um rascunho local, consultar primeiro o produto atual pelo `Get Product` com `return_draft_version=true`.
+- Reenviar todos os campos editaveis pelo `PUT /product/202509/products/{product_id}` com `save_mode=LISTING`.
+- Nao montar a publicacao a partir de uma copia parcial local: campos ausentes em uma edicao completa podem apagar dados existentes.
+- Depois do envio, persistir `PENDING` e consultar o `Get Product` ate o TikTok retornar `ACTIVATE` ou `FAILED`.
+- Tratar `data.errors` como falha mesmo quando o envelope da resposta retorna `code=0`.
+- O atalho de rascunhos abre `https://seller-br.tiktok.com/product`; o anuncio publico so e liberado no estado `ACTIVATE`.
+
 ### Assinatura das APIs
 
 Fonte: https://partner.tiktokshop.com/docv2/page/sign-your-api-request

@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.72-tiktok-ffmpeg-paths
+version: v1.2.73-tiktok-publicar-rascunho
 date: 2026-07-26
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-001545-tiktok-ffmpeg-paths
+release_vps: /var/www/mdv-site/releases/20260727-005800-tiktok-publicar-rascunho
 branch: main
-summary: Separa os arquivos temporarios de entrada e saida no ajuste do video TikTok.
+summary: Publica rascunhos TikTok e adiciona atalhos e status do anuncio.
 ```

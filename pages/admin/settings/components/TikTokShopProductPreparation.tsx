@@ -1,5 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Copy, Loader2, PackageSearch, Search, Send } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Circle,
+  Copy,
+  ExternalLink,
+  Loader2,
+  PackageSearch,
+  RefreshCw,
+  Rocket,
+  Search,
+  Send,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { productService } from '../../../../services/products';
 import { categoryService } from '../../../../services/categories';
@@ -8,6 +21,7 @@ import {
   type TikTokShopCategoryReadiness,
   type TikTokShopCategorySummary,
   type TikTokShopDraftJobStep,
+  type TikTokShopProductLink,
   type TikTokShopSafeStatus,
   type TikTokShopWarehouseSummary,
 } from '../../../../services/tiktokShopService';
@@ -17,7 +31,7 @@ import TikTokShopListingPreview from './TikTokShopListingPreview';
 type Props = {
   status: TikTokShopSafeStatus | null;
   initialProductId?: string | null;
-  onDraftCreated?: (tiktokProductId: string) => void;
+  onDraftCreated?: (link: TikTokShopProductLink) => void;
 };
 
 function getProductIssues(product: Product | null): string[] {
@@ -96,6 +110,9 @@ export default function TikTokShopProductPreparation({
   const [loadingWarehouses, setLoadingWarehouses] = useState(false);
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [createdTikTokProductId, setCreatedTikTokProductId] = useState('');
+  const [tiktokProductStatus, setTikTokProductStatus] = useState('');
+  const [publishingDraft, setPublishingDraft] = useState(false);
+  const [refreshingRemoteStatus, setRefreshingRemoteStatus] = useState(false);
   const [draftSteps, setDraftSteps] = useState<TikTokShopDraftJobStep[]>(INITIAL_DRAFT_STEPS);
   const [draftError, setDraftError] = useState('');
   const [draftDebug, setDraftDebug] = useState('');
@@ -131,6 +148,60 @@ export default function TikTokShopProductPreparation({
       cancelled = true;
     };
   }, [initialProductId]);
+
+  const applyTikTokProductLink = React.useCallback((link: TikTokShopProductLink) => {
+    setCreatedTikTokProductId(String(link.tiktok_product_id || '').trim());
+    setTikTokProductStatus(String(link.status || 'DRAFT').toUpperCase());
+    onDraftCreated?.(link);
+  }, [onDraftCreated]);
+
+  const refreshTikTokProductStatus = React.useCallback(async (showFeedback = false) => {
+    const localProductId = String(selectedProduct?.id || initialProductId || '').trim();
+    if (!localProductId) return;
+    if (showFeedback) setRefreshingRemoteStatus(true);
+    try {
+      const link = await tiktokShopService.getProductStatus(localProductId);
+      applyTikTokProductLink(link);
+      if (showFeedback) toast.success('Status do TikTok Shop atualizado.');
+    } catch (error: any) {
+      if (showFeedback) {
+        console.error('[TikTokShopProductPreparation] status refresh error:', error);
+        toast.error(error?.message || 'Nao foi possivel atualizar o status do TikTok Shop.');
+      }
+    } finally {
+      if (showFeedback) setRefreshingRemoteStatus(false);
+    }
+  }, [applyTikTokProductLink, initialProductId, selectedProduct?.id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!initialProductId) return;
+    tiktokShopService.getProductLinks([initialProductId])
+      .then(async ({ links }) => {
+        if (cancelled) return;
+        const link = links[0];
+        if (!link) return;
+        applyTikTokProductLink(link);
+        try {
+          const current = await tiktokShopService.getProductStatus(initialProductId);
+          if (!cancelled) applyTikTokProductLink(current);
+        } catch {
+          // Mantem o ultimo estado persistido quando a consulta remota estiver indisponivel.
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [applyTikTokProductLink, initialProductId]);
+
+  React.useEffect(() => {
+    if (tiktokProductStatus !== 'PENDING' || !createdTikTokProductId) return;
+    const intervalId = window.setInterval(() => {
+      void refreshTikTokProductStatus(false);
+    }, 10000);
+    return () => window.clearInterval(intervalId);
+  }, [createdTikTokProductId, refreshTikTokProductStatus, tiktokProductStatus]);
 
   const productIssues = useMemo(() => getProductIssues(selectedProduct), [selectedProduct]);
   const canReadCatalog = Boolean(
@@ -370,13 +441,18 @@ export default function TikTokShopProductPreparation({
         throw new Error(`${job.error?.message || 'O acompanhamento do envio nao foi concluido.'}${reference}`);
       }
       const result = job.result;
-      setCreatedTikTokProductId(result.tiktok_product_id);
+      applyTikTokProductLink({
+        product_id: result.product_id,
+        tiktok_product_id: result.tiktok_product_id,
+        tiktok_sku_id: result.tiktok_sku_id,
+        status: result.status,
+        last_synced_at: new Date().toISOString(),
+      });
       toast.success(
         result.already_exists
           ? 'Este produto ja possui rascunho no TikTok Shop.'
           : 'Rascunho criado no TikTok Shop.',
       );
-      onDraftCreated?.(result.tiktok_product_id);
     } catch (error: any) {
       console.error('[TikTokShopProductPreparation] draft creation error:', error);
       const message = error?.message || 'Nao foi possivel criar o rascunho no TikTok Shop.';
@@ -394,6 +470,58 @@ export default function TikTokShopProductPreparation({
     } finally {
       setCreatingDraft(false);
     }
+  }
+
+  async function publishTikTokDraft() {
+    if (!selectedProduct || !createdTikTokProductId) {
+      toast.info('Crie o rascunho antes de publicar.');
+      return;
+    }
+    if (!window.confirm(
+      `Publicar "${selectedProduct.name}" no TikTok Shop? O anuncio sera enviado para analise do TikTok.`,
+    )) return;
+
+    setPublishingDraft(true);
+    setDraftError('');
+    setDraftDebug('');
+    try {
+      const result = await tiktokShopService.publishDraft(selectedProduct.id);
+      applyTikTokProductLink(result);
+      toast.success(
+        result.status === 'ACTIVATE'
+          ? 'O anuncio ja esta ativo no TikTok Shop.'
+          : 'Anuncio enviado para analise do TikTok Shop.',
+      );
+    } catch (error: any) {
+      console.error('[TikTokShopProductPreparation] draft publication error:', error);
+      const message = error?.message || 'Nao foi possivel publicar o rascunho no TikTok Shop.';
+      setDraftError(message);
+      setDraftDebug([
+        'TikTok Shop - debug da publicacao',
+        `Produto: ${selectedProduct.name}`,
+        `Produto local ID: ${selectedProduct.id}`,
+        `Produto TikTok ID: ${createdTikTokProductId}`,
+        `Status anterior: ${tiktokProductStatus || 'nao informado'}`,
+        `Erro: ${message}`,
+        `Horario: ${new Date().toISOString()}`,
+      ].join('\n'));
+      toast.error(message);
+    } finally {
+      setPublishingDraft(false);
+    }
+  }
+
+  function openTikTokSellerProducts() {
+    window.open('https://seller-br.tiktok.com/product', '_blank', 'noopener,noreferrer');
+  }
+
+  function openTikTokPublicListing() {
+    if (!createdTikTokProductId || tiktokProductStatus !== 'ACTIVATE') return;
+    window.open(
+      `https://shop.tiktok.com/view/product/${encodeURIComponent(createdTikTokProductId)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
   }
 
   async function copyDraftDebug() {
@@ -697,13 +825,79 @@ export default function TikTokShopProductPreparation({
           </p>
         )}
         {createdTikTokProductId && (
-          <p className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-emerald-800">
-            <CheckCircle2 className="h-4 w-4" />
-            Rascunho TikTok {createdTikTokProductId} criado e vinculado.
-          </p>
+          <div className="mt-3 rounded-xl border border-cyan-200 bg-cyan-50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-cyan-950">
+                <CheckCircle2 className="h-4 w-4" />
+                Produto TikTok {createdTikTokProductId}
+              </p>
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                tiktokProductStatus === 'ACTIVATE'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : tiktokProductStatus === 'PENDING'
+                    ? 'bg-amber-100 text-amber-800'
+                    : tiktokProductStatus === 'FAILED'
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-cyan-100 text-cyan-800'
+              }`}>
+                {tiktokProductStatus === 'ACTIVATE'
+                  ? 'Anuncio ativo'
+                  : tiktokProductStatus === 'PENDING'
+                    ? 'Em analise'
+                    : tiktokProductStatus === 'FAILED'
+                      ? 'Reprovado'
+                      : 'Rascunho'}
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(tiktokProductStatus || 'DRAFT') === 'DRAFT' && (
+                <button
+                  type="button"
+                  onClick={() => void publishTikTokDraft()}
+                  disabled={publishingDraft || !canWriteProducts}
+                  className="inline-flex items-center gap-2 rounded-lg bg-pink-600 px-3 py-2 text-xs font-bold text-white hover:bg-pink-700 disabled:opacity-50"
+                >
+                  {publishingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                  {publishingDraft ? 'Publicando...' : 'Publicar no TikTok'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={openTikTokSellerProducts}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Ver rascunho
+              </button>
+              <button
+                type="button"
+                onClick={openTikTokPublicListing}
+                disabled={tiktokProductStatus !== 'ACTIVATE'}
+                title={tiktokProductStatus === 'ACTIVATE' ? 'Abrir anuncio publico' : 'Disponivel depois da aprovacao'}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Ver anuncio
+              </button>
+              <button
+                type="button"
+                onClick={() => void refreshTikTokProductStatus(true)}
+                disabled={refreshingRemoteStatus}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshingRemoteStatus ? 'animate-spin' : ''}`} />
+                Atualizar status
+              </button>
+            </div>
+            {tiktokProductStatus === 'PENDING' && (
+              <p className="mt-2 text-xs text-amber-800">
+                O TikTok esta analisando o anuncio. O status sera atualizado automaticamente.
+              </p>
+            )}
+          </div>
         )}
         <p className="mt-2 text-xs text-slate-600">
-          O envio usa AS_DRAFT: nada fica visivel para clientes ate a publicacao posterior no Seller Center.
+          O envio usa AS_DRAFT no primeiro passo. A publicacao envia o rascunho completo para analise antes de ficar visivel.
         </p>
       </div>
     </section>

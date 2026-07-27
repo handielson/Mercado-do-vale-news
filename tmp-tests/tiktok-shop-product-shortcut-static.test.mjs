@@ -87,6 +87,27 @@ for (const file of serverFiles) {
   );
   assert.match(
     source,
+    /fastify\.post\('\/tiktok-shop\/products\/:productId\/publish', \{ preHandler: requireSyncKeyOrAdmin \}/,
+    `${file} must protect the proxy-safe draft publication route`,
+  );
+  assert.match(
+    source,
+    /pathname: `\/product\/202309\/products\/\$\{encodeURIComponent\(remoteProductId\)\}`/,
+    `${file} must retrieve the latest remote draft before publishing`,
+  );
+  assert.match(
+    source,
+    /pathname: `\/product\/202509\/products\/\$\{encodeURIComponent\(remoteProductId\)\}`/,
+    `${file} must publish drafts with the current Edit Product endpoint`,
+  );
+  assert.match(source, /save_mode: 'LISTING'/, `${file} must submit the draft for listing`);
+  assert.doesNotMatch(
+    source,
+    /pathname: '\/product\/202309\/products\/activate'[\s\S]{0,500}DRAFT/,
+    `${file} must not use Activate Product for a draft`,
+  );
+  assert.match(
+    source,
     /fastify\.get\('\/tiktok-shop\/logistics\/warehouses', \{ preHandler: requireSyncKeyOrAdmin \}/,
     `${file} must protect the proxy-safe warehouse route`,
   );
@@ -114,6 +135,7 @@ assert.match(service, /getWarehouses\(\)/, 'frontend service must discover TikTo
 assert.match(service, /createDraft\(input:/, 'frontend service must expose draft creation');
 assert.match(service, /startDraftJob\(input:/, 'frontend service must start asynchronous draft creation');
 assert.match(service, /getDraftJob\(jobId: string\)/, 'frontend service must poll live draft progress');
+assert.match(service, /publishDraft\(productId: string\)/, 'frontend service must publish an existing draft');
 assert.doesNotMatch(service, /include_video/, 'video must not be silently omitted from TikTok drafts');
 assert.doesNotMatch(
   service,
@@ -138,7 +160,8 @@ assert.match(
   'TikTok shortcut must open synchronization in the product card',
 );
 assert.match(card, /isTikTokSynced/, 'product card must render a linked visual state');
-assert.match(card, /bg-emerald-400 ring-2 ring-white/, 'linked TikTok icon must show a confirmation dot');
+assert.match(card, /bg-emerald-400/, 'active TikTok icon must show a confirmation dot');
+assert.match(card, /currentTikTokProductLink\?\.status/, 'TikTok icon must use the real remote status');
 assert.match(card, /TikTokShopSyncModal/, 'product card must render the TikTok synchronization modal');
 
 const page = readFileSync('pages/admin/settings/TikTokShopPage.tsx', 'utf8');
@@ -185,6 +208,19 @@ assert.match(
 assert.match(preparation, /Acompanhamento do envio/, 'TikTok modal must display live sending steps');
 assert.match(preparation, /getDraftJob\(job\.job_id\)/, 'TikTok modal must poll actual backend progress');
 assert.match(preparation, /Copiar debug/, 'TikTok errors must expose a copy-debug action');
+assert.match(preparation, /Publicar no TikTok/, 'TikTok draft must expose a publication button');
+assert.match(preparation, /Ver rascunho/, 'TikTok draft must expose a Seller Center shortcut');
+assert.match(preparation, /Ver anuncio/, 'active TikTok product must expose a public listing shortcut');
+assert.match(
+  preparation,
+  /https:\/\/seller-br\.tiktok\.com\/product/,
+  'draft shortcut must open the official Brazil Seller Center product page',
+);
+assert.match(
+  preparation,
+  /https:\/\/shop\.tiktok\.com\/view\/product\//,
+  'listing shortcut must use the official TikTok Shop product URL format',
+);
 assert.match(preparation, /navigator\.clipboard\.writeText/, 'copy-debug must use the clipboard API');
 assert.match(preparation, /Codigo TikTok:/, 'copied debug must include the TikTok error code');
 assert.match(preparation, /Request ID:/, 'copied debug must include the TikTok request id');

@@ -56,6 +56,13 @@ export interface TikTokShopProductLink {
   last_synced_at: string | null;
 }
 
+export interface TikTokShopPublishResponse extends TikTokShopProductLink {
+  ok: boolean;
+  already_active?: boolean;
+  already_pending?: boolean;
+  request_id: string | null;
+}
+
 export interface TikTokShopCategoryMapping {
   local_category_id: string;
   tiktok_category_id: string;
@@ -190,6 +197,19 @@ export const tiktokShopService = {
   getDraftJob(jobId: string): Promise<TikTokShopDraftJob> {
     return vpsClient.get(
       `/tiktok-shop/products/draft-jobs/${encodeURIComponent(jobId)}`,
+    );
+  },
+
+  getProductStatus(productId: string): Promise<TikTokShopProductLink & { request_id?: string | null }> {
+    return vpsClient.get(
+      `/tiktok-shop/products/${encodeURIComponent(productId)}/status`,
+    );
+  },
+
+  publishDraft(productId: string): Promise<TikTokShopPublishResponse> {
+    return vpsClient.post(
+      `/tiktok-shop/products/${encodeURIComponent(productId)}/publish`,
+      {},
     );
   },
 

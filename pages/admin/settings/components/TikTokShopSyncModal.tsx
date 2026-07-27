@@ -3,6 +3,7 @@ import { Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   tiktokShopService,
+  type TikTokShopProductLink,
   type TikTokShopSafeStatus,
 } from '../../../../services/tiktokShopService';
 import TikTokShopProductPreparation from './TikTokShopProductPreparation';
@@ -10,7 +11,7 @@ import TikTokShopProductPreparation from './TikTokShopProductPreparation';
 type Props = {
   productId: string;
   onClose: () => void;
-  onSuccess?: (tiktokProductId: string) => void;
+  onSuccess?: (link: TikTokShopProductLink) => void;
 };
 
 export default function TikTokShopSyncModal({ productId, onClose, onSuccess }: Props) {
