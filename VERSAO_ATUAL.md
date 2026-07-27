@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.94-tiktok-no-preselection
+version: v1.2.95-tiktok-product-list-refresh
 date: 2026-07-27
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-025327-v1294-tiktok-no-preselection
+release_vps: /var/www/mdv-site/releases/20260727-031239-v1295-tiktok-product-list-refresh
 branch: main
-summary: Consome o product_id apenas na abertura inicial e remove o parametro da URL para evitar pre-selecao ao recarregar.
+summary: Atualiza a pagina de Produtos apos envios TikTok em massa e exibe nas variacoes o vinculo gravado no produto pai.
 ```

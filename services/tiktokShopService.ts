@@ -1,5 +1,23 @@
 import { vpsClient } from './vpsClient';
 
+export const TIKTOK_PRODUCT_LINKS_UPDATED_EVENT = 'mdv:tiktok-shop-product-links-updated';
+export const TIKTOK_PRODUCT_LINKS_UPDATED_STORAGE_KEY = 'mdv:tiktok-shop-product-links-updated-at';
+
+export function notifyTikTokProductLinksUpdated(productIds: string[]) {
+  if (typeof window === 'undefined') return;
+  const detail = {
+    product_ids: Array.from(new Set(productIds.map((id) => String(id || '').trim()).filter(Boolean))),
+    updated_at: Date.now(),
+  };
+
+  try {
+    window.localStorage.setItem(TIKTOK_PRODUCT_LINKS_UPDATED_STORAGE_KEY, JSON.stringify(detail));
+  } catch {
+    // A atualizacao local continua funcionando mesmo com o storage indisponivel.
+  }
+  window.dispatchEvent(new CustomEvent(TIKTOK_PRODUCT_LINKS_UPDATED_EVENT, { detail }));
+}
+
 export interface TikTokShopSafeStatus {
   configured: boolean;
   connected: boolean;
@@ -216,12 +234,24 @@ export const tiktokShopService = {
     );
   },
 
-  getProductLinks(productIds: string[]): Promise<{ links: TikTokShopProductLink[] }> {
+  async getProductLinks(productIds: string[]): Promise<{ links: TikTokShopProductLink[] }> {
     const ids = Array.from(new Set(productIds.map((id) => String(id || '').trim()).filter(Boolean)));
-    if (ids.length === 0) return Promise.resolve({ links: [] });
-    return vpsClient.get(
-      `/tiktok-shop/products/links?product_ids=${encodeURIComponent(ids.slice(0, 100).join(','))}`,
-    );
+    if (ids.length === 0) return { links: [] };
+
+    const batches: string[][] = [];
+    for (let index = 0; index < ids.length; index += 100) {
+      batches.push(ids.slice(index, index + 100));
+    }
+    const responses = await Promise.all(batches.map((batch) =>
+      vpsClient.get<{ links: TikTokShopProductLink[] }>(
+        `/tiktok-shop/products/links?product_ids=${encodeURIComponent(batch.join(','))}`,
+      ),
+    ));
+    const linksByProductId = new Map<string, TikTokShopProductLink>();
+    responses.flatMap((response) => response.links || []).forEach((link) => {
+      if (link.product_id) linksByProductId.set(link.product_id, link);
+    });
+    return { links: Array.from(linksByProductId.values()) };
   },
 
   updatePrice(input: {

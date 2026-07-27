@@ -2,7 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { productService } from '../../../../services/products';
-import { tiktokShopService, type TikTokShopProductLink } from '../../../../services/tiktokShopService';
+import {
+  notifyTikTokProductLinksUpdated,
+  tiktokShopService,
+  type TikTokShopProductLink,
+} from '../../../../services/tiktokShopService';
 import { vpsApiService } from '../../../../services/vpsApiService';
 import type { Product } from '../../../../types/product';
 import { buildTikTokBulkVariationGroups } from '../../../../utils/tiktokBulkVariationGroups';
@@ -182,6 +186,7 @@ export default function TikTokShopBulkPreparation() {
           .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
           .map((result) => result.value);
         setCompletedDraftIds(completed);
+        if (completed.length > 0) notifyTikTokProductLinksUpdated(completed);
         toast[failed ? 'warning' : 'success'](`Rascunhos iniciados: ${chosen.length - failed}${failed ? `; ${failed} bloqueado(s)` : ''}.`);
       } catch (error: any) {
         toast.error(error?.message || 'Nao foi possivel iniciar os rascunhos do lote.');
@@ -201,6 +206,16 @@ export default function TikTokShopBulkPreparation() {
     try {
       const results = await Promise.allSettled(candidates.map((product) => tiktokShopService.publishDraft(product.id)));
       const failed = results.filter((result) => result.status === 'rejected').length;
+      const publishedLinks = results
+        .filter((result): result is PromiseFulfilledResult<TikTokShopProductLink> => result.status === 'fulfilled')
+        .map((result) => result.value);
+      if (publishedLinks.length > 0) {
+        setLinks((current) => ({
+          ...current,
+          ...Object.fromEntries(publishedLinks.map((link) => [link.product_id, link])),
+        }));
+        notifyTikTokProductLinksUpdated(publishedLinks.map((link) => link.product_id));
+      }
       toast[failed ? 'warning' : 'success'](`${action}: ${candidates.length - failed} concluido(s)${failed ? `, ${failed} com falha` : ''}.`);
     } finally {
       setRunning(false);

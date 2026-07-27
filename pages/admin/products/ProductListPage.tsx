@@ -11,7 +11,12 @@ import { BulkCategoryModal } from '../../../components/products/BulkCategoryModa
 import { vpsApiService } from '../../../services/vpsApiService';
 import { toast } from 'sonner';
 import { buildProductVideoUrl } from '../../../utils/video-url';
-import { tiktokShopService, type TikTokShopProductLink } from '../../../services/tiktokShopService';
+import {
+    TIKTOK_PRODUCT_LINKS_UPDATED_EVENT,
+    TIKTOK_PRODUCT_LINKS_UPDATED_STORAGE_KEY,
+    tiktokShopService,
+    type TikTokShopProductLink,
+} from '../../../services/tiktokShopService';
 
 /**
  * ProductListPage
@@ -47,7 +52,9 @@ export const ProductListPage: React.FC = () => {
         allFilteredProducts,
         cacheAge,
     } = useProducts();
-    const visibleProductIdsKey = products.map((product) => product.id).filter(Boolean).join(',');
+    const visibleProductIdsKey = Array.from(new Set(
+        products.flatMap((product) => [product.id, product.parent_id].filter(Boolean) as string[]),
+    )).sort().join(',');
 
     useEffect(() => {
         setPageInput(String(currentPage));
@@ -79,6 +86,37 @@ export const ProductListPage: React.FC = () => {
             cancelled = true;
         };
     }, [visibleProductIdsKey]);
+
+    useEffect(() => {
+        const refreshTikTokLinks = () => {
+            refresh();
+        };
+        const handleStorage = (event: StorageEvent) => {
+            if (event.key === TIKTOK_PRODUCT_LINKS_UPDATED_STORAGE_KEY) refreshTikTokLinks();
+        };
+
+        window.addEventListener(TIKTOK_PRODUCT_LINKS_UPDATED_EVENT, refreshTikTokLinks);
+        window.addEventListener('storage', handleStorage);
+        return () => {
+            window.removeEventListener(TIKTOK_PRODUCT_LINKS_UPDATED_EVENT, refreshTikTokLinks);
+            window.removeEventListener('storage', handleStorage);
+        };
+    }, [refresh]);
+
+    const handleRefresh = () => {
+        refresh();
+        const productIds = visibleProductIdsKey.split(',').filter(Boolean);
+        if (productIds.length === 0) return;
+        void tiktokShopService.getProductLinks(productIds).then(({ links }) => {
+            setTikTokProductLinks(Object.fromEntries(
+                links
+                    .filter((link) => link.product_id && link.tiktok_product_id)
+                    .map((link) => [link.product_id, link]),
+            ));
+        }).catch((error) => {
+            console.warn('[ProductListPage] Falha ao atualizar vinculos TikTok Shop:', error);
+        });
+    };
 
     const goToTypedPage = () => {
         const requestedPage = Number.parseInt(pageInput, 10);
@@ -224,7 +262,7 @@ export const ProductListPage: React.FC = () => {
 
                         {/* Refresh button */}
                         <button
-                            onClick={refresh}
+                            onClick={handleRefresh}
                             disabled={isRefreshing}
                             title="Atualizar dados sem recarregar a página"
                             className="flex items-center gap-2 px-3 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors shadow-sm disabled:opacity-60 text-sm"

@@ -87,7 +87,11 @@ export const ProductList: React.FC<ProductListProps> = ({
                     selectionMode={selectionMode}
                     isSelected={selectedIds.has(product.id)}
                     onToggleSelect={onToggleSelect}
-                    tiktokProductLink={tiktokProductLinks[product.id] || null}
+                    tiktokProductLink={
+                        tiktokProductLinks[product.id]
+                        || (product.parent_id ? tiktokProductLinks[product.parent_id] : null)
+                        || null
+                    }
                 />
             ))}
         </div>
