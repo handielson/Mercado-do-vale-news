@@ -54,7 +54,7 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
             const timeFrom = timeTo - (14 * 24 * 60 * 60);
 
             // 1. Fetch Order List
-            let url = `/api/shopee-actions?action=get_order_list&time_from=${timeFrom}&time_to=${timeTo}&page_size=50`;
+            let url = `/api/shopee-actions?action=get_order_list&time_range_field=create_time&time_from=${timeFrom}&time_to=${timeTo}&page_size=100`;
             if (statusFilter !== 'ALL') {
                 url += `&order_status=${statusFilter}`;
             }
@@ -82,6 +82,36 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
             }
 
             const orderList = listData.response?.order_list || [];
+            let cursor = listData.response?.more
+                ? String(listData.response?.next_cursor || '').trim()
+                : '';
+            let pageCount = 1;
+
+            while (cursor && pageCount < 20) {
+                const pageParams = new URLSearchParams({
+                    action: 'get_order_list',
+                    time_range_field: 'create_time',
+                    time_from: String(timeFrom),
+                    time_to: String(timeTo),
+                    page_size: '100',
+                    cursor,
+                });
+                if (statusFilter !== 'ALL') pageParams.set('order_status', statusFilter);
+
+                const pageRes = await fetch(`/api/shopee-actions?${pageParams.toString()}`);
+                const pageData = await pageRes.json();
+                if (pageData.error) {
+                    toast.error(`Erro ao buscar proxima pagina de pedidos: ${pageData.message || pageData.error}`);
+                    setLoading(false);
+                    return;
+                }
+
+                const pageResponse = pageData.response || {};
+                orderList.push(...(Array.isArray(pageResponse.order_list) ? pageResponse.order_list : []));
+                const nextCursor = String(pageResponse.next_cursor || '').trim();
+                cursor = pageResponse.more && nextCursor ? nextCursor : '';
+                pageCount += 1;
+            }
             
             if (orderList.length === 0) {
                 setOrders([]);
@@ -91,17 +121,21 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
             }
 
             // 2. Fetch Order Details in batches (max 50 per request)
-            const orderSns = orderList.map((o: any) => o.order_sn);
-            const detailsRes = await fetch(`/api/shopee-actions?action=get_order_detail&order_sn_list=${orderSns.join(',')}`);
-            const detailsData = await detailsRes.json();
-
-            if (detailsData.error) {
-                toast.error(`Erro ao buscar detalhes: ${detailsData.error}`);
-            } else {
-                const newOrders = detailsData.response?.order_list || [];
-                setOrders(newOrders);
-                localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), orders: newOrders }));
+            const orderSns = orderList.map((o: any) => o.order_sn).filter(Boolean);
+            const newOrders: any[] = [];
+            for (let index = 0; index < orderSns.length; index += 50) {
+                const batch = orderSns.slice(index, index + 50);
+                const detailsRes = await fetch(`/api/shopee-actions?action=get_order_detail&order_sn_list=${batch.join(',')}`);
+                const detailsData = await detailsRes.json();
+                if (detailsData.error) {
+                    toast.error(`Erro ao buscar detalhes: ${detailsData.message || detailsData.error}`);
+                    setLoading(false);
+                    return;
+                }
+                newOrders.push(...(detailsData.response?.order_list || []));
             }
+            setOrders(newOrders);
+            localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), orders: newOrders }));
 
         } catch (error: any) {
             // Ignora erros gerados por extensões do browser (não são falhas reais de rede)

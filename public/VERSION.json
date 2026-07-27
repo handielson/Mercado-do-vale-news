@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.98-tiktok-linked-modal",
+  "version": "v1.2.99-shopee-orders-pagination",
   "date": "2026-07-27",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260727-063329-v1298-tiktok-linked-modal",
+  "release_vps": "/var/www/mdv-site/releases/20260727-135215-shopee-orders-pagination",
   "branch": "main",
-  "summary": "Finaliza a verificacao de anuncios TikTok ja vinculados sem reiniciar o modal em ciclo."
+  "summary": "Restaura vendas Shopee no painel e carrega todas as paginas de pedidos e detalhes."
 }

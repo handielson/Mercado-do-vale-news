@@ -286,23 +286,37 @@ async function fetchShopeeDetailedOrders(now) {
   start.setHours(0, 0, 0, 0);
   const timeFrom = Math.floor(start.getTime() / 1000);
   const timeTo = Math.floor(now.getTime() / 1000);
-  const statuses = ['READY_TO_SHIP', 'PROCESSED', 'SHIPPED', 'COMPLETED', 'TO_CONFIRM_RECEIVE'];
   const basicOrders = [];
+  let cursor = '';
+  let pageCount = 0;
 
-  for (const status of statuses) {
+  do {
+    const params = new URLSearchParams({
+      action: 'get_order_list',
+      time_range_field: 'create_time',
+      time_from: String(timeFrom),
+      time_to: String(timeTo),
+      page_size: '100',
+    });
+    if (cursor) params.set('cursor', cursor);
     const payload = await fetchJsonOrThrow(
-      `/api/shopee-actions?action=get_order_list&time_from=${timeFrom}&time_to=${timeTo}&page_size=100&order_status=${status}`,
+      `/api/shopee-actions?${params.toString()}`,
     );
-    const orderList = Array.isArray(payload?.response?.order_list) ? payload.response.order_list : [];
+    const response = payload?.response || {};
+    const orderList = Array.isArray(response.order_list) ? response.order_list : [];
 
     for (const order of orderList) {
       basicOrders.push({
         order_sn: order?.order_sn,
         create_time: order?.create_time,
-        order_status: order?.order_status || status,
+        order_status: order?.order_status,
       });
     }
-  }
+
+    const nextCursor = String(response.next_cursor || '').trim();
+    cursor = response.more && nextCursor ? nextCursor : '';
+    pageCount += 1;
+  } while (cursor && pageCount < 20);
 
   const uniqueOrders = Array.from(new Map(
     basicOrders
