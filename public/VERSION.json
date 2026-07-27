@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.93-tiktok-variation-cover",
+  "version": "v1.2.94-tiktok-no-preselection",
   "date": "2026-07-27",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260727-024209-v1293-tiktok-variation-cover",
+  "release_vps": "/var/www/mdv-site/releases/20260727-025327-v1294-tiktok-no-preselection",
   "branch": "main",
-  "summary": "Usa imagens das variacoes como capa do produto pai e impede o envio separado de uma variacao selecionada."
+  "summary": "Consome o product_id apenas na abertura inicial e remove o parametro da URL para evitar pre-selecao ao recarregar."
 }

@@ -36,7 +36,7 @@ function formatTokenDate(value?: string | null) {
 }
 
 export default function TikTokShopPage() {
-  const initialProductId = new URLSearchParams(window.location.search).get('product_id');
+  const [initialProductId] = useState(() => new URLSearchParams(window.location.search).get('product_id'));
   const [status, setStatus] = useState<TikTokShopSafeStatus | null>(null);
   const [shops, setShops] = useState<TikTokAuthorizedShopSummary[]>([]);
   const [draft, setDraft] = useState<TikTokShopDraft>(emptyDraft);
@@ -44,6 +44,17 @@ export default function TikTokShopPage() {
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (!initialProductId) return;
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('product_id');
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`,
+    );
+  }, [initialProductId]);
 
   useEffect(() => {
     let cancelled = false;
