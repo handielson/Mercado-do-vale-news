@@ -6923,14 +6923,94 @@ async function handleShopeeActionsVps(request, reply) {
         return reply.code(result.status).send(result.data);
 
       case 'get_shipping_document': {
+        if (requireShopeeActionsPostVps(request, reply)) return;
         const orderSn = String(payload.order_sn || '').trim();
         const shippingDocumentType = payload.shipping_document_type || 'SHIPPING_LABEL';
-        const orderList = [{ order_sn: orderSn, shipping_document_type: shippingDocumentType }];
-        const infoResult = await shopeeCatalogPostVps('/api/v2/logistics/get_shipping_document_info', creds, { order_list: orderList });
+        const orderDetail = await shopeeCatalogGetVps('/api/v2/order/get_order_detail', creds, encodeShopeeCatalogParamsVps({
+          order_sn_list: orderSn,
+          response_optional_fields: 'package_list,shipping_carrier,order_status,fulfillment_flag',
+        }));
+        const order = orderDetail.data?.response?.order_list?.[0];
+        const packageNumber = firstShopeeActionsNonEmptyVps(order?.package_list?.[0]?.package_number);
+        if (!order || !packageNumber) {
+          return reply.code(200).send({
+            error: 'shipping_document_package_not_found',
+            message: 'Nao foi possivel identificar o pacote deste pedido para gerar a etiqueta.',
+          });
+        }
+
+        const trackingResult = await shopeeCatalogGetVps('/api/v2/logistics/get_tracking_number', creds, encodeShopeeCatalogParamsVps({
+          order_sn: orderSn,
+          package_number: packageNumber,
+        }));
+        const trackingNumber = firstShopeeActionsNonEmptyVps(
+          trackingResult.data?.response?.tracking_number,
+          trackingResult.data?.response?.first_mile_tracking_number,
+          trackingResult.data?.response?.logistics_tracking_no,
+        );
+        if (trackingResult.data?.error || !trackingNumber) {
+          return reply.code(200).send({
+            error: trackingResult.data?.error || 'shipping_document_tracking_not_ready',
+            message: trackingResult.data?.message || 'O codigo de rastreio ainda nao esta disponivel para gerar a etiqueta.',
+          });
+        }
+
+        const documentOrder = {
+          order_sn: orderSn,
+          package_number: packageNumber,
+          tracking_number: trackingNumber,
+          shipping_document_type: shippingDocumentType,
+        };
+        const resultOrder = {
+          order_sn: orderSn,
+          package_number: packageNumber,
+          shipping_document_type: shippingDocumentType,
+        };
+        const createResult = await shopeeCatalogPostVps('/api/v2/logistics/create_shipping_document', creds, {
+          order_list: [documentOrder],
+        });
+        if (createResult.data?.error) {
+          return reply.code(createResult.status).send({
+            error: createResult.data.error,
+            message: createResult.data.message || 'A Shopee nao conseguiu iniciar a geracao da etiqueta.',
+            step: 'create_shipping_document',
+          });
+        }
+
+        let documentResult = null;
+        let documentStatus = '';
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          documentResult = await shopeeCatalogPostVps('/api/v2/logistics/get_shipping_document_result', creds, {
+            order_list: [resultOrder],
+          });
+          const resultList = documentResult.data?.response?.result_list
+            || documentResult.data?.response?.order_list
+            || [];
+          const entry = Array.isArray(resultList)
+            ? resultList.find((item) => item?.order_sn === orderSn) || resultList[0]
+            : null;
+          documentStatus = firstShopeeActionsNonEmptyVps(
+            entry?.status,
+            entry?.shipping_document_status,
+            documentResult.data?.response?.status,
+          ).toUpperCase();
+          if (documentStatus === 'READY') break;
+          if (documentResult.data?.error || ['FAILED', 'ERROR'].includes(documentStatus)) break;
+          await new Promise((resolve) => setTimeout(resolve, 750));
+        }
+
+        if (documentResult?.data?.error || documentStatus !== 'READY') {
+          return reply.code(202).send({
+            error: documentResult?.data?.error || 'shipping_document_processing',
+            message: documentResult?.data?.message || 'A etiqueta esta sendo gerada pela Shopee. Aguarde alguns segundos e tente novamente.',
+            status: documentStatus || 'PROCESSING',
+          });
+        }
+
         const docResponse = await fetch(buildShopeeCatalogUrlVps('/api/v2/logistics/download_shipping_document', creds), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order_list: orderList }),
+          body: JSON.stringify({ order_list: [resultOrder] }),
           signal: AbortSignal.timeout(20000),
         });
         const contentType = docResponse.headers.get('content-type') || '';
@@ -6943,7 +7023,7 @@ async function handleShopeeActionsVps(request, reply) {
             .send(pdfBuffer);
         }
         const docData = await readShopeeCatalogJsonResponseVps(docResponse);
-        return reply.code(docResponse.status).send({ info: infoResult.data, doc: docData });
+        return reply.code(docResponse.status).send({ result: documentResult?.data, doc: docData });
       }
 
       case 'ship_order': {

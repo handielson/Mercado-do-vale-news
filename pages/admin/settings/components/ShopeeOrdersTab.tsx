@@ -30,11 +30,27 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
         setStatusFilter(initialStatusFilter || 'ALL');
     }, [initialStatusFilter]);
 
+    const readOrdersCache = (cacheKey: string) => {
+        try {
+            return localStorage.getItem(cacheKey);
+        } catch {
+            return null;
+        }
+    };
+
+    const writeOrdersCache = (cacheKey: string, cachedOrders: any[]) => {
+        try {
+            localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), orders: cachedOrders }));
+        } catch (error) {
+            console.warn('[ShopeeOrdersTab] Cache local indisponivel; pedidos carregados sem cache.', error);
+        }
+    };
+
     const fetchOrders = async (forceRefresh = false) => {
         const cacheKey = `shopee_orders_${statusFilter}`;
-        
+
         if (!forceRefresh) {
-            const cached = localStorage.getItem(cacheKey);
+            const cached = readOrdersCache(cacheKey);
             if (cached) {
                 try {
                     const parsed = JSON.parse(cached);
@@ -115,7 +131,7 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
             
             if (orderList.length === 0) {
                 setOrders([]);
-                localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), orders: [] }));
+                writeOrdersCache(cacheKey, []);
                 setLoading(false);
                 return;
             }
@@ -135,7 +151,7 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
                 newOrders.push(...(detailsData.response?.order_list || []));
             }
             setOrders(newOrders);
-            localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), orders: newOrders }));
+            writeOrdersCache(cacheKey, newOrders);
 
         } catch (error: any) {
             // Ignora erros gerados por extensões do browser (não são falhas reais de rede)
@@ -279,7 +295,9 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
     const handleDownloadLabel = async (orderSn: string) => {
         toast.loading(`Buscando etiqueta do pedido #${orderSn}...`, { id: `label-${orderSn}` });
         try {
-            const res = await fetch(`/api/shopee-actions?action=get_shipping_document&order_sn=${orderSn}`);
+            const res = await fetch(`/api/shopee-actions?action=get_shipping_document&order_sn=${orderSn}`, {
+                method: 'POST',
+            });
             const contentType = res.headers.get('content-type') || '';
 
             if (contentType.includes('application/pdf')) {
@@ -333,7 +351,7 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
                 toast.success('Etiqueta aberta! Clique em "Imprimir" na janela.', { id: `label-${orderSn}` });
             } else {
                 const data = await res.json();
-                const errMsg = data.error || data.doc?.error;
+                const errMsg = data.message || data.doc?.message || data.error || data.doc?.error;
                 if (errMsg) {
                     toast.error(`Etiqueta: ${errMsg}`, { id: `label-${orderSn}`, duration: 8000 });
                 } else {

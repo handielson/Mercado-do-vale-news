@@ -9,7 +9,6 @@ const requiredEndpoints = [
   '/api/v2/logistics/get_tracking_info',
   '/api/v2/logistics/get_tracking_number',
   '/api/v2/payment/get_escrow_detail',
-  '/api/v2/logistics/get_shipping_document_info',
   '/api/v2/logistics/download_shipping_document',
 ];
 
@@ -46,6 +45,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /order_sn_list n(?:Ã£|ã)o fornecido/, `${file} must validate missing order_sn_list`);
   assert.match(source, /order_sn n(?:Ã£|ã)o fornecido/, `${file} must validate missing order_sn`);
   assert.match(source, /attachment; filename="etiqueta-\$\{orderSn\}\.pdf"/, `${file} must preserve PDF label download filename`);
+  assert.match(source, /shipping_document_processing/, `${file} must report labels that are still being generated`);
   assert.match(source, /A(?:Ã§|ç)(?:Ã£|ã)o desconhecida/, `${file} must reject unknown actions`);
   assert.match(source, /buildCopyableDebug\('shopee-actions'/, `${file} must include copyable debug for Shopee actions failures`);
 

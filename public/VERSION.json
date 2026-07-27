@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.100-purchase-queue-sale-dates",
+  "version": "v1.2.101-shopee-label-generation",
   "date": "2026-07-27",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260727-140739-purchase-queue-sale-dates",
+  "release_vps": "/var/www/mdv-site/releases/20260727-143547-shopee-label-generation",
   "branch": "main",
-  "summary": "Exibe a data real das vendas persistidas na Central de Compras."
+  "summary": "Atualiza a geracao de etiquetas Shopee e evita falso erro de conexao no cache de pedidos."
 }
