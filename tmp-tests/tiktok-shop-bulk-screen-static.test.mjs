@@ -13,5 +13,7 @@ assert.match(bulk, /Reenviar rascunhos/, 'bulk screen must expose resending');
 assert.match(bulk, /Atualizar anuncios/, 'bulk screen must expose updates');
 assert.match(bulk, /getProductLinks/, 'bulk screen must load TikTok links');
 assert.match(bulk, /publishDraft/, 'bulk screen must use the real publish endpoint');
+assert.match(bulk, /Buscar por nome, SKU, categoria ou marca/, 'bulk screen must offer text filtering');
+assert.match(bulk, /Selecionar prontos filtrados/, 'bulk screen must select all eligible filtered products');
 
 console.log('TikTok Shop bulk screen static checks passed');
