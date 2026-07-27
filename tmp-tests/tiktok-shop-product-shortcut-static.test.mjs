@@ -315,7 +315,7 @@ assert.match(
 assert.match(preparation, /Acompanhamento do envio/, 'TikTok modal must display live sending steps');
 assert.match(preparation, /getDraftJob\(job\.job_id\)/, 'TikTok modal must poll actual backend progress');
 assert.match(preparation, /Copiar debug/, 'TikTok errors must expose a copy-debug action');
-assert.match(preparation, /Publicar no TikTok/, 'TikTok draft must expose a publication button');
+assert.match(preparation, /Reenviar anuncio/, 'TikTok draft must expose an explicit resend button');
 assert.match(preparation, /Atualizar anuncio/, 'active TikTok products must expose an explicit update action');
 assert.match(preparation, /Ver rascunho/, 'TikTok draft must expose a Seller Center shortcut');
 assert.match(preparation, /Ver anuncio/, 'active TikTok product must expose a public listing shortcut');

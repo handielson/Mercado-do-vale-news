@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.80-tiktok-update-listing
+version: v1.2.81-tiktok-draft-resend
 date: 2026-07-26
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-023540-tiktok-update-listing
+release_vps: /var/www/mdv-site/releases/20260727-024255-tiktok-draft-resend
 branch: main
-summary: Permite atualizar anuncios TikTok ativos com confirmacao e nova analise.
+summary: Exibe reenvio explicito para anuncios TikTok que permanecem em rascunho.
 ```
