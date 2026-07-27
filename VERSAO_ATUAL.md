@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.83-tiktok-bulk-send
+version: v1.2.84-tiktok-title-compatibility
 date: 2026-07-27
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-040000-v1283-tiktok-bulk-send
+release_vps: /var/www/mdv-site/releases/20260727-050000-v1284-tiktok-title-compatibility
 branch: main
-summary: Adiciona diagnostico e acoes em lote para anuncios TikTok Shop.
+summary: Normaliza titulos TikTok: para vira Compativel com no envio.
 ```

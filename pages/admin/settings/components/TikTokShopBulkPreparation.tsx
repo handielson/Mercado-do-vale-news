@@ -13,7 +13,7 @@ function titleNeedsCompatibilityWording(name?: string | null) {
 
 function diagnostic(product: Product, link?: TikTokShopProductLink) {
   if (link?.status === 'ACTIVE') return { label: 'Atualizar', detail: 'Anuncio ja enviado: sera atualizado no TikTok Shop.', ok: true };
-  if (titleNeedsCompatibilityWording(product.name)) return { label: 'Corrigir titulo', detail: 'Troque “para” por “Compativel com” antes do envio.', ok: false };
+  if (titleNeedsCompatibilityWording(product.name)) return { label: 'Titulo ajustado', detail: 'O envio troca “para” por “Compativel com”.', ok: true };
   if (!product.category_id) return { label: 'Categoria nao mapeada', detail: 'Mapeie a categoria TikTok no preparo.', ok: false };
   if (!product.sku || !(product.eans || []).some(Boolean)) return { label: 'Identificador obrigatorio ausente', detail: 'Informe SKU e EAN.', ok: false };
   if (!product.images?.length) return { label: 'Sem midia', detail: 'Inclua ao menos uma imagem.', ok: false };

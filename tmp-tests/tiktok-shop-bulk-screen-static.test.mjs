@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const page = readFileSync('pages/admin/settings/TikTokShopPage.tsx', 'utf8');
 const bulk = readFileSync('pages/admin/settings/components/TikTokShopBulkPreparation.tsx', 'utf8');
+const vpsServer = readFileSync('vps_server.cjs', 'utf8');
 
 assert.match(page, /TikTokShopBulkPreparation/, 'TikTok page must mount the bulk screen');
 assert.match(bulk, /Envio em massa/, 'bulk screen must be visible');
@@ -20,10 +21,13 @@ assert.match(bulk, /Selecionar prontos filtrados/, 'bulk screen must select all 
 assert.match(bulk, /useState\('positive'\)/, 'bulk screen must default to products with stock');
 assert.match(bulk, /useState\('NOT_SENT'\)/, 'bulk screen must default to products not yet sent');
 assert.match(bulk, /Atualizar/, 'bulk screen must expose update state for sent products');
-assert.match(bulk, /titleNeedsCompatibilityWording/, 'bulk screen must prevent titles using the forbidden wording');
-assert.match(bulk, /Compativel com/, 'bulk screen must require the compatibility wording in titles');
+assert.match(bulk, /titleNeedsCompatibilityWording/, 'bulk screen must identify titles that need compatibility wording');
+assert.match(bulk, /Titulo ajustado/, 'bulk screen must show when a title will be corrected');
 assert.match(bulk, /ref=\{progressRef\}/, 'bulk screen must anchor automatic progress scrolling');
 assert.match(bulk, /scrollIntoView/, 'bulk screen must scroll to progress after sending');
 assert.match(bulk, /bg-emerald-50/, 'completed drafts must have a distinct success state');
+assert.match(vpsServer, /function cleanTikTokDraftTitleVps/, 'API must normalize the TikTok draft title');
+assert.match(vpsServer, /replace\(\/\\bpara\\b\/gi, 'Compatível com'\)/, 'API must use compatibility wording in TikTok titles');
+assert.match(vpsServer, /cleanTikTokDraftTitleVps\(product\.name\)/, 'TikTok draft creation must use the normalized title');
 
 console.log('TikTok Shop bulk screen static checks passed');

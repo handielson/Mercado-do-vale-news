@@ -2450,6 +2450,13 @@ function cleanTikTokDraftTextVps(value) {
     .trim();
 }
 
+function cleanTikTokDraftTitleVps(value) {
+  return cleanTikTokDraftTextVps(value)
+    .replace(/\bpara\b/gi, 'Compatível com')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function escapeTikTokDraftHtmlVps(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -2782,7 +2789,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       });
     }
 
-    const title = cleanTikTokDraftTextVps(product.name).slice(0, 300);
+    const title = cleanTikTokDraftTitleVps(product.name).slice(0, 300);
     const descriptionText = cleanTikTokDraftTextVps(product.description).slice(0, 9900);
     const descriptionHtml = formatTikTokDraftDescriptionHtmlVps(product.description);
     const sellerSku = cleanTikTokDraftTextVps(product.sku).slice(0, 255);
