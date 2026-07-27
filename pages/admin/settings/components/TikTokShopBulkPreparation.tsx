@@ -69,7 +69,8 @@ export default function TikTokShopBulkPreparation() {
   }, []);
 
   const brands = useMemo(() => [...new Set(products.map((product) => product.brand).filter(Boolean))] as string[], [products]);
-  const rows = useMemo(() => products.filter((product) => {
+  const rows = useMemo(() => {
+    const matchesFilters = (product: Product) => {
     const item = diagnostic(product, links[product.id], corrections[product.id]);
     const tiktokState = links[product.id]?.status || 'NOT_SENT';
     const searchable = `${product.name} ${product.sku} ${product.brand} ${product.category_id}`.toLowerCase();
@@ -78,7 +79,18 @@ export default function TikTokShopBulkPreparation() {
       && (stock === 'all' || (stock === 'positive' ? Number(product.stock_quantity || 0) > 0 : Number(product.stock_quantity || 0) <= 0))
       && (state === 'all' || tiktokState === state)
       && (state !== 'READY' || item.ok);
-  }), [brand, corrections, links, products, query, state, stock]);
+    };
+
+    const visibleParentIds = new Set(products
+      .filter((product) => product.parent_id && matchesFilters(product))
+      .map((product) => product.parent_id));
+
+    return products.filter((product) => {
+      if (product.is_parent) return matchesFilters(product) || visibleParentIds.has(product.id);
+      if (product.parent_id) return false;
+      return matchesFilters(product);
+    });
+  }, [brand, corrections, links, products, query, state, stock]);
 
   async function run(action: Action) {
     const chosen = products.filter((product) => selected.includes(product.id) && diagnostic(product, links[product.id], corrections[product.id]).ok);
