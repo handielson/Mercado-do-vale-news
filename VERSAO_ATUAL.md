@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.86-tiktok-variation-drafts
+version: v1.2.87-tiktok-parent-highlight
 date: 2026-07-27
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-070000-v1286-tiktok-variation-drafts
+release_vps: /var/www/mdv-site/releases/20260727-080000-v1287-tiktok-parent-highlight
 branch: main
-summary: Cria rascunhos TikTok com todos os SKUs de cada grupo de variacoes.
+summary: Destaca produtos pai para selecao de anuncios TikTok com variacoes.
 ```

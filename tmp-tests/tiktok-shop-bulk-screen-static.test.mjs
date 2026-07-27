@@ -37,5 +37,7 @@ assert.match(vpsServer, /WHERE parent_id = \? AND id <> \?/, 'TikTok drafts must
 assert.match(vpsServer, /buildTikTokDraftSkusVps/, 'TikTok drafts must build all SKUs for a variation group');
 assert.match(vpsServer, /sales_attributes/, 'TikTok variation SKUs must include sales attributes');
 assert.match(bulk, /Grupo de variacoes/, 'bulk screen must allow a parent product to create variation listings');
+assert.match(bulk, /Produto pai/, 'bulk screen must visually identify selectable variation parents');
+assert.match(bulk, /variacao\(oes\) \/ SKU\(s\) serao enviados juntos/, 'bulk screen must explain that the group sends together');
 
 console.log('TikTok Shop bulk screen static checks passed');
