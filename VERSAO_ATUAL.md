@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.79-tiktok-sku-video-fallback
+version: v1.2.80-tiktok-update-listing
 date: 2026-07-26
 status: ready
-release_vps: API-only (mdv-api)
+release_vps: /var/www/mdv-site/releases/20260727-023540-tiktok-update-listing
 branch: main
-summary: Inclui o video canonico por SKU em rascunhos TikTok quando video_url estiver vazio.
+summary: Permite atualizar anuncios TikTok ativos com confirmacao e nova analise.
 ```

@@ -5721,18 +5721,15 @@ async function handleTikTokShopPublishDraftVps(request, reply) {
   const remoteProductId = String(link?.tiktok_product_id || '').trim();
   if (!remoteProductId) return reply.code(404).send({ error: 'Crie o rascunho antes de publicar.' });
   const currentStatus = String(link.status || 'DRAFT').toUpperCase();
-  if (currentStatus === 'ACTIVATE') {
-    return reply.code(200).send({ ok: true, already_active: true, ...link, status: 'ACTIVATE' });
-  }
   if (currentStatus === 'PENDING') {
     return reply.code(200).send({ ok: true, already_pending: true, ...link, status: 'PENDING' });
   }
-  if (currentStatus !== 'DRAFT') {
-    return reply.code(409).send({ error: `O produto esta em ${currentStatus}; somente rascunhos podem ser publicados por esta acao.` });
+  if (!['DRAFT', 'ACTIVATE'].includes(currentStatus)) {
+    return reply.code(409).send({ error: `O produto esta em ${currentStatus}; somente rascunhos ou anuncios ativos podem ser enviados por esta acao.` });
   }
   try {
     const settings = await loadTikTokShopOAuthSettingsVps();
-    const { product: remoteDraft } = await loadTikTokShopRemoteProductVps(settings, remoteProductId, true);
+    const { product: remoteDraft } = await loadTikTokShopRemoteProductVps(settings, remoteProductId, currentStatus === 'DRAFT');
     const draftPayload = buildTikTokShopListingPayloadVps(remoteDraft, link.tiktok_category_id);
     const payload = await applyTikTokShopAutomaticAttributesVps(settings, draftPayload);
     const result = await callTikTokShopOpenApiVps(settings, {

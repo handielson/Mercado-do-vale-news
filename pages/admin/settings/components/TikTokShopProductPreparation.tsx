@@ -477,8 +477,11 @@ export default function TikTokShopProductPreparation({
       toast.info('Crie o rascunho antes de publicar.');
       return;
     }
+    const isUpdate = tiktokProductStatus === 'ACTIVATE';
     if (!window.confirm(
-      `Publicar "${selectedProduct.name}" no TikTok Shop? O anuncio sera enviado para analise do TikTok.`,
+      isUpdate
+        ? `Atualizar "${selectedProduct.name}" no TikTok Shop? O anuncio sera reenviado para analise.`
+        : `Publicar "${selectedProduct.name}" no TikTok Shop? O anuncio sera enviado para analise do TikTok.`,
     )) return;
 
     setPublishingDraft(true);
@@ -850,7 +853,7 @@ export default function TikTokShopProductPreparation({
               </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {(tiktokProductStatus || 'DRAFT') === 'DRAFT' && (
+              {['DRAFT', 'ACTIVATE'].includes(tiktokProductStatus || 'DRAFT') && (
                 <button
                   type="button"
                   onClick={() => void publishTikTokDraft()}
@@ -858,7 +861,7 @@ export default function TikTokShopProductPreparation({
                   className="inline-flex items-center gap-2 rounded-lg bg-pink-600 px-3 py-2 text-xs font-bold text-white hover:bg-pink-700 disabled:opacity-50"
                 >
                   {publishingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                  {publishingDraft ? 'Publicando...' : 'Publicar no TikTok'}
+                  {publishingDraft ? 'Enviando...' : tiktokProductStatus === 'ACTIVATE' ? 'Atualizar anuncio' : 'Publicar no TikTok'}
                 </button>
               )}
               <button
