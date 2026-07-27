@@ -29,6 +29,8 @@ assert.match(bulk, /bg-emerald-50/, 'completed drafts must have a distinct succe
 assert.match(bulk, /Lista de correcoes/, 'bulk screen must show a correction queue for failed items');
 assert.match(bulk, /Corrigir anuncio/, 'bulk screen must link failed items to the correction flow');
 assert.match(bulk, /setCorrections/, 'failed draft jobs must block the product until corrected');
+assert.match(bulk, /!variationGroups\.parentIdByChild\.has\(product\.id\)/, 'A selected child must not be sent separately from its parent');
+assert.match(bulk, /groupChildren\.some\(hasProductImage\)/, 'A parent must be eligible when one of its variations has an image');
 assert.match(vpsServer, /function cleanTikTokDraftTitleVps/, 'API must normalize the TikTok draft title');
 assert.match(vpsServer, /replace\(\/\\bpara\\b\/gi, 'Compatível com'\)/, 'API must use compatibility wording in TikTok titles');
 assert.match(vpsServer, /cleanTikTokDraftTitleVps\(product\.name\)/, 'TikTok draft creation must use the normalized title');
@@ -41,6 +43,8 @@ assert.match(bulk, /Rascunho criado - enviado sem video/, 'The bulk result must 
 assert.match(bulk, /Enviado sem video/, 'Linked ads without video must keep an informational diagnostic');
 assert.match(vpsServer, /WHERE parent_id = \? AND id <> \?/, 'TikTok drafts must find a sibling video within the same variation group');
 assert.match(vpsServer, /buildTikTokDraftSkusVps/, 'TikTok drafts must build all SKUs for a variation group');
+assert.match(vpsServer, /\[product, \.\.\.variations\]\.flatMap\(\(item\) => normalizeTikTokDraftImagesVps\(item\)\)/, 'A parent draft must reuse images from its variations');
+assert.match(vpsServer, /images, image_url FROM products[\s\S]*WHERE parent_id = \?/, 'Variation media must be loaded for the parent gallery fallback');
 assert.match(vpsServer, /sales_attributes/, 'TikTok variation SKUs must include sales attributes');
 assert.match(bulk, /Grupo de variacoes/, 'bulk screen must allow a parent product to create variation listings');
 assert.match(bulk, /Produto pai/, 'bulk screen must visually identify selectable variation parents');

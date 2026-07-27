@@ -5286,7 +5286,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       [productId],
     );
     if (!product) return reply.code(404).send({ error: 'Produto local nao encontrado.' });
-    const [variations] = Number(product.is_parent) === 1 ? await pool.query(`SELECT id, sku, specs, price_retail, stock_quantity FROM products WHERE parent_id = ? AND (is_parent = 0 OR is_parent IS NULL) ORDER BY sku ASC`, [product.id]) : [[product]];
+    const [variations] = Number(product.is_parent) === 1 ? await pool.query(`SELECT id, sku, specs, price_retail, stock_quantity, images, image_url FROM products WHERE parent_id = ? AND (is_parent = 0 OR is_parent IS NULL) ORDER BY sku ASC`, [product.id]) : [[product]];
     if (variations.length === 0) return reply.code(400).send({ error: 'O grupo nao possui variacoes para enviar.' });
 
     const [[existing]] = await pool.query(
@@ -5342,7 +5342,9 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
     reportProgress('validate_warehouse', 'done', `Armazem confirmado: ${warehouse.name}.`);
 
     reportProgress('prepare_images', 'running', 'Preparando a galeria local para o TikTok.');
-    const imageUrls = normalizeTikTokDraftImagesVps(product);
+    const imageUrls = Array.from(new Set(
+      [product, ...variations].flatMap((item) => normalizeTikTokDraftImagesVps(item)),
+    )).slice(0, 9);
     if (imageUrls.length === 0) return reply.code(400).send({ error: 'O produto precisa de pelo menos uma imagem.' });
     reportProgress('prepare_images', 'done', `${imageUrls.length} imagem(ns) preparada(s), inclusive imagens locais.`);
     const videoUrl = await resolveTikTokDraftVideoUrlVps(product);

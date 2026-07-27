@@ -13,7 +13,11 @@ function titleNeedsCompatibilityWording(name?: string | null) {
   return /\bpara\b/i.test(String(name || ''));
 }
 
-function diagnostic(product: Product, link?: TikTokShopProductLink, correction?: string, isGroupParent = Boolean(product.is_parent)) {
+function hasProductImage(product: Product) {
+  return Boolean(product.images?.length || product.image_url);
+}
+
+function diagnostic(product: Product, link?: TikTokShopProductLink, correction?: string, isGroupParent = Boolean(product.is_parent), groupChildren: Product[] = []) {
   if (correction) return { label: 'Corrigir antes de enviar', detail: correction, ok: false };
   if (link?.video_uploaded === false) return { label: 'Enviado sem video', detail: 'O anuncio foi enviado normalmente, sem video.', ok: true };
   if (link?.status === 'ACTIVE') return { label: 'Atualizar', detail: 'Anuncio ja enviado: sera atualizado no TikTok Shop.', ok: true };
@@ -22,7 +26,7 @@ function diagnostic(product: Product, link?: TikTokShopProductLink, correction?:
   if (titleNeedsCompatibilityWording(product.name)) return { label: 'Titulo ajustado', detail: 'O envio troca “para” por “Compativel com”.', ok: true };
   if (!product.category_id) return { label: 'Categoria nao mapeada', detail: 'Mapeie a categoria TikTok no preparo.', ok: false };
   if (!product.sku || !(product.eans || []).some(Boolean)) return { label: 'Identificador obrigatorio ausente', detail: 'Informe SKU e EAN.', ok: false };
-  if (!product.images?.length) return { label: 'Sem midia', detail: 'Inclua ao menos uma imagem.', ok: false };
+  if (!hasProductImage(product) && !groupChildren.some(hasProductImage)) return { label: 'Sem midia', detail: 'Inclua ao menos uma imagem no pai ou em uma variacao.', ok: false };
   if (!product.description?.trim()) return { label: 'Precisa de dados', detail: 'Adicione a descricao do anuncio.', ok: false };
   if (Number(product.stock_quantity || 0) <= 0) return { label: 'Precisa de dados', detail: 'Informe estoque positivo.', ok: false };
   return { label: 'Pronto', detail: link?.status === 'DRAFT' ? 'Rascunho pronto para publicar.' : 'Pronto para criar rascunho.', ok: true };
@@ -76,7 +80,8 @@ export default function TikTokShopBulkPreparation() {
   const variationGroups = useMemo(() => buildTikTokBulkVariationGroups(products), [products]);
   const rows = useMemo(() => {
     const matchesFilters = (product: Product) => {
-    const item = diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id));
+    const groupChildren = variationGroups.childrenByParent.get(product.id) || [];
+    const item = diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id), groupChildren);
     const tiktokState = links[product.id]?.status || 'NOT_SENT';
     const searchable = `${product.name} ${product.sku} ${product.brand} ${product.category_id}`.toLowerCase();
     return (!query.trim() || searchable.includes(query.trim().toLowerCase()))
@@ -99,7 +104,8 @@ export default function TikTokShopBulkPreparation() {
   async function run(action: Action) {
     const chosen = products.filter((product) =>
       selected.includes(product.id) &&
-      diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id)).ok
+      !variationGroups.parentIdByChild.has(product.id) &&
+      diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id), variationGroups.childrenByParent.get(product.id) || []).ok
     );
     if (!chosen.length) return toast.error('Selecione ao menos um anuncio elegivel.');
     if (!window.confirm(`${action} para ${chosen.length} anuncio(s)?`)) return;
@@ -186,7 +192,7 @@ export default function TikTokShopBulkPreparation() {
     }
 
     const candidates = chosen.filter((product) =>
-      diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id)).ok &&
+      diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id), variationGroups.childrenByParent.get(product.id) || []).ok &&
       links[product.id]
     );
     if (!candidates.length) return toast.error('Nenhum item selecionado possui vinculo TikTok para esta acao.');
@@ -265,7 +271,7 @@ export default function TikTokShopBulkPreparation() {
         <select value={brand} onChange={(event) => setBrand(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Todas as marcas</option>{brands.map((item) => <option key={item} value={item}>{item}</option>)}</select>
         <select value={stock} onChange={(event) => setStock(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="all">Todo estoque</option><option value="positive">Com estoque</option><option value="empty">Sem estoque</option></select>
         <select value={state} onChange={(event) => setState(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="all">Toda situacao TikTok</option><option value="NOT_SENT">Nao enviado</option><option value="DRAFT">Rascunho</option><option value="ACTIVE">Publicado</option><option value="READY">Prontos</option></select>
-        <button type="button" onClick={() => setSelected(rows.filter((product) => diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id)).ok).map((product) => product.id))} className="rounded-lg border border-teal-600 px-3 py-2 text-sm font-semibold text-teal-700">Selecionar prontos filtrados</button>
+        <button type="button" onClick={() => setSelected(rows.filter((product) => diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id), variationGroups.childrenByParent.get(product.id) || []).ok).map((product) => product.id))} className="rounded-lg border border-teal-600 px-3 py-2 text-sm font-semibold text-teal-700">Selecionar prontos filtrados</button>
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
@@ -274,7 +280,7 @@ export default function TikTokShopBulkPreparation() {
           <tbody className="divide-y divide-slate-100">
             {loading ? <tr><td colSpan={5} className="p-6 text-center"><Loader2 className="inline h-4 w-4 animate-spin" /> Carregando...</td></tr> : rows.map((product) => {
               const isGroupParent = variationGroups.parentIds.has(product.id);
-              const item = diagnostic(product, links[product.id], corrections[product.id], isGroupParent);
+              const item = diagnostic(product, links[product.id], corrections[product.id], isGroupParent, variationGroups.childrenByParent.get(product.id) || []);
               const sale = Number(product.price_retail || 0) / 100;
               const cost = Number(product.price_cost || 0) / 100;
               const profit = sale - cost;
