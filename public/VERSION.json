@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.90-tiktok-video-fallback",
+  "version": "v1.2.91-tiktok-video-notice",
   "date": "2026-07-27",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260727-023008-v1290-tiktok-video-fallback",
+  "release_vps": "/var/www/mdv-site/releases/20260727-023427-v1291-tiktok-video-notice",
   "branch": "main",
-  "summary": "Valida o video do pai, reutiliza o primeiro video acessivel das variacoes e nao bloqueia o rascunho quando o video opcional falha."
+  "summary": "Envia o anuncio normalmente sem video e exibe apenas um aviso informativo persistente no resultado e no diagnostico."
 }

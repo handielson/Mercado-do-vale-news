@@ -15,6 +15,7 @@ function titleNeedsCompatibilityWording(name?: string | null) {
 
 function diagnostic(product: Product, link?: TikTokShopProductLink, correction?: string, isGroupParent = Boolean(product.is_parent)) {
   if (correction) return { label: 'Corrigir antes de enviar', detail: correction, ok: false };
+  if (link?.video_uploaded === false) return { label: 'Enviado sem video', detail: 'O anuncio foi enviado normalmente, sem video.', ok: true };
   if (link?.status === 'ACTIVE') return { label: 'Atualizar', detail: 'Anuncio ja enviado: sera atualizado no TikTok Shop.', ok: true };
   if (isGroupParent) return { label: 'Grupo de variacoes', detail: 'Sera criado um unico anuncio com todos os SKUs filhos.', ok: true };
   if (product.parent_id) return { label: 'Enviar pelo grupo pai', detail: 'Esta variacao sera incluida no anuncio do produto pai.', ok: false };
@@ -28,6 +29,7 @@ function diagnostic(product: Product, link?: TikTokShopProductLink, correction?:
 }
 
 function progressStyle(status: string) {
+  if (status === 'Rascunho criado - enviado sem video') return { card: 'border-amber-200 bg-amber-50', name: 'text-amber-950', status: 'text-amber-700', icon: AlertCircle };
   if (status === 'Rascunho criado') return { card: 'border-emerald-200 bg-emerald-50', name: 'text-emerald-900', status: 'text-emerald-700', icon: CheckCircle2 };
   if (status.startsWith('Falha')) return { card: 'border-rose-200 bg-rose-50', name: 'text-rose-900', status: 'text-rose-700', icon: AlertCircle };
   return { card: 'border-slate-200 bg-white', name: 'text-slate-950', status: 'text-slate-600', icon: Loader2 };
@@ -150,10 +152,16 @@ export default function TikTokShopBulkPreparation() {
                   tiktok_sku_id: job.result!.tiktok_sku_id,
                   status: job.result!.status,
                   last_synced_at: new Date().toISOString(),
+                  video_uploaded: job.result!.video_uploaded,
                 },
               }));
             }
-            setDraftProgress((current) => ({ ...current, [product.id]: 'Rascunho criado' }));
+            setDraftProgress((current) => ({
+              ...current,
+              [product.id]: job.result?.video_uploaded === false
+                ? 'Rascunho criado - enviado sem video'
+                : 'Rascunho criado',
+            }));
             return product.id;
           } catch (error: any) {
             const message = error?.message || 'Erro ao enviar o anuncio.';
@@ -221,7 +229,7 @@ export default function TikTokShopBulkPreparation() {
               const Icon = style.icon;
               return (
                 <div key={product.id} className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${style.card}`}>
-                  <Icon className={`h-4 w-4 shrink-0 ${status === 'Rascunho criado' ? 'text-emerald-600' : status.startsWith('Falha') ? 'text-rose-600' : 'animate-spin text-slate-500'}`} />
+                  <Icon className={`h-4 w-4 shrink-0 ${status === 'Rascunho criado' ? 'text-emerald-600' : status === 'Rascunho criado - enviado sem video' ? 'text-amber-600' : status.startsWith('Falha') ? 'text-rose-600' : 'animate-spin text-slate-500'}`} />
                   <div className="min-w-0">
                     <p className={`truncate text-sm font-semibold ${style.name}`}>{product.name}</p>
                     <p className={`text-xs font-medium ${style.status}`}>{status}</p>

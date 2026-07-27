@@ -447,12 +447,16 @@ export default function TikTokShopProductPreparation({
         tiktok_sku_id: result.tiktok_sku_id,
         status: result.status,
         last_synced_at: new Date().toISOString(),
+        video_uploaded: result.video_uploaded,
       });
-      toast.success(
-        result.already_exists
-          ? 'Este produto ja possui rascunho no TikTok Shop.'
-          : 'Rascunho criado no TikTok Shop.',
-      );
+      const successMessage = result.already_exists
+        ? 'Este produto ja possui rascunho no TikTok Shop.'
+        : 'Rascunho criado no TikTok Shop.';
+      if (result.video_uploaded === false) {
+        toast.info(`${successMessage} Enviado sem video.`);
+      } else {
+        toast.success(successMessage);
+      }
     } catch (error: any) {
       console.error('[TikTokShopProductPreparation] draft creation error:', error);
       const message = error?.message || 'Nao foi possivel criar o rascunho no TikTok Shop.';

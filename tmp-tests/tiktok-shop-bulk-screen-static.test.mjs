@@ -35,6 +35,10 @@ assert.match(vpsServer, /cleanTikTokDraftTitleVps\(product\.name\)/, 'TikTok dra
 assert.match(vpsServer, /probeTikTokDraftVideoUrlVps/, 'TikTok drafts must validate configured videos before downloading them');
 assert.match(vpsServer, /variationsWithVideo/, 'TikTok drafts must inspect configured videos from sibling variations');
 assert.match(vpsServer, /Video indisponivel; rascunho seguira sem video/, 'An unavailable optional video must not block the draft');
+assert.match(vpsServer, /video_uploaded: Boolean\(uploadedVideo\)/, 'Draft responses must report whether a video was uploaded');
+assert.match(vpsServer, /Anuncio enviado sem video/, 'Draft responses must carry a non-blocking no-video notice');
+assert.match(bulk, /Rascunho criado - enviado sem video/, 'The bulk result must inform when a draft was sent without video');
+assert.match(bulk, /Enviado sem video/, 'Linked ads without video must keep an informational diagnostic');
 assert.match(vpsServer, /WHERE parent_id = \? AND id <> \?/, 'TikTok drafts must find a sibling video within the same variation group');
 assert.match(vpsServer, /buildTikTokDraftSkusVps/, 'TikTok drafts must build all SKUs for a variation group');
 assert.match(vpsServer, /sales_attributes/, 'TikTok variation SKUs must include sales attributes');

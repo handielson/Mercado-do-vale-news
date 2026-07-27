@@ -54,6 +54,7 @@ export interface TikTokShopProductLink {
   tiktok_sku_id: string | null;
   status: string | null;
   last_synced_at: string | null;
+  video_uploaded?: boolean;
 }
 
 export interface TikTokShopPublishResponse extends TikTokShopProductLink {
@@ -86,6 +87,8 @@ export interface TikTokShopDraftResponse {
   tiktok_sku_id: string | null;
   status: string;
   request_id: string | null;
+  video_uploaded: boolean;
+  notice: string | null;
 }
 
 export type TikTokShopDraftStepStatus = 'idle' | 'running' | 'done' | 'skipped' | 'error';

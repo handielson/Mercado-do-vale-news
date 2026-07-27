@@ -5298,6 +5298,8 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       [productId],
     );
     if (existing?.tiktok_product_id) {
+      const existingMedia = parseTikTokDraftJsonVps(existing.uploaded_images, {});
+      const videoUploaded = Boolean(existingMedia?.video?.id);
       reportProgress('validate_product', 'done', 'Produto ja vinculado ao TikTok Shop.');
       reportProgress('validate_warehouse', 'skipped', 'Validacao ja concluida no envio anterior.');
       reportProgress('prepare_images', 'skipped', 'Imagens ja enviadas.');
@@ -5314,6 +5316,8 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
         tiktok_sku_id: existing.tiktok_sku_id ? String(existing.tiktok_sku_id) : null,
         status: String(existing.status || 'DRAFT'),
         request_id: null,
+        video_uploaded: videoUploaded,
+        notice: videoUploaded ? null : 'Anuncio enviado sem video.',
       });
     }
 
@@ -5458,6 +5462,8 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       tiktok_sku_id: remoteSkuId,
       status: 'DRAFT',
       request_id: result.payload?.request_id || null,
+      video_uploaded: Boolean(uploadedVideo),
+      notice: uploadedVideo ? null : 'Anuncio enviado sem video.',
     });
   } catch (err) {
     const safeError = String(err.message || 'unknown').slice(0, 1000);
@@ -5932,7 +5938,7 @@ async function handleTikTokShopProductLinksVps(request, reply) {
 
   const placeholders = productIds.map(() => '?').join(',');
   const [rows] = await pool.query(
-    `SELECT product_id, tiktok_product_id, tiktok_sku_id, status, last_synced_at
+    `SELECT product_id, tiktok_product_id, tiktok_sku_id, status, last_synced_at, uploaded_images
      FROM tiktok_shop_products
      WHERE product_id IN (${placeholders})
        AND tiktok_product_id IS NOT NULL
@@ -5941,7 +5947,13 @@ async function handleTikTokShopProductLinksVps(request, reply) {
     productIds,
   );
 
-  return { links: rows || [] };
+  return {
+    links: (rows || []).map((row) => {
+      const media = parseTikTokDraftJsonVps(row.uploaded_images, {});
+      const { uploaded_images: _uploadedImages, ...link } = row;
+      return { ...link, video_uploaded: Boolean(media?.video?.id) };
+    }),
+  };
 }
 
 async function handleTikTokShopCategoryMappingGetVps(request, reply) {
