@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.73-tiktok-publicar-rascunho
+version: v1.2.74-tiktok-category-publish
 date: 2026-07-26
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-005800-tiktok-publicar-rascunho
+release_vps: /var/www/mdv-site/releases/20260727-011954-tiktok-category-publish
 branch: main
-summary: Publica rascunhos TikTok e adiciona atalhos e status do anuncio.
+summary: Normaliza categoria e marca do rascunho ao publicar no TikTok Shop.
 ```

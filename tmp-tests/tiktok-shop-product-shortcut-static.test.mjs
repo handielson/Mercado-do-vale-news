@@ -5,6 +5,44 @@ const serverFiles = ['server.js', 'vps_server.js', 'vps_server.cjs'];
 
 for (const file of serverFiles) {
   const source = readFileSync(file, 'utf8');
+  const listingPayloadFunction = source.match(
+    /function buildTikTokShopListingPayloadVps\(remoteProduct\) \{[\s\S]*?\n\}\n\nfunction formatTikTokShopBusinessErrorsVps/,
+  )?.[0].replace(/\n\nfunction formatTikTokShopBusinessErrorsVps$/, '');
+  assert.ok(listingPayloadFunction, `${file} must expose the TikTok listing payload builder`);
+  const buildListingPayload = Function(
+    `${listingPayloadFunction}; return buildTikTokShopListingPayloadVps;`,
+  )();
+  const normalizedListingPayload = buildListingPayload({
+    title: 'Produto de teste',
+    description: '<p>Descricao</p>',
+    categories: [
+      { id: '100', is_leaf: false },
+      { id: '985480', is_leaf: true },
+    ],
+    brand: { id: 'brand-123', name: 'Marca' },
+    main_images: [{ uri: 'tos-image-uri' }],
+    skus: [{ id: 'sku-123' }],
+  });
+  assert.equal(
+    normalizedListingPayload.category_id,
+    '985480',
+    `${file} must convert the Get Product categories trail into Edit Product category_id`,
+  );
+  assert.equal(
+    normalizedListingPayload.brand_id,
+    'brand-123',
+    `${file} must convert the Get Product brand object into Edit Product brand_id`,
+  );
+  assert.throws(
+    () => buildListingPayload({
+      title: 'Produto sem categoria',
+      description: '<p>Descricao</p>',
+      main_images: [{ uri: 'tos-image-uri' }],
+      skus: [{ id: 'sku-123' }],
+    }),
+    (error) => error?.statusCode === 422 && /category_id/.test(error.message),
+    `${file} must report incomplete remote drafts as validation errors instead of gateway errors`,
+  );
   assert.match(
     source,
     /CREATE TABLE IF NOT EXISTS tiktok_shop_products/,

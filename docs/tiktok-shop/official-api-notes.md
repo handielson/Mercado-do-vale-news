@@ -84,6 +84,8 @@ Regras aplicadas:
 
 - `Activate Product` nao publica produtos em `DRAFT`; esse endpoint aceita produtos anteriormente desativados.
 - Para publicar um rascunho local, consultar primeiro o produto atual pelo `Get Product` com `return_draft_version=true`.
+- Converter a categoria folha retornada em `categories[]` pelo `Get Product` para o campo `category_id` exigido pelo `Edit Product`.
+- Converter `brand.id` para `brand_id` quando a marca estiver presente no rascunho retornado.
 - Reenviar todos os campos editaveis pelo `PUT /product/202509/products/{product_id}` com `save_mode=LISTING`.
 - Nao montar a publicacao a partir de uma copia parcial local: campos ausentes em uma edicao completa podem apagar dados existentes.
 - Depois do envio, persistir `PENDING` e consultar o `Get Product` ate o TikTok retornar `ACTIVATE` ou `FAILED`.

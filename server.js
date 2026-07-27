@@ -3004,9 +3004,17 @@ function buildTikTokShopListingPayloadVps(remoteProduct) {
       payload[field] = remoteProduct[field];
     }
   }
+  const categoryTrail = Array.isArray(remoteProduct.categories) ? remoteProduct.categories : [];
+  const leafCategory = categoryTrail.find((category) => category?.is_leaf) || categoryTrail.at(-1);
+  const categoryId = String(remoteProduct.category_id || leafCategory?.id || '').trim();
+  const brandId = String(remoteProduct.brand_id || remoteProduct.brand?.id || '').trim();
+  if (categoryId) payload.category_id = categoryId;
+  if (brandId) payload.brand_id = brandId;
   for (const required of ['description', 'category_id', 'main_images', 'skus', 'title']) {
     if (!payload[required] || (Array.isArray(payload[required]) && payload[required].length === 0)) {
-      throw new Error(`O rascunho retornado pelo TikTok esta sem o campo obrigatorio ${required}.`);
+      const error = new Error(`O rascunho retornado pelo TikTok esta sem o campo obrigatorio ${required}.`);
+      error.statusCode = 422;
+      throw error;
     }
   }
   return payload;
