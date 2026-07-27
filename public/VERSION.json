@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.77-tiktok-draft-status-fallback",
+  "version": "v1.2.78-tiktok-description-format",
   "date": "2026-07-26",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260727-021535-tiktok-draft-status-fallback",
+  "release_vps": "/var/www/mdv-site/releases/20260727-022208-tiktok-description-format",
   "branch": "main",
-  "summary": "Recupera o status atual do TikTok quando o vinculo local ainda aponta para um rascunho ja alterado."
+  "summary": "Formata descricoes TikTok em blocos legiveis com quebras de linha e secoes destacadas."
 }

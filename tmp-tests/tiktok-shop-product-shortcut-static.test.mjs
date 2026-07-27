@@ -93,6 +93,18 @@ for (const file of serverFiles) {
     /Number\(err\?\.tiktokCode\) !== 12052901[\s\S]*?result = await loadProduct\(false\)/,
     `${file} must retry the current product version when TikTok rejects a stale draft-version lookup`,
   );
+  const descriptionFormatter = source.match(
+    /function formatTikTokDraftDescriptionHtmlVps\(value\) \{[\s\S]*?\n\}/,
+  )?.[0];
+  assert.ok(descriptionFormatter, `${file} must format TikTok descriptions before creating a draft`);
+  const formatDescription = Function(
+    `${source.match(/function escapeTikTokDraftHtmlVps\(value\) \{[\s\S]*?\n\}/)?.[0]}; ${descriptionFormatter}; return formatTikTokDraftDescriptionHtmlVps;`,
+  )();
+  const formattedDescription = formatDescription('Texto inicial. Vantagens principais: Economia de energia. Especificações técnicas: Material PLA. Embalagem: 1 unidade.');
+  assert.match(formattedDescription, /Texto inicial\.<br><br>/, `${file} must break dense description sentences into readable blocks`);
+  assert.match(formattedDescription, /<strong>Vantagens principais<\/strong><br>/, `${file} must emphasize recognized description section headings`);
+  assert.match(formattedDescription, /<strong>Especificações técnicas<\/strong><br>/, `${file} must keep technical specifications in their own section`);
+  assert.match(formattedDescription, /<strong>Embalagem<\/strong><br>/, `${file} must keep package contents in their own section`);
   assert.match(
     source,
     /CREATE TABLE IF NOT EXISTS tiktok_shop_products/,

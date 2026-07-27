@@ -4941,6 +4941,51 @@ function escapeTikTokDraftHtmlVps(value) {
     .replace(/'/g, '&#39;');
 }
 
+function formatTikTokDraftDescriptionHtmlVps(value) {
+  const text = String(value || '')
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|li|h[1-6])\s*>/gi, '\n')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/[^\S\r\n]+/g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, 9400);
+  if (!text) return '';
+
+  const sectionPattern = /\b(Vantagens principais|Especifica(?:ç|c)ões t[eé]cnicas|Dimensões|Dimensoes|Embalagem|Conte[uú]do da embalagem|Compatibilidade|Caracter[ií]sticas|Material|Garantia|Observa(?:ç|c)ões)\s*:/gi;
+  const blocks = [];
+  let cursor = 0;
+  let match;
+  while ((match = sectionPattern.exec(text))) {
+    const before = text.slice(cursor, match.index).trim();
+    if (before) blocks.push({ heading: '', text: before });
+    cursor = sectionPattern.lastIndex;
+    const next = sectionPattern.exec(text);
+    const sectionText = text.slice(cursor, next ? next.index : undefined).trim();
+    if (sectionText) blocks.push({ heading: match[1], text: sectionText });
+    if (!next) break;
+    cursor = next.index;
+    sectionPattern.lastIndex = next.index;
+  }
+  if (!blocks.length) blocks.push({ heading: '', text });
+
+  return blocks.map((block) => {
+    const body = escapeTikTokDraftHtmlVps(block.text)
+      .replace(/([.!?])\s+(?=[A-ZÁÀÃÂÉÊÍÓÔÕÚÇ])/g, '$1<br><br>')
+      .replace(/\n+/g, '<br>');
+    return block.heading
+      ? `<strong>${escapeTikTokDraftHtmlVps(block.heading)}</strong><br>${body}`
+      : body;
+  }).join('<br><br>');
+}
+
 function normalizeTikTokDraftImagesVps(product) {
   const storedImages = parseTikTokDraftJsonVps(product?.images, []);
   const values = [
@@ -5205,6 +5250,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
 
     const title = cleanTikTokDraftTextVps(product.name).slice(0, 300);
     const descriptionText = cleanTikTokDraftTextVps(product.description).slice(0, 9900);
+    const descriptionHtml = formatTikTokDraftDescriptionHtmlVps(product.description);
     const sellerSku = cleanTikTokDraftTextVps(product.sku).slice(0, 255);
     const priceCents = Math.round(Number(product.price_retail || 0));
     if (!title || !descriptionText || !sellerSku || priceCents <= 0) {
@@ -5266,7 +5312,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       save_mode: 'AS_DRAFT',
       idempotency_key: crypto.randomUUID(),
       title,
-      description: `<p>${escapeTikTokDraftHtmlVps(descriptionText)}</p>`,
+      description: descriptionHtml,
       category_id: categoryId,
       category_version: 'v1',
       main_images: mainImages,
