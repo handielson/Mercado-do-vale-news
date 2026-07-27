@@ -111,6 +111,7 @@ export default function TikTokShopProductPreparation({
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [createdTikTokProductId, setCreatedTikTokProductId] = useState('');
   const [tiktokProductStatus, setTikTokProductStatus] = useState('');
+  const [loadingTikTokProductLink, setLoadingTikTokProductLink] = useState(Boolean(initialProductId));
   const [publishingDraft, setPublishingDraft] = useState(false);
   const [refreshingRemoteStatus, setRefreshingRemoteStatus] = useState(false);
   const [draftSteps, setDraftSteps] = useState<TikTokShopDraftJobStep[]>(INITIAL_DRAFT_STEPS);
@@ -151,7 +152,8 @@ export default function TikTokShopProductPreparation({
 
   const applyTikTokProductLink = React.useCallback((link: TikTokShopProductLink) => {
     setCreatedTikTokProductId(String(link.tiktok_product_id || '').trim());
-    setTikTokProductStatus(String(link.status || 'DRAFT').toUpperCase());
+    const linkStatus = String(link.status || 'DRAFT').toUpperCase();
+    setTikTokProductStatus(linkStatus === 'ACTIVE' ? 'ACTIVATE' : linkStatus);
     onDraftCreated?.(link);
   }, [onDraftCreated]);
 
@@ -185,6 +187,7 @@ export default function TikTokShopProductPreparation({
     let cancelled = false;
     const productId = String(selectedProduct?.id || '').trim();
     clearTikTokProductLink();
+    setLoadingTikTokProductLink(Boolean(productId));
     if (!productId) return;
 
     tiktokShopService.getProductLinks([productId])
@@ -200,7 +203,10 @@ export default function TikTokShopProductPreparation({
           // Mantem o ultimo estado persistido quando a consulta remota estiver indisponivel.
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoadingTikTokProductLink(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -758,6 +764,8 @@ export default function TikTokShopProductPreparation({
             onClick={() => void createTikTokDraft()}
             disabled={
               creatingDraft ||
+              loadingTikTokProductLink ||
+              Boolean(createdTikTokProductId) ||
               !canWriteProducts ||
               !canReadWarehouses ||
               !selectedProduct ||
@@ -767,8 +775,18 @@ export default function TikTokShopProductPreparation({
             }
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {creatingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {creatingDraft ? 'Acompanhando envio...' : 'Criar rascunho no TikTok'}
+            {creatingDraft || loadingTikTokProductLink
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : createdTikTokProductId
+                ? <CheckCircle2 className="h-4 w-4" />
+                : <Send className="h-4 w-4" />}
+            {creatingDraft
+              ? 'Acompanhando envio...'
+              : loadingTikTokProductLink
+                ? 'Verificando anuncio...'
+                : createdTikTokProductId
+                  ? 'Anuncio ja vinculado'
+                  : 'Criar rascunho no TikTok'}
           </button>
         </div>
         {(creatingDraft || draftSteps.some((step) => step.status !== 'idle') || draftError) && (

@@ -364,7 +364,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         currentTikTokProductLink?.product_id
         && String(currentTikTokProductLink.product_id) !== String(product.id),
     );
-    const isTikTokSynced = currentTikTokStatus === 'ACTIVATE';
+    const isTikTokSynced = ['ACTIVATE', 'ACTIVE'].includes(currentTikTokStatus);
     const isTikTokPending = currentTikTokStatus === 'PENDING';
 
     useEffect(() => {

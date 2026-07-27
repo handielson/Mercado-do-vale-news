@@ -87,6 +87,41 @@ export const ProductListPage: React.FC = () => {
         };
     }, [visibleProductIdsKey]);
 
+    const pendingTikTokProductIdsKey = Object.values(tiktokProductLinks)
+        .filter((link) => String(link.status || '').toUpperCase() === 'PENDING')
+        .map((link) => link.product_id)
+        .filter(Boolean)
+        .sort()
+        .join(',');
+
+    useEffect(() => {
+        const productIds = pendingTikTokProductIdsKey.split(',').filter(Boolean);
+        if (productIds.length === 0) return;
+        let cancelled = false;
+
+        const refreshPendingStatuses = async () => {
+            const results = await Promise.allSettled(
+                productIds.map((productId) => tiktokShopService.getProductStatus(productId)),
+            );
+            if (cancelled) return;
+            const refreshed = results
+                .filter((result): result is PromiseFulfilledResult<TikTokShopProductLink> => result.status === 'fulfilled')
+                .map((result) => result.value);
+            if (refreshed.length === 0) return;
+            setTikTokProductLinks((current) => ({
+                ...current,
+                ...Object.fromEntries(refreshed.map((link) => [link.product_id, link])),
+            }));
+        };
+
+        void refreshPendingStatuses();
+        const intervalId = window.setInterval(() => void refreshPendingStatuses(), 10000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(intervalId);
+        };
+    }, [pendingTikTokProductIdsKey]);
+
     useEffect(() => {
         const refreshTikTokLinks = () => {
             refresh();

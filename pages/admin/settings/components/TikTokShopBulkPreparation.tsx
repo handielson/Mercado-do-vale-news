@@ -24,7 +24,9 @@ function hasProductImage(product: Product) {
 function diagnostic(product: Product, link?: TikTokShopProductLink, correction?: string, isGroupParent = Boolean(product.is_parent), groupChildren: Product[] = []) {
   if (correction) return { label: 'Corrigir antes de enviar', detail: correction, ok: false };
   if (link?.video_uploaded === false) return { label: 'Enviado sem video', detail: 'O anuncio foi enviado normalmente, sem video.', ok: true };
-  if (link?.status === 'ACTIVE') return { label: 'Atualizar', detail: 'Anuncio ja enviado: sera atualizado no TikTok Shop.', ok: true };
+  if (['ACTIVE', 'ACTIVATE'].includes(String(link?.status || '').toUpperCase())) {
+    return { label: 'Atualizar', detail: 'Anuncio ja enviado: sera atualizado no TikTok Shop.', ok: true };
+  }
   if (isGroupParent) return { label: 'Grupo de variacoes', detail: 'Sera criado um unico anuncio com todos os SKUs filhos.', ok: true };
   if (product.parent_id) return { label: 'Enviar pelo grupo pai', detail: 'Esta variacao sera incluida no anuncio do produto pai.', ok: false };
   if (titleNeedsCompatibilityWording(product.name)) return { label: 'Titulo ajustado', detail: 'O envio troca “para” por “Compativel com”.', ok: true };
@@ -86,7 +88,8 @@ export default function TikTokShopBulkPreparation() {
     const matchesFilters = (product: Product) => {
     const groupChildren = variationGroups.childrenByParent.get(product.id) || [];
     const item = diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id), groupChildren);
-    const tiktokState = links[product.id]?.status || 'NOT_SENT';
+    const rawTikTokState = String(links[product.id]?.status || 'NOT_SENT').toUpperCase();
+    const tiktokState = rawTikTokState === 'ACTIVATE' ? 'ACTIVE' : rawTikTokState;
     const searchable = `${product.name} ${product.sku} ${product.brand} ${product.category_id}`.toLowerCase();
     return (!query.trim() || searchable.includes(query.trim().toLowerCase()))
       && (!brand || product.brand === brand)

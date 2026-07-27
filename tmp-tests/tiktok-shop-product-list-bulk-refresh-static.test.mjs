@@ -4,6 +4,10 @@ import { readFileSync } from 'node:fs';
 const listPage = readFileSync('pages/admin/products/ProductListPage.tsx', 'utf8');
 const productList = readFileSync('components/products/ProductList.tsx', 'utf8');
 const productCard = readFileSync('components/products/ProductCard.tsx', 'utf8');
+const preparation = readFileSync(
+  'pages/admin/settings/components/TikTokShopProductPreparation.tsx',
+  'utf8',
+);
 const bulk = readFileSync('pages/admin/settings/components/TikTokShopBulkPreparation.tsx', 'utf8');
 const service = readFileSync('services/tiktokShopService.ts', 'utf8');
 
@@ -26,6 +30,31 @@ assert.match(
   productCard,
   /Variacao incluida no anuncio do produto pai/,
   'the product card must explain when its TikTok state belongs to the grouped parent listing',
+);
+assert.match(
+  preparation,
+  /loadingTikTokProductLink \|\|[\s\S]*Boolean\(createdTikTokProductId\)/,
+  'the draft action must stay disabled while checking a link and after an existing listing is found',
+);
+assert.match(
+  preparation,
+  /loadingTikTokProductLink[\s\S]*'Verificando anuncio\.\.\.'[\s\S]*createdTikTokProductId[\s\S]*'Anuncio ja vinculado'/,
+  'the preparation screen must not look ready to send while restoring an existing listing',
+);
+assert.match(
+  listPage,
+  /pendingTikTokProductIdsKey[\s\S]*getProductStatus\(productId\)[\s\S]*setInterval\(\(\) => void refreshPendingStatuses\(\), 10000\)/,
+  'pending product cards must refresh their remote status without requiring the modal to be opened',
+);
+assert.match(
+  productCard,
+  /\['ACTIVATE', 'ACTIVE'\]\.includes\(currentTikTokStatus\)/,
+  'both persisted active status spellings must render as a published TikTok listing',
+);
+assert.match(
+  preparation,
+  /linkStatus === 'ACTIVE' \? 'ACTIVATE' : linkStatus/,
+  'the preparation screen must normalize the legacy active status spelling',
 );
 assert.match(
   bulk,
