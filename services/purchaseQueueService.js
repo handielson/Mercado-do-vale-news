@@ -1,5 +1,8 @@
 import { getDashboardSalesDigest } from './dashboardSalesDigestService.js';
+import { formatPurchaseQueueSalesLabel, formatQueueDigestDate } from './purchaseQueueDateLabels.js';
 import { vpsClient } from './vpsClient';
+
+export { formatPurchaseQueueSalesLabel, formatQueueDigestDate };
 
 export const PURCHASE_QUEUE_TABLE = 'purchase_queue_items';
 export const PURCHASE_QUOTES_TABLE = 'purchase_quotes';
@@ -30,10 +33,6 @@ function uniqueValues(values) {
 function createId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   return `purchase-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-export function formatQueueDigestDate(now = new Date()) {
-  return [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
 }
 
 export function buildPurchaseQueueItemKey(row = {}) {
@@ -117,7 +116,7 @@ export function buildPurchaseQueueClipboardText(items = []) {
   if (!rows.length) return 'LISTA DE COMPRA\n\nNenhum item pendente na fila de compra.';
   return ['LISTA DE COMPRA', '', ...rows.flatMap((item, index) => [
     `${index + 1}. ${normalizeText(item.model, 'Produto')} | ${normalizeSku(item.sku) || 'SEM-SKU'}`,
-    `Vendas do dia: ${toInteger(item.last_digest_quantity)} | Estoque atual: ${toInteger(item.current_stock)} | Solicitação: ${toInteger(item.requested_quantity)}`,
+    `Vendas: ${formatPurchaseQueueSalesLabel(item)} | Estoque atual: ${toInteger(item.current_stock)} | Solicitação: ${toInteger(item.requested_quantity)}`,
     `Menor orçamento: ${item.lowest_quote_price_cents == null ? 'Ainda não orçado' : formatCurrency(item.lowest_quote_price_cents)} | Status: ${normalizeText(item.status, 'pending')}`,
     '',
   ])].join('\n').trim();
