@@ -117,6 +117,11 @@ export default function TikTokShopProductPreparation({
   const [draftSteps, setDraftSteps] = useState<TikTokShopDraftJobStep[]>(INITIAL_DRAFT_STEPS);
   const [draftError, setDraftError] = useState('');
   const [draftDebug, setDraftDebug] = useState('');
+  const onDraftCreatedRef = React.useRef(onDraftCreated);
+
+  React.useEffect(() => {
+    onDraftCreatedRef.current = onDraftCreated;
+  }, [onDraftCreated]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -154,8 +159,8 @@ export default function TikTokShopProductPreparation({
     setCreatedTikTokProductId(String(link.tiktok_product_id || '').trim());
     const linkStatus = String(link.status || 'DRAFT').toUpperCase();
     setTikTokProductStatus(linkStatus === 'ACTIVE' ? 'ACTIVATE' : linkStatus);
-    onDraftCreated?.(link);
-  }, [onDraftCreated]);
+    onDraftCreatedRef.current?.(link);
+  }, []);
 
   const clearTikTokProductLink = React.useCallback(() => {
     setCreatedTikTokProductId('');

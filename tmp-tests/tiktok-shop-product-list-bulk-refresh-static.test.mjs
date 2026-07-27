@@ -57,6 +57,11 @@ assert.match(
   'the preparation screen must normalize the legacy active status spelling',
 );
 assert.match(
+  preparation,
+  /const onDraftCreatedRef = React\.useRef\(onDraftCreated\)[\s\S]*onDraftCreatedRef\.current\?\.\(link\)[\s\S]*\}, \[\]\)/,
+  'restoring a linked listing must not restart forever when the parent card receives the refreshed status',
+);
+assert.match(
   bulk,
   /notifyTikTokProductLinksUpdated\(completed\)/,
   'bulk draft creation must notify other product pages after persisting links',

@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.97-tiktok-live-status",
+  "version": "v1.2.98-tiktok-linked-modal",
   "date": "2026-07-27",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260727-032442-v1297-tiktok-live-status",
+  "release_vps": "/var/www/mdv-site/releases/20260727-063329-v1298-tiktok-linked-modal",
   "branch": "main",
-  "summary": "Atualiza automaticamente anuncios TikTok em analise e impede que produtos ja vinculados voltem a parecer prontos para envio."
+  "summary": "Finaliza a verificacao de anuncios TikTok ja vinculados sem reiniciar o modal em ciclo."
 }
