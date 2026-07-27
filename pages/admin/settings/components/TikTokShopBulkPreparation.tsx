@@ -11,7 +11,8 @@ function titleNeedsCompatibilityWording(name?: string | null) {
   return /\bpara\b/i.test(String(name || ''));
 }
 
-function diagnostic(product: Product, link?: TikTokShopProductLink) {
+function diagnostic(product: Product, link?: TikTokShopProductLink, correction?: string) {
+  if (correction) return { label: 'Corrigir antes de enviar', detail: correction, ok: false };
   if (link?.status === 'ACTIVE') return { label: 'Atualizar', detail: 'Anuncio ja enviado: sera atualizado no TikTok Shop.', ok: true };
   if (titleNeedsCompatibilityWording(product.name)) return { label: 'Titulo ajustado', detail: 'O envio troca “para” por “Compativel com”.', ok: true };
   if (!product.category_id) return { label: 'Categoria nao mapeada', detail: 'Mapeie a categoria TikTok no preparo.', ok: false };
@@ -41,6 +42,7 @@ export default function TikTokShopBulkPreparation() {
   const [running, setRunning] = useState(false);
   const [draftProgress, setDraftProgress] = useState<Record<string, string>>({});
   const [completedDraftIds, setCompletedDraftIds] = useState<string[]>([]);
+  const [corrections, setCorrections] = useState<Record<string, string>>({});
   const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -67,7 +69,7 @@ export default function TikTokShopBulkPreparation() {
 
   const brands = useMemo(() => [...new Set(products.map((product) => product.brand).filter(Boolean))] as string[], [products]);
   const rows = useMemo(() => products.filter((product) => {
-    const item = diagnostic(product, links[product.id]);
+    const item = diagnostic(product, links[product.id], corrections[product.id]);
     const tiktokState = links[product.id]?.status || 'NOT_SENT';
     const searchable = `${product.name} ${product.sku} ${product.brand} ${product.category_id}`.toLowerCase();
     return (!query.trim() || searchable.includes(query.trim().toLowerCase()))
@@ -75,10 +77,10 @@ export default function TikTokShopBulkPreparation() {
       && (stock === 'all' || (stock === 'positive' ? Number(product.stock_quantity || 0) > 0 : Number(product.stock_quantity || 0) <= 0))
       && (state === 'all' || tiktokState === state)
       && (state !== 'READY' || item.ok);
-  }), [brand, links, products, query, state, stock]);
+  }), [brand, corrections, links, products, query, state, stock]);
 
   async function run(action: Action) {
-    const chosen = products.filter((product) => selected.includes(product.id));
+    const chosen = products.filter((product) => selected.includes(product.id) && diagnostic(product, links[product.id], corrections[product.id]).ok);
     if (!chosen.length) return toast.error('Selecione ao menos um anuncio elegivel.');
     if (!window.confirm(`${action} para ${chosen.length} anuncio(s)?`)) return;
 
@@ -127,7 +129,9 @@ export default function TikTokShopBulkPreparation() {
             setDraftProgress((current) => ({ ...current, [product.id]: 'Rascunho criado' }));
             return product.id;
           } catch (error: any) {
-            setDraftProgress((current) => ({ ...current, [product.id]: `Falha: ${error?.message || 'erro ao enviar'}` }));
+            const message = error?.message || 'Erro ao enviar o anuncio.';
+            setCorrections((current) => ({ ...current, [product.id]: message }));
+            setDraftProgress((current) => ({ ...current, [product.id]: `Falha: ${message}` }));
             throw error;
           }
         }));
@@ -146,7 +150,7 @@ export default function TikTokShopBulkPreparation() {
       return;
     }
 
-    const candidates = chosen.filter((product) => diagnostic(product, links[product.id]).ok && links[product.id]);
+    const candidates = chosen.filter((product) => diagnostic(product, links[product.id], corrections[product.id]).ok && links[product.id]);
     if (!candidates.length) return toast.error('Nenhum item selecionado possui vinculo TikTok para esta acao.');
 
     setRunning(true);
@@ -204,12 +208,26 @@ export default function TikTokShopBulkPreparation() {
         </div>
       )}
 
+      {Object.keys(corrections).length > 0 && (
+        <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4">
+          <div className="flex items-center gap-2"><AlertCircle className="h-5 w-5 text-rose-600" /><div><p className="font-semibold text-rose-950">Lista de correcoes ({Object.keys(corrections).length})</p><p className="text-xs text-rose-700">Estes anuncios ficam bloqueados ate a correcao ser feita.</p></div></div>
+          <div className="mt-3 grid gap-2">
+            {products.filter((product) => corrections[product.id]).map((product) => (
+              <div key={product.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-200 bg-white p-3">
+                <div className="min-w-0"><p className="font-semibold text-slate-950">{product.name}</p><p className="mt-1 text-sm text-rose-700">{corrections[product.id]}</p></div>
+                <button type="button" onClick={() => window.location.assign(`/admin/settings/tiktok-shop?product_id=${encodeURIComponent(product.id)}`)} className="shrink-0 rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">Corrigir anuncio</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 grid gap-3 sm:grid-cols-4">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome, SKU, categoria ou marca" className="rounded-lg border border-slate-300 px-3 py-2 text-sm sm:col-span-2" />
         <select value={brand} onChange={(event) => setBrand(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Todas as marcas</option>{brands.map((item) => <option key={item} value={item}>{item}</option>)}</select>
         <select value={stock} onChange={(event) => setStock(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="all">Todo estoque</option><option value="positive">Com estoque</option><option value="empty">Sem estoque</option></select>
         <select value={state} onChange={(event) => setState(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="all">Toda situacao TikTok</option><option value="NOT_SENT">Nao enviado</option><option value="DRAFT">Rascunho</option><option value="ACTIVE">Publicado</option><option value="READY">Prontos</option></select>
-        <button type="button" onClick={() => setSelected(rows.filter((product) => diagnostic(product, links[product.id]).ok).map((product) => product.id))} className="rounded-lg border border-teal-600 px-3 py-2 text-sm font-semibold text-teal-700">Selecionar prontos filtrados</button>
+        <button type="button" onClick={() => setSelected(rows.filter((product) => diagnostic(product, links[product.id], corrections[product.id]).ok).map((product) => product.id))} className="rounded-lg border border-teal-600 px-3 py-2 text-sm font-semibold text-teal-700">Selecionar prontos filtrados</button>
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
@@ -217,7 +235,7 @@ export default function TikTokShopBulkPreparation() {
           <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Selecionar</th><th className="p-3">Anuncio / SKUs</th><th className="p-3">Diagnostico</th><th className="p-3">Venda / custo</th><th className="p-3">Lucro / margem</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? <tr><td colSpan={5} className="p-6 text-center"><Loader2 className="inline h-4 w-4 animate-spin" /> Carregando...</td></tr> : rows.map((product) => {
-              const item = diagnostic(product, links[product.id]);
+              const item = diagnostic(product, links[product.id], corrections[product.id]);
               const sale = Number(product.price_retail || 0) / 100;
               const cost = Number(product.price_cost || 0) / 100;
               const profit = sale - cost;

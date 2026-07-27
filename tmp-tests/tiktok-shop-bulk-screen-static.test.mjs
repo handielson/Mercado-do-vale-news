@@ -26,8 +26,13 @@ assert.match(bulk, /Titulo ajustado/, 'bulk screen must show when a title will b
 assert.match(bulk, /ref=\{progressRef\}/, 'bulk screen must anchor automatic progress scrolling');
 assert.match(bulk, /scrollIntoView/, 'bulk screen must scroll to progress after sending');
 assert.match(bulk, /bg-emerald-50/, 'completed drafts must have a distinct success state');
+assert.match(bulk, /Lista de correcoes/, 'bulk screen must show a correction queue for failed items');
+assert.match(bulk, /Corrigir anuncio/, 'bulk screen must link failed items to the correction flow');
+assert.match(bulk, /setCorrections/, 'failed draft jobs must block the product until corrected');
 assert.match(vpsServer, /function cleanTikTokDraftTitleVps/, 'API must normalize the TikTok draft title');
 assert.match(vpsServer, /replace\(\/\\bpara\\b\/gi, 'Compatível com'\)/, 'API must use compatibility wording in TikTok titles');
 assert.match(vpsServer, /cleanTikTokDraftTitleVps\(product\.name\)/, 'TikTok draft creation must use the normalized title');
+assert.match(vpsServer, /variationWithVideo/, 'TikTok drafts must reuse a configured video from a sibling variation');
+assert.match(vpsServer, /WHERE parent_id = \? AND id <> \?/, 'TikTok drafts must find a sibling video within the same variation group');
 
 console.log('TikTok Shop bulk screen static checks passed');

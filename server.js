@@ -2599,6 +2599,17 @@ async function uploadTikTokDraftImagesVps(settings, imageUrls) {
 async function resolveTikTokDraftVideoUrlVps(product) {
   const configured = String(product?.video_url || '').trim();
   if (/^https?:\/\//i.test(configured)) return configured;
+  const parentId = String(product?.parent_id || '').trim();
+  if (parentId) {
+    const [[variationWithVideo]] = await pool.query(
+      `SELECT video_url FROM products
+       WHERE parent_id = ? AND id <> ? AND video_url IS NOT NULL AND TRIM(video_url) <> ''
+       LIMIT 1`,
+      [parentId, String(product?.id || '')],
+    );
+    const siblingVideoUrl = String(variationWithVideo?.video_url || '').trim();
+    if (/^https?:\/\//i.test(siblingVideoUrl)) return siblingVideoUrl;
+  }
   const sku = String(product?.sku || '').trim().replace(/\s+/g, '');
   if (!sku) return '';
   const candidate = `https://videos.mercadodovale.com.br/${encodeURIComponent(sku)}.mp4`;
@@ -2753,7 +2764,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
   try {
     const [[product]] = await pool.query(
       `SELECT id, company_id, name, sku, description, images, image_url,
-              video_url, price_retail, stock_quantity, weight_kg, dimensions
+              video_url, parent_id, price_retail, stock_quantity, weight_kg, dimensions
        FROM products
        WHERE id = ?
        LIMIT 1`,
