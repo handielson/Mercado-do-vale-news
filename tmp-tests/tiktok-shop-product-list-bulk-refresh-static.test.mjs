@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const listPage = readFileSync('pages/admin/products/ProductListPage.tsx', 'utf8');
 const productList = readFileSync('components/products/ProductList.tsx', 'utf8');
+const productCard = readFileSync('components/products/ProductCard.tsx', 'utf8');
 const bulk = readFileSync('pages/admin/settings/components/TikTokShopBulkPreparation.tsx', 'utf8');
 const service = readFileSync('services/tiktokShopService.ts', 'utf8');
 
@@ -15,6 +16,16 @@ assert.match(
   productList,
   /tiktokProductLinks\[product\.id\][\s\S]*product\.parent_id \? tiktokProductLinks\[product\.parent_id\]/,
   'a variation card must inherit the TikTok link stored on its parent product',
+);
+assert.match(
+  productCard,
+  /productId=\{currentTikTokProductLink\?\.product_id \|\| product\.id\}/,
+  'clicking a variation with an inherited TikTok link must open the linked parent instead of creating a duplicate child draft',
+);
+assert.match(
+  productCard,
+  /Variacao incluida no anuncio do produto pai/,
+  'the product card must explain when its TikTok state belongs to the grouped parent listing',
 );
 assert.match(
   bulk,

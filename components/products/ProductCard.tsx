@@ -360,6 +360,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
     const shopeeVisualState = getShopeeButtonVisualState({ shopee_item_id: shopeeItemId });
     const currentTikTokStatus = String(currentTikTokProductLink?.status || '').toUpperCase();
     const hasTikTokLink = Boolean(currentTikTokProductLink?.tiktok_product_id);
+    const isTikTokInheritedLink = Boolean(
+        currentTikTokProductLink?.product_id
+        && String(currentTikTokProductLink.product_id) !== String(product.id),
+    );
     const isTikTokSynced = currentTikTokStatus === 'ACTIVATE';
     const isTikTokPending = currentTikTokStatus === 'PENDING';
 
@@ -1348,9 +1352,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                                 isTikTokSynced
                                     ? 'Anuncio ativo no TikTok Shop. Abrir produto.'
                                     : isTikTokPending
-                                        ? 'Anuncio em analise no TikTok Shop.'
+                                        ? isTikTokInheritedLink
+                                            ? 'Variacao incluida no anuncio do produto pai, em analise no TikTok Shop.'
+                                            : 'Anuncio em analise no TikTok Shop.'
                                         : hasTikTokLink
-                                            ? 'Rascunho vinculado ao TikTok Shop.'
+                                            ? isTikTokInheritedLink
+                                                ? 'Variacao incluida no rascunho do produto pai no TikTok Shop.'
+                                                : 'Rascunho vinculado ao TikTok Shop.'
                                             : 'Enviar para o TikTok Shop'
                             }
                             aria-label={isTikTokSynced ? 'Produto sincronizado com TikTok Shop' : 'Enviar produto para TikTok Shop'}
@@ -1953,7 +1961,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
 
             {isTikTokModalOpen && (
                 <TikTokShopSyncModal
-                    productId={product.id}
+                    productId={currentTikTokProductLink?.product_id || product.id}
                     onClose={() => setIsTikTokModalOpen(false)}
                     onSuccess={(link) => {
                         setCurrentTikTokProductLink(link);
