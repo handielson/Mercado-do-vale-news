@@ -295,8 +295,13 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
     const handleDownloadLabel = async (orderSn: string) => {
         toast.loading(`Buscando etiqueta do pedido #${orderSn}...`, { id: `label-${orderSn}` });
         try {
-            const res = await fetch(`/api/shopee-actions?action=get_shipping_document&order_sn=${orderSn}`, {
+            const res = await fetch('/api/shopee-actions', {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'get_shipping_document',
+                    order_sn: orderSn,
+                }),
             });
             const contentType = res.headers.get('content-type') || '';
 

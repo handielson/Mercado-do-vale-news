@@ -10,9 +10,11 @@ assert.match(
 );
 assert.match(
   page,
-  /get_shipping_document&order_sn=\$\{orderSn\}`,\s*\{\s*method: 'POST'/,
+  /fetch\('\/api\/shopee-actions',\s*\{\s*method: 'POST'/,
   'label creation must use POST because it creates a Shopee document task',
 );
+assert.match(page, /action:\s*'get_shipping_document'/, 'label POST must send the action in its JSON body');
+assert.match(page, /order_sn:\s*orderSn/, 'label POST must send the order number in its JSON body');
 assert.match(
   page,
   /data\.message \|\| data\.doc\?\.message \|\| data\.error/,

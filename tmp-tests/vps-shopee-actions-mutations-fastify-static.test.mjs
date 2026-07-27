@@ -39,6 +39,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /ship_order_package_not_ready/, `${file} must block ship_order when package is not ready`);
   assert.match(source, /already_arranged/, `${file} must make repeated ship_order calls idempotent`);
   assert.match(source, /case 'get_shipping_document': \{\s*if \(requireShopeeActionsPostVps/, `${file} must guard shipping document creation behind POST`);
+  assert.match(source, /shipping_document_type \|\| 'NORMAL_AIR_WAYBILL'/, `${file} must use a currently supported Shopee document type`);
   assert.match(source, /tracking_number:\s*trackingNumber/, `${file} must retrieve a tracking number before creating a shipping document`);
   assert.match(source, /documentStatus === 'READY'/, `${file} must wait for the shipping document to become ready before download`);
   assert.match(source, /POST required/, `${file} must reject GET mutation calls`);

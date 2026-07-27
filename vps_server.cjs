@@ -6905,7 +6905,7 @@ async function handleShopeeActionsVps(request, reply) {
       case 'get_shipping_document': {
         if (requireShopeeActionsPostVps(request, reply)) return;
         const orderSn = String(payload.order_sn || '').trim();
-        const shippingDocumentType = payload.shipping_document_type || 'SHIPPING_LABEL';
+        const shippingDocumentType = payload.shipping_document_type || 'NORMAL_AIR_WAYBILL';
         const orderDetail = await shopeeCatalogGetVps('/api/v2/order/get_order_detail', creds, encodeShopeeCatalogParamsVps({
           order_sn_list: orderSn,
           response_optional_fields: 'package_list,shipping_carrier,order_status,fulfillment_flag',
