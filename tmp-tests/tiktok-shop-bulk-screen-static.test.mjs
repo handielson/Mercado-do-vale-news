@@ -39,7 +39,9 @@ assert.match(vpsServer, /sales_attributes/, 'TikTok variation SKUs must include 
 assert.match(bulk, /Grupo de variacoes/, 'bulk screen must allow a parent product to create variation listings');
 assert.match(bulk, /Produto pai/, 'bulk screen must visually identify selectable variation parents');
 assert.match(bulk, /variacao\(oes\) \/ SKU\(s\) serao enviados juntos/, 'bulk screen must explain that the group sends together');
-assert.match(bulk, /visibleParentIds/, 'bulk screen must include a parent when a variation matches the active filters');
-assert.match(bulk, /if \(product\.parent_id\) return false/, 'bulk screen must consolidate variation rows under their parent');
+assert.match(bulk, /buildTikTokBulkVariationGroups/, 'bulk screen must infer legacy parent groups by base name');
+assert.match(bulk, /variationGroups\.parentIdByChild/, 'bulk screen must consolidate variation rows under their parent');
+assert.match(bulk, /updateProductVariationGroup/, 'bulk screen must persist an inferred group before creating its TikTok draft');
+assert.match(bulk, /groupChildren\.some/, 'bulk screen must show a parent when one of its variations matches the active filters');
 
 console.log('TikTok Shop bulk screen static checks passed');

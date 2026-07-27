@@ -24244,7 +24244,7 @@ fastify.delete('/product-categories/:product_id/:category_id', { preHandler: req
   return { ok: true };
 });
 
-// Cria/atualiza grupo de variacoes gravando apenas o parent_id dos produtos.
+// Cria/atualiza grupo de variacoes e marca explicitamente o agregador.
 fastify.patch('/products/variation-group', { preHandler: requireSyncKey }, async (req, reply) => {
   const parentId = String(req.body?.parent_id || '').trim();
   const childIds = Array.isArray(req.body?.child_ids)
@@ -24268,7 +24268,7 @@ fastify.patch('/products/variation-group', { preHandler: requireSyncKey }, async
     let updated = 0;
 
     const [parentResult] = await conn.query(
-      'UPDATE products SET parent_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+      'UPDATE products SET parent_id=NULL, is_parent=1, updated_at=CURRENT_TIMESTAMP WHERE id=?',
       [parentId]
     );
     updated += parentResult.affectedRows || 0;
@@ -24276,7 +24276,7 @@ fastify.patch('/products/variation-group', { preHandler: requireSyncKey }, async
     if (childrenToLink.length > 0) {
       const placeholders = childrenToLink.map(() => '?').join(',');
       const [childResult] = await conn.query(
-        `UPDATE products SET parent_id=?, updated_at=CURRENT_TIMESTAMP WHERE id IN (${placeholders})`,
+        `UPDATE products SET parent_id=?, is_parent=0, updated_at=CURRENT_TIMESTAMP WHERE id IN (${placeholders})`,
         [parentId, ...childrenToLink]
       );
       updated += childResult.affectedRows || 0;

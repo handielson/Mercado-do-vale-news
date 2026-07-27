@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.88-tiktok-parent-filter
+version: v1.2.89-tiktok-parent-groups
 date: 2026-07-27
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-090000-v1288-tiktok-parent-filter
+release_vps: /var/www/mdv-site/releases/20260727-022204-v1289-tiktok-parent-groups
 branch: main
-summary: Exibe o produto pai quando uma variacao corresponde aos filtros do lote TikTok.
+summary: Reconhece familias legadas por nome, exibe o produto pai e persiste o grupo antes do envio TikTok.
 ```

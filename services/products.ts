@@ -59,6 +59,7 @@ function transformFromDB(row: any): Product {
         warranty_type: row.warranty_type || 'brand',
         warranty_template_id: row.warranty_template_id || null,
         parent_id: row.parent_id || undefined,
+        is_parent: Number(row.is_parent) === 1,
         bling_id: row.bling_id || undefined,
         bling_parent_id: row.bling_parent_id || undefined,
         shopee_item_id: row.shopee_item_id || undefined,

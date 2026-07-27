@@ -3,7 +3,9 @@ import { AlertCircle, CheckCircle2, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { productService } from '../../../../services/products';
 import { tiktokShopService, type TikTokShopProductLink } from '../../../../services/tiktokShopService';
+import { vpsApiService } from '../../../../services/vpsApiService';
 import type { Product } from '../../../../types/product';
+import { buildTikTokBulkVariationGroups } from '../../../../utils/tiktokBulkVariationGroups';
 
 type Action = 'Criar rascunhos' | 'Publicar rascunhos' | 'Reenviar rascunhos' | 'Atualizar anuncios';
 
@@ -11,10 +13,10 @@ function titleNeedsCompatibilityWording(name?: string | null) {
   return /\bpara\b/i.test(String(name || ''));
 }
 
-function diagnostic(product: Product, link?: TikTokShopProductLink, correction?: string) {
+function diagnostic(product: Product, link?: TikTokShopProductLink, correction?: string, isGroupParent = Boolean(product.is_parent)) {
   if (correction) return { label: 'Corrigir antes de enviar', detail: correction, ok: false };
   if (link?.status === 'ACTIVE') return { label: 'Atualizar', detail: 'Anuncio ja enviado: sera atualizado no TikTok Shop.', ok: true };
-  if (product.is_parent) return { label: 'Grupo de variacoes', detail: 'Sera criado um unico anuncio com todos os SKUs filhos.', ok: true };
+  if (isGroupParent) return { label: 'Grupo de variacoes', detail: 'Sera criado um unico anuncio com todos os SKUs filhos.', ok: true };
   if (product.parent_id) return { label: 'Enviar pelo grupo pai', detail: 'Esta variacao sera incluida no anuncio do produto pai.', ok: false };
   if (titleNeedsCompatibilityWording(product.name)) return { label: 'Titulo ajustado', detail: 'O envio troca “para” por “Compativel com”.', ok: true };
   if (!product.category_id) return { label: 'Categoria nao mapeada', detail: 'Mapeie a categoria TikTok no preparo.', ok: false };
@@ -69,9 +71,10 @@ export default function TikTokShopBulkPreparation() {
   }, []);
 
   const brands = useMemo(() => [...new Set(products.map((product) => product.brand).filter(Boolean))] as string[], [products]);
+  const variationGroups = useMemo(() => buildTikTokBulkVariationGroups(products), [products]);
   const rows = useMemo(() => {
     const matchesFilters = (product: Product) => {
-    const item = diagnostic(product, links[product.id], corrections[product.id]);
+    const item = diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id));
     const tiktokState = links[product.id]?.status || 'NOT_SENT';
     const searchable = `${product.name} ${product.sku} ${product.brand} ${product.category_id}`.toLowerCase();
     return (!query.trim() || searchable.includes(query.trim().toLowerCase()))
@@ -81,19 +84,21 @@ export default function TikTokShopBulkPreparation() {
       && (state !== 'READY' || item.ok);
     };
 
-    const visibleParentIds = new Set(products
-      .filter((product) => product.parent_id && matchesFilters(product))
-      .map((product) => product.parent_id));
-
     return products.filter((product) => {
-      if (product.is_parent) return matchesFilters(product) || visibleParentIds.has(product.id);
-      if (product.parent_id) return false;
+      const groupChildren = variationGroups.childrenByParent.get(product.id) || [];
+      if (variationGroups.parentIds.has(product.id)) {
+        return matchesFilters(product) || groupChildren.some((child: Product) => matchesFilters(child));
+      }
+      if (variationGroups.parentIdByChild.has(product.id)) return false;
       return matchesFilters(product);
     });
-  }, [brand, corrections, links, products, query, state, stock]);
+  }, [brand, corrections, links, products, query, state, stock, variationGroups]);
 
   async function run(action: Action) {
-    const chosen = products.filter((product) => selected.includes(product.id) && diagnostic(product, links[product.id], corrections[product.id]).ok);
+    const chosen = products.filter((product) =>
+      selected.includes(product.id) &&
+      diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id)).ok
+    );
     if (!chosen.length) return toast.error('Selecione ao menos um anuncio elegivel.');
     if (!window.confirm(`${action} para ${chosen.length} anuncio(s)?`)) return;
 
@@ -110,6 +115,15 @@ export default function TikTokShopBulkPreparation() {
 
         const results = await Promise.allSettled(chosen.map(async (product) => {
           try {
+            const groupChildren = variationGroups.childrenByParent.get(product.id) || [];
+            if (groupChildren.length > 0) {
+              const grouped = await vpsApiService.updateProductVariationGroup(
+                product.id,
+                [product.id, ...groupChildren.map((child: Product) => child.id)]
+              );
+              if (!grouped.ok) throw new Error('Nao foi possivel consolidar as variacoes no produto pai.');
+            }
+
             const mapping = await tiktokShopService.getCategoryMapping(String(product.category_id || ''));
             if (!mapping.mapping) throw new Error('Categoria nao mapeada');
 
@@ -163,7 +177,10 @@ export default function TikTokShopBulkPreparation() {
       return;
     }
 
-    const candidates = chosen.filter((product) => diagnostic(product, links[product.id], corrections[product.id]).ok && links[product.id]);
+    const candidates = chosen.filter((product) =>
+      diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id)).ok &&
+      links[product.id]
+    );
     if (!candidates.length) return toast.error('Nenhum item selecionado possui vinculo TikTok para esta acao.');
 
     setRunning(true);
@@ -240,7 +257,7 @@ export default function TikTokShopBulkPreparation() {
         <select value={brand} onChange={(event) => setBrand(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Todas as marcas</option>{brands.map((item) => <option key={item} value={item}>{item}</option>)}</select>
         <select value={stock} onChange={(event) => setStock(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="all">Todo estoque</option><option value="positive">Com estoque</option><option value="empty">Sem estoque</option></select>
         <select value={state} onChange={(event) => setState(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="all">Toda situacao TikTok</option><option value="NOT_SENT">Nao enviado</option><option value="DRAFT">Rascunho</option><option value="ACTIVE">Publicado</option><option value="READY">Prontos</option></select>
-        <button type="button" onClick={() => setSelected(rows.filter((product) => diagnostic(product, links[product.id], corrections[product.id]).ok).map((product) => product.id))} className="rounded-lg border border-teal-600 px-3 py-2 text-sm font-semibold text-teal-700">Selecionar prontos filtrados</button>
+        <button type="button" onClick={() => setSelected(rows.filter((product) => diagnostic(product, links[product.id], corrections[product.id], variationGroups.parentIds.has(product.id)).ok).map((product) => product.id))} className="rounded-lg border border-teal-600 px-3 py-2 text-sm font-semibold text-teal-700">Selecionar prontos filtrados</button>
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
@@ -248,12 +265,13 @@ export default function TikTokShopBulkPreparation() {
           <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Selecionar</th><th className="p-3">Anuncio / SKUs</th><th className="p-3">Diagnostico</th><th className="p-3">Venda / custo</th><th className="p-3">Lucro / margem</th></tr></thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? <tr><td colSpan={5} className="p-6 text-center"><Loader2 className="inline h-4 w-4 animate-spin" /> Carregando...</td></tr> : rows.map((product) => {
-              const item = diagnostic(product, links[product.id], corrections[product.id]);
+              const isGroupParent = variationGroups.parentIds.has(product.id);
+              const item = diagnostic(product, links[product.id], corrections[product.id], isGroupParent);
               const sale = Number(product.price_retail || 0) / 100;
               const cost = Number(product.price_cost || 0) / 100;
               const profit = sale - cost;
-              const variationCount = product.is_parent ? products.filter((child) => child.parent_id === product.id).length : 0;
-              return <tr key={product.id} className={product.is_parent ? 'bg-teal-50 ring-1 ring-inset ring-teal-200' : item.ok ? '' : 'bg-amber-50/50'}><td className="p-3"><input type="checkbox" disabled={!item.ok} checked={selected.includes(product.id)} onChange={() => setSelected((current) => current.includes(product.id) ? current.filter((id) => id !== product.id) : [...current, product.id])} /></td><td className="p-3"><p className="font-semibold text-slate-950">{product.name}</p><p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">{product.is_parent ? <><span className="rounded-full bg-teal-700 px-2 py-0.5 font-semibold text-white">Produto pai</span><span>{variationCount} variacao(oes) / SKU(s) serao enviados juntos</span></> : <>{product.sku || 'Sem SKU'} · 1 SKU</>}</p></td><td className="p-3"><p className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${item.ok ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.ok ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}{item.label}</p><p className="mt-1 text-xs text-slate-600">{item.detail}</p></td><td className="p-3">R$ {sale.toFixed(2)} / R$ {cost.toFixed(2)}</td><td className="p-3">R$ {profit.toFixed(2)} / {sale ? ((profit / sale) * 100).toFixed(1) : '0.0'}%</td></tr>;
+              const variationCount = (variationGroups.childrenByParent.get(product.id) || []).length;
+              return <tr key={product.id} className={isGroupParent ? 'bg-teal-50 ring-1 ring-inset ring-teal-200' : item.ok ? '' : 'bg-amber-50/50'}><td className="p-3"><input type="checkbox" disabled={!item.ok} checked={selected.includes(product.id)} onChange={() => setSelected((current) => current.includes(product.id) ? current.filter((id) => id !== product.id) : [...current, product.id])} /></td><td className="p-3"><p className="font-semibold text-slate-950">{product.name}</p><p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">{isGroupParent ? <><span className="rounded-full bg-teal-700 px-2 py-0.5 font-semibold text-white">Produto pai</span><span>{variationCount} variacao(oes) / SKU(s) serao enviados juntos</span></> : <>{product.sku || 'Sem SKU'} · 1 SKU</>}</p></td><td className="p-3"><p className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${item.ok ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.ok ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}{item.label}</p><p className="mt-1 text-xs text-slate-600">{item.detail}</p></td><td className="p-3">R$ {sale.toFixed(2)} / R$ {cost.toFixed(2)}</td><td className="p-3">R$ {profit.toFixed(2)} / {sale ? ((profit / sale) * 100).toFixed(1) : '0.0'}%</td></tr>;
             })}
           </tbody>
         </table>
