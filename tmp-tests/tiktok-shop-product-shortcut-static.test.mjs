@@ -90,6 +90,11 @@ for (const file of serverFiles) {
   );
   assert.match(
     source,
+    /Number\(err\?\.tiktokCode\) !== 12052901[\s\S]*?result = await loadProduct\(false\)/,
+    `${file} must retry the current product version when TikTok rejects a stale draft-version lookup`,
+  );
+  assert.match(
+    source,
     /CREATE TABLE IF NOT EXISTS tiktok_shop_products/,
     `${file} must persist TikTok product links separately`,
   );

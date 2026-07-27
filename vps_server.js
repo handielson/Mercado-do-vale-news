@@ -5605,14 +5605,23 @@ function formatTikTokShopBusinessErrorsVps(errors) {
 }
 
 async function loadTikTokShopRemoteProductVps(settings, remoteProductId, returnDraftVersion = false) {
-  const result = await callTikTokShopOpenApiVps(settings, {
+  const loadProduct = (includeDraftVersion) => callTikTokShopOpenApiVps(settings, {
     method: 'GET',
     pathname: `/product/202309/products/${encodeURIComponent(remoteProductId)}`,
     query: {
       locale: 'pt-BR',
-      ...(returnDraftVersion ? { return_draft_version: 'true' } : {}),
+      ...(includeDraftVersion ? { return_draft_version: 'true' } : {}),
     },
   });
+  let result;
+  try {
+    result = await loadProduct(returnDraftVersion);
+  } catch (err) {
+    // O vinculo local pode ainda dizer DRAFT enquanto o TikTok ja mudou o item
+    // para PENDING/ACTIVATE; nesse estado a versao de rascunho nao e consultavel.
+    if (!returnDraftVersion || Number(err?.tiktokCode) !== 12052901) throw err;
+    result = await loadProduct(false);
+  }
   const product = result.payload?.data;
   if (!product || typeof product !== 'object') {
     throw new Error('O TikTok Shop nao retornou os dados do produto.');
