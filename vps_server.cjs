@@ -5071,6 +5071,22 @@ async function uploadTikTokDraftImagesVps(settings, imageUrls) {
   return uploaded;
 }
 
+async function resolveTikTokDraftVideoUrlVps(product) {
+  const configured = String(product?.video_url || '').trim();
+  if (/^https?:\/\//i.test(configured)) return configured;
+  const sku = String(product?.sku || '').trim().replace(/\s+/g, '');
+  if (!sku) return '';
+  const candidate = `https://videos.mercadodovale.com.br/${encodeURIComponent(sku)}.mp4`;
+  try {
+    const response = await fetch(candidate, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+    return response.ok && String(response.headers.get('content-type') || '').toLowerCase().includes('video')
+      ? candidate
+      : '';
+  } catch {
+    return '';
+  }
+}
+
 async function fetchTikTokDraftVideoFileVps(videoUrl) {
   if (!isTrustedTikTokDraftImageUrlVps(videoUrl)) {
     throw new Error('Video fora dos dominios autorizados do Mercado do Vale.');
@@ -5273,7 +5289,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
     const imageUrls = normalizeTikTokDraftImagesVps(product);
     if (imageUrls.length === 0) return reply.code(400).send({ error: 'O produto precisa de pelo menos uma imagem.' });
     reportProgress('prepare_images', 'done', `${imageUrls.length} imagem(ns) preparada(s), inclusive imagens locais.`);
-    const videoUrl = String(product.video_url || '').trim();
+    const videoUrl = await resolveTikTokDraftVideoUrlVps(product);
     const mediaSourceHash = crypto.createHash('sha256')
       .update(JSON.stringify({ imageUrls, videoUrl, video_processing_version: 'pad-v1' }))
       .digest('hex');

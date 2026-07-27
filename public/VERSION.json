@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.78-tiktok-description-format",
+  "version": "v1.2.79-tiktok-sku-video-fallback",
   "date": "2026-07-26",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260727-022208-tiktok-description-format",
+  "release_vps": "API-only (mdv-api)",
   "branch": "main",
-  "summary": "Formata descricoes TikTok em blocos legiveis com quebras de linha e secoes destacadas."
+  "summary": "Inclui o video canonico por SKU em rascunhos TikTok quando video_url estiver vazio."
 }

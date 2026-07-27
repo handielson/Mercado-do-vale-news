@@ -162,6 +162,8 @@ for (const file of serverFiles) {
   assert.match(source, /produto-video-ajustado\.mp4/, `${file} must use a distinct FFmpeg output path`);
   assert.match(source, /video_processing_version: 'pad-v1'/, `${file} must invalidate old video cache`);
   assert.match(source, /video_url, price_retail/, `${file} must load the product video`);
+  assert.match(source, /resolveTikTokDraftVideoUrlVps\(product\)/, `${file} must resolve a TikTok video even when video_url is empty`);
+  assert.match(source, /videos\.mercadodovale\.com\.br\/\$\{encodeURIComponent\(sku\)\}\.mp4/, `${file} must fall back to the canonical SKU video URL`);
   assert.match(source, /\{ video: uploadedVideo \}/, `${file} must associate the uploaded video`);
   assert.match(
     source,
