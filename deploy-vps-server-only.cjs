@@ -168,17 +168,17 @@ async function ensureRemoteAdminEnv(appDir) {
   console.log(`Remote runtime env synced at ${remoteEnv}`);
 }
 
-async function ensureRemoteImageDocumentDependencies(appDir) {
-  const checkCommand = `cd ${appDir} && node -e "require.resolve('sharp'); require.resolve('pdf-lib')"`;
+async function ensureRemoteMediaDocumentDependencies(appDir) {
+  const checkCommand = `cd ${appDir} && node -e "require.resolve('sharp'); require.resolve('pdf-lib'); require.resolve('ffmpeg-static')"`;
   try {
     await exec(checkCommand);
-    console.log('Remote image and PDF dependencies already available');
+    console.log('Remote image, video and PDF dependencies already available');
     return;
   } catch {
-    console.log('Installing remote image and PDF dependencies');
+    console.log('Installing remote image, video and PDF dependencies');
   }
 
-  await exec(`cd ${appDir} && npm install sharp pdf-lib --omit=dev`);
+  await exec(`cd ${appDir} && npm install sharp pdf-lib ffmpeg-static@5.3.0 --omit=dev`);
 }
 
 async function main() {
@@ -205,7 +205,7 @@ async function main() {
   await uploadAutoresponderEngineFiles(appDir);
   await uploadSignedWarrantyFiles(appDir);
   await ensureRemoteAdminEnv(appDir);
-  await ensureRemoteImageDocumentDependencies(appDir);
+  await ensureRemoteMediaDocumentDependencies(appDir);
   const restartOutput = await exec(`pm2 restart ${apiProc.name} --update-env`);
   console.log(restartOutput.trim());
   conn.end();

@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { spawn } = require('child_process');
+const ffmpegStaticPath = require('ffmpeg-static');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
 const crypto = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '.env.tiktok.local'), override: false });
@@ -2575,8 +2576,56 @@ async function fetchTikTokDraftVideoFileVps(videoUrl) {
   return { buffer, contentType, filename: `produto-video.${extension}` };
 }
 
+async function normalizeTikTokDraftVideoRatioVps(file) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-tiktok-video-'));
+  const inputPath = path.join(tempDir, file.filename);
+  const outputPath = path.join(tempDir, 'produto-video.mp4');
+  try {
+    fs.writeFileSync(inputPath, file.buffer);
+    await new Promise((resolve, reject) => {
+      const args = [
+        '-hide_banner', '-loglevel', 'error', '-y',
+        '-i', inputPath,
+        '-vf', "pad=w='ceil(max(iw,ih*9/16)/2)*2':h='ceil(max(ih,iw*9/16)/2)*2':x='(ow-iw)/2':y='(oh-ih)/2':color=black",
+        '-map', '0:v:0', '-map', '0:a?',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-movflags', '+faststart',
+        outputPath,
+      ];
+      let stderr = '';
+      const child = spawn(ffmpegStaticPath, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+      const timeout = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(new Error('Tempo limite excedido ao ajustar a proporcao do video.'));
+      }, 180000);
+      child.stderr.on('data', (chunk) => {
+        stderr = `${stderr}${chunk.toString()}`.slice(-4000);
+      });
+      child.on('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      child.on('close', (code) => {
+        clearTimeout(timeout);
+        if (code === 0) resolve();
+        else reject(new Error(`Falha ao ajustar video para o TikTok: ${stderr || `ffmpeg ${code}`}`));
+      });
+    });
+    const buffer = fs.readFileSync(outputPath);
+    if (buffer.length < 1 || buffer.length > 100 * 1024 * 1024) {
+      throw new Error('Video ajustado vazio ou maior que 100 MB.');
+    }
+    return { buffer, contentType: 'video/mp4', filename: 'produto-video.mp4' };
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
 async function uploadTikTokDraftVideoVps(settings, videoUrl, onPrepared = () => {}) {
-  const file = await fetchTikTokDraftVideoFileVps(videoUrl);
+  const sourceFile = await fetchTikTokDraftVideoFileVps(videoUrl);
+  const file = await normalizeTikTokDraftVideoRatioVps(sourceFile);
   onPrepared();
   const result = await callTikTokShopMultipartVps(settings, {
     pathname: '/product/202309/files/upload',
@@ -2695,7 +2744,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
     reportProgress('prepare_images', 'done', `${imageUrls.length} imagem(ns) preparada(s), inclusive imagens locais.`);
     const videoUrl = String(product.video_url || '').trim();
     const mediaSourceHash = crypto.createHash('sha256')
-      .update(JSON.stringify({ imageUrls, videoUrl }))
+      .update(JSON.stringify({ imageUrls, videoUrl, video_processing_version: 'pad-v1' }))
       .digest('hex');
     const cachedImages = parseTikTokDraftJsonVps(existing?.uploaded_images, {});
     reportProgress('upload_images', 'running', 'Enviando imagens para a biblioteca do TikTok Shop.');
@@ -2715,9 +2764,9 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
         reportProgress('prepare_video', 'skipped', 'Video ja validado no envio anterior.');
         reportProgress('upload_video', 'done', 'Video ja armazenado no TikTok Shop.');
       } else {
-        reportProgress('prepare_video', 'running', 'Baixando e validando o video do produto.');
+        reportProgress('prepare_video', 'running', 'Baixando e ajustando o video para a proporcao aceita pelo TikTok.');
         uploadedVideo = await uploadTikTokDraftVideoVps(settings, videoUrl, () => {
-          reportProgress('prepare_video', 'done', 'Video valido e pronto para envio.');
+          reportProgress('prepare_video', 'done', 'Video ajustado entre 9:16 e 16:9, sem cortar o conteudo.');
           reportProgress('upload_video', 'running', 'Enviando o video para o TikTok Shop.');
         });
         reportProgress('upload_video', 'done', 'Video aceito pelo TikTok Shop.');

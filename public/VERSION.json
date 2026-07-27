@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.70-tiktok-draft-progress",
+  "version": "v1.2.71-tiktok-video-ratio-debug",
   "date": "2026-07-26",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260726-235053-tiktok-draft-progress",
+  "release_vps": "/var/www/mdv-site/releases/20260727-000939-tiktok-video-ratio-debug",
   "branch": "main",
-  "summary": "Corrige midia do rascunho TikTok e adiciona progresso online com previa completa."
+  "summary": "Ajusta automaticamente a proporcao do video TikTok e adiciona a copia do debug."
 }

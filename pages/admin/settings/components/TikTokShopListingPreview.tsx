@@ -163,7 +163,7 @@ export default function TikTokShopListingPreview({
             {[
               ['Titulo, descricao e categoria', Boolean(product?.name && product?.description && category)],
               [`Galeria (${images.length}/9 fotos)`, images.length > 0],
-              [product?.video_url ? 'Video do produto' : 'Video opcional', true],
+              [product?.video_url ? 'Video incluido no envio' : 'Video opcional', true],
               ['Preco, estoque e SKU', Boolean(product?.sku && Number(product?.price_retail) > 0)],
               ['Peso e dimensoes do pacote', Boolean(weightGrams && length && width && height)],
             ].map(([label, ready]) => (

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Loader2, PackageSearch, Search, Send } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Circle, Copy, Loader2, PackageSearch, Search, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { productService } from '../../../../services/products';
 import { categoryService } from '../../../../services/categories';
@@ -98,6 +98,7 @@ export default function TikTokShopProductPreparation({
   const [createdTikTokProductId, setCreatedTikTokProductId] = useState('');
   const [draftSteps, setDraftSteps] = useState<TikTokShopDraftJobStep[]>(INITIAL_DRAFT_STEPS);
   const [draftError, setDraftError] = useState('');
+  const [draftDebug, setDraftDebug] = useState('');
 
   React.useEffect(() => {
     let cancelled = false;
@@ -333,6 +334,7 @@ export default function TikTokShopProductPreparation({
     setCreatingDraft(true);
     setCreatedTikTokProductId('');
     setDraftError('');
+    setDraftDebug('');
     setDraftSteps(INITIAL_DRAFT_STEPS.map((step) => ({ ...step })));
     try {
       let job = await tiktokShopService.startDraftJob({
@@ -349,6 +351,22 @@ export default function TikTokShopProductPreparation({
       }
       if (job.status !== 'completed' || !job.result) {
         const reference = job.error?.request_id ? ` (request ${job.error.request_id})` : '';
+        const failedStep = job.steps.find((step) => step.status === 'error');
+        setDraftDebug([
+          'TikTok Shop - debug do envio',
+          `Produto: ${selectedProduct.name}`,
+          `Produto local ID: ${selectedProduct.id}`,
+          `SKU: ${selectedProduct.sku || 'nao informado'}`,
+          `Categoria: ${selectedCategory.name} (${selectedCategory.id})`,
+          `Armazem: ${selectedWarehouseName || selectedWarehouseId}`,
+          `Video: ${selectedProduct.video_url || 'nao informado'}`,
+          `Etapa: ${failedStep?.label || 'nao identificada'}`,
+          `Erro: ${job.error?.message || 'nao informado'}`,
+          `Codigo TikTok: ${job.error?.code ?? 'nao informado'}`,
+          `Request ID: ${job.error?.request_id || 'nao informado'}`,
+          `Job ID: ${job.job_id}`,
+          `Horario: ${job.updated_at}`,
+        ].join('\n'));
         throw new Error(`${job.error?.message || 'O acompanhamento do envio nao foi concluido.'}${reference}`);
       }
       const result = job.result;
@@ -363,9 +381,40 @@ export default function TikTokShopProductPreparation({
       console.error('[TikTokShopProductPreparation] draft creation error:', error);
       const message = error?.message || 'Nao foi possivel criar o rascunho no TikTok Shop.';
       setDraftError(message);
+      setDraftDebug((current) => current || [
+        'TikTok Shop - debug do envio',
+        `Produto: ${selectedProduct?.name || 'nao informado'}`,
+        `Produto local ID: ${selectedProduct?.id || 'nao informado'}`,
+        `Categoria: ${selectedCategory?.name || 'nao informada'}`,
+        `Video: ${selectedProduct?.video_url || 'nao informado'}`,
+        `Erro: ${message}`,
+        `Horario: ${new Date().toISOString()}`,
+      ].join('\n'));
       toast.error(message);
     } finally {
       setCreatingDraft(false);
+    }
+  }
+
+  async function copyDraftDebug() {
+    if (!draftDebug) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(draftDebug);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = draftDebug;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+      toast.success('Debug copiado para a area de transferencia.');
+    } catch (error) {
+      console.error('[TikTokShopProductPreparation] copy debug error:', error);
+      toast.error('Nao foi possivel copiar o debug.');
     }
   }
 
@@ -611,9 +660,28 @@ export default function TikTokShopProductPreparation({
               ))}
             </div>
             {draftError && (
-              <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{draftError}</span>
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p>{draftError}</p>
+                    {draftError.includes('12019122') && (
+                      <p className="mt-1 font-semibold">
+                        O sistema ajustara automaticamente a proporcao do video na proxima tentativa.
+                      </p>
+                    )}
+                  </div>
+                  {draftDebug && (
+                    <button
+                      type="button"
+                      onClick={() => void copyDraftDebug()}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-300 bg-white px-2.5 py-1.5 font-bold text-red-800 hover:bg-red-100"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copiar debug
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

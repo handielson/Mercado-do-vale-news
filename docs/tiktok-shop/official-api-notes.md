@@ -65,6 +65,8 @@ Regras aplicadas:
 
 - Imagens HTTPS controladas e imagens locais `data:image/...;base64` passam pela mesma validacao de formato e limite de 10 MB antes do upload.
 - Videos cadastrados sao baixados somente dos dominios controlados, limitados a 100 MB e enviados por `POST /product/202309/files/upload`.
+- Antes do upload, o backend ajusta videos fora da faixa de proporcao `9:16` a `16:9` com preenchimento centralizado, sem cortar nem deformar o conteudo.
+- O TikTok recomenda video `1:1`, resolucao minima HD 720p e duracao entre 20 e 60 segundos.
 - O ID retornado pelo upload de arquivo e associado ao campo `video` do rascunho.
 - A criacao longa roda como um processo de backend consultado pelo painel; cada etapa exibe estado real (`running`, `done`, `skipped` ou `error`).
 - O processo expira da memoria em 30 minutos e nunca expoe tokens, segredos ou shop cipher.
