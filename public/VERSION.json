@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.91-tiktok-video-notice",
+  "version": "v1.2.92-tiktok-selection-link",
   "date": "2026-07-27",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260727-023427-v1291-tiktok-video-notice",
+  "release_vps": "/var/www/mdv-site/releases/20260727-023804-v1292-tiktok-selection-link",
   "branch": "main",
-  "summary": "Envia o anuncio normalmente sem video e exibe apenas um aviso informativo persistente no resultado e no diagnostico."
+  "summary": "Limpa o vinculo TikTok anterior ao trocar o produto e impede respostas atrasadas de restaurarem o anuncio errado."
 }

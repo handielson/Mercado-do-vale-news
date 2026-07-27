@@ -155,6 +155,14 @@ export default function TikTokShopProductPreparation({
     onDraftCreated?.(link);
   }, [onDraftCreated]);
 
+  const clearTikTokProductLink = React.useCallback(() => {
+    setCreatedTikTokProductId('');
+    setTikTokProductStatus('');
+    setDraftError('');
+    setDraftDebug('');
+    setDraftSteps(INITIAL_DRAFT_STEPS.map((step) => ({ ...step })));
+  }, []);
+
   const refreshTikTokProductStatus = React.useCallback(async (showFeedback = false) => {
     const localProductId = String(selectedProduct?.id || initialProductId || '').trim();
     if (!localProductId) return;
@@ -175,15 +183,18 @@ export default function TikTokShopProductPreparation({
 
   React.useEffect(() => {
     let cancelled = false;
-    if (!initialProductId) return;
-    tiktokShopService.getProductLinks([initialProductId])
+    const productId = String(selectedProduct?.id || '').trim();
+    clearTikTokProductLink();
+    if (!productId) return;
+
+    tiktokShopService.getProductLinks([productId])
       .then(async ({ links }) => {
         if (cancelled) return;
         const link = links[0];
         if (!link) return;
         applyTikTokProductLink(link);
         try {
-          const current = await tiktokShopService.getProductStatus(initialProductId);
+          const current = await tiktokShopService.getProductStatus(productId);
           if (!cancelled) applyTikTokProductLink(current);
         } catch {
           // Mantem o ultimo estado persistido quando a consulta remota estiver indisponivel.
@@ -193,7 +204,7 @@ export default function TikTokShopProductPreparation({
     return () => {
       cancelled = true;
     };
-  }, [applyTikTokProductLink, initialProductId]);
+  }, [applyTikTokProductLink, clearTikTokProductLink, selectedProduct?.id]);
 
   React.useEffect(() => {
     if (tiktokProductStatus !== 'PENDING' || !createdTikTokProductId) return;
