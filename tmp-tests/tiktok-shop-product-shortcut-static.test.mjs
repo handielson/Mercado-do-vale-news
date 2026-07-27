@@ -58,6 +58,8 @@ for (const file of serverFiles) {
     /ceil\(max\(iw,ih\*9\/16\)\/2\)\*2[\s\S]*ceil\(max\(ih,iw\*9\/16\)\/2\)\*2/,
     `${file} must pad videos into TikTok's 9:16 to 16:9 range without cropping`,
   );
+  assert.match(source, /produto-video-original/, `${file} must use a distinct FFmpeg input path`);
+  assert.match(source, /produto-video-ajustado\.mp4/, `${file} must use a distinct FFmpeg output path`);
   assert.match(source, /video_processing_version: 'pad-v1'/, `${file} must invalidate old video cache`);
   assert.match(source, /video_url, price_retail/, `${file} must load the product video`);
   assert.match(source, /\{ video: uploadedVideo \}/, `${file} must associate the uploaded video`);

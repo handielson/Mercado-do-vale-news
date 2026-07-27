@@ -33,3 +33,10 @@
 - Correcao: o backend usa FFmpeg para preencher o quadro ate a proporcao valida mais proxima, centralizando o conteudo sem corte ou deformacao. O video confirmado passou de `474x850` para `480x850`.
 - Protecao: a versao do processamento integra o hash de cache, o deploy provisiona `ffmpeg-static` na VPS e o teste estatico protege filtro, dependencia e upload.
 - Interface: falhas de envio agora oferecem `Copiar debug` com etapa, produto, categoria, codigo TikTok, request ID, job ID e horario.
+
+### Correcao complementar: entrada e saida FFmpeg com o mesmo nome
+
+- Evidencia: job `51592ba2-8b87-4280-ae7a-6316b25cc315` falhou com `Output ... same as Input #0`.
+- Causa: para arquivos MP4, a entrada temporaria e a saida normalizada eram ambas chamadas `produto-video.mp4`.
+- Correcao: a entrada preserva a extensao sob o nome `produto-video-original.*` e a saida usa `produto-video-ajustado.mp4`.
+- Protecao: o teste agora gera primeiro um MP4 real, confirma caminhos diferentes e somente depois executa o mesmo ajuste usado em producao.

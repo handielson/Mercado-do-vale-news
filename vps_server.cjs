@@ -5060,8 +5060,9 @@ async function fetchTikTokDraftVideoFileVps(videoUrl) {
 
 async function normalizeTikTokDraftVideoRatioVps(file) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mdv-tiktok-video-'));
-  const inputPath = path.join(tempDir, file.filename);
-  const outputPath = path.join(tempDir, 'produto-video.mp4');
+  const inputExtension = path.extname(file.filename) || '.bin';
+  const inputPath = path.join(tempDir, `produto-video-original${inputExtension}`);
+  const outputPath = path.join(tempDir, 'produto-video-ajustado.mp4');
   try {
     fs.writeFileSync(inputPath, file.buffer);
     await new Promise((resolve, reject) => {
