@@ -5,12 +5,15 @@ const serverFiles = ['server.js', 'vps_server.js', 'vps_server.cjs'];
 
 for (const file of serverFiles) {
   const source = readFileSync(file, 'utf8');
-  const listingPayloadFunction = source.match(
+  const listingPayloadFunctions = source.match(
     /function buildTikTokShopListingPayloadVps\(remoteProduct(?:, fallbackCategoryId = '')?\) \{[\s\S]*?\n\}\n\nfunction formatTikTokShopBusinessErrorsVps/,
   )?.[0].replace(/\n\nfunction formatTikTokShopBusinessErrorsVps$/, '');
-  assert.ok(listingPayloadFunction, `${file} must expose the TikTok listing payload builder`);
-  const buildListingPayload = Function(
-    `${listingPayloadFunction}; return buildTikTokShopListingPayloadVps;`,
+  assert.ok(listingPayloadFunctions, `${file} must expose the TikTok listing payload builder`);
+  const { buildListingPayload, mergeAutomaticAttributes } = Function(
+    `${listingPayloadFunctions}; return {
+      buildListingPayload: buildTikTokShopListingPayloadVps,
+      mergeAutomaticAttributes: mergeTikTokShopAutomaticAttributesVps,
+    };`,
   )();
   const normalizedListingPayload = buildListingPayload({
     title: 'Produto de teste',
@@ -53,6 +56,37 @@ for (const file of serverFiles) {
     }),
     (error) => error?.statusCode === 422 && /category_id/.test(error.message),
     `${file} must report incomplete remote drafts as validation errors instead of gateway errors`,
+  );
+  const anatelPayload = mergeAutomaticAttributes(
+    persistedCategoryPayload,
+    [{
+      id: '102427',
+      name: 'Is Anatel Homologation Code Required',
+      is_requried: true,
+      values: [
+        { id: 'yes-id', name: 'Sim' },
+        { id: 'no-id', name: 'Não' },
+      ],
+    }],
+  );
+  assert.deepEqual(
+    anatelPayload.product_attributes,
+    [{
+      id: '102427',
+      name: 'Is Anatel Homologation Code Required',
+      values: [{ id: 'no-id', name: 'Não' }],
+    }],
+    `${file} must resolve the TikTok-provided ANATEL "Nao" value for passive 3D supplies`,
+  );
+  assert.match(
+    source,
+    /attribute\?\.is_required === true \|\| attribute\?\.is_requried === true/,
+    `${file} must support TikTok's historical is_requried response field`,
+  );
+  assert.match(
+    source,
+    /reply\.code\(err\.tiktokCode \? 422 : \(err\.statusCode \|\| 502\)\)/,
+    `${file} must return TikTok business errors as structured validation responses`,
   );
   assert.match(
     source,

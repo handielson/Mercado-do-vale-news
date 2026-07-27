@@ -78,6 +78,7 @@ Fontes verificadas em 27 de julho de 2026:
 - https://partner.tiktokshop.com/docv2/page/edit-product-202509
 - https://partner.tiktokshop.com/docv2/page/activate-product-202309
 - https://partner.tiktokshop.com/docv2/page/get-product-202309
+- https://partner.tiktokshop.com/docv2/page/get-attributes-202309
 - https://seller-br.tiktok.com/university/essay?knowledge_id=4339061972092689&lang=pt-BR
 
 Regras aplicadas:
@@ -91,6 +92,10 @@ Regras aplicadas:
 - Nao montar a publicacao a partir de uma copia parcial local: campos ausentes em uma edicao completa podem apagar dados existentes.
 - Depois do envio, persistir `PENDING` e consultar o `Get Product` ate o TikTok retornar `ACTIVATE` ou `FAILED`.
 - Tratar `data.errors` como falha mesmo quando o envelope da resposta retorna `code=0`.
+- Consultar os atributos atuais da categoria antes da publicacao e enviar os valores obrigatorios com os IDs retornados pelo TikTok.
+- Aceitar tanto `is_required` quanto a grafia historica `is_requried` devolvida pelo `Get Attributes`.
+- Para a categoria `985480` de suprimentos de impressao 3D, declarar automaticamente `Nao` no atributo ANATEL `102427`; o ID do valor nunca e fixado e sempre vem do catalogo atual da loja.
+- Retornar erros de negocio do TikTok como validacao HTTP 422 com `code` e `request_id`, evitando que o proxy transforme a resposta em uma pagina HTML 502.
 - O atalho de rascunhos abre `https://seller-br.tiktok.com/product`; o anuncio publico so e liberado no estado `ACTIVATE`.
 
 ### Assinatura das APIs

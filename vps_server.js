@@ -4840,7 +4840,9 @@ async function handleTikTokShopCategoryReadinessVps(request, reply) {
       },
       rules: rulesResult.payload?.data || {},
       attributes,
-      required_attributes: attributes.filter((attribute) => attribute?.is_required === true),
+      required_attributes: attributes.filter((attribute) => (
+        attribute?.is_required === true || attribute?.is_requried === true
+      )),
       request_ids: {
         rules: rulesResult.payload?.request_id || null,
         attributes: attributesResult.payload?.request_id || null,
@@ -5534,6 +5536,65 @@ function buildTikTokShopListingPayloadVps(remoteProduct, fallbackCategoryId = ''
   return payload;
 }
 
+function normalizeTikTokShopAttributeNameVps(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function mergeTikTokShopAutomaticAttributesVps(payload, attributeDefinitions) {
+  const currentAttributes = Array.isArray(payload?.product_attributes)
+    ? payload.product_attributes
+    : [];
+  const currentIds = new Set(currentAttributes.map((attribute) => String(attribute?.id || '').trim()));
+  const categoryId = String(payload?.category_id || '').trim();
+  if (categoryId !== '985480' || currentIds.has('102427')) return payload;
+
+  const anatelAttribute = (Array.isArray(attributeDefinitions) ? attributeDefinitions : [])
+    .find((attribute) => String(attribute?.id || '').trim() === '102427');
+  if (!anatelAttribute) return payload;
+  const noValue = (Array.isArray(anatelAttribute.values) ? anatelAttribute.values : [])
+    .find((value) => ['nao', 'no'].includes(normalizeTikTokShopAttributeNameVps(value?.name)));
+  if (!noValue?.id) {
+    const error = new Error(
+      'O TikTok exige a declaracao ANATEL, mas nao retornou a opcao "Nao" para esta categoria.',
+    );
+    error.statusCode = 422;
+    throw error;
+  }
+  return {
+    ...payload,
+    product_attributes: [
+      ...currentAttributes,
+      {
+        id: String(anatelAttribute.id),
+        name: String(anatelAttribute.name || 'Is Anatel Homologation Code Required'),
+        values: [{
+          id: String(noValue.id),
+          name: String(noValue.name || 'Nao'),
+        }],
+      },
+    ],
+  };
+}
+
+async function applyTikTokShopAutomaticAttributesVps(settings, payload) {
+  if (String(payload?.category_id || '').trim() !== '985480') return payload;
+  const attributesResult = await callTikTokShopOpenApiVps(settings, {
+    pathname: `/product/202309/categories/${encodeURIComponent(payload.category_id)}/attributes`,
+    query: {
+      category_version: String(payload.category_version || 'v1'),
+      locale: 'pt-BR',
+    },
+  });
+  return mergeTikTokShopAutomaticAttributesVps(
+    payload,
+    attributesResult.payload?.data?.attributes,
+  );
+}
+
 function formatTikTokShopBusinessErrorsVps(errors) {
   if (!Array.isArray(errors) || errors.length === 0) return '';
   return errors.slice(0, 10).map((item) => {
@@ -5633,7 +5694,8 @@ async function handleTikTokShopPublishDraftVps(request, reply) {
   try {
     const settings = await loadTikTokShopOAuthSettingsVps();
     const { product: remoteDraft } = await loadTikTokShopRemoteProductVps(settings, remoteProductId, true);
-    const payload = buildTikTokShopListingPayloadVps(remoteDraft, link.tiktok_category_id);
+    const draftPayload = buildTikTokShopListingPayloadVps(remoteDraft, link.tiktok_category_id);
+    const payload = await applyTikTokShopAutomaticAttributesVps(settings, draftPayload);
     const result = await callTikTokShopOpenApiVps(settings, {
       method: 'PUT',
       pathname: `/product/202509/products/${encodeURIComponent(remoteProductId)}`,
@@ -5674,7 +5736,7 @@ async function handleTikTokShopPublishDraftVps(request, reply) {
       code: err.tiktokCode || null,
       request_id: err.requestId || null,
     });
-    return reply.code(err.statusCode || 502).send({
+    return reply.code(err.tiktokCode ? 422 : (err.statusCode || 502)).send({
       error: 'Falha ao publicar o rascunho no TikTok Shop.',
       detail: safeError,
       code: err.tiktokCode || null,
