@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { productService } from '../../../../services/products';
@@ -30,6 +30,7 @@ export default function TikTokShopBulkPreparation() {
   const [running, setRunning] = useState(false);
   const [draftProgress, setDraftProgress] = useState<Record<string, string>>({});
   const [completedDraftIds, setCompletedDraftIds] = useState<string[]>([]);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { let cancelled = false; (async () => { try { const loaded = await productService.list(); const { links: found } = await tiktokShopService.getProductLinks(loaded.map((product) => product.id)); if (!cancelled) { setProducts(loaded); setLinks(Object.fromEntries(found.map((link) => [link.product_id, link]))); } } catch (error) { console.error('[TikTokShopBulkPreparation] load error:', error); if (!cancelled) toast.error('Nao foi possivel carregar o lote TikTok.'); } finally { if (!cancelled) setLoading(false); } })(); return () => { cancelled = true; }; }, []);
 
@@ -47,6 +48,7 @@ export default function TikTokShopBulkPreparation() {
         const warehouse = warehouseResult.warehouses.find((item) => item.is_default) || warehouseResult.warehouses[0];
         if (!warehouse) throw new Error('Nenhum armazem TikTok disponivel para o lote.');
         setDraftProgress(Object.fromEntries(chosen.map((product) => [product.id, 'Na fila'])));
+        progressRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         const results = await Promise.allSettled(chosen.map(async (product) => {
           const mapping = await tiktokShopService.getCategoryMapping(String(product.category_id || ''));
           if (!mapping.mapping) throw new Error(`Categoria nao mapeada: ${product.name}`);
@@ -57,6 +59,7 @@ export default function TikTokShopBulkPreparation() {
             job = await tiktokShopService.getDraftJob(job.job_id);
           }
           if (job.status !== 'completed') throw new Error(job.error?.message || `Falha ao criar ${product.name}`);
+          if (job.result) setLinks((current) => ({ ...current, [product.id]: { product_id: product.id, tiktok_product_id: job.result!.tiktok_product_id, tiktok_sku_id: job.result!.tiktok_sku_id, status: job.result!.status, last_synced_at: new Date().toISOString() } }));
           setDraftProgress((current) => ({ ...current, [product.id]: 'Rascunho criado' }));
           return product.id;
         }));
