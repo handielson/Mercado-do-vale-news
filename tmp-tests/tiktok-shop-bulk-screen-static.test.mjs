@@ -14,11 +14,16 @@ assert.match(bulk, /Atualizar anuncios/, 'bulk screen must expose updates');
 assert.match(bulk, /getProductLinks/, 'bulk screen must load TikTok links');
 assert.match(bulk, /publishDraft/, 'bulk screen must use the real publish endpoint');
 assert.match(bulk, /startDraftJob/, 'bulk screen must create every selected draft through the queue');
-assert.match(bulk, /setLinks\(\(current\).*tiktok_product_id/, 'completed draft jobs must refresh their TikTok link before publishing');
+assert.match(bulk, /setLinks\(\(current\)[\s\S]*tiktok_product_id/, 'completed draft jobs must refresh their TikTok link before publishing');
 assert.match(bulk, /Buscar por nome, SKU, categoria ou marca/, 'bulk screen must offer text filtering');
 assert.match(bulk, /Selecionar prontos filtrados/, 'bulk screen must select all eligible filtered products');
 assert.match(bulk, /useState\('positive'\)/, 'bulk screen must default to products with stock');
 assert.match(bulk, /useState\('NOT_SENT'\)/, 'bulk screen must default to products not yet sent');
 assert.match(bulk, /Atualizar/, 'bulk screen must expose update state for sent products');
+assert.match(bulk, /titleNeedsCompatibilityWording/, 'bulk screen must prevent titles using the forbidden wording');
+assert.match(bulk, /Compativel com/, 'bulk screen must require the compatibility wording in titles');
+assert.match(bulk, /ref=\{progressRef\}/, 'bulk screen must anchor automatic progress scrolling');
+assert.match(bulk, /scrollIntoView/, 'bulk screen must scroll to progress after sending');
+assert.match(bulk, /bg-emerald-50/, 'completed drafts must have a distinct success state');
 
 console.log('TikTok Shop bulk screen static checks passed');
