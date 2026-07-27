@@ -472,16 +472,17 @@ export default function TikTokShopProductPreparation({
     }
   }
 
-  async function publishTikTokDraft() {
+  async function publishTikTokDraft(action: 'publish' | 'resend' | 'update' = 'publish') {
     if (!selectedProduct || !createdTikTokProductId) {
       toast.info('Crie o rascunho antes de publicar.');
       return;
     }
-    const isUpdate = tiktokProductStatus === 'ACTIVATE';
     if (!window.confirm(
-      isUpdate
+      action === 'update'
         ? `Atualizar "${selectedProduct.name}" no TikTok Shop? O anuncio sera reenviado para analise.`
-        : `Reenviar "${selectedProduct.name}" ao TikTok Shop? O anuncio sera enviado para analise.`,
+        : action === 'resend'
+          ? `Reenviar "${selectedProduct.name}" ao TikTok Shop? O anuncio sera enviado novamente para analise.`
+          : `Publicar "${selectedProduct.name}" no TikTok Shop? O anuncio sera enviado para analise.`,
     )) return;
 
     setPublishingDraft(true);
@@ -853,15 +854,37 @@ export default function TikTokShopProductPreparation({
               </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {['DRAFT', 'ACTIVATE'].includes(tiktokProductStatus || 'DRAFT') && (
+              {tiktokProductStatus === 'DRAFT' && (
                 <button
                   type="button"
-                  onClick={() => void publishTikTokDraft()}
+                  onClick={() => void publishTikTokDraft('publish')}
                   disabled={publishingDraft || !canWriteProducts}
                   className="inline-flex items-center gap-2 rounded-lg bg-pink-600 px-3 py-2 text-xs font-bold text-white hover:bg-pink-700 disabled:opacity-50"
                 >
                   {publishingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                  {publishingDraft ? 'Enviando...' : tiktokProductStatus === 'ACTIVATE' ? 'Atualizar anuncio' : 'Reenviar anuncio'}
+                  {publishingDraft ? 'Enviando...' : 'Publicar anuncio'}
+                </button>
+              )}
+              {tiktokProductStatus === 'DRAFT' && (
+                <button
+                  type="button"
+                  onClick={() => void publishTikTokDraft('resend')}
+                  disabled={publishingDraft || !canWriteProducts}
+                  className="inline-flex items-center gap-2 rounded-lg border border-pink-300 bg-white px-3 py-2 text-xs font-bold text-pink-700 hover:bg-pink-50 disabled:opacity-50"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Reenviar rascunho
+                </button>
+              )}
+              {['DRAFT', 'ACTIVATE'].includes(tiktokProductStatus || 'DRAFT') && (
+                <button
+                  type="button"
+                  onClick={() => void publishTikTokDraft('update')}
+                  disabled={publishingDraft || !canWriteProducts}
+                  className="inline-flex items-center gap-2 rounded-lg bg-pink-600 px-3 py-2 text-xs font-bold text-white hover:bg-pink-700 disabled:opacity-50"
+                >
+                  {publishingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                  {publishingDraft ? 'Enviando...' : 'Atualizar anuncio'}
                 </button>
               )}
               <button

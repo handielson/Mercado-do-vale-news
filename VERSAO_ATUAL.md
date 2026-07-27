@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.81-tiktok-draft-resend
+version: v1.2.82-tiktok-listing-actions
 date: 2026-07-26
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-024255-tiktok-draft-resend
+release_vps: /var/www/mdv-site/releases/20260727-025504-tiktok-listing-actions
 branch: main
-summary: Exibe reenvio explicito para anuncios TikTok que permanecem em rascunho.
+summary: Separa as acoes de publicar, reenviar rascunho e atualizar anuncio TikTok.
 ```
