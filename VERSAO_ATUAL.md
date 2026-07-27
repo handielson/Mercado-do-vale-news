@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.89-tiktok-parent-groups
+version: v1.2.90-tiktok-video-fallback
 date: 2026-07-27
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-022204-v1289-tiktok-parent-groups
+release_vps: /var/www/mdv-site/releases/20260727-023008-v1290-tiktok-video-fallback
 branch: main
-summary: Reconhece familias legadas por nome, exibe o produto pai e persiste o grupo antes do envio TikTok.
+summary: Valida o video do pai, reutiliza o primeiro video acessivel das variacoes e nao bloqueia o rascunho quando o video opcional falha.
 ```

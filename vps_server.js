@@ -5078,31 +5078,48 @@ async function uploadTikTokDraftImagesVps(settings, imageUrls) {
   return uploaded;
 }
 
+async function probeTikTokDraftVideoUrlVps(videoUrl) {
+  if (!isTrustedTikTokDraftImageUrlVps(videoUrl)) return false;
+  try {
+    const response = await fetch(videoUrl, {
+      method: 'HEAD',
+      headers: { Accept: 'video/*' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(5000),
+    });
+    return (
+      response.ok &&
+      isTrustedTikTokDraftImageUrlVps(response.url) &&
+      String(response.headers.get('content-type') || '').toLowerCase().includes('video')
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function resolveTikTokDraftVideoUrlVps(product) {
+  const candidates = [];
   const configured = String(product?.video_url || '').trim();
-  if (/^https?:\/\//i.test(configured)) return configured;
+  if (/^https?:\/\//i.test(configured)) candidates.push(configured);
   const parentId = String(product?.is_parent ? product?.id : product?.parent_id || '').trim();
   if (parentId) {
-    const [[variationWithVideo]] = await pool.query(
+    const [variationsWithVideo] = await pool.query(
       `SELECT video_url FROM products
        WHERE parent_id = ? AND id <> ? AND video_url IS NOT NULL AND TRIM(video_url) <> ''
-       LIMIT 1`,
+       ORDER BY sku ASC`,
       [parentId, String(product?.id || '')],
     );
-    const siblingVideoUrl = String(variationWithVideo?.video_url || '').trim();
-    if (/^https?:\/\//i.test(siblingVideoUrl)) return siblingVideoUrl;
+    for (const variation of variationsWithVideo) {
+      const siblingVideoUrl = String(variation?.video_url || '').trim();
+      if (/^https?:\/\//i.test(siblingVideoUrl)) candidates.push(siblingVideoUrl);
+    }
   }
   const sku = String(product?.sku || '').trim().replace(/\s+/g, '');
-  if (!sku) return '';
-  const candidate = `https://videos.mercadodovale.com.br/${encodeURIComponent(sku)}.mp4`;
-  try {
-    const response = await fetch(candidate, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
-    return response.ok && String(response.headers.get('content-type') || '').toLowerCase().includes('video')
-      ? candidate
-      : '';
-  } catch {
-    return '';
+  if (sku) candidates.push(`https://videos.mercadodovale.com.br/${encodeURIComponent(sku)}.mp4`);
+  for (const candidate of [...new Set(candidates)]) {
+    if (await probeTikTokDraftVideoUrlVps(candidate)) return candidate;
   }
+  return '';
 }
 
 async function fetchTikTokDraftVideoFileVps(videoUrl) {
@@ -5346,12 +5363,22 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
         reportProgress('prepare_video', 'skipped', 'Video ja validado no envio anterior.');
         reportProgress('upload_video', 'done', 'Video ja armazenado no TikTok Shop.');
       } else {
-        reportProgress('prepare_video', 'running', 'Baixando e ajustando o video para a proporcao aceita pelo TikTok.');
-        uploadedVideo = await uploadTikTokDraftVideoVps(settings, videoUrl, () => {
-          reportProgress('prepare_video', 'done', 'Video ajustado entre 9:16 e 16:9, sem cortar o conteudo.');
-          reportProgress('upload_video', 'running', 'Enviando o video para o TikTok Shop.');
-        });
-        reportProgress('upload_video', 'done', 'Video aceito pelo TikTok Shop.');
+        try {
+          reportProgress('prepare_video', 'running', 'Baixando e ajustando o video para a proporcao aceita pelo TikTok.');
+          uploadedVideo = await uploadTikTokDraftVideoVps(settings, videoUrl, () => {
+            reportProgress('prepare_video', 'done', 'Video ajustado entre 9:16 e 16:9, sem cortar o conteudo.');
+            reportProgress('upload_video', 'running', 'Enviando o video para o TikTok Shop.');
+          });
+          reportProgress('upload_video', 'done', 'Video aceito pelo TikTok Shop.');
+        } catch (videoError) {
+          uploadedVideo = null;
+          console.warn('[TikTok Shop] Video opcional ignorado no rascunho.', {
+            product_id: productId,
+            error: videoError instanceof Error ? videoError.message : String(videoError),
+          });
+          reportProgress('prepare_video', 'skipped', 'Video indisponivel; rascunho seguira sem video.');
+          reportProgress('upload_video', 'skipped', 'Video opcional nao enviado.');
+        }
       }
     } else {
       reportProgress('prepare_video', 'skipped', 'Produto sem video cadastrado.');

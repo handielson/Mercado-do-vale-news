@@ -32,7 +32,9 @@ assert.match(bulk, /setCorrections/, 'failed draft jobs must block the product u
 assert.match(vpsServer, /function cleanTikTokDraftTitleVps/, 'API must normalize the TikTok draft title');
 assert.match(vpsServer, /replace\(\/\\bpara\\b\/gi, 'Compatível com'\)/, 'API must use compatibility wording in TikTok titles');
 assert.match(vpsServer, /cleanTikTokDraftTitleVps\(product\.name\)/, 'TikTok draft creation must use the normalized title');
-assert.match(vpsServer, /variationWithVideo/, 'TikTok drafts must reuse a configured video from a sibling variation');
+assert.match(vpsServer, /probeTikTokDraftVideoUrlVps/, 'TikTok drafts must validate configured videos before downloading them');
+assert.match(vpsServer, /variationsWithVideo/, 'TikTok drafts must inspect configured videos from sibling variations');
+assert.match(vpsServer, /Video indisponivel; rascunho seguira sem video/, 'An unavailable optional video must not block the draft');
 assert.match(vpsServer, /WHERE parent_id = \? AND id <> \?/, 'TikTok drafts must find a sibling video within the same variation group');
 assert.match(vpsServer, /buildTikTokDraftSkusVps/, 'TikTok drafts must build all SKUs for a variation group');
 assert.match(vpsServer, /sales_attributes/, 'TikTok variation SKUs must include sales attributes');
