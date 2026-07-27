@@ -8,6 +8,7 @@ import {
 } from '../../../services/tiktokShopService';
 import TikTokShopSaleCalculator from './components/TikTokShopSaleCalculator';
 import TikTokShopProductPreparation from './components/TikTokShopProductPreparation';
+import TikTokShopBulkPreparation from './components/TikTokShopBulkPreparation';
 
 type TikTokShopDraft = {
   app_key: string;
@@ -305,6 +306,7 @@ export default function TikTokShopPage() {
       )}
 
       <TikTokShopProductPreparation status={status} initialProductId={initialProductId} />
+      <TikTokShopBulkPreparation />
       <TikTokShopSaleCalculator status={status} />
     </div>
   );

@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.82-tiktok-listing-actions
-date: 2026-07-26
+version: v1.2.83-tiktok-bulk-send
+date: 2026-07-27
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-025504-tiktok-listing-actions
+release_vps: pendente
 branch: main
-summary: Separa as acoes de publicar, reenviar rascunho e atualizar anuncio TikTok.
+summary: Adiciona diagnostico e acoes em lote para anuncios TikTok Shop.
 ```
