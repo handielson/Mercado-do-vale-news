@@ -1,10 +1,10 @@
 # Versao Atual
 
 ```text
-version: v1.2.74-tiktok-category-publish
+version: v1.2.75-tiktok-category-fallback
 date: 2026-07-26
 status: ready
-release_vps: /var/www/mdv-site/releases/20260727-011954-tiktok-category-publish
+release_vps: /var/www/mdv-site/releases/20260727-012943-tiktok-category-fallback
 branch: main
-summary: Normaliza categoria e marca do rascunho ao publicar no TikTok Shop.
+summary: Usa a categoria persistida na criacao ao publicar rascunhos TikTok.
 ```

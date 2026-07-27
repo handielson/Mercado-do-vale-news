@@ -5497,7 +5497,7 @@ async function handleTikTokShopDraftJobGetVps(request, reply) {
   return reply.code(200).send(mapTikTokDraftJobVps(job));
 }
 
-function buildTikTokShopListingPayloadVps(remoteProduct) {
+function buildTikTokShopListingPayloadVps(remoteProduct, fallbackCategoryId = '') {
   if (!remoteProduct || typeof remoteProduct !== 'object') {
     throw new Error('O TikTok Shop nao retornou os dados atuais do rascunho.');
   }
@@ -5520,7 +5520,7 @@ function buildTikTokShopListingPayloadVps(remoteProduct) {
   }
   const categoryTrail = Array.isArray(remoteProduct.categories) ? remoteProduct.categories : [];
   const leafCategory = categoryTrail.find((category) => category?.is_leaf) || categoryTrail.at(-1);
-  const categoryId = String(remoteProduct.category_id || leafCategory?.id || '').trim();
+  const categoryId = String(remoteProduct.category_id || leafCategory?.id || fallbackCategoryId || '').trim();
   const brandId = String(remoteProduct.brand_id || remoteProduct.brand?.id || '').trim();
   if (categoryId) payload.category_id = categoryId;
   if (brandId) payload.brand_id = brandId;
@@ -5565,7 +5565,7 @@ async function handleTikTokShopProductStatusVps(request, reply) {
     return reply.code(400).send({ error: 'Produto local invalido.' });
   }
   const [[link]] = await pool.query(
-    `SELECT product_id, tiktok_product_id, tiktok_sku_id, status, last_synced_at
+    `SELECT product_id, tiktok_product_id, tiktok_sku_id, tiktok_category_id, status, last_synced_at
      FROM tiktok_shop_products WHERE product_id = ? LIMIT 1`,
     [productId],
   );
@@ -5614,7 +5614,7 @@ async function handleTikTokShopPublishDraftVps(request, reply) {
     return reply.code(400).send({ error: 'Produto local invalido.' });
   }
   const [[link]] = await pool.query(
-    `SELECT product_id, tiktok_product_id, tiktok_sku_id, status, last_synced_at
+    `SELECT product_id, tiktok_product_id, tiktok_sku_id, tiktok_category_id, status, last_synced_at
      FROM tiktok_shop_products WHERE product_id = ? LIMIT 1`,
     [productId],
   );
@@ -5633,7 +5633,7 @@ async function handleTikTokShopPublishDraftVps(request, reply) {
   try {
     const settings = await loadTikTokShopOAuthSettingsVps();
     const { product: remoteDraft } = await loadTikTokShopRemoteProductVps(settings, remoteProductId, true);
-    const payload = buildTikTokShopListingPayloadVps(remoteDraft);
+    const payload = buildTikTokShopListingPayloadVps(remoteDraft, link.tiktok_category_id);
     const result = await callTikTokShopOpenApiVps(settings, {
       method: 'PUT',
       pathname: `/product/202509/products/${encodeURIComponent(remoteProductId)}`,

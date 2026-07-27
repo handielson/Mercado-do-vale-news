@@ -6,7 +6,7 @@ const serverFiles = ['server.js', 'vps_server.js', 'vps_server.cjs'];
 for (const file of serverFiles) {
   const source = readFileSync(file, 'utf8');
   const listingPayloadFunction = source.match(
-    /function buildTikTokShopListingPayloadVps\(remoteProduct\) \{[\s\S]*?\n\}\n\nfunction formatTikTokShopBusinessErrorsVps/,
+    /function buildTikTokShopListingPayloadVps\(remoteProduct(?:, fallbackCategoryId = '')?\) \{[\s\S]*?\n\}\n\nfunction formatTikTokShopBusinessErrorsVps/,
   )?.[0].replace(/\n\nfunction formatTikTokShopBusinessErrorsVps$/, '');
   assert.ok(listingPayloadFunction, `${file} must expose the TikTok listing payload builder`);
   const buildListingPayload = Function(
@@ -32,6 +32,17 @@ for (const file of serverFiles) {
     normalizedListingPayload.brand_id,
     'brand-123',
     `${file} must convert the Get Product brand object into Edit Product brand_id`,
+  );
+  const persistedCategoryPayload = buildListingPayload({
+    title: 'Produto com categoria persistida',
+    description: '<p>Descricao</p>',
+    main_images: [{ uri: 'tos-image-uri' }],
+    skus: [{ id: 'sku-123' }],
+  }, '985480');
+  assert.equal(
+    persistedCategoryPayload.category_id,
+    '985480',
+    `${file} must fall back to the category persisted when the draft was created`,
   );
   assert.throws(
     () => buildListingPayload({
@@ -137,6 +148,11 @@ for (const file of serverFiles) {
     source,
     /pathname: `\/product\/202509\/products\/\$\{encodeURIComponent\(remoteProductId\)\}`/,
     `${file} must publish drafts with the current Edit Product endpoint`,
+  );
+  assert.match(
+    source,
+    /buildTikTokShopListingPayloadVps\(remoteDraft, link\.tiktok_category_id\)/,
+    `${file} must publish with the category persisted for the original draft`,
   );
   assert.match(source, /save_mode: 'LISTING'/, `${file} must submit the draft for listing`);
   assert.doesNotMatch(
