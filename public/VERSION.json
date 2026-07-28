@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.103-restore-pdv-installments",
-  "date": "2026-07-27",
+  "version": "v1.2.104-shopee-pedidos-envio-etiqueta",
+  "date": "2026-07-28",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260727-174231-restore-pdv-installments",
+  "release_vps": "/var/www/mdv-site/releases/20260728-190258-v12104-shopee-pedidos",
   "branch": "main",
-  "summary": "Restaura parcelamentos e taxas no PDV e no orcamento."
+  "summary": "Corrige o preparo de envio e a geração de etiquetas nos pedidos Shopee."
 }

@@ -167,9 +167,15 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
     const handleShipOrder = async (orderSn: string, packageNumber?: string) => {
         toast.loading(`Preparando envio do pedido #${orderSn}...`, { id: 'ship' });
         try {
-            const params = new URLSearchParams({ action: 'ship_order', order_sn: orderSn });
-            if (packageNumber) params.set('package_number', packageNumber);
-            const res = await fetch(`/api/shopee-actions?${params.toString()}`);
+            const res = await fetch('/api/shopee-actions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'ship_order',
+                    order_sn: orderSn,
+                    ...(packageNumber ? { package_number: packageNumber } : {}),
+                }),
+            });
             const data = await res.json();
 
             if (data.error) {

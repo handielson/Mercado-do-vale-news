@@ -10,7 +10,17 @@ assert.match(
 );
 assert.match(
   page,
-  /fetch\('\/api\/shopee-actions',\s*\{\s*method: 'POST'/,
+  /action:\s*'ship_order'[\s\S]*order_sn:\s*orderSn/,
+  'prepare shipment must send the action and order number in the request body',
+);
+assert.match(
+  page,
+  /fetch\('\/api\/shopee-actions',\s*\{\s*method: 'POST'[\s\S]*action:\s*'ship_order'/,
+  'prepare shipment must use POST',
+);
+assert.match(
+  page,
+  /fetch\('\/api\/shopee-actions',\s*\{\s*method: 'POST'[\s\S]*action:\s*'get_shipping_document'/,
   'label creation must use POST because it creates a Shopee document task',
 );
 assert.match(page, /action:\s*'get_shipping_document'/, 'label POST must send the action in its JSON body');

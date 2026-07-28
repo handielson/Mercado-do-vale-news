@@ -4393,26 +4393,18 @@ async function handleShopeeActionsVps(request, reply) {
           trackingResult.data?.response?.first_mile_tracking_number,
           trackingResult.data?.response?.logistics_tracking_no,
         );
-        if (trackingResult.data?.error || !trackingNumber) {
-          return reply.code(200).send({
-            error: trackingResult.data?.error || 'shipping_document_tracking_not_ready',
-            message: trackingResult.data?.message || 'O codigo de rastreio ainda nao esta disponivel para gerar a etiqueta.',
-          });
-        }
-
         const documentOrder = {
           order_sn: orderSn,
           package_number: packageNumber,
-          tracking_number: trackingNumber,
-          shipping_document_type: shippingDocumentType,
+          ...(trackingNumber ? { tracking_number: trackingNumber } : {}),
         };
         const resultOrder = {
           order_sn: orderSn,
           package_number: packageNumber,
-          shipping_document_type: shippingDocumentType,
         };
         const createResult = await shopeeCatalogPostVps('/api/v2/logistics/create_shipping_document', creds, {
           order_list: [documentOrder],
+          shipping_document_type: shippingDocumentType,
         });
         if (createResult.data?.error) {
           return reply.code(createResult.status).send({
@@ -4427,6 +4419,7 @@ async function handleShopeeActionsVps(request, reply) {
         for (let attempt = 0; attempt < 8; attempt += 1) {
           documentResult = await shopeeCatalogPostVps('/api/v2/logistics/get_shipping_document_result', creds, {
             order_list: [resultOrder],
+            shipping_document_type: shippingDocumentType,
           });
           const resultList = documentResult.data?.response?.result_list
             || documentResult.data?.response?.order_list
@@ -4455,7 +4448,7 @@ async function handleShopeeActionsVps(request, reply) {
         const docResponse = await fetch(buildShopeeCatalogUrlVps('/api/v2/logistics/download_shipping_document', creds), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order_list: [resultOrder] }),
+          body: JSON.stringify({ order_list: [resultOrder], shipping_document_type: shippingDocumentType }),
           signal: AbortSignal.timeout(20000),
         });
         const contentType = docResponse.headers.get('content-type') || '';
