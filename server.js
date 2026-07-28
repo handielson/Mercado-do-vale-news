@@ -4528,7 +4528,7 @@ async function handleShopeeActionsVps(request, reply) {
         const isShipmentArrangedRaw = detailPackage.is_shipment_arranged ?? selectedPackage?.is_shipment_arranged;
         const isShipmentArranged = isShipmentArrangedRaw === true || String(isShipmentArrangedRaw).toLowerCase() === 'true';
 
-        if (packageDetailData?.error || !fulfillmentStatus) {
+        if (!fulfillmentStatus) {
           return reply.code(200).send({
             error: 'ship_order_precheck_failed',
             message: 'Não foi possível confirmar que o pacote está pronto para envio. A chamada ship_order foi bloqueada para preservar a taxa de sucesso da Shopee.',
