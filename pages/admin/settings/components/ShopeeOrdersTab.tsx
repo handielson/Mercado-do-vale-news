@@ -307,6 +307,7 @@ export default function ShopeeOrdersTab({ isConnected, initialStatusFilter = 'AL
                 body: JSON.stringify({
                     action: 'get_shipping_document',
                     order_sn: orderSn,
+                    full_page_a4: true,
                 }),
             });
             const contentType = res.headers.get('content-type') || '';

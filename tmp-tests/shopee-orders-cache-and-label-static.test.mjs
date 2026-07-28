@@ -25,6 +25,7 @@ assert.match(
 );
 assert.match(page, /action:\s*'get_shipping_document'/, 'label POST must send the action in its JSON body');
 assert.match(page, /order_sn:\s*orderSn/, 'label POST must send the order number in its JSON body');
+assert.match(page, /full_page_a4:\s*true/, 'label POST must request an A4 full-page document');
 assert.match(
   page,
   /data\.message \|\| data\.doc\?\.message \|\| data\.error/,

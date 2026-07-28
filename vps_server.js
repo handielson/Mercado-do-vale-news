@@ -6722,6 +6722,25 @@ function firstShopeeActionsNonEmptyVps(...values) {
   return '';
 }
 
+async function expandShopeeShippingLabelToA4Vps(pdfBuffer) {
+  const sourcePdf = await PDFDocument.load(pdfBuffer);
+  const outputPdf = await PDFDocument.create();
+
+  for (const sourcePage of sourcePdf.getPages()) {
+    const { width, height } = sourcePage.getSize();
+    const label = await outputPdf.embedPage(sourcePage, {
+      left: 0,
+      bottom: height / 2,
+      right: width / 2,
+      top: height,
+    });
+    const outputPage = outputPdf.addPage([width, height]);
+    outputPage.drawPage(label, { x: 0, y: 0, width, height });
+  }
+
+  return Buffer.from(await outputPdf.save());
+}
+
 async function loadShopeeActionsProductFromVps(productId) {
   const response = await fetch(`https://api.xiaomipetrolina.com.br/products/${encodeURIComponent(String(productId))}`, {
     signal: AbortSignal.timeout(10000),
@@ -7008,7 +7027,13 @@ async function handleShopeeActionsVps(request, reply) {
         });
         const contentType = docResponse.headers.get('content-type') || '';
         if (contentType.includes('application/pdf')) {
-          const pdfBuffer = Buffer.from(await docResponse.arrayBuffer());
+          const originalPdfBuffer = Buffer.from(await docResponse.arrayBuffer());
+          const wantsFullPageA4 = payload.full_page_a4 === true
+            || payload.full_page_a4 === 1
+            || ['true', '1'].includes(String(payload.full_page_a4).toLowerCase());
+          const pdfBuffer = wantsFullPageA4
+            ? await expandShopeeShippingLabelToA4Vps(originalPdfBuffer)
+            : originalPdfBuffer;
           return reply
             .code(200)
             .header('Content-Type', 'application/pdf')

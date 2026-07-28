@@ -45,6 +45,9 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /\.\.\.\(isSplitOrder \? \{ package_number: resolvedPackageNumber \} : \{\}\)/, `${file} must omit package_number from unsplit ship_order payloads`);
   assert.match(source, /already_arranged/, `${file} must make repeated ship_order calls idempotent`);
   assert.match(source, /case 'get_shipping_document': \{\s*if \(requireShopeeActionsPostVps/, `${file} must guard shipping document creation behind POST`);
+  assert.match(source, /async function expandShopeeShippingLabelToA4Vps/, `${file} must support expanding the Shopee quarter-page label to A4`);
+  assert.match(source, /embedPage\(sourcePage,[\s\S]*bottom:\s*height \/ 2,[\s\S]*right:\s*width \/ 2/, `${file} must crop the label's top-left A4 quadrant before scaling`);
+  assert.match(source, /wantsFullPageA4[\s\S]*expandShopeeShippingLabelToA4Vps\(originalPdfBuffer\)/, `${file} must expand labels only when full_page_a4 is requested`);
   assert.match(source, /shipping_document_type \|\| 'NORMAL_AIR_WAYBILL'/, `${file} must use a currently supported Shopee document type`);
   assert.match(source, /\.\.\.\(trackingNumber \? \{ tracking_number: trackingNumber \} : \{\}\)/, `${file} must use tracking when available without blocking label generation`);
   assert.match(source, /order_list:\s*\[documentOrder\],\s*shipping_document_type:\s*shippingDocumentType/, `${file} must send the document type at the Shopee payload root`);
