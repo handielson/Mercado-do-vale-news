@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.105-shopee-package-status",
+  "version": "v1.2.106-shopee-unsplit-order",
   "date": "2026-07-28",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260728-161111-v12105-shopee-package-status",
+  "release_vps": "/var/www/mdv-site/releases/20260728-161811-v12106-shopee-unsplit-order",
   "branch": "main",
-  "summary": "Aceita o status logístico válido do pacote ao preparar pedidos Shopee."
+  "summary": "Omite package_number ao preparar pedidos Shopee não divididos."
 }

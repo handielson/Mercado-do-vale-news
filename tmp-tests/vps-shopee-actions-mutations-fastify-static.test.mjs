@@ -39,6 +39,10 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /ship_order_package_not_ready/, `${file} must block ship_order when package is not ready`);
   assert.match(source, /selectedPackage\?\.logistics_status[\s\S]*if \(!fulfillmentStatus\)/, `${file} must accept the order package LOGISTICS_READY fallback when package detail is unavailable`);
   assert.doesNotMatch(source, /if \(packageDetailData\?\.error \|\| !fulfillmentStatus\)/, `${file} must not discard a valid order package status because package detail failed`);
+  assert.match(source, /response_optional_fields:\s*'package_list,shipping_carrier,order_status,fulfillment_flag,split_up'/, `${file} must request split_up before arranging shipment`);
+  assert.match(source, /const isSplitOrder =[\s\S]*packageList\.length > 1/, `${file} must detect split orders explicitly`);
+  assert.match(source, /const packageDetail = isSplitOrder[\s\S]*get_package_detail/, `${file} must skip package detail for unsplit orders`);
+  assert.match(source, /\.\.\.\(isSplitOrder \? \{ package_number: resolvedPackageNumber \} : \{\}\)/, `${file} must omit package_number from unsplit ship_order payloads`);
   assert.match(source, /already_arranged/, `${file} must make repeated ship_order calls idempotent`);
   assert.match(source, /case 'get_shipping_document': \{\s*if \(requireShopeeActionsPostVps/, `${file} must guard shipping document creation behind POST`);
   assert.match(source, /shipping_document_type \|\| 'NORMAL_AIR_WAYBILL'/, `${file} must use a currently supported Shopee document type`);

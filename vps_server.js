@@ -6928,7 +6928,7 @@ async function handleShopeeActionsVps(request, reply) {
         const shippingDocumentType = payload.shipping_document_type || 'NORMAL_AIR_WAYBILL';
         const orderDetail = await shopeeCatalogGetVps('/api/v2/order/get_order_detail', creds, encodeShopeeCatalogParamsVps({
           order_sn_list: orderSn,
-          response_optional_fields: 'package_list,shipping_carrier,order_status,fulfillment_flag',
+          response_optional_fields: 'package_list,shipping_carrier,order_status,fulfillment_flag,split_up',
         }));
         const order = orderDetail.data?.response?.order_list?.[0];
         const packageNumber = firstShopeeActionsNonEmptyVps(order?.package_list?.[0]?.package_number);
@@ -7055,6 +7055,10 @@ async function handleShopeeActionsVps(request, reply) {
         }
 
         const packageList = Array.isArray(order.package_list) ? order.package_list : [];
+        const isSplitOrder = order.split_up === true
+          || order.split_up === 1
+          || String(order.split_up).toLowerCase() === 'true'
+          || packageList.length > 1;
         const selectedPackage = requestedPackageNumber
           ? packageList.find((pkg) => String(pkg?.package_number || '').trim() === requestedPackageNumber)
           : packageList[0];
@@ -7068,10 +7072,12 @@ async function handleShopeeActionsVps(request, reply) {
           });
         }
 
-        const packageDetail = await shopeeCatalogGetVps('/api/v2/order/get_package_detail', creds, encodeShopeeCatalogParamsVps({
-          order_sn: orderSn,
-          package_number: resolvedPackageNumber,
-        }));
+        const packageDetail = isSplitOrder
+          ? await shopeeCatalogGetVps('/api/v2/order/get_package_detail', creds, encodeShopeeCatalogParamsVps({
+              order_sn: orderSn,
+              package_number: resolvedPackageNumber,
+            }))
+          : { data: {} };
         const packageDetailData = packageDetail.data || {};
         const detailPackage = packageDetailData?.response?.package_detail || packageDetailData?.response?.package_list?.[0] || packageDetailData?.response || {};
         const fulfillmentStatus = firstShopeeActionsNonEmptyVps(
@@ -7108,11 +7114,12 @@ async function handleShopeeActionsVps(request, reply) {
           });
         }
 
-        result = await shopeeCatalogPostVps('/api/v2/logistics/ship_order', creds, {
+        const shipOrderPayload = {
           order_sn: orderSn,
-          package_number: resolvedPackageNumber,
           dropoff: {},
-        });
+          ...(isSplitOrder ? { package_number: resolvedPackageNumber } : {}),
+        };
+        result = await shopeeCatalogPostVps('/api/v2/logistics/ship_order', creds, shipOrderPayload);
         return reply.code(result.status).send(result.data);
       }
 
