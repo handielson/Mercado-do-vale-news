@@ -100,7 +100,7 @@ object LabelRenderer {
         return bitmap
     }
 
-    fun renderCustomText(value: String, size: LabelSize): Bitmap {
+    fun renderCustomText(value: String, size: LabelSize, fontPercent: Int = 100): Bitmap {
         val width = min(MAX_PRINTER_WIDTH, size.widthMm * DOTS_PER_MM)
         val height = size.heightMm * DOTS_PER_MM
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -131,7 +131,7 @@ object LabelRenderer {
             }
         }
 
-        textPaint.textSize = best
+        textPaint.textSize = best * fontPercent.coerceIn(40, 100) / 100f
         val layout = customTextLayout(text, textPaint, availableWidth)
         canvas.save()
         canvas.translate(

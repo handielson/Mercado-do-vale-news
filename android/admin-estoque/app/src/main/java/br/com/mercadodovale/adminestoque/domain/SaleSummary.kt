@@ -22,6 +22,79 @@ enum class SalesChannel(
     }
 }
 
+enum class SaleStatusGroup(val label: String) {
+    ALL("Todas"),
+    NEW("Novas"),
+    TO_SHIP("A enviar"),
+    SHIPPED("Enviadas"),
+    COMPLETED("Concluídas"),
+    CANCELLED("Canceladas"),
+    RETURNS("Devoluções e reembolsos"),
+    OTHER("Outras");
+
+    fun accepts(sale: SaleSummary): Boolean = this == ALL || sale.statusGroup == this
+
+    companion object {
+        fun fromRaw(value: String): SaleStatusGroup = when (normalizeStatus(value)) {
+            "NEW", "CREATED", "PENDING", "UNPAID", "AWAITING_PAYMENT", "PENDING_PAYMENT" -> NEW
+            "PAID", "CONFIRMED", "READY_TO_SHIP", "AWAITING_SHIPMENT", "TO_SHIP",
+            "PROCESSING", "PACKING", "PICKUP_PENDING" -> TO_SHIP
+            "PROCESSED", "SHIPPED", "IN_TRANSIT", "PICKED_UP", "TO_CONFIRM_RECEIVE" -> SHIPPED
+            "DELIVERED", "COMPLETED", "COMPLETE", "SUCCESS", "FINISHED" -> COMPLETED
+            "CANCELLED", "CANCELED", "IN_CANCEL", "VOIDED" -> CANCELLED
+            "REFUND", "REFUNDED", "PARTIAL_REFUND", "RETURN", "RETURNED", "IN_RETURN" -> RETURNS
+            else -> OTHER
+        }
+
+        fun localized(value: String): String {
+            val normalized = normalizeStatus(value)
+            return mapOf(
+                "NEW" to "Nova venda",
+                "CREATED" to "Criada",
+                "PENDING" to "Pendente",
+                "UNPAID" to "Aguardando pagamento",
+                "AWAITING_PAYMENT" to "Aguardando pagamento",
+                "PENDING_PAYMENT" to "Pagamento pendente",
+                "PAID" to "Paga",
+                "CONFIRMED" to "Confirmada",
+                "READY_TO_SHIP" to "Pronta para envio",
+                "AWAITING_SHIPMENT" to "Aguardando envio",
+                "TO_SHIP" to "A enviar",
+                "PROCESSING" to "Em preparação",
+                "PACKING" to "Em separação",
+                "PICKUP_PENDING" to "Aguardando coleta",
+                "PROCESSED" to "Envio preparado",
+                "SHIPPED" to "Enviada",
+                "IN_TRANSIT" to "Em trânsito",
+                "PICKED_UP" to "Coletada",
+                "TO_CONFIRM_RECEIVE" to "Aguardando confirmação de recebimento",
+                "DELIVERED" to "Entregue",
+                "COMPLETED" to "Concluída",
+                "COMPLETE" to "Concluída",
+                "SUCCESS" to "Concluída",
+                "FINISHED" to "Finalizada",
+                "CANCELLED" to "Cancelada",
+                "CANCELED" to "Cancelada",
+                "IN_CANCEL" to "Cancelamento em andamento",
+                "VOIDED" to "Cancelada",
+                "REFUND" to "Em reembolso",
+                "REFUNDED" to "Reembolsada",
+                "PARTIAL_REFUND" to "Reembolso parcial",
+                "RETURN" to "Em devolução",
+                "RETURNED" to "Devolvida",
+                "IN_RETURN" to "Devolução em andamento",
+                "FAILED" to "Falhou",
+            )[normalized] ?: value
+                .replace('_', ' ')
+                .lowercase(Locale("pt", "BR"))
+                .replaceFirstChar { it.titlecase(Locale("pt", "BR")) }
+        }
+
+        private fun normalizeStatus(value: String): String =
+            value.trim().uppercase(Locale.ROOT).replace('-', '_').replace(' ', '_')
+    }
+}
+
 data class SaleItem(
     val name: String,
     val sku: String,
@@ -74,6 +147,24 @@ data class SaleSummary(
 
     val shortId: String
         get() = externalId.take(12).uppercase()
+
+    val statusGroup: SaleStatusGroup
+        get() = SaleStatusGroup.fromRaw(status)
+
+    val localizedStatus: String
+        get() = SaleStatusGroup.localized(status)
+
+    val localizedDeliveryType: String
+        get() = when (deliveryType.trim().lowercase(Locale.ROOT).replace('-', '_')) {
+            "delivery", "shipping", "shipment" -> "Entrega"
+            "pickup", "store_pickup", "retirada" -> "Retirada na loja"
+            "motoboy", "local_delivery" -> "Entrega local"
+            "" -> ""
+            else -> deliveryType
+                .replace('_', ' ')
+                .lowercase(Locale("pt", "BR"))
+                .replaceFirstChar { it.titlecase(Locale("pt", "BR")) }
+        }
 
     val formattedPayment: String
         get() = if (paymentDetails.isEmpty()) {

@@ -51,6 +51,11 @@ assert.doesNotMatch(
   server.match(/async function loadMobilePdvSalesVps[\s\S]*?async function loadMobileOnlineSalesVps/)?.[0] || '',
   /s\.status/,
 );
+assert.match(
+  server.match(/async function loadMobileOnlineSalesVps[\s\S]*?function normalizeMobileShopeeOrderVps/)?.[0] || '',
+  /WHERE 1 = 1/,
+  'a lista Online deve incluir pendentes e canceladas para os filtros do aplicativo',
+);
 assert.match(server, /payment_details:\s*mobileSalesPaymentDetailsVps/);
 assert.match(server, /total_with_fee_cents/);
 assert.match(server, /operator_fee_amount_cents/);

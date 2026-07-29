@@ -6308,7 +6308,7 @@ async function loadMobilePdvSalesVps(limit = 50, saleId = '') {
 async function loadMobileOnlineSalesVps(limit = 50, orderId = '') {
   const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50));
   const params = [];
-  let where = "WHERE LOWER(COALESCE(o.status, '')) NOT IN ('cancelled', 'canceled', 'refunded', 'failed', 'pending')";
+  let where = 'WHERE 1 = 1';
   if (orderId) {
     where += ' AND o.id = ?';
     params.push(String(orderId));

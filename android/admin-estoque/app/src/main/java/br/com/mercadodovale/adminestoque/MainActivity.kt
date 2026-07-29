@@ -34,6 +34,7 @@ import br.com.mercadodovale.adminestoque.data.VpsApiClient
 import br.com.mercadodovale.adminestoque.domain.LabelSize
 import br.com.mercadodovale.adminestoque.domain.ProductLabelProduct
 import br.com.mercadodovale.adminestoque.domain.SaleSummary
+import br.com.mercadodovale.adminestoque.domain.SaleStatusGroup
 import br.com.mercadodovale.adminestoque.domain.SalesChannel
 import br.com.mercadodovale.adminestoque.domain.StockLocationBox
 import br.com.mercadodovale.adminestoque.domain.StockLocationContent
@@ -70,7 +71,9 @@ class MainActivity : Activity() {
     private var currentTransferTargetId: String? = null
     private var currentSalesChannel: SalesChannel? = null
     private var currentSaleId: String? = null
+    private var currentSalesFilter: SaleStatusGroup = SaleStatusGroup.ALL
     private var currentCustomLabelText: String = ""
+    private var currentCustomLabelFontPercent: Int = 90
     private var labelPreview: ImageView? = null
     private var printerIndicator: PrinterStatusView? = null
     private var printerStatusText: TextView? = null
@@ -118,7 +121,15 @@ class MainActivity : Activity() {
             savedInstanceState?.getString(STATE_SALES_CHANNEL),
         )
         currentSaleId = savedInstanceState?.getString(STATE_SALE_ID)
+        currentSalesFilter = savedInstanceState
+            ?.getString(STATE_SALES_FILTER)
+            ?.let { value -> SaleStatusGroup.entries.firstOrNull { it.name == value } }
+            ?: SaleStatusGroup.ALL
         currentCustomLabelText = savedInstanceState?.getString(STATE_CUSTOM_LABEL_TEXT).orEmpty()
+        currentCustomLabelFontPercent = savedInstanceState
+            ?.getInt(STATE_CUSTOM_LABEL_FONT_PERCENT, 90)
+            ?.coerceIn(40, 100)
+            ?: 90
         if (token.isNullOrBlank()) {
             showLogin()
         } else if (handleSaleIntent(intent)) {
@@ -169,7 +180,9 @@ class MainActivity : Activity() {
         outState.putString(STATE_TRANSFER_TARGET_ID, currentTransferTargetId)
         outState.putString(STATE_SALES_CHANNEL, currentSalesChannel?.apiKey)
         outState.putString(STATE_SALE_ID, currentSaleId)
+        outState.putString(STATE_SALES_FILTER, currentSalesFilter.name)
         outState.putString(STATE_CUSTOM_LABEL_TEXT, currentCustomLabelText)
+        outState.putInt(STATE_CUSTOM_LABEL_FONT_PERCENT, currentCustomLabelFontPercent)
         currentLabelProduct?.let { outState.putString(STATE_LABEL_PRODUCT, it.toStateJson()) }
         if (currentTransferLines.isNotEmpty()) {
             outState.putString(
@@ -383,7 +396,10 @@ class MainActivity : Activity() {
         isClickable = true
         isFocusable = true
         contentDescription = "Abrir vendas ${channel.label}"
-        setOnClickListener { showSalesList(channel) }
+        setOnClickListener {
+            currentSalesFilter = SaleStatusGroup.ALL
+            showSalesList(channel)
+        }
         addView(text(channel.label, 22, salesChannelColor(channel)))
         addView(text(channel.subtitle, 14, Color.DKGRAY))
         addView(text("Toque para abrir  ›", 13, blue))
@@ -406,33 +422,63 @@ class MainActivity : Activity() {
         root.addView(text(channel.subtitle, 15, Color.DKGRAY))
         val status = text("Carregando vendas…", 14, Color.DKGRAY)
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val filters = SaleStatusGroup.entries
+        val filterSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                filters.map { it.label },
+            )
+            setSelection(filters.indexOf(currentSalesFilter).coerceAtLeast(0))
+        }
+        root.addView(text("Filtrar por situação", 15, Color.DKGRAY))
+        root.addView(filterSpinner)
         root.addView(status)
         root.addView(list)
         showContent(root)
-        loadSales(channel, status, list)
+        filterSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                currentSalesFilter = filters[position]
+                loadSales(channel, currentSalesFilter, status, list)
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
     }
 
     private fun loadSales(
         channel: SalesChannel,
+        filter: SaleStatusGroup,
         status: TextView,
         list: LinearLayout,
     ) {
+        status.text = "Carregando vendas…"
         runAsync {
             val response = VpsApiClient(token.orEmpty()).get(
-                "/admin/mobile-sales?channel=${channel.apiKey}&limit=50",
+                "/admin/mobile-sales?channel=${channel.apiKey}&limit=100",
             )
             runOnUiThread {
+                if (filter != currentSalesFilter || channel != currentSalesChannel) return@runOnUiThread
                 response.fold(
                     onSuccess = { body ->
                         runCatching { SaleSummary.parseList(body) }.fold(
                             onSuccess = { sales ->
+                                val filtered = sales.filter(filter::accepts)
                                 list.removeAllViews()
-                                status.text = if (sales.isEmpty()) {
-                                    "Nenhuma venda encontrada nesta origem."
+                                status.text = if (filtered.isEmpty()) {
+                                    if (sales.isEmpty()) {
+                                        "Nenhuma venda encontrada nesta origem."
+                                    } else {
+                                        "Nenhuma venda em “${filter.label}”."
+                                    }
                                 } else {
-                                    "${sales.size} venda(s) mais recente(s)"
+                                    if (filter == SaleStatusGroup.ALL) {
+                                        "${filtered.size} venda(s) mais recente(s)"
+                                    } else {
+                                        "${filtered.size} de ${sales.size} venda(s) em “${filter.label}”"
+                                    }
                                 }
-                                sales.forEach { sale -> list.addView(saleListCard(sale)) }
+                                filtered.forEach { sale -> list.addView(saleListCard(sale)) }
                             },
                             onFailure = {
                                 status.text = it.message ?: "Resposta de vendas inválida."
@@ -461,7 +507,7 @@ class MainActivity : Activity() {
             "${it.quantity}x ${it.name}${it.sku.takeIf(String::isNotBlank)?.let { sku -> " • $sku" }.orEmpty()}"
         }
         if (itemSummary.isNotBlank()) addView(text(itemSummary, 14, Color.rgb(15, 23, 42)))
-        addView(text("${sale.status}  ›", 13, blue))
+        addView(text("${sale.localizedStatus}  ›", 13, blue))
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -509,7 +555,7 @@ class MainActivity : Activity() {
         root.addView(text(sale.formattedTotal, 32, green))
         root.addView(text("Venda #${sale.shortId}", 18, Color.rgb(15, 23, 42)))
         root.addView(text(formatSaleDate(sale.occurredAt), 15, Color.DKGRAY))
-        root.addView(saleDetailSection("Status", sale.status))
+        root.addView(saleDetailSection("Status", sale.localizedStatus))
         root.addView(saleDetailSection("Cliente", buildString {
             append(sale.customerName)
             if (sale.customerPhone.isNotBlank()) append("\n").append(sale.customerPhone)
@@ -523,7 +569,7 @@ class MainActivity : Activity() {
             root.addView(
                 saleDetailSection(
                     "Entrega",
-                    listOf(sale.deliveryType, sale.shippingAddress)
+                    listOf(sale.localizedDeliveryType, sale.shippingAddress)
                         .filter(String::isNotBlank)
                         .joinToString("\n"),
                 ),
@@ -2332,7 +2378,41 @@ class MainActivity : Activity() {
             currentCustomLabelText = customText.text.toString()
             currentLabelSize = sizeSpinner.selectedItem as LabelSize
             updatePreviewDimensions(preview, currentLabelSize)
-            preview.setImageBitmap(LabelRenderer.renderCustomText(currentCustomLabelText, currentLabelSize))
+            preview.setImageBitmap(
+                LabelRenderer.renderCustomText(
+                    currentCustomLabelText,
+                    currentLabelSize,
+                    currentCustomLabelFontPercent,
+                ),
+            )
+        }
+        val fontValue = text("Fonte: $currentCustomLabelFontPercent%", 16, Color.rgb(15, 23, 42))
+        fun updateFont(delta: Int) {
+            currentCustomLabelFontPercent =
+                (currentCustomLabelFontPercent + delta).coerceIn(40, 100)
+            fontValue.text = if (currentCustomLabelFontPercent == 100) {
+                "Fonte: 100% — máximo que cabe"
+            } else {
+                "Fonte: $currentCustomLabelFontPercent%"
+            }
+            updateCustomPreview()
+        }
+        val fontSelector = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(Button(this@MainActivity).apply {
+                text = "A−"
+                contentDescription = "Diminuir fonte"
+                setOnClickListener { updateFont(-10) }
+                layoutParams = LinearLayout.LayoutParams(dp(72), dp(52))
+            })
+            addView(fontValue, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(Button(this@MainActivity).apply {
+                text = "A+"
+                contentDescription = "Aumentar fonte"
+                setOnClickListener { updateFont(10) }
+                layoutParams = LinearLayout.LayoutParams(dp(72), dp(52))
+            })
         }
         customText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -2348,6 +2428,8 @@ class MainActivity : Activity() {
         root.addView(customText)
         root.addView(text("Tamanho da etiqueta", 15, Color.DKGRAY))
         root.addView(sizeSpinner)
+        root.addView(text("Tamanho da fonte", 15, Color.DKGRAY))
+        root.addView(fontSelector)
         root.addView(text("Quantidade de cópias", 15, Color.DKGRAY))
         root.addView(copiesSelector)
         root.addView(text("Pré-visualização — exatamente como será impressa", 14, Color.DKGRAY))
@@ -2371,7 +2453,11 @@ class MainActivity : Activity() {
                     requestBluetoothAndConnect()
                 }
                 else -> {
-                    val bitmap = LabelRenderer.renderCustomText(value, sizeSpinner.selectedItem as LabelSize)
+                    val bitmap = LabelRenderer.renderCustomText(
+                        value,
+                        sizeSpinner.selectedItem as LabelSize,
+                        currentCustomLabelFontPercent,
+                    )
                     preview.setImageBitmap(bitmap)
                     printerClient.print(bitmap, quantity) { result ->
                         runOnUiThread {
@@ -2840,7 +2926,9 @@ class MainActivity : Activity() {
         private const val STATE_TRANSFER_TARGET_ID = "state_transfer_target_id"
         private const val STATE_SALES_CHANNEL = "state_sales_channel"
         private const val STATE_SALE_ID = "state_sale_id"
+        private const val STATE_SALES_FILTER = "state_sales_filter"
         private const val STATE_CUSTOM_LABEL_TEXT = "state_custom_label_text"
+        private const val STATE_CUSTOM_LABEL_FONT_PERCENT = "state_custom_label_font_percent"
         private const val SCREEN_LOGIN = "login"
         private const val SCREEN_DASHBOARD = "dashboard"
         private const val SCREEN_PERMISSIONS = "permissions"
