@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.117-printer-service-update
+version: v1.2.118-printer-runtime-dependency
 date: 2026-07-29
 status: ready
-release_vps: /var/www/mdv-site/releases/20260729-125841-v12117-printer-service-update
+release_vps: /var/www/mdv-site/releases/20260729-145006-v12118-printer-runtime-dependency
 branch: main
-summary: Permite atualizar com seguranca o servico local de impressao pelo painel.
+summary: Corrige a descoberta das impressoras Windows e instala dependencias no servico local.
 ```

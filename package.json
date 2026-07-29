@@ -50,6 +50,7 @@
     "lucide-react": "^0.344.0",
     "mysql2": "^3.20.0",
     "pdf-lib": "^1.17.1",
+    "pdf-to-printer": "^5.8.0",
     "pg": "^8.19.0",
     "postcss": "^8.4.35",
     "qrcode.react": "^4.2.0",

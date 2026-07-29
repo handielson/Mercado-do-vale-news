@@ -134,12 +134,46 @@ async function runPrintFlowTest() {
 
 async function pullPrinterServiceUpdate() {
     const projectRoot = path.resolve(__dirname, '..');
-    const { stdout, stderr } = await execFileAsync(
+    const { stdout: pullStdout, stderr: pullStderr } = await execFileAsync(
         'git',
         ['pull', '--ff-only', 'origin', 'main'],
         { cwd: projectRoot, windowsHide: true, timeout: 120000 },
     );
-    return String(stdout || stderr || 'Atualização do repositório concluída.').trim();
+    const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const { stdout: installStdout, stderr: installStderr } = await execFileAsync(
+        npmCommand,
+        ['install', '--omit=dev', '--no-audit', '--no-fund'],
+        { cwd: projectRoot, windowsHide: true, timeout: 180000 },
+    );
+    return [pullStdout, pullStderr, installStdout, installStderr]
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+}
+
+function normalizePrinterNames(printers) {
+    return Array.from(new Set(
+        printers
+            .map(printer => String(printer?.name || printer?.deviceId || printer || '').trim())
+            .filter(Boolean),
+    )).sort((left, right) => left.localeCompare(right, 'pt-BR'));
+}
+
+async function getLocalPrinterNames() {
+    try {
+        const ptp = require('pdf-to-printer');
+        return normalizePrinterNames(await ptp.getPrinters());
+    } catch (pdfToPrinterError) {
+        if (process.platform !== 'win32') throw pdfToPrinterError;
+
+        // Algumas instalações retornam propriedades incompletas para pdf-to-printer.
+        const { stdout } = await execFileAsync(
+            'powershell.exe',
+            ['-NoProfile', '-Command', 'Get-CimInstance Win32_Printer | Select-Object -ExpandProperty Name'],
+            { windowsHide: true, timeout: 30000 },
+        );
+        return normalizePrinterNames(stdout.split(/\r?\n/));
+    }
 }
 
 async function restartPrinterServiceAfterUpdate() {
@@ -255,13 +289,7 @@ function startLocalServer() {
         }
 
         if (req.url === '/printers') {
-            const ptp = require('pdf-to-printer');
-            ptp.getPrinters().then(printers => {
-                const names = Array.from(new Set(
-                    printers
-                        .map(printer => String(printer?.name || printer?.deviceId || printer || '').trim())
-                        .filter(Boolean),
-                )).sort((left, right) => left.localeCompare(right, 'pt-BR'));
+            getLocalPrinterNames().then(names => {
                 res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
                 res.end(JSON.stringify({ printers: names }));
             }).catch(err => {

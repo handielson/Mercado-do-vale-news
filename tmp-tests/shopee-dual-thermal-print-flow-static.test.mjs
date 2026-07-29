@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 const script = readFileSync('scripts/shopee-auto-print.cjs', 'utf8');
 const panel = readFileSync('pages/admin/settings/components/ShopeePrintersTab.tsx', 'utf8');
+const packageJson = readFileSync('package.json', 'utf8');
 
 assert.match(script, /shippingLabelsDir\s*=\s*path\.join\(__dirname, 'Etiquetas de envio'\)/,
   'etiquetas precisam ficar em uma pasta local dedicada');
@@ -38,5 +39,12 @@ for (const text of [
 ]) {
   assert.match(panel, new RegExp(text), `painel deve manter o texto: ${text}`);
 }
+
+assert.match(script, /\['install', '--omit=dev', '--no-audit', '--no-fund'\]/,
+  'a atualizaÃ§Ã£o local deve instalar dependÃªncias novas antes de reiniciar');
+assert.match(script, /Get-CimInstance Win32_Printer/,
+  'a listagem deve ter alternativa nativa do Windows quando pdf-to-printer falhar');
+assert.match(packageJson, /"pdf-to-printer":\s*"\^5\.8\.0"/,
+  'o serviÃ§o local precisa declarar a dependÃªncia de impressÃ£o');
 
 console.log('Shopee dual thermal print flow regression checks passed.');
