@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.108-android-sales-push",
+  "version": "v1.2.109-tiktok-sales-webhook",
   "date": "2026-07-28",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260728-234246-v12108-android-sales-push",
+  "release_vps": "/var/www/mdv-site/releases/20260728-234936-v12109-tiktok-sales-webhook",
   "branch": "main",
-  "summary": "Adiciona vendas por canal e notificacoes push no aplicativo Gestao MDV."
+  "summary": "Configura o webhook oficial de mudanca de pedidos do TikTok Shop."
 }

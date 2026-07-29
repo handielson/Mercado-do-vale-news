@@ -6485,6 +6485,37 @@ async function handleTikTokShopWebhookVps(request, reply) {
   }
 }
 
+async function handleTikTokShopOrderWebhookConfigureVps(_request, reply) {
+  try {
+    const settings = await loadTikTokShopOAuthSettingsVps();
+    const address = String(
+      process.env.TIKTOK_SHOP_ORDER_WEBHOOK_URL
+        || 'https://api.xiaomipetrolina.com.br/api/tiktok-shop/webhook',
+    ).trim();
+    const result = await callTikTokShopOpenApiVps(settings, {
+      method: 'PUT',
+      pathname: '/event/202309/webhooks',
+      body: {
+        address,
+        event_type: 'ORDER_STATUS_CHANGE',
+      },
+    });
+    reply.header('Cache-Control', 'no-store');
+    return {
+      configured: true,
+      event_type: 'ORDER_STATUS_CHANGE',
+      address,
+      request_id: result?.payload?.request_id || null,
+    };
+  } catch (error) {
+    return reply.code(error.statusCode || 500).send({
+      error: 'Falha ao configurar webhook de pedidos TikTok Shop.',
+      detail: error.message || String(error),
+      request_id: error.requestId || null,
+    });
+  }
+}
+
 function generateShopeeShopSignVps(partnerId, partnerKey, apiPath, timestamp, accessToken, shopId) {
   const baseString = `${partnerId}${apiPath}${timestamp}${accessToken}${shopId}`;
   return crypto.createHmac('sha256', partnerKey).update(baseString).digest('hex');
@@ -10969,6 +11000,7 @@ fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);
 fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
 fastify.all('/api/shopee-actions', handleShopeeActionsVps);
 fastify.all('/api/tiktok-shop/webhook', handleTikTokShopWebhookVps);
+fastify.put('/api/tiktok-shop/webhooks/order-status', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopOrderWebhookConfigureVps);
 fastify.post('/admin/mobile-push/devices', { preHandler: requireAdminBearerToken }, async (request, reply) => {
   try {
     const auth = await getVpsBearerAuthContext(request);
@@ -11072,6 +11104,7 @@ fastify.post('/api/tiktok-shop/products/:productId/publish', { preHandler: requi
 fastify.get('/api/tiktok-shop/products/links', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopProductLinksVps);
 fastify.post('/api/tiktok-shop/products/price', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopUpdatePriceVps);
 fastify.get('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
+fastify.put('/tiktok-shop/webhooks/order-status', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopOrderWebhookConfigureVps);
 fastify.patch('/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsPatchVps);
 fastify.get('/tiktok-shop/oauth/auth', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopOAuthAuthVps);
 fastify.get('/tiktok-shop/shops', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopAuthorizedShopsVps);

@@ -29,6 +29,7 @@ for (const contract of [
   "fastify.get('/admin/mobile-sales'",
   "fastify.get('/admin/mobile-sales/:channel/:saleId'",
   "fastify.all('/api/tiktok-shop/webhook'",
+  "fastify.put('/api/tiktok-shop/webhooks/order-status'",
   'recordMobileOnlineSaleVps(order.id)',
   'recordMobilePdvSaleVps(saleId)',
 ]) {
@@ -43,6 +44,8 @@ assert.match(service, /FIREBASE_SERVICE_ACCOUNT_(?:JSON|BASE64|PATH)/);
 assert.match(service, /sendEachForMulticast/);
 assert.match(service, /UNIQUE KEY uniq_mobile_sale_event/);
 assert.match(service, /UNIQUE KEY uniq_mobile_push_token/);
+assert.match(server, /event_type:\s*'ORDER_STATUS_CHANGE'/);
+assert.match(server, /pathname:\s*'\/event\/202309\/webhooks'/);
 
 const deploy = fs.readFileSync(
   new URL('../deploy-vps-server-only.cjs', import.meta.url),
