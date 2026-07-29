@@ -22,11 +22,18 @@ assert.match(script, /runPrintFlowTest[\s\S]*?labelPrinter[\s\S]*?summaryPrinter
   'o teste precisa enviar conteúdo para as duas térmicas');
 assert.match(script, /req\.url === '\/test-flow' && req\.method === 'POST'/,
   'o serviço local precisa expor o fluxo de teste');
+assert.match(script, /req\.url === '\/update-service' && req\.method === 'POST'/,
+  'o serviço local precisa expor a atualização controlada pelo painel');
+assert.match(script, /git',\s*\['pull', '--ff-only', 'origin', 'main'\]/,
+  'a atualização local deve aceitar somente avanço rápido da main');
+assert.match(script, /server\.listen\(8081, '127\.0\.0\.1'/,
+  'o serviço local deve aceitar conexões somente deste computador');
 
 for (const text of [
   'duas térmicas 10x15',
   'Executar fluxo de teste',
   'Limpar arquivos',
+  'Atualizar serviço',
   'Etiquetas de envio',
 ]) {
   assert.match(panel, new RegExp(text), `painel deve manter o texto: ${text}`);

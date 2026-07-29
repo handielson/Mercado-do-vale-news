@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.116-shopee-dual-thermal
+version: v1.2.117-printer-service-update
 date: 2026-07-29
 status: ready
-release_vps: /var/www/mdv-site/releases/20260729-123523-v12116-shopee-dual-thermal
+release_vps: /var/www/mdv-site/releases/20260729-125841-v12117-printer-service-update
 branch: main
-summary: Configura duas impressoras termicas 10x15 da Shopee, arquivos locais e fluxo de teste seguro.
+summary: Permite atualizar com seguranca o servico local de impressao pelo painel.
 ```

@@ -1,6 +1,8 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const http = require('http');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 
 const path = require('path');
@@ -47,6 +49,12 @@ function generateSign(partnerId, partnerKey, apiPath, timestamp, accessToken, sh
 
 const VPS_API_URL = (process.env.VITE_VPS_URL || 'https://api.xiaomipetrolina.com.br').replace(/\/+$/, '');
 const VPS_SYNC_KEY = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || process.env.SYNC_SECRET || '';
+const execFileAsync = promisify(execFile);
+const LOCAL_PANEL_ORIGINS = new Set([
+    'https://www.mercadodovale.com.br',
+    'https://mercadodovale.com.br',
+    'http://localhost:5173',
+]);
 
 async function getFetch() {
     if (typeof fetch === 'function') return fetch;
@@ -124,6 +132,31 @@ async function runPrintFlowTest() {
     return { label_file: path.basename(labelPath), summary_file: path.basename(summaryPath) };
 }
 
+async function pullPrinterServiceUpdate() {
+    const projectRoot = path.resolve(__dirname, '..');
+    const { stdout, stderr } = await execFileAsync(
+        'git',
+        ['pull', '--ff-only', 'origin', 'main'],
+        { cwd: projectRoot, windowsHide: true, timeout: 120000 },
+    );
+    return String(stdout || stderr || 'Atualização do repositório concluída.').trim();
+}
+
+async function restartPrinterServiceAfterUpdate() {
+    const pm2Command = process.platform === 'win32' ? 'pm2.cmd' : 'pm2';
+    const projectRoot = path.resolve(__dirname, '..');
+    await execFileAsync(pm2Command, ['restart', 'shopee-auto-print'], {
+        cwd: projectRoot,
+        windowsHide: true,
+        timeout: 60000,
+    });
+    await execFileAsync(pm2Command, ['save'], {
+        cwd: projectRoot,
+        windowsHide: true,
+        timeout: 60000,
+    });
+}
+
 async function getCompanySettings() {
     console.log("-> Lendo configuracoes Shopee e impressoras da VPS...");
     if (!VPS_SYNC_KEY) {
@@ -162,7 +195,7 @@ async function getCompanySettings() {
 
 // Função para iniciar servidor web local para escolher a impressora
 function startLocalServer() {
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(async (req, res) => {
         // CORS headers - needed because browser HTTPS calls localhost HTTP
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -182,6 +215,29 @@ function startLocalServer() {
             });
             res.writeHead(202, { 'Content-Type': 'application/json; charset=utf-8' });
             return res.end(JSON.stringify({ ok: true, message: 'Fluxo de teste iniciado. Verifique as duas impressoras.' }));
+        }
+
+        if (req.url === '/update-service' && req.method === 'POST') {
+            const origin = String(req.headers.origin || '').replace(/\/+$/, '');
+            if (!LOCAL_PANEL_ORIGINS.has(origin)) {
+                res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+                return res.end(JSON.stringify({ error: 'Atualização permitida somente pelo painel Mercado do Vale.' }));
+            }
+            try {
+                const output = await pullPrinterServiceUpdate();
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ ok: true, message: 'Atualização concluída. Reiniciando o serviço local...', output }));
+                setTimeout(() => {
+                    restartPrinterServiceAfterUpdate()
+                        .then(() => console.log('[LOCAL UPDATE] Serviço de impressão reiniciado.'))
+                        .catch((err) => console.error('[LOCAL UPDATE] Falha ao reiniciar o serviço:', err.message));
+                }, 300);
+            } catch (err) {
+                console.error('[LOCAL UPDATE] Falha ao atualizar:', err.message);
+                res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ error: `Não foi possível atualizar o serviço local: ${err.message}` }));
+            }
+            return;
         }
 
         if (req.url === '/shipping-labels') {
@@ -356,7 +412,7 @@ function startLocalServer() {
             });
         }
     });
-    server.listen(8081, () => {
+    server.listen(8081, '127.0.0.1', () => {
         console.log("Servidor local ativo! Escutando na porta 8081.");
     });
 }

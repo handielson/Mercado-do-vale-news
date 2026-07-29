@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getCompanyData, saveCompanyData } from '../../../../services/companyService';
 import { Company } from '../../../../types/company';
-import { Printer, Save, Loader2, Info, RefreshCw, Trash2, Play } from 'lucide-react';
+import { Printer, Save, Loader2, Info, RefreshCw, Trash2, Play, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ShopeePrintersTab() {
@@ -13,6 +13,7 @@ export default function ShopeePrintersTab() {
     const [shippingLabels, setShippingLabels] = useState<{ files: number; total_bytes: number } | null>(null);
     const [cleaningLabels, setCleaningLabels] = useState(false);
     const [testingFlow, setTestingFlow] = useState(false);
+    const [updatingService, setUpdatingService] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -135,6 +136,23 @@ export default function ShopeePrintersTab() {
         }
     };
 
+    const handleUpdateService = async () => {
+        if (!window.confirm('Atualizar o serviço local de impressão deste computador? O serviço será reiniciado em seguida.')) {
+            return;
+        }
+        setUpdatingService(true);
+        try {
+            const response = await fetch('http://localhost:8081/update-service', { method: 'POST' });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data?.error || 'Falha ao atualizar o serviço.');
+            toast.success('Atualização concluída. O serviço local será reiniciado em alguns segundos.');
+        } catch (error: any) {
+            toast.error(`Não foi possível atualizar o serviço local. Nesta primeira vez, atualize pelo PowerShell. ${error?.message || ''}`.trim());
+        } finally {
+            setUpdatingService(false);
+        }
+    };
+
     const formatBytes = (bytes: number) => {
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -180,11 +198,10 @@ export default function ShopeePrintersTab() {
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-blue-800 text-sm">
                         <Info className="w-5 h-5 shrink-0 text-blue-500 mt-0.5" />
                         <div>
-                            <p className="font-semibold mb-1">Como funciona a impressão em lote?</p>
+                            <p className="font-semibold mb-1">Como funciona a impressão automática?</p>
                             <p className="text-blue-700/80">
-                                O sistema precisa do nome <strong>NOME EXATO</strong> da impressora como aparece no painel de controle do Windows.
-                                Por exemplo: <code className="bg-white px-1 py-0.5 rounded border border-blue-200 text-blue-900 font-mono text-xs">Zebra TLP2844</code>.
-                                Um script local (PM2) em sua loja vai ler esses nomes da API VPS e disparar a impressão dupla: etiqueta de envio em uma térmica 10x15 e resumo de separação na outra térmica 10x15.
+                                No computador onde as impressoras estão conectadas, use o botão para buscar e selecionar cada térmica uma única vez.
+                                O serviço local de impressão mantém essa configuração e envia automaticamente a etiqueta de envio para uma térmica 10x15 e o resumo de separação para a outra.
                             </p>
                         </div>
                     </div>
@@ -251,37 +268,21 @@ export default function ShopeePrintersTab() {
                         </button>
                     </div>
 
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 text-amber-900 text-sm">
+                    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 text-sm">
                         <Info className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
                         <div className="flex-1">
-                            <p className="font-bold mb-1 text-amber-800">⚠️ Atualização Necessária no PC do Caixa</p>
-                            <p className="mb-3 text-amber-700">
-                                Foram adicionadas as rotas de "Imprimir Teste" e "Impressão Manual". Para que funcionem, você precisa abrir o <strong>PowerShell</strong> no PC onde a impressora está ligada, entrar na pasta do projeto e rodar o script de atualização do Node:
-                            </p>
-                            <div className="bg-amber-900/5 p-3 rounded-lg border border-amber-200/50 font-mono text-xs text-amber-900 relative group">
-                                <code>git pull origin main<br/>pm2 restart shopee-auto-print<br/>pm2 save</code>
-                                <button 
-                                    onClick={() => {
-                                        navigator.clipboard.writeText('git pull origin main && pm2 restart shopee-auto-print && pm2 save');
-                                        toast.success('Comando copiado!');
-                                    }}
-                                    className="absolute top-2 right-2 p-1.5 bg-white text-slate-500 hover:text-amber-600 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                                    title="Copiar Comando"
-                                >
-                                    <Save className="w-4 h-4" /> 
-                                    {/* Using Save icon as a placeholder since Copy isn't imported, but wait, I can just write "Copiar" */}
-                                </button>
-                                <button 
-                                    onClick={() => {
-                                        navigator.clipboard.writeText('git pull origin main && pm2 restart shopee-auto-print && pm2 save');
-                                        toast.success('Comando copiado!');
-                                    }}
-                                    className="absolute top-2 right-2 px-2 py-1 bg-white text-xs font-bold text-slate-600 hover:text-amber-600 rounded border border-amber-200 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                    Copiar
-                                </button>
-                            </div>
+                            <p className="font-bold mb-1 text-amber-800">Atualizar serviço de impressão deste computador</p>
+                            <p className="text-amber-700">Use após uma nova publicação para baixar a versão aprovada e reiniciar o serviço local.</p>
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => void handleUpdateService()}
+                            disabled={updatingService}
+                            className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {updatingService ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                            {updatingService ? 'Atualizando...' : 'Atualizar serviço'}
+                        </button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
