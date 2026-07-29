@@ -4,6 +4,10 @@ import { Company } from '../../../../types/company';
 import { Printer, Save, Loader2, Info, RefreshCw, Trash2, Play, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
+// O serviço local escuta explicitamente em IPv4 para não expor a porta na rede.
+// `localhost` pode resolver primeiro para ::1 no Chrome e não alcançar o serviço.
+const LOCAL_PRINT_SERVICE_URL = 'http://127.0.0.1:8081';
+
 export default function ShopeePrintersTab() {
     const [company, setCompany] = useState<Company | null>(null);
     const [loading, setLoading] = useState(true);
@@ -52,7 +56,7 @@ export default function ShopeePrintersTab() {
         }
         toast.loading('Enviando página de teste do Windows...', { id: 'test-print' });
         try {
-            const res = await fetch(`http://localhost:8081/test-print?printer=${encodeURIComponent(printerName)}`);
+            const res = await fetch(`${LOCAL_PRINT_SERVICE_URL}/test-print?printer=${encodeURIComponent(printerName)}`);
             if (!res.ok) throw new Error('Falha no comando de teste');
             toast.success(`Página de teste enviada para "${printerName}"!`, { id: 'test-print' });
         } catch (error: any) {
@@ -63,7 +67,7 @@ export default function ShopeePrintersTab() {
     const loadWindowsPrinters = async () => {
         setLoadingPrinters(true);
         try {
-            const response = await fetch('http://localhost:8081/printers');
+            const response = await fetch(`${LOCAL_PRINT_SERVICE_URL}/printers`);
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data?.error || 'Falha ao consultar o Windows.');
             const printers = Array.isArray(data?.printers)
@@ -84,7 +88,7 @@ export default function ShopeePrintersTab() {
 
     const loadShippingLabels = async () => {
         try {
-            const response = await fetch('http://localhost:8081/shipping-labels');
+            const response = await fetch(`${LOCAL_PRINT_SERVICE_URL}/shipping-labels`);
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data?.error || 'Falha ao consultar as etiquetas.');
             setShippingLabels({
@@ -102,7 +106,7 @@ export default function ShopeePrintersTab() {
         }
         setCleaningLabels(true);
         try {
-            const response = await fetch('http://localhost:8081/shipping-labels', { method: 'DELETE' });
+            const response = await fetch(`${LOCAL_PRINT_SERVICE_URL}/shipping-labels`, { method: 'DELETE' });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data?.error || 'Falha ao limpar etiquetas.');
             setShippingLabels({ files: Number(data?.files || 0), total_bytes: Number(data?.total_bytes || 0) });
@@ -124,7 +128,7 @@ export default function ShopeePrintersTab() {
         }
         setTestingFlow(true);
         try {
-            const response = await fetch('http://localhost:8081/test-flow', { method: 'POST' });
+            const response = await fetch(`${LOCAL_PRINT_SERVICE_URL}/test-flow`, { method: 'POST' });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data?.error || 'Falha ao iniciar o teste.');
             toast.success('Teste iniciado: confira a etiqueta e o resumo nas duas impressoras.');
@@ -142,7 +146,7 @@ export default function ShopeePrintersTab() {
         }
         setUpdatingService(true);
         try {
-            const response = await fetch('http://localhost:8081/update-service', { method: 'POST' });
+            const response = await fetch(`${LOCAL_PRINT_SERVICE_URL}/update-service`, { method: 'POST' });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data?.error || 'Falha ao atualizar o serviço.');
             toast.success('Atualização concluída. O serviço local será reiniciado em alguns segundos.');

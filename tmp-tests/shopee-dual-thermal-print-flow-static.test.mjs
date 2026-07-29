@@ -46,5 +46,9 @@ assert.match(script, /Get-CimInstance Win32_Printer/,
   'a listagem deve ter alternativa nativa do Windows quando pdf-to-printer falhar');
 assert.match(packageJson, /"pdf-to-printer":\s*"\^5\.8\.0"/,
   'o serviÃ§o local precisa declarar a dependÃªncia de impressÃ£o');
+assert.match(panel, /LOCAL_PRINT_SERVICE_URL\s*=\s*'http:\/\/127\.0\.0\.1:8081'/,
+  'o painel precisa usar o loopback IPv4 que o serviço local atende');
+assert.doesNotMatch(panel, /http:\/\/localhost:8081/,
+  'localhost pode resolver para IPv6 e impedir a comunicação com o serviço IPv4');
 
 console.log('Shopee dual thermal print flow regression checks passed.');
