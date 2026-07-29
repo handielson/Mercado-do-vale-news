@@ -18,6 +18,9 @@ const {
   buildDiscardMessage,
   fitImageInsideA4,
 } = require('./services/signedWarrantyDocumentCore.cjs');
+const {
+  createMobileSalesPushService,
+} = require('./services/mobileSalesPushService.cjs');
 require('dotenv').config({ path: path.join(__dirname, '.env.tiktok.local'), override: false });
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -197,6 +200,7 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
 });
+const mobileSalesPushService = createMobileSalesPushService({ pool, logger: console });
 const MP_PIX_FEE_PCT = Number(process.env.MP_PIX_FEE_PCT || 0);
 const MP_CARD_FEE_PCT = Number(process.env.MP_CARD_FEE_PCT || 0.0499);
 
@@ -4005,6 +4009,13 @@ async function handleMercadoPagoWebhookVps(body) {
         rawMessage: notifyError?.message || String(notifyError),
       }));
     });
+    await recordMobileOnlineSaleVps(order.id).catch((notifyError) => {
+      console.error('[mobile-sales-push] paid order notification failed:', buildCopyableDebug('mobile-sales-push', {
+        step: 'notify paid online order',
+        order_id: order.id,
+        rawMessage: notifyError?.message || String(notifyError),
+      }));
+    });
 
     return { status: 200, body: { message: 'success', order_id: order.id } };
   } catch (err) {
@@ -5253,12 +5264,7 @@ function buildTikTokDraftSkusVps(products, warehouseId) {
     if (hasVariations && !color) throw new Error(`Informe a cor da variacao ${sellerSku}.`);
     if (hasVariations && values.has(color.toLowerCase())) throw new Error(`A cor da variacao esta duplicada: ${color}.`);
     if (hasVariations) values.add(color.toLowerCase());
-    return {
-      seller_sku: sellerSku,
-      price: { amount: (priceCents / 100).toFixed(2), currency: 'BRL' },
-      inventory: [{ warehouse_id: warehouseId, quantity: Math.max(0, Math.floor(Number(product.stock_quantity || 0))) }],
-      ...(hasVariations ? { sales_attributes: [{ name: 'Cor', value_name: color }] } : {}),
-    };
+    return { seller_sku: sellerSku, price: { amount: (priceCents / 100).toFixed(2), currency: 'BRL' }, inventory: [{ warehouse_id: warehouseId, quantity: Math.max(0, Math.floor(Number(product.stock_quantity || 0))) }], ...(hasVariations ? { sales_attributes: [{ name: 'Cor', value_name: color }] } : {}) };
   });
 }
 
@@ -5291,14 +5297,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
       [productId],
     );
     if (!product) return reply.code(404).send({ error: 'Produto local nao encontrado.' });
-    const [variations] = Number(product.is_parent) === 1
-      ? await pool.query(
-        `SELECT id, sku, specs, price_retail, stock_quantity, images, image_url FROM products
-         WHERE parent_id = ? AND (is_parent = 0 OR is_parent IS NULL)
-         ORDER BY sku ASC`,
-        [product.id],
-      )
-      : [[product]];
+    const [variations] = Number(product.is_parent) === 1 ? await pool.query(`SELECT id, sku, specs, price_retail, stock_quantity, images, image_url FROM products WHERE parent_id = ? AND (is_parent = 0 OR is_parent IS NULL) ORDER BY sku ASC`, [product.id]) : [[product]];
     if (variations.length === 0) return reply.code(400).send({ error: 'O grupo nao possui variacoes para enviar.' });
 
     const [[existing]] = await pool.query(
@@ -5517,10 +5516,14 @@ const tiktokDraftJobsVps = new Map();
 
 function mapTikTokDraftJobVps(job) {
   return {
-    job_id: job.id, status: job.status, product_id: job.productId,
+    job_id: job.id,
+    status: job.status,
+    product_id: job.productId,
     steps: job.steps.map((step) => ({ ...step })),
-    result: job.result, error: job.error,
-    created_at: job.createdAt, updated_at: job.updatedAt,
+    result: job.result,
+    error: job.error,
+    created_at: job.createdAt,
+    updated_at: job.updatedAt,
   };
 }
 
@@ -5545,15 +5548,23 @@ async function runTikTokDraftJobVps(job, body) {
   let responsePayload = null;
   const fakeReply = {
     header() { return this; },
-    code(statusCode) { responseStatus = Number(statusCode); return this; },
-    send(payload) { responsePayload = payload; return payload; },
+    code(statusCode) {
+      responseStatus = Number(statusCode);
+      return this;
+    },
+    send(payload) {
+      responsePayload = payload;
+      return payload;
+    },
   };
   try {
     job.status = 'running';
     job.updatedAt = new Date().toISOString();
     const returned = await handleTikTokShopCreateDraftVps({
       body,
-      tiktokProgress: (key, status, detail) => updateTikTokDraftJobStepVps(job, key, status, detail),
+      tiktokProgress: (key, status, detail) => {
+        updateTikTokDraftJobStepVps(job, key, status, detail);
+      },
     }, fakeReply);
     if (responsePayload === null && returned && typeof returned === 'object') responsePayload = returned;
     if (responseStatus >= 400) {
@@ -5561,7 +5572,11 @@ async function runTikTokDraftJobVps(job, body) {
       const runningStep = job.steps.find((step) => step.status === 'running');
       if (runningStep) updateTikTokDraftJobStepVps(job, runningStep.key, 'error', detail);
       job.status = 'error';
-      job.error = { message: detail, code: responsePayload?.code ?? null, request_id: responsePayload?.request_id ?? null };
+      job.error = {
+        message: detail,
+        code: responsePayload?.code ?? null,
+        request_id: responsePayload?.request_id ?? null,
+      };
     } else {
       job.status = 'completed';
       job.result = responsePayload;
@@ -5571,7 +5586,11 @@ async function runTikTokDraftJobVps(job, body) {
     const runningStep = job.steps.find((step) => step.status === 'running');
     if (runningStep) updateTikTokDraftJobStepVps(job, runningStep.key, 'error', detail);
     job.status = 'error';
-    job.error = { message: detail, code: err.tiktokCode ?? null, request_id: err.requestId ?? null };
+    job.error = {
+      message: detail,
+      code: err.tiktokCode ?? null,
+      request_id: err.requestId ?? null,
+    };
   }
   job.updatedAt = new Date().toISOString();
 }
@@ -5585,20 +5604,32 @@ async function handleTikTokShopDraftJobStartVps(request, reply) {
   }
   const now = new Date().toISOString();
   const job = {
-    id: crypto.randomUUID(), productId, status: 'queued',
+    id: crypto.randomUUID(),
+    productId,
+    status: 'queued',
     steps: TIKTOK_DRAFT_JOB_STEPS_VPS.map(([key, label]) => ({
-      key, label, status: 'idle', detail: '', updated_at: null,
+      key,
+      label,
+      status: 'idle',
+      detail: '',
+      updated_at: null,
     })),
-    result: null, error: null, createdAt: now, updatedAt: now,
+    result: null,
+    error: null,
+    createdAt: now,
+    updatedAt: now,
   };
   tiktokDraftJobsVps.set(job.id, job);
-  setImmediate(() => { void runTikTokDraftJobVps(job, body); });
+  setImmediate(() => {
+    void runTikTokDraftJobVps(job, body);
+  });
   return reply.code(202).send(mapTikTokDraftJobVps(job));
 }
 
 async function handleTikTokShopDraftJobGetVps(request, reply) {
   pruneTikTokDraftJobsVps();
-  const job = tiktokDraftJobsVps.get(String(request.params?.jobId || '').trim());
+  const jobId = String(request.params?.jobId || '').trim();
+  const job = tiktokDraftJobsVps.get(jobId);
   if (!job) return reply.code(404).send({ error: 'Processo de envio nao encontrado ou expirado.' });
   reply.header('Cache-Control', 'no-store');
   return reply.code(200).send(mapTikTokDraftJobVps(job));
@@ -6070,14 +6101,384 @@ async function handleShopeeOAuthVps(request, reply) {
   return reply.code(404).send({ error: 'Route not found or missing action.' });
 }
 
+function mobileSalesParseJsonVps(value, fallback = null) {
+  if (value == null || value === '') return fallback;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return fallback;
+  }
+}
+
+function mobileSalesMajorToCentsVps(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.round(numeric * 100)) : 0;
+}
+
+function mobileSalesCentsVps(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.round(numeric)) : 0;
+}
+
+function mobileSalesIsoVps(value, fallback = new Date()) {
+  const parsed = value instanceof Date ? value : new Date(value || fallback);
+  return Number.isNaN(parsed.getTime()) ? fallback.toISOString() : parsed.toISOString();
+}
+
+function mobileSalesPaymentLabelVps(value) {
+  const labels = {
+    money: 'Dinheiro',
+    cash: 'Dinheiro',
+    credit: 'Credito',
+    debit: 'Debito',
+    pix: 'Pix',
+    a_prazo: 'A prazo',
+    mercadopago: 'Mercado Pago',
+  };
+  const methods = mobileSalesParseJsonVps(value, value);
+  if (Array.isArray(methods)) {
+    return methods
+      .map((method) => labels[String(method?.method || '').toLowerCase()] || method?.method)
+      .filter(Boolean)
+      .join(' + ');
+  }
+  const key = String(methods || '').toLowerCase();
+  return labels[key] || String(methods || 'Nao informado');
+}
+
+function mobileSalesMapItemVps(item, amountsAreMajor = false) {
+  const quantity = Math.max(1, Number(item?.quantity ?? item?.item_quantity ?? item?.model_quantity_purchased ?? 1) || 1);
+  const unitRaw = item?.unit_price
+    ?? item?.sale_price
+    ?? item?.model_discounted_price
+    ?? item?.original_price
+    ?? item?.sku_sale_price
+    ?? 0;
+  const totalRaw = item?.total
+    ?? item?.subtotal
+    ?? item?.discounted_price
+    ?? item?.sale_price
+    ?? (Number(unitRaw) * quantity);
+  const toCents = amountsAreMajor ? mobileSalesMajorToCentsVps : mobileSalesCentsVps;
+  return {
+    name: String(
+      item?.product_name
+      || item?.item_name
+      || item?.display_name
+      || item?.product?.name
+      || 'Item',
+    ),
+    sku: String(
+      item?.product_sku
+      || item?.model_sku
+      || item?.seller_sku
+      || item?.sku
+      || '',
+    ),
+    variation: String(item?.model_name || item?.sku_name || ''),
+    quantity,
+    unit_price_cents: toCents(unitRaw),
+    total_cents: toCents(totalRaw),
+    image_url: String(item?.image_url || item?.product_image || item?.sku_image || ''),
+  };
+}
+
+async function mobileSalesLoadLocalItemsVps(tableName, foreignKey, ids) {
+  if (!ids.length) return new Map();
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT * FROM \`${tableName}\` WHERE \`${foreignKey}\` IN (${placeholders}) ORDER BY created_at ASC`,
+    ids,
+  );
+  const grouped = new Map();
+  for (const row of rows || []) {
+    const key = String(row[foreignKey] || '');
+    const list = grouped.get(key) || [];
+    list.push(mobileSalesMapItemVps(row));
+    grouped.set(key, list);
+  }
+  return grouped;
+}
+
+async function loadMobilePdvSalesVps(limit = 50, saleId = '') {
+  const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50));
+  const params = [];
+  let where = "WHERE s.status = 'completed'";
+  if (saleId) {
+    where += ' AND s.id = ?';
+    params.push(String(saleId));
+  }
+  params.push(safeLimit);
+  const [rows] = await pool.query(
+    `SELECT s.*, c.name AS customer_name, c.phone AS customer_phone
+       FROM sales s
+       LEFT JOIN customers c ON c.id = s.customer_id
+       ${where}
+      ORDER BY s.created_at DESC
+      LIMIT ?`,
+    params,
+  );
+  const ids = (rows || []).map((row) => String(row.id));
+  const itemsBySale = await mobileSalesLoadLocalItemsVps('sale_items', 'sale_id', ids);
+  return (rows || []).map((sale) => ({
+    channel: 'pdv',
+    external_id: String(sale.id),
+    status: String(sale.status || 'completed'),
+    customer_name: String(sale.customer_name || 'Consumidor'),
+    total_cents: mobileSalesCentsVps(sale.total),
+    currency: 'BRL',
+    occurred_at: mobileSalesIsoVps(sale.created_at),
+    details: {
+      items: itemsBySale.get(String(sale.id)) || [],
+      payment: mobileSalesPaymentLabelVps(sale.payment_methods || sale.payment_method),
+      customer_phone: String(sale.customer_phone || ''),
+      discount_cents: mobileSalesCentsVps(sale.discount_total || sale.discount),
+      profit_cents: mobileSalesCentsVps(sale.profit),
+      notes: String(sale.notes || ''),
+    },
+  }));
+}
+
+async function loadMobileOnlineSalesVps(limit = 50, orderId = '') {
+  const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50));
+  const params = [];
+  let where = "WHERE LOWER(COALESCE(o.status, '')) NOT IN ('cancelled', 'canceled', 'refunded', 'failed', 'pending')";
+  if (orderId) {
+    where += ' AND o.id = ?';
+    params.push(String(orderId));
+  }
+  params.push(safeLimit);
+  const [rows] = await pool.query(
+    `SELECT o.*
+       FROM orders o
+       ${where}
+      ORDER BY o.created_at DESC
+      LIMIT ?`,
+    params,
+  );
+  const ids = (rows || []).map((row) => String(row.id));
+  const itemsByOrder = await mobileSalesLoadLocalItemsVps('order_items', 'order_id', ids);
+  return (rows || []).map((order) => ({
+    channel: 'online',
+    external_id: String(order.id),
+    status: String(order.status || 'paid'),
+    customer_name: String(order.customer_name || 'Cliente online'),
+    total_cents: mobileSalesCentsVps(order.total),
+    currency: 'BRL',
+    occurred_at: mobileSalesIsoVps(order.paid_at || order.created_at),
+    details: {
+      items: itemsByOrder.get(String(order.id)) || [],
+      payment: mobileSalesPaymentLabelVps(order.payment_method),
+      customer_phone: String(order.customer_phone || ''),
+      customer_email: String(order.customer_email || ''),
+      delivery_type: String(order.delivery_type || ''),
+      shipping_address: mobileSalesParseJsonVps(order.shipping_address, order.shipping_address || null),
+      notes: String(order.notes || ''),
+    },
+  }));
+}
+
+function normalizeMobileShopeeOrderVps(order) {
+  const items = (Array.isArray(order?.item_list) ? order.item_list : []).map((item) =>
+    mobileSalesMapItemVps(item, true)
+  );
+  const totalMajor = Number(
+    order?.total_amount
+    ?? order?.order_income?.escrow_amount
+    ?? items.reduce((sum, item) => sum + (item.total_cents / 100), 0),
+  ) || 0;
+  return {
+    channel: 'shopee',
+    external_id: String(order?.order_sn || ''),
+    status: String(order?.order_status || 'confirmed'),
+    customer_name: String(order?.buyer_username || order?.recipient_address?.name || 'Cliente Shopee'),
+    total_cents: mobileSalesMajorToCentsVps(totalMajor),
+    currency: String(order?.currency || 'BRL'),
+    occurred_at: mobileSalesIsoVps((Number(order?.create_time) || Math.floor(Date.now() / 1000)) * 1000),
+    details: {
+      items,
+      payment: String(order?.payment_method || 'Shopee'),
+      customer_phone: String(order?.recipient_address?.phone || ''),
+      shipping_address: order?.recipient_address || null,
+      tracking_number: String(order?.tracking_number || ''),
+      ship_by_date: order?.ship_by_date || null,
+    },
+  };
+}
+
+async function loadMobileShopeeSalesVps(limit = 50, orderSn = '') {
+  const creds = await getShopeeCatalogCredentialsVps();
+  let orderNumbers = [];
+  if (orderSn) {
+    orderNumbers = [String(orderSn)];
+  } else {
+    const now = Math.floor(Date.now() / 1000);
+    const listed = await shopeeCatalogGetVps(
+      '/api/v2/order/get_order_list',
+      creds,
+      encodeShopeeCatalogParamsVps({
+        time_range_field: 'create_time',
+        time_from: now - (30 * 24 * 60 * 60),
+        time_to: now,
+        page_size: Math.max(1, Math.min(100, Number(limit) || 50)),
+      }),
+    );
+    orderNumbers = (listed?.response?.order_list || [])
+      .map((order) => String(order?.order_sn || ''))
+      .filter(Boolean);
+  }
+  if (!orderNumbers.length) return [];
+  const sales = [];
+  for (let index = 0; index < orderNumbers.length; index += 50) {
+    const detail = await shopeeCatalogGetVps(
+      '/api/v2/order/get_order_detail',
+      creds,
+      encodeShopeeCatalogParamsVps({
+        order_sn_list: orderNumbers.slice(index, index + 50).join(','),
+        response_optional_fields: [
+          'buyer_user_id',
+          'buyer_username',
+          'recipient_address',
+          'item_list',
+          'total_amount',
+          'currency',
+          'payment_method',
+          'shipping_carrier',
+          'payment_method',
+        ].join(','),
+      }),
+    );
+    sales.push(...(detail?.response?.order_list || []).map(normalizeMobileShopeeOrderVps));
+  }
+  return sales
+    .filter((sale) => sale.external_id)
+    .sort((a, b) => new Date(b.occurred_at) - new Date(a.occurred_at))
+    .slice(0, Math.max(1, Math.min(100, Number(limit) || 50)));
+}
+
+function normalizeMobileTikTokOrderVps(order) {
+  const items = (Array.isArray(order?.line_items) ? order.line_items : []).map((item) => {
+    const mapped = mobileSalesMapItemVps({
+      ...item,
+      product_name: item?.product_name || item?.display_name,
+      seller_sku: item?.seller_sku,
+      quantity: item?.quantity,
+      sale_price: item?.sale_price,
+      sku_image: item?.sku_image,
+    }, true);
+    return mapped;
+  });
+  const payment = order?.payment || {};
+  const totalMajor = Number(
+    payment?.total_amount
+    ?? order?.payment_info?.total_amount
+    ?? items.reduce((sum, item) => sum + (item.total_cents / 100), 0),
+  ) || 0;
+  return {
+    channel: 'tiktok',
+    external_id: String(order?.id || ''),
+    status: String(order?.status || 'confirmed'),
+    customer_name: String(order?.buyer_email || order?.recipient_address?.name || 'Cliente TikTok'),
+    total_cents: mobileSalesMajorToCentsVps(totalMajor),
+    currency: String(payment?.currency || order?.currency || 'BRL'),
+    occurred_at: mobileSalesIsoVps((Number(order?.create_time) || Math.floor(Date.now() / 1000)) * 1000),
+    details: {
+      items,
+      payment: 'TikTok Shop',
+      customer_phone: String(order?.recipient_address?.phone_number || ''),
+      shipping_address: order?.recipient_address || null,
+      packages: order?.packages || [],
+      delivery_option_name: String(order?.delivery_option_name || ''),
+    },
+  };
+}
+
+async function loadMobileTikTokSalesVps(limit = 50, orderId = '') {
+  const settings = await loadTikTokShopOAuthSettingsVps();
+  let orders = [];
+  if (orderId) {
+    const result = await callTikTokShopOpenApiVps(settings, {
+      pathname: '/order/202309/orders',
+      query: { ids: String(orderId) },
+    });
+    orders = result?.payload?.data?.orders || [];
+  } else {
+    const result = await callTikTokShopOpenApiVps(settings, {
+      method: 'POST',
+      pathname: '/order/202309/orders/search',
+      query: {
+        page_size: Math.max(1, Math.min(100, Number(limit) || 50)),
+        sort_field: 'create_time',
+        sort_order: 'DESC',
+      },
+      body: {
+        create_time_ge: Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60),
+      },
+    });
+    orders = result?.payload?.data?.orders || [];
+  }
+  return orders
+    .map(normalizeMobileTikTokOrderVps)
+    .filter((sale) => sale.external_id)
+    .slice(0, Math.max(1, Math.min(100, Number(limit) || 50)));
+}
+
+async function recordMobilePdvSaleVps(saleId) {
+  const sale = (await loadMobilePdvSalesVps(1, saleId))[0];
+  return sale ? mobileSalesPushService.recordSaleEvent(sale) : null;
+}
+
+async function recordMobileOnlineSaleVps(orderId) {
+  const sale = (await loadMobileOnlineSalesVps(1, orderId))[0];
+  return sale ? mobileSalesPushService.recordSaleEvent(sale) : null;
+}
+
+async function recordMobileShopeeSaleVps(orderSn) {
+  const sale = (await loadMobileShopeeSalesVps(1, orderSn))[0];
+  if (!sale || /CANCEL|UNPAID|REFUND|RETURN/i.test(sale.status)) return null;
+  return mobileSalesPushService.recordSaleEvent(sale);
+}
+
+async function recordMobileTikTokSaleVps(orderId) {
+  const sale = (await loadMobileTikTokSalesVps(1, orderId))[0];
+  if (!sale || /CANCEL|UNPAID|REFUND|RETURN/i.test(sale.status)) return null;
+  return mobileSalesPushService.recordSaleEvent(sale);
+}
+
 async function handleShopeeWebhookVps(request, reply) {
   if (request.method !== 'POST') return reply.code(405).send({ error: 'Method Not Allowed' });
 
   try {
+    const body = request.body && typeof request.body === 'object' ? request.body : {};
+    const data = body.data && typeof body.data === 'object' ? body.data : body;
+    const orderSn = String(data.ordersn || data.order_sn || data.orderSn || '').trim();
+    if (orderSn) {
+      await recordMobileShopeeSaleVps(orderSn);
+    }
     return reply.code(200).send({ message: 'success' });
   } catch (err) {
     console.error('[shopee-webhook] fatal:', buildCopyableDebug('shopee-webhook', {
       step: 'process webhook',
+      rawMessage: err.message,
+    }));
+    return reply.code(200).send({ error: err.message });
+  }
+}
+
+async function handleTikTokShopWebhookVps(request, reply) {
+  if (request.method !== 'POST') return reply.code(405).send({ error: 'Method Not Allowed' });
+  try {
+    const body = request.body && typeof request.body === 'object' ? request.body : {};
+    const data = body.data && typeof body.data === 'object' ? body.data : {};
+    const orderId = String(data.order_id || '').trim();
+    if (orderId) {
+      await recordMobileTikTokSaleVps(orderId);
+    }
+    return reply.code(200).send({ message: 'success' });
+  } catch (err) {
+    console.error('[tiktok-shop-webhook] fatal:', buildCopyableDebug('tiktok-shop-webhook', {
+      step: 'process order status webhook',
       rawMessage: err.message,
     }));
     return reply.code(200).send({ error: err.message });
@@ -10567,6 +10968,92 @@ fastify.all('/api/shopee', handleShopeeOAuthVps);
 fastify.all('/api/shopee-webhook', handleShopeeWebhookVps);
 fastify.all('/api/shopee-catalog', handleShopeeCatalogVps);
 fastify.all('/api/shopee-actions', handleShopeeActionsVps);
+fastify.all('/api/tiktok-shop/webhook', handleTikTokShopWebhookVps);
+fastify.post('/admin/mobile-push/devices', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    const auth = await getVpsBearerAuthContext(request);
+    return await mobileSalesPushService.registerDevice({
+      customerId: auth.customerId,
+      token: request.body?.token,
+      platform: request.body?.platform,
+      appVersion: request.body?.app_version,
+      deviceName: request.body?.device_name,
+    });
+  } catch (error) {
+    return reply.code(400).send({ error: error.message || 'Falha ao registrar notificacoes.' });
+  }
+});
+fastify.delete('/admin/mobile-push/devices', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    return await mobileSalesPushService.unregisterDevice(request.body?.token);
+  } catch (error) {
+    return reply.code(400).send({ error: error.message || 'Falha ao remover notificacoes.' });
+  }
+});
+fastify.get('/admin/mobile-sales', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  const channel = String(request.query?.channel || '').trim().toLowerCase();
+  const limit = Math.max(1, Math.min(100, Number(request.query?.limit) || 50));
+  try {
+    let sales = [];
+    let warning = null;
+    if (channel === 'pdv') sales = await loadMobilePdvSalesVps(limit);
+    else if (channel === 'online') sales = await loadMobileOnlineSalesVps(limit);
+    else if (channel === 'shopee') {
+      try {
+        sales = await loadMobileShopeeSalesVps(limit);
+      } catch (error) {
+        warning = error.message || 'Shopee indisponivel.';
+        sales = await mobileSalesPushService.listRecordedSales(channel, limit);
+      }
+    } else if (channel === 'tiktok') {
+      try {
+        sales = await loadMobileTikTokSalesVps(limit);
+      } catch (error) {
+        warning = error.message || 'TikTok Shop indisponivel.';
+        sales = await mobileSalesPushService.listRecordedSales(channel, limit);
+      }
+    } else {
+      return reply.code(400).send({ error: 'Canal de venda invalido.' });
+    }
+    reply.header('Cache-Control', 'no-store');
+    return {
+      channel,
+      count: sales.length,
+      sales,
+      ...(warning ? { warning } : {}),
+    };
+  } catch (error) {
+    return reply.code(error.statusCode || 500).send({
+      error: 'Falha ao carregar vendas.',
+      detail: error.message || String(error),
+    });
+  }
+});
+fastify.get('/admin/mobile-sales/:channel/:saleId', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  const channel = String(request.params?.channel || '').trim().toLowerCase();
+  const saleId = String(request.params?.saleId || '').trim();
+  if (!saleId) return reply.code(400).send({ error: 'Venda nao informada.' });
+  try {
+    let sale = null;
+    if (channel === 'pdv') sale = (await loadMobilePdvSalesVps(1, saleId))[0] || null;
+    else if (channel === 'online') sale = (await loadMobileOnlineSalesVps(1, saleId))[0] || null;
+    else if (channel === 'shopee') sale = (await loadMobileShopeeSalesVps(1, saleId))[0] || null;
+    else if (channel === 'tiktok') sale = (await loadMobileTikTokSalesVps(1, saleId))[0] || null;
+    else return reply.code(400).send({ error: 'Canal de venda invalido.' });
+
+    if (!sale) sale = await mobileSalesPushService.getRecordedSale(channel, saleId);
+    if (!sale) return reply.code(404).send({ error: 'Venda nao encontrada.' });
+    reply.header('Cache-Control', 'no-store');
+    return { sale };
+  } catch (error) {
+    const recorded = await mobileSalesPushService.getRecordedSale(channel, saleId).catch(() => null);
+    if (recorded) return { sale: recorded, warning: error.message || String(error) };
+    return reply.code(error.statusCode || 500).send({
+      error: 'Falha ao carregar os detalhes da venda.',
+      detail: error.message || String(error),
+    });
+  }
+});
 fastify.get('/api/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
 fastify.patch('/api/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsPatchVps);
 fastify.get('/api/tiktok-shop/oauth/auth', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopOAuthAuthVps);
@@ -25250,6 +25737,18 @@ fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, re
   if (name === 'customers' && rows[0]) {
     await syncCustomerGoogleContactRecord(rows[0], 'table-data-create');
   }
+  if (name === 'sale_items' && rows[0]?.sale_id) {
+    void Promise.all([
+      notifyTelegramPdvSaleVps(rows[0].sale_id),
+      recordMobilePdvSaleVps(rows[0].sale_id),
+    ]).catch((notifyError) => {
+      console.error('[mobile-sales-push] PDV sale notification failed:', buildCopyableDebug('mobile-sales-push', {
+        step: 'notify pdv sale after sale_item insert',
+        sale_id: rows[0].sale_id,
+        rawMessage: notifyError?.message || String(notifyError),
+      }));
+    });
+  }
 
   reply.code(201);
   return rows[0] || { ok: true };
@@ -25285,7 +25784,10 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
 
   if (name === 'sale_items') {
     const saleIds = Array.from(new Set(insertRows.map((row) => row.sale_id).filter(Boolean).map(String)));
-    void Promise.all(saleIds.map((saleId) => notifyTelegramPdvSaleVps(saleId))).catch((notifyError) => {
+    void Promise.all(saleIds.flatMap((saleId) => [
+      notifyTelegramPdvSaleVps(saleId),
+      recordMobilePdvSaleVps(saleId),
+    ])).catch((notifyError) => {
       console.error('[telegram-sales] PDV sale notification failed:', buildCopyableDebug('telegram-sales', {
         step: 'notify pdv sale after sale_items bulk',
         sale_count: saleIds.length,
@@ -33040,6 +33542,7 @@ async function getDefaultCompanyIdForCatalog() {
 }
 
 async function runMigrations() {
+  await mobileSalesPushService.ensureTables();
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_favorites (
       id CHAR(36) PRIMARY KEY DEFAULT (UUID()),

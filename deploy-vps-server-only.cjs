@@ -14,6 +14,8 @@ const privateKeyPath = process.env.VPS_SITE_PRIVATE_KEY || process.env.VPS_PRIVA
 const privateKey = privateKeyPath ? fs.readFileSync(privateKeyPath) : undefined;
 const localServer = path.join(__dirname, 'vps_server.js');
 const localServerCjs = path.join(__dirname, 'vps_server.cjs');
+const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim();
+const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const autoresponderEngineFiles = [
   'services/autoresponder/engine/types.js',
   'services/autoresponder/engine/state.js',
@@ -119,6 +121,29 @@ async function uploadSignedWarrantyFiles(appDir) {
   console.log(`Uploaded ${relativePath}`);
 }
 
+async function uploadMobileSalesPushFiles(appDir) {
+  await exec(`mkdir -p ${appDir}/services`);
+  await upload(
+    path.join(__dirname, mobileSalesServicePath),
+    remotePathJoin(appDir, mobileSalesServicePath),
+  );
+  console.log(`Uploaded ${mobileSalesServicePath}`);
+}
+
+async function ensureRemoteFirebaseCredentials(appDir) {
+  if (!firebaseServiceAccountPath) return null;
+  if (!fs.existsSync(firebaseServiceAccountPath)) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_PATH does not exist');
+  }
+  const remoteSecretDir = `${appDir}/.secrets`;
+  const remoteSecretPath = `${remoteSecretDir}/gestao-mdv-firebase.json`;
+  await exec(`mkdir -p ${remoteSecretDir} && chmod 700 ${remoteSecretDir}`);
+  await upload(firebaseServiceAccountPath, remoteSecretPath);
+  await exec(`chmod 600 ${remoteSecretPath}`);
+  console.log('Firebase service account uploaded to protected runtime directory');
+  return remoteSecretPath;
+}
+
 function upsertEnv(content, entries) {
   const lines = String(content || '').replace(/\r\n/g, '\n').split('\n');
   const seen = new Set();
@@ -136,7 +161,7 @@ function upsertEnv(content, entries) {
   return `${next.join('\n').replace(/\n+$/, '')}\n`;
 }
 
-async function ensureRemoteAdminEnv(appDir) {
+async function ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath = null) {
   const remoteEnv = `${appDir}/.env`;
   let wahaStatusApiKey = String(process.env.WAHA_STATUS_API_KEY || '').trim();
   if (!wahaStatusApiKey) {
@@ -162,6 +187,9 @@ async function ensureRemoteAdminEnv(appDir) {
       entries.MDV_ADMIN_EMAIL = adminEmail;
       entries.MDV_ADMIN_PASSWORD = adminPassword;
     }
+    if (remoteFirebaseCredentialPath) {
+      entries.FIREBASE_SERVICE_ACCOUNT_PATH = remoteFirebaseCredentialPath;
+    }
     const next = upsertEnv(current, entries);
     await writeRemoteText(sftp, remoteEnv, next);
   });
@@ -179,6 +207,17 @@ async function ensureRemoteMediaDocumentDependencies(appDir) {
   }
 
   await exec(`cd ${appDir} && npm install sharp pdf-lib ffmpeg-static@5.3.0 --omit=dev`);
+}
+
+async function ensureRemoteMobileSalesDependencies(appDir) {
+  try {
+    await exec(`cd ${appDir} && node -e "require.resolve('firebase-admin')"`);
+    console.log('Remote Firebase Admin dependency already available');
+    return;
+  } catch {
+    console.log('Installing remote Firebase Admin dependency');
+  }
+  await exec(`cd ${appDir} && npm install firebase-admin@13.10.0 --omit=dev`);
 }
 
 async function main() {
@@ -204,8 +243,11 @@ async function main() {
   await upload(localServer, `${appDir}/server.js`);
   await uploadAutoresponderEngineFiles(appDir);
   await uploadSignedWarrantyFiles(appDir);
-  await ensureRemoteAdminEnv(appDir);
+  await uploadMobileSalesPushFiles(appDir);
+  const remoteFirebaseCredentialPath = await ensureRemoteFirebaseCredentials(appDir);
+  await ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath);
   await ensureRemoteMediaDocumentDependencies(appDir);
+  await ensureRemoteMobileSalesDependencies(appDir);
   const restartOutput = await exec(`pm2 restart ${apiProc.name} --update-env`);
   console.log(restartOutput.trim());
   conn.end();

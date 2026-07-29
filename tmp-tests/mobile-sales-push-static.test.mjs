@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { normalizeSale } = require('../services/mobileSalesPushService.cjs');
+
+const normalized = normalizeSale({
+  channel: 'PDV',
+  external_id: 'sale-1',
+  status: 'completed',
+  customer_name: 'Cliente',
+  total_cents: 1490.4,
+  occurred_at: '2026-07-28T12:00:00.000Z',
+  details: { items: [{ name: 'Produto', quantity: 1 }] },
+});
+assert.equal(normalized.channel, 'pdv');
+assert.equal(normalized.external_id, 'sale-1');
+assert.equal(normalized.total_cents, 1490);
+assert.equal(normalized.details.items[0].name, 'Produto');
+assert.throws(() => normalizeSale({ channel: 'outro', external_id: '1' }));
+
+const server = fs.readFileSync(new URL('../vps_server.js', import.meta.url), 'utf8');
+const mirror = fs.readFileSync(new URL('../vps_server.cjs', import.meta.url), 'utf8');
+assert.equal(server, mirror, 'vps_server.js e vps_server.cjs devem permanecer espelhados');
+for (const contract of [
+  "fastify.post('/admin/mobile-push/devices'",
+  "fastify.delete('/admin/mobile-push/devices'",
+  "fastify.get('/admin/mobile-sales'",
+  "fastify.get('/admin/mobile-sales/:channel/:saleId'",
+  "fastify.all('/api/tiktok-shop/webhook'",
+  'recordMobileOnlineSaleVps(order.id)',
+  'recordMobilePdvSaleVps(saleId)',
+]) {
+  assert.ok(server.includes(contract), `Contrato ausente: ${contract}`);
+}
+
+const service = fs.readFileSync(
+  new URL('../services/mobileSalesPushService.cjs', import.meta.url),
+  'utf8',
+);
+assert.match(service, /FIREBASE_SERVICE_ACCOUNT_(?:JSON|BASE64|PATH)/);
+assert.match(service, /sendEachForMulticast/);
+assert.match(service, /UNIQUE KEY uniq_mobile_sale_event/);
+assert.match(service, /UNIQUE KEY uniq_mobile_push_token/);
+
+const deploy = fs.readFileSync(
+  new URL('../deploy-vps-server-only.cjs', import.meta.url),
+  'utf8',
+);
+assert.match(deploy, /uploadMobileSalesPushFiles/);
+assert.match(deploy, /ensureRemoteFirebaseCredentials/);
+assert.match(deploy, /npm install firebase-admin@13\.10\.0 --omit=dev/);
+assert.match(deploy, /chmod 600/);
+
+console.log('mobile-sales-push-static: ok');

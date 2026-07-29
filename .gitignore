@@ -17,6 +17,10 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Service-account private keys
+*firebase-adminsdk*.json
+firebase-service-account*.json
 android/totem-pix/keystore.properties
 android/totem-pix/*.jks
 android/totem-pix/.gradle/
