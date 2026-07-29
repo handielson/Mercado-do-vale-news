@@ -51,6 +51,17 @@ assert.doesNotMatch(
   server.match(/async function loadMobilePdvSalesVps[\s\S]*?async function loadMobileOnlineSalesVps/)?.[0] || '',
   /s\.status/,
 );
+assert.match(server, /payment_details:\s*mobileSalesPaymentDetailsVps/);
+assert.match(server, /total_with_fee_cents/);
+assert.match(server, /operator_fee_amount_cents/);
+const shopeeLoader = server.match(
+  /async function loadMobileShopeeSalesVps[\s\S]*?function normalizeMobileTikTokOrderVps/,
+)?.[0] || '';
+assert.match(shopeeLoader, /14 \* 24 \* 60 \* 60/);
+assert.match(shopeeLoader, /listed\?\.data\?\.response/);
+assert.match(shopeeLoader, /detail\?\.data\?\.response\?\.order_list/);
+assert.match(shopeeLoader, /response\.more && response\.next_cursor/);
+assert.doesNotMatch(shopeeLoader, /30 \* 24 \* 60 \* 60/);
 
 const deploy = fs.readFileSync(
   new URL('../deploy-vps-server-only.cjs', import.meta.url),

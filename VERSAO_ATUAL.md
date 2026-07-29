@@ -1,10 +1,10 @@
-# Versao Atual
+# Versão Atual
 
 ```text
-version: v1.2.110-mobile-pdv-sales
-date: 2026-07-28
+version: v1.2.111-android-shopee-label
+date: 2026-07-29
 status: ready
-release_vps: /var/www/mdv-site/releases/20260728-235255-v12110-mobile-pdv-sales
+release_vps: /var/www/mdv-site/releases/20260729-032033-v12111-android-shopee-label
 branch: main
-summary: Corrige a lista de vendas PDV no aplicativo Gestao MDV.
+summary: Restaura vendas Shopee, detalha pagamentos PDV e adiciona etiqueta avulsa ao Gestão MDV.
 ```

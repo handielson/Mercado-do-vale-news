@@ -32,6 +32,21 @@ data class SaleItem(
     val imageUrl: String,
 )
 
+data class SalePaymentDetail(
+    val label: String,
+    val amountCents: Long,
+    val totalWithFeeCents: Long,
+    val installments: Int,
+    val installmentCents: Long,
+    val feePercentage: Double,
+    val feeAmountCents: Long,
+    val operatorFeePercentage: Double,
+    val operatorFeeAmountCents: Long,
+    val receivedCents: Long,
+    val changeCents: Long,
+    val dueDate: String,
+)
+
 data class SaleSummary(
     val channel: SalesChannel,
     val externalId: String,
@@ -42,6 +57,7 @@ data class SaleSummary(
     val occurredAt: String,
     val items: List<SaleItem>,
     val payment: String,
+    val paymentDetails: List<SalePaymentDetail>,
     val customerPhone: String,
     val customerEmail: String,
     val deliveryType: String,
@@ -58,6 +74,44 @@ data class SaleSummary(
 
     val shortId: String
         get() = externalId.take(12).uppercase()
+
+    val formattedPayment: String
+        get() = if (paymentDetails.isEmpty()) {
+            payment
+        } else {
+            paymentDetails.joinToString("\n\n") { detail ->
+                buildString {
+                    append(detail.label)
+                    if (detail.installments > 1) {
+                        append(" em ").append(detail.installments).append("x de ")
+                            .append(formatCents(detail.installmentCents))
+                    }
+                    append("\nValor: ").append(formatCents(detail.amountCents))
+                    if (detail.feeAmountCents > 0 || detail.feePercentage > 0) {
+                        append("\nAcréscimo: ").append(formatCents(detail.feeAmountCents))
+                        if (detail.feePercentage > 0) append(" (").append(formatPercent(detail.feePercentage)).append(")")
+                    }
+                    if (detail.totalWithFeeCents != detail.amountCents) {
+                        append("\nTotal cobrado: ").append(formatCents(detail.totalWithFeeCents))
+                    }
+                    if (detail.operatorFeeAmountCents > 0 || detail.operatorFeePercentage > 0) {
+                        append("\nTaxa da operadora: ").append(formatCents(detail.operatorFeeAmountCents))
+                        if (detail.operatorFeePercentage > 0) {
+                            append(" (").append(formatPercent(detail.operatorFeePercentage)).append(")")
+                        }
+                    }
+                    if (detail.receivedCents > 0) append("\nRecebido: ").append(formatCents(detail.receivedCents))
+                    if (detail.changeCents > 0) append("\nTroco: ").append(formatCents(detail.changeCents))
+                    if (detail.dueDate.isNotBlank()) append("\nVencimento: ").append(detail.dueDate)
+                }
+            }
+        }
+
+    private fun formatCents(value: Long): String =
+        NumberFormat.getCurrencyInstance(Locale("pt", "BR")).format(value / 100.0)
+
+    private fun formatPercent(value: Double): String =
+        String.format(Locale("pt", "BR"), "%.2f%%", value)
 
     companion object {
         fun parseList(body: String): List<SaleSummary> {
@@ -96,6 +150,28 @@ data class SaleSummary(
                     )
                 }
             }
+            val rawPayments = details.optJSONArray("payment_details") ?: JSONArray()
+            val paymentDetails = buildList {
+                for (index in 0 until rawPayments.length()) {
+                    val item = rawPayments.optJSONObject(index) ?: continue
+                    add(
+                        SalePaymentDetail(
+                            label = item.optString("label", "Pagamento"),
+                            amountCents = item.optLong("amount_cents"),
+                            totalWithFeeCents = item.optLong("total_with_fee_cents"),
+                            installments = item.optInt("installments", 1).coerceAtLeast(1),
+                            installmentCents = item.optLong("installment_cents"),
+                            feePercentage = item.optDouble("fee_percentage"),
+                            feeAmountCents = item.optLong("fee_amount_cents"),
+                            operatorFeePercentage = item.optDouble("operator_fee_percentage"),
+                            operatorFeeAmountCents = item.optLong("operator_fee_amount_cents"),
+                            receivedCents = item.optLong("received_cents"),
+                            changeCents = item.optLong("change_cents"),
+                            dueDate = item.optString("due_date"),
+                        ),
+                    )
+                }
+            }
             return SaleSummary(
                 channel = channel,
                 externalId = json.getString("external_id"),
@@ -106,6 +182,7 @@ data class SaleSummary(
                 occurredAt = json.optString("occurred_at"),
                 items = items,
                 payment = details.optString("payment", "Não informado"),
+                paymentDetails = paymentDetails,
                 customerPhone = details.optString("customer_phone"),
                 customerEmail = details.optString("customer_email"),
                 deliveryType = details.optString("delivery_type"),

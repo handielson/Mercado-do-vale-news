@@ -6147,6 +6147,63 @@ function mobileSalesPaymentLabelVps(value) {
   return labels[key] || String(methods || 'Nao informado');
 }
 
+function mobileSalesPaymentDetailsVps(value, fallbackMethod = '', fallbackTotalCents = 0) {
+  const labels = {
+    money: 'Dinheiro',
+    cash: 'Dinheiro',
+    credit: 'Crédito',
+    debit: 'Débito',
+    pix: 'Pix',
+    a_prazo: 'A prazo',
+    mercadopago: 'Mercado Pago',
+  };
+  const methods = mobileSalesParseJsonVps(value, null);
+  if (Array.isArray(methods) && methods.length) {
+    return methods.map((method) => {
+      const key = String(method?.method || '').toLowerCase();
+      const amountCents = mobileSalesCentsVps(method?.amount);
+      const totalWithFeeCents = mobileSalesCentsVps(method?.total_with_fee ?? method?.amount);
+      const feeAmountCents = mobileSalesCentsVps(
+        method?.fee_amount ?? Math.max(0, totalWithFeeCents - amountCents),
+      );
+      return {
+        method: key || 'other',
+        label: labels[key] || String(method?.method || 'Pagamento'),
+        amount_cents: amountCents,
+        total_with_fee_cents: totalWithFeeCents,
+        installments: Math.max(1, Number(method?.installments || 1) || 1),
+        installment_cents: Math.max(
+          0,
+          Math.round(totalWithFeeCents / Math.max(1, Number(method?.installments || 1) || 1)),
+        ),
+        fee_percentage: Number(method?.fee_percentage || 0) || 0,
+        fee_amount_cents: feeAmountCents,
+        operator_fee_percentage: Number(method?.operator_fee_percentage || 0) || 0,
+        operator_fee_amount_cents: mobileSalesCentsVps(method?.operator_fee_amount),
+        received_cents: mobileSalesCentsVps(method?.received_amount ?? method?.received),
+        change_cents: mobileSalesCentsVps(method?.change_amount ?? method?.change),
+        due_date: String(method?.due_date || ''),
+      };
+    });
+  }
+  const key = String(fallbackMethod || '').toLowerCase();
+  return [{
+    method: key || 'other',
+    label: labels[key] || String(fallbackMethod || 'Não informado'),
+    amount_cents: mobileSalesCentsVps(fallbackTotalCents),
+    total_with_fee_cents: mobileSalesCentsVps(fallbackTotalCents),
+    installments: 1,
+    installment_cents: mobileSalesCentsVps(fallbackTotalCents),
+    fee_percentage: 0,
+    fee_amount_cents: 0,
+    operator_fee_percentage: 0,
+    operator_fee_amount_cents: 0,
+    received_cents: 0,
+    change_cents: 0,
+    due_date: '',
+  }];
+}
+
 function mobileSalesMapItemVps(item, amountsAreMajor = false) {
   const quantity = Math.max(1, Number(item?.quantity ?? item?.item_quantity ?? item?.model_quantity_purchased ?? 1) || 1);
   const unitRaw = item?.unit_price
@@ -6221,23 +6278,31 @@ async function loadMobilePdvSalesVps(limit = 50, saleId = '') {
   );
   const ids = (rows || []).map((row) => String(row.id));
   const itemsBySale = await mobileSalesLoadLocalItemsVps('sale_items', 'sale_id', ids);
-  return (rows || []).map((sale) => ({
-    channel: 'pdv',
-    external_id: String(sale.id),
-    status: 'completed',
-    customer_name: String(sale.customer_name || 'Consumidor'),
-    total_cents: mobileSalesCentsVps(sale.total),
-    currency: 'BRL',
-    occurred_at: mobileSalesIsoVps(sale.created_at),
-    details: {
-      items: itemsBySale.get(String(sale.id)) || [],
-      payment: mobileSalesPaymentLabelVps(sale.payment_methods || sale.payment_method),
-      customer_phone: String(sale.customer_phone || ''),
-      discount_cents: mobileSalesCentsVps(sale.discount_total || sale.discount),
-      profit_cents: mobileSalesCentsVps(sale.profit),
-      notes: String(sale.notes || ''),
-    },
-  }));
+  return (rows || []).map((sale) => {
+    const totalCents = mobileSalesCentsVps(sale.total);
+    return {
+      channel: 'pdv',
+      external_id: String(sale.id),
+      status: 'completed',
+      customer_name: String(sale.customer_name || 'Consumidor'),
+      total_cents: totalCents,
+      currency: 'BRL',
+      occurred_at: mobileSalesIsoVps(sale.created_at),
+      details: {
+        items: itemsBySale.get(String(sale.id)) || [],
+        payment: mobileSalesPaymentLabelVps(sale.payment_methods || sale.payment_method),
+        payment_details: mobileSalesPaymentDetailsVps(
+          sale.payment_methods,
+          sale.payment_method,
+          totalCents,
+        ),
+        customer_phone: String(sale.customer_phone || ''),
+        discount_cents: mobileSalesCentsVps(sale.discount_total || sale.discount),
+        profit_cents: mobileSalesCentsVps(sale.profit),
+        notes: String(sale.notes || ''),
+      },
+    };
+  });
 }
 
 async function loadMobileOnlineSalesVps(limit = 50, orderId = '') {
@@ -6314,21 +6379,37 @@ async function loadMobileShopeeSalesVps(limit = 50, orderSn = '') {
     orderNumbers = [String(orderSn)];
   } else {
     const now = Math.floor(Date.now() / 1000);
-    const listed = await shopeeCatalogGetVps(
-      '/api/v2/order/get_order_list',
-      creds,
-      encodeShopeeCatalogParamsVps({
-        time_range_field: 'create_time',
-        time_from: now - (30 * 24 * 60 * 60),
-        time_to: now,
-        page_size: Math.max(1, Math.min(100, Number(limit) || 50)),
-      }),
-    );
-    orderNumbers = (listed?.response?.order_list || [])
-      .map((order) => String(order?.order_sn || ''))
-      .filter(Boolean);
+    let cursor = '';
+    let page = 0;
+    do {
+      const listed = await shopeeCatalogGetVps(
+        '/api/v2/order/get_order_list',
+        creds,
+        encodeShopeeCatalogParamsVps({
+          time_range_field: 'create_time',
+          time_from: now - (14 * 24 * 60 * 60),
+          time_to: now,
+          page_size: Math.max(1, Math.min(100, Number(limit) || 50)),
+          cursor,
+        }),
+      );
+      if (listed?.data?.error) {
+        throw new Error(listed.data.message || listed.data.error);
+      }
+      const response = listed?.data?.response || {};
+      orderNumbers.push(
+        ...(response.order_list || [])
+          .map((order) => String(order?.order_sn || ''))
+          .filter(Boolean),
+      );
+      cursor = response.more && response.next_cursor
+        ? String(response.next_cursor)
+        : '';
+      page += 1;
+    } while (cursor && page < 20 && orderNumbers.length < Math.max(1, Math.min(100, Number(limit) || 50)));
   }
   if (!orderNumbers.length) return [];
+  orderNumbers = [...new Set(orderNumbers)];
   const sales = [];
   for (let index = 0; index < orderNumbers.length; index += 50) {
     const detail = await shopeeCatalogGetVps(
@@ -6349,7 +6430,10 @@ async function loadMobileShopeeSalesVps(limit = 50, orderSn = '') {
         ].join(','),
       }),
     );
-    sales.push(...(detail?.response?.order_list || []).map(normalizeMobileShopeeOrderVps));
+    if (detail?.data?.error) {
+      throw new Error(detail.data.message || detail.data.error);
+    }
+    sales.push(...(detail?.data?.response?.order_list || []).map(normalizeMobileShopeeOrderVps));
   }
   return sales
     .filter((sale) => sale.external_id)

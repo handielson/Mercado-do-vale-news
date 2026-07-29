@@ -1,10 +1,14 @@
 package br.com.mercadodovale.adminestoque.printing
 
+import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import br.com.mercadodovale.adminestoque.domain.LabelSize
 import br.com.mercadodovale.adminestoque.domain.ProductLabelProduct
 import com.google.zxing.BarcodeFormat
@@ -95,6 +99,58 @@ object LabelRenderer {
         }
         return bitmap
     }
+
+    fun renderCustomText(value: String, size: LabelSize): Bitmap {
+        val width = min(MAX_PRINTER_WIDTH, size.widthMm * DOTS_PER_MM)
+        val height = size.heightMm * DOTS_PER_MM
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.WHITE)
+
+        val text = value.trim().ifBlank { "TEXTO" }
+        val padding = max(4, (size.paddingMm * DOTS_PER_MM).toInt())
+        val availableWidth = (width - padding * 2).coerceAtLeast(1)
+        val availableHeight = (height - padding * 2).coerceAtLeast(1)
+        val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.BLACK
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+
+        var low = 8f
+        var high = availableHeight.toFloat()
+        var best = low
+        repeat(22) {
+            val candidate = (low + high) / 2f
+            textPaint.textSize = candidate
+            val layout = customTextLayout(text, textPaint, availableWidth)
+            if (layout.height <= availableHeight) {
+                best = candidate
+                low = candidate
+            } else {
+                high = candidate
+            }
+        }
+
+        textPaint.textSize = best
+        val layout = customTextLayout(text, textPaint, availableWidth)
+        canvas.save()
+        canvas.translate(
+            padding.toFloat(),
+            padding + (availableHeight - layout.height).coerceAtLeast(0) / 2f,
+        )
+        layout.draw(canvas)
+        canvas.restore()
+        return bitmap
+    }
+
+    @SuppressLint("WrongConstant")
+    private fun customTextLayout(value: String, paint: TextPaint, width: Int): StaticLayout =
+        StaticLayout.Builder.obtain(value, 0, value.length, paint, width)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .setIncludePad(false)
+            .setLineSpacing(0f, 1f)
+            .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+            .build()
 
     private fun paint(size: Float, bold: Boolean = false, monospace: Boolean = false) =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {

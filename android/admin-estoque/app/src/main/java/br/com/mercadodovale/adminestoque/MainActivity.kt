@@ -70,6 +70,7 @@ class MainActivity : Activity() {
     private var currentTransferTargetId: String? = null
     private var currentSalesChannel: SalesChannel? = null
     private var currentSaleId: String? = null
+    private var currentCustomLabelText: String = ""
     private var labelPreview: ImageView? = null
     private var printerIndicator: PrinterStatusView? = null
     private var printerStatusText: TextView? = null
@@ -117,6 +118,7 @@ class MainActivity : Activity() {
             savedInstanceState?.getString(STATE_SALES_CHANNEL),
         )
         currentSaleId = savedInstanceState?.getString(STATE_SALE_ID)
+        currentCustomLabelText = savedInstanceState?.getString(STATE_CUSTOM_LABEL_TEXT).orEmpty()
         if (token.isNullOrBlank()) {
             showLogin()
         } else if (handleSaleIntent(intent)) {
@@ -135,6 +137,7 @@ class MainActivity : Activity() {
                 SCREEN_SALES_LIST -> currentSalesChannel?.let(::showSalesList) ?: showSalesOverview()
                 SCREEN_SALES -> showSalesOverview()
                 SCREEN_LABELS -> showLabels()
+                SCREEN_CUSTOM_LABEL -> showCustomLabel()
                 SCREEN_STOCK_CONTENTS -> {
                     val locationId = currentStockLocationId
                     if (locationId.isNullOrBlank()) showStockLocations()
@@ -166,6 +169,7 @@ class MainActivity : Activity() {
         outState.putString(STATE_TRANSFER_TARGET_ID, currentTransferTargetId)
         outState.putString(STATE_SALES_CHANNEL, currentSalesChannel?.apiKey)
         outState.putString(STATE_SALE_ID, currentSaleId)
+        outState.putString(STATE_CUSTOM_LABEL_TEXT, currentCustomLabelText)
         currentLabelProduct?.let { outState.putString(STATE_LABEL_PRODUCT, it.toStateJson()) }
         if (currentTransferLines.isNotEmpty()) {
             outState.putString(
@@ -511,7 +515,7 @@ class MainActivity : Activity() {
             if (sale.customerPhone.isNotBlank()) append("\n").append(sale.customerPhone)
             if (sale.customerEmail.isNotBlank()) append("\n").append(sale.customerEmail)
         }))
-        root.addView(saleDetailSection("Pagamento", sale.payment))
+        root.addView(saleDetailSection("Pagamento", sale.formattedPayment))
         if (sale.trackingNumber.isNotBlank()) {
             root.addView(saleDetailSection("Rastreamento", sale.trackingNumber))
         }
@@ -1927,6 +1931,7 @@ class MainActivity : Activity() {
         currentScreen = SCREEN_LABELS
         val root = screen()
         root.addView(back("Imprimir etiquetas") { showDashboard() })
+        root.addView(button("Etiqueta avulsa") { showCustomLabel() })
 
         root.addView(text("Perfil da impressora", 15, Color.DKGRAY))
         val printerProfiles = PrinterProfile.entries
@@ -2218,6 +2223,169 @@ class MainActivity : Activity() {
         printerIndicator = indicator
         printerStatusText = printerText
         printerConnectButton = connectButton
+        if (
+            hasBluetoothPermission() &&
+            printerClient.state == PrinterConnectionState.DISCONNECTED &&
+            (
+                activePrinterProfile == PrinterProfile.MARKLIFE_P50 ||
+                    !genericPrinterClient.selectedDeviceAddress.isNullOrBlank()
+                )
+        ) {
+            printerClient.connect()
+        }
+    }
+
+    private fun showCustomLabel() {
+        currentScreen = SCREEN_CUSTOM_LABEL
+        val root = screen()
+        root.addView(back("Etiqueta avulsa") { showLabels() })
+        root.addView(text("Etiqueta avulsa", 28, green))
+        root.addView(
+            text(
+                "Digite qualquer texto. O aplicativo ajusta automaticamente o maior tamanho possível para ocupar toda a área útil da etiqueta.",
+                14,
+                Color.DKGRAY,
+            ),
+        )
+        root.addView(
+            text(
+                "Impressora: ${activePrinterProfile.shortName}. Para trocar o perfil ou o dispositivo, volte à tela anterior.",
+                13,
+                Color.GRAY,
+            ),
+        )
+
+        val status = text(currentPrinterMessage, 14, Color.DKGRAY)
+        printerStatusText = status
+        val indicator = PrinterStatusView(this).also {
+            it.setState(printerClient.state)
+            printerIndicator = it
+        }
+        val printerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(indicator)
+            addView(status, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        root.addView(printerRow)
+
+        val customText = EditText(this).apply {
+            hint = "Texto da etiqueta"
+            setText(currentCustomLabelText)
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            gravity = Gravity.TOP or Gravity.START
+            minLines = 4
+            maxLines = 12
+            textSize = 18f
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(14) }
+        }
+        val sizes = LabelSize.desktopDefaults
+        val sizeSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, sizes)
+            setSelection(sizes.indexOf(currentLabelSize).coerceAtLeast(0))
+        }
+        val copies = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText("1")
+            gravity = Gravity.CENTER
+            textSize = 16f
+            setSelectAllOnFocus(true)
+            layoutParams = LinearLayout.LayoutParams(dp(72), dp(52))
+        }
+        fun updateCopies(delta: Int) {
+            val current = copies.text.toString().toIntOrNull() ?: 1
+            copies.setText((current + delta).coerceIn(1, 100).toString())
+            copies.selectAll()
+        }
+        val copiesSelector = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(Button(this@MainActivity).apply {
+                text = "−"
+                contentDescription = "Diminuir quantidade"
+                setOnClickListener { updateCopies(-1) }
+                layoutParams = LinearLayout.LayoutParams(dp(52), dp(52))
+            })
+            addView(copies)
+            addView(Button(this@MainActivity).apply {
+                text = "+"
+                contentDescription = "Aumentar quantidade"
+                setOnClickListener { updateCopies(1) }
+                layoutParams = LinearLayout.LayoutParams(dp(52), dp(52))
+            })
+        }
+        val preview = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setBackgroundColor(Color.WHITE)
+            contentDescription = "Pré-visualização da etiqueta avulsa"
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(200),
+            ).apply { bottomMargin = dp(14) }
+        }
+        fun updateCustomPreview() {
+            currentCustomLabelText = customText.text.toString()
+            currentLabelSize = sizeSpinner.selectedItem as LabelSize
+            updatePreviewDimensions(preview, currentLabelSize)
+            preview.setImageBitmap(LabelRenderer.renderCustomText(currentCustomLabelText, currentLabelSize))
+        }
+        customText.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) = updateCustomPreview()
+            override fun afterTextChanged(value: Editable?) = Unit
+        })
+        sizeSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = updateCustomPreview()
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+
+        root.addView(text("Texto", 15, Color.DKGRAY))
+        root.addView(customText)
+        root.addView(text("Tamanho da etiqueta", 15, Color.DKGRAY))
+        root.addView(sizeSpinner)
+        root.addView(text("Quantidade de cópias", 15, Color.DKGRAY))
+        root.addView(copiesSelector)
+        root.addView(text("Pré-visualização — exatamente como será impressa", 14, Color.DKGRAY))
+        root.addView(preview)
+
+        val connectButton = button("Conectar à ${activePrinterProfile.shortName}") {
+            requestBluetoothAndConnect()
+        }.apply {
+            visibility = if (printerClient.isReady) View.GONE else View.VISIBLE
+        }
+        printerConnectButton = connectButton
+        root.addView(connectButton)
+        root.addView(button("Imprimir etiqueta avulsa") {
+            val value = customText.text.toString().trim()
+            val quantity = copies.text.toString().toIntOrNull()
+            when {
+                value.isBlank() -> status.text = "Digite o texto da etiqueta."
+                quantity == null || quantity !in 1..100 -> status.text = "Informe uma quantidade entre 1 e 100."
+                !printerClient.isReady -> {
+                    status.text = "Conectando à ${activePrinterProfile.shortName}…"
+                    requestBluetoothAndConnect()
+                }
+                else -> {
+                    val bitmap = LabelRenderer.renderCustomText(value, sizeSpinner.selectedItem as LabelSize)
+                    preview.setImageBitmap(bitmap)
+                    printerClient.print(bitmap, quantity) { result ->
+                        runOnUiThread {
+                            status.text = result.fold(
+                                onSuccess = { "$quantity etiqueta(s) avulsa(s) enviada(s)." },
+                                onFailure = { it.message ?: "Falha ao imprimir." },
+                            )
+                        }
+                    }
+                }
+            }
+        })
+        showContent(root)
+        updateCustomPreview()
         if (
             hasBluetoothPermission() &&
             printerClient.state == PrinterConnectionState.DISCONNECTED &&
@@ -2672,6 +2840,7 @@ class MainActivity : Activity() {
         private const val STATE_TRANSFER_TARGET_ID = "state_transfer_target_id"
         private const val STATE_SALES_CHANNEL = "state_sales_channel"
         private const val STATE_SALE_ID = "state_sale_id"
+        private const val STATE_CUSTOM_LABEL_TEXT = "state_custom_label_text"
         private const val SCREEN_LOGIN = "login"
         private const val SCREEN_DASHBOARD = "dashboard"
         private const val SCREEN_PERMISSIONS = "permissions"
@@ -2680,6 +2849,7 @@ class MainActivity : Activity() {
         private const val SCREEN_STOCK_BATCH_BUILD = "stock_batch_build"
         private const val SCREEN_STOCK_TRANSFER = "stock_transfer"
         private const val SCREEN_LABELS = "labels"
+        private const val SCREEN_CUSTOM_LABEL = "custom_label"
         private const val SCREEN_SALES = "sales"
         private const val SCREEN_SALES_LIST = "sales_list"
         private const val SCREEN_SALES_DETAIL = "sales_detail"
