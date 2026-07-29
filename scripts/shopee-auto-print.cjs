@@ -4,6 +4,7 @@ const http = require('http');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { createShopeeSeparationSummaryPdf } = require('./shopee-separation-summary.cjs');
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -60,6 +61,142 @@ async function getFetch() {
     if (typeof fetch === 'function') return fetch;
     const mod = await import('node-fetch');
     return mod.default;
+}
+
+async function callVpsShopeeAction(action, payload = {}) {
+    const requestFetch = await getFetch();
+    const response = await requestFetch(`${VPS_API_URL}/api/shopee-actions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-sync-key': VPS_SYNC_KEY,
+        },
+        body: JSON.stringify({ action, payload }),
+        signal: AbortSignal.timeout(60000),
+    });
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/pdf')) {
+        return {
+            ok: response.ok,
+            status: response.status,
+            contentType,
+            buffer: Buffer.from(await response.arrayBuffer()),
+            data: null,
+        };
+    }
+    const text = await response.text();
+    let data = null;
+    try {
+        data = text ? JSON.parse(text) : {};
+    } catch {
+        data = { error: text || `HTTP ${response.status}` };
+    }
+    return { ok: response.ok, status: response.status, contentType, buffer: null, data };
+}
+
+function orderPrintStatePaths(orderSn) {
+    return {
+        legacy: path.join(printedMarkersDir, `${orderSn}.txt`),
+        label: path.join(printedMarkersDir, `${orderSn}.label.txt`),
+        summary: path.join(printedMarkersDir, `${orderSn}.summary.txt`),
+    };
+}
+
+function markPrintStep(markerPath) {
+    fs.writeFileSync(markerPath, new Date().toISOString());
+}
+
+function isVpsActionSuccess(result) {
+    return Boolean(result?.ok && !result?.data?.error && result?.data?.success !== false);
+}
+
+function buildShopeeGetUrl(settings, shopeeApiUrl, apiPath, extraParams = {}) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const sign = generateSign(
+        settings.shopee_partner_id,
+        settings.shopee_partner_key,
+        apiPath,
+        timestamp,
+        settings.shopee_access_token,
+        settings.shopee_shop_id,
+    );
+    const params = new URLSearchParams({
+        partner_id: String(settings.shopee_partner_id),
+        timestamp: String(timestamp),
+        access_token: String(settings.shopee_access_token),
+        shop_id: String(settings.shopee_shop_id),
+        sign,
+        ...extraParams,
+    });
+    return `${shopeeApiUrl}${apiPath}?${params.toString()}`;
+}
+
+async function getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn) {
+    const requestFetch = await getFetch();
+    const detailUrl = buildShopeeGetUrl(settings, shopeeApiUrl, '/api/v2/order/get_order_detail', {
+        order_sn_list: orderSn,
+        response_optional_fields: [
+            'buyer_username',
+            'recipient_address',
+            'item_list',
+            'shipping_carrier',
+            'checkout_shipping_carrier',
+            'note',
+            'create_time',
+            'package_list',
+        ].join(','),
+    });
+    const detailResponse = await requestFetch(detailUrl);
+    const detailData = await detailResponse.json();
+    if (!detailResponse.ok || detailData?.error) {
+        throw new Error(detailData?.message || detailData?.error || `Falha ao consultar o pedido ${orderSn}.`);
+    }
+    const order = detailData?.response?.order_list?.[0];
+    if (!order) throw new Error(`Pedido ${orderSn} não retornou detalhes para o resumo.`);
+
+    const packageInfo = Array.isArray(order.package_list) ? order.package_list[0] || {} : {};
+    const packageNumber = String(packageInfo.package_number || '').trim();
+    let trackingNumber = String(
+        packageInfo.tracking_number
+        || packageInfo.logistics_tracking_number
+        || order.tracking_number
+        || '',
+    ).trim();
+    try {
+        const trackingUrl = buildShopeeGetUrl(settings, shopeeApiUrl, '/api/v2/logistics/get_tracking_number', {
+            order_sn: orderSn,
+            ...(packageNumber ? { package_number: packageNumber } : {}),
+        });
+        const trackingResponse = await requestFetch(trackingUrl);
+        const trackingData = await trackingResponse.json();
+        if (trackingResponse.ok && !trackingData?.error) {
+            trackingNumber = String(
+                trackingData?.response?.tracking_number
+                || trackingData?.response?.first_mile_tracking_number
+                || trackingData?.response?.logistics_tracking_no
+                || trackingNumber,
+            ).trim();
+        }
+    } catch (trackingError) {
+        console.warn(`[SUMMARY] Rastreio ainda indisponível para ${orderSn}: ${trackingError.message}`);
+    }
+
+    const items = (Array.isArray(order.item_list) ? order.item_list : []).map((item) => ({
+        name: item?.item_name || item?.product_name || 'Item Shopee',
+        modelName: item?.model_name || '',
+        sku: item?.model_sku || item?.item_sku || item?.seller_sku || '',
+        quantity: item?.model_quantity_purchased || item?.quantity || 1,
+    }));
+
+    return {
+        orderSn,
+        trackingNumber,
+        buyerName: order?.recipient_address?.name || order?.buyer_username || 'Cliente Shopee',
+        shippingCarrier: order?.shipping_carrier || order?.checkout_shipping_carrier || 'Shopee',
+        createdAt: order?.create_time,
+        note: order?.note || '',
+        items,
+    };
 }
 
 // A etiqueta normal da Shopee ocupa um quadrante da página. O PDF ampliado é
@@ -397,22 +534,15 @@ function startLocalServer() {
                     
                     if ((docType === 'both' || docType === 'summary') && targetSummaryPrinter) {
                         try {
-                            const rPkg = await fetch(urlDoc, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ order_list: [{ order_sn: orderSn }], shipping_document_type: "NORMAL_PORT_RECEIPT_RETURN" })
+                            const summaryData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn);
+                            const tempPkgPath = path.join(shippingLabelsDir, `MANUAL_${orderSn}_resumo-separacao-10x15.pdf`);
+                            fs.writeFileSync(tempPkgPath, await createShopeeSeparationSummaryPdf(summaryData));
+                            await ptp.print(tempPkgPath, {
+                                printer: targetSummaryPrinter,
+                                paperSize: '4x6',
+                                scale: 'fit'
                             });
-                            if (rPkg.headers.get('content-type')?.includes('pdf')) {
-                                const pdfPkgBuffer = await rPkg.arrayBuffer();
-                                const tempPkgPath = path.join(shippingLabelsDir, `MANUAL_${orderSn}_resumo-separacao-10x15.pdf`);
-                                fs.writeFileSync(tempPkgPath, Buffer.from(pdfPkgBuffer));
-                                await ptp.print(tempPkgPath, {
-                                    printer: targetSummaryPrinter,
-                                    paperSize: '4x6',
-                                    scale: 'fit'
-                                });
-                                console.log(`[MANUAL PRINT] Resumo enviado!`);
-                            }
+                            console.log(`[MANUAL PRINT] Resumo com rastreio enviado!`);
                         } catch(e) { console.error("Erro manual Resumo:", e); }
                     }
                 } catch(err) {
@@ -447,7 +577,7 @@ function startLocalServer() {
 
 function delay(ms) { return new Promise(res => setTimeout(res, ms)); }
 
-async function runLoop() {
+async function legacyRunLoop() {
     console.log(`[${new Date().toISOString()}] Iniciando ciclo do Shopee Auto Print...`);
     
     try {
@@ -550,25 +680,17 @@ async function runLoop() {
                     // --- IMPRIMIR RESUMO / PACKING LIST na A4 ---
                     if (settings.shopee_printer_a4) {
                         try {
-                            console.log(`Baixando Resumo/Packing List para ${order_sn}...`);
-                            const docPkld = { order_list: [{ order_sn }], shipping_document_type: "NORMAL_PORT_RECEIPT_RETURN" };
-                            const rPkg = await fetch(urlDoc, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(docPkld)
+                            console.log(`Gerando resumo de separação com rastreio para ${order_sn}...`);
+                            const summaryData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, order_sn);
+                            const tempPkgPath = path.join(shippingLabelsDir, `${order_sn}_resumo-separacao-10x15.pdf`);
+                            fs.writeFileSync(tempPkgPath, await createShopeeSeparationSummaryPdf(summaryData));
+                            console.log(`Enviando Resumo para impressora: ${settings.shopee_printer_a4}`);
+                            await ptp.print(tempPkgPath, {
+                                printer: settings.shopee_printer_a4,
+                                paperSize: '4x6',
+                                scale: 'fit'
                             });
-                            if (rPkg.headers.get('content-type')?.includes('pdf')) {
-                                const pdfPkgBuffer = await rPkg.arrayBuffer();
-                                const tempPkgPath = path.join(shippingLabelsDir, `${order_sn}_resumo-separacao-10x15.pdf`);
-                                fs.writeFileSync(tempPkgPath, Buffer.from(pdfPkgBuffer));
-                                console.log(`Enviando Resumo para impressora: ${settings.shopee_printer_a4}`);
-                                await ptp.print(tempPkgPath, {
-                                    printer: settings.shopee_printer_a4,
-                                    paperSize: '4x6',
-                                    scale: 'fit'
-                                });
-                                console.log(`Sucesso ao imprimir RESUMO ${order_sn}!`);
-                            }
+                            console.log(`Sucesso ao imprimir RESUMO ${order_sn}!`);
                         } catch (pkgErr) {
                             console.error(`Falha ao imprimir Resumo do pedido ${order_sn}:`, pkgErr);
                         }
@@ -592,6 +714,149 @@ async function runLoop() {
     }
 }
 
+let loopRunning = false;
+
+async function runLoop() {
+    if (loopRunning) {
+        console.log('Ciclo anterior ainda está em execução; nova rodada ignorada.');
+        return;
+    }
+    loopRunning = true;
+    console.log(`[${new Date().toISOString()}] Iniciando ciclo seguro do Shopee Auto Print...`);
+
+    try {
+        const settings = await getCompanySettings();
+        const {
+            shopee_partner_id,
+            shopee_partner_key,
+            shopee_shop_id,
+            shopee_access_token,
+            shopee_printer_thermal,
+        } = settings;
+        if (!shopee_access_token) {
+            console.log('Shopee não conectada. Aguardando...');
+            return;
+        }
+        if (!shopee_printer_thermal) {
+            console.log('Impressora térmica não configurada. Aguardando configuração no painel...');
+            return;
+        }
+
+        const requestFetch = await getFetch();
+        const shopeeApiUrl = String(shopee_partner_id).startsWith('10')
+            ? 'https://partner.test-stable.shopeemobile.com'
+            : 'https://partner.shopeemobile.com';
+        const pathList = '/api/v2/order/get_order_list';
+        const timestamp = Math.floor(Date.now() / 1000);
+        const sign = generateSign(
+            shopee_partner_id,
+            shopee_partner_key,
+            pathList,
+            timestamp,
+            shopee_access_token,
+            shopee_shop_id,
+        );
+        const timeFrom = timestamp - (14 * 24 * 60 * 60);
+        const listUrl = `${shopeeApiUrl}${pathList}?partner_id=${shopee_partner_id}&timestamp=${timestamp}&access_token=${shopee_access_token}&shop_id=${shopee_shop_id}&sign=${sign}&time_range_field=create_time&time_from=${timeFrom}&time_to=${timestamp}&page_size=30&order_status=READY_TO_SHIP`;
+        const listResponse = await requestFetch(listUrl);
+        const listData = await listResponse.json();
+        if (listData.error) {
+            console.error('Shopee API Error:', listData.message);
+            return;
+        }
+
+        const orders = listData.response?.order_list || [];
+        if (orders.length === 0) {
+            console.log('Nenhum pedido READY_TO_SHIP no momento.');
+            return;
+        }
+
+        const ptp = require('pdf-to-printer');
+        for (const order of orders) {
+            const orderSn = String(order.order_sn || '').trim();
+            if (!orderSn) continue;
+            const markers = orderPrintStatePaths(orderSn);
+            if (fs.existsSync(markers.legacy)) continue;
+
+            console.log(`Processando fluxo fiscal e impressão de ${orderSn}...`);
+            try {
+                if (!fs.existsSync(markers.label)) {
+                    const invoice = await callVpsShopeeAction('upload_invoice', { order_sn: orderSn });
+                    if (!isVpsActionSuccess(invoice)) {
+                        console.log(`[${orderSn}] Nota ainda não pronta: ${invoice.data?.message || invoice.data?.error || `HTTP ${invoice.status}`}`);
+                        continue;
+                    }
+
+                    let shipment = null;
+                    for (let attempt = 1; attempt <= 6; attempt += 1) {
+                        shipment = await callVpsShopeeAction('ship_order', { order_sn: orderSn });
+                        if (isVpsActionSuccess(shipment)) break;
+                        const shipmentError = `${shipment.data?.error || ''} ${shipment.data?.message || ''}`;
+                        if (!/invoice|nota fiscal|lack_of_invoice_data|pending/i.test(shipmentError)) break;
+                        await delay(2500);
+                    }
+                    if (!isVpsActionSuccess(shipment)) {
+                        console.log(`[${orderSn}] Preparar envio pendente: ${shipment?.data?.message || shipment?.data?.error || `HTTP ${shipment?.status}`}`);
+                        continue;
+                    }
+
+                    await delay(2000);
+                    const document = await callVpsShopeeAction('get_shipping_document', {
+                        order_sn: orderSn,
+                        shipping_document_type: 'NORMAL_AIR_WAYBILL',
+                    });
+                    if (!document.ok || !document.buffer?.length || !document.contentType.includes('pdf')) {
+                        console.log(`[${orderSn}] Etiqueta ainda não pronta: ${document.data?.message || document.data?.error || `HTTP ${document.status}`}`);
+                        continue;
+                    }
+
+                    const labelPath = path.join(shippingLabelsDir, `${orderSn}_etiqueta-10x15.pdf`);
+                    fs.writeFileSync(labelPath, await expandShopeeLabelForThermalPaper(document.buffer));
+                    console.log(`Enviando etiqueta para: ${shopee_printer_thermal}`);
+                    await ptp.print(labelPath, {
+                        printer: shopee_printer_thermal,
+                        paperSize: '4x6',
+                        scale: 'fit',
+                    });
+                    markPrintStep(markers.label);
+                    console.log(`Etiqueta ${orderSn} impressa e marcada.`);
+                }
+
+                if (settings.shopee_printer_a4 && !fs.existsSync(markers.summary)) {
+                    const summaryData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn);
+                    const summaryPath = path.join(shippingLabelsDir, `${orderSn}_resumo-separacao-10x15.pdf`);
+                    const summaryBuffer = await createShopeeSeparationSummaryPdf(summaryData);
+                    if (!summaryBuffer?.length) throw new Error('Resumo de separação vazio.');
+                    fs.writeFileSync(summaryPath, summaryBuffer);
+                    console.log(`Enviando resumo para: ${settings.shopee_printer_a4}`);
+                    await ptp.print(summaryPath, {
+                        printer: settings.shopee_printer_a4,
+                        paperSize: '4x6',
+                        scale: 'fit',
+                    });
+                    markPrintStep(markers.summary);
+                    console.log(`Resumo ${orderSn} impresso e marcado.`);
+                }
+
+                if (
+                    fs.existsSync(markers.label)
+                    && (!settings.shopee_printer_a4 || fs.existsSync(markers.summary))
+                ) {
+                    markPrintStep(markers.legacy);
+                    console.log(`Fluxo ${orderSn} concluído sem repetição.`);
+                }
+            } catch (orderError) {
+                console.error(`Falha no pedido ${orderSn}:`, orderError.message || orderError);
+            }
+            await delay(3000);
+        }
+    } catch (error) {
+        console.error('Erro Fatal no Ciclo:', error);
+    } finally {
+        loopRunning = false;
+    }
+}
+
 startLocalServer();
-runLoop();
-setInterval(runLoop, POLLING_INTERVAL);
+void runLoop();
+setInterval(() => void runLoop(), POLLING_INTERVAL);

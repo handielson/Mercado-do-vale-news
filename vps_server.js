@@ -7218,6 +7218,186 @@ function firstShopeeActionsNonEmptyVps(...values) {
   return '';
 }
 
+function saoPauloIsoDateVps(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function isShopeeFiscalErrorVps(value) {
+  return /\bncm\b|\bcest\b|classifica(?:c|ç)(?:a|ã)o fiscal|tributa(?:c|ç)(?:a|ã)o|cfop/i.test(String(value || ''));
+}
+
+async function isShopeeFulfillmentAuthorizedVps(request) {
+  const key = String(request.headers['x-sync-key'] || request.headers['x-api-key'] || '');
+  const expectedKey = String(
+    process.env.VPS_SYNC_KEY
+      || process.env.VITE_VPS_SYNC_KEY
+      || process.env.SYNC_SECRET
+      || '',
+  );
+  if (key && expectedKey && key === expectedKey) return true;
+  return isAdminBearerToken(request);
+}
+
+async function readBlingNfeDetailVps(id, authHeader) {
+  const response = await fetch(`https://www.bling.com.br/Api/v3/nfe/${encodeURIComponent(String(id))}`, {
+    headers: { Authorization: authHeader, Accept: 'application/json' },
+    signal: AbortSignal.timeout(15000),
+  });
+  const body = await readBlingProxyResponse(response);
+  if (!response.ok) {
+    const error = new Error(body.json?.error?.description || body.text || `Bling NF-e ${response.status}`);
+    error.code = 'bling_invoice_detail_failed';
+    error.status = response.status;
+    throw error;
+  }
+  return body.json?.data || null;
+}
+
+async function findBlingNfeForShopeeOrderVps(orderSn, authHeader) {
+  const end = new Date();
+  const start = new Date(end.getTime() - (14 * 24 * 60 * 60 * 1000));
+  const params = new URLSearchParams({
+    pagina: '1',
+    limite: '100',
+    dataEmissaoInicial: saoPauloIsoDateVps(start),
+    dataEmissaoFinal: saoPauloIsoDateVps(end),
+  });
+  const response = await fetch(`https://www.bling.com.br/Api/v3/nfe?${params.toString()}`, {
+    headers: { Authorization: authHeader, Accept: 'application/json' },
+    signal: AbortSignal.timeout(15000),
+  });
+  const body = await readBlingProxyResponse(response);
+  if (!response.ok) {
+    const error = new Error(body.json?.error?.description || body.text || `Bling NF-e list ${response.status}`);
+    error.code = 'bling_invoice_list_failed';
+    error.status = response.status;
+    throw error;
+  }
+
+  const candidates = (Array.isArray(body.json?.data) ? body.json.data : []).slice(0, 40);
+  for (const candidate of candidates) {
+    const detail = await readBlingNfeDetailVps(candidate.id, authHeader);
+    if (String(detail?.numeroPedidoLoja || '').trim() === String(orderSn).trim()) return detail;
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+  return null;
+}
+
+async function ensureBlingNfeAuthorizedForShopeeVps(invoice, authHeader) {
+  if (invoice?.chaveAcesso && invoice?.xml) return invoice;
+  const response = await fetch(
+    `https://www.bling.com.br/Api/v3/nfe/${encodeURIComponent(String(invoice.id))}/enviar?enviarEmail=false`,
+    {
+      method: 'POST',
+      headers: { Authorization: authHeader, Accept: 'application/json' },
+      signal: AbortSignal.timeout(45000),
+    },
+  );
+  const body = await readBlingProxyResponse(response);
+  if (!response.ok) {
+    const message = body.json?.error?.description
+      || body.json?.error?.message
+      || body.json?.message
+      || body.text
+      || `Bling NF-e send ${response.status}`;
+    const error = new Error(message);
+    error.code = isShopeeFiscalErrorVps(message) ? 'bling_invoice_fiscal_error' : 'bling_invoice_send_failed';
+    error.status = response.status;
+    throw error;
+  }
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const detail = await readBlingNfeDetailVps(invoice.id, authHeader);
+    if (detail?.chaveAcesso && detail?.xml) return detail;
+  }
+  const error = new Error('A NF-e foi enviada ao Bling, mas ainda não retornou autorizada pela SEFAZ.');
+  error.code = 'bling_invoice_authorization_pending';
+  throw error;
+}
+
+async function downloadBlingNfeXmlVps(invoice) {
+  const xmlUrl = String(invoice?.xml || '').trim();
+  if (!xmlUrl) {
+    const error = new Error('A NF-e autorizada não retornou o link do XML.');
+    error.code = 'bling_invoice_xml_missing';
+    throw error;
+  }
+  const response = await fetch(xmlUrl, { signal: AbortSignal.timeout(20000) });
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const preview = buffer.subarray(0, 500).toString('utf8');
+  if (!response.ok || buffer.length === 0 || !/<(?:nfeProc|NFe)\b/i.test(preview)) {
+    const error = new Error(`Não foi possível baixar o XML autorizado da NF-e ${invoice.numero || invoice.id}.`);
+    error.code = 'bling_invoice_xml_download_failed';
+    error.status = response.status;
+    throw error;
+  }
+  if (buffer.length > 1024 * 1024) {
+    const error = new Error('O XML da NF-e ultrapassa o limite de 1 MB aceito pela Shopee.');
+    error.code = 'shopee_invoice_xml_too_large';
+    throw error;
+  }
+  return buffer;
+}
+
+async function notifyShopeeFulfillmentErrorVps(orderSn, code, message) {
+  if (!isShopeeFiscalErrorVps(message) && code !== 'bling_invoice_fiscal_error') return null;
+  return mobileSalesPushService.sendOperationalAlert({
+    event_key: `shopee:${orderSn}:invoice-fiscal-error:${crypto.createHash('sha1').update(String(message)).digest('hex').slice(0, 12)}`,
+    channel: 'shopee',
+    external_id: orderSn,
+    severity: 'error',
+    title: 'Shopee: nota fiscal precisa de correção',
+    body: `Pedido ${orderSn}: ${String(message).slice(0, 700)}`,
+  });
+}
+
+async function uploadBlingNfeToShopeeVps(orderSn, creds) {
+  const authHeader = await getBlingProductDetailAuthHeaderVps({ headers: {} });
+  if (!authHeader) {
+    const error = new Error('Bling não conectado.');
+    error.code = 'bling_not_connected';
+    throw error;
+  }
+  const found = await findBlingNfeForShopeeOrderVps(orderSn, authHeader);
+  if (!found) {
+    return {
+      success: false,
+      pending: true,
+      error: 'bling_invoice_not_found',
+      message: 'A NF-e vinculada ao pedido ainda não apareceu no Bling. O fluxo tentará novamente.',
+    };
+  }
+  const invoice = await ensureBlingNfeAuthorizedForShopeeVps(found, authHeader);
+  const xml = await downloadBlingNfeXmlVps(invoice);
+  const formData = new FormData();
+  formData.append('order_sn', orderSn);
+  formData.append('file_type', '4');
+  formData.append(
+    'file',
+    new Blob([new Uint8Array(xml)], { type: 'application/xml' }),
+    `NFE-${invoice.chaveAcesso || invoice.numero || orderSn}.xml`,
+  );
+  const upload = await shopeeCatalogMultipartVps('/api/v2/order/upload_invoice_doc', creds, formData);
+  if (!upload.ok || upload.data?.error) {
+    const error = new Error(upload.data?.message || upload.data?.error || `Shopee invoice upload ${upload.status}`);
+    error.code = upload.data?.error || 'shopee_invoice_upload_failed';
+    error.status = upload.status;
+    throw error;
+  }
+  return {
+    success: true,
+    invoice_id: invoice.id,
+    invoice_number: invoice.numero || null,
+    access_key: invoice.chaveAcesso || null,
+  };
+}
+
 async function expandShopeeShippingLabelToA4Vps(pdfBuffer) {
   const sourcePdf = await PDFDocument.load(pdfBuffer);
   const outputPdf = await PDFDocument.create();
@@ -7364,7 +7544,7 @@ async function handleShopeeActionsVps(request, reply) {
     if (action === 'get_escrow_list' && (!payload.time_from || !payload.time_to)) return reply.code(400).send({ error: 'time_from e time_to são obrigatórios' });
     if (action === 'get_order_detail' && !payload.order_sn_list) return reply.code(400).send({ error: 'order_sn_list não fornecido' });
     if (['get_tracking_info', 'get_escrow_detail', 'get_shipping_document'].includes(action) && !payload.order_sn) return reply.code(400).send({ error: 'order_sn não fornecido' });
-    if (action === 'ship_order' && !payload.order_sn) return reply.code(400).send({ error: 'order_sn não fornecido' });
+    if (['upload_invoice', 'ship_order'].includes(action) && !payload.order_sn) return reply.code(400).send({ error: 'order_sn não fornecido' });
     if (action === 'add_item' && !payload.product_id) return reply.code(400).send({ error: 'product_id não fornecido' });
     if (['update_stock', 'update_price'].includes(action) && !payload.product_id) return reply.code(400).send({ error: 'product_id não fornecido' });
     if (action === 'update_stock' && payload.stock === undefined) return reply.code(400).send({ error: 'Faltam parametros' });
@@ -7538,6 +7718,45 @@ async function handleShopeeActionsVps(request, reply) {
         }
         const docData = await readShopeeCatalogJsonResponseVps(docResponse);
         return reply.code(docResponse.status).send({ result: documentResult?.data, doc: docData });
+      }
+
+      case 'upload_invoice': {
+        if (requireShopeeActionsPostVps(request, reply)) return;
+        if (!(await isShopeeFulfillmentAuthorizedVps(request))) {
+          return reply.code(401).send({ error: 'Unauthorized' });
+        }
+        const orderSn = String(payload.order_sn || '').trim();
+        const currentDetail = await shopeeCatalogGetVps('/api/v2/order/get_order_detail', creds, encodeShopeeCatalogParamsVps({
+          order_sn_list: orderSn,
+          response_optional_fields: 'invoice_data,order_status',
+        }));
+        const currentOrder = currentDetail.data?.response?.order_list?.[0];
+        const currentInvoice = currentOrder?.invoice_data || {};
+        if (
+          currentInvoice.number
+          || currentInvoice.access_key
+          || currentInvoice.issue_date
+          || ['SUCCESS', 'COMPLETED', 'UPLOADED'].includes(String(currentInvoice.status || '').toUpperCase())
+        ) {
+          return reply.code(200).send({
+            success: true,
+            already_uploaded: true,
+            invoice_status: currentInvoice.status || null,
+          });
+        }
+        try {
+          const upload = await uploadBlingNfeToShopeeVps(orderSn, creds);
+          return reply.code(upload.pending ? 202 : 200).send(upload);
+        } catch (error) {
+          await notifyShopeeFulfillmentErrorVps(orderSn, error.code, error.message).catch((notifyError) => {
+            console.error('[shopee-invoice] mobile alert failed:', notifyError.message);
+          });
+          return reply.code(error.status && error.status >= 400 ? error.status : 422).send({
+            success: false,
+            error: error.code || 'shopee_invoice_flow_failed',
+            message: error.message,
+          });
+        }
       }
 
       case 'ship_order': {

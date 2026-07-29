@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.119-printer-loopback
+version: v1.2.120-shopee-fiscal-print
 date: 2026-07-29
 status: ready
-release_vps: /var/www/mdv-site/releases/20260729-151437-v12119-printer-loopback
+release_vps: /var/www/mdv-site/releases/20260729-170413-shopee-fiscal-print
 branch: main
-summary: Corrige o acesso do painel ao servico local de impressao via IPv4.
+summary: Automatiza NF-e Shopee, preparar envio e impressao unica nas duas termicas.
 ```

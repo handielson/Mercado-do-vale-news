@@ -162,6 +162,21 @@ function createMobileSalesPushService({ pool, logger = console }) {
         INDEX idx_mobile_sale_external (channel, external_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS mobile_operational_alerts (
+        id CHAR(36) PRIMARY KEY,
+        event_key VARCHAR(540) NOT NULL,
+        channel VARCHAR(20) NOT NULL,
+        external_id VARCHAR(255) NOT NULL,
+        severity VARCHAR(20) NOT NULL DEFAULT 'error',
+        title VARCHAR(255) NOT NULL,
+        body TEXT NOT NULL,
+        notified_at TIMESTAMP NULL DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_mobile_operational_alert (event_key),
+        INDEX idx_mobile_operational_alert_date (channel, created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
   }
 
   async function registerDevice({ customerId, token, platform, appVersion, deviceName }) {
@@ -260,6 +275,82 @@ function createMobileSalesPushService({ pool, logger = console }) {
     };
   }
 
+  async function sendOperationalAlert(input) {
+    const channel = normalizeChannel(input?.channel || 'shopee');
+    const externalId = boundedText(input?.external_id || input?.sale_id, 255);
+    const eventKey = boundedText(input?.event_key || `${channel}:${externalId}:operational-alert`, 540);
+    const title = boundedText(input?.title || 'Atenção na automação', 255);
+    const body = boundedText(input?.body || 'Confira o pedido no Gestão MDV.', 1000);
+    const severity = boundedText(input?.severity || 'error', 20) || 'error';
+    if (!externalId) throw new Error('Identificador do alerta obrigatorio.');
+
+    await ensureTables();
+    const [insertResult] = await pool.query(
+      `INSERT IGNORE INTO mobile_operational_alerts
+        (id, event_key, channel, external_id, severity, title, body)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [crypto.randomUUID(), eventKey, channel, externalId, severity, title, body],
+    );
+    const inserted = Number(insertResult?.affectedRows || 0) > 0;
+    if (!inserted) return { inserted: false, push: null };
+
+    const messaging = getFirebaseMessaging();
+    if (!messaging) return { inserted: true, push: { configured: false, sent: 0, failed: 0 } };
+    const [deviceRows] = await pool.query(
+      `SELECT token
+         FROM mobile_push_devices
+        WHERE active = 1
+          AND platform = 'android'
+        ORDER BY last_seen_at DESC
+        LIMIT 500`,
+    );
+    const tokens = (deviceRows || []).map((row) => row.token).filter(Boolean);
+    if (!tokens.length) return { inserted: true, push: { configured: true, sent: 0, failed: 0 } };
+
+    try {
+      const response = await messaging.sendEachForMulticast({
+        tokens,
+        data: {
+          // O aplicativo atual abre a venda Shopee ao receber type=sale.
+          type: 'sale',
+          channel,
+          sale_id: externalId,
+          status: `automation_${severity}`,
+          total_cents: '0',
+          occurred_at: new Date().toISOString(),
+          notification_title: title,
+          notification_body: body,
+        },
+        android: { priority: 'high' },
+      });
+      const invalidTokens = [];
+      response.responses.forEach((result, index) => {
+        if (!result.success && INVALID_FCM_TOKEN_CODES.has(result.error?.code)) {
+          invalidTokens.push(tokens[index]);
+        }
+      });
+      await deactivateTokens(invalidTokens);
+      await pool.query(
+        'UPDATE mobile_operational_alerts SET notified_at = CURRENT_TIMESTAMP WHERE event_key = ?',
+        [eventKey],
+      );
+      return {
+        inserted: true,
+        push: {
+          configured: true,
+          sent: response.successCount,
+          failed: response.failureCount,
+        },
+      };
+    } catch (error) {
+      logger.error('[mobile-operational-push] send failed:', error?.message || error);
+      return {
+        inserted: true,
+        push: { configured: true, sent: 0, failed: 1, error: error?.message || String(error) },
+      };
+    }
+  }
+
   async function recordSaleEvent(input, { notify = true } = {}) {
     const sale = normalizeSale(input);
     await ensureTables();
@@ -341,6 +432,7 @@ function createMobileSalesPushService({ pool, logger = console }) {
     listRecordedSales,
     recordSaleEvent,
     registerDevice,
+    sendOperationalAlert,
     sendSalePush,
     unregisterDevice,
   };
