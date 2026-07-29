@@ -6204,7 +6204,7 @@ async function mobileSalesLoadLocalItemsVps(tableName, foreignKey, ids) {
 async function loadMobilePdvSalesVps(limit = 50, saleId = '') {
   const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50));
   const params = [];
-  let where = "WHERE s.status = 'completed'";
+  let where = "WHERE COALESCE(s.finalization_status, 'success') = 'success'";
   if (saleId) {
     where += ' AND s.id = ?';
     params.push(String(saleId));
@@ -6224,7 +6224,7 @@ async function loadMobilePdvSalesVps(limit = 50, saleId = '') {
   return (rows || []).map((sale) => ({
     channel: 'pdv',
     external_id: String(sale.id),
-    status: String(sale.status || 'completed'),
+    status: 'completed',
     customer_name: String(sale.customer_name || 'Consumidor'),
     total_cents: mobileSalesCentsVps(sale.total),
     currency: 'BRL',

@@ -46,6 +46,11 @@ assert.match(service, /UNIQUE KEY uniq_mobile_sale_event/);
 assert.match(service, /UNIQUE KEY uniq_mobile_push_token/);
 assert.match(server, /event_type:\s*'ORDER_STATUS_CHANGE'/);
 assert.match(server, /pathname:\s*'\/event\/202309\/webhooks'/);
+assert.match(server, /COALESCE\(s\.finalization_status, 'success'\) = 'success'/);
+assert.doesNotMatch(
+  server.match(/async function loadMobilePdvSalesVps[\s\S]*?async function loadMobileOnlineSalesVps/)?.[0] || '',
+  /s\.status/,
+);
 
 const deploy = fs.readFileSync(
   new URL('../deploy-vps-server-only.cjs', import.meta.url),
