@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "114524898151",
+    "project_id": "gestao-mdv",
+    "storage_bucket": "gestao-mdv.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:114524898151:android:ce681fd90371a6eb73a5c2",
+        "android_client_info": {
+          "package_name": "br.com.mercadodovale.adminestoque"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC0tcT5M_pwQxMeyTbFfU5YiNqIhkZKBGk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

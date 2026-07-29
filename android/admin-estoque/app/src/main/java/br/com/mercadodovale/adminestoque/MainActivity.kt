@@ -1,6 +1,7 @@
 package br.com.mercadodovale.adminestoque
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothManager
 import android.content.Intent
@@ -11,7 +12,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -30,12 +33,19 @@ import android.widget.Toast
 import br.com.mercadodovale.adminestoque.data.VpsApiClient
 import br.com.mercadodovale.adminestoque.domain.LabelSize
 import br.com.mercadodovale.adminestoque.domain.ProductLabelProduct
+import br.com.mercadodovale.adminestoque.domain.SaleSummary
+import br.com.mercadodovale.adminestoque.domain.SalesChannel
 import br.com.mercadodovale.adminestoque.domain.StockLocationBox
 import br.com.mercadodovale.adminestoque.domain.StockLocationContent
 import br.com.mercadodovale.adminestoque.domain.StockTransferLine
+import br.com.mercadodovale.adminestoque.printing.BluetoothPrinterClient
+import br.com.mercadodovale.adminestoque.printing.GenericEscPosPrinterClient
 import br.com.mercadodovale.adminestoque.printing.LabelRenderer
 import br.com.mercadodovale.adminestoque.printing.P50PrinterClient
 import br.com.mercadodovale.adminestoque.printing.PrinterConnectionState
+import br.com.mercadodovale.adminestoque.printing.PrinterProfile
+import br.com.mercadodovale.adminestoque.push.PushRegistration
+import br.com.mercadodovale.adminestoque.push.SalesNotificationContract
 import br.com.mercadodovale.adminestoque.ui.PrinterStatusView
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
@@ -44,8 +54,12 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.text.Normalizer
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
-class MainActivity : Activity(), P50PrinterClient.Listener {
+class MainActivity : Activity() {
     private var token: String? = null
     private var currentLabelProduct: ProductLabelProduct? = null
     private var currentLabelSize = LabelSize.default
@@ -54,19 +68,38 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
     private var currentStockLocationName: String? = null
     private var currentTransferLines: List<StockTransferLine> = emptyList()
     private var currentTransferTargetId: String? = null
+    private var currentSalesChannel: SalesChannel? = null
+    private var currentSaleId: String? = null
     private var labelPreview: ImageView? = null
     private var printerIndicator: PrinterStatusView? = null
     private var printerStatusText: TextView? = null
     private var printerConnectButton: Button? = null
     private var currentPrinterMessage = "Impressora desconectada."
     private var pendingCameraAction: (() -> Unit)? = null
-    private lateinit var printerClient: P50PrinterClient
+    private lateinit var p50PrinterClient: P50PrinterClient
+    private lateinit var genericPrinterClient: GenericEscPosPrinterClient
+    private var activePrinterProfile = PrinterProfile.MARKLIFE_P50
+    private val printerClient: BluetoothPrinterClient
+        get() = when (activePrinterProfile) {
+            PrinterProfile.MARKLIFE_P50 -> p50PrinterClient
+            PrinterProfile.GENERIC_ESC_POS -> genericPrinterClient
+        }
     private val green = Color.rgb(11, 107, 58)
     private val blue = Color.rgb(37, 99, 235)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        printerClient = P50PrinterClient(applicationContext, this)
+        activePrinterProfile = PrinterProfile.fromPreference(
+            sessionPreferences.getString(PRINTER_PROFILE_KEY, null),
+        )
+        p50PrinterClient = P50PrinterClient(applicationContext) { state, message ->
+            onPrinterState(PrinterProfile.MARKLIFE_P50, state, message)
+        }
+        genericPrinterClient = GenericEscPosPrinterClient(applicationContext) { state, message ->
+            onPrinterState(PrinterProfile.GENERIC_ESC_POS, state, message)
+        }.apply {
+            selectedDeviceAddress = sessionPreferences.getString(GENERIC_PRINTER_ADDRESS_KEY, null)
+        }
         token = sessionPreferences.getString(SESSION_TOKEN_KEY, null)
         currentLabelProduct = (
             savedInstanceState?.getString(STATE_LABEL_PRODUCT)
@@ -80,10 +113,27 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
             ?.let(StockTransferLine::fromStateJson)
             .orEmpty()
         currentTransferTargetId = savedInstanceState?.getString(STATE_TRANSFER_TARGET_ID)
+        currentSalesChannel = SalesChannel.fromApiKey(
+            savedInstanceState?.getString(STATE_SALES_CHANNEL),
+        )
+        currentSaleId = savedInstanceState?.getString(STATE_SALE_ID)
         if (token.isNullOrBlank()) {
             showLogin()
+        } else if (handleSaleIntent(intent)) {
+            Unit
         } else {
             when (currentScreen) {
+                SCREEN_SALES_DETAIL -> {
+                    val channel = currentSalesChannel
+                    val saleId = currentSaleId
+                    if (channel != null && !saleId.isNullOrBlank()) {
+                        showSaleDetailsFromApi(channel, saleId)
+                    } else {
+                        showSalesOverview()
+                    }
+                }
+                SCREEN_SALES_LIST -> currentSalesChannel?.let(::showSalesList) ?: showSalesOverview()
+                SCREEN_SALES -> showSalesOverview()
                 SCREEN_LABELS -> showLabels()
                 SCREEN_STOCK_CONTENTS -> {
                     val locationId = currentStockLocationId
@@ -94,12 +144,13 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                     )
                 }
                 SCREEN_STOCK_TRANSFER -> {
-                    if (currentTransferLines.isEmpty() || currentStockLocationId.isNullOrBlank()) {
+                    if (currentTransferLines.isEmpty()) {
                         showStockLocations()
                     } else {
                         showStockBatchTransfer(currentTransferLines)
                     }
                 }
+                SCREEN_STOCK_BATCH_BUILD -> showStockBatchBuilder()
                 SCREEN_STOCK -> showStockLocations()
                 SCREEN_PERMISSIONS -> showPermissions()
                 else -> showDashboard()
@@ -113,6 +164,8 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         outState.putString(STATE_STOCK_LOCATION_ID, currentStockLocationId)
         outState.putString(STATE_STOCK_LOCATION_NAME, currentStockLocationName)
         outState.putString(STATE_TRANSFER_TARGET_ID, currentTransferTargetId)
+        outState.putString(STATE_SALES_CHANNEL, currentSalesChannel?.apiKey)
+        outState.putString(STATE_SALE_ID, currentSaleId)
         currentLabelProduct?.let { outState.putString(STATE_LABEL_PRODUCT, it.toStateJson()) }
         if (currentTransferLines.isNotEmpty()) {
             outState.putString(
@@ -122,12 +175,24 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (!token.isNullOrBlank()) handleSaleIntent(intent)
+    }
+
     override fun onDestroy() {
-        printerClient.close()
+        p50PrinterClient.close()
+        genericPrinterClient.close()
         super.onDestroy()
     }
 
-    override fun onPrinterState(state: PrinterConnectionState, message: String) {
+    private fun onPrinterState(
+        profile: PrinterProfile,
+        state: PrinterConnectionState,
+        message: String,
+    ) {
+        if (profile != activePrinterProfile) return
         runOnUiThread {
             currentPrinterMessage = message
             printerIndicator?.setState(state)
@@ -149,9 +214,9 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                 ) View.GONE else View.VISIBLE
                 isEnabled = state != PrinterConnectionState.CONNECTING
                 text = if (state == PrinterConnectionState.CONNECTING) {
-                    "Conectando à Marklife P50…"
+                    "Conectando à ${activePrinterProfile.shortName}…"
                 } else {
-                    "Conectar à Marklife P50"
+                    "Conectar à ${activePrinterProfile.shortName}"
                 }
             }
         }
@@ -197,7 +262,9 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                         onSuccess = { accessToken ->
                             token = accessToken
                             sessionPreferences.edit().putString(SESSION_TOKEN_KEY, accessToken).apply()
-                            showDashboard()
+                            requestSalesNotificationPermission()
+                            PushRegistration.refresh(applicationContext)
+                            if (!handleSaleIntent(intent)) showDashboard()
                         },
                         onFailure = { status.text = it.message ?: "Não foi possível entrar." },
                     )
@@ -214,10 +281,23 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         val root = screen()
         root.addView(text("Gestão MDV", 30, green))
         root.addView(text("Escolha uma operação", 16, Color.DKGRAY))
+        root.addView(
+            card(
+                "Vendas e notificações",
+                "Online, PDV, Shopee e TikTok com detalhes e avisos automáticos.",
+            ) { showSalesOverview() },
+        )
         root.addView(card("Movimentar estoque", "Consultar caixas e os produtos guardados em cada local.") { showStockLocations() })
-        root.addView(card("Imprimir etiquetas", "Visualizar a etiqueta e imprimir na Marklife P50.") { showLabels() })
+        root.addView(
+            card(
+                "Imprimir etiquetas",
+                "Visualizar a etiqueta e imprimir na P50 ou em uma impressora Bluetooth genérica.",
+            ) { showLabels() },
+        )
         root.addView(card("Permissões do celular", permissionSummary()) { showPermissions() })
         root.addView(button("Sair") {
+            val accessToken = token.orEmpty()
+            PushRegistration.unregister(applicationContext, accessToken)
             token = null
             currentLabelProduct = null
             sessionPreferences.edit()
@@ -229,6 +309,280 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         })
         root.addView(appVersionText())
         showContent(root)
+    }
+
+    private fun showSalesOverview() {
+        currentScreen = SCREEN_SALES
+        currentSalesChannel = null
+        currentSaleId = null
+        val root = screen()
+        root.addView(back("Vendas") { showDashboard() })
+        root.addView(text("Vendas", 28, green))
+        root.addView(
+            text(
+                "Escolha uma origem. Ao tocar em uma notificação, esta área abre diretamente nos detalhes da venda.",
+                15,
+                Color.DKGRAY,
+            ),
+        )
+        root.addView(salesChannelRow(SalesChannel.ONLINE, SalesChannel.PDV))
+        root.addView(salesChannelRow(SalesChannel.SHOPEE, SalesChannel.TIKTOK))
+
+        val pushStatus = text(
+            if (hasSalesNotificationPermission()) {
+                "✓ Notificações automáticas autorizadas neste celular."
+            } else {
+                "Autorize as notificações para receber novas vendas com o aplicativo fechado."
+            },
+            14,
+            if (hasSalesNotificationPermission()) Color.rgb(21, 128, 61) else Color.rgb(185, 28, 28),
+        )
+        root.addView(pushStatus)
+        if (!hasSalesNotificationPermission()) {
+            root.addView(button("Ativar notificações de vendas") {
+                requestSalesNotificationPermission()
+            })
+        }
+        root.addView(button("Atualizar registro deste celular") {
+            pushStatus.text = "Registrando este celular…"
+            PushRegistration.refresh(applicationContext) { result ->
+                runOnUiThread {
+                    pushStatus.text = result.fold(
+                        onSuccess = { "✓ Celular registrado para receber novas vendas." },
+                        onFailure = { it.message ?: "Não foi possível registrar este celular." },
+                    )
+                }
+            }
+        })
+        showContent(root)
+    }
+
+    private fun salesChannelRow(left: SalesChannel, right: SalesChannel) =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 2f
+            addView(salesChannelCard(left), LinearLayout.LayoutParams(0, dp(150), 1f).apply {
+                marginEnd = dp(7)
+                bottomMargin = dp(14)
+            })
+            addView(salesChannelCard(right), LinearLayout.LayoutParams(0, dp(150), 1f).apply {
+                marginStart = dp(7)
+                bottomMargin = dp(14)
+            })
+        }
+
+    private fun salesChannelCard(channel: SalesChannel) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(16), dp(16), dp(16), dp(16))
+        setBackgroundColor(Color.WHITE)
+        isClickable = true
+        isFocusable = true
+        contentDescription = "Abrir vendas ${channel.label}"
+        setOnClickListener { showSalesList(channel) }
+        addView(text(channel.label, 22, salesChannelColor(channel)))
+        addView(text(channel.subtitle, 14, Color.DKGRAY))
+        addView(text("Toque para abrir  ›", 13, blue))
+    }
+
+    private fun salesChannelColor(channel: SalesChannel): Int = when (channel) {
+        SalesChannel.ONLINE -> Color.rgb(37, 99, 235)
+        SalesChannel.PDV -> green
+        SalesChannel.SHOPEE -> Color.rgb(238, 77, 45)
+        SalesChannel.TIKTOK -> Color.rgb(15, 23, 42)
+    }
+
+    private fun showSalesList(channel: SalesChannel) {
+        currentScreen = SCREEN_SALES_LIST
+        currentSalesChannel = channel
+        currentSaleId = null
+        val root = screen()
+        root.addView(back("Vendas ${channel.label}") { showSalesOverview() })
+        root.addView(text(channel.label, 28, salesChannelColor(channel)))
+        root.addView(text(channel.subtitle, 15, Color.DKGRAY))
+        val status = text("Carregando vendas…", 14, Color.DKGRAY)
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(status)
+        root.addView(list)
+        showContent(root)
+        loadSales(channel, status, list)
+    }
+
+    private fun loadSales(
+        channel: SalesChannel,
+        status: TextView,
+        list: LinearLayout,
+    ) {
+        runAsync {
+            val response = VpsApiClient(token.orEmpty()).get(
+                "/admin/mobile-sales?channel=${channel.apiKey}&limit=50",
+            )
+            runOnUiThread {
+                response.fold(
+                    onSuccess = { body ->
+                        runCatching { SaleSummary.parseList(body) }.fold(
+                            onSuccess = { sales ->
+                                list.removeAllViews()
+                                status.text = if (sales.isEmpty()) {
+                                    "Nenhuma venda encontrada nesta origem."
+                                } else {
+                                    "${sales.size} venda(s) mais recente(s)"
+                                }
+                                sales.forEach { sale -> list.addView(saleListCard(sale)) }
+                            },
+                            onFailure = {
+                                status.text = it.message ?: "Resposta de vendas inválida."
+                            },
+                        )
+                    },
+                    onFailure = {
+                        handleProtectedApiFailure(it, status, "Falha ao carregar as vendas.")
+                    },
+                )
+            }
+        }
+    }
+
+    private fun saleListCard(sale: SaleSummary) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(14), dp(16), dp(14))
+        setBackgroundColor(Color.WHITE)
+        isClickable = true
+        isFocusable = true
+        contentDescription = "Abrir venda ${sale.shortId}"
+        setOnClickListener { showSaleDetails(sale) }
+        addView(text("${sale.formattedTotal}  •  ${sale.customerName}", 18, green))
+        addView(text("#${sale.shortId}  •  ${formatSaleDate(sale.occurredAt)}", 14, Color.DKGRAY))
+        val itemSummary = sale.items.take(2).joinToString("\n") {
+            "${it.quantity}x ${it.name}${it.sku.takeIf(String::isNotBlank)?.let { sku -> " • $sku" }.orEmpty()}"
+        }
+        if (itemSummary.isNotBlank()) addView(text(itemSummary, 14, Color.rgb(15, 23, 42)))
+        addView(text("${sale.status}  ›", 13, blue))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = dp(12) }
+    }
+
+    private fun showSaleDetailsFromApi(channel: SalesChannel, saleId: String) {
+        currentScreen = SCREEN_SALES_DETAIL
+        currentSalesChannel = channel
+        currentSaleId = saleId
+        val root = screen()
+        root.addView(back("Detalhes da venda") { showSalesList(channel) })
+        val status = text("Carregando a venda #${saleId.take(12).uppercase()}…", 16, Color.DKGRAY)
+        root.addView(status)
+        showContent(root)
+
+        runAsync {
+            val encodedSaleId = URLEncoder.encode(saleId, "UTF-8")
+            val response = VpsApiClient(token.orEmpty()).get(
+                "/admin/mobile-sales/${channel.apiKey}/$encodedSaleId",
+            )
+            runOnUiThread {
+                response.fold(
+                    onSuccess = { body ->
+                        runCatching { SaleSummary.parseSingle(body) }.fold(
+                            onSuccess = ::showSaleDetails,
+                            onFailure = { status.text = it.message ?: "Detalhes inválidos." },
+                        )
+                    },
+                    onFailure = {
+                        handleProtectedApiFailure(it, status, "Falha ao carregar a venda.")
+                    },
+                )
+            }
+        }
+    }
+
+    private fun showSaleDetails(sale: SaleSummary) {
+        currentScreen = SCREEN_SALES_DETAIL
+        currentSalesChannel = sale.channel
+        currentSaleId = sale.externalId
+        val root = screen()
+        root.addView(back("Detalhes da venda") { showSalesList(sale.channel) })
+        root.addView(text(sale.channel.label, 17, salesChannelColor(sale.channel)))
+        root.addView(text(sale.formattedTotal, 32, green))
+        root.addView(text("Venda #${sale.shortId}", 18, Color.rgb(15, 23, 42)))
+        root.addView(text(formatSaleDate(sale.occurredAt), 15, Color.DKGRAY))
+        root.addView(saleDetailSection("Status", sale.status))
+        root.addView(saleDetailSection("Cliente", buildString {
+            append(sale.customerName)
+            if (sale.customerPhone.isNotBlank()) append("\n").append(sale.customerPhone)
+            if (sale.customerEmail.isNotBlank()) append("\n").append(sale.customerEmail)
+        }))
+        root.addView(saleDetailSection("Pagamento", sale.payment))
+        if (sale.trackingNumber.isNotBlank()) {
+            root.addView(saleDetailSection("Rastreamento", sale.trackingNumber))
+        }
+        if (sale.deliveryType.isNotBlank() || sale.shippingAddress.isNotBlank()) {
+            root.addView(
+                saleDetailSection(
+                    "Entrega",
+                    listOf(sale.deliveryType, sale.shippingAddress)
+                        .filter(String::isNotBlank)
+                        .joinToString("\n"),
+                ),
+            )
+        }
+        root.addView(text("Itens", 21, Color.rgb(15, 23, 42)))
+        if (sale.items.isEmpty()) {
+            root.addView(text("A origem não retornou os itens desta venda.", 14, Color.DKGRAY))
+        } else {
+            sale.items.forEach { item ->
+                root.addView(
+                    saleDetailSection(
+                        "${item.quantity}x ${item.name}",
+                        buildString {
+                            if (item.variation.isNotBlank()) append(item.variation).append("\n")
+                            if (item.sku.isNotBlank()) append("SKU: ").append(item.sku).append("\n")
+                            append(formatMoneyCents(item.totalCents, sale.currency))
+                        },
+                    ),
+                )
+            }
+        }
+        if (sale.notes.isNotBlank()) root.addView(saleDetailSection("Observações", sale.notes))
+        showContent(root)
+    }
+
+    private fun saleDetailSection(title: String, value: String) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(14), dp(16), dp(14))
+        setBackgroundColor(Color.WHITE)
+        addView(text(title, 14, Color.GRAY))
+        addView(text(value.ifBlank { "Não informado" }, 17, Color.rgb(15, 23, 42)))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = dp(12) }
+    }
+
+    private fun formatSaleDate(value: String): String = runCatching {
+        DateTimeFormatter.ofPattern("dd/MM/yyyy 'às' HH:mm")
+            .withZone(ZoneId.of("America/Sao_Paulo"))
+            .format(Instant.parse(value))
+    }.getOrElse { value.ifBlank { "Data não informada" } }
+
+    private fun formatMoneyCents(cents: Long, currency: String): String =
+        runCatching {
+            java.text.NumberFormat.getCurrencyInstance(java.util.Locale("pt", "BR")).apply {
+                this.currency = java.util.Currency.getInstance(currency.ifBlank { "BRL" })
+            }.format(cents / 100.0)
+        }.getOrElse { "R$ %.2f".format(cents / 100.0) }
+
+    private fun handleSaleIntent(sourceIntent: Intent): Boolean {
+        if (!sourceIntent.getBooleanExtra(SalesNotificationContract.EXTRA_OPEN_SALE, false)) {
+            return false
+        }
+        val channel = SalesChannel.fromApiKey(
+            sourceIntent.getStringExtra(SalesNotificationContract.EXTRA_SALES_CHANNEL),
+        )
+        val saleId = sourceIntent.getStringExtra(SalesNotificationContract.EXTRA_SALE_ID).orEmpty()
+        sourceIntent.removeExtra(SalesNotificationContract.EXTRA_OPEN_SALE)
+        if (channel == null || saleId.isBlank()) return false
+        showSaleDetailsFromApi(channel, saleId)
+        return true
     }
 
     private fun showPermissions() {
@@ -245,13 +599,40 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
 
         val bluetoothGranted = hasBluetoothPermission()
         val bluetoothEnabled = getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == true
-        root.addView(permissionCard("Bluetooth", bluetoothGranted && bluetoothEnabled, "Conexão com a Marklife P50 já pareada."))
+        root.addView(
+            permissionCard(
+                "Bluetooth",
+                bluetoothGranted && bluetoothEnabled,
+                "Conexão com a P50 ou com impressoras térmicas genéricas já pareadas.",
+            ),
+        )
         if (!bluetoothGranted && Build.VERSION.SDK_INT >= 31) root.addView(button("Permitir dispositivos próximos") {
             requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_BLUETOOTH)
         })
         if (bluetoothGranted && !bluetoothEnabled) root.addView(button("Ativar Bluetooth") {
-            startActivity(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE))
+            if (hasBluetoothPermission()) {
+                requestEnableBluetooth()
+            } else if (Build.VERSION.SDK_INT >= 31) {
+                requestPermissions(
+                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                    REQUEST_BLUETOOTH,
+                )
+            }
         })
+
+        val notificationsGranted = hasSalesNotificationPermission()
+        root.addView(
+            permissionCard(
+                "Notificações de vendas",
+                notificationsGranted,
+                "Avisos imediatos de novas vendas Online, PDV, Shopee e TikTok.",
+            ),
+        )
+        if (!notificationsGranted && Build.VERSION.SDK_INT >= 33) {
+            root.addView(button("Permitir notificações de vendas") {
+                requestSalesNotificationPermission()
+            })
+        }
 
         root.addView(text("O app não precisa acessar fotos, arquivos, localização, contatos ou telefone.", 14, Color.DKGRAY))
         root.addView(button("Abrir configurações do aplicativo") { openAppSettings() })
@@ -290,13 +671,86 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         root.addView(productStatus)
         root.addView(productResults)
 
-        root.addView(text("2. Abrir uma caixa pelo QR", 19, Color.rgb(15, 23, 42)))
+        root.addView(text("2. Transferência em lote", 19, Color.rgb(15, 23, 42)))
+        root.addView(
+            card(
+                "Transferência em lote",
+                "Pesquise e adicione vários produtos, escolha a origem de cada um e envie todos para o mesmo destino.",
+            ) {
+                currentTransferLines = emptyList()
+                currentTransferTargetId = null
+                showStockBatchBuilder()
+            },
+        )
+
+        root.addView(text("3. Abrir uma caixa pelo QR", 19, Color.rgb(15, 23, 42)))
         root.addView(text("Leia a etiqueta da caixa para escolher um ou vários produtos.", 14, Color.DKGRAY))
         val status = text("Carregando caixas…", 14, Color.DKGRAY)
         val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
         var loadedLocations = emptyList<StockLocationBox>()
+        var locationsLoaded = false
+        val locationQuery = field("Pesquisar caixa por nome ou código")
+        val locationFilter = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                STOCK_LOCATION_FILTER_LABELS,
+            )
+        }
+        val allBoxesContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        var allBoxesExpanded = false
+        lateinit var allBoxesToggle: Button
+        allBoxesToggle = button("▸ Todas as caixas") {
+            allBoxesExpanded = !allBoxesExpanded
+            allBoxesContent.visibility = if (allBoxesExpanded) View.VISIBLE else View.GONE
+            val count = if (locationsLoaded) " (${loadedLocations.size})" else ""
+            allBoxesToggle.text =
+                "${if (allBoxesExpanded) "▾" else "▸"} Todas as caixas$count"
+        }
+        lateinit var renderLocations: () -> Unit
+        renderLocations = {
+            if (locationsLoaded) {
+                val visibleLocations = filterStockLocations(
+                    loadedLocations,
+                    locationQuery.text.toString(),
+                    locationFilter.selectedItemPosition,
+                )
+                list.removeAllViews()
+                status.text = when {
+                    loadedLocations.isEmpty() -> "Nenhuma caixa cadastrada."
+                    visibleLocations.isEmpty() -> "Nenhuma caixa encontrada com este filtro."
+                    visibleLocations.size == loadedLocations.size ->
+                        "${loadedLocations.size} caixa(s) encontrada(s)."
+                    else -> "${visibleLocations.size} de ${loadedLocations.size} caixa(s)."
+                }
+                allBoxesToggle.text =
+                    "${if (allBoxesExpanded) "▾" else "▸"} Todas as caixas (${loadedLocations.size})"
+                visibleLocations.forEach { location ->
+                    list.addView(
+                        card(
+                            location.displayName,
+                            location.description ?: "Toque para visualizar os produtos.",
+                        ) {
+                            showStockLocationContents(location.id, location.displayName)
+                        },
+                    )
+                }
+            }
+        }
+        locationQuery.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = renderLocations()
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        locationFilter.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = renderLocations()
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
         root.addView(button("Ler QR da caixa e selecionar produtos") {
             ensureCameraPermission(status) {
                 launchScanner { value ->
@@ -311,8 +765,12 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
             }
         })
         root.addView(status)
-        root.addView(text("Ou selecione uma caixa:", 15, Color.DKGRAY))
-        root.addView(list)
+        root.addView(allBoxesToggle)
+        allBoxesContent.addView(text("Pesquise ou filtre para selecionar uma caixa:", 15, Color.DKGRAY))
+        allBoxesContent.addView(locationQuery)
+        allBoxesContent.addView(locationFilter)
+        allBoxesContent.addView(list)
+        root.addView(allBoxesContent)
         showContent(root)
 
         runAsync {
@@ -323,22 +781,8 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                             runOnUiThread {
                                 if (currentScreen != SCREEN_STOCK) return@runOnUiThread
                                 loadedLocations = locations
-                                list.removeAllViews()
-                                status.text = if (locations.isEmpty()) {
-                                    "Nenhuma caixa cadastrada."
-                                } else {
-                                    "${locations.size} caixa(s) encontrada(s)."
-                                }
-                                locations.forEach { location ->
-                                    list.addView(
-                                        card(
-                                            location.displayName,
-                                            location.description ?: "Toque para visualizar os produtos.",
-                                        ) {
-                                            showStockLocationContents(location.id, location.displayName)
-                                        },
-                                    )
-                                }
+                                locationsLoaded = true
+                                renderLocations()
                             }
                         },
                         onFailure = { error ->
@@ -483,9 +927,360 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                             )
                         }
                     },
+            )
+        }
+    }
+
+    private fun showStockBatchBuilder() {
+        currentScreen = SCREEN_STOCK_BATCH_BUILD
+        currentStockLocationId = null
+        currentStockLocationName = null
+        currentTransferTargetId = null
+
+        val selectedLines = linkedMapOf<String, StockTransferLine>().apply {
+            currentTransferLines.forEach { line ->
+                put(transferLineKey(line.item), line)
+            }
+        }
+        val root = screen()
+        root.addView(back("Transferência em lote") { showStockLocations() })
+        root.addView(text("Transferência em lote", 27, green))
+        root.addView(
+            text(
+                "Adicione produtos de qualquer caixa. Cada item mantém sua própria origem e todos seguem para um único destino.",
+                15,
+                Color.DKGRAY,
+            ),
+        )
+
+        val query = field("Bipar EAN, digitar SKU ou nome")
+        val status = text("", 14, Color.DKGRAY)
+        val results = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val selectedList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        lateinit var continueButton: Button
+        lateinit var renderSelected: () -> Unit
+        renderSelected = {
+            currentTransferLines = selectedLines.values.toList()
+            selectedList.removeAllViews()
+            if (selectedLines.isEmpty()) {
+                selectedList.addView(
+                    text(
+                        "Nenhum produto na lista. Pesquise ou leia um código para adicionar.",
+                        14,
+                        Color.GRAY,
+                    ),
+                )
+            } else {
+                selectedLines.forEach { (key, line) ->
+                    selectedList.addView(
+                        batchSelectionRow(
+                            line = line,
+                            onQuantityChanged = { quantity ->
+                                selectedLines[key] = line.copy(quantity = quantity)
+                                currentTransferLines = selectedLines.values.toList()
+                            },
+                            onRemove = {
+                                selectedLines.remove(key)
+                                renderSelected()
+                            },
+                        ),
+                    )
+                }
+            }
+            continueButton.text = "Escolher destino (${selectedLines.size})"
+            continueButton.isEnabled = selectedLines.isNotEmpty()
+        }
+        val addSource: (StockLocationContent) -> Unit = { source ->
+            val key = transferLineKey(source)
+            if (selectedLines.containsKey(key)) {
+                status.text =
+                    "${source.productName} já está na lista com origem em ${source.locationName}."
+            } else {
+                selectedLines[key] = StockTransferLine(source, 1)
+                status.text =
+                    "${source.productName} adicionado da origem ${source.locationName}."
+                query.setText("")
+                results.removeAllViews()
+                renderSelected()
+            }
+        }
+        val runSearch = {
+            searchBatchProduct(
+                rawQuery = query.text.toString(),
+                status = status,
+                results = results,
+                onAdd = addSource,
+            )
+        }
+
+        root.addView(query)
+        root.addView(button("Pesquisar produto") { runSearch() })
+        root.addView(button("Ler código do produto") {
+            ensureCameraPermission(status) {
+                launchScanner { value ->
+                    query.setText(value)
+                    searchBatchProduct(value, status, results, addSource)
+                }
+            }
+        })
+        root.addView(status)
+        root.addView(results)
+        root.addView(text("Produtos selecionados", 19, Color.rgb(15, 23, 42)))
+        root.addView(selectedList)
+        continueButton = button("Escolher destino (0)") {
+            val prepared = selectedLines.values.toList()
+            if (prepared.isEmpty()) {
+                status.text = "Adicione pelo menos um produto."
+            } else {
+                currentTransferLines = prepared
+                showStockBatchTransfer(prepared)
+            }
+        }.apply { isEnabled = false }
+        root.addView(continueButton)
+        renderSelected()
+        showContent(root)
+    }
+
+    private fun searchBatchProduct(
+        rawQuery: String,
+        status: TextView,
+        results: LinearLayout,
+        onAdd: (StockLocationContent) -> Unit,
+    ) {
+        val query = rawQuery.trim()
+        if (query.isBlank()) {
+            status.text = "Informe o nome, SKU ou EAN do produto."
+            return
+        }
+        status.text = "Pesquisando produto…"
+        results.removeAllViews()
+        runAsync {
+            val encoded = URLEncoder.encode(query, "UTF-8")
+            VpsApiClient(token.orEmpty())
+                .get("/products?search=$encoded&compact=true&limit=12")
+                .fold(
+                    onSuccess = { body ->
+                        runCatching {
+                            ProductLabelProduct.parseList(body)
+                                .filter { it.stockQuantity > 0 }
+                                .take(8)
+                        }.fold(
+                            onSuccess = { products ->
+                                runOnUiThread {
+                                    if (currentScreen != SCREEN_STOCK_BATCH_BUILD) {
+                                        return@runOnUiThread
+                                    }
+                                    status.text = if (products.isEmpty()) {
+                                        "Nenhum produto com estoque foi encontrado."
+                                    } else {
+                                        "Selecione o produto para escolher a origem."
+                                    }
+                                    if (products.size == 1) {
+                                        loadBatchProductSources(
+                                            products.first(),
+                                            status,
+                                            results,
+                                            onAdd,
+                                        )
+                                    } else {
+                                        products.forEach { product ->
+                                            results.addView(
+                                                stockSearchProductRow(product) {
+                                                    loadBatchProductSources(
+                                                        product,
+                                                        status,
+                                                        results,
+                                                        onAdd,
+                                                    )
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            onFailure = { error ->
+                                runOnUiThread {
+                                    status.text =
+                                        error.message ?: "Não foi possível ler os produtos."
+                                }
+                            },
+                        )
+                    },
+                    onFailure = { error ->
+                        runOnUiThread {
+                            handleProtectedApiFailure(
+                                error,
+                                status,
+                                "Não foi possível pesquisar o produto.",
+                            )
+                        }
+                    },
                 )
         }
     }
+
+    private fun loadBatchProductSources(
+        product: ProductLabelProduct,
+        status: TextView,
+        results: LinearLayout,
+        onAdd: (StockLocationContent) -> Unit,
+    ) {
+        status.text = "Localizando ${product.name} nas caixas…"
+        results.removeAllViews()
+        runAsync {
+            val productId = URLEncoder.encode(product.id, "UTF-8")
+            VpsApiClient(token.orEmpty())
+                .get("/stock-locations/products/$productId/distribution")
+                .fold(
+                    onSuccess = { body ->
+                        runCatching {
+                            StockLocationContent.parseDistribution(body, product)
+                        }.fold(
+                            onSuccess = { sources ->
+                                runOnUiThread {
+                                    if (currentScreen != SCREEN_STOCK_BATCH_BUILD) {
+                                        return@runOnUiThread
+                                    }
+                                    results.removeAllViews()
+                                    results.addView(stockSearchProductRow(product, null))
+                                    status.text = if (sources.isEmpty()) {
+                                        "Este produto não possui saldo disponível em nenhuma caixa."
+                                    } else {
+                                        "Escolha a caixa de origem para adicionar ao lote."
+                                    }
+                                    sources.forEach { source ->
+                                        results.addView(
+                                            card(
+                                                "Adicionar de ${source.locationName}",
+                                                "Disponível: ${source.available}" +
+                                                    if (source.reservedQuantity > 0) {
+                                                        " • reservado: ${source.reservedQuantity}"
+                                                    } else {
+                                                        ""
+                                                    },
+                                            ) { onAdd(source) },
+                                        )
+                                    }
+                                }
+                            },
+                            onFailure = { error ->
+                                runOnUiThread {
+                                    status.text = error.message
+                                        ?: "Não foi possível ler a distribuição do produto."
+                                }
+                            },
+                        )
+                    },
+                    onFailure = { error ->
+                        runOnUiThread {
+                            handleProtectedApiFailure(
+                                error,
+                                status,
+                                "Não foi possível localizar o produto nas caixas.",
+                            )
+                        }
+                    },
+                )
+        }
+    }
+
+    private fun batchSelectionRow(
+        line: StockTransferLine,
+        onQuantityChanged: (Int) -> Unit,
+        onRemove: () -> Unit,
+    ): View {
+        val quantity = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setText(line.quantity.toString())
+            gravity = Gravity.CENTER
+            setSelectAllOnFocus(true)
+            layoutParams = LinearLayout.LayoutParams(dp(58), dp(44))
+        }
+        fun updateQuantity(value: Int) {
+            val next = value.coerceIn(1, line.item.available.coerceAtLeast(1))
+            quantity.setText(next.toString())
+            quantity.selectAll()
+            onQuantityChanged(next)
+        }
+        quantity.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(
+                value: CharSequence?,
+                start: Int,
+                count: Int,
+                after: Int,
+            ) = Unit
+
+            override fun onTextChanged(
+                value: CharSequence?,
+                start: Int,
+                before: Int,
+                count: Int,
+            ) {
+                value?.toString()?.toIntOrNull()
+                    ?.takeIf { it in 1..line.item.available }
+                    ?.let(onQuantityChanged)
+            }
+
+            override fun afterTextChanged(value: Editable?) = Unit
+        })
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setBackgroundColor(Color.WHITE)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply { bottomMargin = dp(10) }
+
+            addView(text(line.item.productName, 16, Color.rgb(15, 23, 42)))
+            addView(
+                text(
+                    "SKU: ${line.item.sku.ifBlank { "-" }} • origem: ${line.item.locationName} • disponível: ${line.item.available}",
+                    13,
+                    Color.DKGRAY,
+                ),
+            )
+            addView(
+                LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(Button(this@MainActivity).apply {
+                        text = "−"
+                        contentDescription = "Diminuir quantidade de ${line.item.productName}"
+                        setOnClickListener {
+                            updateQuantity(
+                                (quantity.text.toString().toIntOrNull() ?: 1) - 1,
+                            )
+                        }
+                    }, LinearLayout.LayoutParams(dp(46), dp(44)))
+                    addView(quantity)
+                    addView(Button(this@MainActivity).apply {
+                        text = "+"
+                        contentDescription = "Aumentar quantidade de ${line.item.productName}"
+                        setOnClickListener {
+                            updateQuantity(
+                                (quantity.text.toString().toIntOrNull() ?: 1) + 1,
+                            )
+                        }
+                    }, LinearLayout.LayoutParams(dp(46), dp(44)))
+                    addView(Button(this@MainActivity).apply {
+                        text = "Todo estoque"
+                        isAllCaps = false
+                        setOnClickListener { updateQuantity(line.item.available) }
+                    }, LinearLayout.LayoutParams(0, dp(44), 1f))
+                },
+            )
+            addView(button("Remover da lista") { onRemove() })
+        }
+    }
+
+    private fun transferLineKey(item: StockLocationContent): String =
+        "${item.productId}|${item.locationId}"
 
     private fun stockSearchProductRow(
         product: ProductLabelProduct,
@@ -668,12 +1463,62 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
             inputType = InputType.TYPE_CLASS_NUMBER
             setText("1")
             setSelectAllOnFocus(true)
-            layoutParams = LinearLayout.LayoutParams(dp(76), LinearLayout.LayoutParams.WRAP_CONTENT)
+            setOnTouchListener { view, event ->
+                if (event.action == MotionEvent.ACTION_UP) {
+                    (view as EditText).post { view.selectAll() }
+                }
+                false
+            }
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(dp(54), dp(44))
             isEnabled = item.available > 0
         }
+        fun setQuantity(value: Int, selectItem: Boolean = false) {
+            quantity.setText(value.coerceIn(1, item.available.coerceAtLeast(1)).toString())
+            quantity.selectAll()
+            if (selectItem && item.available > 0) checkBox.isChecked = true
+        }
+        val quantitySelector = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
+            addView(
+                LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    addView(Button(this@MainActivity).apply {
+                        text = "−"
+                        textSize = 16f
+                        contentDescription = "Diminuir quantidade de ${item.productName}"
+                        isEnabled = item.available > 0
+                        setPadding(0, 0, 0, 0)
+                        setOnClickListener {
+                            setQuantity((quantity.text.toString().toIntOrNull() ?: 1) - 1)
+                        }
+                    }, LinearLayout.LayoutParams(dp(42), dp(44)))
+                    addView(quantity)
+                    addView(Button(this@MainActivity).apply {
+                        text = "+"
+                        textSize = 16f
+                        contentDescription = "Aumentar quantidade de ${item.productName}"
+                        isEnabled = item.available > 0
+                        setPadding(0, 0, 0, 0)
+                        setOnClickListener {
+                            setQuantity((quantity.text.toString().toIntOrNull() ?: 1) + 1)
+                        }
+                    }, LinearLayout.LayoutParams(dp(42), dp(44)))
+                },
+            )
+            addView(Button(this@MainActivity).apply {
+                text = "Todo estoque"
+                textSize = 12f
+                isAllCaps = false
+                contentDescription = "Usar todo o estoque disponível de ${item.productName}"
+                isEnabled = item.available > 0
+                setOnClickListener { setQuantity(item.available, selectItem = true) }
+            }, LinearLayout.LayoutParams(dp(138), dp(44)))
+        }
         val rowView = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.VERTICAL
             setPadding(dp(10), dp(10), dp(10), dp(10))
             setBackgroundColor(Color.WHITE)
             layoutParams = LinearLayout.LayoutParams(
@@ -683,32 +1528,53 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                 bottomMargin = dp(10)
             }
 
-            addView(checkBox)
-            val photo = ImageView(this@MainActivity).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(72), dp(72)).apply {
-                    marginEnd = dp(12)
-                }
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setPadding(dp(4), dp(4), dp(4), dp(4))
-                setBackgroundColor(Color.rgb(248, 250, 252))
-                contentDescription = "Foto de ${item.productName}"
-            }
-            addView(photo)
             addView(
                 LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.VERTICAL
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
                     layoutParams = LinearLayout.LayoutParams(
-                        0,
+                        LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT,
-                        1f,
                     )
-                    addView(text(item.productName, 16, Color.rgb(15, 23, 42)))
-                    addView(text("SKU: ${item.sku.ifBlank { "-" }}", 13, Color.DKGRAY))
-                    addView(text("Disponível: ${item.available}", 13, Color.DKGRAY))
+                    addView(checkBox)
+                    val photo = ImageView(this@MainActivity).apply {
+                        layoutParams = LinearLayout.LayoutParams(dp(82), dp(82)).apply {
+                            marginEnd = dp(12)
+                        }
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        setPadding(dp(4), dp(4), dp(4), dp(4))
+                        setBackgroundColor(Color.rgb(248, 250, 252))
+                        contentDescription = "Foto de ${item.productName}"
+                    }
+                    addView(photo)
+                    addView(
+                        LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            layoutParams = LinearLayout.LayoutParams(
+                                0,
+                                LinearLayout.LayoutParams.WRAP_CONTENT,
+                                1f,
+                            )
+                            addView(text(item.productName, 16, Color.rgb(15, 23, 42)))
+                            addView(text("SKU: ${item.sku.ifBlank { "-" }}", 13, Color.DKGRAY))
+                            addView(text("Disponível: ${item.available}", 13, Color.DKGRAY))
+                        },
+                    )
+                    loadProductImage(item.imageUrl, photo)
                 },
             )
-            addView(quantity)
-            loadProductImage(item.imageUrl, photo)
+            addView(
+                LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(48), dp(6), 0, 0)
+                    addView(
+                        text("Quantidade", 13, Color.DKGRAY),
+                        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                    )
+                    addView(quantitySelector)
+                },
+            )
         }
         val selectionRow = StockSelectionRow(item, rowView, checkBox, quantity)
         checkBox.setOnCheckedChangeListener { _, checked -> onChecked(checked, selectionRow) }
@@ -724,9 +1590,20 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
             showStockLocations()
             return
         }
-        val sourceLocationId = currentStockLocationId ?: firstItem.locationId
-        val sourceLocationName = currentStockLocationName ?: firstItem.locationName
-        if (sourceLocationId.isBlank()) {
+        val sourceLocationIds = lines.map { it.item.locationId }.filter { it.isNotBlank() }.toSet()
+        val commonSourceLocationId = sourceLocationIds.singleOrNull()
+        val sourceLocationName = if (commonSourceLocationId != null) {
+            lines.firstOrNull { it.item.locationId == commonSourceLocationId }?.item?.locationName
+                ?: currentStockLocationName
+                ?: "Caixa"
+        } else {
+            "${sourceLocationIds.size} caixas"
+        }
+        val returnsToSingleSource =
+            commonSourceLocationId != null &&
+                currentStockLocationId == commonSourceLocationId &&
+                !currentStockLocationName.isNullOrBlank()
+        if (sourceLocationIds.isEmpty() || lines.any { it.item.locationId.isBlank() }) {
             showStockLocations()
             return
         }
@@ -735,10 +1612,27 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         currentTransferLines = lines
         val root = screen()
         root.addView(back("Movimentar produtos") {
-            showStockLocationContents(sourceLocationId, sourceLocationName)
+            if (returnsToSingleSource) {
+                showStockLocationContents(
+                    commonSourceLocationId.orEmpty(),
+                    currentStockLocationName ?: sourceLocationName,
+                )
+            } else {
+                showStockBatchBuilder()
+            }
         })
         root.addView(text("Movimentar produtos", 27, green))
-        root.addView(text("Origem: $sourceLocationName", 16, Color.DKGRAY))
+        root.addView(
+            text(
+                if (commonSourceLocationId != null) {
+                    "Origem: $sourceLocationName"
+                } else {
+                    "Origens: ${sourceLocationIds.size} caixas diferentes"
+                },
+                16,
+                Color.DKGRAY,
+            ),
+        )
 
         val quantityInputs = linkedMapOf<String, EditText>()
         lines.forEach { line ->
@@ -763,7 +1657,7 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                             addView(text(line.item.productName, 15, Color.rgb(15, 23, 42)))
                             addView(
                                 text(
-                                    "SKU: ${line.item.sku.ifBlank { "-" }} • disponível: ${line.item.available}",
+                                    "SKU: ${line.item.sku.ifBlank { "-" }} • origem: ${line.item.locationName} • disponível: ${line.item.available}",
                                     13,
                                     Color.DKGRAY,
                                 ),
@@ -779,7 +1673,7 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                             LinearLayout.LayoutParams.WRAP_CONTENT,
                         )
                     }
-                    quantityInputs[line.item.productId] = input
+                    quantityInputs[transferLineKey(line.item)] = input
                     addView(input)
                 },
             )
@@ -793,18 +1687,77 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
             orientation = LinearLayout.VERTICAL
         }
         var locations = emptyList<StockLocationBox>()
+        var targetLocationsLoaded = false
         var target: StockLocationBox? = null
-
-        fun selectTarget(location: StockLocationBox) {
-            if (location.id == sourceLocationId) {
-                status.text = "A caixa de destino precisa ser diferente da origem."
-                return
+        val selectTarget: (StockLocationBox) -> Unit = { location ->
+            if (location.id in sourceLocationIds) {
+                status.text = "O destino não pode ser uma das caixas de origem do lote."
+            } else {
+                target = location
+                currentTransferTargetId = location.id
+                selectedTarget.text = "Destino: ${location.displayName}"
+                selectedTarget.setTextColor(green)
+                status.text = "Destino selecionado. Confira a quantidade e confirme."
             }
-            target = location
-            currentTransferTargetId = location.id
-            selectedTarget.text = "Destino: ${location.displayName}"
-            selectedTarget.setTextColor(green)
-            status.text = "Destino selecionado. Confira a quantidade e confirme."
+        }
+        val targetQuery = field("Pesquisar caixa de destino")
+        val targetFilter = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                STOCK_LOCATION_FILTER_LABELS,
+            )
+        }
+        val targetListStatus = text("", 13, Color.GRAY)
+        val allTargetsContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        var allTargetsExpanded = false
+        lateinit var allTargetsToggle: Button
+        allTargetsToggle = button("▸ Todas as caixas de destino") {
+            allTargetsExpanded = !allTargetsExpanded
+            allTargetsContent.visibility =
+                if (allTargetsExpanded) View.VISIBLE else View.GONE
+            val count = if (targetLocationsLoaded) " (${locations.size})" else ""
+            allTargetsToggle.text =
+                "${if (allTargetsExpanded) "▾" else "▸"} Todas as caixas de destino$count"
+        }
+        lateinit var renderTargetLocations: () -> Unit
+        renderTargetLocations = {
+            if (targetLocationsLoaded) {
+                val visibleLocations = filterStockLocations(
+                    locations,
+                    targetQuery.text.toString(),
+                    targetFilter.selectedItemPosition,
+                )
+                targetList.removeAllViews()
+                visibleLocations.forEach { location ->
+                    targetList.addView(
+                        card(
+                            location.displayName,
+                            location.description ?: "Usar como destino",
+                        ) { selectTarget.invoke(location) },
+                    )
+                }
+                targetListStatus.text = when {
+                    locations.isEmpty() -> "Não existe outra caixa disponível."
+                    visibleLocations.isEmpty() -> "Nenhuma caixa de destino encontrada."
+                    visibleLocations.size == locations.size -> "${locations.size} caixa(s) disponível(is)."
+                    else -> "${visibleLocations.size} de ${locations.size} caixa(s)."
+                }
+                allTargetsToggle.text =
+                    "${if (allTargetsExpanded) "▾" else "▸"} Todas as caixas de destino (${locations.size})"
+            }
+        }
+        targetQuery.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = renderTargetLocations()
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        targetFilter.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = renderTargetLocations()
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
 
         root.addView(reason)
@@ -817,13 +1770,20 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                     if (scanned == null) {
                         status.text = "Este QR não pertence a uma caixa cadastrada."
                     } else {
-                        selectTarget(scanned)
+                        selectTarget.invoke(scanned)
                     }
                 }
             }
         })
-        root.addView(text("Ou selecione a caixa de destino:", 15, Color.DKGRAY))
-        root.addView(targetList)
+        root.addView(allTargetsToggle)
+        allTargetsContent.addView(
+            text("Pesquise ou filtre a caixa de destino:", 15, Color.DKGRAY),
+        )
+        allTargetsContent.addView(targetQuery)
+        allTargetsContent.addView(targetFilter)
+        allTargetsContent.addView(targetListStatus)
+        allTargetsContent.addView(targetList)
+        root.addView(allTargetsContent)
         root.addView(status)
 
         lateinit var confirm: Button
@@ -832,7 +1792,10 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
             val prepared = mutableListOf<StockTransferLine>()
             var validationError: String? = null
             lines.forEach { line ->
-                val amount = quantityInputs[line.item.productId]?.text.toString().toIntOrNull()
+                val amount = quantityInputs[transferLineKey(line.item)]
+                    ?.text
+                    .toString()
+                    .toIntOrNull()
                 when {
                     amount == null || amount <= 0 ->
                         validationError = "Informe uma quantidade válida para ${line.item.productName}."
@@ -840,6 +1803,10 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                         validationError = "${line.item.productName}: máximo disponível ${line.item.available}."
                     line.item.depositId.isBlank() ->
                         validationError = "${line.item.productName} não possui depósito de origem válido."
+                    line.item.locationId.isBlank() ->
+                        validationError = "${line.item.productName} não possui caixa de origem válida."
+                    line.item.locationId == selected?.id ->
+                        validationError = "${line.item.productName} já está na caixa de destino."
                     else -> prepared += StockTransferLine(line.item, amount)
                 }
             }
@@ -851,11 +1818,13 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                 validationError != null ->
                     status.text = validationError
                 else -> {
+                    currentTransferLines = prepared
                     confirm.isEnabled = false
                     status.text = "Movimentando 0 de ${prepared.size} produto(s)…"
                     runAsync {
                         var succeeded = 0
                         val failures = mutableListOf<String>()
+                        val failedLines = mutableListOf<StockTransferLine>()
                         prepared.forEachIndexed { index, line ->
                             runOnUiThread {
                                 status.text = "Movimentando ${index + 1} de ${prepared.size}: ${line.item.productName}"
@@ -863,7 +1832,7 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                             val payload = JSONObject()
                                 .put("product_id", line.item.productId)
                                 .put("from_deposit_id", line.item.depositId)
-                                .put("from_location_id", sourceLocationId)
+                                .put("from_location_id", line.item.locationId)
                                 .put("to_deposit_id", selected.depositId)
                                 .put("to_location_id", selected.id)
                                 .put("quantity", line.quantity)
@@ -872,13 +1841,14 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                                 })
                                 .put(
                                     "notes",
-                                    "Origem: $sourceLocationName; destino: ${selected.displayName}",
+                                    "Origem: ${line.item.locationName}; destino: ${selected.displayName}",
                                 )
                             VpsApiClient(token.orEmpty())
                                 .post("/stock-locations/transfers", payload)
                                 .fold(
                                     onSuccess = { succeeded += 1 },
                                     onFailure = {
+                                        failedLines += line
                                         failures += "${line.item.sku.ifBlank { line.item.productName }}: ${it.message ?: "falha"}"
                                     },
                                 )
@@ -890,9 +1860,21 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                                 "$succeeded concluído(s); ${failures.size} falharam: ${failures.take(2).joinToString()}"
                             }
                             Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-                            currentTransferLines = emptyList()
-                            currentTransferTargetId = null
-                            showStockLocationContents(sourceLocationId, sourceLocationName)
+                            if (failedLines.isEmpty()) {
+                                currentTransferLines = emptyList()
+                                currentTransferTargetId = null
+                                if (returnsToSingleSource) {
+                                    showStockLocationContents(
+                                        commonSourceLocationId.orEmpty(),
+                                        currentStockLocationName ?: sourceLocationName,
+                                    )
+                                } else {
+                                    showStockLocations()
+                                }
+                            } else {
+                                currentTransferLines = failedLines
+                                showStockBatchTransfer(failedLines)
+                            }
                         }
                     }
                 }
@@ -908,19 +1890,12 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                         onSuccess = { loaded ->
                             runOnUiThread {
                                 if (currentScreen != SCREEN_STOCK_TRANSFER) return@runOnUiThread
-                                locations = loaded.filter { it.id != sourceLocationId }
-                                targetList.removeAllViews()
-                                locations.forEach { location ->
-                                    targetList.addView(
-                                        card(
-                                            location.displayName,
-                                            location.description ?: "Usar como destino",
-                                        ) { selectTarget(location) },
-                                    )
-                                }
+                                locations = loaded.filter { it.id !in sourceLocationIds }
+                                targetLocationsLoaded = true
+                                renderTargetLocations()
                                 currentTransferTargetId
                                     ?.let { id -> locations.firstOrNull { it.id == id } }
-                                    ?.let(::selectTarget)
+                                    ?.let(selectTarget)
                                 if (locations.isEmpty()) {
                                     status.text = "Não existe outra caixa disponível para receber o produto."
                                 } else if (target == null) {
@@ -952,6 +1927,95 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         currentScreen = SCREEN_LABELS
         val root = screen()
         root.addView(back("Imprimir etiquetas") { showDashboard() })
+
+        root.addView(text("Perfil da impressora", 15, Color.DKGRAY))
+        val printerProfiles = PrinterProfile.entries
+        val profileSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                printerProfiles,
+            )
+            setSelection(printerProfiles.indexOf(activePrinterProfile))
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long,
+                ) {
+                    val selectedProfile = printerProfiles[position]
+                    if (selectedProfile != activePrinterProfile) {
+                        switchPrinterProfile(selectedProfile)
+                        showLabels()
+                    }
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+            }
+        }
+        root.addView(profileSpinner)
+
+        if (activePrinterProfile == PrinterProfile.GENERIC_ESC_POS) {
+            root.addView(text("Impressora Bluetooth pareada", 15, Color.DKGRAY))
+            val pairedDevices = if (hasBluetoothPermission()) {
+                genericPrinterClient.pairedDevices()
+            } else {
+                emptyList()
+            }
+            if (pairedDevices.isEmpty()) {
+                root.addView(
+                    text(
+                        if (hasBluetoothPermission()) {
+                            "Nenhuma impressora pareada. Faça o pareamento nas configurações Bluetooth do celular."
+                        } else {
+                            "Autorize dispositivos próximos para listar as impressoras pareadas."
+                        },
+                        14,
+                        Color.rgb(185, 28, 28),
+                    ),
+                )
+            } else {
+                val deviceSpinner = Spinner(this).apply {
+                    adapter = ArrayAdapter(
+                        this@MainActivity,
+                        android.R.layout.simple_spinner_dropdown_item,
+                        pairedDevices,
+                    )
+                    val selectedIndex = pairedDevices.indexOfFirst {
+                        it.address == genericPrinterClient.selectedDeviceAddress
+                    }.coerceAtLeast(0)
+                    setSelection(selectedIndex)
+                    onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                        override fun onItemSelected(
+                            parent: AdapterView<*>?,
+                            view: View?,
+                            position: Int,
+                            id: Long,
+                        ) {
+                            val selectedDevice = pairedDevices[position]
+                            if (selectedDevice.address != genericPrinterClient.selectedDeviceAddress) {
+                                genericPrinterClient.close()
+                                genericPrinterClient.selectedDeviceAddress = selectedDevice.address
+                                sessionPreferences.edit()
+                                    .putString(GENERIC_PRINTER_ADDRESS_KEY, selectedDevice.address)
+                                    .apply()
+                            }
+                        }
+
+                        override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+                    }
+                }
+                root.addView(deviceSpinner)
+            }
+            root.addView(
+                text(
+                    "Compatível com impressoras térmicas Bluetooth clássicas que aceitam ESC/POS.",
+                    13,
+                    Color.GRAY,
+                ),
+            )
+        }
 
         val printerRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -1086,16 +2150,34 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         root.addView(sizeSpinner)
         root.addView(text("Quantidade de cópias", 15, Color.DKGRAY))
         root.addView(copiesSelector)
-        root.addView(text("O intervalo entre etiquetas será localizado automaticamente pela P50.", 13, Color.GRAY))
-        root.addView(text("Pré-visualização — esta mesma imagem será enviada à P50", 14, Color.DKGRAY))
+        root.addView(
+            text(
+                if (activePrinterProfile == PrinterProfile.MARKLIFE_P50) {
+                    "O intervalo entre etiquetas será localizado automaticamente pela P50."
+                } else {
+                    "O perfil genérico envia a etiqueta raster e avança o papel pelo comando ESC/POS."
+                },
+                13,
+                Color.GRAY,
+            ),
+        )
+        root.addView(
+            text(
+                "Pré-visualização — esta mesma imagem será enviada à ${activePrinterProfile.shortName}",
+                14,
+                Color.DKGRAY,
+            ),
+        )
         root.addView(preview)
-        val connectButton = button("Conectar à Marklife P50") { requestBluetoothAndConnect() }.apply {
+        val connectButton = button("Conectar à ${activePrinterProfile.shortName}") {
+            requestBluetoothAndConnect()
+        }.apply {
             visibility = if (
                 printerClient.state == PrinterConnectionState.CONNECTED ||
                 printerClient.state == PrinterConnectionState.PRINTING
             ) View.GONE else View.VISIBLE
             isEnabled = printerClient.state != PrinterConnectionState.CONNECTING
-            if (!isEnabled) text = "Conectando à Marklife P50…"
+            if (!isEnabled) text = "Conectando à ${activePrinterProfile.shortName}…"
         }
         printerConnectButton = connectButton
         root.addView(connectButton)
@@ -1106,7 +2188,8 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                 product == null -> searchStatus.text = "Busque e selecione um produto antes de imprimir."
                 quantity == null || quantity !in 1..100 -> searchStatus.text = "Informe uma quantidade entre 1 e 100."
                 !printerClient.isReady -> {
-                    searchStatus.text = "Conectando à P50. Aguarde o ícone ficar verde e toque em imprimir novamente."
+                    searchStatus.text =
+                        "Conectando à ${activePrinterProfile.shortName}. Aguarde o ícone ficar verde e toque em imprimir novamente."
                     requestBluetoothAndConnect()
                 }
                 else -> {
@@ -1115,7 +2198,9 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
                     printerClient.print(bitmap, quantity) { result ->
                         runOnUiThread {
                             searchStatus.text = result.fold(
-                                onSuccess = { "$quantity etiqueta(s) enviada(s) para a P50." },
+                                onSuccess = {
+                                    "$quantity etiqueta(s) enviada(s) para a ${activePrinterProfile.shortName}."
+                                },
                                 onFailure = { it.message ?: "Falha ao imprimir." },
                             )
                         }
@@ -1133,7 +2218,16 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         printerIndicator = indicator
         printerStatusText = printerText
         printerConnectButton = connectButton
-        if (hasBluetoothPermission() && printerClient.state == PrinterConnectionState.DISCONNECTED) printerClient.connect()
+        if (
+            hasBluetoothPermission() &&
+            printerClient.state == PrinterConnectionState.DISCONNECTED &&
+            (
+                activePrinterProfile == PrinterProfile.MARKLIFE_P50 ||
+                    !genericPrinterClient.selectedDeviceAddress.isNullOrBlank()
+                )
+        ) {
+            printerClient.connect()
+        }
     }
 
     private fun updatePreviewDimensions(preview: ImageView, size: LabelSize) {
@@ -1307,8 +2401,44 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         }
     }
 
+    private fun switchPrinterProfile(profile: PrinterProfile) {
+        if (profile == activePrinterProfile) return
+        printerClient.close()
+        activePrinterProfile = profile
+        sessionPreferences.edit()
+            .putString(PRINTER_PROFILE_KEY, profile.preferenceValue)
+            .apply()
+        val client = printerClient
+        currentPrinterMessage = when (client.state) {
+            PrinterConnectionState.CONNECTED -> "${profile.shortName} conectada."
+            PrinterConnectionState.PRINTING -> "Imprimindo na ${profile.shortName}…"
+            else -> "${profile.shortName} desconectada."
+        }
+    }
+
     private fun hasCameraPermission(): Boolean =
         checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+
+    private fun hasSalesNotificationPermission(): Boolean =
+        Build.VERSION.SDK_INT < 33 ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestSalesNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 && !hasSalesNotificationPermission()) {
+            requestPermissions(
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_NOTIFICATIONS,
+            )
+        } else {
+            PushRegistration.refresh(applicationContext)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestEnableBluetooth() {
+        if (!hasBluetoothPermission()) return
+        startActivity(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE))
+    }
 
     private fun hasBluetoothPermission(): Boolean =
         Build.VERSION.SDK_INT < 31 || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
@@ -1316,7 +2446,12 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
     private fun permissionSummary(): String {
         val camera = if (hasCameraPermission()) "câmera autorizada" else "câmera pendente"
         val bluetooth = if (hasBluetoothPermission()) "Bluetooth autorizado" else "Bluetooth pendente"
-        return "$camera • $bluetooth"
+        val notifications = if (hasSalesNotificationPermission()) {
+            "notificações autorizadas"
+        } else {
+            "notificações pendentes"
+        }
+        return "$camera • $bluetooth • $notifications"
     }
 
     private fun permissionCard(title: String, granted: Boolean, description: String) = LinearLayout(this).apply {
@@ -1342,7 +2477,27 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
             }
             REQUEST_BLUETOOTH -> {
                 if (granted) printerClient.connect()
-                else onPrinterState(PrinterConnectionState.ERROR, "Permissão Bluetooth não autorizada.")
+                else onPrinterState(
+                    activePrinterProfile,
+                    PrinterConnectionState.ERROR,
+                    "Permissão Bluetooth não autorizada.",
+                )
+            }
+            REQUEST_NOTIFICATIONS -> {
+                if (granted) {
+                    PushRegistration.refresh(applicationContext)
+                    Toast.makeText(
+                        this,
+                        "Notificações de vendas ativadas.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this,
+                        "Sem essa permissão, novas vendas não aparecerão como aviso.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             }
         }
     }
@@ -1355,6 +2510,49 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
             .onFailure { Toast.makeText(this, "Não foi possível abrir o link.", Toast.LENGTH_LONG).show() }
     }
+
+    private fun filterStockLocations(
+        locations: List<StockLocationBox>,
+        rawQuery: String,
+        filterIndex: Int,
+    ): List<StockLocationBox> {
+        val query = normalizeSearchText(rawQuery)
+        return locations
+            .asSequence()
+            .filter { location ->
+                val number = location.boxNumber
+                when (filterIndex) {
+                    1 -> number != null && number in 1..20
+                    2 -> number != null && number in 21..40
+                    3 -> number != null && number in 41..60
+                    4 -> number != null && number in 61..80
+                    5 -> number != null && number >= 81
+                    6 -> number == null
+                    else -> true
+                }
+            }
+            .filter { location ->
+                query.isBlank() || normalizeSearchText(
+                    listOfNotNull(
+                        location.displayName,
+                        location.code,
+                        location.description,
+                    ).joinToString(" "),
+                ).contains(query)
+            }
+            .sortedWith(
+                compareBy<StockLocationBox>(
+                    { it.boxNumber ?: Int.MAX_VALUE },
+                    { normalizeSearchText(it.displayName) },
+                ),
+            )
+            .toList()
+    }
+
+    private fun normalizeSearchText(value: String): String =
+        Normalizer.normalize(value.trim(), Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+            .lowercase()
 
     private fun field(hint: String, secret: Boolean = false) = EditText(this).apply {
         this.hint = hint
@@ -1460,21 +2658,39 @@ class MainActivity : Activity(), P50PrinterClient.Listener {
     companion object {
         private const val REQUEST_BLUETOOTH = 41
         private const val REQUEST_CAMERA = 42
+        private const val REQUEST_NOTIFICATIONS = 43
         private const val SESSION_PREFERENCES = "mdv_admin_session"
         private const val SESSION_TOKEN_KEY = "access_token"
         private const val LABEL_PRODUCT_KEY = "selected_label_product"
+        private const val PRINTER_PROFILE_KEY = "printer_profile"
+        private const val GENERIC_PRINTER_ADDRESS_KEY = "generic_printer_address"
         private const val STATE_LABEL_PRODUCT = "state_label_product"
         private const val STATE_SCREEN = "state_screen"
         private const val STATE_STOCK_LOCATION_ID = "state_stock_location_id"
         private const val STATE_STOCK_LOCATION_NAME = "state_stock_location_name"
         private const val STATE_TRANSFER_LINES = "state_transfer_lines"
         private const val STATE_TRANSFER_TARGET_ID = "state_transfer_target_id"
+        private const val STATE_SALES_CHANNEL = "state_sales_channel"
+        private const val STATE_SALE_ID = "state_sale_id"
         private const val SCREEN_LOGIN = "login"
         private const val SCREEN_DASHBOARD = "dashboard"
         private const val SCREEN_PERMISSIONS = "permissions"
         private const val SCREEN_STOCK = "stock"
         private const val SCREEN_STOCK_CONTENTS = "stock_contents"
+        private const val SCREEN_STOCK_BATCH_BUILD = "stock_batch_build"
         private const val SCREEN_STOCK_TRANSFER = "stock_transfer"
         private const val SCREEN_LABELS = "labels"
+        private const val SCREEN_SALES = "sales"
+        private const val SCREEN_SALES_LIST = "sales_list"
+        private const val SCREEN_SALES_DETAIL = "sales_detail"
+        private val STOCK_LOCATION_FILTER_LABELS = listOf(
+            "Todas as caixas",
+            "Caixas 1 a 20",
+            "Caixas 21 a 40",
+            "Caixas 41 a 60",
+            "Caixas 61 a 80",
+            "Caixas 81 ou mais",
+            "Outros locais",
+        )
     }
 }

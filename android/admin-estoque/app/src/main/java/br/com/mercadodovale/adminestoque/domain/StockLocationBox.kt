@@ -21,6 +21,16 @@ data class StockLocationBox(
             ) "$cleanName $cleanCode" else cleanName
         }
 
+    val boxNumber: Int?
+        get() = Regex("\\d+")
+            .find(code.trim())
+            ?.value
+            ?.toIntOrNull()
+            ?: Regex("\\d+")
+                .find(name.trim())
+                ?.value
+                ?.toIntOrNull()
+
     companion object {
         fun parseList(body: String): List<StockLocationBox> {
             val array = JSONArray(body)

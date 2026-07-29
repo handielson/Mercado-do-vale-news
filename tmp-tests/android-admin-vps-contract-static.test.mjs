@@ -31,12 +31,32 @@ const printerClient = fs.readFileSync(
   new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/printing/P50PrinterClient.kt', import.meta.url),
   'utf8',
 );
+const genericPrinterClient = fs.readFileSync(
+  new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/printing/GenericEscPosPrinterClient.kt', import.meta.url),
+  'utf8',
+);
+const bluetoothPrinterClient = fs.readFileSync(
+  new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/printing/BluetoothPrinterClient.kt', import.meta.url),
+  'utf8',
+);
 const printerStatusView = fs.readFileSync(
   new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/ui/PrinterStatusView.kt', import.meta.url),
   'utf8',
 );
 const buildGradle = fs.readFileSync(
   new URL('../android/admin-estoque/app/build.gradle.kts', import.meta.url),
+  'utf8',
+);
+const saleModel = fs.readFileSync(
+  new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/domain/SaleSummary.kt', import.meta.url),
+  'utf8',
+);
+const pushService = fs.readFileSync(
+  new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/push/SalesMessagingService.kt', import.meta.url),
+  'utf8',
+);
+const pushRegistration = fs.readFileSync(
+  new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/push/PushRegistration.kt', import.meta.url),
   'utf8',
 );
 
@@ -69,7 +89,7 @@ assert.match(productModel, /www\.mercadodovale\.com\.br\/produto/, 'o produto de
 assert.match(productModel, /fun toStateJson\(\): String/, 'o produto selecionado deve poder ser preservado durante recriacoes da tela');
 assert.match(productModel, /fun fromStateJson\(value: String\)/, 'o produto selecionado deve poder ser restaurado');
 assert.match(productModel, /it\.widthMm == 30 && it\.heightMm == 20/, 'o tamanho inicial deve acompanhar o papel 30x20 usado na P50');
-assert.match(activity, /Pré-visualização — esta mesma imagem será enviada à P50/, 'a tela deve mostrar a etiqueta antes da impressao');
+assert.match(activity, /Pré-visualização — esta mesma imagem será enviada à \$\{activePrinterProfile\.shortName\}/, 'a tela deve mostrar a etiqueta antes da impressao');
 assert.match(activity, /Permissões do celular/, 'o app deve ter uma tela visivel de permissoes');
 assert.match(activity, /LabelRenderer\.render\(product/, 'a previa e a impressao devem compartilhar o renderizador');
 assert.match(labelRenderer, /MultiFormatWriter/, 'a etiqueta deve renderizar codigo de barras');
@@ -105,8 +125,22 @@ assert.match(activity, /Abrir uma caixa pelo QR[\s\S]*Ler QR da caixa e selecion
 assert.match(activity, /CheckBox/, 'cada produto da caixa deve ter controle de selecao');
 assert.match(activity, /Selecionar todos/, 'a caixa deve permitir selecionar todos os produtos');
 assert.match(activity, /Movimentar selecionados/, 'a caixa deve permitir movimentar um ou varios produtos');
+assert.match(activity, /text = "−"[\s\S]*Diminuir quantidade de/, 'cada produto deve permitir diminuir a quantidade');
+assert.match(activity, /text = "\+"[\s\S]*Aumentar quantidade de/, 'cada produto deve permitir aumentar a quantidade');
+assert.match(activity, /text = "Todo estoque"[\s\S]*setQuantity\(item\.available, selectItem = true\)/, 'cada produto deve permitir usar todo o saldo disponivel');
+assert.match(activity, /Pesquisar caixa por nome ou código[\s\S]*STOCK_LOCATION_FILTER_LABELS/, 'a lista de caixas deve ter pesquisa e filtro');
+assert.match(activity, /Pesquisar caixa de destino[\s\S]*filterStockLocations/, 'a lista de destinos tambem deve ter pesquisa e filtro');
+assert.match(activity, /Caixas 1 a 20[\s\S]*Caixas 81 ou mais[\s\S]*Outros locais/, 'o filtro deve dividir listas grandes em faixas');
+assert.match(activity, /allBoxesContent[\s\S]*visibility = View\.GONE[\s\S]*▸ Todas as caixas/, 'a lista geral de caixas deve iniciar recolhida');
+assert.match(activity, /allTargetsContent[\s\S]*visibility = View\.GONE[\s\S]*▸ Todas as caixas de destino/, 'a lista de destinos deve iniciar recolhida');
+assert.match(stockLocationModel, /val boxNumber: Int\?/, 'o modelo deve identificar o numero da caixa para filtrar e ordenar');
+assert.match(activity, /2\. Transferência em lote[\s\S]*showStockBatchBuilder/, 'a tela de estoque deve expor o lote como funcao propria');
+assert.match(activity, /private fun showStockBatchBuilder[\s\S]*Bipar EAN, digitar SKU ou nome[\s\S]*Produtos selecionados[\s\S]*Escolher destino/, 'o lote deve pesquisar e manter varios produtos antes do destino');
+assert.match(activity, /private fun loadBatchProductSources[\s\S]*Escolha a caixa de origem para adicionar ao lote/, 'cada produto do lote deve permitir escolher sua origem');
+assert.match(activity, /transferLineKey\(item[\s\S]*productId\}\|\$\{item\.locationId/, 'o mesmo produto deve poder ser identificado por produto e origem');
 assert.match(activity, /private fun showStockBatchTransfer[\s\S]*Ler QR da caixa de destino[\s\S]*Confirmar movimentação/, 'o lote deve permitir escolher o destino por QR e confirmar');
 assert.match(activity, /prepared\.forEachIndexed[\s\S]*\/stock-locations\/transfers/, 'os produtos selecionados devem ser enviados em sequencia ao mesmo destino');
+assert.match(activity, /put\("from_location_id", line\.item\.locationId\)/, 'cada item deve usar sua propria caixa de origem');
 assert.match(activity, /\.post\("\/stock-locations\/transfers", payload\)/, 'o Android deve usar a mesma transferencia atomica do computador');
 assert.match(activity, /amount > line\.item\.available/, 'o app deve impedir movimentacao acima do saldo disponivel');
 assert.match(apiClient, /fun post\(path: String, payload: JSONObject\)/, 'o cliente Android deve enviar transferencias autenticadas');
@@ -146,15 +180,32 @@ assert.match(printerClient, /CHUNK_SIZE = 200/, 'a P50S deve receber pacotes BLE
 assert.doesNotMatch(printerClient, /reconnectAfterCalibration/, 'a calibracao nao deve derrubar a conexao antes da impressao');
 assert.match(printerStatusView, /PrinterConnectionState\.CONNECTED -> Color\.rgb\(22, 163, 74\)/, 'o icone deve ficar verde quando conectado');
 assert.match(printerStatusView, /ValueAnimator/, 'o estado Bluetooth deve ter animacao');
+assert.match(bluetoothPrinterClient, /MARKLIFE_P50[\s\S]*GENERIC_ESC_POS/, 'o app deve manter perfis separados para P50 e impressora generica');
+assert.match(activity, /Perfil da impressora[\s\S]*PrinterProfile\.entries/, 'a tela deve permitir escolher o perfil de impressao');
+assert.match(activity, /Impressora Bluetooth pareada[\s\S]*genericPrinterClient\.pairedDevices/, 'o perfil generico deve listar dispositivos pareados');
+assert.match(activity, /GENERIC_PRINTER_ADDRESS_KEY[\s\S]*putString\(GENERIC_PRINTER_ADDRESS_KEY/, 'a impressora generica escolhida deve permanecer salva');
+assert.match(genericPrinterClient, /00001101-0000-1000-8000-00805f9b34fb/, 'a impressora generica deve usar o canal serial Bluetooth SPP');
+assert.match(genericPrinterClient, /write\(GS\)[\s\S]*write\(0x76\)[\s\S]*write\(0x30\)/, 'o perfil generico deve enviar raster ESC POS');
+assert.match(genericPrinterClient, /repeat\(copies\)[\s\S]*write\(image\)[\s\S]*write\(FORM_FEED\)/, 'as copias genericas devem ser enviadas em um unico lote com avanco');
 assert.match(activity, /text = "−"[\s\S]*updateCopies\(-1\)/, 'a quantidade deve ter botao para diminuir');
 assert.match(activity, /text = "\+"[\s\S]*updateCopies\(1\)/, 'a quantidade deve ter botao para aumentar');
 assert.match(activity, /setSelectAllOnFocus\(true\)/, 'a quantidade deve selecionar todo o valor ao receber foco');
 assert.match(activity, /MotionEvent\.ACTION_UP[\s\S]*selectAll\(\)/, 'um toque na quantidade deve permitir digitar por cima');
-assert.match(buildGradle, /versionCode = 37/, 'o APK atualizado deve ter novo versionCode');
+assert.match(buildGradle, /versionCode = 41/, 'o APK atualizado deve ter novo versionCode');
+assert.match(buildGradle, /versionName = "0\.8\.0"/, 'o APK atualizado deve mostrar a nova versao');
+assert.match(buildGradle, /firebase-messaging/, 'o APK deve receber notificacoes pelo Firebase Cloud Messaging');
+assert.match(activity, /salesChannelRow\(SalesChannel\.ONLINE, SalesChannel\.PDV\)/, 'Online e PDV devem ocupar a primeira linha');
+assert.match(activity, /salesChannelRow\(SalesChannel\.SHOPEE, SalesChannel\.TIKTOK\)/, 'Shopee e TikTok devem ocupar a segunda linha');
+assert.match(activity, /showSaleDetailsFromApi/, 'a notificacao deve abrir os detalhes da venda');
+assert.match(saleModel, /data class SaleSummary/, 'o app deve normalizar os detalhes de cada venda');
+assert.match(pushService, /FirebaseMessagingService/, 'o app deve receber push mesmo fora da tela de vendas');
+assert.match(pushRegistration, /\/admin\/mobile-push\/devices/, 'o aparelho deve registrar o token na VPS');
 assert.match(buildGradle, /com\.google\.zxing:core/, 'o app deve incluir o encoder de QR e codigo de barras');
 assert.match(manifest, /android\.permission\.BLUETOOTH"[\s\S]*android:maxSdkVersion="30"/, 'Android 8-11 precisa da permissao Bluetooth legada');
 assert.match(manifest, /android\.permission\.BLUETOOTH_CONNECT/, 'Android 12+ precisa de BLUETOOTH_CONNECT para dispositivo pareado');
 assert.match(manifest, /android\.permission\.CAMERA/, 'o leitor deve declarar permissao de camera');
+assert.match(manifest, /android\.permission\.POST_NOTIFICATIONS/, 'Android 13+ precisa da permissao de notificacoes');
+assert.match(manifest, /com\.google\.firebase\.MESSAGING_EVENT/, 'o manifesto deve declarar o servico FCM');
 assert.doesNotMatch(manifest, /android\.permission\.BLUETOOTH_SCAN/, 'o app nao deve pedir permissao de scan sem executar descoberta');
 
 console.log('android admin VPS contract: OK');

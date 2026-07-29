@@ -9,6 +9,7 @@ class VpsApiClient(private val accessToken: String) {
 
     fun get(path: String): Result<String> = request(path, "GET")
     fun post(path: String, payload: JSONObject): Result<String> = request(path, "POST", payload)
+    fun delete(path: String, payload: JSONObject): Result<String> = request(path, "DELETE", payload)
 
     private fun request(path: String, method: String, payload: JSONObject? = null): Result<String> = runCatching {
         require(path.startsWith('/')) { "A rota deve iniciar com /" }

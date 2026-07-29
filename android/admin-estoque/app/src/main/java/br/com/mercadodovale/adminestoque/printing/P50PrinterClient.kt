@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
@@ -21,21 +22,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.Adler32
 import java.util.zip.Deflater
 
-enum class PrinterConnectionState {
-    DISCONNECTED,
-    CONNECTING,
-    CONNECTED,
-    PRINTING,
-    ERROR,
-}
-
 class P50PrinterClient(
     private val context: Context,
-    private val listener: Listener,
-) {
-    interface Listener {
-        fun onPrinterState(state: PrinterConnectionState, message: String)
-    }
+    private val listener: PrinterStateListener,
+) : BluetoothPrinterClient {
 
     private val serviceUuid = UUID.fromString("0000ff00-0000-1000-8000-00805f9b34fb")
     private val readUuid = UUID.fromString("0000ff01-0000-1000-8000-00805f9b34fb")
@@ -70,14 +60,14 @@ class P50PrinterClient(
     private var pendingWriteStatus = BluetoothGatt.GATT_FAILURE
 
     @Volatile
-    var state: PrinterConnectionState = PrinterConnectionState.DISCONNECTED
+    override var state: PrinterConnectionState = PrinterConnectionState.DISCONNECTED
         private set
 
-    val isReady: Boolean
+    override val isReady: Boolean
         get() = gatt != null && writeCharacteristic != null
 
     @SuppressLint("MissingPermission")
-    fun connect() {
+    override fun connect() {
         if (state == PrinterConnectionState.CONNECTING || isReady) return
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
         if (adapter == null || !adapter.isEnabled) {
@@ -94,7 +84,7 @@ class P50PrinterClient(
         gatt = device.connectGatt(context, false, callback, BluetoothDeviceTransport.LE)
     }
 
-    fun print(
+    override fun print(
         bitmap: Bitmap,
         copies: Int,
         completion: (Result<Unit>) -> Unit,
@@ -151,7 +141,7 @@ class P50PrinterClient(
     }
 
     @SuppressLint("MissingPermission")
-    fun close() {
+    override fun close() {
         pendingWrite?.countDown()
         pendingWrite = null
         pendingPrinterResult?.countDown()
@@ -338,7 +328,7 @@ class P50PrinterClient(
             currentGatt.writeDescriptor(
                 descriptor,
                 enableValue,
-            ) == BluetoothGatt.GATT_SUCCESS
+            ) == BluetoothStatusCodes.SUCCESS
         } else {
             @Suppress("DEPRECATION")
             descriptor.value = enableValue
@@ -520,7 +510,7 @@ class P50PrinterClient(
         writeType: Int,
     ): Boolean = if (Build.VERSION.SDK_INT >= 33) {
         currentGatt.writeCharacteristic(characteristic, chunk, writeType) ==
-            BluetoothGatt.GATT_SUCCESS
+            BluetoothStatusCodes.SUCCESS
     } else {
         @Suppress("DEPRECATION")
         characteristic.writeType = writeType
