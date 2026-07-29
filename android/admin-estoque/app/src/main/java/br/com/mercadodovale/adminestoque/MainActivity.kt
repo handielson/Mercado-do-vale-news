@@ -71,7 +71,7 @@ class MainActivity : Activity() {
     private var currentTransferTargetId: String? = null
     private var currentSalesChannel: SalesChannel? = null
     private var currentSaleId: String? = null
-    private var currentSalesFilter: SaleStatusGroup = SaleStatusGroup.ALL
+    private var currentSalesFilter: SaleStatusGroup = SaleStatusGroup.TO_SHIP
     private var currentCustomLabelText: String = ""
     private var currentCustomLabelFontPercent: Int = 90
     private var labelPreview: ImageView? = null
@@ -124,7 +124,7 @@ class MainActivity : Activity() {
         currentSalesFilter = savedInstanceState
             ?.getString(STATE_SALES_FILTER)
             ?.let { value -> SaleStatusGroup.entries.firstOrNull { it.name == value } }
-            ?: SaleStatusGroup.ALL
+            ?: SaleStatusGroup.TO_SHIP
         currentCustomLabelText = savedInstanceState?.getString(STATE_CUSTOM_LABEL_TEXT).orEmpty()
         currentCustomLabelFontPercent = savedInstanceState
             ?.getInt(STATE_CUSTOM_LABEL_FONT_PERCENT, 90)
@@ -397,7 +397,7 @@ class MainActivity : Activity() {
         isFocusable = true
         contentDescription = "Abrir vendas ${channel.label}"
         setOnClickListener {
-            currentSalesFilter = SaleStatusGroup.ALL
+            currentSalesFilter = SaleStatusGroup.TO_SHIP
             showSalesList(channel)
         }
         addView(text(channel.label, 22, salesChannelColor(channel)))
