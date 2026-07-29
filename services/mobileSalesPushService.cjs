@@ -231,10 +231,6 @@ function createMobileSalesPushService({ pool, logger = console }) {
 
     const response = await messaging.sendEachForMulticast({
       tokens,
-      notification: {
-        title: `Nova venda • ${channelLabel(sale.channel)}`,
-        body: saleNotificationBody(sale),
-      },
       data: {
         type: 'sale',
         channel: sale.channel,
@@ -242,14 +238,11 @@ function createMobileSalesPushService({ pool, logger = console }) {
         status: sale.status,
         total_cents: String(sale.total_cents),
         occurred_at: sale.occurred_at.toISOString(),
+        notification_title: `Nova venda • ${channelLabel(sale.channel)}`,
+        notification_body: saleNotificationBody(sale),
       },
       android: {
         priority: 'high',
-        notification: {
-          channelId: 'sales',
-          sound: 'default',
-          tag: `sale-${sale.channel}-${sale.external_id}`,
-        },
       },
     });
 

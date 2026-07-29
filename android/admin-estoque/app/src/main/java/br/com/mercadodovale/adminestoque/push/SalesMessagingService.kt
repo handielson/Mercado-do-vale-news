@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import br.com.mercadodovale.adminestoque.MainActivity
+import br.com.mercadodovale.adminestoque.data.SalesCache
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -23,8 +24,17 @@ class SalesMessagingService : FirebaseMessagingService() {
 
         val channel = data["channel"].orEmpty()
         val saleId = data["sale_id"].orEmpty()
-        val title = message.notification?.title ?: "Nova venda"
-        val body = message.notification?.body ?: "Toque para conferir os detalhes."
+        val title = data["notification_title"] ?: message.notification?.title ?: "Nova venda"
+        val body = data["notification_body"]
+            ?: message.notification?.body
+            ?: "Toque para conferir os detalhes."
+        SalesCache.markPending(applicationContext, channel, saleId)
+        sendBroadcast(
+            Intent(SalesNotificationContract.ACTION_SALE_RECEIVED)
+                .setPackage(packageName)
+                .putExtra(SalesNotificationContract.EXTRA_SALES_CHANNEL, channel)
+                .putExtra(SalesNotificationContract.EXTRA_SALE_ID, saleId),
+        )
 
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

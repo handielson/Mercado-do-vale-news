@@ -42,6 +42,12 @@ const service = fs.readFileSync(
 );
 assert.match(service, /FIREBASE_SERVICE_ACCOUNT_(?:JSON|BASE64|PATH)/);
 assert.match(service, /sendEachForMulticast/);
+assert.match(service, /notification_title:[\s\S]*notification_body:/);
+assert.doesNotMatch(
+  service.match(/sendEachForMulticast\(\{[\s\S]*?\n\s*\}\);/)?.[0] || '',
+  /\n\s*notification:\s*\{/,
+  'o FCM deve usar mensagem somente de dados para atualizar o cache mesmo em segundo plano',
+);
 assert.match(service, /UNIQUE KEY uniq_mobile_sale_event/);
 assert.match(service, /UNIQUE KEY uniq_mobile_push_token/);
 assert.match(server, /event_type:\s*'ORDER_STATUS_CHANGE'/);

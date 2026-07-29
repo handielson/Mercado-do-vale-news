@@ -4,7 +4,10 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -30,6 +33,8 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
+import br.com.mercadodovale.adminestoque.data.SalesCache
 import br.com.mercadodovale.adminestoque.data.VpsApiClient
 import br.com.mercadodovale.adminestoque.domain.LabelSize
 import br.com.mercadodovale.adminestoque.domain.ProductLabelProduct
@@ -74,6 +79,8 @@ class MainActivity : Activity() {
     private var currentSalesFilter: SaleStatusGroup = SaleStatusGroup.TO_SHIP
     private var currentCustomLabelText: String = ""
     private var currentCustomLabelFontPercent: Int = 90
+    private val syncingSalesChannels = mutableSetOf<SalesChannel>()
+    private var saleReceiverRegistered = false
     private var labelPreview: ImageView? = null
     private var printerIndicator: PrinterStatusView? = null
     private var printerStatusText: TextView? = null
@@ -90,6 +97,20 @@ class MainActivity : Activity() {
         }
     private val green = Color.rgb(11, 107, 58)
     private val blue = Color.rgb(37, 99, 235)
+    private val salePushReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val channel = SalesChannel.fromApiKey(
+                intent?.getStringExtra(SalesNotificationContract.EXTRA_SALES_CHANNEL),
+            ) ?: return
+            if (
+                currentScreen == SCREEN_SALES_LIST &&
+                currentSalesChannel == channel &&
+                channel !in syncingSalesChannels
+            ) {
+                showSalesList(channel)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -196,6 +217,28 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (!token.isNullOrBlank()) handleSaleIntent(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (!saleReceiverRegistered) {
+            val filter = IntentFilter(SalesNotificationContract.ACTION_SALE_RECEIVED)
+            ContextCompat.registerReceiver(
+                this,
+                salePushReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            saleReceiverRegistered = true
+        }
+    }
+
+    override fun onStop() {
+        if (saleReceiverRegistered) {
+            unregisterReceiver(salePushReceiver)
+            saleReceiverRegistered = false
+        }
+        super.onStop()
     }
 
     override fun onDestroy() {
@@ -321,6 +364,7 @@ class MainActivity : Activity() {
                 .remove(SESSION_TOKEN_KEY)
                 .remove(LABEL_PRODUCT_KEY)
                 .apply()
+            SalesCache.clearAll(applicationContext)
             printerClient.close()
             showLogin()
         })
@@ -420,7 +464,7 @@ class MainActivity : Activity() {
         root.addView(back("Vendas ${channel.label}") { showSalesOverview() })
         root.addView(text(channel.label, 28, salesChannelColor(channel)))
         root.addView(text(channel.subtitle, 15, Color.DKGRAY))
-        val status = text("Carregando vendas…", 14, Color.DKGRAY)
+        val status = text("Abrindo vendas salvas…", 14, Color.DKGRAY)
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val filters = SaleStatusGroup.entries
         val filterSpinner = Spinner(this).apply {
@@ -433,52 +477,75 @@ class MainActivity : Activity() {
         }
         root.addView(text("Filtrar por situação", 15, Color.DKGRAY))
         root.addView(filterSpinner)
+        root.addView(button("Atualizar tudo") {
+            refreshAllSales(channel, currentSalesFilter, status, list)
+        })
         root.addView(status)
         root.addView(list)
         showContent(root)
         filterSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 currentSalesFilter = filters[position]
-                loadSales(channel, currentSalesFilter, status, list)
+                renderCachedSales(channel, currentSalesFilter, status, list)
+                syncPendingSales(channel, currentSalesFilter, status, list)
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
     }
 
-    private fun loadSales(
+    private fun renderCachedSales(
         channel: SalesChannel,
         filter: SaleStatusGroup,
         status: TextView,
         list: LinearLayout,
     ) {
-        status.text = "Carregando vendas…"
+        val sales = SalesCache.load(applicationContext, channel)
+        val filtered = sales.filter(filter::accepts)
+        list.removeAllViews()
+        status.text = when {
+            !SalesCache.isInitialized(applicationContext, channel) ->
+                "Preparando o primeiro carregamento…"
+            filtered.isEmpty() && sales.isEmpty() ->
+                "Nenhuma venda salva nesta origem."
+            filtered.isEmpty() ->
+                "Nenhuma venda em “${filter.label}”."
+            filter == SaleStatusGroup.ALL ->
+                "${filtered.size} venda(s) salva(s) • novas entram automaticamente"
+            else ->
+                "${filtered.size} de ${sales.size} venda(s) em “${filter.label}” • atualização automática"
+        }
+        filtered.forEach { sale -> list.addView(saleListCard(sale)) }
+    }
+
+    private fun refreshAllSales(
+        channel: SalesChannel,
+        filter: SaleStatusGroup,
+        status: TextView,
+        list: LinearLayout,
+    ) {
+        if (!syncingSalesChannels.add(channel)) return
+        status.text = "Atualizando todas as vendas…"
         runAsync {
             val response = VpsApiClient(token.orEmpty()).get(
                 "/admin/mobile-sales?channel=${channel.apiKey}&limit=100",
             )
             runOnUiThread {
-                if (filter != currentSalesFilter || channel != currentSalesChannel) return@runOnUiThread
+                syncingSalesChannels.remove(channel)
+                if (channel != currentSalesChannel) return@runOnUiThread
                 response.fold(
                     onSuccess = { body ->
-                        runCatching { SaleSummary.parseList(body) }.fold(
+                        runCatching { SalesCache.replace(applicationContext, channel, body) }.fold(
                             onSuccess = { sales ->
-                                val filtered = sales.filter(filter::accepts)
-                                list.removeAllViews()
-                                status.text = if (filtered.isEmpty()) {
-                                    if (sales.isEmpty()) {
-                                        "Nenhuma venda encontrada nesta origem."
-                                    } else {
-                                        "Nenhuma venda em “${filter.label}”."
-                                    }
-                                } else {
-                                    if (filter == SaleStatusGroup.ALL) {
-                                        "${filtered.size} venda(s) mais recente(s)"
-                                    } else {
-                                        "${filtered.size} de ${sales.size} venda(s) em “${filter.label}”"
-                                    }
+                                val refreshedIds = sales.mapTo(mutableSetOf(), SaleSummary::externalId)
+                                SalesCache.pendingIds(applicationContext, channel)
+                                    .filter(refreshedIds::contains)
+                                    .forEach { SalesCache.resolvePending(applicationContext, channel, it) }
+                                renderCachedSales(channel, currentSalesFilter, status, list)
+                                if (filter == currentSalesFilter) {
+                                    Toast.makeText(this, "Vendas atualizadas.", Toast.LENGTH_SHORT).show()
                                 }
-                                filtered.forEach { sale -> list.addView(saleListCard(sale)) }
+                                syncPendingSales(channel, currentSalesFilter, status, list)
                             },
                             onFailure = {
                                 status.text = it.message ?: "Resposta de vendas inválida."
@@ -489,6 +556,38 @@ class MainActivity : Activity() {
                         handleProtectedApiFailure(it, status, "Falha ao carregar as vendas.")
                     },
                 )
+            }
+        }
+    }
+
+    private fun syncPendingSales(
+        channel: SalesChannel,
+        filter: SaleStatusGroup,
+        status: TextView,
+        list: LinearLayout,
+    ) {
+        if (!SalesCache.isInitialized(applicationContext, channel)) {
+            refreshAllSales(channel, filter, status, list)
+            return
+        }
+        val pendingIds = SalesCache.pendingIds(applicationContext, channel)
+        if (pendingIds.isEmpty() || !syncingSalesChannels.add(channel)) return
+        status.text = "Incluindo ${pendingIds.size} nova(s) venda(s)…"
+        runAsync {
+            val client = VpsApiClient(token.orEmpty())
+            pendingIds.forEach { saleId ->
+                val encodedSaleId = URLEncoder.encode(saleId, "UTF-8")
+                client.get("/admin/mobile-sales/${channel.apiKey}/$encodedSaleId")
+                    .onSuccess { body ->
+                        SalesCache.upsertSingle(applicationContext, channel, body)
+                        SalesCache.resolvePending(applicationContext, channel, saleId)
+                    }
+            }
+            runOnUiThread {
+                syncingSalesChannels.remove(channel)
+                if (channel == currentSalesChannel && filter == currentSalesFilter) {
+                    renderCachedSales(channel, filter, status, list)
+                }
             }
         }
     }
@@ -533,7 +632,11 @@ class MainActivity : Activity() {
                 response.fold(
                     onSuccess = { body ->
                         runCatching { SaleSummary.parseSingle(body) }.fold(
-                            onSuccess = ::showSaleDetails,
+                            onSuccess = { sale ->
+                                SalesCache.upsertSingle(applicationContext, channel, body)
+                                SalesCache.resolvePending(applicationContext, channel, saleId)
+                                showSaleDetails(sale)
+                            },
                             onFailure = { status.text = it.message ?: "Detalhes inválidos." },
                         )
                     },
@@ -2582,6 +2685,7 @@ class MainActivity : Activity() {
                         if (VpsApiClient.isUnauthorized(error)) {
                             token = null
                             sessionPreferences.edit().remove(SESSION_TOKEN_KEY).apply()
+                            SalesCache.clearAll(applicationContext)
                             Toast.makeText(
                                 this,
                                 "Sua sessão expirou. Entre novamente.",
@@ -2877,6 +2981,7 @@ class MainActivity : Activity() {
                 if (sessionError != null && VpsApiClient.isUnauthorized(sessionError)) {
                     token = null
                     sessionPreferences.edit().remove(SESSION_TOKEN_KEY).apply()
+                    SalesCache.clearAll(applicationContext)
                     Toast.makeText(
                         this,
                         "Sua sessão expirou. Entre novamente.",
