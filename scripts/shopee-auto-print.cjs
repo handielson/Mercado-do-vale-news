@@ -1,6 +1,7 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const http = require('http');
+const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -10,10 +11,32 @@ require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
 
 const POLLING_INTERVAL = 5 * 60 * 1000; // 5 minutos
 
-const printedDir = path.join(__dirname, 'shopee_printed');
+// PDFs que podem ser consultados e apagados pelo painel. Os marcadores ficam
+// separados: limpar etiquetas nunca faz pedidos antigos serem impressos de novo.
+const shippingLabelsDir = path.join(__dirname, 'Etiquetas de envio');
+const printedMarkersDir = path.join(__dirname, 'shopee_printed');
 
-if (!fs.existsSync(printedDir)) {
-    fs.mkdirSync(printedDir, { recursive: true });
+for (const directory of [shippingLabelsDir, printedMarkersDir]) {
+    if (!fs.existsSync(directory)) {
+        fs.mkdirSync(directory, { recursive: true });
+    }
+}
+
+function getShippingLabelsSummary() {
+    const files = fs.readdirSync(shippingLabelsDir, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.pdf'));
+    const totalBytes = files.reduce((total, entry) => total + fs.statSync(path.join(shippingLabelsDir, entry.name)).size, 0);
+    return { folder: shippingLabelsDir, files: files.length, total_bytes: totalBytes };
+}
+
+function clearShippingLabels() {
+    let deleted = 0;
+    for (const entry of fs.readdirSync(shippingLabelsDir, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.pdf')) continue;
+        fs.unlinkSync(path.join(shippingLabelsDir, entry.name));
+        deleted += 1;
+    }
+    return { ...getShippingLabelsSummary(), deleted };
 }
 
 // Para assinar requisições da Shopee Open API v2
@@ -29,6 +52,76 @@ async function getFetch() {
     if (typeof fetch === 'function') return fetch;
     const mod = await import('node-fetch');
     return mod.default;
+}
+
+// A etiqueta normal da Shopee ocupa um quadrante da página. O PDF ampliado é
+// ajustado pelo driver ao papel térmico 10x15, preenchendo toda a folha.
+async function expandShopeeLabelForThermalPaper(pdfBuffer) {
+    const sourcePdf = await PDFDocument.load(pdfBuffer);
+    const outputPdf = await PDFDocument.create();
+
+    for (const sourcePage of sourcePdf.getPages()) {
+        const { width, height } = sourcePage.getSize();
+        const label = await outputPdf.embedPage(sourcePage, {
+            left: 0,
+            bottom: height / 2,
+            right: width / 2,
+            top: height,
+        });
+        const outputPage = outputPdf.addPage([width, height]);
+        outputPage.drawPage(label, { x: 0, y: 0, width, height });
+    }
+
+    return Buffer.from(await outputPdf.save());
+}
+
+async function createThermalTestPdf({ title, subtitle, lines }) {
+    const pdf = await PDFDocument.create();
+    const page = pdf.addPage([288, 432]); // 4 x 6 polegadas (10 x 15 cm)
+    const regular = await pdf.embedFont(StandardFonts.Helvetica);
+    const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    page.drawRectangle({ x: 0, y: 0, width: 288, height: 432, color: rgb(1, 1, 1) });
+    page.drawRectangle({ x: 18, y: 374, width: 252, height: 40, color: rgb(0.06, 0.12, 0.22) });
+    page.drawText(title, { x: 30, y: 390, size: 15, font: bold, color: rgb(1, 1, 1) });
+    page.drawText(subtitle, { x: 30, y: 354, size: 9, font: regular, color: rgb(0.25, 0.3, 0.36) });
+    let y = 320;
+    for (const line of lines) {
+        page.drawText(line, { x: 30, y, size: 12, font: regular, color: rgb(0.08, 0.12, 0.18) });
+        y -= 28;
+    }
+    page.drawRectangle({ x: 30, y: 62, width: 228, height: 2, color: rgb(0.08, 0.12, 0.18) });
+    page.drawText('TESTE - nenhum pedido real foi alterado', {
+        x: 30, y: 38, size: 9, font: bold, color: rgb(0.72, 0.12, 0.12),
+    });
+    return Buffer.from(await pdf.save());
+}
+
+async function runPrintFlowTest() {
+    const settings = await getCompanySettings();
+    const labelPrinter = String(settings.shopee_printer_thermal || '').trim();
+    const summaryPrinter = String(settings.shopee_printer_a4 || '').trim();
+    if (!labelPrinter || !summaryPrinter) {
+        throw new Error('Selecione e salve as duas impressoras térmicas antes de executar o teste.');
+    }
+
+    const ptp = require('pdf-to-printer');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const labelPath = path.join(shippingLabelsDir, `TESTE_${stamp}_etiqueta-10x15.pdf`);
+    const summaryPath = path.join(shippingLabelsDir, `TESTE_${stamp}_resumo-separacao-10x15.pdf`);
+    fs.writeFileSync(labelPath, await createThermalTestPdf({
+        title: 'ETIQUETA DE ENVIO',
+        subtitle: 'Fluxo Shopee - teste local',
+        lines: ['1. Nota fiscal: simulada', '2. Preparar envio: simulado', '3. Etiqueta 10x15: pronta', 'Impressora 1: OK'],
+    }));
+    fs.writeFileSync(summaryPath, await createThermalTestPdf({
+        title: 'RESUMO DE SEPARAÇÃO',
+        subtitle: 'Fluxo Shopee - teste local',
+        lines: ['Pedido teste #TESTE', 'Produto: conferência de impressão', 'Quantidade: 1', 'Impressora 2: OK'],
+    }));
+
+    await ptp.print(labelPath, { printer: labelPrinter, paperSize: '4x6', scale: 'fit' });
+    await ptp.print(summaryPath, { printer: summaryPrinter, paperSize: '4x6', scale: 'fit' });
+    return { label_file: path.basename(labelPath), summary_file: path.basename(summaryPath) };
 }
 
 async function getCompanySettings() {
@@ -81,7 +174,46 @@ function startLocalServer() {
             return res.end();
         }
 
-        if (req.url === '/') {
+        if (req.url === '/test-flow' && req.method === 'POST') {
+            runPrintFlowTest().then((result) => {
+                console.log('[TEST FLOW] Etiqueta e resumo enviados para impressão:', result);
+            }).catch((err) => {
+                console.error('[TEST FLOW] Falhou:', err.message);
+            });
+            res.writeHead(202, { 'Content-Type': 'application/json; charset=utf-8' });
+            return res.end(JSON.stringify({ ok: true, message: 'Fluxo de teste iniciado. Verifique as duas impressoras.' }));
+        }
+
+        if (req.url === '/shipping-labels') {
+            try {
+                const summary = req.method === 'DELETE'
+                    ? clearShippingLabels()
+                    : getShippingLabelsSummary();
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                return res.end(JSON.stringify(summary));
+            } catch (err) {
+                console.error('[LOCAL LABELS] Falha ao limpar etiquetas:', err.message);
+                res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                return res.end(JSON.stringify({ error: 'Não foi possível administrar a pasta de etiquetas.' }));
+            }
+        }
+
+        if (req.url === '/printers') {
+            const ptp = require('pdf-to-printer');
+            ptp.getPrinters().then(printers => {
+                const names = Array.from(new Set(
+                    printers
+                        .map(printer => String(printer?.name || printer?.deviceId || printer || '').trim())
+                        .filter(Boolean),
+                )).sort((left, right) => left.localeCompare(right, 'pt-BR'));
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ printers: names }));
+            }).catch(err => {
+                console.error('[LOCAL PRINTERS] Falha ao listar impressoras:', err.message);
+                res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ error: 'Não foi possível listar as impressoras do Windows.' }));
+            });
+        } else if (req.url === '/') {
             const ptp = require('pdf-to-printer');
             ptp.getPrinters().then(printers => {
                 const list = printers.map(p => `<li>${p.deviceId || p.name || p}</li>`).join('');
@@ -149,7 +281,7 @@ function startLocalServer() {
                             await fetch(urlCreate, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ order_list: [{ order_sn: orderSn }], shipping_document_type: "THERMAL_AIR_WAYBILL" })
+                                body: JSON.stringify({ order_list: [{ order_sn: orderSn }], shipping_document_type: "NORMAL_AIR_WAYBILL" })
                             });
                             // Wait 2 seconds for Shopee to build the PDF internally
                             await new Promise(r => setTimeout(r, 2000));
@@ -157,13 +289,17 @@ function startLocalServer() {
                             const rDoc = await fetch(urlDoc, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ order_list: [{ order_sn: orderSn }], shipping_document_type: "THERMAL_AIR_WAYBILL" })
+                                body: JSON.stringify({ order_list: [{ order_sn: orderSn }], shipping_document_type: "NORMAL_AIR_WAYBILL" })
                             });
                             if (rDoc.headers.get('content-type')?.includes('pdf')) {
                                 const pdfBuffer = await rDoc.arrayBuffer();
-                                const tempPdfPath = path.join(printedDir, `MANUAL_${orderSn}_awb.pdf`);
-                                fs.writeFileSync(tempPdfPath, Buffer.from(pdfBuffer));
-                                await ptp.print(tempPdfPath, { printer: settings.shopee_printer_thermal });
+                                const tempPdfPath = path.join(shippingLabelsDir, `MANUAL_${orderSn}_etiqueta-10x15.pdf`);
+                                fs.writeFileSync(tempPdfPath, await expandShopeeLabelForThermalPaper(Buffer.from(pdfBuffer)));
+                                await ptp.print(tempPdfPath, {
+                                    printer: settings.shopee_printer_thermal,
+                                    paperSize: '4x6',
+                                    scale: 'fit'
+                                });
                                 console.log(`[MANUAL PRINT] Etiqueta Térmica enviada!`);
                             } else {
                                 const j = await rDoc.json();
@@ -184,9 +320,13 @@ function startLocalServer() {
                             });
                             if (rPkg.headers.get('content-type')?.includes('pdf')) {
                                 const pdfPkgBuffer = await rPkg.arrayBuffer();
-                                const tempPkgPath = path.join(printedDir, `MANUAL_${orderSn}_packing.pdf`);
+                                const tempPkgPath = path.join(shippingLabelsDir, `MANUAL_${orderSn}_resumo-separacao-10x15.pdf`);
                                 fs.writeFileSync(tempPkgPath, Buffer.from(pdfPkgBuffer));
-                                await ptp.print(tempPkgPath, { printer: targetSummaryPrinter });
+                                await ptp.print(tempPkgPath, {
+                                    printer: targetSummaryPrinter,
+                                    paperSize: '4x6',
+                                    scale: 'fit'
+                                });
                                 console.log(`[MANUAL PRINT] Resumo enviado!`);
                             }
                         } catch(e) { console.error("Erro manual Resumo:", e); }
@@ -272,7 +412,7 @@ async function runLoop() {
         for (const order of orders) {
             const { order_sn } = order;
             // Check if already printed today / this run
-            const markerFile = path.join(printedDir, `${order_sn}.txt`);
+            const markerFile = path.join(printedMarkersDir, `${order_sn}.txt`);
             if (fs.existsSync(markerFile)) {
                 continue;
             }
@@ -289,14 +429,14 @@ async function runLoop() {
 
             const docPayload = {
                 order_list: [{ order_sn }],
-                shipping_document_type: "THERMAL_AIR_WAYBILL"
+                shipping_document_type: "NORMAL_AIR_WAYBILL"
             };
 
             // Request generation
             await fetch(urlCreate, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order_list: [{ order_sn }], shipping_document_type: "THERMAL_AIR_WAYBILL", tracking_number: "" })
+                body: JSON.stringify({ order_list: [{ order_sn }], shipping_document_type: "NORMAL_AIR_WAYBILL", tracking_number: "" })
             });
             await delay(2000); // Wait for Shopee to build the PDF
 
@@ -311,12 +451,16 @@ async function runLoop() {
             // Awb returns PDF stream, wait let me verify: Shopee download_shipping_document returns application/pdf byte stream
             if (rDoc.headers.get('content-type')?.includes('pdf')) {
                 const pdfBuffer = await rDoc.arrayBuffer();
-                const tempPdfPath = path.join(printedDir, `${order_sn}_awb.pdf`);
-                fs.writeFileSync(tempPdfPath, Buffer.from(pdfBuffer));
+                const tempPdfPath = path.join(shippingLabelsDir, `${order_sn}_etiqueta-10x15.pdf`);
+                fs.writeFileSync(tempPdfPath, await expandShopeeLabelForThermalPaper(Buffer.from(pdfBuffer)));
                 
                 console.log(`Enviando para impressora: ${shopee_printer_thermal}`);
                 try {
-                    await ptp.print(tempPdfPath, { printer: shopee_printer_thermal });
+                    await ptp.print(tempPdfPath, {
+                        printer: shopee_printer_thermal,
+                        paperSize: '4x6',
+                        scale: 'fit'
+                    });
                     console.log(`Sucesso ao imprimir ETIQUETA ${order_sn}!`);
                     
                     // --- IMPRIMIR RESUMO / PACKING LIST na A4 ---
@@ -331,10 +475,14 @@ async function runLoop() {
                             });
                             if (rPkg.headers.get('content-type')?.includes('pdf')) {
                                 const pdfPkgBuffer = await rPkg.arrayBuffer();
-                                const tempPkgPath = path.join(printedDir, `${order_sn}_packing.pdf`);
+                                const tempPkgPath = path.join(shippingLabelsDir, `${order_sn}_resumo-separacao-10x15.pdf`);
                                 fs.writeFileSync(tempPkgPath, Buffer.from(pdfPkgBuffer));
                                 console.log(`Enviando Resumo para impressora: ${settings.shopee_printer_a4}`);
-                                await ptp.print(tempPkgPath, { printer: settings.shopee_printer_a4 });
+                                await ptp.print(tempPkgPath, {
+                                    printer: settings.shopee_printer_a4,
+                                    paperSize: '4x6',
+                                    scale: 'fit'
+                                });
                                 console.log(`Sucesso ao imprimir RESUMO ${order_sn}!`);
                             }
                         } catch (pkgErr) {
