@@ -63,6 +63,10 @@ const salesCache = fs.readFileSync(
   new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/data/SalesCache.kt', import.meta.url),
   'utf8',
 );
+const salesSoundSettings = fs.readFileSync(
+  new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/push/SalesSoundSettings.kt', import.meta.url),
+  'utf8',
+);
 
 assert.equal(source, mirrors, 'vps_server.js e vps_server.cjs devem permanecer identicos');
 
@@ -204,8 +208,8 @@ assert.match(activity, /text = "−"[\s\S]*updateCopies\(-1\)/, 'a quantidade de
 assert.match(activity, /text = "\+"[\s\S]*updateCopies\(1\)/, 'a quantidade deve ter botao para aumentar');
 assert.match(activity, /setSelectAllOnFocus\(true\)/, 'a quantidade deve selecionar todo o valor ao receber foco');
 assert.match(activity, /MotionEvent\.ACTION_UP[\s\S]*selectAll\(\)/, 'um toque na quantidade deve permitir digitar por cima');
-assert.match(buildGradle, /versionCode = 45/, 'o APK atualizado deve ter novo versionCode');
-assert.match(buildGradle, /versionName = "0\.10\.2"/, 'o APK atualizado deve mostrar a nova versao');
+assert.match(buildGradle, /versionCode = 46/, 'o APK atualizado deve ter novo versionCode');
+assert.match(buildGradle, /versionName = "0\.11\.0"/, 'o APK atualizado deve mostrar a nova versao');
 assert.match(buildGradle, /firebase-messaging/, 'o APK deve receber notificacoes pelo Firebase Cloud Messaging');
 assert.match(activity, /salesChannelRow\(SalesChannel\.ONLINE, SalesChannel\.PDV\)/, 'Online e PDV devem ocupar a primeira linha');
 assert.match(activity, /salesChannelRow\(SalesChannel\.SHOPEE, SalesChannel\.TIKTOK\)/, 'Shopee e TikTok devem ocupar a segunda linha');
@@ -222,6 +226,13 @@ assert.match(activity, /button\("Atualizar tudo"\)/, 'a reconciliacao completa d
 assert.match(activity, /syncPendingSales[\s\S]*pendingIds[\s\S]*upsertSingle/, 'o app deve buscar e inserir somente vendas novas recebidas por push');
 assert.match(salesCache, /MAX_SALES_PER_CHANNEL = 100[\s\S]*upsertSingle/, 'o cache deve mesclar vendas sem crescer indefinidamente');
 assert.match(pushService, /SalesCache\.markPending[\s\S]*ACTION_SALE_RECEIVED/, 'o push deve enfileirar e avisar a tela sobre a nova venda');
+assert.match(activity, /Configurar som das vendas[\s\S]*Escolher toque do sistema[\s\S]*Importar arquivo de áudio/, 'o app deve permitir configurar a origem do som');
+assert.match(activity, /SeekBar[\s\S]*Volume: \$progress%/, 'o volume sonoro deve ser ajustavel');
+assert.match(activity, /Tocar somente no horário programado[\s\S]*chooseSalesSoundTime/, 'o som deve aceitar uma faixa de horario');
+assert.match(salesSoundSettings, /MAX_CUSTOM_SOUND_BYTES = 10 \* 1024 \* 1024/, 'o upload de audio deve ter limite seguro');
+assert.match(salesSoundSettings, /setUsage\(AudioAttributes\.USAGE_NOTIFICATION\)[\s\S]*setVolume\(volume, volume\)/, 'a reproducao deve respeitar o volume configurado e o canal de notificacoes');
+assert.match(salesSoundSettings, /startMinutes < config\.endMinutes[\s\S]*current >= config\.startMinutes \|\| current < config\.endMinutes/, 'a agenda deve aceitar periodos normais e atravessando meia-noite');
+assert.match(pushService, /setSilent\(true\)[\s\S]*SalesSoundSettings\.play/, 'a notificacao deve evitar som duplicado e usar a configuracao do app');
 assert.match(activity, /sale\.localizedStatus/, 'cards e detalhes devem evitar status em ingles');
 assert.match(saleModel, /data class SalePaymentDetail/, 'o PDV deve preservar cada pagamento e suas taxas');
 assert.match(saleModel, /val formattedPayment:[\s\S]*Taxa da operadora/, 'os detalhes devem mostrar parcelas, acrescimos e taxa da operadora');

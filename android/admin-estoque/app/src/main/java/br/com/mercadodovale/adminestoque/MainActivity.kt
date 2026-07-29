@@ -3,6 +3,7 @@ package br.com.mercadodovale.adminestoque
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.TimePickerDialog
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -11,10 +12,12 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.provider.OpenableColumns
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -30,6 +33,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -52,6 +56,7 @@ import br.com.mercadodovale.adminestoque.printing.PrinterConnectionState
 import br.com.mercadodovale.adminestoque.printing.PrinterProfile
 import br.com.mercadodovale.adminestoque.push.PushRegistration
 import br.com.mercadodovale.adminestoque.push.SalesNotificationContract
+import br.com.mercadodovale.adminestoque.push.SalesSoundSettings
 import br.com.mercadodovale.adminestoque.ui.PrinterStatusView
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
@@ -167,6 +172,7 @@ class MainActivity : Activity() {
                     }
                 }
                 SCREEN_SALES_LIST -> currentSalesChannel?.let(::showSalesList) ?: showSalesOverview()
+                SCREEN_SALES_SOUND -> showSalesSoundSettings()
                 SCREEN_SALES -> showSalesOverview()
                 SCREEN_LABELS -> showLabels()
                 SCREEN_CUSTOM_LABEL -> showCustomLabel()
@@ -415,7 +421,151 @@ class MainActivity : Activity() {
                 }
             }
         })
+        root.addView(button("Configurar som das vendas") { showSalesSoundSettings() })
         showContent(root)
+    }
+
+    private fun showSalesSoundSettings() {
+        currentScreen = SCREEN_SALES_SOUND
+        currentSalesChannel = null
+        currentSaleId = null
+        val config = SalesSoundSettings.load(applicationContext)
+        val root = screen()
+        root.addView(back("Som das vendas") { showSalesOverview() })
+        root.addView(text("Som das notificações", 28, green))
+        root.addView(
+            text(
+                "Escolha o áudio, o volume e em quais horários uma nova venda pode tocar.",
+                15,
+                Color.DKGRAY,
+            ),
+        )
+
+        root.addView(CheckBox(this).apply {
+            text = "Tocar som ao receber nova venda"
+            isChecked = config.enabled
+            setOnCheckedChangeListener { _, checked ->
+                SalesSoundSettings.setEnabled(applicationContext, checked)
+            }
+        })
+        root.addView(
+            text(
+                "Som selecionado: ${SalesSoundSettings.selectedSoundLabel(applicationContext, config)}",
+                16,
+                Color.rgb(15, 23, 42),
+            ),
+        )
+        root.addView(button("Escolher toque do sistema") { openSystemSoundPicker() })
+        root.addView(button("Importar arquivo de áudio") { openCustomSoundPicker() })
+
+        val volumeLabel = text("Volume: ${config.volumePercent}%", 16, Color.DKGRAY)
+        root.addView(volumeLabel)
+        root.addView(SeekBar(this).apply {
+            max = 100
+            progress = config.volumePercent
+            contentDescription = "Volume do som de vendas"
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    volumeLabel.text = "Volume: $progress%"
+                    if (fromUser) SalesSoundSettings.setVolume(applicationContext, progress)
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        })
+
+        root.addView(CheckBox(this).apply {
+            text = "Tocar somente no horário programado"
+            isChecked = config.scheduleEnabled
+            setOnCheckedChangeListener { _, checked ->
+                SalesSoundSettings.setScheduleEnabled(applicationContext, checked)
+                showSalesSoundSettings()
+            }
+        })
+        if (config.scheduleEnabled) {
+            root.addView(
+                button("Início: ${SalesSoundSettings.formatMinutes(config.startMinutes)}") {
+                    chooseSalesSoundTime(isStart = true)
+                },
+            )
+            root.addView(
+                button("Fim: ${SalesSoundSettings.formatMinutes(config.endMinutes)}") {
+                    chooseSalesSoundTime(isStart = false)
+                },
+            )
+            root.addView(
+                text(
+                    "Se o horário final for menor que o inicial, o período atravessa a meia-noite.",
+                    13,
+                    Color.GRAY,
+                ),
+            )
+        }
+        root.addView(button("Testar som agora") {
+            val played = SalesSoundSettings.play(applicationContext, ignoreSchedule = true)
+            Toast.makeText(
+                this,
+                if (played) "Reproduzindo o som configurado." else "Ative o som e escolha um volume maior que zero.",
+                Toast.LENGTH_SHORT,
+            ).show()
+        })
+        root.addView(
+            text(
+                "O volume definido é relativo ao volume de notificações do aparelho. O modo silencioso e o Não Perturbe continuam sendo respeitados.",
+                13,
+                Color.GRAY,
+            ),
+        )
+        showContent(root)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun openSystemSoundPicker() {
+        val config = SalesSoundSettings.load(applicationContext)
+        val currentUri = config.systemSoundUri.takeIf(String::isNotBlank)?.let(Uri::parse)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        startActivityForResult(
+            Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
+                putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Escolher som da venda")
+                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, currentUri)
+            },
+            REQUEST_SALES_SYSTEM_SOUND,
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    private fun openCustomSoundPicker() {
+        startActivityForResult(
+            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "audio/*"
+            },
+            REQUEST_SALES_CUSTOM_SOUND,
+        )
+    }
+
+    private fun chooseSalesSoundTime(isStart: Boolean) {
+        val config = SalesSoundSettings.load(applicationContext)
+        val currentMinutes = if (isStart) config.startMinutes else config.endMinutes
+        TimePickerDialog(
+            this,
+            { _, hour, minute ->
+                val selected = hour * 60 + minute
+                SalesSoundSettings.setSchedule(
+                    applicationContext,
+                    if (isStart) selected else config.startMinutes,
+                    if (isStart) config.endMinutes else selected,
+                )
+                showSalesSoundSettings()
+            },
+            currentMinutes / 60,
+            currentMinutes % 60,
+            true,
+        ).show()
     }
 
     private fun salesChannelRow(left: SalesChannel, right: SalesChannel) =
@@ -2823,6 +2973,49 @@ class MainActivity : Activity() {
         }
     }
 
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK) return
+        when (requestCode) {
+            REQUEST_SALES_SYSTEM_SOUND -> {
+                val uri = data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+                SalesSoundSettings.useSystemSound(applicationContext, uri)
+                showSalesSoundSettings()
+                Toast.makeText(this, "Toque do sistema selecionado.", Toast.LENGTH_SHORT).show()
+            }
+            REQUEST_SALES_CUSTOM_SOUND -> {
+                val uri = data?.data ?: return
+                val displayName = contentDisplayName(uri)
+                runAsync {
+                    val result = runCatching {
+                        SalesSoundSettings.importCustomSound(applicationContext, uri, displayName)
+                    }
+                    runOnUiThread {
+                        result.fold(
+                            onSuccess = {
+                                showSalesSoundSettings()
+                                Toast.makeText(this, "Áudio importado.", Toast.LENGTH_SHORT).show()
+                            },
+                            onFailure = {
+                                Toast.makeText(
+                                    this,
+                                    it.message ?: "Não foi possível importar o áudio.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun contentDisplayName(uri: Uri): String =
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+            if (it.moveToFirst()) it.getString(0) else null
+        } ?: "Áudio personalizado"
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
@@ -3018,6 +3211,8 @@ class MainActivity : Activity() {
         private const val REQUEST_BLUETOOTH = 41
         private const val REQUEST_CAMERA = 42
         private const val REQUEST_NOTIFICATIONS = 43
+        private const val REQUEST_SALES_SYSTEM_SOUND = 44
+        private const val REQUEST_SALES_CUSTOM_SOUND = 45
         private const val SESSION_PREFERENCES = "mdv_admin_session"
         private const val SESSION_TOKEN_KEY = "access_token"
         private const val LABEL_PRODUCT_KEY = "selected_label_product"
@@ -3044,6 +3239,7 @@ class MainActivity : Activity() {
         private const val SCREEN_LABELS = "labels"
         private const val SCREEN_CUSTOM_LABEL = "custom_label"
         private const val SCREEN_SALES = "sales"
+        private const val SCREEN_SALES_SOUND = "sales_sound"
         private const val SCREEN_SALES_LIST = "sales_list"
         private const val SCREEN_SALES_DETAIL = "sales_detail"
         private val STOCK_LOCATION_FILTER_LABELS = listOf(

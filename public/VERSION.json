@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.113-android-sales-cache",
+  "version": "v1.2.114-android-sales-sound",
   "date": "2026-07-29",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260729-005853-v12113-android-vendas-cache",
+  "release_vps": "/var/www/mdv-site/releases/20260729-021057-v12114-android-som-vendas",
   "branch": "main",
-  "summary": "Abre vendas pelo cache local e inclui automaticamente somente as novas recebidas por push."
+  "summary": "Adiciona som configuravel, volume e horario para notificacoes de vendas no Gestao MDV."
 }
