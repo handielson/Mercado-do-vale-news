@@ -591,13 +591,16 @@ class MainActivity : Activity() {
         isFocusable = true
         contentDescription = "Abrir vendas ${channel.label}"
         setOnClickListener {
-            currentSalesFilter = SaleStatusGroup.TO_SHIP
+            currentSalesFilter = defaultSalesFilter(channel)
             showSalesList(channel)
         }
         addView(text(channel.label, 22, salesChannelColor(channel)))
         addView(text(channel.subtitle, 14, Color.DKGRAY))
         addView(text("Toque para abrir  ›", 13, blue))
     }
+
+    private fun defaultSalesFilter(channel: SalesChannel): SaleStatusGroup =
+        if (channel == SalesChannel.PDV) SaleStatusGroup.ALL else SaleStatusGroup.TO_SHIP
 
     private fun salesChannelColor(channel: SalesChannel): Int = when (channel) {
         SalesChannel.ONLINE -> Color.rgb(37, 99, 235)

@@ -208,8 +208,8 @@ assert.match(activity, /text = "−"[\s\S]*updateCopies\(-1\)/, 'a quantidade de
 assert.match(activity, /text = "\+"[\s\S]*updateCopies\(1\)/, 'a quantidade deve ter botao para aumentar');
 assert.match(activity, /setSelectAllOnFocus\(true\)/, 'a quantidade deve selecionar todo o valor ao receber foco');
 assert.match(activity, /MotionEvent\.ACTION_UP[\s\S]*selectAll\(\)/, 'um toque na quantidade deve permitir digitar por cima');
-assert.match(buildGradle, /versionCode = 46/, 'o APK atualizado deve ter novo versionCode');
-assert.match(buildGradle, /versionName = "0\.11\.0"/, 'o APK atualizado deve mostrar a nova versao');
+assert.match(buildGradle, /versionCode = 47/, 'o APK atualizado deve ter novo versionCode');
+assert.match(buildGradle, /versionName = "0\.11\.1"/, 'o APK atualizado deve mostrar a nova versao');
 assert.match(buildGradle, /firebase-messaging/, 'o APK deve receber notificacoes pelo Firebase Cloud Messaging');
 assert.match(activity, /salesChannelRow\(SalesChannel\.ONLINE, SalesChannel\.PDV\)/, 'Online e PDV devem ocupar a primeira linha');
 assert.match(activity, /salesChannelRow\(SalesChannel\.SHOPEE, SalesChannel\.TIKTOK\)/, 'Shopee e TikTok devem ocupar a segunda linha');
@@ -219,7 +219,8 @@ assert.match(saleModel, /enum class SaleStatusGroup[\s\S]*NEW\("Novas"\)[\s\S]*T
 assert.match(saleModel, /fun localized\(value: String\)[\s\S]*"READY_TO_SHIP" to "Pronta para envio"[\s\S]*"CANCELLED" to "Cancelada"/, 'status externos devem ser traduzidos para portugues');
 assert.match(activity, /SaleStatusGroup\.entries[\s\S]*Filtrar por situação/, 'a lista de vendas deve mostrar o seletor de situacao');
 assert.match(activity, /currentSalesFilter: SaleStatusGroup = SaleStatusGroup\.TO_SHIP/, 'o filtro A enviar deve iniciar pre-selecionado');
-assert.match(activity, /currentSalesFilter = SaleStatusGroup\.TO_SHIP[\s\S]*showSalesList\(channel\)/, 'trocar o canal deve restaurar o filtro A enviar');
+assert.match(activity, /currentSalesFilter = defaultSalesFilter\(channel\)[\s\S]*showSalesList\(channel\)/, 'trocar o canal deve restaurar o filtro padrao da origem');
+assert.match(activity, /defaultSalesFilter\(channel: SalesChannel\)[\s\S]*channel == SalesChannel\.PDV\) SaleStatusGroup\.ALL else SaleStatusGroup\.TO_SHIP/, 'o PDV deve abrir em Todas e os demais canais em A enviar');
 assert.match(activity, /sales\.filter\(filter::accepts\)/, 'o seletor deve filtrar os registros carregados');
 assert.match(activity, /renderCachedSales[\s\S]*SalesCache\.load/, 'a tela deve abrir imediatamente as vendas salvas');
 assert.match(activity, /button\("Atualizar tudo"\)/, 'a reconciliacao completa deve continuar disponivel sob demanda');
