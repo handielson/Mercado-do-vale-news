@@ -60,10 +60,14 @@ assert.match(script, /\/api\/v2\/logistics\/get_tracking_number/,
   'o resumo precisa consultar o código de rastreio da Shopee');
 assert.match(script, /createShopeeSeparationSummaryPdf/,
   'os fluxos manual e automático precisam usar o resumo próprio 10x15');
+assert.match(script, /'get_stock_locations'[\s\S]*?stockLocation/,
+  'o resumo precisa consultar e associar a localização de estoque pelo SKU');
 assert.doesNotMatch(script, /NORMAL_PORT_RECEIPT_RETURN/,
   'o recibo portuário da Shopee não deve substituir o resumo de separação');
 assert.match(summary, /bcid:\s*'code128'/,
   'o rastreio precisa ser impresso como código de barras Code 128');
+assert.match(summary, /Localizacao:[\s\S]*?stockLocation/,
+  'cada item precisa imprimir sua localização de depósito');
 assert.match(packageJson, /"bwip-js":\s*"\^\d+/,
   'a dependência que gera o código de barras precisa estar versionada');
 
@@ -85,6 +89,10 @@ assert.match(vpsServer, /numeroPedidoLoja[\s\S]*?orderSn/,
   'a NF-e do Bling precisa ser localizada pelo nÃºmero exato do pedido Shopee');
 assert.match(vpsServer, /notifyShopeeFulfillmentErrorVps/,
   'erros fiscais precisam acionar o aviso operacional');
+assert.match(vpsServer, /case 'get_stock_locations'[\s\S]*?getShopeeStockLocationsVps/,
+  'a VPS precisa oferecer a consulta autenticada de localizações por SKU');
+assert.match(vpsServer, /product_stock_locations[\s\S]*?stock_deposits[\s\S]*?stock_locations/,
+  'a localização deve vir da distribuição real de estoque');
 assert.match(mobilePush, /sendOperationalAlert/,
   'o GestÃ£o MDV precisa receber alertas operacionais deduplicados');
 assert.equal(vpsServer, vpsServerMirror,

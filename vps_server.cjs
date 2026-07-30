@@ -7515,6 +7515,56 @@ async function uploadBlingNfeToShopeeVps(orderSn, creds) {
   };
 }
 
+async function getShopeeStockLocationsVps(inputSkus) {
+  const skus = Array.from(new Set(
+    (Array.isArray(inputSkus) ? inputSkus : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  )).slice(0, 100);
+  if (!skus.length) return [];
+
+  const placeholders = skus.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT
+       p.sku,
+       sd.name AS deposit_name,
+       sd.code AS deposit_code,
+       sl.name AS location_name,
+       sl.code AS location_code,
+       psl.quantity,
+       psl.reserved_quantity
+     FROM products p
+     LEFT JOIN product_stock_locations psl ON psl.product_id = p.id
+     LEFT JOIN stock_deposits sd ON sd.id = psl.deposit_id
+     LEFT JOIN stock_locations sl ON sl.id = psl.location_id
+     WHERE UPPER(TRIM(p.sku)) IN (${placeholders})
+     ORDER BY
+       UPPER(TRIM(p.sku)) ASC,
+       (psl.quantity > 0) DESC,
+       psl.quantity DESC,
+       sd.is_default DESC,
+       sl.is_default DESC,
+       sd.name ASC,
+       sl.name ASC`,
+    skus.map((sku) => sku.toUpperCase()),
+  );
+
+  const bySku = new Map(skus.map((sku) => [sku.toUpperCase(), {
+    sku,
+    locations: [],
+  }]));
+  for (const row of rows || []) {
+    const key = String(row?.sku || '').trim().toUpperCase();
+    const item = bySku.get(key);
+    if (!item) continue;
+    const deposit = String(row?.deposit_name || row?.deposit_code || '').trim();
+    const location = String(row?.location_name || row?.location_code || '').trim();
+    const label = [deposit, location].filter(Boolean).join(' / ');
+    if (label && !item.locations.includes(label)) item.locations.push(label);
+  }
+  return Array.from(bySku.values());
+}
+
 async function expandShopeeShippingLabelToA4Vps(pdfBuffer) {
   const sourcePdf = await PDFDocument.load(pdfBuffer);
   const outputPdf = await PDFDocument.create();
@@ -7874,6 +7924,19 @@ async function handleShopeeActionsVps(request, reply) {
             message: error.message,
           });
         }
+      }
+
+      case 'get_stock_locations': {
+        if (requireShopeeActionsPostVps(request, reply)) return;
+        if (!(await isShopeeFulfillmentAuthorizedVps(request))) {
+          return reply.code(401).send({ error: 'Unauthorized' });
+        }
+        const skus = Array.isArray(payload.skus) ? payload.skus : [];
+        if (!skus.length) return reply.code(400).send({ error: 'skus não fornecidos' });
+        return reply.code(200).send({
+          success: true,
+          items: await getShopeeStockLocationsVps(skus),
+        });
       }
 
       case 'ship_order': {

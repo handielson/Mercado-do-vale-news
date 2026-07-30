@@ -20,6 +20,7 @@ const {
             modelName: `Cor ${index + 1}`,
             sku: `SKU-${index + 1}`,
             quantity: index + 1,
+            stockLocation: `Deposito / Prateleira ${index + 1}`,
         })),
     });
     assert.ok(Buffer.isBuffer(buffer) && buffer.length > 1_000, 'deve gerar um PDF com código de barras');

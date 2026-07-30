@@ -187,6 +187,25 @@ async function getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn) {
         sku: item?.model_sku || item?.item_sku || item?.seller_sku || '',
         quantity: item?.model_quantity_purchased || item?.quantity || 1,
     }));
+    const itemSkus = Array.from(new Set(items.map((item) => String(item.sku || '').trim()).filter(Boolean)));
+    const stockLocationsBySku = new Map();
+    if (itemSkus.length) {
+        try {
+            const locationResult = await callVpsShopeeAction('get_stock_locations', { skus: itemSkus });
+            if (isVpsActionSuccess(locationResult)) {
+                for (const entry of locationResult.data?.items || []) {
+                    stockLocationsBySku.set(
+                        String(entry?.sku || '').trim().toUpperCase(),
+                        Array.isArray(entry?.locations) ? entry.locations.filter(Boolean) : [],
+                    );
+                }
+            } else {
+                console.warn(`[SUMMARY] Localização indisponível para ${orderSn}: ${locationResult.data?.message || locationResult.data?.error || `HTTP ${locationResult.status}`}`);
+            }
+        } catch (locationError) {
+            console.warn(`[SUMMARY] Falha ao consultar localização para ${orderSn}: ${locationError.message}`);
+        }
+    }
 
     return {
         orderSn,
@@ -195,7 +214,13 @@ async function getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn) {
         shippingCarrier: order?.shipping_carrier || order?.checkout_shipping_carrier || 'Shopee',
         createdAt: order?.create_time,
         note: order?.note || '',
-        items,
+        items: items.map((item) => {
+            const locations = stockLocationsBySku.get(String(item.sku || '').trim().toUpperCase()) || [];
+            return {
+                ...item,
+                stockLocation: locations.length ? locations.join(' | ') : 'Não cadastrada',
+            };
+        }),
     };
 }
 

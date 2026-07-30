@@ -60,7 +60,7 @@ async function createShopeeSeparationSummaryPdf(order) {
         ? order.items
         : [{ name: 'Item não informado', sku: '', quantity: 1 }];
     const pages = [];
-    for (let index = 0; index < items.length; index += 4) pages.push(items.slice(index, index + 4));
+    for (let index = 0; index < items.length; index += 3) pages.push(items.slice(index, index + 3));
 
     const trackingNumber = printableText(order?.trackingNumber);
     let barcodePng = null;
@@ -126,6 +126,15 @@ async function createShopeeSeparationSummaryPdf(order) {
             const sku = printableText(item?.sku);
             const model = printableText(item?.modelName);
             page.drawText(`SKU: ${sku || '-'}${model ? `  |  Variacao: ${model}` : ''}`, { x: 26, y, size: 6.5, font: regular, color: gray });
+            y -= 10;
+            const [locationLine] = wrapText(
+                `Localizacao: ${item?.stockLocation || 'Nao cadastrada'}`,
+                bold,
+                6.5,
+                244,
+                1,
+            );
+            page.drawText(locationLine, { x: 26, y, size: 6.5, font: bold, color: black });
             y -= 15;
         }
 
