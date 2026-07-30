@@ -95,6 +95,10 @@ Regras aplicadas:
 - Consultar os atributos atuais da categoria antes da publicacao e enviar os valores obrigatorios com os IDs retornados pelo TikTok.
 - Aceitar tanto `is_required` quanto a grafia historica `is_requried` devolvida pelo `Get Attributes`.
 - Para a categoria `985480` de suprimentos de impressao 3D, declarar automaticamente `Nao` no atributo ANATEL `102427`; o ID do valor nunca e fixado e sempre vem do catalogo atual da loja.
+- Para as demais categorias, exibir cada atributo obrigatorio no preparo do anuncio: usar uma selecao quando o `Get Attributes` retornar valores catalogados e permitir digitacao somente quando nao houver opcoes.
+- No atributo ANATEL `102427`, apresentar a opcao oficial `Nao` ao vendedor como `Nao possui codigo Anatel`, preservando no payload o ID e o nome oficiais retornados pelo TikTok.
+- Revalidar no servidor cada opcao informada contra o catalogo atual da categoria e interromper a publicacao antes do TikTok se algum atributo obrigatorio continuar vazio.
+- Quando peso ou medidas nao estiverem gravados diretamente no SKU local, herdar os valores `weight_kg` e `dimensions.*` do modelo vinculado antes de validar e montar o pacote.
 - Retornar erros de negocio do TikTok como validacao HTTP 422 com `code` e `request_id`, evitando que o proxy transforme a resposta em uma pagina HTML 502.
 - O atalho de rascunhos abre `https://seller-br.tiktok.com/product`; o anuncio publico so e liberado no estado `ACTIVATE`.
 

@@ -16,8 +16,8 @@ function variationBaseName(value) {
 }
 
 /**
- * Consolida tanto os grupos persistidos quanto familias legadas que possuem
- * um item-base e variacoes terminadas em "Cor:...".
+ * Consolida grupos persistidos, familias legadas com item-base e variacoes
+ * que compartilham apenas o pai do Bling.
  */
 export function buildTikTokBulkVariationGroups(products) {
   const byId = new Map(products.map((product) => [String(product.id), product]));
@@ -62,6 +62,32 @@ export function buildTikTokBulkVariationGroups(products) {
     if (variations.length === 0) continue;
 
     for (const variation of variations) linkChild(parent.id, variation);
+  }
+
+  const productsByBlingParent = new Map();
+  for (const product of products) {
+    const blingParentId = String(product.bling_parent_id || '').trim();
+    if (!blingParentId || blingParentId === '0') continue;
+    const current = productsByBlingParent.get(blingParentId) || [];
+    current.push(product);
+    productsByBlingParent.set(blingParentId, current);
+  }
+
+  for (const family of productsByBlingParent.values()) {
+    if (family.length < 2) continue;
+
+    const alreadyGrouped = family.some((product) => {
+      const productId = String(product.id || '');
+      return parentIdByChild.has(productId) || childrenByParent.has(productId);
+    });
+    if (alreadyGrouped) continue;
+
+    const parent = family.find((product) => Number(product.stock_quantity || 0) > 0);
+    if (!parent) continue;
+
+    for (const variation of family) {
+      if (String(variation.id) !== String(parent.id)) linkChild(parent.id, variation);
+    }
   }
 
   return {

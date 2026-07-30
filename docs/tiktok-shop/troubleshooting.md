@@ -40,3 +40,25 @@
 - Causa: para arquivos MP4, a entrada temporaria e a saida normalizada eram ambas chamadas `produto-video.mp4`.
 - Correcao: a entrada preserva a extensao sob o nome `produto-video-original.*` e a saida usa `produto-video-ajustado.mp4`.
 - Protecao: o teste agora gera primeiro um MP4 real, confirma caminhos diferentes e somente depois executa o mesmo ajuste usado em producao.
+
+## Atributo obrigatorio ausente na publicacao
+
+- Data: 29 de julho de 2026
+- Area: produtos
+- Sintoma: a publicacao do rascunho retorna HTTP 422 e codigo TikTok `12052104`.
+- Evidencia: o TikTok informou a ausencia do atributo `102427`, `Is Anatel Homologation Code Required`.
+- Documentacao oficial: `Get Attributes` e `Edit Product`; todos os atributos marcados como `is_required` devem ser enviados ao listar o produto.
+- Causa: o painel apenas mostrava os nomes dos atributos obrigatorios. O publicador tinha um preenchimento automatico de ANATEL restrito a uma categoria passiva de impressao 3D.
+- Correcao: o painel passou a oferecer selecao catalogada ou digitacao para os campos obrigatorios. O servidor consulta novamente os atributos, valida IDs e bloqueia localmente quando houver campo vazio.
+- Protecao: `tmp-tests/tiktok-shop-required-attributes.test.mjs`.
+- Risco restante: atributos condicionais adicionais podem aparecer depois de uma escolha; nesse caso, o TikTok pode exigir uma nova consulta e preenchimento na tentativa seguinte.
+
+## Peso e medidas do modelo ignorados no preparo
+
+- Data: 29 de julho de 2026
+- Area: produtos / logistica
+- Sintoma: o preparo do `INV15M` informava peso e medidas ausentes, embora o cadastro exibisse esses dados.
+- Evidencia: o SKU tinha `weight_kg = null` e `dimensions = {}`, enquanto o modelo vinculado armazenava `0,4 kg` e `19 x 6 x 12 cm`.
+- Causa: a tela e o publicador liam apenas os campos diretos do produto.
+- Correcao: ambos agora preservam dados diretos e completam somente os campos ausentes com `template_values` do modelo.
+- Protecao: `tmp-tests/tiktok-shop-required-attributes.test.mjs` valida o pacote herdado de `400 g`, `12 x 19 x 6 cm`.

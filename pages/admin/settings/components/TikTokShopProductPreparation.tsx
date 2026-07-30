@@ -16,12 +16,14 @@ import {
 import { toast } from 'sonner';
 import { productService } from '../../../../services/products';
 import { categoryService } from '../../../../services/categories';
+import { modelService } from '../../../../services/models';
 import {
   tiktokShopService,
   type TikTokShopCategoryReadiness,
   type TikTokShopCategorySummary,
   type TikTokShopDraftJobStep,
   type TikTokShopProductLink,
+  type TikTokShopRequiredAttributeInput,
   type TikTokShopSafeStatus,
   type TikTokShopWarehouseSummary,
 } from '../../../../services/tiktokShopService';
@@ -62,6 +64,65 @@ function attributeLabel(attribute: Record<string, any>): string {
   return String(attribute?.name || attribute?.id || 'Atributo obrigatorio');
 }
 
+function attributeOptions(attribute: Record<string, any>): Array<{ id: string; name: string }> {
+  return (Array.isArray(attribute?.values) ? attribute.values : [])
+    .map((value: Record<string, any>) => ({
+      id: String(value?.id || '').trim(),
+      name: String(value?.name || '').trim(),
+    }))
+    .filter((value: { id: string; name: string }) => value.id && value.name);
+}
+
+function attributeOptionLabel(
+  attribute: Record<string, any>,
+  option: { id: string; name: string },
+): string {
+  const normalizedName = normalizeCategoryName(option.name);
+  if (
+    String(attribute?.id || '').trim() === '102427' &&
+    ['nao', 'no'].includes(normalizedName)
+  ) {
+    return 'Nao possui codigo Anatel';
+  }
+  return option.name;
+}
+
+function positiveNumber(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+async function hydrateTikTokProductLogistics(product: Product): Promise<Product> {
+  const currentDimensions = product.dimensions || {};
+  const hasCompleteLogistics = Boolean(
+    positiveNumber(product.shipping_weight) || positiveNumber(product.weight_kg),
+  ) && Boolean(
+    (positiveNumber(product.shipping_length) || positiveNumber(currentDimensions.depth_cm)) &&
+    (positiveNumber(product.shipping_width) || positiveNumber(currentDimensions.width_cm)) &&
+    (positiveNumber(product.shipping_height) || positiveNumber(currentDimensions.height_cm)),
+  );
+  if (hasCompleteLogistics || !product.model_id) return product;
+
+  try {
+    const model = await modelService.getById(product.model_id);
+    const values = model?.template_values || {};
+    return {
+      ...product,
+      weight_kg: positiveNumber(product.weight_kg) || positiveNumber(values.weight_kg) || undefined,
+      dimensions: {
+        depth_cm: positiveNumber(currentDimensions.depth_cm) ||
+          positiveNumber(values['dimensions.depth_cm']),
+        width_cm: positiveNumber(currentDimensions.width_cm) ||
+          positiveNumber(values['dimensions.width_cm']),
+        height_cm: positiveNumber(currentDimensions.height_cm) ||
+          positiveNumber(values['dimensions.height_cm']),
+      },
+    };
+  } catch {
+    return product;
+  }
+}
+
 function normalizeCategoryName(value: string): string {
   return value
     .normalize('NFD')
@@ -99,6 +160,7 @@ export default function TikTokShopProductPreparation({
   const [categories, setCategories] = useState<TikTokShopCategorySummary[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<TikTokShopCategorySummary | null>(null);
   const [readiness, setReadiness] = useState<TikTokShopCategoryReadiness | null>(null);
+  const [requiredAttributeValues, setRequiredAttributeValues] = useState<Record<string, string>>({});
   const [searchingProducts, setSearchingProducts] = useState(false);
   const [searchingCategories, setSearchingCategories] = useState(false);
   const [loadingReadiness, setLoadingReadiness] = useState(false);
@@ -132,15 +194,17 @@ export default function TikTokShopProductPreparation({
 
     setLoadingInitialProduct(true);
     productService.getById(initialProductId)
-      .then((product) => {
+      .then(async (product) => {
         if (cancelled) return;
         if (!product) {
           toast.error('O produto selecionado nao foi encontrado.');
           return;
         }
-        setProductQuery(product.sku || product.name);
-        setProducts([product]);
-        setSelectedProduct(product);
+        const hydratedProduct = await hydrateTikTokProductLogistics(product);
+        if (cancelled) return;
+        setProductQuery(hydratedProduct.sku || hydratedProduct.name);
+        setProducts([hydratedProduct]);
+        setSelectedProduct(hydratedProduct);
       })
       .catch((error) => {
         console.error('[TikTokShopProductPreparation] initial product error:', error);
@@ -367,6 +431,14 @@ export default function TikTokShopProductPreparation({
     }
   }
 
+  async function selectProduct(product: Product) {
+    const hydratedProduct = await hydrateTikTokProductLogistics(product);
+    setProducts((current) => current.map((item) => (
+      item.id === hydratedProduct.id ? hydratedProduct : item
+    )));
+    setSelectedProduct(hydratedProduct);
+  }
+
   async function searchCategories() {
     const query = categoryQuery.trim();
     if (query.length < 2) {
@@ -390,6 +462,7 @@ export default function TikTokShopProductPreparation({
   async function chooseCategory(category: TikTokShopCategorySummary, persistMapping = true) {
     setSelectedCategory(category);
     setReadiness(null);
+    setRequiredAttributeValues({});
     setLoadingReadiness(true);
     try {
       const result = await tiktokShopService.getCategoryReadiness(category.id);
@@ -515,7 +588,20 @@ export default function TikTokShopProductPreparation({
     setDraftError('');
     setDraftDebug('');
     try {
-      const result = await tiktokShopService.publishDraft(selectedProduct.id);
+      const requiredAttributes: TikTokShopRequiredAttributeInput[] = (readiness?.required_attributes || [])
+        .map((attribute) => {
+          const id = String(attribute?.id || '').trim();
+          const selectedValue = String(requiredAttributeValues[id] || '').trim();
+          if (!id || !selectedValue) return null;
+          const option = attributeOptions(attribute).find((value) => value.id === selectedValue);
+          return {
+            id,
+            name: attributeLabel(attribute),
+            ...(option ? { value_id: option.id, value_name: option.name } : { value_name: selectedValue }),
+          };
+        })
+        .filter((attribute): attribute is TikTokShopRequiredAttributeInput => Boolean(attribute));
+      const result = await tiktokShopService.publishDraft(selectedProduct.id, requiredAttributes);
       applyTikTokProductLink(result);
       toast.success(
         result.status === 'ACTIVATE'
@@ -630,7 +716,7 @@ export default function TikTokShopProductPreparation({
               <button
                 key={product.id}
                 type="button"
-                onClick={() => setSelectedProduct(product)}
+                onClick={() => void selectProduct(product)}
                 className={`w-full rounded-lg border p-3 text-left text-sm ${
                   selectedProduct?.id === product.id
                     ? 'border-teal-500 bg-teal-50'
@@ -729,13 +815,53 @@ export default function TikTokShopProductPreparation({
             </div>
             {readiness ? (
               readiness.required_attributes.length ? (
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-                  {readiness.required_attributes.map((attribute) => (
-                    <li key={String(attribute.id || attribute.name)}>
-                      {attributeLabel(attribute)}
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-3 space-y-3">
+                  <p className="text-xs text-slate-600">
+                    Preencha os campos abaixo antes de publicar. As opcoes sao carregadas diretamente do TikTok.
+                  </p>
+                  {readiness.required_attributes.map((attribute) => {
+                    const attributeId = String(attribute.id || '').trim();
+                    const options = attributeOptions(attribute);
+                    return (
+                      <label key={attributeId || String(attribute.name)} className="block">
+                        <span className="mb-1 block text-xs font-semibold text-slate-700">
+                          {attributeLabel(attribute)} <span className="text-rose-600">*</span>
+                        </span>
+                        {options.length > 0 ? (
+                          <select
+                            value={requiredAttributeValues[attributeId] || ''}
+                            onChange={(event) => setRequiredAttributeValues((current) => ({
+                              ...current,
+                              [attributeId]: event.target.value,
+                            }))}
+                            disabled={publishingDraft}
+                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
+                          >
+                            <option value="">Selecione uma opcao</option>
+                            {options.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {attributeOptionLabel(attribute, option)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={requiredAttributeValues[attributeId] || ''}
+                            onChange={(event) => setRequiredAttributeValues((current) => ({
+                              ...current,
+                              [attributeId]: event.target.value,
+                            }))}
+                            disabled={publishingDraft}
+                            maxLength={500}
+                            placeholder="Digite o valor exigido pelo TikTok"
+                            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
+                          />
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
               ) : (
                 <p className="mt-2 text-sm text-green-800">Nenhum atributo obrigatorio retornado para esta categoria.</p>
               )

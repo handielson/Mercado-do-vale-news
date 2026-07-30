@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.120-shopee-fiscal-print",
-  "date": "2026-07-29",
+  "version": "v1.2.121-tiktok-attributes-logistics",
+  "date": "2026-07-30",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260729-170413-shopee-fiscal-print",
+  "release_vps": "/var/www/mdv-site/releases/20260730-003122-tiktok-atributos-logistica",
   "branch": "main",
-  "summary": "Automatiza NF-e Shopee, preparar envio e impressao unica nas duas termicas."
+  "summary": "Corrige grupos de variacoes, atributos obrigatorios e logistica herdada no TikTok Shop."
 }

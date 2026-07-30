@@ -5232,12 +5232,28 @@ async function uploadTikTokDraftVideoVps(settings, videoUrl, onPrepared = () => 
 
 function buildTikTokDraftPackageVps(product) {
   const dimensions = parseTikTokDraftJsonVps(product?.dimensions, {});
+  const modelValues = parseTikTokDraftJsonVps(product?.model_template_values, {});
   const weightGrams = Number(product?.shipping_weight || 0) > 0
     ? Number(product.shipping_weight)
-    : Number(product?.weight_kg || 0) * 1000;
-  const length = Number(product?.shipping_length || dimensions?.depth_cm || 0);
-  const width = Number(product?.shipping_width || dimensions?.width_cm || 0);
-  const height = Number(product?.shipping_height || dimensions?.height_cm || 0);
+    : Number(product?.weight_kg || modelValues?.weight_kg || 0) * 1000;
+  const length = Number(
+    product?.shipping_length ||
+    dimensions?.depth_cm ||
+    modelValues?.['dimensions.depth_cm'] ||
+    0
+  );
+  const width = Number(
+    product?.shipping_width ||
+    dimensions?.width_cm ||
+    modelValues?.['dimensions.width_cm'] ||
+    0
+  );
+  const height = Number(
+    product?.shipping_height ||
+    dimensions?.height_cm ||
+    modelValues?.['dimensions.height_cm'] ||
+    0
+  );
   if (!(weightGrams > 0 && length > 0 && width > 0 && height > 0)) {
     throw new Error('Peso e medidas de envio sao obrigatorios para criar o rascunho.');
   }
@@ -5290,13 +5306,20 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
   try {
     const [[product]] = await pool.query(
       `SELECT id, company_id, name, sku, description, images, image_url,
-              video_url, parent_id, is_parent, specs, price_retail, stock_quantity, weight_kg, dimensions
+              video_url, parent_id, is_parent, specs, price_retail, stock_quantity, weight_kg, dimensions, model_id
        FROM products
        WHERE id = ?
        LIMIT 1`,
       [productId],
     );
     if (!product) return reply.code(404).send({ error: 'Produto local nao encontrado.' });
+    if (product.model_id) {
+      const [[model]] = await pool.query(
+        'SELECT template_values FROM models WHERE id = ? LIMIT 1',
+        [product.model_id],
+      );
+      product.model_template_values = model?.template_values || {};
+    }
     const [variations] = Number(product.is_parent) === 1 ? await pool.query(`SELECT id, sku, specs, price_retail, stock_quantity, images, image_url FROM products WHERE parent_id = ? AND (is_parent = 0 OR is_parent IS NULL) ORDER BY sku ASC`, [product.id]) : [[product]];
     if (variations.length === 0) return reply.code(400).send({ error: 'O grupo nao possui variacoes para enviar.' });
 
@@ -5680,6 +5703,89 @@ function normalizeTikTokShopAttributeNameVps(value) {
     .toLowerCase();
 }
 
+function mergeTikTokShopProvidedAttributesVps(payload, attributeDefinitions, providedAttributes) {
+  const definitions = Array.isArray(attributeDefinitions) ? attributeDefinitions : [];
+  const definitionById = new Map(
+    definitions.map((attribute) => [String(attribute?.id || '').trim(), attribute]),
+  );
+  const currentAttributes = Array.isArray(payload?.product_attributes)
+    ? payload.product_attributes
+    : [];
+  const mergedAttributes = [...currentAttributes];
+  const selections = Array.isArray(providedAttributes) ? providedAttributes.slice(0, 100) : [];
+
+  for (const selection of selections) {
+    const attributeId = String(selection?.id || '').trim();
+    const definition = definitionById.get(attributeId);
+    if (!attributeId || !definition) {
+      const error = new Error(`Atributo TikTok invalido ou indisponivel para a categoria: ${attributeId || 'sem ID'}.`);
+      error.statusCode = 422;
+      throw error;
+    }
+    const availableValues = Array.isArray(definition.values) ? definition.values : [];
+    const selectedValueId = String(selection?.value_id || '').trim();
+    const selectedValueName = String(selection?.value_name || '').trim();
+    let value;
+    if (availableValues.length > 0) {
+      const catalogValue = availableValues.find((candidate) => (
+        String(candidate?.id || '').trim() === selectedValueId
+      ));
+      if (!catalogValue?.id) {
+        const error = new Error(`Selecione uma opcao valida para o atributo obrigatorio "${definition.name || attributeId}".`);
+        error.statusCode = 422;
+        throw error;
+      }
+      value = {
+        id: String(catalogValue.id),
+        name: String(catalogValue.name || selectedValueName || '').trim(),
+      };
+    } else {
+      if (!selectedValueName || selectedValueName.length > 500) {
+        const error = new Error(`Digite um valor valido para o atributo obrigatorio "${definition.name || attributeId}".`);
+        error.statusCode = 422;
+        throw error;
+      }
+      value = { name: selectedValueName };
+    }
+    const nextAttribute = {
+      id: attributeId,
+      name: String(definition.name || selection?.name || attributeId),
+      values: [value],
+    };
+    const existingIndex = mergedAttributes.findIndex((attribute) => (
+      String(attribute?.id || '').trim() === attributeId
+    ));
+    if (existingIndex >= 0) mergedAttributes[existingIndex] = nextAttribute;
+    else mergedAttributes.push(nextAttribute);
+  }
+  return { ...payload, product_attributes: mergedAttributes };
+}
+
+function assertTikTokShopRequiredAttributesVps(payload, attributeDefinitions) {
+  const currentAttributes = Array.isArray(payload?.product_attributes)
+    ? payload.product_attributes
+    : [];
+  const filledIds = new Set(
+    currentAttributes
+      .filter((attribute) => Array.isArray(attribute?.values) && attribute.values.some((value) => (
+        String(value?.id || '').trim() || String(value?.name || '').trim()
+      )))
+      .map((attribute) => String(attribute?.id || '').trim()),
+  );
+  const missing = (Array.isArray(attributeDefinitions) ? attributeDefinitions : [])
+    .filter((attribute) => attribute?.is_required === true || attribute?.is_requried === true)
+    .filter((attribute) => !filledIds.has(String(attribute?.id || '').trim()));
+  if (missing.length > 0) {
+    const labels = missing.slice(0, 10).map((attribute) => (
+      `${attribute?.name || 'Atributo obrigatorio'} (${attribute?.id || 'sem ID'})`
+    ));
+    const error = new Error(`Preencha os atributos obrigatorios do TikTok antes de publicar: ${labels.join(', ')}.`);
+    error.statusCode = 422;
+    throw error;
+  }
+  return payload;
+}
+
 function mergeTikTokShopAutomaticAttributesVps(payload, attributeDefinitions) {
   const currentAttributes = Array.isArray(payload?.product_attributes)
     ? payload.product_attributes
@@ -5716,19 +5822,26 @@ function mergeTikTokShopAutomaticAttributesVps(payload, attributeDefinitions) {
   };
 }
 
-async function applyTikTokShopAutomaticAttributesVps(settings, payload) {
-  if (String(payload?.category_id || '').trim() !== '985480') return payload;
+async function applyTikTokShopAutomaticAttributesVps(settings, payload, providedAttributes = []) {
+  const categoryId = String(payload?.category_id || '').trim();
   const attributesResult = await callTikTokShopOpenApiVps(settings, {
-    pathname: `/product/202309/categories/${encodeURIComponent(payload.category_id)}/attributes`,
+    pathname: `/product/202309/categories/${encodeURIComponent(categoryId)}/attributes`,
     query: {
       category_version: String(payload.category_version || 'v1'),
       locale: 'pt-BR',
     },
   });
-  return mergeTikTokShopAutomaticAttributesVps(
+  const attributeDefinitions = attributesResult.payload?.data?.attributes;
+  const withProvidedAttributes = mergeTikTokShopProvidedAttributesVps(
     payload,
-    attributesResult.payload?.data?.attributes,
+    attributeDefinitions,
+    providedAttributes,
   );
+  const withAutomaticAttributes = mergeTikTokShopAutomaticAttributesVps(
+    withProvidedAttributes,
+    attributeDefinitions,
+  );
+  return assertTikTokShopRequiredAttributesVps(withAutomaticAttributes, attributeDefinitions);
 }
 
 function formatTikTokShopBusinessErrorsVps(errors) {
@@ -5837,7 +5950,11 @@ async function handleTikTokShopPublishDraftVps(request, reply) {
     const settings = await loadTikTokShopOAuthSettingsVps();
     const { product: remoteDraft } = await loadTikTokShopRemoteProductVps(settings, remoteProductId, currentStatus === 'DRAFT');
     const draftPayload = buildTikTokShopListingPayloadVps(remoteDraft, link.tiktok_category_id);
-    const payload = await applyTikTokShopAutomaticAttributesVps(settings, draftPayload);
+    const payload = await applyTikTokShopAutomaticAttributesVps(
+      settings,
+      draftPayload,
+      request.body?.required_attributes,
+    );
     const result = await callTikTokShopOpenApiVps(settings, {
       method: 'PUT',
       pathname: `/product/202509/products/${encodeURIComponent(remoteProductId)}`,

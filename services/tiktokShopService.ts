@@ -141,6 +141,13 @@ export interface TikTokShopDraftInput {
   warehouse_id: string;
 }
 
+export interface TikTokShopRequiredAttributeInput {
+  id: string;
+  name?: string;
+  value_id?: string;
+  value_name: string;
+}
+
 export const tiktokShopService = {
   getStatus(): Promise<TikTokShopSafeStatus> {
     return vpsClient.get<TikTokShopSafeStatus>('/tiktok-shop/settings');
@@ -227,10 +234,13 @@ export const tiktokShopService = {
     );
   },
 
-  publishDraft(productId: string): Promise<TikTokShopPublishResponse> {
+  publishDraft(
+    productId: string,
+    requiredAttributes: TikTokShopRequiredAttributeInput[] = [],
+  ): Promise<TikTokShopPublishResponse> {
     return vpsClient.post(
       `/tiktok-shop/products/${encodeURIComponent(productId)}/publish`,
-      {},
+      { required_attributes: requiredAttributes },
     );
   },
 
