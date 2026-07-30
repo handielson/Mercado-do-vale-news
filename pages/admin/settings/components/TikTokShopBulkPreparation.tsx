@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, Search, Send, Tags } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Copy, Loader2, Search, Send, Tags } from 'lucide-react';
 import { toast } from 'sonner';
 import { categoryService } from '../../../../services/categories';
 import { productService } from '../../../../services/products';
@@ -11,6 +11,7 @@ import {
 } from '../../../../services/tiktokShopService';
 import { vpsApiService } from '../../../../services/vpsApiService';
 import type { Product } from '../../../../types/product';
+import { buildTikTokBulkDebug } from '../../../../utils/tiktokBulkDebug';
 import {
   buildTikTokBulkVariationGroups,
   chooseTikTokBulkGroupCategoryMapping,
@@ -18,6 +19,12 @@ import {
 } from '../../../../utils/tiktokBulkVariationGroups';
 
 type Action = 'Criar rascunhos' | 'Publicar rascunhos' | 'Reenviar rascunhos' | 'Atualizar anuncios';
+type BulkDebugEntry = {
+  product_id: string;
+  product_name: string;
+  message: string;
+  debug: string;
+};
 
 function titleNeedsCompatibilityWording(name?: string | null) {
   return /\bpara\b/i.test(String(name || ''));
@@ -46,7 +53,7 @@ function diagnostic(product: Product, link?: TikTokShopProductLink, correction?:
 
 function progressStyle(status: string) {
   if (status === 'Rascunho criado - enviado sem video') return { card: 'border-amber-200 bg-amber-50', name: 'text-amber-950', status: 'text-amber-700', icon: AlertCircle };
-  if (status === 'Rascunho criado') return { card: 'border-emerald-200 bg-emerald-50', name: 'text-emerald-900', status: 'text-emerald-700', icon: CheckCircle2 };
+  if (status === 'Rascunho criado' || status.endsWith(': concluido')) return { card: 'border-emerald-200 bg-emerald-50', name: 'text-emerald-900', status: 'text-emerald-700', icon: CheckCircle2 };
   if (status.startsWith('Falha')) return { card: 'border-rose-200 bg-rose-50', name: 'text-rose-900', status: 'text-rose-700', icon: AlertCircle };
   return { card: 'border-slate-200 bg-white', name: 'text-slate-950', status: 'text-slate-600', icon: Loader2 };
 }
@@ -64,6 +71,7 @@ export default function TikTokShopBulkPreparation() {
   const [draftProgress, setDraftProgress] = useState<Record<string, string>>({});
   const [completedDraftIds, setCompletedDraftIds] = useState<string[]>([]);
   const [corrections, setCorrections] = useState<Record<string, string>>({});
+  const [bulkDebugEntries, setBulkDebugEntries] = useState<Record<string, BulkDebugEntry>>({});
   const [categoryPickerProductId, setCategoryPickerProductId] = useState('');
   const [categoryQuery, setCategoryQuery] = useState('');
   const [categoryResults, setCategoryResults] = useState<TikTokShopCategorySummary[]>([]);
@@ -201,6 +209,58 @@ export default function TikTokShopBulkPreparation() {
     }
   }
 
+  function registerBulkFailure(
+    action: Action,
+    product: Product,
+    error: any,
+    context: {
+      category?: { id?: string; name?: string } | null;
+      warehouse?: { id?: string; name?: string } | null;
+    } = {}
+  ) {
+    const message = error?.message || 'Erro ao enviar o anuncio.';
+    const debug = buildTikTokBulkDebug({
+      action,
+      product,
+      link: links[product.id],
+      error,
+      category: context.category,
+      warehouse: context.warehouse,
+    });
+    setCorrections((current) => ({ ...current, [product.id]: message }));
+    setBulkDebugEntries((current) => ({
+      ...current,
+      [product.id]: {
+        product_id: product.id,
+        product_name: product.name,
+        message,
+        debug,
+      },
+    }));
+    return message;
+  }
+
+  async function copyBulkDebug(entry: BulkDebugEntry) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(entry.debug);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = entry.debug;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+      toast.success('Debug copiado para a area de transferencia.');
+    } catch (error) {
+      console.error('[TikTokShopBulkPreparation] copy debug error:', error);
+      toast.error('Nao foi possivel copiar o debug.');
+    }
+  }
+
   async function run(action: Action) {
     const chosen = products.filter((product) =>
       selected.includes(product.id) &&
@@ -213,6 +273,7 @@ export default function TikTokShopBulkPreparation() {
     if (action === 'Criar rascunhos') {
       setRunning(true);
       setCompletedDraftIds([]);
+      setBulkDebugEntries({});
       setDraftProgress(Object.fromEntries(chosen.map((product) => [product.id, 'Na fila'])));
       window.requestAnimationFrame(() => progressRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 
@@ -222,6 +283,7 @@ export default function TikTokShopBulkPreparation() {
         if (!warehouse) throw new Error('Nenhum armazem TikTok disponivel para o lote.');
 
         const results = await Promise.allSettled(chosen.map(async (product) => {
+          let debugCategory: { id?: string; name?: string } | null = null;
           try {
             const groupChildren = variationGroups.childrenByParent.get(product.id) || [];
             const localCategoryIds = getTikTokBulkGroupCategoryIds(product, groupChildren);
@@ -230,6 +292,10 @@ export default function TikTokShopBulkPreparation() {
             );
             const resolvedCategory = chooseTikTokBulkGroupCategoryMapping(mappingResults);
             if (!resolvedCategory.mapping) throw new Error(resolvedCategory.error || 'Categoria nao mapeada');
+            debugCategory = {
+              id: resolvedCategory.mapping.tiktok_category_id,
+              name: resolvedCategory.mapping.tiktok_category_name,
+            };
 
             if (groupChildren.length > 0) {
               const grouped = await vpsApiService.updateProductVariationGroup(
@@ -251,7 +317,13 @@ export default function TikTokShopBulkPreparation() {
               await new Promise((resolve) => window.setTimeout(resolve, 1000));
               job = await tiktokShopService.getDraftJob(job.job_id);
             }
-            if (job.status !== 'completed') throw new Error(job.error?.message || 'Tempo limite ao criar rascunho');
+            if (job.status !== 'completed') {
+              const jobFailure: any = new Error(job.error?.message || 'Tempo limite ao criar rascunho');
+              jobFailure.tiktokCode = job.error?.code;
+              jobFailure.requestId = job.error?.request_id;
+              jobFailure.jobId = job.job_id;
+              throw jobFailure;
+            }
 
             if (job.result) {
               setLinks((current) => ({
@@ -274,8 +346,10 @@ export default function TikTokShopBulkPreparation() {
             }));
             return product.id;
           } catch (error: any) {
-            const message = error?.message || 'Erro ao enviar o anuncio.';
-            setCorrections((current) => ({ ...current, [product.id]: message }));
+            const message = registerBulkFailure(action, product, error, {
+              category: debugCategory,
+              warehouse,
+            });
             setDraftProgress((current) => ({ ...current, [product.id]: `Falha: ${message}` }));
             throw error;
           }
@@ -303,8 +377,21 @@ export default function TikTokShopBulkPreparation() {
     if (!candidates.length) return toast.error('Nenhum item selecionado possui vinculo TikTok para esta acao.');
 
     setRunning(true);
+    setBulkDebugEntries({});
+    setDraftProgress(Object.fromEntries(candidates.map((product) => [product.id, `${action}: enviando`])));
+    window.requestAnimationFrame(() => progressRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     try {
-      const results = await Promise.allSettled(candidates.map((product) => tiktokShopService.publishDraft(product.id)));
+      const results = await Promise.allSettled(candidates.map(async (product) => {
+        try {
+          const result = await tiktokShopService.publishDraft(product.id);
+          setDraftProgress((current) => ({ ...current, [product.id]: `${action}: concluido` }));
+          return result;
+        } catch (error: any) {
+          const message = registerBulkFailure(action, product, error);
+          setDraftProgress((current) => ({ ...current, [product.id]: `Falha: ${message}` }));
+          throw error;
+        }
+      }));
       const failed = results.filter((result) => result.status === 'rejected').length;
       const publishedLinks = results
         .filter((result): result is PromiseFulfilledResult<TikTokShopProductLink> => result.status === 'fulfilled')
@@ -348,9 +435,10 @@ export default function TikTokShopBulkPreparation() {
               const status = draftProgress[product.id];
               const style = progressStyle(status);
               const Icon = style.icon;
+              const completed = status === 'Rascunho criado' || status.endsWith(': concluido');
               return (
                 <div key={product.id} className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 ${style.card}`}>
-                  <Icon className={`h-4 w-4 shrink-0 ${status === 'Rascunho criado' ? 'text-emerald-600' : status === 'Rascunho criado - enviado sem video' ? 'text-amber-600' : status.startsWith('Falha') ? 'text-rose-600' : 'animate-spin text-slate-500'}`} />
+                  <Icon className={`h-4 w-4 shrink-0 ${completed ? 'text-emerald-600' : status === 'Rascunho criado - enviado sem video' ? 'text-amber-600' : status.startsWith('Falha') ? 'text-rose-600' : 'animate-spin text-slate-500'}`} />
                   <div className="min-w-0">
                     <p className={`truncate text-sm font-semibold ${style.name}`}>{product.name}</p>
                     <p className={`text-xs font-medium ${style.status}`}>{status}</p>
@@ -364,6 +452,44 @@ export default function TikTokShopBulkPreparation() {
               Publicar rascunhos criados ({completedDraftIds.length})
             </button>
           )}
+        </div>
+      )}
+
+      {Object.keys(bulkDebugEntries).length > 0 && (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-red-600" />
+            <div>
+              <p className="font-semibold text-red-950">Debug do envio em massa ({Object.keys(bulkDebugEntries).length})</p>
+              <p className="text-xs text-red-700">Copie os dados completos de cada falha para diagnosticar o retorno do TikTok Shop.</p>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3">
+            {Object.values(bulkDebugEntries).map((entry) => (
+              <div key={entry.product_id} className="rounded-lg border border-red-200 bg-white p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-950">{entry.product_name}</p>
+                    <p className="mt-1 break-words text-sm text-red-700">{entry.message}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void copyBulkDebug(entry)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-300 bg-white px-2.5 py-1.5 text-xs font-bold text-red-800 hover:bg-red-100"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copiar debug
+                  </button>
+                </div>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs font-semibold text-slate-600">Ver detalhes tecnicos</summary>
+                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-slate-950 p-3 text-[11px] text-slate-100">
+                    {entry.debug}
+                  </pre>
+                </details>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

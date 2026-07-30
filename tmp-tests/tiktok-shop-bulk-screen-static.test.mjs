@@ -59,5 +59,10 @@ assert.match(bulk, /Escolher categoria TikTok/, 'bulk rows must expose the TikTo
 assert.match(bulk, /getCategories\(searchTerm\)/, 'the bulk category picker must search the live TikTok catalog');
 assert.match(bulk, /localCategoryIds\.map\(\(localCategoryId\) => tiktokShopService\.saveCategoryMapping/, 'a parent category selection must be persisted for every local category represented by the group');
 assert.match(bulk, /esta escolha vale para todo o grupo de variacoes/, 'the parent picker must explain the category scope');
+assert.match(bulk, /Debug do envio em massa/, 'bulk failures must render a dedicated debug panel');
+assert.match(bulk, /buildTikTokBulkDebug/, 'bulk failures must use the sanitized TikTok debug formatter');
+assert.match(bulk, /registerBulkFailure\(action, product, error/, 'every bulk action failure must be registered per product');
+assert.match(bulk, /Copiar debug/, 'bulk failures must expose a copy-debug action');
+assert.match(bulk, /Ver detalhes tecnicos/, 'bulk failures must allow technical details to be inspected before copying');
 
 console.log('TikTok Shop bulk screen static checks passed');
