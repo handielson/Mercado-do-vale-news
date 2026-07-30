@@ -15,6 +15,36 @@ function variationBaseName(value) {
   return normalizeGroupText(String(value || '').replace(/\s*(?:[-|,]\s*)?cor\s*:\s*.+$/i, ''));
 }
 
+export function getTikTokBulkGroupCategoryIds(parent, children = []) {
+  return [...new Set(
+    [parent, ...children]
+      .map((product) => String(product?.category_id || '').trim())
+      .filter(Boolean)
+  )];
+}
+
+export function chooseTikTokBulkGroupCategoryMapping(mappings = []) {
+  const found = mappings
+    .map((item) => item?.mapping || item)
+    .filter((mapping) => mapping?.tiktok_category_id);
+  const categoryIds = new Set(found.map((mapping) => String(mapping.tiktok_category_id)));
+
+  if (categoryIds.size === 0) {
+    return {
+      mapping: null,
+      error: 'Categoria nao mapeada. Mapeie a categoria TikTok em um dos produtos do grupo.',
+    };
+  }
+  if (categoryIds.size > 1) {
+    return {
+      mapping: null,
+      error: 'O grupo possui categorias TikTok conflitantes. Padronize o mapeamento antes do envio.',
+    };
+  }
+
+  return { mapping: found[0], error: null };
+}
+
 /**
  * Consolida grupos persistidos, familias legadas com item-base e variacoes
  * que compartilham apenas o pai do Bling.

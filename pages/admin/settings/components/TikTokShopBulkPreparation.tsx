@@ -1,15 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, Send } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, Search, Send, Tags } from 'lucide-react';
 import { toast } from 'sonner';
+import { categoryService } from '../../../../services/categories';
 import { productService } from '../../../../services/products';
 import {
   notifyTikTokProductLinksUpdated,
   tiktokShopService,
+  type TikTokShopCategorySummary,
   type TikTokShopProductLink,
 } from '../../../../services/tiktokShopService';
 import { vpsApiService } from '../../../../services/vpsApiService';
 import type { Product } from '../../../../types/product';
-import { buildTikTokBulkVariationGroups } from '../../../../utils/tiktokBulkVariationGroups';
+import {
+  buildTikTokBulkVariationGroups,
+  chooseTikTokBulkGroupCategoryMapping,
+  getTikTokBulkGroupCategoryIds,
+} from '../../../../utils/tiktokBulkVariationGroups';
 
 type Action = 'Criar rascunhos' | 'Publicar rascunhos' | 'Reenviar rascunhos' | 'Atualizar anuncios';
 
@@ -58,6 +64,11 @@ export default function TikTokShopBulkPreparation() {
   const [draftProgress, setDraftProgress] = useState<Record<string, string>>({});
   const [completedDraftIds, setCompletedDraftIds] = useState<string[]>([]);
   const [corrections, setCorrections] = useState<Record<string, string>>({});
+  const [categoryPickerProductId, setCategoryPickerProductId] = useState('');
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const [categoryResults, setCategoryResults] = useState<TikTokShopCategorySummary[]>([]);
+  const [searchingCategories, setSearchingCategories] = useState(false);
+  const [savingCategory, setSavingCategory] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,6 +95,10 @@ export default function TikTokShopBulkPreparation() {
 
   const brands = useMemo(() => [...new Set(products.map((product) => product.brand).filter(Boolean))] as string[], [products]);
   const variationGroups = useMemo(() => buildTikTokBulkVariationGroups(products), [products]);
+  const categoryPickerProduct = useMemo(
+    () => products.find((product) => product.id === categoryPickerProductId) || null,
+    [categoryPickerProductId, products]
+  );
   const rows = useMemo(() => {
     const matchesFilters = (product: Product) => {
     const groupChildren = variationGroups.childrenByParent.get(product.id) || [];
@@ -108,6 +123,84 @@ export default function TikTokShopBulkPreparation() {
     });
   }, [brand, corrections, links, products, query, state, stock, variationGroups]);
 
+  async function searchBulkCategories(queryOverride?: string) {
+    const searchTerm = String(queryOverride ?? categoryQuery).trim();
+    if (searchTerm.length < 2) {
+      toast.info('Digite ao menos 2 caracteres para buscar a categoria TikTok.');
+      return;
+    }
+
+    setSearchingCategories(true);
+    try {
+      const result = await tiktokShopService.getCategories(searchTerm);
+      const availableLeaves = (Array.isArray(result?.categories) ? result.categories : [])
+        .filter((category) => category.is_leaf)
+        .slice(0, 40);
+      setCategoryResults(availableLeaves);
+      if (availableLeaves.length === 0) toast.info('Nenhuma categoria TikTok encontrada.');
+    } catch (error) {
+      console.error('[TikTokShopBulkPreparation] category search error:', error);
+      toast.error('Nao foi possivel consultar as categorias do TikTok Shop.');
+    } finally {
+      setSearchingCategories(false);
+    }
+  }
+
+  async function openCategoryPicker(product: Product) {
+    setCategoryPickerProductId(product.id);
+    setCategoryResults([]);
+
+    let suggestedQuery = '';
+    const localCategoryId = String(product.category_id || '').trim();
+    if (localCategoryId) {
+      try {
+        const localCategory = await categoryService.getById(localCategoryId);
+        suggestedQuery = String(localCategory?.name || '').trim();
+      } catch (error) {
+        console.warn('[TikTokShopBulkPreparation] local category lookup error:', error);
+      }
+    }
+    if (!suggestedQuery) suggestedQuery = String(product.name || '').split(/\s+/).slice(0, 4).join(' ');
+    setCategoryQuery(suggestedQuery);
+    if (suggestedQuery.length >= 2) await searchBulkCategories(suggestedQuery);
+  }
+
+  async function saveBulkCategory(category: TikTokShopCategorySummary) {
+    if (!categoryPickerProduct) return;
+    const groupChildren = variationGroups.childrenByParent.get(categoryPickerProduct.id) || [];
+    const localCategoryIds = getTikTokBulkGroupCategoryIds(categoryPickerProduct, groupChildren);
+    if (localCategoryIds.length === 0) {
+      toast.error('O produto e suas variacoes nao possuem categoria local para salvar o mapeamento.');
+      return;
+    }
+
+    setSavingCategory(true);
+    try {
+      await Promise.all(localCategoryIds.map((localCategoryId) => tiktokShopService.saveCategoryMapping({
+        local_category_id: localCategoryId,
+        tiktok_category_id: category.id,
+        tiktok_category_name: category.name,
+      })));
+      setCorrections((current) => {
+        const next = { ...current };
+        delete next[categoryPickerProduct.id];
+        return next;
+      });
+      toast.success(
+        groupChildren.length > 0
+          ? `Categoria "${category.name}" aplicada ao produto pai e suas variacoes.`
+          : `Categoria "${category.name}" aplicada ao anuncio.`
+      );
+      setCategoryPickerProductId('');
+      setCategoryResults([]);
+    } catch (error) {
+      console.error('[TikTokShopBulkPreparation] category mapping save error:', error);
+      toast.error('Nao foi possivel salvar a categoria TikTok para o anuncio.');
+    } finally {
+      setSavingCategory(false);
+    }
+  }
+
   async function run(action: Action) {
     const chosen = products.filter((product) =>
       selected.includes(product.id) &&
@@ -131,6 +224,13 @@ export default function TikTokShopBulkPreparation() {
         const results = await Promise.allSettled(chosen.map(async (product) => {
           try {
             const groupChildren = variationGroups.childrenByParent.get(product.id) || [];
+            const localCategoryIds = getTikTokBulkGroupCategoryIds(product, groupChildren);
+            const mappingResults = await Promise.all(
+              localCategoryIds.map((categoryId) => tiktokShopService.getCategoryMapping(categoryId))
+            );
+            const resolvedCategory = chooseTikTokBulkGroupCategoryMapping(mappingResults);
+            if (!resolvedCategory.mapping) throw new Error(resolvedCategory.error || 'Categoria nao mapeada');
+
             if (groupChildren.length > 0) {
               const grouped = await vpsApiService.updateProductVariationGroup(
                 product.id,
@@ -139,13 +239,10 @@ export default function TikTokShopBulkPreparation() {
               if (!grouped.ok) throw new Error('Nao foi possivel consolidar as variacoes no produto pai.');
             }
 
-            const mapping = await tiktokShopService.getCategoryMapping(String(product.category_id || ''));
-            if (!mapping.mapping) throw new Error('Categoria nao mapeada');
-
             let job = await tiktokShopService.startDraftJob({
               product_id: product.id,
-              category_id: mapping.mapping.tiktok_category_id,
-              category_name: mapping.mapping.tiktok_category_name,
+              category_id: resolvedCategory.mapping.tiktok_category_id,
+              category_name: resolvedCategory.mapping.tiktok_category_name,
               warehouse_id: warehouse.id,
             });
             setDraftProgress((current) => ({ ...current, [product.id]: 'Enviando rascunho' }));
@@ -284,6 +381,70 @@ export default function TikTokShopBulkPreparation() {
         </div>
       )}
 
+      {categoryPickerProduct && (
+        <div className="mt-4 rounded-xl border border-cyan-200 bg-cyan-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 font-semibold text-cyan-950">
+                <Tags className="h-4 w-4" />
+                Escolher categoria TikTok
+              </div>
+              <p className="mt-1 text-sm text-cyan-900">
+                {categoryPickerProduct.name}
+                {variationGroups.parentIds.has(categoryPickerProduct.id) && ' · esta escolha vale para todo o grupo de variacoes'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCategoryPickerProductId('')}
+              className="text-sm font-semibold text-cyan-800 hover:text-cyan-950"
+            >
+              Fechar
+            </button>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <input
+              value={categoryQuery}
+              onChange={(event) => setCategoryQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void searchBulkCategories();
+              }}
+              placeholder="Ex.: videogame, celular, carregador"
+              className="min-w-0 flex-1 rounded-lg border border-cyan-300 bg-white px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => void searchBulkCategories()}
+              disabled={searchingCategories}
+              className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {searchingCategories ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              Buscar
+            </button>
+          </div>
+          <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
+            {categoryResults.map((category) => {
+              const available = category.permission_statuses.length === 0 ||
+                category.permission_statuses.includes('AVAILABLE');
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => void saveBulkCategory(category)}
+                  disabled={!available || savingCategory}
+                  className="rounded-lg border border-cyan-200 bg-white p-3 text-left text-sm hover:border-teal-400 hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="font-semibold text-slate-900">{category.name}</span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    ID {category.id} · {available ? 'Disponivel' : category.permission_statuses.join(', ')}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 grid gap-3 sm:grid-cols-4">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome, SKU, categoria ou marca" className="rounded-lg border border-slate-300 px-3 py-2 text-sm sm:col-span-2" />
         <select value={brand} onChange={(event) => setBrand(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Todas as marcas</option>{brands.map((item) => <option key={item} value={item}>{item}</option>)}</select>
@@ -303,7 +464,7 @@ export default function TikTokShopBulkPreparation() {
               const cost = Number(product.price_cost || 0) / 100;
               const profit = sale - cost;
               const variationCount = (variationGroups.childrenByParent.get(product.id) || []).length;
-              return <tr key={product.id} className={isGroupParent ? 'bg-teal-50 ring-1 ring-inset ring-teal-200' : item.ok ? '' : 'bg-amber-50/50'}><td className="p-3"><input type="checkbox" disabled={!item.ok} checked={selected.includes(product.id)} onChange={() => setSelected((current) => current.includes(product.id) ? current.filter((id) => id !== product.id) : [...current, product.id])} /></td><td className="p-3"><p className="font-semibold text-slate-950">{product.name}</p><p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">{isGroupParent ? <><span className="rounded-full bg-teal-700 px-2 py-0.5 font-semibold text-white">Produto pai</span><span>{variationCount} variacao(oes) / SKU(s) serao enviados juntos</span></> : <>{product.sku || 'Sem SKU'} · 1 SKU</>}</p></td><td className="p-3"><p className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${item.ok ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.ok ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}{item.label}</p><p className="mt-1 text-xs text-slate-600">{item.detail}</p></td><td className="p-3">R$ {sale.toFixed(2)} / R$ {cost.toFixed(2)}</td><td className="p-3">R$ {profit.toFixed(2)} / {sale ? ((profit / sale) * 100).toFixed(1) : '0.0'}%</td></tr>;
+              return <tr key={product.id} className={isGroupParent ? 'bg-teal-50 ring-1 ring-inset ring-teal-200' : item.ok ? '' : 'bg-amber-50/50'}><td className="p-3"><input type="checkbox" disabled={!item.ok} checked={selected.includes(product.id)} onChange={() => setSelected((current) => current.includes(product.id) ? current.filter((id) => id !== product.id) : [...current, product.id])} /></td><td className="p-3"><p className="font-semibold text-slate-950">{product.name}</p><p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">{isGroupParent ? <><span className="rounded-full bg-teal-700 px-2 py-0.5 font-semibold text-white">Produto pai</span><span>{variationCount} variacao(oes) / {variationCount + 1} SKU(s) serao enviados juntos</span></> : <>{product.sku || 'Sem SKU'} · 1 SKU</>}</p></td><td className="p-3"><p className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${item.ok ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.ok ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}{item.label}</p><p className="mt-1 text-xs text-slate-600">{item.detail}</p><button type="button" onClick={() => void openCategoryPicker(product)} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900"><Tags className="h-3.5 w-3.5" />Escolher categoria TikTok</button></td><td className="p-3">R$ {sale.toFixed(2)} / R$ {cost.toFixed(2)}</td><td className="p-3">R$ {profit.toFixed(2)} / {sale ? ((profit / sale) * 100).toFixed(1) : '0.0'}%</td></tr>;
             })}
           </tbody>
         </table>

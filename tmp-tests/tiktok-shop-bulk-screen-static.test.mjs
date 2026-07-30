@@ -48,10 +48,16 @@ assert.match(vpsServer, /images, image_url FROM products[\s\S]*WHERE parent_id =
 assert.match(vpsServer, /sales_attributes/, 'TikTok variation SKUs must include sales attributes');
 assert.match(bulk, /Grupo de variacoes/, 'bulk screen must allow a parent product to create variation listings');
 assert.match(bulk, /Produto pai/, 'bulk screen must visually identify selectable variation parents');
-assert.match(bulk, /variacao\(oes\) \/ SKU\(s\) serao enviados juntos/, 'bulk screen must explain that the group sends together');
+assert.match(bulk, /variacao\(oes\) \/ \{variationCount \+ 1\} SKU\(s\) serao enviados juntos/, 'bulk screen must explain that the group sends together and show the total SKU count');
 assert.match(bulk, /buildTikTokBulkVariationGroups/, 'bulk screen must infer legacy parent groups by base name');
 assert.match(bulk, /variationGroups\.parentIdByChild/, 'bulk screen must consolidate variation rows under their parent');
 assert.match(bulk, /updateProductVariationGroup/, 'bulk screen must persist an inferred group before creating its TikTok draft');
 assert.match(bulk, /groupChildren\.some/, 'bulk screen must show a parent when one of its variations matches the active filters');
+assert.match(bulk, /getTikTokBulkGroupCategoryIds\(product, groupChildren\)/, 'bulk screen must inspect category mappings from the full variation group');
+assert.match(bulk, /chooseTikTokBulkGroupCategoryMapping\(mappingResults\)/, 'bulk screen must reuse one unambiguous TikTok category mapping across the group');
+assert.match(bulk, /Escolher categoria TikTok/, 'bulk rows must expose the TikTok category picker');
+assert.match(bulk, /getCategories\(searchTerm\)/, 'the bulk category picker must search the live TikTok catalog');
+assert.match(bulk, /localCategoryIds\.map\(\(localCategoryId\) => tiktokShopService\.saveCategoryMapping/, 'a parent category selection must be persisted for every local category represented by the group');
+assert.match(bulk, /esta escolha vale para todo o grupo de variacoes/, 'the parent picker must explain the category scope');
 
 console.log('TikTok Shop bulk screen static checks passed');

@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { buildTikTokBulkVariationGroups } from '../utils/tiktokBulkVariationGroups.js';
+import {
+  buildTikTokBulkVariationGroups,
+  chooseTikTokBulkGroupCategoryMapping,
+  getTikTokBulkGroupCategoryIds,
+} from '../utils/tiktokBulkVariationGroups.js';
 
 const parent = {
   id: 'parent',
@@ -91,5 +95,34 @@ assert.equal(
   0,
   'a Bling family without stock must not promote an unavailable variation to parent'
 );
+
+assert.deepEqual(
+  getTikTokBulkGroupCategoryIds(
+    { id: 'group-parent', category_id: 'local-parent' },
+    [
+      { id: 'group-child-a', category_id: 'local-child' },
+      { id: 'group-child-b', category_id: 'local-parent' },
+    ]
+  ),
+  ['local-parent', 'local-child'],
+  'category mapping lookup must inspect every distinct local category in the variation group'
+);
+
+const inheritedMapping = chooseTikTokBulkGroupCategoryMapping([
+  { mapping: null },
+  { mapping: { tiktok_category_id: 'remote-game', tiktok_category_name: 'Video Games' } },
+]);
+assert.equal(
+  inheritedMapping.mapping?.tiktok_category_id,
+  'remote-game',
+  'the parent must inherit the only TikTok category mapping available in its variation group'
+);
+
+const conflictingMapping = chooseTikTokBulkGroupCategoryMapping([
+  { mapping: { tiktok_category_id: 'remote-a' } },
+  { mapping: { tiktok_category_id: 'remote-b' } },
+]);
+assert.equal(conflictingMapping.mapping, null, 'conflicting TikTok category mappings must block the group');
+assert.match(conflictingMapping.error, /conflitantes/i, 'a category conflict must provide an actionable diagnostic');
 
 console.log('TikTok Shop bulk parent group checks passed');
