@@ -1,13 +1,13 @@
 const crypto = require('crypto');
 const fs = require('fs');
-const { cert, getApps, initializeApp } = require('firebase-admin/app');
-const { getMessaging } = require('firebase-admin/messaging');
 
 const CHANNELS = new Set(['online', 'pdv', 'shopee', 'tiktok']);
 const INVALID_FCM_TOKEN_CODES = new Set([
   'messaging/invalid-registration-token',
   'messaging/registration-token-not-registered',
 ]);
+const MAX_SALE_NOTIFICATION_AGE_MS = 30 * 60 * 1000;
+const MAX_SALE_NOTIFICATION_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 function boundedText(value, maxLength = 255) {
   return String(value || '').trim().slice(0, maxLength);
@@ -54,6 +54,16 @@ function normalizeSale(input) {
   };
 }
 
+function isSaleFreshForNotification(sale, nowMs = Date.now()) {
+  const occurredAtMs = sale?.occurred_at instanceof Date
+    ? sale.occurred_at.getTime()
+    : new Date(sale?.occurred_at || 0).getTime();
+  if (!Number.isFinite(occurredAtMs)) return false;
+  const ageMs = Number(nowMs) - occurredAtMs;
+  return ageMs >= -MAX_SALE_NOTIFICATION_FUTURE_SKEW_MS
+    && ageMs <= MAX_SALE_NOTIFICATION_AGE_MS;
+}
+
 function parseFirebaseServiceAccount() {
   const rawJson = String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '').trim();
   const rawBase64 = String(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || '').trim();
@@ -76,6 +86,8 @@ function parseFirebaseServiceAccount() {
 function getFirebaseMessaging() {
   const serviceAccount = parseFirebaseServiceAccount();
   if (!serviceAccount) return null;
+  const { cert, getApps, initializeApp } = require('firebase-admin/app');
+  const { getMessaging } = require('firebase-admin/messaging');
   const app = getApps()[0] || initializeApp({ credential: cert(serviceAccount) });
   return getMessaging(app);
 }
@@ -258,6 +270,7 @@ function createMobileSalesPushService({ pool, logger = console }) {
       },
       android: {
         priority: 'high',
+        ttl: MAX_SALE_NOTIFICATION_AGE_MS,
       },
     });
 
@@ -353,6 +366,7 @@ function createMobileSalesPushService({ pool, logger = console }) {
 
   async function recordSaleEvent(input, { notify = true } = {}) {
     const sale = normalizeSale(input);
+    const shouldNotify = notify && isSaleFreshForNotification(sale);
     await ensureTables();
     const eventKey = boundedText(
       input?.event_key || `${sale.channel}:${sale.external_id}:sale`,
@@ -378,7 +392,14 @@ function createMobileSalesPushService({ pool, logger = console }) {
       ],
     );
     const inserted = Number(result?.affectedRows || 0) > 0;
-    if (!inserted || !notify) return { inserted, sale, push: null };
+    if (!inserted || !shouldNotify) {
+      return {
+        inserted,
+        sale,
+        push: null,
+        notification_skipped: inserted && notify ? 'stale_sale' : null,
+      };
+    }
 
     let push = null;
     try {
@@ -440,6 +461,8 @@ function createMobileSalesPushService({ pool, logger = console }) {
 
 module.exports = {
   CHANNELS,
+  MAX_SALE_NOTIFICATION_AGE_MS,
   createMobileSalesPushService,
+  isSaleFreshForNotification,
   normalizeSale,
 };

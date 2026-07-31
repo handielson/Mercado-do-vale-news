@@ -3,7 +3,11 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { normalizeSale } = require('../services/mobileSalesPushService.cjs');
+const {
+  MAX_SALE_NOTIFICATION_AGE_MS,
+  isSaleFreshForNotification,
+  normalizeSale,
+} = require('../services/mobileSalesPushService.cjs');
 
 const normalized = normalizeSale({
   channel: 'PDV',
@@ -19,6 +23,25 @@ assert.equal(normalized.external_id, 'sale-1');
 assert.equal(normalized.total_cents, 1490);
 assert.equal(normalized.details.items[0].name, 'Produto');
 assert.throws(() => normalizeSale({ channel: 'outro', external_id: '1' }));
+const nowMs = Date.parse('2026-07-30T12:00:00.000Z');
+assert.equal(
+  isSaleFreshForNotification(
+    normalizeSale({ channel: 'shopee', external_id: 'fresh', occurred_at: new Date(nowMs - 60_000) }),
+    nowMs,
+  ),
+  true,
+);
+assert.equal(
+  isSaleFreshForNotification(
+    normalizeSale({
+      channel: 'shopee',
+      external_id: 'old',
+      occurred_at: new Date(nowMs - MAX_SALE_NOTIFICATION_AGE_MS - 1),
+    }),
+    nowMs,
+  ),
+  false,
+);
 
 const server = fs.readFileSync(new URL('../vps_server.js', import.meta.url), 'utf8');
 const mirror = fs.readFileSync(new URL('../vps_server.cjs', import.meta.url), 'utf8');
@@ -50,6 +73,8 @@ assert.doesNotMatch(
 );
 assert.match(service, /UNIQUE KEY uniq_mobile_sale_event/);
 assert.match(service, /UNIQUE KEY uniq_mobile_push_token/);
+assert.match(service, /ttl:\s*MAX_SALE_NOTIFICATION_AGE_MS/);
+assert.match(service, /notification_skipped:\s*inserted && notify \? 'stale_sale'/);
 assert.match(server, /event_type:\s*'ORDER_STATUS_CHANGE'/);
 assert.match(server, /pathname:\s*'\/event\/202309\/webhooks'/);
 assert.match(server, /COALESCE\(s\.finalization_status, 'success'\) = 'success'/);

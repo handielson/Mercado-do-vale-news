@@ -36,6 +36,13 @@ class SalesMessagingService : FirebaseMessagingService() {
                 .putExtra(SalesNotificationContract.EXTRA_SALES_CHANNEL, channel)
                 .putExtra(SalesNotificationContract.EXTRA_SALE_ID, saleId),
         )
+        if (!SalesNotificationFreshness.shouldAlert(
+                occurredAt = data["occurred_at"],
+                sentTimeMs = message.sentTime,
+            )
+        ) {
+            return
+        }
 
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

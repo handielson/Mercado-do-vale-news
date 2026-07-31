@@ -55,6 +55,10 @@ const pushService = fs.readFileSync(
   new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/push/SalesMessagingService.kt', import.meta.url),
   'utf8',
 );
+const notificationFreshness = fs.readFileSync(
+  new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/push/SalesNotificationFreshness.kt', import.meta.url),
+  'utf8',
+);
 const pushRegistration = fs.readFileSync(
   new URL('../android/admin-estoque/app/src/main/java/br/com/mercadodovale/adminestoque/push/PushRegistration.kt', import.meta.url),
   'utf8',
@@ -208,8 +212,8 @@ assert.match(activity, /text = "−"[\s\S]*updateCopies\(-1\)/, 'a quantidade de
 assert.match(activity, /text = "\+"[\s\S]*updateCopies\(1\)/, 'a quantidade deve ter botao para aumentar');
 assert.match(activity, /setSelectAllOnFocus\(true\)/, 'a quantidade deve selecionar todo o valor ao receber foco');
 assert.match(activity, /MotionEvent\.ACTION_UP[\s\S]*selectAll\(\)/, 'um toque na quantidade deve permitir digitar por cima');
-assert.match(buildGradle, /versionCode = 47/, 'o APK atualizado deve ter novo versionCode');
-assert.match(buildGradle, /versionName = "0\.11\.1"/, 'o APK atualizado deve mostrar a nova versao');
+assert.match(buildGradle, /versionCode = 54/, 'o APK atualizado deve ter novo versionCode');
+assert.match(buildGradle, /versionName = "0\.12\.6"/, 'o APK atualizado deve mostrar a nova versao');
 assert.match(buildGradle, /firebase-messaging/, 'o APK deve receber notificacoes pelo Firebase Cloud Messaging');
 assert.match(activity, /salesChannelRow\(SalesChannel\.ONLINE, SalesChannel\.PDV\)/, 'Online e PDV devem ocupar a primeira linha');
 assert.match(activity, /salesChannelRow\(SalesChannel\.SHOPEE, SalesChannel\.TIKTOK\)/, 'Shopee e TikTok devem ocupar a segunda linha');
@@ -239,6 +243,9 @@ assert.match(saleModel, /data class SalePaymentDetail/, 'o PDV deve preservar ca
 assert.match(saleModel, /val formattedPayment:[\s\S]*Taxa da operadora/, 'os detalhes devem mostrar parcelas, acrescimos e taxa da operadora');
 assert.match(activity, /sale\.formattedPayment/, 'a tela da venda deve exibir o pagamento detalhado');
 assert.match(pushService, /FirebaseMessagingService/, 'o app deve receber push mesmo fora da tela de vendas');
+assert.match(pushService, /SalesNotificationFreshness\.shouldAlert[\s\S]*return/, 'o app deve abandonar a notificacao quando a mensagem estiver atrasada');
+assert.match(notificationFreshness, /MAX_AGE_MS = 30 \* 60 \* 1000L/, 'o app deve aceitar somente notificacoes com ate 30 minutos');
+assert.match(notificationFreshness, /occurredAtMs[\s\S]*sentTimeMs[\s\S]*timestamps\.all/, 'o app deve validar a data da venda e a data de envio do Firebase');
 assert.match(pushRegistration, /\/admin\/mobile-push\/devices/, 'o aparelho deve registrar o token na VPS');
 assert.match(buildGradle, /com\.google\.zxing:core/, 'o app deve incluir o encoder de QR e codigo de barras');
 assert.match(manifest, /android\.permission\.BLUETOOTH"[\s\S]*android:maxSdkVersion="30"/, 'Android 8-11 precisa da permissao Bluetooth legada');
