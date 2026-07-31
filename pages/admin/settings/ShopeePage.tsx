@@ -71,6 +71,8 @@ import {
 } from '../../../services/shopeeVariationLinking';
 import { buildShopeeOfferVariationGroups } from '../../../services/shopeeOfferMapping';
 import type { ShopeeVariationGroup } from '../../../types/shopee-variation';
+import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
+import { getShopeeBulkEffectiveStock, hasShopeeBulkPublishStock } from '../../../utils/shopeeBulkEligibility';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface ShopeeProduct {
@@ -97,6 +99,7 @@ export interface ShopeeProduct {
     bling_parent_id?: number | string | null;
     video_url?: string | null;
     stock_quantity?: number;
+    variation_stock_quantity?: number;
     track_inventory?: boolean;
     parent_id?: string | null;
     is_parent?: boolean | number | null;
@@ -345,12 +348,6 @@ function normalizeProductDimensions(value: unknown): LocalProduct['dimensions'] 
 
 function isBulkUpdateCandidate(product: Pick<ShopeeProduct, 'shopee_item_id'>): boolean {
     return Boolean(normalizePositiveId(product.shopee_item_id));
-}
-
-function hasBulkPublishStock(product: Pick<ShopeeProduct, 'stock_quantity' | 'track_inventory'>): boolean {
-    if (product.track_inventory === false) return true;
-    const stock = Number(product.stock_quantity ?? 0);
-    return Number.isFinite(stock) && stock > 0;
 }
 
 function readPositiveSpecValue(specs: Record<string, any> | null | undefined, keys: string[]): number {
@@ -1322,7 +1319,17 @@ export default function ShopeePage() {
         setLoadingProducts(true);
         try {
             // Fetch products from VPS (source of truth for catalog), bypassing 5-min cache to ensure Bling cost is fresh
-            const localProds = await fetchAllVpsProducts({ status: 'all', noCache: true, preferProxy: true, proxyOnly: true });
+            const allLocalProds = await fetchAllVpsProducts({ status: 'all', noCache: true, preferProxy: true, proxyOnly: true });
+            const localProds = allLocalProds.filter((product: any) => !isArchivedProductRecord(product));
+            const variationStockByParentId = new Map<string, number>();
+            for (const product of localProds) {
+                const parentId = String(product?.parent_id || '').trim();
+                if (!parentId) continue;
+                const childStock = product?.track_inventory === false
+                    ? 1
+                    : Math.max(0, Number(product?.stock_quantity ?? 0) || 0);
+                variationStockByParentId.set(parentId, (variationStockByParentId.get(parentId) || 0) + childStock);
+            }
 
             // Fetch Shopee sync records from VPS (integration metadata)
             const shopeeRecords = await shopeeProductService.list();
@@ -1354,6 +1361,7 @@ export default function ShopeePage() {
                     bling_parent_id: p.bling_parent_id ?? null,
                     video_url: p.video_url ?? null,
                     stock_quantity: Number(p.stock_quantity ?? 0) || 0,
+                    variation_stock_quantity: variationStockByParentId.get(String(p.id)) || 0,
                     track_inventory: p.track_inventory !== false,
                     parent_id: p.parent_id ?? null,
                     is_parent: p.is_parent ?? null,
@@ -1765,7 +1773,7 @@ export default function ShopeePage() {
 
     const selectBulkReadyProducts = (items: ShopeeProduct[]) => {
         const readyIds = items
-            .filter(p => hasBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)) && bulkReadinessById.get(p.product_id)?.status === 'ready')
+            .filter(p => hasShopeeBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)) && bulkReadinessById.get(p.product_id)?.status === 'ready')
             .map(p => p.product_id);
         setBulkSelectedIds(readyIds);
         if (readyIds.length === 0) {
@@ -1775,7 +1783,7 @@ export default function ShopeePage() {
 
     const getBulkSelectableProductIds = (items: ShopeeProduct[]) =>
         items
-            .filter(p => hasBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)))
+            .filter(p => hasShopeeBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)))
             .map(p => p.product_id);
 
     const toggleBulkVisibleSelection = () => {
@@ -1802,7 +1810,7 @@ export default function ShopeePage() {
         const queue = bulkSelectedIds
             .map(id => products.find(p => p.product_id === id))
             .filter((p): p is ShopeeProduct => Boolean(p))
-            .filter(p => hasBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)));
+            .filter(p => hasShopeeBulkPublishStock(p) && (p.status === 'not_synced' || isBulkUpdateCandidate(p)));
 
         if (queue.length === 0) {
             toast.error('Selecione pelo menos um produto para enviar ou atualizar.');
@@ -1930,11 +1938,12 @@ export default function ShopeePage() {
         notSynced: products.filter(p => p.status === 'not_synced').length,
     };
 
-    const bulkCandidates = products.filter(p => (p.status === 'not_synced' || isBulkUpdateCandidate(p)) && hasBulkPublishStock(p));
+    const bulkCandidates = products.filter(p => (p.status === 'not_synced' || isBulkUpdateCandidate(p)) && hasShopeeBulkPublishStock(p));
     const bulkReadiness = bulkCandidates.map((product) =>
         evaluateShopeeAutoPublishReadiness({
             ...product,
             status: isBulkUpdateCandidate(product) ? 'not_synced' : product.status,
+            stock_quantity: getShopeeBulkEffectiveStock(product),
         }, bulkShopeeTemplates, {
             requiredAttributesByCategoryId: bulkRequiredAttributesByCategoryId,
             hasEnabledLogisticsChannel: bulkHasEnabledLogisticsChannel,

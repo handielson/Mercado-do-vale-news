@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.130-bling-stock-reference
+version: v1.2.131-parent-shopee-visibility
 date: 2026-07-31
 status: ready
-release_vps: /var/www/mdv-site/releases/20260731-193156-bling-stock-reference
+release_vps: /var/www/mdv-site/releases/20260731-195035-parent-shopee-visibility
 branch: main
-summary: Corrige duplicidade de estoque e envia o numero curto do pedido nos lancamentos do Bling.
+summary: Exibe produtos pai no envio em massa e oculta cadastros tecnicos arquivados.
 ```

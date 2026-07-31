@@ -9,6 +9,7 @@ import { unitService } from '../../../services/units';
 import { stockLocationService } from '../../../services/stockLocationService';
 import { aggregateModelProducts } from '../../../services/modelProductAggregator.js';
 import { getProductCloneState } from '../../../services/productClonePrefill.js';
+import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -76,7 +77,8 @@ export const ModelProductAggregatorPage: React.FC = () => {
             ]);
 
             if (!model) throw new Error('Modelo nao encontrado.');
-            const safeProducts = Array.isArray(products) ? products : [];
+            const safeProducts = (Array.isArray(products) ? products : [])
+                .filter((product: any) => !isArchivedProductRecord(product));
 
             const unitLists = await Promise.all(
                 safeProducts.map((product: any) => unitService.listByProduct(product.id).catch(() => []))
