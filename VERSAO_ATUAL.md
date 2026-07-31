@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.132-card-total-12x
+version: v1.2.133-shopee-description-format
 date: 2026-07-31
 status: ready
-release_vps: /var/www/mdv-site/releases/20260731-203648-card-total-12x
+release_vps: /var/www/mdv-site/releases/20260731-204247-shopee-description-format
 branch: main
-summary: Mostra o total final no cartao em 12x nos cards do catalogo.
+summary: Converte descricoes HTML em texto formatado compativel com a Shopee.
 ```

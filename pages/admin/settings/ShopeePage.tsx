@@ -17,6 +17,7 @@ import { NcmSearchWidget } from '../../../components/admin/NcmSearchWidget';
 import { InmetroWidget } from '../../../components/admin/InmetroWidget';
 import { fetchBlingProductDetail } from '../../../services/blingService';
 import { resolveShopeeSyncDefaults } from './shopeeSyncDefaults.js';
+import { normalizeShopeeDescription } from '../../../services/shopeeDescription.js';
 import {
     applyShopeeStockFields,
     buildShopeeAddItemStockVariants,
@@ -404,29 +405,6 @@ function translateShopeeText(entity: any, fallbackKeys: string[] = []): string {
     }
 
     return '';
-}
-
-function normalizeShopeeDescription(value: string | undefined): string {
-    if (!value) return '';
-    return String(value)
-        .replace(/<p\b[^>]*>(?:\s|&nbsp;|&#160;|\u00a0|<br\s*\/?\s*>)*<\/p>/gi, '')
-        .replace(/&nbsp;|&#160;|\u00a0/gi, ' ')
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/(?:div|li|h[1-6])>/gi, '\n')
-        .replace(/<\/p>/gi, '\n\n')
-        .replace(/<li\b[^>]*>/gi, '- ')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&amp;/gi, '&')
-        .replace(/&lt;/gi, '<')
-        .replace(/&gt;/gi, '>')
-        .replace(/&quot;/gi, '"')
-        .replace(/&#39;|&apos;/gi, "'")
-        .replace(/\r\n/g, '\n')
-        .replace(/[ \t]+\n/g, '\n')
-        .replace(/\n[ \t]+/g, '\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .replace(/[ \t]{2,}/g, ' ')
-        .trim();
 }
 
 function extractShopeeAttributeTree(data: any): any[] {
@@ -3083,7 +3061,7 @@ export function ShopeeSyncModal({
         }
 
         if (applied.description && (options.force || !descriptionDirtyRef.current)) {
-            setItemDescription(applied.description);
+            setItemDescription(normalizeShopeeDescription(applied.description));
         }
 
         if (applied.price) {
@@ -5539,10 +5517,12 @@ export function ShopeeSyncModal({
                                         descriptionDirtyRef.current = true;
                                         setItemDescription(e.target.value);
                                     }}
+                                    onBlur={() => setItemDescription(current => normalizeShopeeDescription(current))}
                                     rows={7}
                                     className="w-full px-3 py-2 border border-slate-200 rounded-2xl text-sm focus:ring-2 focus:ring-orange-500"
                                     placeholder="Descricao que sera enviada para a Shopee"
                                 />
+                                <p className="mt-1 text-[10px] text-slate-500">Titulos, paragrafos e listas do cadastro sao convertidos automaticamente em texto compativel com a Shopee.</p>
                             </div>
                             {missingRequiredAttributes.length > 0 && (
                                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -5945,7 +5925,7 @@ function ExpandedItemPanel({
         try {
             const payload: Record<string, any> = { item_id: p.shopee_item_id };
             if (form.item_name.trim())    payload.item_name      = form.item_name.trim();
-            if (form.description.trim())  payload.description    = form.description.trim();
+            if (form.description.trim())  payload.description    = normalizeShopeeDescription(form.description);
             if (form.item_sku.trim())     payload.item_sku       = form.item_sku.trim();
             if (form.item_weight)         payload.item_weight    = parseFloat(form.item_weight);
             if (form.package_length)      payload.package_length = parseInt(form.package_length);

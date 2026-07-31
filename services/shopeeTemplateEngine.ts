@@ -5,6 +5,7 @@ import type {
     ShopeeTemplateRule,
     ShopeeTitleSafetyResult,
 } from '../types/shopee-template';
+import { normalizeShopeeDescription } from './shopeeDescription.js';
 
 function normalizeText(value: unknown): string {
     return String(value || '')
@@ -339,8 +340,8 @@ export function alignShopeeAttributeDefaultsToOptions(
 
 export function applyShopeeTemplateToProduct(product: Record<string, any>, template: ShopeeTemplate): ShopeeTemplateApplyResult {
     const title = renderShopeeTemplateText(template.titleTemplate || product?.name || '', product);
-    const description = String(product?.description || '').trim()
-        || renderShopeeTemplateText(template.descriptionTemplate || '', product);
+    const description = normalizeShopeeDescription(product?.description)
+        || normalizeShopeeDescription(renderShopeeTemplateText(template.descriptionTemplate || '', product));
 
     return {
         templateId: template.id,

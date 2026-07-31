@@ -137,6 +137,15 @@ assert.equal(applied.stock, 2);
 assert.equal(applied.gtinMode, 'no_gtin');
 assert.deepEqual(applied.attributeValues, { '100134': 'TPU' });
 
+const appliedFromHtmlDescription = applyShopeeTemplateToProduct({
+  ...sampleProduct,
+  description: '<h1>Capa Silicone Realme C85 Pro</h1><h2>Descricao do produto</h2><p>Proteja seu aparelho.</p><ul><li>Silicone flexivel</li><li>Encaixe preciso</li></ul>',
+}, templates[1]);
+assert.equal(
+  appliedFromHtmlDescription.description,
+  'Capa Silicone Realme C85 Pro\nDescricao do produto\nProteja seu aparelho.\n\n- Silicone flexivel\n- Encaixe preciso'
+);
+
 const appliedFromNameOnly = applyShopeeTemplateToProduct({
   id: 'p2',
   name: 'Capa de Silicone para Redmi Note 14 4G Cor:Marrom',
