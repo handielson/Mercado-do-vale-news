@@ -25,6 +25,7 @@ import { syncStockToBling } from './blingService';
 import { vpsApiService } from './vpsApiService';
 import { vpsClient } from './vpsClient';
 import { getCompanyId } from './companyContext';
+import { formatReferenceNumber } from '../utils/referenceNumber';
 
 // ─── Helper: monta dados para notificação Telegram ────────────────────────────
 function buildOrderNotificationData(
@@ -346,7 +347,7 @@ async function decrementOrderItemStockByPriority(item: OrderStockItem, orderId: 
         await stockLocationService.decrementStockByPriority({
             product_id: item.product_id,
             quantity,
-            reason: `Pedido online #${orderId}`,
+            reason: `Pedido online #${formatReferenceNumber(orderId)}`,
             reference_type: 'order',
             reference_id: orderId,
             notes: 'Baixa automatica de pedido online por prioridade de deposito.',
@@ -370,7 +371,7 @@ async function reserveOrderStockByPriority(orderId: string, items: OrderStockIte
             await stockLocationService.reserveStockByPriority({
                 product_id: item.product_id,
                 quantity,
-                reason: `Reserva pedido online #${orderId}`,
+                reason: `Reserva pedido online #${formatReferenceNumber(orderId)}`,
                 reference_type: 'order_reservation',
                 reference_id: orderId,
                 notes: 'Reserva automatica de pedido online por prioridade de deposito.',
@@ -388,7 +389,7 @@ async function consumeOrderReservedStock(orderId: string): Promise<boolean> {
     try {
         const consumed = await stockLocationService.consumeOrderStockReservations({
             order_id: orderId,
-            reason: `Baixa de reserva pedido online #${orderId}`,
+            reason: `Baixa de reserva pedido online #${formatReferenceNumber(orderId)}`,
             notes: 'Baixa automatica consumindo reserva do pedido online.',
         });
         return consumed.length > 0;
@@ -413,7 +414,7 @@ async function releaseOrderReservedStock(orderId: string): Promise<void> {
     try {
         await stockLocationService.releaseOrderStockReservations({
             order_id: orderId,
-            reason: `Liberacao reserva pedido online #${orderId}`,
+            reason: `Liberacao reserva pedido online #${formatReferenceNumber(orderId)}`,
             notes: 'Liberacao automatica de reserva pelo cancelamento do pedido online.',
         });
     } catch (releaseError) {
@@ -628,7 +629,7 @@ export async function createOrder(input: OrderInput): Promise<Order> {
                     await finalizeOrderStockByPriority(input.items, order.id);
                     syncOrderItemsStockToBling(
                         input.items,
-                        `Pedido online #${order.id} — Mercado do Vale`
+                        `Pedido online #${formatReferenceNumber(order.id)} — Mercado do Vale`
                     ).catch(e => console.error('[orderService] Falha ao sincronizar estoque Bling (card approved):', e));
                     // Auto-reserva de unidades serializadas (cartão aprovado na hora)
                     autoReserveOrderItems(input.items, order.id).catch(e =>
@@ -776,7 +777,7 @@ export async function confirmPayment(
     await finalizeOrderStockByPriority(items, order.id);
     syncOrderItemsStockToBling(
         items,
-        `Pedido online #${order.id} — Mercado do Vale`
+        `Pedido online #${formatReferenceNumber(order.id)} — Mercado do Vale`
     ).catch(e => console.error('[orderService] Falha ao sincronizar estoque Bling (confirmPayment):', e));
 
     // Auto-reserva de unidades serializadas (IMEI/Serial) — FIFO
@@ -827,7 +828,7 @@ export async function completeOnDeliveryOrder(id: string): Promise<void> {
     await finalizeOrderStockByPriority(items, id);
     syncOrderItemsStockToBling(
         items,
-        `Pedido online #${id} — Mercado do Vale`
+        `Pedido online #${formatReferenceNumber(id)} — Mercado do Vale`
     ).catch(e => console.error('[orderService] Falha ao sincronizar estoque Bling (onDelivery):', e));
 
     // Auto-reserva de unidades serializadas (IMEI/Serial) — FIFO
@@ -861,7 +862,7 @@ export async function cancelOrder(id: string): Promise<void> {
     cancelReferralReward(id).catch(e => console.error("Erro cancelando moedas de indicação:", e));
 
     if (shouldRestoreNumericStock) {
-        const reason = `Cancelamento pedido online #${id}`;
+        const reason = `Cancelamento pedido online #${formatReferenceNumber(id)}`;
         const returnedProductIds = await restoreOrderStockForItems(id, items, reason);
         const releasedProductIds = await releaseOrderUnits(id);
         for (const productId of releasedProductIds) returnedProductIds.add(productId);

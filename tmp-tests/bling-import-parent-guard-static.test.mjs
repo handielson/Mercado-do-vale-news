@@ -14,7 +14,8 @@ assert.match(page, /toggleBlingSelectionGroup\(prev, id, blingProducts\)/);
 assert.match(page, /resolveBlingImportSelection\(selectedProducts, blingProducts\)/);
 
 for (const source of [serverJs, serverCjs]) {
-  assert.match(source, /WHERE bling_id=\? AND \(company_id <=> \? OR company_id IS NULL\)/);
+  assert.match(source, /WHERE p\.bling_id=\? AND \(p\.company_id <=> \? OR p\.company_id IS NULL\)/);
+  assert.match(source, /SELECT COUNT\(\*\) FROM units u WHERE u\.product_id = p\.id/);
   assert.match(source, /p\.id = existingByBling\[0\]\.id/);
   assert.match(source, /is_parent=IF\(VALUES\(is_parent\) IS NULL, is_parent, VALUES\(is_parent\)\)/);
 }

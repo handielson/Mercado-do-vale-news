@@ -28,6 +28,7 @@ import { moneyReaisToCents, moneyToCents } from '../utils/money';
 import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../utils/salePresentation';
 import { UnitStatus } from '../utils/field-standards';
 import type { StockLocationPriorityDecrementResult, StockLocationSaleRestoreResult } from '../types/stock-location';
+import { formatReferenceNumber } from '../utils/referenceNumber';
 
 const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Promise<StockLocationPriorityDecrementResult[]> => {
     if (!item.product_id) return [];
@@ -36,7 +37,7 @@ const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Pro
         return await stockLocationService.decrementStockByPriority({
             product_id: item.product_id,
             quantity: item.quantity,
-            reason: `Venda PDV #${saleId}`,
+            reason: `Venda PDV #${formatReferenceNumber(saleId)}`,
             reference_type: 'sale',
             reference_id: saleId,
             notes: 'Baixa automatica por prioridade: Loja Principal antes dos demais depositos.',
@@ -721,7 +722,7 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
                 await syncStockToBling(
                     item.product_id!,
                     item.quantity,
-                    `Venda #${sale.id} — PDV Mercado do Vale`,
+                    `Venda #${formatReferenceNumber(sale.id)} — PDV Mercado do Vale`,
                     { comboSelections: item.comboSelections }
                 );
             }
@@ -973,7 +974,7 @@ export const cancelSale = async (id: string): Promise<void> => {
 
         await patchSale(id, { status: 'cancelled', refund_cash_session_id: refundCashSessionId } as Partial<Sale>);
 
-        await restoreCancelledSaleInventory(id, items, `Cancelamento PDV #${id}`);
+        await restoreCancelledSaleInventory(id, items, `Cancelamento PDV #${formatReferenceNumber(id)}`);
 
         // Cancel associated delivery credits
         await deliveryCreditService.cancelBySaleId(id);
@@ -997,7 +998,7 @@ export const refundSale = async (id: string): Promise<void> => {
 
         await patchSale(id, { status: 'refunded', refund_cash_session_id: refundCashSessionId } as Partial<Sale>);
 
-        await restoreCancelledSaleInventory(id, items, `Estorno PDV #${id}`);
+        await restoreCancelledSaleInventory(id, items, `Estorno PDV #${formatReferenceNumber(id)}`);
 
         // Cancel associated delivery credits
         await deliveryCreditService.cancelBySaleId(id);
@@ -1018,7 +1019,7 @@ export const deleteSale = async (id: string): Promise<void> => {
         // Restore stock before deleting
         const items = await loadSaleItemsBySaleId(id);
 
-        await restoreCancelledSaleInventory(id, items, `Exclusao PDV #${id}`);
+        await restoreCancelledSaleInventory(id, items, `Exclusao PDV #${formatReferenceNumber(id)}`);
 
         // Delete sale (cascade will delete sale_items and delivery_credits)
         await deleteSaleRow(id);

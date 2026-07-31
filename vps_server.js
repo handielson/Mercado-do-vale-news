@@ -25144,9 +25144,12 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
       const requestedId = p.id || null;
       if (p.bling_id) {
         const [existingByBling] = await pool.query(
-          `SELECT id FROM products
-            WHERE bling_id=? AND (company_id <=> ? OR company_id IS NULL)
-            ORDER BY (company_id <=> ?) DESC, created_at ASC, id ASC
+          `SELECT p.id FROM products p
+            WHERE p.bling_id=? AND (p.company_id <=> ? OR p.company_id IS NULL)
+            ORDER BY (p.company_id <=> ?) DESC,
+                     (p.status = 'active') DESC,
+                     (SELECT COUNT(*) FROM units u WHERE u.product_id = p.id) DESC,
+                     p.created_at ASC, p.id ASC
             LIMIT 1`,
           [p.bling_id, p.company_id || null, p.company_id || null]
         );
