@@ -5663,6 +5663,178 @@ async function syncShopeeStockFromBlingTargetsVps(stockTargets = []) {
   return results;
 }
 
+function distributeTikTokInventoryQuantityVps(inventory = [], quantity = 0) {
+  const entries = (Array.isArray(inventory) ? inventory : [])
+    .filter((entry) => String(entry?.warehouse_id || '').trim());
+  const target = Math.max(0, Math.trunc(Number(quantity) || 0));
+  return entries.map((entry, index) => ({
+    warehouse_id: String(entry.warehouse_id),
+    quantity: index === 0 ? target : 0,
+  }));
+}
+
+async function syncTikTokStockFromBlingTargetsVps(stockTargets = []) {
+  const targets = Array.isArray(stockTargets) ? stockTargets.filter((target) => target?.id) : [];
+  if (!targets.length) return { ok: true, skipped: 'no_stock_targets', updated: 0, errors: [] };
+  const targetIds = [...new Set(targets.map((target) => String(target.id)))];
+  const placeholders = targetIds.map(() => '?').join(',');
+  const [links] = await pool.query(
+    `SELECT DISTINCT tsp.product_id, tsp.tiktok_product_id, tsp.tiktok_sku_id
+       FROM tiktok_shop_products tsp
+      WHERE tsp.tiktok_product_id IS NOT NULL
+        AND COALESCE(tsp.status, '') NOT IN ('DELETED', 'FREEZE')
+        AND (tsp.product_id IN (${placeholders}) OR tsp.product_id IN (
+          SELECT parent_id FROM products WHERE id IN (${placeholders}) AND parent_id IS NOT NULL
+        ))`,
+    [...targetIds, ...targetIds],
+  );
+  if (!links.length) return { ok: true, skipped: 'no_tiktok_links', updated: 0, errors: [] };
+  let settings;
+  try {
+    settings = await loadTikTokShopOAuthSettingsVps();
+  } catch (err) {
+    return { ok: false, skipped: 'missing_tiktok_credentials', updated: 0, errors: [{ message: err.message }] };
+  }
+  const results = { ok: true, updated: 0, skipped: null, errors: [] };
+  for (const link of links) {
+    const remoteProductId = String(link.tiktok_product_id || '').trim();
+    try {
+      const [localRows] = await pool.query(
+        'SELECT id, sku, stock_quantity, track_inventory FROM products WHERE id = ? OR parent_id = ?',
+        [link.product_id, link.product_id],
+      );
+      const localBySku = new Map((localRows || []).map((row) => [String(row.sku || '').trim().toUpperCase(), row]));
+      const { product: remoteProduct } = await loadTikTokShopRemoteProductVps(settings, remoteProductId, false);
+      const remoteSkus = Array.isArray(remoteProduct?.skus) ? remoteProduct.skus : [];
+      const updates = [];
+      for (const remoteSku of remoteSkus) {
+        const remoteSkuId = String(remoteSku?.id || '').trim();
+        const sellerSku = String(remoteSku?.seller_sku || '').trim().toUpperCase();
+        const local = localBySku.get(sellerSku)
+          || (remoteSkus.length === 1 ? localRows?.[0] : null)
+          || (remoteSkuId === String(link.tiktok_sku_id || '') ? localRows?.[0] : null);
+        if (!remoteSkuId || !local) continue;
+        const quantity = Number(local.track_inventory) === 0 ? 999 : Math.max(0, Math.trunc(Number(local.stock_quantity || 0)));
+        const inventory = distributeTikTokInventoryQuantityVps(remoteSku.inventory, quantity);
+        if (!inventory.length) throw new Error(`TikTok SKU ${remoteSkuId} nao retornou armazem para atualizar estoque.`);
+        updates.push({ id: remoteSkuId, inventory });
+      }
+      if (!updates.length) throw new Error('Nenhum SKU TikTok foi associado aos SKUs locais.');
+      const result = await callTikTokShopOpenApiVps(settings, {
+        method: 'POST',
+        pathname: `/product/202309/products/${encodeURIComponent(remoteProductId)}/inventory/update`,
+        body: { skus: updates },
+      });
+      const businessError = formatTikTokShopBusinessErrorsVps(result.payload?.data?.errors);
+      if (businessError) throw new Error(`TikTok Shop recusou o estoque: ${businessError}`);
+      results.updated += updates.length;
+      await pool.query(
+        'UPDATE tiktok_shop_products SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE product_id = ?',
+        [link.product_id],
+      );
+    } catch (err) {
+      results.ok = false;
+      const message = String(err.message || 'unknown').slice(0, 1000);
+      results.errors.push({ product_id: link.product_id, tiktok_product_id: remoteProductId, message });
+      await pool.query(
+        'UPDATE tiktok_shop_products SET last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE product_id = ?',
+        [message, link.product_id],
+      ).catch(() => {});
+    }
+  }
+  return results;
+}
+
+async function syncMarketplaceStockFromBlingTargetsVps(stockTargets = []) {
+  const [shopee, tiktok] = await Promise.all([
+    syncShopeeStockFromBlingTargetsVps(stockTargets),
+    syncTikTokStockFromBlingTargetsVps(stockTargets),
+  ]);
+  return { ok: Boolean(shopee.ok && tiktok.ok), shopee, tiktok };
+}
+
+async function recoverBlingWebhookStockTargetsVps({ blingId, sku, stockQty, vpsResult }) {
+  if (vpsResult?.ok && Array.isArray(vpsResult.stockTargets) && vpsResult.stockTargets.length) {
+    return { ...vpsResult, recovered: false };
+  }
+
+  const whereSql = blingId ? 'p.bling_id = ?' : 'p.sku = ?';
+  const whereValue = blingId ? String(blingId) : String(sku || '').trim();
+  const [rows] = await pool.query(
+    `SELECT p.id, p.specs, p.stock_quantity, COUNT(u.id) AS unit_count
+       FROM products p
+       LEFT JOIN units u ON u.product_id = p.id
+      WHERE ${whereSql}
+      GROUP BY p.id, p.specs, p.stock_quantity
+      ORDER BY CASE WHEN p.status = 'active' THEN 0 ELSE 1 END,
+               COUNT(u.id) DESC,
+               p.created_at ASC`,
+    [whereValue],
+  );
+
+  const isSerializedMatch = (rows || []).some((row) => {
+    if (Number(row.unit_count || 0) > 0) return true;
+    const specs = typeof row.specs === 'string'
+      ? (() => { try { return JSON.parse(row.specs || '{}'); } catch { return {}; } })()
+      : (row.specs || {});
+    return Boolean(specs.imei1 || specs.imei2 || specs.serial || specs.serial_number);
+  });
+
+  if (isSerializedMatch) {
+    const canonical = rows?.[0];
+    if (!canonical) {
+      return { ok: false, recovered: true, affectedRows: 0, stockTargets: [], original: vpsResult || null };
+    }
+    await pool.query(
+      `UPDATE products
+          SET custom_fields = JSON_SET(COALESCE(custom_fields, JSON_OBJECT()), '$.bling_stock_quantity', ?, '$.bling_stock_synced_at', CURRENT_TIMESTAMP),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [stockQty, canonical.id],
+    );
+    const availableStock = await syncProductStock(canonical.id);
+    return {
+      ok: true,
+      recovered: true,
+      affectedRows: 1,
+      serializedStockReference: true,
+      product_id: canonical.id,
+      bling_stock_quantity: stockQty,
+      stock_quantity: availableStock,
+      stockTargets: await getShopeeStockTargetsForProductIds([canonical.id]),
+      original: vpsResult || null,
+    };
+  }
+
+  const locationSync = [];
+  for (const row of rows || []) {
+    await pool.query('UPDATE products SET stock_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [stockQty, row.id]);
+    locationSync.push(
+      stockNumber(row.stock_quantity) <= 0 && stockQty > 0
+        ? await resetProductStockLocationsToIncoming(
+            row.id,
+            stockQty,
+            'bling_webhook_fallback_reentry',
+            'Fallback interno do webhook Bling; nova entrada recriada em Deposito / Entrada-Conferencia.',
+          )
+        : await reconcileProductStockLocationsToTotal(
+            row.id,
+            stockQty,
+            'bling_webhook_fallback',
+            'Fallback interno do webhook Bling; evita baixa parcial sem locais e marketplaces.',
+          ),
+    );
+  }
+  return {
+    ok: rows.length > 0 && locationSync.every((result) => result?.ok),
+    recovered: true,
+    affectedRows: rows.length,
+    locationSync,
+    stockTargets: await getShopeeStockTargetsForProductIds((rows || []).map((row) => row.id)),
+    original: vpsResult || null,
+  };
+}
+
 function normalizeBlingAdminSlugVps(value) {
   return String(value || '')
     .toLowerCase()
@@ -5766,14 +5938,26 @@ async function handleBlingWebhookVps(request, reply) {
       }
 
       const vpsPayload = blingId ? { bling_id: blingId, stock_quantity: stockQty } : { sku: resolvedSku, stock_quantity: stockQty };
-      const vpsStockResult = await patchVpsJsonForWebhookVps(request, '/products/stock', vpsPayload);
-      if (blingId) {
-        await vpsDbPatch('products', `bling_id=eq.${encodeURIComponent(String(blingId))}`, { stock_quantity: stockQty });
-      } else if (resolvedSku) {
-        await vpsDbPatch('products', `sku=eq.${encodeURIComponent(String(resolvedSku))}`, { stock_quantity: stockQty });
-      }
-      const shopeeStockSync = await syncShopeeStockFromBlingTargetsVps(vpsStockResult?.stockTargets || []);
-      return reply.code(200).send({ ok: true, event, sku: resolvedSku, bling_id: blingId, stock_quantity: stockQty, stockSource, vpsUpdated: Boolean(vpsStockResult?.ok), shopeeStockSync });
+      const selfCallResult = await patchVpsJsonForWebhookVps(request, '/products/stock', vpsPayload);
+      const vpsStockResult = await recoverBlingWebhookStockTargetsVps({
+        blingId,
+        sku: resolvedSku,
+        stockQty,
+        vpsResult: selfCallResult,
+      });
+      const marketplaceStockSync = await syncMarketplaceStockFromBlingTargetsVps(vpsStockResult.stockTargets || []);
+      return reply.code(200).send({
+        ok: Boolean(vpsStockResult.ok && marketplaceStockSync.ok),
+        event,
+        sku: resolvedSku,
+        bling_id: blingId,
+        stock_quantity: stockQty,
+        stockSource,
+        vpsUpdated: Boolean(vpsStockResult.ok),
+        stockRecoveryApplied: Boolean(vpsStockResult.recovered),
+        shopeeStockSync: marketplaceStockSync.shopee,
+        tiktokStockSync: marketplaceStockSync.tiktok,
+      });
     }
 
     const isProductEvent = event.includes('product') || event.includes('produto');
@@ -5828,14 +6012,38 @@ async function handleBlingWebhookVps(request, reply) {
             : { products: [{ sku: resolvedSku, ...pickBlingPriceStockUpdatesVps(updates) }] }
         )
         : { ok: true, stockTargets: [] };
-      if (blingId) await vpsDbPatch('products', `bling_id=eq.${encodeURIComponent(String(blingId))}`, updates);
+      let effectivePriceStockResult = vpsPriceStockResult;
+      if (updates.stock_quantity !== undefined) {
+        effectivePriceStockResult = await recoverBlingWebhookStockTargetsVps({
+          blingId,
+          sku: resolvedSku,
+          stockQty: updates.stock_quantity,
+          vpsResult: vpsPriceStockResult,
+        });
+      } else if (blingId) {
+        await vpsDbPatch('products', `bling_id=eq.${encodeURIComponent(String(blingId))}`, updates);
+      }
       if (updates.price_retail !== undefined && childPriceTargets.length > 0) {
         await vpsDbPatch('products', `bling_parent_id=eq.${encodeURIComponent(String(blingId))}`, { price_retail: updates.price_retail });
       }
-      const shopeeStockSync = updates.stock_quantity !== undefined
-        ? await syncShopeeStockFromBlingTargetsVps(vpsPriceStockResult?.stockTargets || [])
-        : { ok: true, skipped: 'stock_unchanged', updated: 0, errors: [] };
-      return reply.code(200).send({ ok: true, event, sku: resolvedSku, priceTargetSkus, updates, vpsUpdated: Boolean(vpsNameResult?.ok && vpsPriceStockResult?.ok), shopeeStockSync });
+      const marketplaceStockSync = updates.stock_quantity !== undefined
+        ? await syncMarketplaceStockFromBlingTargetsVps(effectivePriceStockResult?.stockTargets || [])
+        : {
+            ok: true,
+            shopee: { ok: true, skipped: 'stock_unchanged', updated: 0, errors: [] },
+            tiktok: { ok: true, skipped: 'stock_unchanged', updated: 0, errors: [] },
+          };
+      return reply.code(200).send({
+        ok: Boolean(vpsNameResult?.ok && effectivePriceStockResult?.ok && marketplaceStockSync.ok),
+        event,
+        sku: resolvedSku,
+        priceTargetSkus,
+        updates,
+        vpsUpdated: Boolean(vpsNameResult?.ok && effectivePriceStockResult?.ok),
+        stockRecoveryApplied: Boolean(effectivePriceStockResult?.recovered),
+        shopeeStockSync: marketplaceStockSync.shopee,
+        tiktokStockSync: marketplaceStockSync.tiktok,
+      });
     }
 
     return reply.code(200).send({ ok: true, message: `Event '${event}' not handled` });
