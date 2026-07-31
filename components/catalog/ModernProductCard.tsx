@@ -69,6 +69,7 @@ export function ModernProductCard({
     const [showQuoteModal, setShowQuoteModal] = useState(false);
     const [installment10x, setInstallment10x] = useState<string>('');
     const [installment12x, setInstallment12x] = useState<string>('');
+    const [installment12xTotal, setInstallment12xTotal] = useState<string>('');
     const [selectedKitQty, setSelectedKitQty] = useState<number>(1);
     const [variantsExpanded, setVariantsExpanded] = useState(false);
     const [colorsExpandedVariants, setColorsExpandedVariants] = useState<Set<number>>(new Set());
@@ -88,7 +89,7 @@ export function ModernProductCard({
     const [userInteractedWithColor, setUserInteractedWithColor] = useState(false);
 
     // Store installment values for each variant
-    const [variantInstallments, setVariantInstallments] = useState<Map<number, string>>(new Map());
+    const [variantInstallments, setVariantInstallments] = useState<Map<number, { installment: string; total: string }>>(new Map());
     const [displayImageUrl, setDisplayImageUrl] = useState<string>('');
 
     // Calculate total stock across all variants/colors
@@ -198,6 +199,8 @@ export function ModernProductCard({
         // Atacado só aceita PIX/Dinheiro à vista - sem parcelamento
         if (effectiveCustomerType === 'wholesale') {
             setInstallment10x('');
+            setInstallment12x('');
+            setInstallment12xTotal('');
             return;
         }
 
@@ -206,7 +209,10 @@ export function ModernProductCard({
             const plan10x = plans.find(p => p.installments === 10);
             const plan12x = plans.find(p => p.installments === 12);
             if (plan10x) setInstallment10x(formatPrice(plan10x.value));
-            if (plan12x) setInstallment12x(formatPrice(plan12x.value));
+            if (plan12x) {
+                setInstallment12x(formatPrice(plan12x.value));
+                setInstallment12xTotal(formatPrice(plan12x.total));
+            }
         };
 
         loadInstallment();
@@ -223,7 +229,7 @@ export function ModernProductCard({
         }
 
         const loadVariantInstallments = async () => {
-            const newInstallments = new Map<number, string>();
+            const newInstallments = new Map<number, { installment: string; total: string }>();
 
             for (let i = 0; i < productGroup.variants.length; i++) {
                 const variant = productGroup.variants[i];
@@ -235,7 +241,10 @@ export function ModernProductCard({
                     const plans = await calculateInstallments(price, 12);
                     const plan12x = plans.find(p => p.installments === 12);
                     if (plan12x) {
-                        newInstallments.set(i, formatPrice(plan12x.value));
+                        newInstallments.set(i, {
+                            installment: formatPrice(plan12x.value),
+                            total: formatPrice(plan12x.total),
+                        });
                     }
                 }
             }
@@ -854,7 +863,8 @@ export function ModernProductCard({
                                                                 </div>
                                                                 {installment && effectiveCustomerType !== 'wholesale' && (
                                                                     <div className="text-[9px] sm:text-[10px] text-slate-500">
-                                                                        12x de {installment}
+                                                                        <div>12x de {installment.installment}</div>
+                                                                        <div className="font-medium text-slate-600">Total no cartão: {installment.total}</div>
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -980,10 +990,13 @@ export function ModernProductCard({
                                         <div className={`text-xs sm:text-sm font-semibold tracking-tight ${getActivePromoPrice(product) !== null || selectedKit ? 'text-red-500' : 'text-slate-900'}`}>
                                             {formatPrice(discountedPriceCents)}
                                         </div>
-                                        {/* Reserva altura da linha de parcelamento (14px) pra evitar CLS quando o texto chega async via paymentFeesService */}
-                                        <div className="text-[9px] sm:text-[10px] text-slate-500 min-h-[14px]">
+                                        {/* Reserva altura das linhas de parcelamento pra evitar CLS quando os valores chegam async. */}
+                                        <div className="text-[9px] sm:text-[10px] text-slate-500 min-h-[28px]">
                                             {installment12x && effectiveCustomerType !== 'wholesale'
-                                                ? `12x de ${installment12x}`
+                                                ? <>
+                                                    <div>12x de {installment12x}</div>
+                                                    <div className="font-medium text-slate-600">Total no cartão: {installment12xTotal}</div>
+                                                </>
                                                 : ''}
                                         </div>
                                     </div>

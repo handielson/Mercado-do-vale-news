@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.131-parent-shopee-visibility
+version: v1.2.132-card-total-12x
 date: 2026-07-31
 status: ready
-release_vps: /var/www/mdv-site/releases/20260731-195035-parent-shopee-visibility
+release_vps: /var/www/mdv-site/releases/20260731-203648-card-total-12x
 branch: main
-summary: Exibe produtos pai no envio em massa e oculta cadastros tecnicos arquivados.
+summary: Mostra o total final no cartao em 12x nos cards do catalogo.
 ```
