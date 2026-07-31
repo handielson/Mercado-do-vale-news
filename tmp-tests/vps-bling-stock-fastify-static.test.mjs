@@ -13,8 +13,9 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /blingId and quantity required/, `${file} must validate stock-sync payload`);
   assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/depositos\?pagina=1&limite=1/, `${file} must fetch a Bling deposit before stock-sync`);
   assert.match(source, /https:\/\/www\.bling\.com\.br\/Api\/v3\/estoques['"`]/, `${file} must post stock movements to Bling`);
-  assert.match(source, /operacao:\s*'S'/, `${file} must preserve stock-sync outgoing operation`);
-  assert.match(source, /observacoes:\s*notes \|\| 'Venda PDV Mercado do Vale'/, `${file} must preserve stock-sync default notes`);
+  assert.match(source, /const normalizedOperation = String\(operation \|\| 'S'\)/, `${file} must preserve outgoing stock as the default operation`);
+  assert.match(source, /operacao:\s*normalizedOperation/, `${file} must support outgoing and incoming stock movements`);
+  assert.match(source, /normalizedOperation === 'E' \? 'Devolucao Mercado do Vale' : 'Venda PDV Mercado do Vale'/, `${file} must preserve direction-specific default notes`);
   assert.match(source, /buildCopyableDebug\('bling-stock'/, `${file} must return copyable debug details for stock failures`);
   assert.match(source, /buildCopyableDebug\('bling-stock-sync'/, `${file} must return copyable debug details for stock-sync failures`);
 

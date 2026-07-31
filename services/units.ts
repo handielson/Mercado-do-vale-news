@@ -200,6 +200,7 @@ export const unitService = {
             order_id: null,
             sale_id: null,
             reserved_at: null,
+            sold_at: null,
         });
         if (!released) throw new Error('Falha ao liberar unidade atual.');
 
@@ -252,6 +253,7 @@ export const unitService = {
             order_id: null,
             sale_id: null,
             reserved_at: null,
+            sold_at: null,
         });
         if (!data) throw new Error('Falha ao liberar unidade.');
         return transformFromDB(data);

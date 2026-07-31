@@ -17,6 +17,7 @@ import { calculateSaleTotals } from '../utils/saleCalculations';
 import { promotionService } from './promotionService';
 import { benefitService } from './benefitService';
 import { syncStockToBling } from './blingService';
+import type { BlingComboSelection } from './blingComboStock';
 import { cancelReferralReward, processReferralReward } from './cashbackService';
 import { unitService } from './units';
 import { stockLocationService } from './stockLocationService';
@@ -25,7 +26,8 @@ import { vpsClient } from './vpsClient';
 import { deliveryCreditService } from './deliveryCreditService';
 import { moneyReaisToCents, moneyToCents } from '../utils/money';
 import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../utils/salePresentation';
-import type { StockLocationPriorityDecrementResult } from '../types/stock-location';
+import { UnitStatus } from '../utils/field-standards';
+import type { StockLocationPriorityDecrementResult, StockLocationSaleRestoreResult } from '../types/stock-location';
 
 const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Promise<StockLocationPriorityDecrementResult[]> => {
     if (!item.product_id) return [];
@@ -47,23 +49,81 @@ const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Pro
 type SaleStockRestoreItem = {
     product_id: string | null;
     quantity: number;
+    serialized_unit_id?: string | null;
+    serialized_unit?: { unitId?: string | null } | null;
+    combo_selections?: BlingComboSelection[] | null;
+    comboSelections?: BlingComboSelection[] | null;
 };
 
 const restoreSaleStockForItems = async (
     saleId: string,
     items: SaleStockRestoreItem[] | null | undefined,
     reason: string
-): Promise<void> => {
+): Promise<StockLocationSaleRestoreResult[]> => {
     try {
-        await stockLocationService.restoreSaleStockByLocation({
+        return await stockLocationService.restoreSaleStockByLocation({
             sale_id: saleId,
             reason,
             notes: 'Devolucao automatica pelo fluxo de venda PDV.',
         });
-        return;
     } catch (restoreError) {
         console.error(`[saleService] Falha ao restaurar estoque por local da venda ${saleId}:`, restoreError);
+        throw restoreError;
     }
+};
+
+const releaseSaleSerializedUnits = async (
+    saleId: string,
+    items: SaleStockRestoreItem[] | null | undefined
+): Promise<Set<string>> => {
+    const unitToProduct = new Map<string, string>();
+    for (const item of items || []) {
+        const unitId = String(item.serialized_unit_id || item.serialized_unit?.unitId || '').trim();
+        const productId = String(item.product_id || '').trim();
+        if (unitId && productId) unitToProduct.set(unitId, productId);
+    }
+    if (unitToProduct.size === 0) return new Set();
+
+    const units = await unitService.listByIds([...unitToProduct.keys()]);
+    const releasedProductIds = new Set<string>();
+    for (const unit of units) {
+        if (String(unit.sale_id || '') !== saleId) continue;
+        if (![UnitStatus.SOLD, UnitStatus.RESERVED].includes(unit.status)) continue;
+        await unitService.release(unit.id);
+        const productId = unitToProduct.get(unit.id);
+        if (productId) releasedProductIds.add(productId);
+    }
+    return releasedProductIds;
+};
+
+const syncReturnedSaleStockToBling = async (
+    items: SaleStockRestoreItem[] | null | undefined,
+    returnedProductIds: Set<string>,
+    notes: string
+): Promise<void> => {
+    for (const item of items || []) {
+        const productId = String(item.product_id || '').trim();
+        const quantity = Number(item.quantity) || 0;
+        if (!productId || quantity <= 0 || !returnedProductIds.has(productId)) continue;
+        await syncStockToBling(productId, quantity, notes, {
+            operation: 'E',
+            comboSelections: item.combo_selections || item.comboSelections || undefined,
+        });
+    }
+};
+
+const restoreCancelledSaleInventory = async (
+    saleId: string,
+    items: SaleStockRestoreItem[] | null | undefined,
+    reason: string
+): Promise<void> => {
+    const restored = await restoreSaleStockForItems(saleId, items, reason);
+    const returnedProductIds = new Set(
+        restored.map((row) => String(row.product_id || '')).filter(Boolean)
+    );
+    const releasedProductIds = await releaseSaleSerializedUnits(saleId, items);
+    for (const productId of releasedProductIds) returnedProductIds.add(productId);
+    await syncReturnedSaleStockToBling(items, returnedProductIds, reason);
 };
 
 interface TableDataResponse<T> {
@@ -644,14 +704,16 @@ export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
         const itemsToSyncBling = saleItemsPersisted ? saleInput.items.filter(
             item => item.track_inventory && item.product_id
         ) : [];
-        for (const item of itemsToSyncBling) {
-            syncStockToBling(
-                item.product_id!,
-                item.quantity,
-                `Venda #${sale.id} — PDV Mercado do Vale`,
-                { comboSelections: item.comboSelections }
-            ).catch(() => { /* já logado internamente */ });
-        }
+        void (async () => {
+            for (const item of itemsToSyncBling) {
+                await syncStockToBling(
+                    item.product_id!,
+                    item.quantity,
+                    `Venda #${sale.id} — PDV Mercado do Vale`,
+                    { comboSelections: item.comboSelections }
+                );
+            }
+        })().catch((error) => console.error(`[saleService] Falha ao sincronizar estoque Bling da venda ${sale.id}:`, error));
 
         // Create delivery credit if applicable
         if (legacyDeliveryPersonId && saleInput.delivery_total && saleInput.delivery_total > 0) {
@@ -899,7 +961,7 @@ export const cancelSale = async (id: string): Promise<void> => {
 
         await patchSale(id, { status: 'cancelled', refund_cash_session_id: refundCashSessionId } as Partial<Sale>);
 
-        await restoreSaleStockForItems(id, items, `Cancelamento PDV #${id}`);
+        await restoreCancelledSaleInventory(id, items, `Cancelamento PDV #${id}`);
 
         // Cancel associated delivery credits
         await deliveryCreditService.cancelBySaleId(id);
@@ -923,7 +985,7 @@ export const refundSale = async (id: string): Promise<void> => {
 
         await patchSale(id, { status: 'refunded', refund_cash_session_id: refundCashSessionId } as Partial<Sale>);
 
-        await restoreSaleStockForItems(id, items, `Estorno PDV #${id}`);
+        await restoreCancelledSaleInventory(id, items, `Estorno PDV #${id}`);
 
         // Cancel associated delivery credits
         await deliveryCreditService.cancelBySaleId(id);
@@ -944,7 +1006,7 @@ export const deleteSale = async (id: string): Promise<void> => {
         // Restore stock before deleting
         const items = await loadSaleItemsBySaleId(id);
 
-        await restoreSaleStockForItems(id, items, `Exclusao PDV #${id}`);
+        await restoreCancelledSaleInventory(id, items, `Exclusao PDV #${id}`);
 
         // Delete sale (cascade will delete sale_items and delivery_credits)
         await deleteSaleRow(id);

@@ -800,7 +800,7 @@ export async function syncStockToBling(
     productId: string,
     quantity: number,
     notes?: string,
-    options?: { comboSelections?: BlingComboSelection[] }
+    options?: { comboSelections?: BlingComboSelection[]; operation?: 'S' | 'E' }
 ): Promise<void> {
     try {
         // Busca o bling_id do produto pela VPS para manter leituras operacionais fora do VPS.
@@ -819,7 +819,8 @@ export async function syncStockToBling(
                     await syncStockToBling(
                         target.productId,
                         target.quantity,
-                        `${notes || ''} (Combo)`.trim()
+                        `${notes || ''} (Combo)`.trim(),
+                        { operation: options?.operation }
                     );
                 }
             } catch (comboErr) {
@@ -832,14 +833,23 @@ export async function syncStockToBling(
         if (!blingId) return; // Produto não veio do Bling — ignora
 
         // Chama o proxy server-side (CORS-safe)
-        await fetch('/api/bling?resource=stock-sync', {
+        const response = await fetch('/api/bling?resource=stock-sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ blingId, quantity, notes }),
+            body: JSON.stringify({
+                blingId,
+                quantity,
+                notes,
+                operation: options?.operation || 'S',
+            }),
         });
+        if (!response.ok) {
+            const detail = await response.text().catch(() => response.statusText);
+            throw new Error(`Bling stock sync failed (${response.status}): ${detail}`);
+        }
     } catch (err) {
-        // Não propaga o erro — a venda não deve falhar por problema no Bling
         console.warn('[syncStockToBling] Falha ao sincronizar estoque:', err);
+        throw err;
     }
 }
 

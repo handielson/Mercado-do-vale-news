@@ -10089,8 +10089,10 @@ async function handleBlingApiVps(request, reply) {
   if (resource === 'stock-sync') {
     if (request.method !== 'POST') return reply.code(405).send({ error: 'Method not allowed' });
 
-    const { blingId, quantity, notes } = request.body || {};
+    const { blingId, quantity, notes, operation } = request.body || {};
     if (!blingId || !quantity) return reply.code(400).send({ error: 'blingId and quantity required' });
+    const normalizedOperation = String(operation || 'S').toUpperCase();
+    if (!['S', 'E'].includes(normalizedOperation)) return reply.code(400).send({ error: 'operation must be S or E' });
 
     try {
       const authHeader = await getBlingProductDetailAuthHeaderVps(request);
@@ -10140,9 +10142,9 @@ async function handleBlingApiVps(request, reply) {
         body: JSON.stringify({
           produto: { id: blingId },
           deposito: { id: depositoId },
-          operacao: 'S',
+          operacao: normalizedOperation,
           quantidade: quantity,
-          observacoes: notes || 'Venda PDV Mercado do Vale',
+          observacoes: notes || (normalizedOperation === 'E' ? 'Devolucao Mercado do Vale' : 'Venda PDV Mercado do Vale'),
         }),
       });
       const stockBody = await readBlingProxyResponse(stockResponse);
@@ -10162,6 +10164,7 @@ async function handleBlingApiVps(request, reply) {
         ok: true,
         depositoId,
         depositoNome: selectedDeposit?.descricao || selectedDeposit?.nome || null,
+        operation: normalizedOperation,
       });
     } catch (err) {
       return reply.code(500).send({

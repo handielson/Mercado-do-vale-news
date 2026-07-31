@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.127-bling-marketplace-stock
+version: v1.2.128-cancelamento-imei-bling
 date: 2026-07-31
 status: ready
-release_vps: /var/www/mdv-site/releases/20260731-153827-bling-marketplace-stock
+release_vps: /var/www/mdv-site/releases/20260731-182453-cancelamento-imei-bling
 branch: main
-summary: Propaga ajustes de estoque do Bling para locais, Shopee e TikTok Shop.
+summary: Restaura IMEI e estoque do Bling em cancelamentos e estornos.
 ```

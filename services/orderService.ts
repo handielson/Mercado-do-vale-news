@@ -299,16 +299,20 @@ async function autoReserveOrderItems(
  * Libera todas as unidades reservadas para um pedido, voltando para 'available'.
  * Chamado ao cancelar pedido. Units moram na VPS MySQL.
  */
-async function releaseOrderUnits(orderId: string): Promise<void> {
+async function releaseOrderUnits(orderId: string): Promise<Set<string>> {
+    const releasedProductIds = new Set<string>();
     try {
         const { vpsApiService } = await import('./vpsApiService');
         const reserved = await vpsApiService.getUnitsByOrder(orderId);
-        for (const u of (reserved || []).filter((x: any) => x.status === UnitStatus.RESERVED)) {
+        for (const u of (reserved || []).filter((x: any) => [UnitStatus.RESERVED, UnitStatus.SOLD].includes(x.status))) {
             await unitService.release(u.id);
+            if (u.product_id) releasedProductIds.add(String(u.product_id));
         }
     } catch (err) {
         console.error(`[orderService] Falha ao liberar unidades do pedido ${orderId}:`, err);
+        throw err;
     }
+    return releasedProductIds;
 }
 
 /**
@@ -442,16 +446,33 @@ function orderHadNumericStockDecrement(order: { status?: string | null; payment_
     ].includes(String(order.status || ''));
 }
 
-async function restoreOrderStockForItems(orderId: string, items: OrderStockItem[] | null | undefined, reason: string): Promise<void> {
+async function restoreOrderStockForItems(orderId: string, items: OrderStockItem[] | null | undefined, reason: string): Promise<Set<string>> {
     try {
-        await stockLocationService.restoreOrderStockByLocation({
+        const restored = await stockLocationService.restoreOrderStockByLocation({
             order_id: orderId,
             reason,
             notes: 'Devolucao automatica pelo cancelamento de pedido online.',
         });
-        return;
+        return new Set(restored.map((row) => String(row.product_id || '')).filter(Boolean));
     } catch (restoreError) {
         console.error(`[orderService] Falha ao restaurar estoque por local do pedido ${orderId}:`, restoreError);
+        throw restoreError;
+    }
+}
+
+async function syncReturnedOrderStockToBling(
+    items: OrderStockItem[] | null | undefined,
+    returnedProductIds: Set<string>,
+    notes: string
+): Promise<void> {
+    for (const item of items || []) {
+        const productId = String(item.product_id || '').trim();
+        const quantity = Number(item.quantity) || 0;
+        if (!productId || quantity <= 0 || !returnedProductIds.has(productId)) continue;
+        await syncStockToBling(productId, quantity, notes, {
+            operation: 'E',
+            comboSelections: (item as any).combo_selections || (item as any).comboSelections,
+        });
     }
 }
 
@@ -840,15 +861,15 @@ export async function cancelOrder(id: string): Promise<void> {
     cancelReferralReward(id).catch(e => console.error("Erro cancelando moedas de indicação:", e));
 
     if (shouldRestoreNumericStock) {
-        await restoreOrderStockForItems(id, items, `Cancelamento pedido online #${id}`);
+        const reason = `Cancelamento pedido online #${id}`;
+        const returnedProductIds = await restoreOrderStockForItems(id, items, reason);
+        const releasedProductIds = await releaseOrderUnits(id);
+        for (const productId of releasedProductIds) returnedProductIds.add(productId);
+        await syncReturnedOrderStockToBling(items, returnedProductIds, reason);
     } else {
         await releaseOrderReservedStock(id);
+        await releaseOrderUnits(id);
     }
-
-    // Libera unidades serializadas reservadas — voltam para 'available'
-    releaseOrderUnits(id).catch(e =>
-        console.error('[orderService] Falha ao liberar unidades serializadas (cancelOrder):', e)
-    );
 }
 
 // ─── Salvar resultado do gateway no pedido ────────────────────────────────────
