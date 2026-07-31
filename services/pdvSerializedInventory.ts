@@ -44,6 +44,7 @@ export type PdvSearchCardDeps = {
 type HydratedPdvProduct = {
     product: Product;
     available_units?: Unit[];
+    has_unit_history?: boolean;
 };
 
 function cleanText(value: unknown): string {
@@ -225,12 +226,17 @@ export async function buildPdvSearchCards(
             ? await deps.listUnitsByProduct(product.id).catch(() => [])
             : [];
         const availableUnits = units.filter(isAvailableUnit);
-        const legacyOption = buildLegacyProductUnitOption(product);
+        const legacyOption = units.length === 0 ? buildLegacyProductUnitOption(product) : null;
 
         if (availableUnits.length > 0 || legacyOption) {
             cards.push(buildSerializedProductCard(product, availableUnits));
             continue;
         }
+
+        // Produtos que ja possuem unidades devem ser vendidos somente por uma
+        // unidade realmente disponivel. Nunca converta um IMEI vendido/reservado
+        // em estoque comum nem reutilize os specs legados do produto.
+        if (units.length > 0) continue;
 
         cards.push(buildStockProductCard(product));
     }
@@ -247,14 +253,16 @@ export function fromHydratedPdvSearchPayload(payload: HydratedPdvProduct[]): Pdv
         entries.push({
             product: entry.product,
             available_units: (entry.available_units || []).filter(isAvailableUnit),
+            has_unit_history: entry.has_unit_history === true,
         });
         grouped.set(key, entries);
     }
 
-    return [...grouped.values()].map((entries) => {
+    return [...grouped.values()].flatMap((entries) => {
         const canonical = entries.find((entry) => (entry.available_units || []).filter(isAvailableUnit).length > 0) || entries[entries.length - 1];
         const availableUnits = entries.flatMap((entry) => (entry.available_units || []).filter(isAvailableUnit));
-        const legacyOptions = entries
+        const groupHasUnitHistory = entries.some((entry) => entry.has_unit_history === true);
+        const legacyOptions = groupHasUnitHistory ? [] : entries
             .filter((entry) => entry.product.id !== canonical.product.id)
             .map((entry) => buildLegacyProductUnitOption(entry.product))
             .filter((option): option is PdvSerializedUnitOption => Boolean(option));
@@ -271,8 +279,13 @@ export function fromHydratedPdvSearchPayload(payload: HydratedPdvProduct[]): Pdv
             return true;
         });
 
-        return availableUnits.length > 0 || dedupedLegacyOptions.length > 0 || buildLegacyProductUnitOption(canonical.product)
-            ? buildSerializedProductCard(canonical.product, availableUnits, dedupedLegacyOptions)
-            : buildStockProductCard(canonical.product);
+        if (availableUnits.length > 0 || dedupedLegacyOptions.length > 0 || (!groupHasUnitHistory && buildLegacyProductUnitOption(canonical.product))) {
+            return [buildSerializedProductCard(canonical.product, availableUnits, dedupedLegacyOptions)];
+        }
+
+        // Ha historico de unidades, mas nenhuma disponivel: o produto nao pode
+        // aparecer como estoque comum, pois isso contornaria o controle de IMEI.
+        if (groupHasUnitHistory) return [];
+        return [buildStockProductCard(canonical.product)];
     });
 }

@@ -118,6 +118,7 @@ const hydratedCards = mod.fromHydratedPdvSearchPayload([
     available_units: [
       { id: 'unit-hydrated', product_id: 'prod-athomics-canonical', status: 'available', imei_1: '', imei_2: '', serial: 'AT2209901855', condition: 'new', created: '', updated: '' },
     ],
+    has_unit_history: true,
   },
   {
     product: {
@@ -130,17 +131,25 @@ const hydratedCards = mod.fromHydratedPdvSearchPayload([
       specs: { serial: 'AT2209900136' },
     },
     available_units: [],
+    has_unit_history: true,
   },
 ]);
 
 assert.equal(hydratedCards.length, 1, 'hydrated duplicate products with the same SKU must render one product card');
 assert.equal(hydratedCards[0].id, 'product:prod-athomics-canonical:serialized');
 assert.equal(hydratedCards[0].kind, 'serialized-product');
-assert.deepEqual(hydratedCards[0].unitOptions.map((option) => option.label), ['Serial: AT2209901855', 'Serial: AT2209900136']);
-assert.ok(
-  hydratedCards[0].unitOptions.some((option) => option.unitData.serial === 'AT2209900136' && option.unitData.unitId === undefined),
-  'legacy duplicate serial must be selectable in the grouped hydrated card',
-);
+assert.deepEqual(hydratedCards[0].unitOptions.map((option) => option.label), ['Serial: AT2209901855']);
+assert.ok(hydratedCards[0].unitOptions.every((option) => option.unitData.unitId), 'migrated groups must expose only real unit ids');
+
+const soldOnlyCards = mod.fromHydratedPdvSearchPayload([{
+  product: {
+    id: 'prod-sold-only', name: 'Smartphone vendido', sku: 'SOLD-ONE', track_inventory: true,
+    stock_quantity: 1, price_retail: 100000, specs: { imei1: '864812087937929' },
+  },
+  available_units: [],
+  has_unit_history: true,
+}]);
+assert.deepEqual(soldOnlyCards, [], 'sold units in stale product specs must never return as available stock');
 
 const smartphoneCards = mod.fromHydratedPdvSearchPayload([
   {
@@ -161,6 +170,7 @@ const smartphoneCards = mod.fromHydratedPdvSearchPayload([
       },
     },
     available_units: [],
+    has_unit_history: true,
   },
   {
     product: {
@@ -181,6 +191,7 @@ const smartphoneCards = mod.fromHydratedPdvSearchPayload([
       { id: 'unit-redmi-1', product_id: 'prod-redmi-canonical', status: 'available', imei_1: '865750085805988', imei_2: '865750085805996', serial: '72698/W5XJ03708', condition: 'new', created: '', updated: '' },
       { id: 'unit-redmi-2', product_id: 'prod-redmi-canonical', status: 'available', imei_1: '865750084601982', imei_2: '865750084601990', serial: '72698/W5XJ04308', condition: 'new', created: '', updated: '' },
     ],
+    has_unit_history: true,
   },
   {
     product: {
@@ -200,6 +211,7 @@ const smartphoneCards = mod.fromHydratedPdvSearchPayload([
     available_units: [
       { id: 'unit-redmi-preto', product_id: 'prod-redmi-preto', status: 'available', imei_1: '865750081088886', imei_2: '865750081088894', serial: '71373/W5XH022', condition: 'new', created: '', updated: '' },
     ],
+    has_unit_history: true,
   },
 ]);
 

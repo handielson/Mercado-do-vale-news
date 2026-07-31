@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildAuthHeaders } from '../../../services/authSession';
-import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings, FieldMappingConfig, SYSTEM_FIELDS, loadFieldMappings, saveFieldMappings, getDefaultFieldMappings, ColorMapping, loadColorMappings, saveColorMappings, blingService, FetchProgress, isBlingReconnectRequired } from '../../../services/blingService';
+import { fetchAllBlingProducts, searchBlingProducts, importBlingProducts, resolveBlingImportSelection, fetchBlingCategories, fetchBlingProductDetail, BlingProduct, BlingProductDetail, BlingCategory, CategoryMapping, ImportResult, BLING_FIELD_MAPPINGS, DEFAULT_ENABLED_FIELDS, loadCategoryMappings, saveCategoryMappings, FieldMappingConfig, SYSTEM_FIELDS, loadFieldMappings, saveFieldMappings, getDefaultFieldMappings, ColorMapping, loadColorMappings, saveColorMappings, blingService, FetchProgress, isBlingReconnectRequired } from '../../../services/blingService';
+import { expandBlingSelectionIds, isBlingStructureProduct, toggleBlingSelectionGroup } from '../../../services/blingVariationImport';
 import { categoryService } from '../../../services/categories';
 import { modelService } from '../../../services/models';
 import { colorService } from '../../../services/colors';
@@ -796,7 +797,10 @@ export default function BlingPage() {
             setExistingBlingIds(existing);
 
             // Seleciona por padrão apenas os ativos, não importados, e com estoque > 0
-            const activeIds = new Set(products.filter(p => p.situacao === 'A' && !existing.has(p.id) && Number(p.stock_quantity) > 0).map(p => p.id));
+            const activeIds = expandBlingSelectionIds(
+                products.filter(p => p.situacao === 'A' && !existing.has(p.id) && Number(p.stock_quantity) > 0).map(p => p.id),
+                products,
+            );
             setSelectedIds(activeIds);
         } catch (err: any) {
             if (isBlingReconnectRequired(err)) {
@@ -822,7 +826,14 @@ export default function BlingPage() {
     }
 
     async function handleImport() {
-        const toImportBase = blingProducts.filter(p => selectedIds.has(p.id));
+        const selectedProducts = blingProducts.filter(p => selectedIds.has(p.id));
+        let toImportBase: BlingProduct[];
+        try {
+            toImportBase = await resolveBlingImportSelection(selectedProducts, blingProducts);
+        } catch (err: any) {
+            toast.error(`Erro ao completar grupo de variacoes: ${err?.message || String(err)}`);
+            return;
+        }
         if (toImportBase.length === 0) { toast.error('Selecione ao menos um produto.'); return; }
         if (!importCategoryId) { toast.error('Selecione uma categoria padrão para importação.'); return; }
 
@@ -1006,9 +1017,7 @@ export default function BlingPage() {
 
     function toggleSelect(id: number) {
         setSelectedIds(prev => {
-            const next = new Set(prev);
-            next.has(id) ? next.delete(id) : next.add(id);
-            return next;
+            return toggleBlingSelectionGroup(prev, id, blingProducts);
         });
     }
 
@@ -1024,7 +1033,7 @@ export default function BlingPage() {
 
         // 3. Tab Filter
         if (productListFilter === 'new') {
-            return !existingBlingIds.has(p.id) && Number(p.stock_quantity) > 0;
+            return !existingBlingIds.has(p.id) && (Number(p.stock_quantity) > 0 || isBlingStructureProduct(p));
         } else if (productListFilter === 'imported') {
             return existingBlingIds.has(p.id);
         } else if (productListFilter === 'out_of_stock') {
@@ -1042,7 +1051,7 @@ export default function BlingPage() {
         setSelectedIds(prev => {
             const next = new Set(prev);
             nonExistingFiltered.forEach(p => allSelected ? next.delete(p.id) : next.add(p.id));
-            return next;
+            return allSelected ? next : expandBlingSelectionIds(next, blingProducts);
         });
     }
 
@@ -1787,16 +1796,16 @@ export default function BlingPage() {
                                                         <span className="text-xs text-slate-400 whitespace-nowrap">{selectedIds.size} selecionados</span>
                                                         <button
                                                             onClick={() => {
-                                                                const selectableProducts = filteredProducts.filter(p => p.formato !== 'E' && p.formato !== 'V');
+                                                                const selectableProducts = filteredProducts;
                                                                 if (selectableProducts.every(p => selectedIds.has(p.id))) {
                                                                     setSelectedIds(new Set()); // Desmarca todos
                                                                 } else {
-                                                                    setSelectedIds(new Set(selectableProducts.map(p => p.id))); // Marca todos os selecionáveis
+                                                                    setSelectedIds(expandBlingSelectionIds(selectableProducts.map(p => p.id), blingProducts)); // Marca todos os selecionáveis
                                                                 }
                                                             }}
                                                             className="text-xs text-blue-600 hover:underline font-medium whitespace-nowrap ml-2"
                                                         >
-                                                            {filteredProducts.filter(p => p.formato !== 'E' && p.formato !== 'V').every(p => selectedIds.has(p.id)) && filteredProducts.filter(p => p.formato !== 'E' && p.formato !== 'V').length > 0 ? 'Desmarcar' : 'Todos'}
+                                                            {filteredProducts.every(p => selectedIds.has(p.id)) && filteredProducts.length > 0 ? 'Desmarcar' : 'Todos'}
                                                         </button>
                                                     </div>
                                                 <div className="divide-y divide-slate-100">
@@ -1810,16 +1819,13 @@ export default function BlingPage() {
                                                             <div key={p.id} className={`border-b border-slate-100 last:border-0 ${isExisting ? 'opacity-70 bg-slate-50/50' : ''}`}>
                                                                 {/* Summary row */}
                                                                 <div className={`flex items-center gap-3 py-2.5 transition-colors ${(p.formato === 'E' || p.formato === 'V') ? 'bg-slate-100 border-l-[3px] border-slate-300 pl-[13px] pr-4 opacity-90' : 'px-4 hover:bg-slate-50'}`}>
-                                                                    {(p.formato !== 'E' && p.formato !== 'V') ? (
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={selectedIds.has(p.id)}
-                                                                            onChange={() => toggleSelect(p.id)}
-                                                                            className="w-4 h-4 accent-green-600 flex-shrink-0"
-                                                                        />
-                                                                    ) : (
-                                                                        <div className="w-4 h-4 flex-shrink-0" title="Produtos Pai não podem ser importados sozinhos." />
-                                                                    )}
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={selectedIds.has(p.id)}
+                                                                        onChange={() => toggleSelect(p.id)}
+                                                                        title={isBlingStructureProduct(p) ? 'Selecionar somente o produto pai' : 'Selecionar o pai e todas as variações'}
+                                                                        className="w-4 h-4 accent-green-600 flex-shrink-0"
+                                                                    />
                                                                     <div className="flex-1 min-w-0">
                                                                         <div className="flex items-center gap-2">
                                                                              <p className="text-sm font-medium text-slate-800 truncate">{displayProduct.nome}</p>

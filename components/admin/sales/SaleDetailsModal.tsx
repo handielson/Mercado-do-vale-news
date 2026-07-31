@@ -31,6 +31,8 @@ import {
     SaleProfitData
 } from '../../../utils/salePresentation';
 import { SignedWarrantyDocumentSection } from './SignedWarrantyDocumentSection';
+import { formatBrazilDateTime } from '../../../utils/brazilDateTime';
+import { getSaleItemRecordedIdentifier, getWarrantySaleItems } from '../../../utils/warrantySaleItems';
 
 interface SaleDetailsModalProps {
     isOpen: boolean;
@@ -378,7 +380,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
             } else {
                 // 2) Fallback: nenhum doc salvo (vendas migradas ou usuário fechou
                 //    modal sem salvar). Regenera dos sale_items serializados.
-                const serializedItems = sale.items.filter((i: any) => i.serialized_unit_id);
+                const serializedItems = getWarrantySaleItems(sale.items);
                 if (serializedItems.length === 0) {
                     toast.error('Nenhum item serializado nesta venda — sem termo a imprimir');
                     return;
@@ -442,7 +444,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                         cor: productSpecs.color || '',
                         ram: productSpecs.ram || '',
                         memoria: productSpecs.storage || '',
-                        imei1: unit.imei_1 || '',
+                        imei1: unit.imei_1 || getSaleItemRecordedIdentifier(item),
                         imei2: unit.imei_2 || '',
                         dias_garantia: String(days),
                         tipo_garantia: 'Garantia Legal',
@@ -533,13 +535,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
     const realProfitTotal = getSaleRealProfit(sale, realProfit);
 
     const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleString('pt-BR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        return formatBrazilDateTime(dateString);
     };
 
     const deliveryTypeLabel = (type?: string) => {
@@ -1080,7 +1076,7 @@ export default function SaleDetailsModal({ isOpen, onClose, sale, onStatusChange
                                             <p className="mb-2 text-xs font-semibold uppercase text-blue-600">Logs da entrega</p>
                                             <div className="max-h-28 overflow-auto rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
                                                 {deliveryLogs.map((log) => (
-                                                    <p key={log.id}>{new Date(log.created_at).toLocaleString('pt-BR')} - {log.event_type}: {log.message}</p>
+                                                    <p key={log.id}>{formatBrazilDateTime(log.created_at)} - {log.event_type}: {log.message}</p>
                                                 ))}
                                             </div>
                                         </div>

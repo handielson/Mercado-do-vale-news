@@ -561,6 +561,18 @@ async function deleteSaleRow(id: string): Promise<void> {
  */
 export const createSale = async (saleInput: SaleInput): Promise<Sale> => {
     try {
+        const invalidSerializedItem = saleInput.items.find((item) => {
+            const serialized = item.serialized_unit;
+            const hasIdentifier = Boolean(serialized?.imei1 || serialized?.imei2 || serialized?.serial);
+            return hasIdentifier && !serialized?.unitId;
+        });
+        if (invalidSerializedItem) {
+            throw new Error(
+                `O item serializado "${invalidSerializedItem.product_name}" nao possui uma unidade de estoque valida. `
+                + 'Atualize a busca e selecione um IMEI disponivel antes de concluir a venda.'
+            );
+        }
+
         // Calculate totals from items
         const totals = calculateSaleTotals(saleInput.items);
 

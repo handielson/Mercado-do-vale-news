@@ -4,6 +4,7 @@ import { modelService } from './models';
 import { brandService } from './brands';
 import { crossSellTagsService } from './cross-sell-tags';
 import { vpsApiService } from './vpsApiService';
+import { buildBlingImportSelection, getBlingParentId, isBlingStructureProduct } from './blingVariationImport';
 import { buildVpsUrl, getVpsSyncHeaders, VPS_DIRECT_BASE_URL } from './vpsProxyBase';
 import { companySettingsService } from './companySettingsService';
 import { getCompanyId } from './companyContext';
@@ -276,6 +277,7 @@ export async function fetchBlingProductDetail(productId: number): Promise<BlingP
             precoCusto: data.precoCusto ?? data.precoCompra ?? parentData?.precoCusto ?? parentData?.precoCompra ?? null,
             precoCompra: data.precoCompra ?? parentData?.precoCompra ?? null,
             situacao: data.situacao || 'A',
+            formato: data.formato,
             stock_quantity: data.stock_quantity ?? 0,
             categoria: data.categoria || parentData?.categoria || undefined,
             marca: data.marca || parentData?.marca || undefined,
@@ -737,6 +739,7 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         company_id: companyId,
         bling_id: item.id,
         bling_parent_id: parentId ?? null,
+        is_parent: isBlingStructureProduct(item),
         // Básico
         name: nomeLimpo,
         slug,
@@ -788,6 +791,27 @@ function mapBlingToDb(item: any, companyId: string, _enabledFields: Set<string>,
         is_gift: false,
         warranty_type: 'brand',
     };
+}
+
+export async function resolveBlingImportSelection(
+    selectedProducts: BlingProduct[],
+    availableProducts: BlingProduct[] = selectedProducts,
+): Promise<BlingProduct[]> {
+    const plan = buildBlingImportSelection(selectedProducts, availableProducts);
+    const fetchedParents: BlingProduct[] = [];
+
+    for (const parentId of plan.missingParentIds) {
+        const parent = await fetchBlingProductDetail(parentId);
+        if (!parent) {
+            throw new Error(`Nao foi possivel carregar o produto pai ${parentId} no Bling.`);
+        }
+        fetchedParents.push(parent);
+    }
+
+    return buildBlingImportSelection(
+        [...plan.products, ...fetchedParents],
+        [...availableProducts, ...fetchedParents],
+    ).products;
 }
 
 // ------- Stock sync: PDV → Bling -------
@@ -1274,8 +1298,10 @@ export async function importBlingProducts(
     categoryId: string,
     onProgress: (current: number, total: number, result: Partial<ImportResult>) => void,
     modelId?: string,
-    autoCreateModel: boolean = false
+    autoCreateModel: boolean = false,
+    availableProducts: BlingProduct[] = selectedProducts,
 ): Promise<ImportResult> {
+    selectedProducts = await resolveBlingImportSelection(selectedProducts, availableProducts);
     const companyId = await getCompanyId();
     const categoryMappings = loadCategoryMappings();
     console.warn('[bling:import-start]', {
@@ -1312,11 +1338,25 @@ export async function importBlingProducts(
     const result: ImportResult = { created: 0, updated: 0, errors: [] };
     const total = selectedProducts.length;
     const vpsRows: any[] = []; // collect successful rows for batch VPS sync
-    const existingVpsProducts = (await vpsApiService.getProducts({
-        status: 'all',
-        limit: 5000,
-        noCache: true,
-    })) || [];
+    const existingVpsProducts: any[] = [];
+    const existingPageSize = 500;
+    for (let offset = 0; offset < 50000; offset += existingPageSize) {
+        const page = (await vpsApiService.getProducts({
+            status: 'all',
+            limit: existingPageSize,
+            offset,
+            noCache: true,
+        })) || [];
+        existingVpsProducts.push(...page);
+        if (page.length < existingPageSize) break;
+    }
+    const localIdByBlingId = new Map<number, string>();
+    for (const product of existingVpsProducts) {
+        const blingId = Number(product?.bling_id);
+        if (Number.isFinite(blingId) && product?.id && !localIdByBlingId.has(blingId)) {
+            localIdByBlingId.set(blingId, product.id);
+        }
+    }
 
     const formatPersistenceError = (error: any): string => {
         if (!error) return 'Erro desconhecido no VPS';
@@ -1378,7 +1418,7 @@ export async function importBlingProducts(
         throw new Error('Falha ao atualizar produto após fallback de colunas.');
     };
 
-    const insertWithColumnFallback = async (initialRow: Record<string, any>): Promise<{ id: string; resolvedRow: Record<string, any> }> => {
+    const insertWithColumnFallback = async (initialRow: Record<string, any>): Promise<{ id: string; resolvedRow: Record<string, any>; matchedExisting: boolean }> => {
         let row = { ...initialRow };
         for (let attempt = 1; attempt <= 6; attempt++) {
             const rowWithId = { ...row, id: row.id || crypto.randomUUID() };
@@ -1388,7 +1428,15 @@ export async function importBlingProducts(
                 ? null
                 : { message: created.errors?.[0]?.error || 'Falha ao criar produto na VPS.' };
             row = rowWithId;
-            if (!error) return { id: insertedData?.id, resolvedRow: row };
+            if (!error) {
+                const resolved = created.resolved?.[0];
+                const resolvedId = resolved?.id || insertedData?.id;
+                return {
+                    id: resolvedId,
+                    resolvedRow: { ...row, id: resolvedId },
+                    matchedExisting: Boolean(resolved?.matched_existing),
+                };
+            }
 
             const fullMsg = formatPersistenceError(error);
 
@@ -1491,6 +1539,15 @@ export async function importBlingProducts(
             blingCategoryIdForDebug = enriched?.categoria?.id ?? blingCategoryIdForDebug;
 
             const row = mapBlingToDb(enriched, companyId, enabledFields, categoryId, validImportModelId, marginWholesale, marginReseller, modelDescription);
+            const structuralParent = isBlingStructureProduct(enriched);
+            const blingParentId = getBlingParentId(enriched);
+            row.is_parent = structuralParent;
+            row.parent_id = structuralParent
+                ? null
+                : (blingParentId ? localIdByBlingId.get(blingParentId) || null : null);
+            if (blingParentId && !row.parent_id) {
+                throw new Error(`produto_pai_local_ausente: bling_parent_id=${blingParentId}`);
+            }
 
             // Se o mapeamento local estiver desatualizado (categoria removida/trocada), cai para a categoria padrão.
             if (!row.category_id || !validVpsCategoryIds.has(row.category_id)) {
@@ -1693,6 +1750,7 @@ export async function importBlingProducts(
 
             // Extrai _color_id auxiliar antes de enviar para o banco
             const { _color_id: resolvedColorId, ...dbRow } = row;
+            let persistedProductId: string;
 
             if (existing) {
                 operation = 'atualização';
@@ -1703,15 +1761,19 @@ export async function importBlingProducts(
                 await updateWithColumnFallback(existing.id, stripBlingNameFieldsWhenLocalManaged(existing, updateFields));
                 result.updated++;
                 vpsRows.push({ ...dbRow, id: existing.id });
+                persistedProductId = existing.id;
             } else {
                 operation = 'criação';
                 const insertedData = await insertWithColumnFallback(dbRow);
-                result.created++;
+                if (insertedData.matchedExisting) result.updated++;
+                else result.created++;
                 // Use resolvedRow so that any slug/sku/ean modified during conflict fallback
                 // is propagated to the VPS (not the original conflicting value from dbRow).
                 vpsRows.push({ ...insertedData.resolvedRow, id: insertedData.id });
                 existingVpsProducts.push({ ...insertedData.resolvedRow, id: insertedData.id });
+                persistedProductId = insertedData.id;
             }
+            localIdByBlingId.set(Number(item.id), persistedProductId);
 
             // Associa cor ao model_color_images se o produto tiver model_id e cor mapeada
             if (resolvedColorId && dbRow.model_id && dbRow.images?.length) {

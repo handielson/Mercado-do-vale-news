@@ -3201,7 +3201,7 @@ async function notifySaleCompletedWhatsApp(saleId) {
     variables: {
       nome: customer?.name || 'Cliente',
       pedido: receiptOrderNumber,
-      data: sale.created_at ? new Date(sale.created_at).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR'),
+      data: formatAutomationDateTime(sale.created_at || new Date()),
       itens: itemLines,
       pagamento: formatAutomationPaymentMethods(sale.payment_methods),
       subtotal: formatAutomationMoney(sale.subtotal || 0),
@@ -23252,19 +23252,21 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
 
   const productIds = products.map((product) => product.id).filter(Boolean);
   const unitsByProduct = new Map();
+  const productsWithUnitHistory = new Set();
 
   if (productIds.length > 0) {
     const placeholders = productIds.map(() => '?').join(', ');
     const [units] = await pool.query(
       `SELECT u.*
          FROM units u
-        WHERE u.status = 'available'
-          AND u.product_id IN (${placeholders})
+        WHERE u.product_id IN (${placeholders})
         ORDER BY u.created_at ASC`,
       productIds,
     );
 
     for (const unit of units) {
+      productsWithUnitHistory.add(unit.product_id);
+      if (unit.status !== 'available') continue;
       const list = unitsByProduct.get(unit.product_id) || [];
       list.push(unit);
       unitsByProduct.set(unit.product_id, list);
@@ -23275,6 +23277,7 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
   return products.map((product) => ({
     product,
     available_units: unitsByProduct.get(product.id) || [],
+    has_unit_history: productsWithUnitHistory.has(product.id),
   }));
 });
 
@@ -25132,10 +25135,27 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
     }));
   }
 
-  const results = { upserted: 0, errors: [] };
+  const results = { upserted: 0, errors: [], resolved: [] };
 
-  for (const p of products) {
+  for (const rawProduct of products) {
+    const p = { ...rawProduct };
     try {
+      let matchedExisting = false;
+      const requestedId = p.id || null;
+      if (p.bling_id) {
+        const [existingByBling] = await pool.query(
+          `SELECT id FROM products
+            WHERE bling_id=? AND (company_id <=> ? OR company_id IS NULL)
+            ORDER BY (company_id <=> ?) DESC, created_at ASC, id ASC
+            LIMIT 1`,
+          [p.bling_id, p.company_id || null, p.company_id || null]
+        );
+        if (existingByBling.length > 0) {
+          p.id = existingByBling[0].id;
+          matchedExisting = true;
+        }
+      }
+
       const conflict = await findProductSerializedIdentifierConflict(
         collectProductSerializedIdentifiers(p),
         p.id || null
@@ -25152,13 +25172,13 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           price_promo, promo_start, promo_end,
           stock_quantity, status, category_id, brand, model_id,
           images, specs, custom_fields, dimensions, weight_kg,
-          ncm, cest, origin, bling_id, bling_parent_id, parent_id,
+          ncm, cest, origin, bling_id, bling_parent_id, parent_id, is_parent,
           video_url, track_inventory, is_gift, is_virtual,
           warranty_type, warranty_template_id, company_id, kits,
           offer_type, offer_parent_product_id, offer_visibility,
           shopee_strategy, shopee_offer_status, shopee_offer_error,
           hide_from_catalog, meta_title, meta_description, keywords
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON DUPLICATE KEY UPDATE
           name=IF(VALUES(name) IS NULL, name, VALUES(name)),
           slug=IF(VALUES(slug) IS NULL, slug, VALUES(slug)),
@@ -25188,7 +25208,8 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           origin=IF(VALUES(origin) IS NULL, origin, VALUES(origin)),
           bling_id=IF(VALUES(bling_id) IS NULL, bling_id, VALUES(bling_id)),
           bling_parent_id=IF(VALUES(bling_parent_id) IS NULL, bling_parent_id, VALUES(bling_parent_id)),
-          parent_id=IF(VALUES(parent_id) IS NULL, parent_id, VALUES(parent_id)),
+          parent_id=IF(VALUES(is_parent)=1, NULL, IF(VALUES(parent_id) IS NULL, parent_id, VALUES(parent_id))),
+          is_parent=IF(VALUES(is_parent) IS NULL, is_parent, VALUES(is_parent)),
           video_url=IF(VALUES(video_url) IS NULL, video_url, VALUES(video_url)),
           track_inventory=IF(VALUES(track_inventory) IS NULL, track_inventory, VALUES(track_inventory)),
           is_gift=IF(VALUES(is_gift) IS NULL, is_gift, VALUES(is_gift)),
@@ -25218,7 +25239,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           jsonStr(p.images), jsonStr(p.specs), jsonStr(p.custom_fields),
           jsonStr(p.dimensions), p.weight_kg || null,
           p.ncm || null, p.cest || null, p.origin || null,
-          p.bling_id || null, p.bling_parent_id || null, p.parent_id || null,
+          p.bling_id || null, p.bling_parent_id || null, p.parent_id || null, optionalBool(p.is_parent),
           p.video_url || null,
           optionalBool(p.track_inventory), optionalBool(p.is_gift), optionalBool(p.is_virtual),
           p.warranty_type ?? null, p.warranty_template_id || null,
@@ -25230,6 +25251,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
         ]
       );
       results.upserted++;
+      results.resolved.push({ requested_id: requestedId, id: p.id, bling_id: p.bling_id || null, matched_existing: matchedExisting });
     } catch (err) {
       results.errors.push({ id: p.id, name: p.name, error: err.message });
     }
@@ -25354,7 +25376,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       price_promo=?, promo_start=?, promo_end=?,
       stock_quantity=?, status=?, category_id=?, brand=?, model_id=?,
       images=?, specs=?, custom_fields=?, dimensions=?, weight_kg=?,
-      ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?,
+      ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?, is_parent=?,
       video_url=?, track_inventory=?, is_gift=?,
       warranty_type=?, warranty_template_id=?, kits=?,
       hide_from_catalog=?, meta_title=?, meta_description=?, keywords=?,
@@ -25373,7 +25395,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       jsonStr(p.images), jsonStr(p.specs), jsonStr(p.custom_fields),
       jsonStr(p.dimensions), p.weight_kg || null,
       p.ncm || null, p.cest || null, p.origin || null,
-      p.bling_id || null, p.bling_parent_id || null, p.parent_id || null,
+      p.bling_id || null, p.bling_parent_id || null, p.parent_id || null, optionalBool(p.is_parent),
       p.video_url || null,
       p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
       p.warranty_type || 'brand', p.warranty_template_id || null, jsonStr(p.kits),

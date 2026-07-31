@@ -4,6 +4,7 @@ import { CoinBalance } from '../types/cashback';
 import type { BenefitStatus } from '../services/benefitService';
 import { buildGlobalHeader, getHeaderTemplate } from './headerBuilder';
 import { buildPaymentPresentation } from './salePresentation';
+import { formatBrazilDate, formatBrazilTime } from './brazilDateTime';
 
 const fmt = (v: number) => `R$ ${(v / 100).toFixed(2).replace('.', ',')}`;
 
@@ -72,8 +73,8 @@ function resolveExtraPageTags(
         .replace(/\{\{empresa_cnpj\}\}/g, settings.cnpj || '')
         .replace(/\{\{empresa_endereco\}\}/g, settings.address || '')
         // Venda
-        .replace(/\{\{data_venda\}\}/g, saleDate.toLocaleDateString('pt-BR'))
-        .replace(/\{\{hora_venda\}\}/g, saleDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
+        .replace(/\{\{data_venda\}\}/g, formatBrazilDate(saleDate))
+        .replace(/\{\{hora_venda\}\}/g, formatBrazilTime(saleDate))
         .replace(/\{\{numero_pedido\}\}/g, sale.id.slice(0, 8).toUpperCase())
         // Películas
         .replace(/\{\{pelicula_saldo\}\}/g, String(peliSaldo))
@@ -255,8 +256,8 @@ export function printSaleReceipt(
                 <p style="font-size:16px;font-weight:800;color:#2563eb;">#${sale.id.slice(0, 8).toUpperCase()}</p>
             </div>
             <div style="text-align:right;">
-                <p style="font-size:11px;color:#6b7280;">${saleDate.toLocaleDateString('pt-BR')}</p>
-                <p style="font-size:11px;color:#6b7280;">${saleDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                <p style="font-size:11px;color:#6b7280;">${formatBrazilDate(saleDate)}</p>
+                <p style="font-size:11px;color:#6b7280;">${formatBrazilTime(saleDate)}</p>
             </div>
         </div>
     </div>

@@ -427,11 +427,11 @@ class VpsApiService {
     return result;
   }
 
-  async searchPdvProducts(search: string, limit: number = 50): Promise<Array<{ product: any; available_units: any[] }> | null> {
+  async searchPdvProducts(search: string, limit: number = 50): Promise<Array<{ product: any; available_units: any[]; has_unit_history?: boolean }> | null> {
     const qs = new URLSearchParams();
     qs.set('search', search);
     qs.set('limit', String(limit));
-    return this.fetchSafe<Array<{ product: any; available_units: any[] }>>(`/pdv/product-search?${qs.toString()}`, true);
+    return this.fetchSafe<Array<{ product: any; available_units: any[]; has_unit_history?: boolean }>>(`/pdv/product-search?${qs.toString()}`, true);
   }
 
   /** Atualiza o array de imagens de um produto pelo SKU (image bank sync).
@@ -499,7 +499,7 @@ class VpsApiService {
   }
 
   /** Cria ou upserta um produto na VPS MySQL */
-  async createProduct(data: any): Promise<{ upserted: number; errors: any[] }> {
+  async createProduct(data: any): Promise<{ upserted: number; errors: any[]; resolved?: Array<{ requested_id: string | null; id: string; bling_id: number | null; matched_existing: boolean }> }> {
     this.invalidateProductCache();
     try {
       const res = await fetch(proxyUrl('/products/batch', 'POST'), {

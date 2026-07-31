@@ -18,6 +18,8 @@ import { vpsApiService } from '../../services/vpsApiService';
 import { warrantyTemplateService } from '../../services/warrantyTemplates';
 import { getCustomerFinancialSummary, type CustomerFinancialSummary } from '../../services/customerFinancialSummaryService';
 import { DeliveryWorkerTab } from '../../components/customer/profile/DeliveryWorkerTab';
+import { formatBrazilDate, formatBrazilDateTime } from '../../utils/brazilDateTime';
+import { getSaleItemRecordedIdentifier, getWarrantySaleItems } from '../../utils/warrantySaleItems';
 
 /**
  * Customer Details Page
@@ -162,13 +164,16 @@ export default function CustomerDetailsPage() {
             } else {
                 // 2) Fallback: regenera (cobre vendas migradas com IMEI no SKU e
                 //    vendas novas onde usuário não clicou Salvar Termo).
-                const serializedItems = sale.items.filter((i: any) => i.serialized_unit_id);
-                const isLegacy = serializedItems.length === 0;
+                const serializedItems = getWarrantySaleItems(sale.items);
+                if (serializedItems.length === 0) {
+                    toast.error('Nenhum aparelho serializado foi encontrado nesta venda');
+                    return;
+                }
 
                 const { vpsApiService } = await import('../../services/vpsApiService');
                 const { brandService } = await import('../../services/brands');
                 const { categoryService } = await import('../../services/categories');
-                const units = isLegacy ? [] : (await vpsApiService.getUnitsBySale(sale.id) || []);
+                const units = await vpsApiService.getUnitsBySale(sale.id) || [];
                 const unitById = new Map<string, any>();
                 units.forEach((u: any) => unitById.set(u.id, u));
                 const brands = await brandService.list();
@@ -181,9 +186,7 @@ export default function CustomerDetailsPage() {
                         ? 'delivery' : 'store_pickup'
                 );
 
-                const itemsToRender = isLegacy ? sale.items.slice(0, 1) : serializedItems;
-
-                for (const item of itemsToRender) {
+                for (const item of serializedItems) {
                     let specs: Record<string, any> = (item as any).product_specs || {};
                     let brand = (item as any).product_brand || '';
                     let model = (item as any).product_model || '';
@@ -204,13 +207,8 @@ export default function CustomerDetailsPage() {
                     }
 
                     const unit = unitById.get((item as any).serialized_unit_id) || {};
-                    let imei1 = unit.imei_1 || specs.imei1 || '';
-                    let imei2 = unit.imei_2 || specs.imei2 || '';
-                    if (!imei1 && item.product_sku) {
-                        const parts = item.product_sku.split('/').map((s: string) => s.trim());
-                        imei1 = parts[0] || '';
-                        imei2 = parts[1] || '';
-                    }
+                    const imei1 = unit.imei_1 || getSaleItemRecordedIdentifier(item);
+                    const imei2 = unit.imei_2 || '';
                     if (!model) model = item.product_name;
 
                     let days = 90;
@@ -400,7 +398,7 @@ export default function CustomerDetailsPage() {
 
     // Format date
     const formatDate = (value: string) => {
-        return new Date(value).toLocaleDateString('pt-BR');
+        return formatBrazilDate(value);
     };
 
     const formatCurrencyCents = (value: number) => {
@@ -677,7 +675,7 @@ export default function CustomerDetailsPage() {
                                         </div>
                                         <div>
                                             <div className="text-sm font-bold text-slate-800">Pedido #{sale.id.slice(0, 8).toUpperCase()}</div>
-                                            <div className="text-xs text-slate-500">{new Date(sale.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                                            <div className="text-xs text-slate-500">{formatBrazilDateTime(sale.created_at, { month: 'long' })}</div>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">

@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.128-cancelamento-imei-bling",
+  "version": "v1.2.129-pdv-serial-parent-integrity",
   "date": "2026-07-31",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260731-182453-cancelamento-imei-bling",
+  "release_vps": "/var/www/mdv-site/releases/20260731-191359-pdv-imei-garantia-fuso",
   "branch": "main",
-  "summary": "Restaura IMEI e estoque do Bling em cancelamentos e estornos."
+  "summary": "Protege vendas serializadas, termo de garantia, fuso do PDV e importacao de pais/variacoes do Bling."
 }
