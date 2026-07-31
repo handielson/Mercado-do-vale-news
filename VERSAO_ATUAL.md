@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.126-android-ready-to-send-warranty
-date: 2026-07-30
+version: v1.2.127-bling-marketplace-stock
+date: 2026-07-31
 status: ready
-release_vps: /var/www/mdv-site/releases/20260731-010429-android-pronto-envio-termo
+release_vps: /var/www/mdv-site/releases/20260731-153827-bling-marketplace-stock
 branch: main
-summary: Adiciona Pronto para envio, foto do termo assinado e código legível no Gestão MDV.
+summary: Propaga ajustes de estoque do Bling para locais, Shopee e TikTok Shop.
 ```
