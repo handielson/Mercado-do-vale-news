@@ -74,6 +74,7 @@ import { buildShopeeOfferVariationGroups } from '../../../services/shopeeOfferMa
 import type { ShopeeVariationGroup } from '../../../types/shopee-variation';
 import { isArchivedProductRecord } from '../../../utils/localProductVisibility';
 import { getShopeeBulkEffectiveStock, hasShopeeBulkPublishStock } from '../../../utils/shopeeBulkEligibility';
+import { buildMarketplaceParentGallery, collectMarketplaceProductImages } from '../../../services/marketplaceParentGallery.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface ShopeeProduct {
@@ -2799,7 +2800,17 @@ export function ShopeeSyncModal({
 
         return 0.3;
     })();
-    const primaryImage = (product.images || []).find((image) => typeof image === 'string' && image.trim()) || '';
+    const initialVariationGroupForGallery = (variationGroups || []).find((group) =>
+        group.parent.id === product.id || group.children.some((child) => child.id === product.id)
+    );
+    const initialGalleryUrls = initialVariationGroupForGallery
+        ? buildMarketplaceParentGallery(
+            initialVariationGroupForGallery.parent,
+            initialVariationGroupForGallery.children,
+            { minimumCount: 3, maxCount: 9 }
+        )
+        : collectMarketplaceProductImages(product).slice(0, 9);
+    const primaryImage = initialGalleryUrls[0] || '';
     const gtinValue = (product.eans || []).find((ean) => typeof ean === 'string' && ean.trim()) || '';
     const initialGtinMode = gtinValue && isNoGtinValue(gtinValue) ? 'no_gtin' : 'code';
     const initialGtinInput = initialGtinMode === 'code' ? gtinValue.trim() : '';
@@ -2869,10 +2880,7 @@ export function ShopeeSyncModal({
     const [gtinMode, setGtinMode] = useState<'code' | 'no_gtin'>(initialGtinMode);
     const [gtinInput, setGtinInput] = useState(initialGtinInput);
     const [mediaImages, setMediaImages] = useState<EditableImage[]>(() =>
-        (product.images || [])
-            .filter((image) => typeof image === 'string' && image.trim())
-            .slice(0, 9)
-            .map((image) => ({ image_url: image }))
+        initialGalleryUrls.map((image) => ({ image_url: image }))
     );
     const [mediaVideos, setMediaVideos] = useState<EditableVideo[]>(() =>
         defaultVideoUrl ? [{ file_name: defaultVideoUrl.split('/').pop() || 'video.mp4', video_url: defaultVideoUrl }] : []
@@ -2890,6 +2898,7 @@ export function ShopeeSyncModal({
     const explicitCategoryLockedRef = useRef(false);
     const autoPublishAdvancedRef = useRef(false);
     const autoPublishStartedRef = useRef(false);
+    const variationGalleryAppliedRef = useRef('');
     const activeFieldTemplate = useMemo(() => resolveShopeeFieldTemplate(product), [product]);
     const [shopeeTemplates, setShopeeTemplates] = useState<ShopeeTemplate[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -2957,6 +2966,29 @@ export function ShopeeSyncModal({
             ],
         });
     }, [nameSuggestedVariationGroup, rawSelectedVariationGroup]);
+    useEffect(() => {
+        if (!publishWithVariations || !selectedVariationGroup) return;
+        if (variationGalleryAppliedRef.current === selectedVariationGroup.id) return;
+
+        const galleryUrls = buildMarketplaceParentGallery(
+            selectedVariationGroup.parent,
+            selectedVariationGroup.children,
+            { minimumCount: 3, maxCount: 9 }
+        );
+        setMediaImages((current) => {
+            const next = galleryUrls.map((imageUrl) => ({ image_url: imageUrl }));
+            const seen = new Set(galleryUrls);
+            for (const image of current) {
+                if (next.length >= 9) break;
+                const imageUrl = String(image.image_url || '').trim();
+                if (imageUrl && seen.has(imageUrl)) continue;
+                if (imageUrl) seen.add(imageUrl);
+                next.push(image);
+            }
+            return next;
+        });
+        variationGalleryAppliedRef.current = selectedVariationGroup.id;
+    }, [publishWithVariations, selectedVariationGroup]);
     const variationDimensions = useMemo(
         () => selectedVariationGroup ? detectShopeeVariationDimensions(selectedVariationGroup) : [],
         [selectedVariationGroup]

@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.133-shopee-description-format",
+  "version": "v1.2.134-parent-gallery-images",
   "date": "2026-07-31",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260731-204247-shopee-description-format",
+  "release_vps": "/var/www/mdv-site/releases/20260731-213343-parent-gallery-images",
   "branch": "main",
-  "summary": "Converte descricoes HTML em texto formatado compativel com a Shopee."
+  "summary": "Completa galerias de produtos pai com imagens das variacoes para Shopee e TikTok."
 }
