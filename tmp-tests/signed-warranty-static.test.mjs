@@ -168,7 +168,7 @@ for (const server of Object.values(servers)) {
 
 const extractPipeline = (source) => {
   const match = source.match(
-    /\/\/ SIGNED_WARRANTY_PIPELINE_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_PIPELINE_END/
+    /\/\/ SIGNED_WARRANTY_PIPELINE_START\r?\n([\s\S]*?)\/\/ SIGNED_WARRANTY_PIPELINE_END/
   );
   assert.ok(match, 'signed warranty pipeline block must exist');
   return match[1].trim().replace(/\r\n/g, '\n');
@@ -177,7 +177,7 @@ assert.equal(extractPipeline(servers.js), extractPipeline(servers.cjs));
 
 const extractApi = (source) => {
   const match = source.match(
-    /\/\/ SIGNED_WARRANTY_API_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_API_END/
+    /\/\/ SIGNED_WARRANTY_API_START\r?\n([\s\S]*?)\/\/ SIGNED_WARRANTY_API_END/
   );
   assert.ok(match, 'signed warranty API block must exist');
   return match[1].trim().replace(/\r\n/g, '\n');
@@ -186,7 +186,7 @@ assert.equal(extractApi(servers.js), extractApi(servers.cjs));
 
 const extractSync = (source) => {
   const match = source.match(
-    /\/\/ SIGNED_WARRANTY_SYNC_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_SYNC_END/
+    /\/\/ SIGNED_WARRANTY_SYNC_START\r?\n([\s\S]*?)\/\/ SIGNED_WARRANTY_SYNC_END/
   );
   assert.ok(match, 'signed warranty sync block must exist');
   return match[1].trim().replace(/\r\n/g, '\n');

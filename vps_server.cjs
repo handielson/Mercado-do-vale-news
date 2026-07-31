@@ -6400,12 +6400,14 @@ async function loadMobilePdvSalesVps(limit = 50, saleId = '') {
     return {
       channel: 'pdv',
       external_id: String(sale.id),
+      display_id: String(sale.id).split('-')[0].toUpperCase(),
       status: 'completed',
       customer_name: String(sale.customer_name || 'Consumidor'),
       total_cents: totalCents,
       currency: 'BRL',
       occurred_at: mobileSalesIsoVps(sale.created_at),
       details: {
+        display_id: String(sale.id).split('-')[0].toUpperCase(),
         items: itemsBySale.get(String(sale.id)) || [],
         payment: mobileSalesPaymentLabelVps(sale.payment_methods || sale.payment_method),
         payment_details: mobileSalesPaymentDetailsVps(
@@ -6444,12 +6446,14 @@ async function loadMobileOnlineSalesVps(limit = 50, orderId = '') {
   return (rows || []).map((order) => ({
     channel: 'online',
     external_id: String(order.id),
+    display_id: String(order.id).split('-')[0].toUpperCase(),
     status: String(order.status || 'paid'),
     customer_name: String(order.customer_name || 'Cliente online'),
     total_cents: mobileSalesCentsVps(order.total),
     currency: 'BRL',
     occurred_at: mobileSalesIsoVps(order.paid_at || order.created_at),
     details: {
+      display_id: String(order.id).split('-')[0].toUpperCase(),
       items: itemsByOrder.get(String(order.id)) || [],
       payment: mobileSalesPaymentLabelVps(order.payment_method),
       customer_phone: String(order.customer_phone || ''),

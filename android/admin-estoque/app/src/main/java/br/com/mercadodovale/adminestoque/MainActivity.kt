@@ -6,6 +6,7 @@ import android.app.Activity
 import android.app.TimePickerDialog
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -18,6 +19,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.provider.OpenableColumns
+import android.provider.MediaStore
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
@@ -38,6 +40,7 @@ import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import br.com.mercadodovale.adminestoque.data.SalesCache
 import br.com.mercadodovale.adminestoque.data.VpsApiClient
 import br.com.mercadodovale.adminestoque.domain.LabelSize
@@ -62,6 +65,7 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import org.json.JSONObject
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -92,6 +96,8 @@ class MainActivity : Activity() {
     private var printerConnectButton: Button? = null
     private var currentPrinterMessage = "Impressora desconectada."
     private var pendingCameraAction: (() -> Unit)? = null
+    private var pendingWarrantyPhotoFile: File? = null
+    private var pendingWarrantySale: SaleSummary? = null
     private lateinit var p50PrinterClient: P50PrinterClient
     private lateinit var genericPrinterClient: GenericEscPosPrinterClient
     private var activePrinterProfile = PrinterProfile.MARKLIFE_P50
@@ -849,7 +855,123 @@ class MainActivity : Activity() {
             }
         }
         if (sale.notes.isNotBlank()) root.addView(saleDetailSection("Observações", sale.notes))
+        if (sale.channel == SalesChannel.PDV) {
+            root.addView(signedWarrantySection(sale))
+        }
         showContent(root)
+    }
+
+    private fun signedWarrantySection(sale: SaleSummary) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(14), dp(16), dp(14))
+        setBackgroundColor(Color.rgb(236, 253, 245))
+        addView(text("Termo de garantia assinado", 18, Color.rgb(6, 78, 59)))
+        val status = text("Consultando documento da venda #${sale.shortId}…", 14, Color.DKGRAY)
+        addView(status)
+        val captureButton = button("Fotografar termo assinado") {
+            ensureCameraPermission(status) {
+                launchSignedWarrantyCamera(sale, status)
+            }
+        }
+        addView(captureButton)
+        loadSignedWarrantyStatus(sale, status, captureButton)
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = dp(12) }
+    }
+
+    private fun loadSignedWarrantyStatus(
+        sale: SaleSummary,
+        status: TextView,
+        captureButton: Button,
+    ) {
+        runAsync {
+            val encodedSaleId = URLEncoder.encode(sale.externalId, "UTF-8")
+            val result = VpsApiClient(token.orEmpty()).get("/sales/$encodedSaleId/signed-warranty")
+            runOnUiThread {
+                result.fold(
+                    onSuccess = { body ->
+                        val active = runCatching {
+                            JSONObject(body).optJSONObject("active")
+                        }.getOrNull()
+                        if (active != null) {
+                            val version = active.optInt("version_number", 1)
+                            status.text = "Termo digitalizado e arquivado • versão $version"
+                            captureButton.text = "Substituir foto do termo"
+                        } else {
+                            status.text = "Pendente: fotografe o termo assinado pelo cliente."
+                            captureButton.text = "Fotografar termo assinado"
+                        }
+                    },
+                    onFailure = {
+                        status.text = it.message ?: "Não foi possível consultar o termo."
+                    },
+                )
+            }
+        }
+    }
+
+    private fun launchSignedWarrantyCamera(sale: SaleSummary, status: TextView) {
+        val photoDirectory = File(cacheDir, "signed-warranty").apply { mkdirs() }
+        val photo = File(photoDirectory, "termo-${sale.shortId}-${System.currentTimeMillis()}.jpg")
+        val photoUri = FileProvider.getUriForFile(this, "$packageName.files", photo)
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, photoUri)
+            clipData = ClipData.newRawUri("Termo de garantia", photoUri)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        if (intent.resolveActivity(packageManager) == null) {
+            status.text = "Nenhum aplicativo de câmera foi encontrado."
+            return
+        }
+        pendingWarrantyPhotoFile?.delete()
+        pendingWarrantyPhotoFile = photo
+        pendingWarrantySale = sale
+        status.text = "Fotografe o termo inteiro e confirme a imagem."
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, REQUEST_SIGNED_WARRANTY_PHOTO)
+    }
+
+    private fun uploadSignedWarrantyPhoto(sale: SaleSummary, photo: File) {
+        val root = screen()
+        root.addView(back("Detalhes da venda") { showSaleDetails(sale) })
+        root.addView(text("Enviando termo assinado", 24, green))
+        val status = text(
+            "Enviando a foto e gerando o PDF da venda #${sale.shortId}…",
+            16,
+            Color.DKGRAY,
+        )
+        root.addView(status)
+        showContent(root)
+        runAsync {
+            val encodedSaleId = URLEncoder.encode(sale.externalId, "UTF-8")
+            val result = VpsApiClient(token.orEmpty()).uploadFile(
+                "/admin/sales/$encodedSaleId/signed-warranty",
+                "file",
+                photo,
+                "termo-garantia-${sale.shortId}.jpg",
+            )
+            photo.delete()
+            runOnUiThread {
+                pendingWarrantyPhotoFile = null
+                pendingWarrantySale = null
+                result.fold(
+                    onSuccess = {
+                        Toast.makeText(
+                            this,
+                            "Termo assinado digitalizado com sucesso.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        showSaleDetails(sale)
+                    },
+                    onFailure = {
+                        status.text = it.message ?: "Não foi possível enviar o termo assinado."
+                        root.addView(button("Voltar para a venda") { showSaleDetails(sale) })
+                    },
+                )
+            }
+        }
     }
 
     private fun saleDetailSection(title: String, value: String) = LinearLayout(this).apply {
@@ -2979,6 +3101,19 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_SIGNED_WARRANTY_PHOTO) {
+            val photo = pendingWarrantyPhotoFile
+            val sale = pendingWarrantySale
+            if (resultCode == RESULT_OK && photo != null && sale != null && photo.length() > 0) {
+                uploadSignedWarrantyPhoto(sale, photo)
+            } else {
+                photo?.delete()
+                pendingWarrantyPhotoFile = null
+                pendingWarrantySale = null
+                sale?.let(::showSaleDetails)
+            }
+            return
+        }
         if (resultCode != RESULT_OK) return
         when (requestCode) {
             REQUEST_SALES_SYSTEM_SOUND -> {
@@ -3216,6 +3351,7 @@ class MainActivity : Activity() {
         private const val REQUEST_NOTIFICATIONS = 43
         private const val REQUEST_SALES_SYSTEM_SOUND = 44
         private const val REQUEST_SALES_CUSTOM_SOUND = 45
+        private const val REQUEST_SIGNED_WARRANTY_PHOTO = 46
         private const val SESSION_PREFERENCES = "mdv_admin_session"
         private const val SESSION_TOKEN_KEY = "access_token"
         private const val LABEL_PRODUCT_KEY = "selected_label_product"

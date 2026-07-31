@@ -26,6 +26,7 @@ enum class SaleStatusGroup(val label: String) {
     ALL("Todas"),
     NEW("Novas"),
     TO_SHIP("A enviar"),
+    READY_TO_SEND("Pronto para envio"),
     SHIPPED("Enviadas"),
     COMPLETED("Concluídas"),
     CANCELLED("Canceladas"),
@@ -38,8 +39,11 @@ enum class SaleStatusGroup(val label: String) {
         fun fromRaw(value: String): SaleStatusGroup = when (normalizeStatus(value)) {
             "NEW", "CREATED", "PENDING", "UNPAID", "AWAITING_PAYMENT", "PENDING_PAYMENT" -> NEW
             "PAID", "CONFIRMED", "READY_TO_SHIP", "AWAITING_SHIPMENT", "TO_SHIP",
-            "PROCESSING", "PACKING", "PICKUP_PENDING" -> TO_SHIP
-            "PROCESSED", "SHIPPED", "IN_TRANSIT", "PICKED_UP", "TO_CONFIRM_RECEIVE" -> SHIPPED
+            "PROCESSING", "PACKING" -> TO_SHIP
+            "PROCESSED", "LABEL_CREATED", "SHIPPING_LABEL_CREATED", "SHIPPING_DOCUMENT_CREATED",
+            "AWAITING_COLLECTION", "AWAITING_PICKUP", "PICKUP_PENDING", "READY_FOR_PICKUP",
+            "READY_FOR_COLLECTION" -> READY_TO_SEND
+            "SHIPPED", "IN_TRANSIT", "PICKED_UP", "TO_CONFIRM_RECEIVE" -> SHIPPED
             "DELIVERED", "COMPLETED", "COMPLETE", "SUCCESS", "FINISHED" -> COMPLETED
             "CANCELLED", "CANCELED", "IN_CANCEL", "VOIDED" -> CANCELLED
             "REFUND", "REFUNDED", "PARTIAL_REFUND", "RETURN", "RETURNED", "IN_RETURN" -> RETURNS
@@ -64,6 +68,13 @@ enum class SaleStatusGroup(val label: String) {
                 "PACKING" to "Em separação",
                 "PICKUP_PENDING" to "Aguardando coleta",
                 "PROCESSED" to "Envio preparado",
+                "LABEL_CREATED" to "Etiqueta emitida",
+                "SHIPPING_LABEL_CREATED" to "Etiqueta emitida",
+                "SHIPPING_DOCUMENT_CREATED" to "Etiqueta emitida",
+                "AWAITING_COLLECTION" to "Aguardando coleta",
+                "AWAITING_PICKUP" to "Aguardando coleta",
+                "READY_FOR_PICKUP" to "Pronto para coleta",
+                "READY_FOR_COLLECTION" to "Pronto para coleta",
                 "SHIPPED" to "Enviada",
                 "IN_TRANSIT" to "Em trânsito",
                 "PICKED_UP" to "Coletada",
@@ -123,6 +134,7 @@ data class SalePaymentDetail(
 data class SaleSummary(
     val channel: SalesChannel,
     val externalId: String,
+    val displayId: String,
     val status: String,
     val customerName: String,
     val totalCents: Long,
@@ -146,7 +158,7 @@ data class SaleSummary(
         }.getOrElse { "R$ %.2f".format(Locale("pt", "BR"), totalCents / 100.0) }
 
     val shortId: String
-        get() = externalId.take(12).uppercase()
+        get() = displayId.ifBlank { externalId }.take(24).uppercase()
 
     val statusGroup: SaleStatusGroup
         get() = SaleStatusGroup.fromRaw(status)
@@ -266,6 +278,10 @@ data class SaleSummary(
             return SaleSummary(
                 channel = channel,
                 externalId = json.getString("external_id"),
+                displayId = json.optString(
+                    "display_id",
+                    details.optString("display_id", json.getString("external_id").take(8)),
+                ),
                 status = json.optString("status", "confirmada"),
                 customerName = json.optString("customer_name", "Cliente"),
                 totalCents = json.optLong("total_cents"),

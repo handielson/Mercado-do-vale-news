@@ -13,6 +13,10 @@ const {
   fitImageInsideA4,
 } = require('../services/signedWarrantyDocumentCore.cjs');
 
+function readServerSource() {
+  return readFileSync('vps_server.cjs', 'utf8').replace(/\r\n/g, '\n');
+}
+
 test('normalizes the visible eight-character sale code', () => {
   assert.equal(normalizeSaleCode(' ab12-cd34 '), 'AB12CD34');
 });
@@ -53,7 +57,7 @@ test('fits portrait and landscape images inside A4 without cropping', () => {
 });
 
 function loadSignedWarrantyPipelineFactory() {
-  const source = readFileSync('vps_server.cjs', 'utf8');
+  const source = readServerSource();
   const match = source.match(
     /\/\/ SIGNED_WARRANTY_PIPELINE_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_PIPELINE_END/
   );
@@ -62,7 +66,7 @@ function loadSignedWarrantyPipelineFactory() {
 }
 
 function loadSignedWarrantyApiFactory() {
-  const source = readFileSync('vps_server.cjs', 'utf8');
+  const source = readServerSource();
   const match = source.match(
     /\/\/ SIGNED_WARRANTY_API_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_API_END/
   );
@@ -71,7 +75,7 @@ function loadSignedWarrantyApiFactory() {
 }
 
 function loadSignedWarrantySyncFactory() {
-  const source = readFileSync('vps_server.cjs', 'utf8');
+  const source = readServerSource();
   const match = source.match(
     /\/\/ SIGNED_WARRANTY_SYNC_START\n([\s\S]*?)\/\/ SIGNED_WARRANTY_SYNC_END/
   );
@@ -878,7 +882,7 @@ function buildPipeline(overrides = {}) {
 }
 
 function loadPrivateSynologyPathHelpers() {
-  const source = readFileSync('vps_server.cjs', 'utf8');
+  const source = readServerSource();
   const match = source.match(
     /(function normalizePrivateSynologyPath[\s\S]*?function joinPrivateSynologyPath[\s\S]*?\n})/
   );
@@ -890,7 +894,7 @@ function loadPrivateSynologyPathHelpers() {
 }
 
 function loadSignedWarrantyIndexUpgrade() {
-  const source = readFileSync('vps_server.cjs', 'utf8');
+  const source = readServerSource();
   const match = source.match(
     /(async function upgradeSignedWarrantyDocumentIndexes[\s\S]*?\n})\n\nasync function seedAutoresponderRuleTemplates/
   );
@@ -899,7 +903,7 @@ function loadSignedWarrantyIndexUpgrade() {
 }
 
 function loadPrivateSynologyHttpHelpers(https, { maxJsonBytes = 16, maxDownloadBytes = 32 } = {}) {
-  const source = readFileSync('vps_server.cjs', 'utf8');
+  const source = readServerSource();
   const match = source.match(
     /(function synologyPrivateJsonRequest[\s\S]*?async function downloadBufferFromSynologyPrivateFolder[\s\S]*?\n})\n\nasync function uploadBufferToSynologyPrivateFolder/
   );
