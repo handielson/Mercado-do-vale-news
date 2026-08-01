@@ -158,6 +158,11 @@ function existingChecks(files) {
     checks.push(`node ${testFile}`);
   }
 
+  const serverFilesChanged = files.some((file) => ['server.js', 'vps_server.js', 'vps_server.cjs'].includes(file));
+  if (serverFilesChanged && existsSync(path.join(process.cwd(), 'tmp-tests/pdv-stock-location-decrement-static.test.mjs'))) {
+    checks.push('node tmp-tests/pdv-stock-location-decrement-static.test.mjs');
+  }
+
   for (const serverFile of ['vps_server.js', 'vps_server.cjs', 'server.js']) {
     if (existsSync(path.join(process.cwd(), serverFile))) {
       checks.push(`node --check ${serverFile}`);
@@ -284,6 +289,12 @@ function runSelfTest() {
 
   const both = classifyFiles(['pages/Home.tsx', 'vps_server.cjs']);
   assert(both.target === 'both', 'both classification failed');
+
+  const serverChecks = existingChecks(['vps_server.js']);
+  assert(
+    serverChecks.includes('node tmp-tests/pdv-stock-location-decrement-static.test.mjs'),
+    'server publication must protect PDV stock-location names across server copies'
+  );
 
   const docs = classifyFiles(['docs/versoes/2026-06-23-v1.2.3-note.md']);
   assert(docs.target === 'docs-only', 'docs-only classification failed');

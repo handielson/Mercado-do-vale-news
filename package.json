@@ -14,6 +14,7 @@
     "test:pdv-product-search": "node tmp-tests/pdv-product-search-autocomplete-static.test.mjs",
     "test:pdv-legacy-serialized": "node tmp-tests/pdv-legacy-serialized-product-fallback-static.test.mjs",
     "test:pdv-sale-finalization-log": "node tmp-tests/pdv-sale-finalization-log-static.test.mjs",
+    "test:pdv-stock-location": "node tmp-tests/pdv-stock-location-decrement-static.test.mjs",
     "test:sale-legacy-item-money": "node tmp-tests/sale-legacy-item-money-static.test.mjs",
     "test:signed-warranty": "node --test tmp-tests/signed-warranty-core.test.cjs && node tmp-tests/signed-warranty-static.test.mjs",
     "test:autoresponder:whatsapp": "node tmp-tests/google-contacts-oauth-static.test.mjs && node tmp-tests/autoresponder-contact-name-invalid-replies-static.test.mjs && node tmp-tests/autoresponder-google-contact-flow-static.test.mjs && node tmp-tests/autoresponder-smartphone-catalog-loop-regression-static.test.mjs",

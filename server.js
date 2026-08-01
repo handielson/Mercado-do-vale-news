@@ -18202,7 +18202,9 @@ fastify.post('/stock-locations/transfers', { preHandler: requireSyncKey }, async
 
 async function getPriorityStockSources(productId) {
   const [rows] = await pool.query(
-    `SELECT psl.*, sd.is_default AS deposit_is_default, sl.is_default AS location_is_default
+    `SELECT psl.*,
+            sd.name AS deposit_name, sd.code AS deposit_code, sd.type AS deposit_type, sd.is_default AS deposit_is_default,
+            sl.name AS location_name, sl.code AS location_code, sl.is_default AS location_is_default
      FROM product_stock_locations psl
      LEFT JOIN stock_deposits sd ON sd.id = psl.deposit_id
      LEFT JOIN stock_locations sl ON sl.id = psl.location_id
@@ -18283,7 +18285,21 @@ fastify.post('/stock-locations/priority-decrements', { preHandler: requireSyncKe
       new_from_quantity: next,
       notes: input.notes || null,
     });
-    result.push({ stock_location_id: source.id, deposit_id: source.deposit_id, location_id: source.location_id, quantity_decremented: decrement, previous_quantity: previous, new_quantity: next });
+    result.push({
+      stock_location_id: source.id,
+      deposit_id: source.deposit_id,
+      location_id: source.location_id,
+      deposit_name: source.deposit_name || null,
+      deposit_code: source.deposit_code || null,
+      deposit_type: source.deposit_type || null,
+      deposit_is_default: Boolean(source.deposit_is_default),
+      location_name: source.location_name || null,
+      location_code: source.location_code || null,
+      location_is_default: Boolean(source.location_is_default),
+      quantity_decremented: decrement,
+      previous_quantity: previous,
+      new_quantity: next,
+    });
     remaining -= decrement;
   }
   await syncProductStockFromLocations(input.product_id);

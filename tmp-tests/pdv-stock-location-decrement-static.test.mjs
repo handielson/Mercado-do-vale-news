@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const saleService = readFileSync('services/saleService.ts', 'utf8');
-const server = readFileSync('vps_server.cjs', 'utf8');
+const servers = ['server.js', 'vps_server.js', 'vps_server.cjs'].map((file) => ({
+  file,
+  source: readFileSync(file, 'utf8'),
+}));
 const types = readFileSync('types/stock-location.ts', 'utf8');
 const saleDetails = readFileSync('components/admin/sales/SaleDetailsModal.tsx', 'utf8');
 
@@ -24,17 +27,19 @@ assert.match(
   'PDV sales must leave a warning when stock is decremented outside the main store'
 );
 
-assert.match(
-  server,
-  /sd\.name AS deposit_name[\s\S]*sl\.name AS location_name/,
-  'priority decrement sources must include human-readable deposit and location names'
-);
+for (const server of servers) {
+  assert.match(
+    server.source,
+    /sd\.name AS deposit_name[\s\S]*sl\.name AS location_name/,
+    `${server.file}: priority decrement sources must include human-readable deposit and location names`
+  );
 
-assert.match(
-  server,
-  /deposit_name: source\.deposit_name[\s\S]*location_name: source\.location_name/,
-  'priority decrement response must return the source location names used by the sale'
-);
+  assert.match(
+    server.source,
+    /deposit_name: source\.deposit_name[\s\S]*location_name: source\.location_name/,
+    `${server.file}: priority decrement response must return the source location names used by the sale`
+  );
+}
 
 assert.match(
   types,

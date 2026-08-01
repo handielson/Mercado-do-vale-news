@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.134-parent-gallery-images
-date: 2026-07-31
+version: v1.2.135-pdv-location-names
+date: 2026-08-01
 status: ready
-release_vps: /var/www/mdv-site/releases/20260731-213343-parent-gallery-images
+release_vps: /var/www/mdv-site/releases/20260801-112411-v12135-pdv-location-names
 branch: main
-summary: Completa galerias de produtos pai com imagens das variacoes para Shopee e TikTok.
+summary: Exibe nomes reais de deposito e local nas baixas do PDV e protege a paridade dos servidores.
 ```
