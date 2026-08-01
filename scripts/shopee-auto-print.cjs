@@ -4,7 +4,10 @@ const http = require('http');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
-const { createShopeeSeparationSummaryPdf } = require('./shopee-separation-summary.cjs');
+const {
+    createShopeeInterventionReceiptPdf,
+    createShopeeSeparationSummaryPdf,
+} = require('./shopee-separation-summary.cjs');
 
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -106,6 +109,49 @@ function markPrintStep(markerPath) {
     fs.writeFileSync(markerPath, new Date().toISOString());
 }
 
+function normalizeInterventionIssue(stage, resultOrError) {
+    const data = resultOrError?.data || {};
+    const errorCode = String(
+        data.error
+        || resultOrError?.code
+        || (resultOrError?.status ? `http_${resultOrError.status}` : '')
+        || 'erro_nao_identificado',
+    ).trim();
+    const message = String(
+        data.message
+        || resultOrError?.message
+        || data.error
+        || `Falha na etapa ${stage}.`,
+    ).trim();
+    return { stage, errorCode, message };
+}
+
+function requiresHumanIntervention(stage, resultOrError) {
+    const issue = normalizeInterventionIssue(stage, resultOrError);
+    const normalized = `${issue.errorCode} ${issue.message}`.toLowerCase();
+    if (resultOrError?.data?.requires_human_intervention === true) return true;
+    if (stage === 'shipping_document') return true;
+    if (stage === 'label_print' || stage === 'summary') return true;
+    if (stage === 'invoice') {
+        if (resultOrError?.data?.pending === true || resultOrError?.status === 202) return false;
+        return !/invoice_not_found|authorization_pending|ainda nao apareceu|ainda não apareceu|ainda nao retornou autorizada|ainda não retornou autorizada/.test(normalized);
+    }
+    if (stage === 'ship_order') {
+        return !/invoice|nota fiscal|lack_of_invoice_data|pending|not_ready|not ready|precheck_failed/.test(normalized);
+    }
+    return true;
+}
+
+function interventionInstructions(stage) {
+    return {
+        invoice: 'Abra a NF-e no Bling, corrija NCM, CEST ou tributacao, autorize a nota e confirme o envio para a Shopee.',
+        ship_order: 'Abra o pedido na Shopee e no Bling, resolva o bloqueio informado e prepare o envio manualmente se necessario.',
+        shipping_document: 'Confira se o pedido esta preparado para envio e gere a etiqueta manualmente na Shopee antes de despachar.',
+        label_print: 'Verifique a impressora de etiquetas, papel, conexao e fila do Windows. Depois imprima a etiqueta manualmente.',
+        summary: 'Verifique a impressora de comprovante, papel, conexao e fila do Windows. Depois imprima o resumo manualmente.',
+    }[stage] || 'Abra o pedido, corrija o problema informado e retome o fluxo antes de despachar.';
+}
+
 function isVpsActionSuccess(result) {
     return Boolean(result?.ok && !result?.data?.error && result?.data?.success !== false);
 }
@@ -144,6 +190,8 @@ async function getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn) {
             'note',
             'create_time',
             'package_list',
+            'payment_method',
+            'total_amount',
         ].join(','),
     });
     const detailResponse = await requestFetch(detailUrl);
@@ -214,6 +262,8 @@ async function getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn) {
         shippingCarrier: order?.shipping_carrier || order?.checkout_shipping_carrier || 'Shopee',
         createdAt: order?.create_time,
         note: order?.note || '',
+        paymentMethod: order?.payment_method || '',
+        totalAmount: Number(order?.total_amount || 0),
         items: items.map((item) => {
             const locations = stockLocationsBySku.get(String(item.sku || '').trim().toUpperCase()) || [];
             return {
@@ -222,6 +272,73 @@ async function getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn) {
             };
         }),
     };
+}
+
+async function printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, stage, resultOrError }) {
+    const summaryPrinter = String(settings?.shopee_printer_a4 || '').trim();
+    if (!summaryPrinter) {
+        console.error(`[INTERVENTION] Impressora de comprovante não configurada para ${orderSn}.`);
+        return { printed: false, reason: 'summary_printer_missing' };
+    }
+
+    const issue = normalizeInterventionIssue(stage, resultOrError);
+    const issueHash = crypto.createHash('sha1')
+        .update(`${stage}|${issue.errorCode}`)
+        .digest('hex')
+        .slice(0, 12);
+    const markerPath = path.join(printedMarkersDir, `${orderSn}.intervention-${issueHash}.txt`);
+    if (fs.existsSync(markerPath)) {
+        console.log(`[INTERVENTION] Aviso ${issue.errorCode} já impresso para ${orderSn}.`);
+        return { printed: false, reason: 'already_printed' };
+    }
+
+    let orderData = {
+        orderSn,
+        buyerName: 'Não foi possível consultar',
+        paymentMethod: '',
+        totalAmount: 0,
+        items: [],
+    };
+    try {
+        orderData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn);
+    } catch (summaryError) {
+        console.warn(`[INTERVENTION] Dados parciais para ${orderSn}: ${summaryError.message}`);
+    }
+
+    try {
+        const receiptPath = path.join(
+            shippingLabelsDir,
+            `${orderSn}_intervencao-${stage}-${issueHash}-10x15.pdf`,
+        );
+        const receipt = await createShopeeInterventionReceiptPdf({
+            order: orderData,
+            stage,
+            stageLabel: {
+                invoice: 'Nota fiscal',
+                ship_order: 'Preparar envio',
+                shipping_document: 'Gerar etiqueta',
+                label_print: 'Imprimir etiqueta',
+                summary: 'Imprimir resumo',
+            }[stage] || stage,
+            errorCode: issue.errorCode,
+            message: issue.message,
+            instructions: interventionInstructions(stage),
+            occurredAt: Date.now(),
+        });
+        fs.writeFileSync(receiptPath, receipt);
+        const ptp = require('pdf-to-printer');
+        await ptp.print(receiptPath, {
+            printer: summaryPrinter,
+            paperSize: '4x6',
+            scale: 'fit',
+        });
+        markPrintStep(markerPath);
+        console.log(`[INTERVENTION] Comprovante ${issue.errorCode} impresso para ${orderSn}.`);
+        return { printed: true, file: receiptPath };
+    } catch (printError) {
+        console.error(`[INTERVENTION] Falha ao imprimir aviso de ${orderSn}:`, printError.message || printError);
+        return { printed: false, reason: 'print_failed', error: printError.message };
+    }
 }
 
 // A etiqueta normal da Shopee ocupa um quadrante da página. O PDF ampliado é
@@ -804,14 +921,19 @@ async function runLoop() {
             if (fs.existsSync(markers.legacy)) continue;
 
             console.log(`Processando fluxo fiscal e impressão de ${orderSn}...`);
+            let currentStage = 'invoice';
             try {
                 if (!fs.existsSync(markers.label)) {
                     const invoice = await callVpsShopeeAction('upload_invoice', { order_sn: orderSn });
                     if (!isVpsActionSuccess(invoice)) {
                         console.log(`[${orderSn}] Nota ainda não pronta: ${invoice.data?.message || invoice.data?.error || `HTTP ${invoice.status}`}`);
+                        if (requiresHumanIntervention('invoice', invoice)) {
+                            await printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, stage: 'invoice', resultOrError: invoice });
+                        }
                         continue;
                     }
 
+                    currentStage = 'ship_order';
                     let shipment = null;
                     for (let attempt = 1; attempt <= 6; attempt += 1) {
                         shipment = await callVpsShopeeAction('ship_order', { order_sn: orderSn });
@@ -822,9 +944,13 @@ async function runLoop() {
                     }
                     if (!isVpsActionSuccess(shipment)) {
                         console.log(`[${orderSn}] Preparar envio pendente: ${shipment?.data?.message || shipment?.data?.error || `HTTP ${shipment?.status}`}`);
+                        if (requiresHumanIntervention('ship_order', shipment)) {
+                            await printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, stage: 'ship_order', resultOrError: shipment });
+                        }
                         continue;
                     }
 
+                    currentStage = 'shipping_document';
                     await delay(2000);
                     const document = await callVpsShopeeAction('get_shipping_document', {
                         order_sn: orderSn,
@@ -832,9 +958,13 @@ async function runLoop() {
                     });
                     if (!document.ok || !document.buffer?.length || !document.contentType.includes('pdf')) {
                         console.log(`[${orderSn}] Etiqueta ainda não pronta: ${document.data?.message || document.data?.error || `HTTP ${document.status}`}`);
+                        if (requiresHumanIntervention('shipping_document', document)) {
+                            await printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, stage: 'shipping_document', resultOrError: document });
+                        }
                         continue;
                     }
 
+                    currentStage = 'label_print';
                     const labelPath = path.join(shippingLabelsDir, `${orderSn}_etiqueta-10x15.pdf`);
                     fs.writeFileSync(labelPath, await expandShopeeLabelForThermalPaper(document.buffer));
                     console.log(`Enviando etiqueta para: ${shopee_printer_thermal}`);
@@ -848,6 +978,7 @@ async function runLoop() {
                 }
 
                 if (settings.shopee_printer_a4 && !fs.existsSync(markers.summary)) {
+                    currentStage = 'summary';
                     const summaryData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn);
                     const summaryPath = path.join(shippingLabelsDir, `${orderSn}_resumo-separacao-10x15.pdf`);
                     const summaryBuffer = await createShopeeSeparationSummaryPdf(summaryData);
@@ -872,6 +1003,15 @@ async function runLoop() {
                 }
             } catch (orderError) {
                 console.error(`Falha no pedido ${orderSn}:`, orderError.message || orderError);
+                if (requiresHumanIntervention(currentStage, orderError)) {
+                    await printHumanInterventionReceipt({
+                        settings,
+                        shopeeApiUrl,
+                        orderSn,
+                        stage: currentStage,
+                        resultOrError: orderError,
+                    });
+                }
             }
             await delay(3000);
         }

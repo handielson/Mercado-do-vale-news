@@ -60,6 +60,14 @@ assert.match(script, /\/api\/v2\/logistics\/get_tracking_number/,
   'o resumo precisa consultar o código de rastreio da Shopee');
 assert.match(script, /createShopeeSeparationSummaryPdf/,
   'os fluxos manual e automático precisam usar o resumo próprio 10x15');
+assert.match(script, /createShopeeInterventionReceiptPdf/,
+  'erros que exigem ação humana precisam gerar comprovante próprio 10x15');
+assert.match(script, /requiresHumanIntervention\('invoice'[\s\S]*?printHumanInterventionReceipt/,
+  'erros fiscais não transitórios precisam imprimir o aviso operacional');
+assert.match(script, /\.intervention-\$\{issueHash\}\.txt/,
+  'cada erro precisa de marcador deduplicado para não imprimir em loop');
+assert.match(script, /stage === 'shipping_document'[\s\S]*?return true/,
+  'falha ao gerar a etiqueta precisa pedir intervenção porque o pedido pode sair de READY_TO_SHIP');
 assert.match(script, /'get_stock_locations'[\s\S]*?stockLocation/,
   'o resumo precisa consultar e associar a localização de estoque pelo SKU');
 assert.doesNotMatch(script, /NORMAL_PORT_RECEIPT_RETURN/,
@@ -68,6 +76,8 @@ assert.match(summary, /bcid:\s*'code128'/,
   'o rastreio precisa ser impresso como código de barras Code 128');
 assert.match(summary, /Localizacao:[\s\S]*?stockLocation/,
   'cada item precisa imprimir sua localização de depósito');
+assert.match(summary, /INTERVENCAO NECESSARIA[\s\S]*?NAO DESPACHAR ATE CORRIGIR/,
+  'o comprovante de erro precisa ter alerta claro para bloquear o despacho');
 assert.match(packageJson, /"bwip-js":\s*"\^\d+/,
   'a dependência que gera o código de barras precisa estar versionada');
 

@@ -52,6 +52,88 @@ function formatOrderDate(value) {
     }).format(date);
 }
 
+function formatMoney(value) {
+    const amount = Number(value || 0);
+    return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+    }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function drawWrappedLines(page, value, font, size, x, startY, maxWidth, maxLines, color, lineHeight = size + 2) {
+    const lines = wrapText(value, font, size, maxWidth, maxLines);
+    let y = startY;
+    for (const line of lines) {
+        page.drawText(line, { x, y, size, font, color });
+        y -= lineHeight;
+    }
+    return y;
+}
+
+async function createShopeeInterventionReceiptPdf(input) {
+    const pdf = await PDFDocument.create();
+    const regular = await pdf.embedFont(StandardFonts.Helvetica);
+    const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const order = input?.order || {};
+    const items = Array.isArray(order.items) && order.items.length
+        ? order.items
+        : [{ name: 'Itens indisponiveis para consulta', sku: '', quantity: 1, stockLocation: 'Nao consultada' }];
+    const pages = [];
+    for (let index = 0; index < items.length; index += 3) pages.push(items.slice(index, index + 3));
+
+    const black = rgb(0.04, 0.07, 0.12);
+    const gray = rgb(0.32, 0.36, 0.42);
+    const red = rgb(0.72, 0.08, 0.08);
+    const paleRed = rgb(1, 0.93, 0.93);
+    const border = rgb(0.78, 0.81, 0.85);
+    const stage = printableText(input?.stageLabel || input?.stage || 'Automacao Shopee');
+    const errorCode = printableText(input?.errorCode || 'erro_nao_identificado');
+    const errorMessage = printableText(input?.message || 'O pedido precisa de verificacao manual.');
+    const instructions = printableText(input?.instructions || 'Abra o pedido, corrija o problema informado e retome o fluxo.');
+
+    for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+        const page = pdf.addPage([288, 432]);
+        page.drawRectangle({ x: 0, y: 0, width: 288, height: 432, color: rgb(1, 1, 1) });
+        page.drawRectangle({ x: 12, y: 382, width: 264, height: 38, color: red });
+        page.drawText('INTERVENCAO NECESSARIA', { x: 22, y: 399, size: 12, font: bold, color: rgb(1, 1, 1) });
+        page.drawText(`SHOPEE | ${pageIndex + 1}/${pages.length}`, { x: 218, y: 399, size: 6.5, font: bold, color: rgb(1, 1, 1) });
+
+        page.drawText(`PEDIDO: ${printableText(order.orderSn) || '-'}`, { x: 18, y: 363, size: 11, font: bold, color: black });
+        page.drawText(`Etapa: ${stage}`, { x: 18, y: 349, size: 7.5, font: bold, color: red });
+        page.drawText(`Detectado: ${formatOrderDate(input?.occurredAt || Date.now())}`, { x: 174, y: 349, size: 6.5, font: regular, color: gray });
+        page.drawText(`Cliente: ${printableText(order.buyerName) || 'Nao consultado'}`, { x: 18, y: 335, size: 7.5, font: regular, color: black });
+        page.drawText(`Pagamento: ${printableText(order.paymentMethod) || '-'} | Total: ${formatMoney(order.totalAmount)}`, { x: 18, y: 323, size: 7, font: regular, color: gray });
+
+        page.drawRectangle({ x: 16, y: 245, width: 256, height: 66, color: paleRed, borderColor: red, borderWidth: 0.8 });
+        page.drawText(`ERRO: ${errorCode}`, { x: 24, y: 297, size: 7.5, font: bold, color: red });
+        drawWrappedLines(page, errorMessage, regular, 7.5, 24, 284, 240, 4, black, 9);
+
+        page.drawText('O QUE FAZER', { x: 18, y: 230, size: 8, font: bold, color: black });
+        drawWrappedLines(page, instructions, regular, 7.2, 18, 217, 252, 3, black, 9);
+        page.drawLine({ start: { x: 18, y: 184 }, end: { x: 270, y: 184 }, thickness: 0.7, color: border });
+        page.drawText('ITENS DA VENDA', { x: 18, y: 171, size: 8, font: bold, color: black });
+
+        let y = 156;
+        for (const item of pages[pageIndex]) {
+            const quantity = Math.max(1, Number(item?.quantity) || 1);
+            const [nameLine] = wrapText(`${quantity}x ${item?.name || 'Item'}`, bold, 7.3, 252, 1);
+            page.drawText(nameLine, { x: 18, y, size: 7.3, font: bold, color: black });
+            y -= 10;
+            page.drawText(`SKU: ${printableText(item?.sku) || '-'}`, { x: 24, y, size: 6.5, font: regular, color: gray });
+            y -= 9;
+            const [locationLine] = wrapText(`Local: ${item?.stockLocation || 'Nao cadastrada'}`, regular, 6.5, 246, 1);
+            page.drawText(locationLine, { x: 24, y, size: 6.5, font: regular, color: black });
+            y -= 15;
+        }
+
+        page.drawRectangle({ x: 16, y: 18, width: 256, height: 30, borderColor: red, borderWidth: 1.2 });
+        page.drawText('NAO DESPACHAR ATE CORRIGIR', { x: 45, y: 36, size: 9, font: bold, color: red });
+        page.drawText('[  ] Corrigido por: ______________________', { x: 45, y: 24, size: 6.5, font: regular, color: black });
+    }
+
+    return Buffer.from(await pdf.save());
+}
+
 async function createShopeeSeparationSummaryPdf(order) {
     const pdf = await PDFDocument.create();
     const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -149,8 +231,10 @@ async function createShopeeSeparationSummaryPdf(order) {
 }
 
 module.exports = {
+    createShopeeInterventionReceiptPdf,
     createShopeeSeparationSummaryPdf,
     formatOrderDate,
+    formatMoney,
     printableText,
     wrapText,
 };
