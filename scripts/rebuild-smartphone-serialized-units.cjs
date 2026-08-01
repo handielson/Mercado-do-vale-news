@@ -7,6 +7,7 @@ const API_BASE = (process.env.VPS_API_BASE_URL || process.env.VITE_API_URL || 'h
 const SYNC_KEY = process.env.VITE_VPS_SYNC_KEY || process.env.VPS_SYNC_KEY || process.env.SYNC_KEY || '';
 const APPLY = process.argv.includes('--apply');
 const SUMMARY = process.argv.includes('--summary');
+const CLEANUP_LEGACY_PRODUCTS = process.argv.includes('--cleanup-legacy-products');
 
 function argValue(name) {
   const prefix = `--${name}=`;
@@ -193,14 +194,19 @@ async function main() {
 
   const planned = [];
   const skippedDuplicates = [];
+  const cleanupCandidates = [];
 
   for (const [groupKey, group] of groups) {
     const canonical = chooseCanonicalProduct(group, unitsByProduct);
     const seen = new Set();
+    const unitByIdentifier = new Map();
     for (const product of group) {
       for (const unit of unitsByProduct.get(product.id) || []) {
         const existingIdentifierKey = identifierKey({ imei_1: unit.imei_1, imei_2: unit.imei_2, serial: unit.serial });
-        if (existingIdentifierKey) seen.add(existingIdentifierKey);
+        if (existingIdentifierKey) {
+          seen.add(existingIdentifierKey);
+          if (!unitByIdentifier.has(existingIdentifierKey)) unitByIdentifier.set(existingIdentifierKey, unit);
+        }
       }
     }
 
@@ -208,6 +214,24 @@ async function main() {
       const ids = identifiers(product);
       const currentIdentifierKey = identifierKey(ids);
       if (!currentIdentifierKey) continue;
+      const sourceUnits = unitsByProduct.get(product.id) || [];
+      const existingUnit = unitByIdentifier.get(currentIdentifierKey);
+      const canCleanMigratedSource = product.id !== canonical.id
+        && sourceUnits.length === 0
+        && existingUnit
+        && existingUnit.product_id === canonical.id;
+      if (canCleanMigratedSource) {
+        cleanupCandidates.push({
+          group_key: groupKey,
+          source_product_id: product.id,
+          source_sku: product.sku,
+          target_product_id: canonical.id,
+          target_sku: canonical.sku,
+          identifier: currentIdentifierKey,
+          unit_id: existingUnit.id,
+          unit_status: existingUnit.status,
+        });
+      }
       if (seen.has(currentIdentifierKey)) {
         skippedDuplicates.push({
           group_key: groupKey,
@@ -233,6 +257,18 @@ async function main() {
         cost_price: product.price_cost ?? undefined,
         internal_notes: `Migrado de product.specs pelo rebuild de smartphones em ${new Date().toISOString()}. Produto origem ${product.id} (${product.sku || '-'})`,
       });
+      if (product.id !== canonical.id && sourceUnits.length === 0) {
+        cleanupCandidates.push({
+          group_key: groupKey,
+          source_product_id: product.id,
+          source_sku: product.sku,
+          target_product_id: canonical.id,
+          target_sku: canonical.sku,
+          identifier: currentIdentifierKey,
+          unit_id: null,
+          unit_status: 'pending_creation',
+        });
+      }
     }
   }
 
@@ -244,10 +280,15 @@ async function main() {
     groups: groups.size,
     planned_units: planned.length,
     skipped_duplicates: skippedDuplicates.length,
+    cleanup_requested: CLEANUP_LEGACY_PRODUCTS,
+    cleanup_candidates: cleanupCandidates,
+    cleanup_candidates_count: cleanupCandidates.length,
     planned,
     skippedDuplicates,
     inserted: 0,
     errors: [],
+    cleaned_legacy_products: 0,
+    cleanup_errors: [],
   };
 
   if (SUMMARY) {
@@ -267,6 +308,41 @@ async function main() {
     });
     result.inserted = created.inserted || 0;
     result.errors = created.errors || [];
+  }
+
+  if (APPLY && CLEANUP_LEGACY_PRODUCTS && cleanupCandidates.length > 0) {
+    if (!SYNC_KEY) throw new Error('Missing VITE_VPS_SYNC_KEY/VPS_SYNC_KEY');
+    for (const candidate of cleanupCandidates) {
+      try {
+        const [matchingUnits, sourceUnits] = await Promise.all([
+          api(`/units/by-identifier/${encodeURIComponent(candidate.identifier)}`),
+          api(`/units?product_id=${encodeURIComponent(candidate.source_product_id)}`),
+        ]);
+        const migratedUnit = (Array.isArray(matchingUnits) ? matchingUnits : [])
+          .find((unit) => unit.product_id === candidate.target_product_id);
+        if (!migratedUnit) throw new Error('matching unit was not found on the canonical product');
+        if (Array.isArray(sourceUnits) && sourceUnits.length > 0) {
+          throw new Error('source product owns units and cannot be archived automatically');
+        }
+
+        await api(`/table-data/products/${encodeURIComponent(candidate.source_product_id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            status: 'inactive',
+            stock_quantity: 0,
+            hide_from_catalog: 1,
+          }),
+        });
+        result.cleaned_legacy_products += 1;
+      } catch (error) {
+        result.cleanup_errors.push({
+          source_product_id: candidate.source_product_id,
+          target_product_id: candidate.target_product_id,
+          identifier: candidate.identifier,
+          error: error.message,
+        });
+      }
+    }
   }
 
   console.log(JSON.stringify(result, null, 2));
