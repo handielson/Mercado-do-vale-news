@@ -8,6 +8,7 @@ assert.match(remote, /fs\.writeFileSync\(ENV_FILE/, 'remote OAuth helper must ke
 assert.doesNotMatch(remote, /console\.log\([^\n]*refreshToken/, 'remote OAuth helper must never print the refresh token');
 assert.match(remote, /code_challenge_method', 'S256'/, 'remote OAuth helper must use PKCE');
 assert.match(tunnel, /forwardOut[\s\S]*127\.0\.0\.1[\s\S]*LOCAL_PORT/, 'runner must use a local SSH tunnel');
+assert.doesNotMatch(tunnel, /socket\.destroy\(error\)/, 'runner must not emit an unhandled socket error when the OAuth callback closes');
 assert.match(tunnel, /pm2 restart[\s\S]*--update-env/, 'runner must restart the API after installing the token');
 
 console.log('Google Contacts VPS OAuth static checks passed');

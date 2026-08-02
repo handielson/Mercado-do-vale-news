@@ -39,7 +39,7 @@ async function main() {
   console.log('SSH conectado; preparando autorizacao remota.');
   const localServer = net.createServer((socket) => {
     conn.forwardOut('127.0.0.1', socket.remotePort || 0, '127.0.0.1', LOCAL_PORT, (error, stream) => {
-      if (error) return socket.destroy(error);
+      if (error) return socket.destroy();
       socket.pipe(stream).pipe(socket);
     });
   });
