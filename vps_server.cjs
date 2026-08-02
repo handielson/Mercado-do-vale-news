@@ -3121,6 +3121,16 @@ function formatAutomationMoney(value) {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+function formatAutomationDateTime(value) {
+  const parsed = value instanceof Date ? value : new Date(value);
+  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Recife',
+  }).format(date);
+}
+
 function parseAutomationJson(value, fallback = null) {
   if (value == null || value === '') return fallback;
   if (typeof value !== 'string') return value;
@@ -3183,6 +3193,9 @@ async function notifySaleCompletedWhatsApp(saleId) {
   if (!sale) return { status: 'failed', error: 'sale_not_found' };
   const [customers] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [sale.customer_id]);
   const customer = customers?.[0] || null;
+  const googleContactSync = customer
+    ? await syncCustomerGoogleContactRecord(customer, 'sale-completed')
+    : { ok: false, skipped: true, reason: 'customer_not_found' };
   const [items] = await pool.query('SELECT * FROM sale_items WHERE sale_id = ? ORDER BY created_at ASC LIMIT 200', [saleId]);
   const addressText = buildAutomationAddressText(parseAutomationJson(customer?.address, null));
   const itemLines = (items || []).map((item) => `- ${item.product_name || 'Item'} x${item.quantity || 1} - ${formatAutomationMoney(item.total || item.subtotal || item.unit_price || 0)}`).join('\n') || 'Itens registrados no recibo';
@@ -3192,7 +3205,7 @@ async function notifySaleCompletedWhatsApp(saleId) {
     .join('\n') || 'Sem itens serializados informados';
   const receiptOrderNumber = String(sale.id || '').trim().slice(0, 8).toUpperCase();
 
-  return sendWhatsAppAutomationMessageVps({
+  const whatsappResult = await sendWhatsAppAutomationMessageVps({
     templateKey: 'sale_completed',
     phone: customer?.phone,
     entityType: 'sale',
@@ -3214,6 +3227,14 @@ async function notifySaleCompletedWhatsApp(saleId) {
       observacao_entrega: sale.notes ? `Observacao: ${sale.notes}` : '',
     },
   });
+  return {
+    ...whatsappResult,
+    google_contact_sync: {
+      ok: googleContactSync?.ok === true,
+      action: googleContactSync?.action || null,
+      reason: googleContactSync?.reason || null,
+    },
+  };
 }
 async function sendBirthdayGreetingsForToday(options = {}) {
   const now = new Date();
@@ -12648,12 +12669,18 @@ function formatAutoresponderPhoneForGoogle(sender) {
   return digits.startsWith('55') ? `+${digits}` : `+55${digits}`;
 }
 
+let googleContactsAccessTokenCache = { token: '', expiresAt: 0 };
+
 async function getGoogleContactsAccessToken() {
   const clientId = process.env.GOOGLE_CONTACTS_CLIENT_ID || '';
   const clientSecret = process.env.GOOGLE_CONTACTS_CLIENT_SECRET || '';
   const refreshToken = process.env.GOOGLE_CONTACTS_REFRESH_TOKEN || '';
   if (!clientId || !clientSecret || !refreshToken) {
     return null;
+  }
+
+  if (googleContactsAccessTokenCache.token && googleContactsAccessTokenCache.expiresAt > Date.now() + 60_000) {
+    return googleContactsAccessTokenCache.token;
   }
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -12671,7 +12698,11 @@ async function getGoogleContactsAccessToken() {
     throw new Error(`Google token refresh failed: ${res.status} ${await res.text()}`);
   }
   const data = await res.json();
-  return data.access_token || null;
+  const token = data.access_token || '';
+  if (!token) return null;
+  const expiresInMs = Math.max(60, Number(data.expires_in) || 3600) * 1000;
+  googleContactsAccessTokenCache = { token, expiresAt: Date.now() + expiresInMs };
+  return token;
 }
 
 async function createOrUpdateGoogleContact({ sender, name }) {

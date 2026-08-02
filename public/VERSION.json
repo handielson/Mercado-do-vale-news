@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.137-shopee-intervention-receipt",
-  "date": "2026-08-01",
+  "version": "v1.2.138-sale-google-contact-recovery",
+  "date": "2026-08-02",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260801-145522-shopee-intervention-receipt",
+  "release_vps": "/var/www/mdv-site/releases/20260802-130929-v12138-sale-google-contact-recovery",
   "branch": "main",
-  "summary": "Imprime comprovante 10x15 quando o fluxo Shopee exige correcao humana."
+  "summary": "Restaura a confirmacao WhatsApp da venda e a sincronizacao automatica do cliente no Google Contacts."
 }
