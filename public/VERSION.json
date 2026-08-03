@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.138-sale-google-contact-recovery",
-  "date": "2026-08-02",
+  "version": "v1.2.139-facebook-marketplace-produto-parent",
+  "date": "2026-08-03",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260802-130929-v12138-sale-google-contact-recovery",
+  "release_vps": "/var/www/mdv-site/releases/20260803-151706-v12139-facebook-marketplace-produto-parent",
   "branch": "main",
-  "summary": "Restaura a confirmacao WhatsApp da venda e a sincronizacao automatica do cliente no Google Contacts."
+  "summary": "Adiciona a fila assistida do Facebook Marketplace e corrige o valor padrao de is_parent no cadastro de produtos."
 }

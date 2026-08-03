@@ -11631,6 +11631,68 @@ async function maybeSendCronDispatcherInstagramReminderVps(settings, now, hour) 
   return true;
 }
 
+function cronDispatcherSaoPauloDateTimeVps(date) {
+  const parts = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(date);
+  const value = (type) => parts.find((part) => part.type === type)?.value || '00';
+  return `${value('year')}-${value('month')}-${value('day')} ${value('hour')}:${value('minute')}:${value('second')}`;
+}
+
+async function maybeSendFacebookMarketplaceRemindersVps(settings, now) {
+  try {
+    const localNow = cronDispatcherSaoPauloDateTimeVps(now);
+    const [rows] = await pool.query(
+      `SELECT id, product_name, price_cents, description, destinations, scheduled_for
+       FROM facebook_marketplace_schedule
+       WHERE status = 'scheduled' AND reminder_sent_at IS NULL AND scheduled_for <= ?
+       ORDER BY scheduled_for ASC
+       LIMIT 20`,
+      [localNow],
+    );
+    if (!rows.length) return 0;
+
+    for (const item of rows) {
+      let destinations = [];
+      try {
+        destinations = Array.isArray(item.destinations) ? item.destinations : JSON.parse(item.destinations || '[]');
+      } catch {
+        destinations = [];
+      }
+      const destinationText = destinations.map((destination) => destination?.name).filter(Boolean).join(', ');
+      const price = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((Number(item.price_cents) || 0) / 100);
+      const scheduled = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })
+        .format(new Date(`${String(item.scheduled_for).replace(' ', 'T')}-03:00`));
+      const message = [
+        'Facebook Marketplace - publicacao pronta',
+        '',
+        item.product_name,
+        `Preco: ${price}`,
+        `Horario: ${scheduled}`,
+        destinationText ? `Destinos: ${destinationText}` : '',
+        '',
+        String(item.description || '').slice(0, 2500),
+        '',
+        'Abra Marketing > Fase de Agendamento para copiar o texto e publicar.',
+      ].filter((line) => line !== '').join('\n');
+
+      await sendCronDispatcherTelegramMessageVps(settings, message);
+      await pool.query(
+        `UPDATE facebook_marketplace_schedule
+         SET status = 'ready', reminder_sent_at = ?
+         WHERE id = ? AND reminder_sent_at IS NULL`,
+        [localNow, item.id],
+      );
+    }
+    return rows.length;
+  } catch (error) {
+    if (error?.code === 'ER_NO_SUCH_TABLE') return 0;
+    throw error;
+  }
+}
+
 async function handleCronDispatcherVps(request, reply) {
   if (!String(process.env.CRON_SECRET || process.env.SYNC_SECRET || '').trim()) {
     return reply.code(503).send({ error: 'Cron secret not configured' });
@@ -11662,14 +11724,26 @@ async function handleCronDispatcherVps(request, reply) {
       });
     }
 
-    const templates = parseCronDispatcherTemplatesVps(settings);
-    if (!templates.length) return reply.code(200).send({ message: 'No templates configured', birthdaySummary, whatsappStatusSummary });
-
     const now = new Date();
     const timeParts = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).formatToParts(now);
     const hour = timeParts.find((part) => part.type === 'hour')?.value || '00';
     const currentHourPrefix = `${hour}:`;
     const forceTemplateId = request.query?.forceTemplateId || request.body?.forceTemplateId;
+
+    let facebookMarketplaceRemindersSent = 0;
+    try {
+      facebookMarketplaceRemindersSent = await maybeSendFacebookMarketplaceRemindersVps(settings, now);
+    } catch (err) {
+      console.error('[cron-dispatcher] Failed to send Facebook Marketplace reminders:', err.message);
+    }
+
+    const templates = parseCronDispatcherTemplatesVps(settings);
+    if (!templates.length) return reply.code(200).send({
+      message: 'No templates configured',
+      facebookMarketplaceRemindersSent,
+      birthdaySummary,
+      whatsappStatusSummary,
+    });
 
     const scheduledTemplates = templates.filter((template) => {
       if (forceTemplateId) return String(template.id) === String(forceTemplateId);
@@ -11678,6 +11752,7 @@ async function handleCronDispatcherVps(request, reply) {
     if (!scheduledTemplates.length) {
       return reply.code(200).send({
         message: forceTemplateId ? 'Template nao encontrado.' : `No templates scheduled for hour ${hour}`,
+        facebookMarketplaceRemindersSent,
         birthdaySummary,
         whatsappStatusSummary,
       });
@@ -11717,6 +11792,7 @@ async function handleCronDispatcherVps(request, reply) {
       message: `Cron ran successfully. Dispatched ${dispatched} templates.`,
       dispatched,
       instagramReminderSent,
+      facebookMarketplaceRemindersSent,
       birthdaySummary,
       whatsappStatusSummary,
     });
@@ -25259,7 +25335,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           bling_id=IF(VALUES(bling_id) IS NULL, bling_id, VALUES(bling_id)),
           bling_parent_id=IF(VALUES(bling_parent_id) IS NULL, bling_parent_id, VALUES(bling_parent_id)),
           parent_id=IF(VALUES(is_parent)=1, NULL, IF(VALUES(parent_id) IS NULL, parent_id, VALUES(parent_id))),
-          is_parent=IF(VALUES(is_parent) IS NULL, is_parent, VALUES(is_parent)),
+          is_parent=IF(? IS NULL, is_parent, VALUES(is_parent)),
           video_url=IF(VALUES(video_url) IS NULL, video_url, VALUES(video_url)),
           track_inventory=IF(VALUES(track_inventory) IS NULL, track_inventory, VALUES(track_inventory)),
           is_gift=IF(VALUES(is_gift) IS NULL, is_gift, VALUES(is_gift)),
@@ -25289,7 +25365,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           jsonStr(p.images), jsonStr(p.specs), jsonStr(p.custom_fields),
           jsonStr(p.dimensions), p.weight_kg || null,
           p.ncm || null, p.cest || null, p.origin || null,
-          p.bling_id || null, p.bling_parent_id || null, p.parent_id || null, optionalBool(p.is_parent),
+          p.bling_id || null, p.bling_parent_id || null, p.parent_id || null, optionalBool(p.is_parent) ?? 0,
           p.video_url || null,
           optionalBool(p.track_inventory), optionalBool(p.is_gift), optionalBool(p.is_virtual),
           p.warranty_type ?? null, p.warranty_template_id || null,
@@ -25298,6 +25374,7 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           p.shopee_strategy || 'variation', p.shopee_offer_status || null, p.shopee_offer_error || null,
           optionalBool(p.hide_from_catalog),
           p.meta_title || null, p.meta_description || null, p.keywords || null,
+          optionalBool(p.is_parent),
         ]
       );
       results.upserted++;
@@ -34402,6 +34479,28 @@ async function runMigrations() {
       session_id VARCHAR(255) NULL,
       viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_product_views_product (product_id, viewed_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS facebook_marketplace_schedule (
+      id CHAR(36) PRIMARY KEY,
+      product_id CHAR(36) NULL,
+      product_name VARCHAR(255) NOT NULL,
+      price_cents INT NOT NULL DEFAULT 0,
+      description TEXT NOT NULL,
+      image_urls JSON NULL,
+      destinations JSON NULL,
+      scheduled_for DATETIME NOT NULL,
+      status ENUM('scheduled', 'ready', 'published', 'cancelled') NOT NULL DEFAULT 'scheduled',
+      notes TEXT NULL,
+      published_url TEXT NULL,
+      published_at DATETIME NULL,
+      reminder_sent_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_facebook_marketplace_due (status, scheduled_for),
+      INDEX idx_facebook_marketplace_product (product_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 

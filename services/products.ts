@@ -358,6 +358,7 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
         company_id: companyId,
         model_id: input.model_id,
         parent_id: input.parent_id || null,
+        is_parent: input.is_parent ? 1 : 0,
         brand,
         category_id,
         name: input.name,
