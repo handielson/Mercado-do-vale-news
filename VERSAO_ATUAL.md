@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.141-cliente-recibo-garantia
+version: v1.2.142-cliente-foto-moedas
 date: 2026-08-03
 status: ready
-release_vps: /var/www/mdv-site/releases/20260803-161515-v12141-cliente-recibo-garantia
+release_vps: /var/www/mdv-site/releases/20260803-162911-v12142-cliente-foto-moedas
 branch: main
-summary: Ativa recibo e termo de garantia no painel do cliente com rotas autenticadas e isolamento dos documentos por proprietario da venda.
+summary: Mantem produtos comprados com foto no historico e torna o credito de Moedas do Vale automatico, seguro e reconciliavel.
 ```

@@ -32,12 +32,6 @@ assert.match(
 
 assert.match(
   pdvPage,
-  /const isWalkInCustomer = \(customer\?: Customer\): boolean => customer\?\.is_walk_in_customer === true;/,
-  'PDV page must identify walk-in customers before applying benefits.',
-);
-
-assert.match(
-  pdvPage,
   /const customer = await customerService\.getWalkInCustomer\(\);/,
   'PDV page must select the existing Cliente Balcão from the customer service.',
 );

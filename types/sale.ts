@@ -59,6 +59,9 @@ export interface SaleItem {
     product_category_id?: string;
     product_category_slug?: string;
     product_category_name?: string;
+    product_slug?: string | null;
+    product_image_url?: string | null;
+    product_stock_quantity?: number | null;
 
     // Unidade serializada vinculada (bip de IMEI no PDV)
     serialized_unit?: {
@@ -175,6 +178,7 @@ export interface SaleInput {
  */
 export interface SaleWithItems extends Sale {
     items: SaleItem[];
+    coins_earned?: number;
     customer?: {
         id: string;
         name: string;

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Coins, ArrowUpRight, ArrowDownRight, Clock, Info, Gift, Flame, ReceiptText } from 'lucide-react';
 import { useVpsAuth } from '../../../hooks/useVpsAuth';
-import { getCoinBalance, getCoinTransactions, coinsToReais, getCashbackSettings } from '../../../services/cashbackService';
+import { coinsToReais } from '../../../services/cashbackService';
+import { getCustomerCoinSnapshot } from '../../../services/customerCoinService';
 import type { CoinBalance, CoinTransaction } from '../../../types/cashback';
 import DailyCheckinWidget from '../../cashback/DailyCheckinWidget';
 import { format } from 'date-fns';
@@ -18,14 +19,10 @@ export function CoinsTab() {
         if (!customer) return;
         setLoading(true);
         try {
-            const [bal, txs, settings] = await Promise.all([
-                getCoinBalance(customer.id),
-                getCoinTransactions(customer.id, 50),
-                getCashbackSettings()
-            ]);
-            setBalance(bal);
-            setTransactions(txs);
-            setRate(settings.coins_to_brl_rate);
+            const snapshot = await getCustomerCoinSnapshot();
+            setBalance(snapshot.balance);
+            setTransactions(snapshot.transactions.slice(0, 50));
+            setRate(Number(snapshot.settings?.coins_to_brl_rate || 100));
         } catch (error) {
             console.error('Error loading coins data:', error);
         } finally {

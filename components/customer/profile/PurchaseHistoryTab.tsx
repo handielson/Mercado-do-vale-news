@@ -7,7 +7,7 @@ import { customerDocumentService } from '../../../services/customerDocumentServi
 import { SaleWithItems } from '../../../types/sale';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
 import { printOnlineOrderReceipt } from '../../../utils/printOnlineOrderReceipt';
-import { getCoinBalance, getCoinsEarnedForReference } from '../../../services/cashbackService';
+import { getCustomerCoinSnapshot } from '../../../services/customerCoinService';
 import { generateLegacySalePdf } from '../../../utils/legacySalePdfGenerator';
 import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
@@ -25,6 +25,7 @@ import {
     type CustomerDebtMercadoPagoIntent,
 } from '../../../services/customerDebtService';
 import { toast } from 'sonner';
+import { toBrowserSafeMediaUrl } from '../../../utils/media-url';
 
 const fmt = (v: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v / 100);
@@ -215,17 +216,14 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                 return;
             }
             const customerId = effectiveCustomer?.id;
-            const [settings, coinBalance, benefitStatuses, coinsThisSale] = await Promise.all([
+            const [settings, coinSnapshot, benefitStatuses] = await Promise.all([
                 customerDocumentService.getSettings(),
-                customerId ? getCoinBalance(customerId).catch(() => null) : Promise.resolve(null),
+                customerId ? getCustomerCoinSnapshot().catch(() => null) : Promise.resolve(null),
                 customerId ? benefitService.getCustomerBenefitsStatus(customerId).catch(() => []) : Promise.resolve([]),
-                customerId
-                    ? getCoinsEarnedForReference(customerId, sale.id).catch(() => 0)
-                    : Promise.resolve(0),
             ]);
             const benefits: PrintReceiptBenefits = {
-                coinBalance,
-                coinsEarnedThisSale: coinsThisSale,
+                coinBalance: coinSnapshot?.balance || null,
+                coinsEarnedThisSale: Number(sale.coins_earned || 0),
                 benefitStatuses,
             };
             printSaleReceipt(sale, settings, productSpecs, benefits, printWindow);
@@ -972,12 +970,28 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                                                     ? idParts.join(' | ')
                                                     : (item.product_sku ? `SKU: ${item.product_sku}` : null);
                                                 return (
-                                                    <div key={idx} className="flex justify-between items-start py-2 border-b border-slate-100 last:border-0">
-                                                        <div>
+                                                    <div key={idx} className="flex items-start gap-3 py-3 border-b border-slate-100 last:border-0">
+                                                        <Link
+                                                            to={`/produto/${encodeURIComponent(item.product_slug || item.product_id)}`}
+                                                            className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                                                            aria-label={`Ver ${item.product_name}`}
+                                                        >
+                                                            {item.product_image_url ? (
+                                                                <img
+                                                                    src={toBrowserSafeMediaUrl(item.product_image_url)}
+                                                                    alt={item.product_name}
+                                                                    className="h-full w-full object-contain p-1"
+                                                                    loading="lazy"
+                                                                />
+                                                            ) : (
+                                                                <Package className="h-6 w-6 text-slate-300" />
+                                                            )}
+                                                        </Link>
+                                                        <div className="min-w-0 flex-1">
                                                             <div className="text-sm font-medium text-slate-800">
                                                                 {item.quantity > 1 && <span className="mr-1.5 text-slate-500">{item.quantity}x</span>}
                                                                 <Link
-                                                                    to={`/?search=${encodeURIComponent(item.product_name)}`}
+                                                                    to={`/produto/${encodeURIComponent(item.product_slug || item.product_id)}`}
                                                                     className="hover:text-blue-600 hover:underline transition-colors cursor-pointer"
                                                                 >
                                                                     {item.product_name}
@@ -990,12 +1004,22 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                                                                 </div>
                                                             ) : null}
                                                         </div>
-                                                        <div className="text-sm font-bold text-slate-800 ml-4">{fmt(item.subtotal + (item.warranty_price || 0))}</div>
+                                                        <div className="shrink-0 text-sm font-bold text-slate-800">{fmt(item.subtotal + (item.warranty_price || 0))}</div>
                                                     </div>
                                                 );
                                             })}
                                         </div>
                                     </div>
+
+                                    {Number(sale.coins_earned || 0) > 0 && (
+                                        <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                                            <div>
+                                                <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Moedas do Vale</p>
+                                                <p className="mt-0.5 text-sm text-amber-900">Crédito automático desta compra</p>
+                                            </div>
+                                            <span className="text-lg font-black text-amber-700">+{Number(sale.coins_earned).toLocaleString('pt-BR')}</span>
+                                        </div>
+                                    )}
 
                                     <SignedWarrantyDocumentCard saleId={sale.id} />
 

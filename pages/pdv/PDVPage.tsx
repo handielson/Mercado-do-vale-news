@@ -24,7 +24,6 @@ import { WarrantyTagData, DeliveryTypeWarranty } from '../../types/warrantyDocum
 import { WarrantyOption } from '../../types/companySettings';
 import { toast } from 'sonner';
 import { validateCoupon, applyCoupon, type Coupon } from '../../services/couponService';
-import { earnCoinsForPurchase } from '../../services/cashbackService';
 import { telegramBotService } from '../../services/telegramBot';
 import { brandService } from '../../services/brands';
 import { categoryService } from '../../services/categories';
@@ -596,7 +595,6 @@ export default function PDVPage() {
         setDeliveryCostCustomer(costCustomer);
     };
 
-    const isWalkInCustomer = (customer?: Customer): boolean => customer?.is_walk_in_customer === true;
 
     const handleSelectWalkInCustomer = async () => {
         try {
@@ -1012,26 +1010,6 @@ export default function PDVPage() {
             if (appliedCoupon) {
                 await applyCoupon(appliedCoupon.id);
                 handleClearCoupon();
-            }
-
-            // Creditar Moedas do Vale pelo valor final pago
-            if (!isWalkInCustomer(selectedCustomer)) {
-            try {
-                const totals = calculateSaleTotals(cartItems);
-                const couponDiscount = appliedCoupon
-                    ? (totals.subtotal * ((appliedCoupon as any).discount_percent ?? 0)) / 100
-                    : 0;
-                const finalPaid = Math.max(0, totals.subtotal - couponDiscount + deliveryCostCustomer - appliedFinalAdjustmentDiscount);
-                // finalPaid is in cents, earnCoinsForPurchase expects Reais
-                const coinsEarned = await earnCoinsForPurchase(selectedCustomer.id, finalPaid / 100, sale.id);
-                if (coinsEarned > 0) {
-                    toast.success(`🪙 +${coinsEarned} Moedas do Vale!`, {
-                        description: `${selectedCustomer.name} acumulou moedas nesta compra.`
-                    });
-                }
-            } catch {
-                // Erro nas moedas não bloqueia a venda
-            }
             }
 
             if (sale.finalization_status === 'needs_review') {

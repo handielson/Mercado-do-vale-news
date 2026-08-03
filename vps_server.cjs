@@ -26645,6 +26645,141 @@ function normalizeTableDataValue(value) {
   return value;
 }
 
+// PURCHASE_CASHBACK_CORE_START
+function saleMoneyScaleForCashback(sale, items = []) {
+  const itemValues = items.flatMap((item) => [item.unit_price, item.total, item.subtotal, item.discount]);
+  const allValues = [sale.total, sale.subtotal, sale.discount, sale.discount_total, ...itemValues];
+  const hasCentStoredItem = itemValues.some((value) => {
+    const number = Math.abs(Number(value));
+    return Number.isFinite(number) && Number.isInteger(number) && number >= 1000;
+  });
+  if (hasCentStoredItem) return 1;
+  const hasDecimalValue = allValues.some((value) => {
+    const number = Number(value);
+    return Number.isFinite(number) && Math.abs(number - Math.round(number)) > 0.001;
+  });
+  return hasDecimalValue ? 100 : 1;
+}
+
+async function ensurePurchaseCoinsForSaleVps(saleId, options = {}) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [sales] = await connection.query('SELECT * FROM sales WHERE id = ? LIMIT 1 FOR UPDATE', [saleId]);
+    const sale = sales?.[0] || null;
+    if (!sale?.customer_id) {
+      await connection.rollback();
+      return { sale_id: saleId, status: 'skipped', reason: 'sale_or_customer_not_found', coins: 0 };
+    }
+    if (['cancelled', 'refunded'].includes(String(sale.payment_status || '').toLowerCase())) {
+      await connection.rollback();
+      return { sale_id: saleId, status: 'skipped', reason: 'sale_not_eligible', coins: 0 };
+    }
+
+    const [customers] = await connection.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [sale.customer_id]);
+    const customer = customers?.[0] || null;
+    if (!customer || customer.is_walk_in_customer === 1 || customer.is_walk_in_customer === true) {
+      await connection.rollback();
+      return { sale_id: saleId, status: 'skipped', reason: 'walk_in_or_missing_customer', coins: 0 };
+    }
+
+    const [existingRows] = await connection.query(
+      `SELECT id, amount, status FROM coin_transactions
+        WHERE customer_id = ? AND reference_id = ? AND reference_type = 'sale'
+          AND type = 'earn_purchase' AND status <> 'cancelled'
+        ORDER BY created_at DESC LIMIT 1`,
+      [sale.customer_id, sale.id]
+    );
+    if (existingRows?.[0]) {
+      await connection.commit();
+      return { sale_id: sale.id, status: 'existing', reason: null, coins: Number(existingRows[0].amount || 0) };
+    }
+
+    const [settingsRows] = await connection.query('SELECT * FROM cashback_settings ORDER BY updated_at DESC LIMIT 1');
+    const settings = settingsRows?.[0] || null;
+    if (!settings || !(settings.active === 1 || settings.active === true)) {
+      await connection.rollback();
+      return { sale_id: sale.id, status: 'skipped', reason: 'cashback_inactive', coins: 0 };
+    }
+
+    const [items] = await connection.query('SELECT * FROM sale_items WHERE sale_id = ? ORDER BY created_at ASC', [sale.id]);
+    const scale = saleMoneyScaleForCashback(sale, items);
+    const paidCents = Math.max(0, Math.round(Number(sale.total || 0) * scale));
+    const paidBrl = paidCents / 100;
+    if (paidBrl < 0.01 || paidBrl < Number(settings.min_purchase_for_coins || 0)) {
+      await connection.rollback();
+      return { sale_id: sale.id, status: 'skipped', reason: 'below_minimum', coins: 0 };
+    }
+    const coins = Math.floor(paidBrl * Number(settings.coins_per_real || 0));
+    if (coins <= 0) {
+      await connection.rollback();
+      return { sale_id: sale.id, status: 'skipped', reason: 'zero_coins', coins: 0 };
+    }
+    if (options.apply === false) {
+      await connection.rollback();
+      return { sale_id: sale.id, status: 'missing', reason: null, coins, customer_id: sale.customer_id };
+    }
+
+    await connection.query(
+      `INSERT INTO coin_balances (id, customer_id, balance, lifetime_earned, lifetime_spent)
+       VALUES (?, ?, ?, ?, 0)
+       ON DUPLICATE KEY UPDATE
+         balance = balance + VALUES(balance),
+         lifetime_earned = lifetime_earned + VALUES(lifetime_earned),
+         updated_at = CURRENT_TIMESTAMP`,
+      [crypto.randomUUID(), sale.customer_id, coins, coins]
+    );
+    await connection.query(
+      `INSERT INTO coin_transactions
+        (id, customer_id, amount, type, status, description, reference_id, reference_type, created_at)
+       VALUES (?, ?, ?, 'earn_purchase', 'completed', ?, ?, 'sale', ?)`,
+      [
+        crypto.randomUUID(),
+        sale.customer_id,
+        coins,
+        `Compra aprovada - R$ ${paidBrl.toFixed(2).replace('.', ',')}`,
+        sale.id,
+        sale.created_at || new Date(),
+      ]
+    );
+    await connection.commit();
+    return { sale_id: sale.id, status: 'credited', reason: null, coins, customer_id: sale.customer_id };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function reconcilePurchaseCoinsVps({ apply = false, limit = 500 } = {}) {
+  const cappedLimit = Math.max(1, Math.min(Number(limit) || 500, 5000));
+  const [sales] = await pool.query(
+    `SELECT s.id
+       FROM sales s
+      WHERE s.customer_id IS NOT NULL
+        AND COALESCE(s.payment_status, 'paid') NOT IN ('cancelled', 'refunded')
+      ORDER BY s.created_at ASC
+      LIMIT ?`,
+    [cappedLimit]
+  );
+  const results = [];
+  for (const sale of sales) {
+    results.push(await ensurePurchaseCoinsForSaleVps(String(sale.id), { apply }));
+  }
+  return {
+    apply,
+    scanned: results.length,
+    credited: results.filter((row) => row.status === 'credited').length,
+    missing: results.filter((row) => row.status === 'missing').length,
+    existing: results.filter((row) => row.status === 'existing').length,
+    skipped: results.filter((row) => row.status === 'skipped').length,
+    coins: results.filter((row) => ['credited', 'missing'].includes(row.status)).reduce((sum, row) => sum + Number(row.coins || 0), 0),
+    sample: results.filter((row) => ['credited', 'missing'].includes(row.status)).slice(0, 20),
+  };
+}
+// PURCHASE_CASHBACK_CORE_END
+
 // INSERT individual
 fastify.post('/table-data/:name', { preHandler: requireSyncKey }, async (req, reply) => {
   const { name } = req.params;
@@ -26722,8 +26857,17 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
     allValues
   );
 
+  let cashback = [];
   if (name === 'sale_items') {
     const saleIds = Array.from(new Set(insertRows.map((row) => row.sale_id).filter(Boolean).map(String)));
+    cashback = await Promise.all(saleIds.map(async (saleId) => {
+      try {
+        return await ensurePurchaseCoinsForSaleVps(saleId, { apply: true });
+      } catch (error) {
+        console.error(`[cashback] Falha ao creditar automaticamente a venda ${saleId}:`, error.message);
+        return { sale_id: saleId, status: 'failed', reason: error.message, coins: 0 };
+      }
+    }));
     void Promise.all(saleIds.flatMap((saleId) => [
       notifyTelegramPdvSaleVps(saleId),
       recordMobilePdvSaleVps(saleId),
@@ -26736,7 +26880,15 @@ fastify.post('/table-data/:name/bulk', { preHandler: requireSyncKey }, async (re
     });
   }
 
-  return { inserted: rows.length };
+  return { inserted: rows.length, cashback };
+});
+
+fastify.post('/admin/cashback/reconcile-sales', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  return reconcilePurchaseCoinsVps({
+    apply: body.apply === true,
+    limit: body.limit,
+  });
 });
 
 fastify.post('/whatsapp/automation/test-send', { preHandler: requireSyncKey }, async (req) => {
@@ -30224,11 +30376,50 @@ fastify.get('/customer/purchases', async (req, reply) => {
     );
     saleItems = rows;
   }
+  const productIds = Array.from(new Set(saleItems.map((item) => String(item.product_id || '')).filter(Boolean)));
+  const productById = new Map();
+  if (productIds.length > 0) {
+    const [products] = await pool.query(
+      'SELECT id, slug, images, image_url, stock_quantity FROM products WHERE id IN (?)',
+      [productIds]
+    );
+    for (const product of products) {
+      const images = parsePublicJson(product.images, []);
+      productById.set(String(product.id), {
+        slug: product.slug || null,
+        image_url: product.image_url || (Array.isArray(images) ? images.find(Boolean) : null) || null,
+        stock_quantity: Number(product.stock_quantity || 0),
+      });
+    }
+  }
   const saleItemsBySaleId = new Map();
   for (const item of saleItems) {
+    const product = productById.get(String(item.product_id || '')) || null;
     const list = saleItemsBySaleId.get(String(item.sale_id)) || [];
-    list.push(item);
+    list.push({
+      ...item,
+      product_slug: product?.slug || null,
+      product_image_url: product?.image_url || null,
+      product_stock_quantity: product?.stock_quantity ?? null,
+    });
     saleItemsBySaleId.set(String(item.sale_id), list);
+  }
+
+  const coinsBySaleId = new Map();
+  if (saleIds.length > 0) {
+    const [coinRows] = await pool.query(
+      `SELECT reference_id, amount
+         FROM coin_transactions
+        WHERE customer_id = ? AND reference_type = 'sale' AND type = 'earn_purchase'
+          AND status <> 'cancelled' AND reference_id IN (?)`,
+      [customerId, saleIds]
+    );
+    for (const transaction of coinRows) {
+      coinsBySaleId.set(
+        String(transaction.reference_id),
+        Number(coinsBySaleId.get(String(transaction.reference_id)) || 0) + Number(transaction.amount || 0)
+      );
+    }
   }
 
   const orderConditions = ['customer_id = ?'];
@@ -30262,6 +30453,7 @@ fastify.get('/customer/purchases', async (req, reply) => {
     customer: publicCustomer(customer),
     sales: sales.map(sale => ({
       ...sale,
+      coins_earned: Number(coinsBySaleId.get(String(sale.id)) || 0),
       items: saleItemsBySaleId.get(String(sale.id)) || [],
       customer: {
         id: String(customer.id),
@@ -30273,6 +30465,23 @@ fastify.get('/customer/purchases', async (req, reply) => {
       ...order,
       items: orderItemsByOrderId.get(String(order.id)) || [],
     })),
+  };
+});
+
+fastify.get('/customer/coins', async (req, reply) => {
+  const auth = await getVpsBearerAuthContext(req);
+  if (!auth.customerId) return reply.code(401).send({ error: 'Unauthorized' });
+
+  const [balances, transactions, settingsRows] = await Promise.all([
+    pool.query('SELECT * FROM coin_balances WHERE customer_id = ? LIMIT 1', [auth.customerId]),
+    pool.query('SELECT * FROM coin_transactions WHERE customer_id = ? ORDER BY created_at DESC LIMIT 100', [auth.customerId]),
+    pool.query('SELECT coins_per_real, min_purchase_for_coins, coins_to_brl_rate, max_redeem_percent, min_coins_to_redeem, active FROM cashback_settings ORDER BY updated_at DESC LIMIT 1'),
+  ]);
+  reply.header('Cache-Control', 'private, no-store');
+  return {
+    balance: balances[0]?.[0] || null,
+    transactions: transactions[0] || [],
+    settings: settingsRows[0]?.[0] || null,
   };
 });
 
