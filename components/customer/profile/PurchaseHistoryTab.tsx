@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Package, RefreshCw, Receipt, FileText, ExternalLink, Check, Clock, X, CreditCard, Truck, Filter, Search, type LucideIcon } from 'lucide-react';
+import { ShoppingBag, Package, RefreshCw, Receipt, FileText, ExternalLink, Check, Clock, X, CreditCard, Truck, Filter, Search, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { useVpsAuth } from '../../../hooks/useVpsAuth';
 import { getCustomerPurchaseHistory } from '../../../services/saleService';
-import { companySettingsService } from '../../../services/companySettingsService';
+import { customerDocumentService } from '../../../services/customerDocumentService';
 import { SaleWithItems } from '../../../types/sale';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
 import { printOnlineOrderReceipt } from '../../../utils/printOnlineOrderReceipt';
@@ -13,6 +13,8 @@ import { benefitService } from '../../../services/benefitService';
 import { vpsApiService } from '../../../services/vpsApiService';
 import { getLegacyCustomerPurchases, type LegacyCustomerPurchase } from '../../../services/legacyCustomerPurchasesService';
 import { SignedWarrantyDocumentCard } from './SignedWarrantyDocumentCard';
+import { getSaleItemRecordedIdentifier, getWarrantySaleItems } from '../../../utils/warrantySaleItems';
+import { applyWarrantyDisplayFlags, formatWarrantyCpfCnpj, formatWarrantyDate, formatWarrantyPhone, getWarrantyDeclaration, renderWarrantyBothCopies } from '../../../utils/warrantyTagReplacement';
 import type { Customer } from '../../../types/customer';
 import {
     createCustomerDebtMercadoPagoIntent,
@@ -94,6 +96,7 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
     const [productSpecs, setProductSpecs] = useState<Record<string, Record<string, string>>>({});
     const [loading, setLoading] = useState(true);
     const [printingReceiptId, setPrintingReceiptId] = useState<string | null>(null);
+    const [printingWarrantyId, setPrintingWarrantyId] = useState<string | null>(null);
     const [printingComprovanteId, setPrintingComprovanteId] = useState<string | null>(null);
     const [legacyPurchases, setLegacyPurchases] = useState<LegacyCustomerPurchase[]>([]);
     const [companyHeader, setCompanyHeader] = useState<{ name: string; logoUrl: string }>({ name: 'Mercado do Vale', logoUrl: '' });
@@ -106,7 +109,7 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
     const [debtPixIntent, setDebtPixIntent] = useState<CustomerDebtMercadoPagoIntent | null>(null);
 
     useEffect(() => {
-        companySettingsService.get()
+        customerDocumentService.getSettings()
             .then(s => setCompanyHeader({
                 name: s?.company_name || 'Mercado do Vale',
                 logoUrl: s?.receipt_logo_url || '',
@@ -117,7 +120,7 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
     const handleViewLegacyComprovante = async (sale: SaleWithItems) => {
         setPrintingComprovanteId(sale.id);
         try {
-            const settings = await companySettingsService.get();
+            const settings = await customerDocumentService.getSettings();
             const company = {
                 name:    settings?.company_name || 'Mercado do Vale',
                 address: settings?.address      || '',
@@ -175,11 +178,16 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
     };
 
     const handlePrintReceipt = async (sale: SaleWithItems) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            toast.error('Permita pop-ups para imprimir o recibo');
+            return;
+        }
         setPrintingReceiptId(sale.id);
         try {
             // Pedidos online têm estrutura diferente — usa um recibo dedicado
             if ((sale as any).is_online_order) {
-                const settings = await companySettingsService.get().catch(() => null);
+                const settings = await customerDocumentService.getSettings().catch(() => null);
                 printOnlineOrderReceipt({
                     id: sale.id,
                     created_at: sale.created_at,
@@ -203,29 +211,111 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                     gateway_pix_data: (sale as any).gateway_pix_data,
                     customer_name: effectiveCustomer?.name,
                     customer_cpf: (effectiveCustomer as any)?.cpf_cnpj,
-                }, settings);
+                }, settings, printWindow);
                 return;
             }
             const customerId = effectiveCustomer?.id;
             const [settings, coinBalance, benefitStatuses, coinsThisSale] = await Promise.all([
-                companySettingsService.get(),
+                customerDocumentService.getSettings(),
                 customerId ? getCoinBalance(customerId).catch(() => null) : Promise.resolve(null),
                 customerId ? benefitService.getCustomerBenefitsStatus(customerId).catch(() => []) : Promise.resolve([]),
                 customerId
                     ? getCoinsEarnedForReference(customerId, sale.id).catch(() => 0)
                     : Promise.resolve(0),
             ]);
-            if (!settings) return;
             const benefits: PrintReceiptBenefits = {
                 coinBalance,
                 coinsEarnedThisSale: coinsThisSale,
                 benefitStatuses,
             };
-            printSaleReceipt(sale, settings, productSpecs, benefits);
+            printSaleReceipt(sale, settings, productSpecs, benefits, printWindow);
         } catch (e) {
             console.error(e);
+            printWindow.close();
+            toast.error('Erro ao gerar o recibo');
         } finally {
             setPrintingReceiptId(null);
+        }
+    };
+
+    const handlePrintWarranty = async (sale: SaleWithItems) => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            toast.error('Permita pop-ups para imprimir o termo de garantia');
+            return;
+        }
+        setPrintingWarrantyId(sale.id);
+        try {
+            const [settings, savedDocuments] = await Promise.all([
+                customerDocumentService.getSettings(),
+                customerDocumentService.listWarrantyDocuments(sale.id),
+            ]);
+            const sections: string[] = [];
+            if (savedDocuments.length > 0) {
+                for (const document of savedDocuments) {
+                    sections.push(`<div class="warranty-copy">${document.warranty_content}</div>`);
+                    sections.push(`<div class="warranty-copy">${document.warranty_content.replace(/Assinatura do Cliente/gi, 'Assinatura da Empresa')}</div>`);
+                }
+            } else {
+                if (!settings.warranty_template) throw new Error('Template de garantia nao configurado');
+                const recordedItems = getWarrantySaleItems(sale.items);
+                const warrantyItems = recordedItems.length > 0
+                    ? recordedItems
+                    : sale.items.filter(item => {
+                        const specs = productSpecs[(item as any).id] || {};
+                        return Boolean(specs.imei1 || specs.imei2 || specs.serial);
+                    });
+                if (warrantyItems.length === 0) throw new Error('Nenhum aparelho serializado foi encontrado nesta venda');
+
+                for (const item of warrantyItems) {
+                    const specs = {
+                        ...(productSpecs[(item as any).product_id] || {}),
+                        ...(productSpecs[(item as any).id] || {}),
+                    };
+                    const tagData = applyWarrantyDisplayFlags({
+                        nome_loja: settings.company_name || 'Mercado do Vale',
+                        endereco: settings.address || '',
+                        telefone: formatWarrantyPhone(settings.phone || ''),
+                        email: settings.email || '',
+                        cnpj: formatWarrantyCpfCnpj(settings.cnpj || ''),
+                        logo: (settings as any).logo || settings.receipt_logo_url || '',
+                        nome_cliente: effectiveCustomer?.name || sale.customer?.name || '',
+                        cpf_cliente: formatWarrantyCpfCnpj((effectiveCustomer as any)?.cpf_cnpj || sale.customer?.cpf_cnpj || ''),
+                        telefone_cliente: formatWarrantyPhone((effectiveCustomer as any)?.phone || ''),
+                        email_cliente: (effectiveCustomer as any)?.email || '',
+                        numero_venda: sale.id.slice(0, 8).toUpperCase(),
+                        numero_documento: sale.id.slice(0, 8).toUpperCase(),
+                        data_compra: formatWarrantyDate(sale.created_at),
+                        produto: item.product_name,
+                        marca: (item as any).product_brand || '',
+                        modelo: (item as any).product_model || item.product_name,
+                        cor: specs.color || '',
+                        ram: specs.ram || '',
+                        memoria: specs.storage || '',
+                        imei1: specs.imei1 || getSaleItemRecordedIdentifier(item),
+                        imei2: specs.imei2 || '',
+                        dias_garantia: '90',
+                        tipo_garantia: 'Garantia Legal',
+                        declaracao_recebimento: getWarrantyDeclaration(
+                            sale.delivery_type === 'delivery' || sale.delivery_type === 'store_delivery' || sale.delivery_type === 'hybrid_delivery'
+                                ? 'delivery'
+                                : 'store_pickup',
+                        ),
+                    }, settings);
+                    const copies = renderWarrantyBothCopies(settings.warranty_template, tagData);
+                    sections.push(`<div class="warranty-copy">${copies.copy1}</div>`);
+                    sections.push(`<div class="warranty-copy">${copies.copy2}</div>`);
+                }
+            }
+
+            printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Termo de Garantia</title><style>body{font-family:Arial,sans-serif;padding:20px;line-height:1.6}.warranty-copy{page-break-after:always;margin-bottom:40px}.warranty-copy:last-child{page-break-after:auto}</style></head><body>${sections.join('')}<script>window.onload=function(){window.print();};<\/script></body></html>`);
+            printWindow.document.close();
+        } catch (error) {
+            console.error(error);
+            printWindow.close();
+            toast.error(error instanceof Error ? error.message : 'Erro ao gerar o termo de garantia');
+        } finally {
+            setPrintingWarrantyId(null);
         }
     };
 
@@ -839,6 +929,19 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
                                                     ? <RefreshCw size={13} className="animate-spin" />
                                                     : <Receipt size={13} />}
                                                 Recibo
+                                            </button>
+                                        )}
+                                        {!sale.legacy_sale_id && !isOnlineOrder && (
+                                            <button
+                                                onClick={() => handlePrintWarranty(sale)}
+                                                disabled={printingWarrantyId === sale.id}
+                                                title="Imprimir Termo de Garantia"
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors disabled:opacity-50"
+                                            >
+                                                {printingWarrantyId === sale.id
+                                                    ? <RefreshCw size={13} className="animate-spin" />
+                                                    : <ShieldCheck size={13} />}
+                                                Termo de Garantia
                                             </button>
                                         )}
                                         {(() => {

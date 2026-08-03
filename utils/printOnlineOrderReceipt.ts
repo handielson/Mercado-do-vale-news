@@ -74,7 +74,11 @@ interface OnlineOrderReceiptInput {
  * dispara `window.print()` automaticamente. O cliente pode imprimir ou salvar
  * em PDF pelo dialog do navegador.
  */
-export function printOnlineOrderReceipt(order: OnlineOrderReceiptInput, settings: CompanySettings | null) {
+export function printOnlineOrderReceipt(
+    order: OnlineOrderReceiptInput,
+    settings: CompanySettings | null,
+    printWindow?: Window | null,
+) {
     const company = {
         name: settings?.company_name || 'Mercado do Vale',
         cnpj: settings?.cnpj || '',
@@ -254,11 +258,12 @@ export function printOnlineOrderReceipt(order: OnlineOrderReceiptInput, settings
 
     const blob = new Blob([html], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank', 'width=900,height=900');
+    const win = printWindow || window.open(url, '_blank', 'width=900,height=900');
     if (!win) {
         URL.revokeObjectURL(url);
         alert('Não foi possível abrir a janela de impressão. Verifique se o bloqueador de pop-up está desativado.');
         return;
     }
+    if (printWindow) printWindow.location.href = url;
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

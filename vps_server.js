@@ -18281,6 +18281,38 @@ function sanitizePublicCompanySettings(row) {
   };
 }
 
+function sanitizeCustomerDocumentSettings(row) {
+  if (!row) return null;
+  return {
+    company_name: row.company_name || row.name || 'Mercado do Vale',
+    address: buildPublicCompanyAddress(row),
+    phone: row.phone || '',
+    cnpj: row.cnpj || '',
+    email: row.email || '',
+    logo: row.logo || null,
+    receipt_logo_url: row.receipt_logo_url || null,
+    receipt_width: row.receipt_width || '80mm',
+    show_company_info: row.show_company_info !== 0,
+    show_order_number: row.show_order_number !== 0,
+    show_timestamp: row.show_timestamp !== 0,
+    show_seller_info: row.show_seller_info !== 0,
+    header_text: row.header_text || '',
+    footer_text: row.footer_text || '',
+    receipt_extra_page_text: row.receipt_extra_page_text || null,
+    receipt_extra_page_qr_url: row.receipt_extra_page_qr_url || null,
+    receipt_show_extra_page: row.receipt_show_extra_page === 1 || row.receipt_show_extra_page === true,
+    default_a4_header: row.default_a4_header || null,
+    default_thermal_header: row.default_thermal_header || null,
+    warranty_template: row.warranty_template || null,
+    warranty_show_logo: row.warranty_show_logo !== 0,
+    warranty_show_company_name: row.warranty_show_company_name !== 0,
+    warranty_show_cnpj: row.warranty_show_cnpj !== 0,
+    warranty_show_phone: row.warranty_show_phone !== 0,
+    warranty_show_email: row.warranty_show_email !== 0,
+    warranty_show_address: row.warranty_show_address !== 0,
+  };
+}
+
 // ─── Health ────────────────────────────────────────────────────────────────
 fastify.get('/health', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async () => ({
   status: 'ok',
@@ -30242,6 +30274,40 @@ fastify.get('/customer/purchases', async (req, reply) => {
       items: orderItemsByOrderId.get(String(order.id)) || [],
     })),
   };
+});
+
+fastify.get('/customer/document-settings', async (req, reply) => {
+  const auth = await getVpsBearerAuthContext(req);
+  if (!auth.customerId) return reply.code(401).send({ error: 'Unauthorized' });
+
+  const [rows] = await pool.query('SELECT * FROM company_settings LIMIT 1');
+  reply.header('Cache-Control', 'private, no-store');
+  return sanitizeCustomerDocumentSettings(rows?.[0] || null);
+});
+
+fastify.get('/customer/sales/:saleId/warranty-documents', async (req, reply) => {
+  const auth = await getVpsBearerAuthContext(req);
+  if (!auth.customerId) return reply.code(401).send({ error: 'Unauthorized' });
+
+  const saleId = String(req.params?.saleId || '').trim();
+  const [sales] = await pool.query(
+    'SELECT id, customer_id FROM sales WHERE id = ? LIMIT 1',
+    [saleId]
+  );
+  const sale = sales?.[0] || null;
+  if (!sale || (!auth.isAdmin && String(sale.customer_id) !== String(auth.customerId))) {
+    return reply.code(404).send({ error: 'Venda nao encontrada' });
+  }
+
+  const [documents] = await pool.query(
+    `SELECT id, sale_id, serialized_unit_id, warranty_content, created_at
+       FROM warranty_documents
+      WHERE sale_id = ?
+      ORDER BY created_at ASC`,
+    [saleId]
+  );
+  reply.header('Cache-Control', 'private, no-store');
+  return { documents };
 });
 
 fastify.patch('/shipping/price-ranges/:id', { preHandler: requireSyncKey }, async (req, reply) => {

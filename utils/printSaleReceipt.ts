@@ -93,7 +93,8 @@ export function printSaleReceipt(
     sale: SaleWithItems,
     settings: CompanySettings,
     productSpecs?: Record<string, Record<string, string>>,
-    benefits?: PrintReceiptBenefits
+    benefits?: PrintReceiptBenefits,
+    printWindow?: Window | null,
 ) {
     const logo = (settings as any).logo || settings.receipt_logo_url || '';
     const companyName = settings.company_name || 'Mercado do Vale';
@@ -305,7 +306,7 @@ window.onload = () => {
 </body>
 </html>`;
 
-    const pw = window.open('', '_blank');
+    const pw = printWindow || window.open('', '_blank');
     if (!pw) return;
     pw.document.write(html);
     pw.document.close();

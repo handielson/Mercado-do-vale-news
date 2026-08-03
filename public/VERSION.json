@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.140-cliente-historico-acesso",
+  "version": "v1.2.141-cliente-recibo-garantia",
   "date": "2026-08-03",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260803-160144-v12140-cliente-historico-acesso",
+  "release_vps": "/var/www/mdv-site/releases/20260803-161515-v12141-cliente-recibo-garantia",
   "branch": "main",
-  "summary": "Corrige o historico de compras e sincroniza a senha enviada ao cliente com o acesso criado, incluindo a protecao do vinculo de produtos existentes."
+  "summary": "Ativa recibo e termo de garantia no painel do cliente com rotas autenticadas e isolamento dos documentos por proprietario da venda."
 }
