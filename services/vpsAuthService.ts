@@ -135,7 +135,7 @@ export const vpsAuthService = {
     });
   },
 
-  async createCustomerLogin(data: { customer_id: string; email: string; cpf_cnpj: string; password: string }): Promise<void> {
+  async createCustomerLogin(data: { customer_id: string; email?: string; cpf_cnpj: string; password: string }): Promise<void> {
     const session = readStoredSession();
     const response = await fetch(buildAuthUrl('/auth/admin/users'), {
       method: 'POST',

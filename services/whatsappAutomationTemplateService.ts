@@ -275,7 +275,7 @@ export function previewWhatsAppAutomationTemplate(template: WhatsAppAutomationTe
     endereco: 'Rua Exemplo, 123 - Centro, Petrolina/PE - CEP 56300-000',
     maps_link: 'https://maps.google.com/?q=Rua%20Exemplo%20123',
     portal_link: 'https://mv.mercadodovale.com.br/',
-    senha_temporaria: '12345',
+    senha_temporaria: '123456',
     pedido: '#A1B2C3D4',
     data: '20/06/2026 14:30',
     itens: '- Smartphone Exemplo x1 - R$ 1.999,00',

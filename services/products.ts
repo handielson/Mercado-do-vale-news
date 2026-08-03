@@ -414,7 +414,15 @@ async function create(input: ProductInput): Promise<ProductWithPriceAdjustment> 
     const result = await vpsApiService.createProduct(payload);
     if (result.errors.length > 0) throw new Error(`Failed to create product: ${result.errors[0].error}`);
 
-    const savedProduct = transformFromDB(payload) as ProductWithPriceAdjustment;
+    // O batch pode reaproveitar um produto existente (por exemplo, pelo bling_id).
+    // Nesse caso, o ID resolvido pela API deve ser usado na unidade serializada criada
+    // logo depois pelo ProductForm; manter o UUID solicitado gera uma unidade orfa.
+    const resolved = result.resolved?.find((row) => row.requested_id === id) || result.resolved?.[0];
+    const resolvedId = resolved?.id || id;
+    const persistedRow = resolvedId !== id
+        ? await vpsApiService.getProductById(resolvedId, true)
+        : null;
+    const savedProduct = transformFromDB(persistedRow || { ...payload, id: resolvedId }) as ProductWithPriceAdjustment;
     const priceAdjustment = await syncVariationPrices(savedProduct);
     if (priceAdjustment) {
         savedProduct.priceAdjustment = priceAdjustment;

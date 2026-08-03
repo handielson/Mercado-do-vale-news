@@ -28,6 +28,7 @@ import { moneyReaisToCents, moneyToCents } from '../utils/money';
 import { getSaleCollectedTotal, getSaleCostTotal, getSaleRealProfit } from '../utils/salePresentation';
 import { UnitStatus } from '../utils/field-standards';
 import type { StockLocationPriorityDecrementResult, StockLocationSaleRestoreResult } from '../types/stock-location';
+import type { OrderWithItems } from '../types/order';
 import { formatReferenceNumber } from '../utils/referenceNumber';
 
 const decrementSaleStockByPriority = async (item: SaleItem, saleId: string): Promise<StockLocationPriorityDecrementResult[]> => {
@@ -891,6 +892,51 @@ export const getSales = async (filters?: SaleFilters): Promise<SaleWithItems[]> 
         throw error;
     }
 };
+
+interface CustomerPurchasesResponse {
+    sales?: any[];
+    orders?: any[];
+}
+
+export async function getCustomerPurchaseHistory(customerId?: string): Promise<{
+    sales: SaleWithItems[];
+    orders: OrderWithItems[];
+}> {
+    const query = customerId ? `?customer_id=${encodeURIComponent(customerId)}` : '';
+    const data = await vpsClient.get<CustomerPurchasesResponse>(`/customer/purchases${query}`);
+
+    const sales = (Array.isArray(data.sales) ? data.sales : []).map((saleRow) => {
+        const rawItems = Array.isArray(saleRow.items) ? saleRow.items : [];
+        const moneyScale = shouldScaleSaleMoneyFromReais(saleRow, rawItems) ? 100 : 1;
+        return {
+            ...normalizeSaleRow(saleRow, moneyScale),
+            items: rawItems.map((row: any) => normalizeSaleItemRow(row, saleRow)),
+            customer: saleRow.customer,
+        } as SaleWithItems;
+    });
+
+    const orders = (Array.isArray(data.orders) ? data.orders : []).map((orderRow) => ({
+        ...orderRow,
+        shipping_address: parseJsonField(orderRow.shipping_address, null),
+        gateway_pix_data: parseJsonField(orderRow.gateway_pix_data, null),
+        shipping_cost: Number(orderRow.shipping_cost) || 0,
+        subtotal: Number(orderRow.subtotal) || 0,
+        discount: Number(orderRow.discount) || 0,
+        total: Number(orderRow.total) || 0,
+        coupon_discount: Number(orderRow.coupon_discount) || 0,
+        coins_spent: Number(orderRow.coins_spent) || 0,
+        coins_discount: Number(orderRow.coins_discount) || 0,
+        items: (Array.isArray(orderRow.items) ? orderRow.items : []).map((item: any) => ({
+            ...item,
+            combo_selections: parseJsonField(item.combo_selections, null),
+            quantity: Number(item.quantity) || 0,
+            unit_price: Number(item.unit_price) || 0,
+            subtotal: Number(item.subtotal) || 0,
+        })),
+    })) as OrderWithItems[];
+
+    return { sales, orders };
+}
 
 export const updateSaleCostsAndProfit = async (saleId: string): Promise<SaleWithItems> => {
     const sale = await loadSaleWithItemsById(saleId);

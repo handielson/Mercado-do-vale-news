@@ -28,12 +28,12 @@ Seu Código de Indicação: *{codigo_indicacao}*
 const PORTAL_LINK = 'https://mv.mercadodovale.com.br/';
 
 /**
- * Extracts the default password from CPF: first 5 digits (no punctuation).
- * Ex: "123.456.789-00" → "12345"
+ * Extracts the default password from CPF: first 6 digits (no punctuation).
+ * Ex: "123.456.789-00" → "123456"
  */
 export function getDefaultPassword(cpf_cnpj: string): string {
     const digits = cpf_cnpj.replace(/\D/g, '');
-    return digits.slice(0, 5);
+    return digits.slice(0, 6);
 }
 
 /**

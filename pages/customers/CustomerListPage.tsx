@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { customerService } from '../../services/customers';
 import { Customer, CustomerFilters } from '../../types/customer';
 import { welcomeMessageService, buildMessage, buildWhatsAppUrl } from '../../services/welcomeMessageService';
+import { vpsAuthService } from '../../services/vpsAuthService';
 
 /**
  * Customer List Page
@@ -80,14 +81,35 @@ export default function CustomerListPage() {
         }
     };
 
-    const handleSendWelcome = (customer: Customer) => {
+    const handleSendWelcome = async (customer: Customer) => {
         if (!customer.phone) {
             toast.error('Cliente sem telefone cadastrado');
             return;
         }
-        const message = buildMessage(welcomeTemplate, customer);
-        const url = buildWhatsAppUrl(customer.phone, message);
-        window.open(url, '_blank');
+        if (!customer.cpf_cnpj) {
+            toast.error('Cliente sem CPF/CNPJ cadastrado');
+            return;
+        }
+        const whatsappWindow = window.open('', '_blank');
+        if (!whatsappWindow) {
+            toast.error('Permita pop-ups para abrir o WhatsApp');
+            return;
+        }
+        try {
+            const password = customer.cpf_cnpj.replace(/\D/g, '').slice(0, 6);
+            await vpsAuthService.createCustomerLogin({
+                customer_id: customer.id,
+                email: customer.email,
+                cpf_cnpj: customer.cpf_cnpj,
+                password,
+            });
+            const message = buildMessage(welcomeTemplate, customer);
+            const url = buildWhatsAppUrl(customer.phone, message);
+            whatsappWindow.location.href = url;
+        } catch (error: any) {
+            whatsappWindow.close();
+            toast.error(error?.message || 'Nao foi possivel preparar o acesso do cliente');
+        }
     };
 
     // Format CPF/CNPJ

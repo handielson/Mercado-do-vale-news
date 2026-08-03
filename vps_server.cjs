@@ -1397,11 +1397,11 @@ fastify.post('/auth/admin/users', { preHandler: requireSyncKeyOrAdmin }, async (
   await ensureCustomerAuthTable();
   const body = request.body || {};
   const customerId = String(body.customer_id || '').trim();
-  const email = normalizeAuthEmail(body.email);
+  const email = normalizeAuthEmail(body.email) || null;
   const cpfCnpj = normalizeAuthDocument(body.cpf_cnpj);
   const password = String(body.password || '');
-  if (!customerId || !email || !cpfCnpj || password.length < 6) {
-    return reply.code(400).send({ error: 'customer_id, email, cpf_cnpj e senha valida sao obrigatorios' });
+  if (!customerId || !cpfCnpj || password.length < 6) {
+    return reply.code(400).send({ error: 'customer_id, cpf_cnpj e senha valida sao obrigatorios' });
   }
   const [customers] = await pool.query('SELECT id FROM customers WHERE id = ? LIMIT 1', [customerId]);
   if (!customers?.[0]) return reply.code(404).send({ error: 'Cliente nao encontrado' });
@@ -3013,7 +3013,7 @@ function getWhatsAppAutomationSampleVariablesVps() {
     endereco: 'Rua Exemplo, 123 - Centro, Petrolina/PE - CEP 56300-000',
     maps_link: 'https://maps.google.com/?q=Rua%20Exemplo%20123',
     portal_link: 'https://mv.mercadodovale.com.br/',
-    senha_temporaria: '12345',
+    senha_temporaria: '123456',
     pedido: '#A1B2C3D4',
     data: new Date().toLocaleString('pt-BR'),
     itens: '- Smartphone Exemplo x1 - R$ 1.999,00',
@@ -3167,6 +3167,19 @@ async function notifyCustomerRegisteredWhatsApp(customerId, source = 'admin') {
   const [rows] = await pool.query('SELECT * FROM customers WHERE id = ? LIMIT 1', [customerId]);
   const customer = rows?.[0] || null;
   if (!customer) return { status: 'failed', error: 'customer_not_found' };
+  const temporaryPassword = String(customer.cpf_cnpj || '').replace(/\D/g, '').slice(0, 6);
+  if (source !== 'site') {
+    if (temporaryPassword.length < 6) return { status: 'failed', error: 'customer_document_invalid' };
+    await ensureCustomerAuthTable();
+    const { salt, hash } = await hashVpsPassword(temporaryPassword);
+    await pool.query(
+      `INSERT INTO customer_auth (customer_id, email, cpf_cnpj, password_hash, salt)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE email = VALUES(email), cpf_cnpj = VALUES(cpf_cnpj), password_hash = VALUES(password_hash), salt = VALUES(salt), updated_at = NOW()`,
+      [customer.id, normalizeAuthEmail(customer.email) || null, normalizeAuthDocument(customer.cpf_cnpj), hash, salt]
+    );
+    await pool.query('UPDATE customers SET user_id = COALESCE(user_id, id), account_status = "active", updated_at = NOW() WHERE id = ?', [customer.id]);
+  }
   const addressText = buildAutomationAddressText(parseAutomationJson(customer.address, null));
   const templateKey = source === 'site' ? 'customer_registered_site' : 'customer_registered_admin';
   return sendWhatsAppAutomationMessageVps({
@@ -3182,7 +3195,7 @@ async function notifyCustomerRegisteredWhatsApp(customerId, source = 'admin') {
       endereco: addressText,
       maps_link: buildAutomationMapsLink(addressText),
       portal_link: 'https://mv.mercadodovale.com.br/',
-      senha_temporaria: String(customer.cpf_cnpj || '').replace(/\D/g, '').slice(0, 5) || 'temporaria',
+      senha_temporaria: temporaryPassword || 'temporaria',
     },
   });
 }

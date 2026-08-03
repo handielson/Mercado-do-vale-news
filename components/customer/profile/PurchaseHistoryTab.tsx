@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingBag, Package, RefreshCw, Receipt, FileText, ExternalLink, Check, Clock, X, CreditCard, Truck, Filter, Search, type LucideIcon } from 'lucide-react';
 import { useVpsAuth } from '../../../hooks/useVpsAuth';
-import { getSales } from '../../../services/saleService';
-import { getOrders } from '../../../services/orderService';
+import { getCustomerPurchaseHistory } from '../../../services/saleService';
 import { companySettingsService } from '../../../services/companySettingsService';
 import { SaleWithItems } from '../../../types/sale';
 import { printSaleReceipt, PrintReceiptBenefits } from '../../../utils/printSaleReceipt';
@@ -235,11 +234,11 @@ export const PurchaseHistoryTab: React.FC<PurchaseHistoryTabProps> = ({ customer
         (async () => {
             try {
                 // Fetch PDV Sales and Online Orders simultaneously
-                const [pdvSales, onlineOrders, debtRows] = await Promise.all([
-                    getSales({ customer_id: effectiveCustomer.id }),
-                    getOrders({ customer_id: effectiveCustomer.id }),
+                const [purchaseHistory, debtRows] = await Promise.all([
+                    getCustomerPurchaseHistory(effectiveCustomer.id),
                     listCustomerDebts(effectiveCustomer.id).catch(() => []),
                 ]);
+                const { sales: pdvSales, orders: onlineOrders } = purchaseHistory;
                 setCustomerDebts(debtRows);
                 getLegacyCustomerPurchases(effectiveCustomer.id)
                     .then(setLegacyPurchases)
