@@ -569,6 +569,17 @@ function pausedAdBundlePayloadHash(item, accountId) {
   return sha256(JSON.stringify({ schemaVersion: 1, accountId, item }));
 }
 
+function confirmsPausedAdDuringReview(ad) {
+  const status = String(ad?.status || '').toUpperCase();
+  const effectiveStatus = String(ad?.effective_status || '').toUpperCase();
+  // Meta documents that an ad created with status=PAUSED can temporarily be
+  // PENDING_REVIEW before returning to the selected PAUSED status. Campaign
+  // and ad set are independently confirmed PAUSED before this check.
+  return status === 'PAUSED'
+    || status === 'PENDING_REVIEW'
+    || effectiveStatus === 'PENDING_REVIEW';
+}
+
 async function findExecutionItem(pool, approvalId, itemKey) {
   const [rows] = await pool.query(
     'SELECT * FROM marketing_approval_execution_items WHERE approval_id=? AND item_key=? LIMIT 1',
@@ -964,8 +975,8 @@ async function executePausedWhatsappAdBundle(pool, approval) {
       }
     }
     if (!ad?.id || ad.name !== item.ad_name || String(ad.adset_id) !== String(adset.id)
-      || !String(ad.effective_status || ad.status).includes('PAUSED')) {
-      throw new Error(`Meta did not confirm paused ad ${item.item_key}`);
+      || !confirmsPausedAdDuringReview(ad)) {
+      throw new Error(`Meta did not confirm paused ad ${item.item_key}: ${JSON.stringify({ id: ad?.id || null, name: ad?.name || null, status: ad?.status || null, effective_status: ad?.effective_status || null, adset_id: ad?.adset_id || null })}`);
     }
     await saveExecutionItem(pool, approval.id, adItemKey, payloadHash, {
       state: 'succeeded', externalId: ad.id, externalStatus: ad.effective_status || ad.status || 'PAUSED',

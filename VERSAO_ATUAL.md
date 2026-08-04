@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.177-meta-app-publicacao
+version: v1.2.178-meta-ad-pending-review
 date: 2026-08-04
 status: ready
 release_vps: /var/www/mdv-site/releases/20260804-223713-meta-app-publicacao
 branch: main
-summary: Publica as páginas legais exigidas pela Meta para habilitar o app Gestão MV em modo público.
+summary: Reconhece PENDING_REVIEW como transição oficial segura de anúncios Meta criados com status PAUSED.
 ```
