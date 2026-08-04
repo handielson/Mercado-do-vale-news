@@ -628,7 +628,7 @@ function whatsappProductLink(phone, message) {
   return `https://api.whatsapp.com/send?phone=${encodeURIComponent(digits(phone))}&text=${encodeURIComponent(message)}`;
 }
 
-function buildCarouselStorySpec(item, pageId, instagramAccountId, whatsapp) {
+function buildCarouselStorySpec(item, pageId, instagramAccountId, whatsapp, { includeInstagramActor = true } = {}) {
   const cards = item.cards.map((card) => {
     const trackedMessage = `${card.whatsapp_message} | Origem: ${item.tracking_code}`;
     const link = whatsappProductLink(whatsapp, trackedMessage);
@@ -640,9 +640,8 @@ function buildCarouselStorySpec(item, pageId, instagramAccountId, whatsapp) {
       call_to_action: { type: 'WHATSAPP_MESSAGE', value: { link } },
     };
   });
-  return {
+  const storySpec = {
     page_id: pageId,
-    instagram_actor_id: instagramAccountId,
     link_data: {
       link: whatsappProductLink(whatsapp, `Quero comprar pelo Instagram | Origem: ${item.tracking_code}`),
       message: item.primary_text,
@@ -657,6 +656,11 @@ function buildCarouselStorySpec(item, pageId, instagramAccountId, whatsapp) {
       },
     },
   };
+  // A Page linked to an Instagram business account is also a valid identity for
+  // Instagram placements.  Keeping this optional lets us recover from Meta
+  // rejecting an explicit actor id even after it was returned by the account.
+  if (includeInstagramActor) storySpec.instagram_actor_id = instagramAccountId;
+  return storySpec;
 }
 
 async function revalidateApprovedProducts(pool, item) {
@@ -809,7 +813,12 @@ async function executePausedWhatsappAdBundle(pool, approval) {
   for (const item of payload.campaigns) await revalidateApprovedProducts(pool, item);
 
   const token = decryptToken(row, config.encryptionKey);
-  await assertInstagramActorEligibleForAdAccount(row.selected_ad_account_id, row.selected_instagram_account_id, token);
+  const instagramActor = await resolveInstagramActorForPage(
+    row.selected_ad_account_id,
+    row.selected_page_id,
+    row.selected_instagram_account_id,
+    token,
+  );
   const [campaignResponse, adsetResponse, adResponse] = await Promise.all([
     graphRequest(`${row.selected_ad_account_id}/campaigns`, token, { fields: 'id,name,status,effective_status,objective', limit: 100 }),
     graphRequest(`${row.selected_ad_account_id}/adsets`, token, { fields: 'id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget', limit: 200 }),
@@ -921,12 +930,33 @@ async function executePausedWhatsappAdBundle(pool, approval) {
     if (!ad) {
       await saveExecutionItem(pool, approval.id, adItemKey, payloadHash, { state: 'creating' });
       try {
-        const created = await graphPost(`${row.selected_ad_account_id}/ads`, token, {
+        const adPayload = (includeInstagramActor) => ({
           name: item.ad_name,
           adset_id: adset.id,
           status: 'PAUSED',
-          creative: JSON.stringify({ object_story_spec: buildCarouselStorySpec(item, row.selected_page_id, row.selected_instagram_account_id, whatsapp) }),
+          creative: JSON.stringify({
+            object_story_spec: buildCarouselStorySpec(
+              item,
+              row.selected_page_id,
+              instagramActor.id,
+              whatsapp,
+              { includeInstagramActor },
+            ),
+          }),
         });
+        let created;
+        try {
+          created = await graphPost(`${row.selected_ad_account_id}/ads`, token, adPayload(true));
+        } catch (error) {
+          // Meta can list a valid linked actor and still reject it explicitly for
+          // a click-to-WhatsApp creative. Retry once with the same linked Page
+          // identity; the ad set remains PAUSED and the original error created
+          // no remote ad id.
+          const isRejectedInstagramActor = Number(error?.metaCode) === 100
+            && /instagram_actor_id.*valid Instagram account id/i.test(String(error?.message || ''));
+          if (!isRejectedInstagramActor) throw error;
+          created = await graphPost(`${row.selected_ad_account_id}/ads`, token, adPayload(false));
+        }
         ad = await graphRequest(created.id, token, { fields: 'id,name,status,effective_status,adset_id' });
       } catch (error) {
         const diagnostic = tagMetaExecutionError(error, 'criar anúncio pausado', item.ad_name);
@@ -1018,15 +1048,30 @@ async function discoverAssets(token) {
   };
 }
 
-async function assertInstagramActorEligibleForAdAccount(adAccountId, instagramAccountId, token) {
-  const result = await graphRequest(`${adAccountId}/instagram_accounts`, token, {
+async function resolveInstagramActorForPage(adAccountId, pageId, selectedInstagramAccountId, token) {
+  const [result, page] = await Promise.all([
+    graphRequest(`${adAccountId}/instagram_accounts`, token, {
     fields: 'id,username,name', limit: 100,
-  });
+    }),
+    graphRequest(pageId, token, { fields: 'id,name,instagram_business_account{id,username,name}' }),
+  ]);
   const accounts = Array.isArray(result?.data) ? result.data : [];
-  const eligible = accounts.find((account) => String(account.id) === String(instagramAccountId));
-  if (!eligible) {
-    throw new Error('O Instagram selecionado não está habilitado para anunciar nesta conta. No Gerenciador de Anúncios da Meta, vincule @mercadodovale_ à conta de anúncios e conceda a tarefa Anunciar; depois reconecte a Meta e confirme as contas.');
+  const pageInstagram = page?.instagram_business_account;
+  if (!pageInstagram?.id) {
+    throw new Error('A Página selecionada não possui um Instagram comercial vinculado. Vincule @mercadodovale_ à Página no Meta Business Suite e reconecte a Meta.');
   }
+  const eligible = accounts.find((account) => String(account.id) === String(pageInstagram.id));
+  if (!eligible) {
+    throw new Error('O Instagram vinculado à Página selecionada não está habilitado para anunciar nesta conta. No Gerenciador de Anúncios da Meta, vincule @mercadodovale_ à conta de anúncios e conceda a tarefa Anunciar; depois reconecte a Meta e confirme as contas.');
+  }
+  return { ...eligible, id: String(eligible.id), selectionMatchesPage: String(selectedInstagramAccountId) === String(pageInstagram.id) };
+}
+
+async function assertInstagramActorEligibleForAdAccount(adAccountId, instagramAccountId, token, pageId = null) {
+  if (pageId) return resolveInstagramActorForPage(adAccountId, pageId, instagramAccountId, token);
+  const result = await graphRequest(`${adAccountId}/instagram_accounts`, token, { fields: 'id,username,name', limit: 100 });
+  const eligible = (result?.data || []).find((account) => String(account.id) === String(instagramAccountId));
+  if (!eligible) throw new Error('O Instagram selecionado não está habilitado para anunciar nesta conta. No Gerenciador de Anúncios da Meta, vincule @mercadodovale_ à conta de anúncios e conceda a tarefa Anunciar; depois reconecte a Meta e confirme as contas.');
   return eligible;
 }
 
@@ -1468,7 +1513,12 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
     if (!scopes.includes('ads_management')) return reply.code(409).send({ error: 'A permissão ads_management da Meta está ausente.' });
     try {
       const token = decryptToken(row, config.encryptionKey);
-      await assertInstagramActorEligibleForAdAccount(row.selected_ad_account_id, row.selected_instagram_account_id, token);
+      await assertInstagramActorEligibleForAdAccount(
+        row.selected_ad_account_id,
+        row.selected_instagram_account_id,
+        token,
+        row.selected_page_id,
+      );
     } catch (error) {
       return reply.code(409).send({ error: text(error.message, 1000) || 'Não foi possível validar se o Instagram pode anunciar nesta conta.' });
     }
