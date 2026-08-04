@@ -173,10 +173,10 @@ export const metaMarketingConnectionService = {
         );
     },
 
-    async preparePausedAdBundleApproval(): Promise<MetaCampaignDraftApprovalResponse> {
+    async preparePausedAdBundleApproval(retry = false): Promise<MetaCampaignDraftApprovalResponse> {
         return await vpsClient.post<MetaCampaignDraftApprovalResponse>(
             '/admin/marketing/meta/paused-ad-bundle-approvals',
-            {},
+            retry ? { retry: true } : {},
         );
     },
 };

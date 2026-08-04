@@ -1569,12 +1569,15 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
     };
     // A corrected executor must be able to request a new human approval after an older
     // execution with the same approved payload has failed.
-    const idempotencyKey = `meta-paused-ads-v2:${sha256(JSON.stringify(executionPayload)).slice(0, 120)}`;
+    const idempotencyBase = `meta-paused-ads-v2:${sha256(JSON.stringify(executionPayload)).slice(0, 120)}`;
     const [existingRows] = await pool.query(
-      'SELECT * FROM marketing_approval_requests WHERE idempotency_key=? LIMIT 1',
-      [idempotencyKey],
+      'SELECT * FROM marketing_approval_requests WHERE idempotency_key LIKE ? ORDER BY created_at DESC',
+      [`${idempotencyBase}%`],
     );
-    if (existingRows?.[0]) return { ok: true, approval: parseApproval(existingRows[0]), reused: true };
+    const reusable = existingRows.find((item) => !['failed', 'rejected', 'cancelled', 'expired'].includes(item.status));
+    if (reusable) return { ok: true, approval: parseApproval(reusable), reused: true };
+    const retryAttempt = req.body?.retry ? existingRows.length + 1 : 0;
+    const idempotencyKey = retryAttempt ? `${idempotencyBase}:retry:${retryAttempt}` : idempotencyBase;
 
     const id = crypto.randomUUID();
     const auth = await getBearerAuthContext(req);

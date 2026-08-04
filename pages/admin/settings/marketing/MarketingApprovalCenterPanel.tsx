@@ -356,7 +356,7 @@ export default function MarketingApprovalCenterPanel() {
     const retryPausedAdPreparation = async (request: MarketingApprovalRequest) => {
         setRetryingId(request.id);
         try {
-            const response = await metaMarketingConnectionService.preparePausedAdBundleApproval();
+            const response = await metaMarketingConnectionService.preparePausedAdBundleApproval(true);
             toast.success(response.reused
                 ? 'A nova solicitação já está disponível em Aprovações.'
                 : 'Nova solicitação criada. Revise e aprove antes de qualquer execução.');
