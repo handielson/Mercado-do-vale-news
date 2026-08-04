@@ -21,6 +21,12 @@ const REVIEW_LABELS = {
     active: { label: 'Em veiculação', className: 'bg-blue-100 text-blue-800', icon: PlayCircle },
 };
 
+const formatMoney = (value: number, currency = 'BRL') => new Intl.NumberFormat('pt-BR', {
+    style: 'currency', currency: currency || 'BRL', maximumFractionDigits: 2,
+}).format(Number(value) || 0);
+const formatCount = (value: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(Number(value) || 0);
+const formatPercent = (value: number) => `${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value) || 0)}%`;
+
 export default function MetaMarketingConnectionPanel() {
     const [connection, setConnection] = useState<MetaMarketingConnection | null>(null);
     const [loading, setLoading] = useState(true);
@@ -114,6 +120,7 @@ export default function MetaMarketingConnectionPanel() {
             .filter((campaign) => campaign.deliveryStatus === 'ACTIVE' && !managedCampaignIds.has(campaign.id))
             .map((campaign) => ({ ...campaign, account: accountAudit.account }))
     ));
+    const legacyAnalysis = connection.lastAudit?.legacyAnalysis;
 
     return (
         <section className="rounded-2xl border border-blue-200 bg-white shadow-sm">
@@ -148,6 +155,58 @@ export default function MetaMarketingConnectionPanel() {
                         <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-700" /><div className="min-w-0 flex-1"><p className="text-sm font-black text-rose-900">Campanha ativa fora do portfólio gerenciado</p><p className="mt-1 text-xs text-rose-800">Ela pertence a outra conta de anúncios e não será pausada ou alterada automaticamente. Enquanto estiver ativa, a autorização das duas novas campanhas permanece bloqueada para respeitar o limite operacional.</p></div></div>
                         <div className="mt-3 space-y-2">
                             {activeOutsidePortfolio.map((campaign) => <div key={`${campaign.account.id}:${campaign.id}`} className="flex flex-col gap-2 rounded-lg border border-rose-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-black text-slate-900">{campaign.name}</p><p className="text-xs text-slate-500">Conta: {campaign.account.name || campaign.account.id} · {campaign.account.account_id || campaign.account.id.replace(/^act_/, '')}</p></div><a href={campaign.managerUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-black text-blue-700 hover:underline">Ver campanha antiga na Meta <ExternalLink className="h-3.5 w-3.5" /></a></div>)}
+                        </div>
+                    </section>
+                )}
+
+                {legacyAnalysis && legacyAnalysis.campaigns.length > 0 && (
+                    <section className="rounded-xl border border-cyan-200 bg-cyan-50/50 p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <p className="text-sm font-black text-slate-900">Referência dos anúncios antigos para planejar os novos</p>
+                                <p className="mt-1 text-xs text-slate-600">Compara os últimos 30 dias com os 30 anteriores, por campanha e anúncio. É uma leitura somente leitura; nenhum orçamento ou estado foi alterado.</p>
+                            </div>
+                            <p className="text-[11px] font-bold text-cyan-800">{legacyAnalysis.ranges.current.since} a {legacyAnalysis.ranges.current.until}</p>
+                        </div>
+
+                        <div className="mt-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                            {[
+                                ['Gasto', formatMoney(legacyAnalysis.currentTotals.spend)],
+                                ['Conversas', formatCount(legacyAnalysis.currentTotals.conversations)],
+                                ['Custo/conversa', legacyAnalysis.currentTotals.conversations > 0 ? formatMoney(legacyAnalysis.currentTotals.costPerConversation) : 'Não mensurado'],
+                                ['CTR', formatPercent(legacyAnalysis.currentTotals.ctr)],
+                                ['CPM', formatMoney(legacyAnalysis.currentTotals.cpm)],
+                                ['ROAS', legacyAnalysis.currentTotals.purchaseValue > 0 ? `${legacyAnalysis.currentTotals.roas.toFixed(2)}x` : 'Não mensurado'],
+                            ].map(([label, value]) => <div key={label} className="rounded-lg border border-cyan-100 bg-white p-3"><p className="text-[11px] font-bold text-slate-500">{label}</p><p className="mt-1 text-sm font-black text-slate-900">{value}</p></div>)}
+                        </div>
+
+                        {legacyAnalysis.benchmark && <p className="mt-3 rounded-lg bg-cyan-100/70 px-3 py-2 text-xs text-cyan-950"><strong>Melhor referência observada:</strong> {legacyAnalysis.benchmark.campaignName}, com base em {legacyAnalysis.benchmark.basis === 'cost_per_conversation' ? 'menor custo por conversa mensurada' : 'maior CTR entre campanhas com entrega'}. Isso orienta o próximo teste, mas não autoriza copiar público, criativo ou orçamento automaticamente.</p>}
+                        {legacyAnalysis.currentTotals.conversations === 0 && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"><strong>Mensuração incompleta:</strong> a Meta não atribuiu conversas no período. CTR e cliques ajudam a diagnosticar o criativo, mas não comprovam vendas. O encaminhamento para o WhatsApp e o registro do bot devem ser validados antes da ativação.</p>}
+
+                        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                            {legacyAnalysis.campaigns.map((campaign) => {
+                                const metrics = campaign.current.metrics;
+                                const previous = campaign.previous.metrics;
+                                const currency = campaign.current.currency || campaign.account.currency || 'BRL';
+                                return <article key={`${campaign.account.id}:${campaign.campaignId}`} className="rounded-xl border border-cyan-100 bg-white p-4 shadow-sm">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div><h4 className="text-sm font-black text-slate-900">{campaign.campaignName}</h4><p className="mt-1 text-[11px] text-slate-500">{campaign.account.name || campaign.account.id} · {campaign.activeAdCount} anúncio(s) veiculando</p></div>
+                                        <a href={campaign.managerUrl} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-black text-blue-700 hover:underline">Ver na Meta</a>
+                                    </div>
+                                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                        <div><p className="text-[10px] font-bold text-slate-400">Gasto</p><p className="text-xs font-black">{formatMoney(metrics.spend, currency)}</p></div>
+                                        <div><p className="text-[10px] font-bold text-slate-400">Conversas</p><p className="text-xs font-black">{formatCount(metrics.conversations)}</p></div>
+                                        <div><p className="text-[10px] font-bold text-slate-400">Custo/conversa</p><p className="text-xs font-black">{metrics.conversations > 0 ? formatMoney(metrics.costPerConversation, currency) : '—'}</p></div>
+                                        <div><p className="text-[10px] font-bold text-slate-400">CTR</p><p className="text-xs font-black">{formatPercent(metrics.ctr)}</p></div>
+                                        <div><p className="text-[10px] font-bold text-slate-400">Alcance</p><p className="text-xs font-black">{formatCount(metrics.reach)}</p></div>
+                                        <div><p className="text-[10px] font-bold text-slate-400">Frequência</p><p className="text-xs font-black">{metrics.frequency.toFixed(2)}</p></div>
+                                        <div><p className="text-[10px] font-bold text-slate-400">CPM</p><p className="text-xs font-black">{formatMoney(metrics.cpm, currency)}</p></div>
+                                        <div><p className="text-[10px] font-bold text-slate-400">ROAS</p><p className="text-xs font-black">{metrics.purchaseValue > 0 ? `${metrics.roas.toFixed(2)}x` : '—'}</p></div>
+                                    </div>
+                                    <p className="mt-3 text-[11px] text-slate-500">30 dias anteriores: gasto {formatMoney(previous.spend, currency)} · {formatCount(previous.conversations)} conversa(s) · CTR {formatPercent(previous.ctr)}.</p>
+                                    {campaign.ads.length > 0 && <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">{campaign.ads.map((ad) => <div key={ad.adId} className="flex flex-col gap-1 rounded-lg bg-slate-50 p-2.5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold text-slate-800">{ad.adName}</p><p className="text-[10px] text-slate-500">Gasto {formatMoney(ad.current.metrics.spend, currency)} · Conversas {formatCount(ad.current.metrics.conversations)} · CTR {formatPercent(ad.current.metrics.ctr)}</p></div><a href={ad.managerUrl} target="_blank" rel="noreferrer" className="text-[11px] font-black text-blue-700 hover:underline">Abrir anúncio</a></div>)}</div>}
+                                </article>;
+                            })}
                         </div>
                     </section>
                 )}

@@ -51,6 +51,7 @@ export interface MetaMarketingConnection {
         };
         managedAdReviews?: MetaManagedAdReview[];
         accountAudits?: MetaAdAccountCampaignAudit[];
+        legacyAnalysis?: MetaLegacyPortfolioAnalysis;
     } | null;
     lastAuditAt: string | null;
     lastError: string | null;
@@ -66,6 +67,13 @@ export interface MetaAdAccountCampaignAudit {
         effective_status?: string;
         deliveryStatus: 'ACTIVE' | 'NOT_DELIVERING';
         activeAdCount: number;
+        activeAds?: Array<{
+            id: string;
+            name?: string;
+            campaign_id: string;
+            adset_id: string;
+            managerUrl: string;
+        }>;
         managerUrl: string;
     }>;
 }
@@ -140,6 +148,40 @@ export interface MetaCampaignInsightItem {
     metrics: MetaCampaignMetrics;
     followers?: MetaCampaignFollowerTracking;
     actions: Array<{ action_type: string; value: string }>;
+}
+
+export interface MetaLegacyAdAnalysis {
+    adId: string;
+    adName: string;
+    managerUrl: string;
+    current: MetaCampaignInsightItem & { adId: string; adName: string };
+    previous: MetaCampaignInsightItem & { adId: string; adName: string };
+}
+
+export interface MetaLegacyCampaignAnalysis {
+    account: MetaAdAccount;
+    campaignId: string;
+    campaignName: string;
+    managerUrl: string;
+    activeAdCount: number;
+    current: MetaCampaignInsightItem;
+    previous: MetaCampaignInsightItem;
+    ads: MetaLegacyAdAnalysis[];
+}
+
+export interface MetaLegacyPortfolioAnalysis {
+    mode: 'read_only';
+    datePreset: 'last_30d';
+    attribution: string;
+    ranges: {
+        current: { since: string; until: string };
+        previous: { since: string; until: string };
+    };
+    currentTotals: MetaCampaignMetrics;
+    previousTotals: MetaCampaignMetrics;
+    benchmark: { campaignId: string; campaignName: string; basis: 'cost_per_conversation' | 'ctr' } | null;
+    campaigns: MetaLegacyCampaignAnalysis[];
+    capturedAt: string;
 }
 
 export interface MetaCampaignInsightsReport {

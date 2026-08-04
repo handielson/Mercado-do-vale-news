@@ -619,13 +619,24 @@ async function readAllAdAccountCampaigns(row, token) {
       }),
     ]);
     const ads = adResponse?.data || [];
+    const activeAds = ads.filter((ad) => ad.effective_status === 'ACTIVE');
     const activeCampaignIds = new Set(
-      ads.filter((ad) => ad.effective_status === 'ACTIVE').map((ad) => String(ad.campaign_id)),
+      activeAds.map((ad) => String(ad.campaign_id)),
     );
     const campaigns = (campaignResponse?.data || []).map((campaign) => ({
       ...campaign,
       deliveryStatus: activeCampaignIds.has(String(campaign.id)) ? 'ACTIVE' : 'NOT_DELIVERING',
-      activeAdCount: ads.filter((ad) => ad.effective_status === 'ACTIVE' && String(ad.campaign_id) === String(campaign.id)).length,
+      activeAds: activeAds
+        .filter((ad) => String(ad.campaign_id) === String(campaign.id))
+        .map((ad) => ({
+          ...ad,
+          managerUrl: adsManagerUrl(account.id, {
+            campaignId: String(ad.campaign_id),
+            adsetId: String(ad.adset_id),
+            adId: String(ad.id),
+          }),
+        })),
+      activeAdCount: activeAds.filter((ad) => String(ad.campaign_id) === String(campaign.id)).length,
       managerUrl: campaignManagerUrl(account.id, campaign.id),
     }));
     return {
@@ -1539,6 +1550,96 @@ async function campaignInsights(token, accountId, range, campaigns) {
   return (Array.isArray(result?.data) ? result.data : []).map((row) => normalizeInsight(row, campaigns));
 }
 
+async function adInsights(token, accountId, range, campaigns) {
+  const result = await graphRequest(`${accountId}/insights`, token, {
+    level: 'ad', time_range: JSON.stringify(range), time_increment: 'all_days',
+    action_report_time: 'conversion', action_breakdowns: 'action_type', limit: 500,
+    fields: [
+      'date_start', 'date_stop', 'account_currency', 'campaign_id', 'campaign_name',
+      'adset_id', 'adset_name', 'ad_id', 'ad_name', 'spend', 'impressions', 'reach',
+      'frequency', 'clicks', 'unique_clicks', 'inline_link_clicks',
+      'inline_post_engagement', 'outbound_clicks', 'ctr', 'cpc', 'cpm', 'actions',
+      'action_values', 'video_play_actions', 'video_thruplay_watched_actions',
+    ].join(','),
+  });
+  return (Array.isArray(result?.data) ? result.data : []).map((row) => ({
+    ...normalizeInsight(row, campaigns),
+    adId: String(row.ad_id),
+    adName: row.ad_name || row.ad_id,
+    adsetId: row.adset_id ? String(row.adset_id) : null,
+    adsetName: row.adset_name || null,
+  }));
+}
+
+function insightOrEmpty(items, campaign, campaigns) {
+  return items.find((item) => String(item.campaignId) === String(campaign.id))
+    || normalizeInsight({ campaign_id: campaign.id, campaign_name: campaign.name }, campaigns);
+}
+
+function adInsightOrEmpty(items, ad, campaign, campaigns) {
+  return items.find((item) => String(item.adId) === String(ad.id)) || {
+    ...normalizeInsight({ campaign_id: campaign.id, campaign_name: campaign.name }, campaigns),
+    adId: String(ad.id),
+    adName: ad.name || String(ad.id),
+    adsetId: ad.adset_id ? String(ad.adset_id) : null,
+    adsetName: null,
+  };
+}
+
+async function legacyPortfolioAnalysis(token, accountAudits, targetCampaignIds) {
+  const targetIds = new Set((targetCampaignIds || []).map(String));
+  const ranges = insightRanges('last_30d');
+  const analyzedAccounts = await Promise.all((accountAudits || []).map(async (accountAudit) => {
+    const activeCampaigns = (accountAudit.campaigns || [])
+      .filter((campaign) => campaign.deliveryStatus === 'ACTIVE' && !targetIds.has(String(campaign.id)));
+    if (activeCampaigns.length === 0) return [];
+    const campaigns = new Map((accountAudit.campaigns || []).map((campaign) => [String(campaign.id), campaign]));
+    const [currentCampaigns, previousCampaigns, currentAds, previousAds] = await Promise.all([
+      campaignInsights(token, accountAudit.account.id, ranges.current, campaigns),
+      campaignInsights(token, accountAudit.account.id, ranges.previous, campaigns),
+      adInsights(token, accountAudit.account.id, ranges.current, campaigns),
+      adInsights(token, accountAudit.account.id, ranges.previous, campaigns),
+    ]);
+    return activeCampaigns.map((campaign) => ({
+      account: accountAudit.account,
+      campaignId: String(campaign.id),
+      campaignName: campaign.name,
+      managerUrl: campaign.managerUrl,
+      activeAdCount: campaign.activeAdCount,
+      current: insightOrEmpty(currentCampaigns, campaign, campaigns),
+      previous: insightOrEmpty(previousCampaigns, campaign, campaigns),
+      ads: (campaign.activeAds || []).map((ad) => ({
+        adId: String(ad.id),
+        adName: ad.name || String(ad.id),
+        managerUrl: ad.managerUrl,
+        current: adInsightOrEmpty(currentAds, ad, campaign, campaigns),
+        previous: adInsightOrEmpty(previousAds, ad, campaign, campaigns),
+      })),
+    }));
+  }));
+  const campaigns = analyzedAccounts.flat();
+  const measurableConversations = campaigns.filter((item) => item.current.metrics.conversations > 0);
+  const benchmark = measurableConversations.length > 0
+    ? [...measurableConversations].sort((a, b) => a.current.metrics.costPerConversation - b.current.metrics.costPerConversation)[0]
+    : [...campaigns].filter((item) => item.current.metrics.impressions > 0)
+      .sort((a, b) => b.current.metrics.ctr - a.current.metrics.ctr)[0] || null;
+  return {
+    mode: 'read_only',
+    datePreset: 'last_30d',
+    ranges,
+    attribution: 'Meta action_report_time=conversion; a janela efetiva segue a configuraÃ§Ã£o unificada da conta/campanha',
+    currentTotals: insightTotals(campaigns.map((item) => item.current)),
+    previousTotals: insightTotals(campaigns.map((item) => item.previous)),
+    benchmark: benchmark ? {
+      campaignId: benchmark.campaignId,
+      campaignName: benchmark.campaignName,
+      basis: measurableConversations.length > 0 ? 'cost_per_conversation' : 'ctr',
+    } : null,
+    campaigns,
+    capturedAt: new Date().toISOString(),
+  };
+}
+
 function withManagedCampaigns(items, campaigns) {
   const result = [...items];
   const seen = new Set(result.map((item) => item.campaignId));
@@ -2347,6 +2448,11 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
         readManagedAdReviews(pool, row, token),
         readAllAdAccountCampaigns(row, token),
       ]);
+      const legacyAnalysis = await legacyPortfolioAnalysis(
+        token,
+        accountAudits,
+        managedAdReviews.map((item) => item.campaignId),
+      );
       const selectedAccountAudit = accountAudits.find((item) => item.account.id === row.selected_ad_account_id);
       const items = selectedAccountAudit?.campaigns || [];
       const audit = {
@@ -2361,6 +2467,7 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
         campaigns: items,
         managedAdReviews,
         accountAudits,
+        legacyAnalysis,
       };
       await pool.query("UPDATE meta_marketing_connections SET last_audit=?,last_audit_at=NOW(),last_error=NULL,status='connected' WHERE id=1", [JSON.stringify(audit)]);
       return { ok: true, audit, connection: sanitizeConnection(await connectionRow(pool), config) };
