@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.148-facebook-todos-grupos",
+  "version": "v1.2.149-shopee-avaliacoes-auto",
   "date": "2026-08-03",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-011537-v12148-facebook-todos-grupos",
+  "release_vps": "/var/www/mdv-site/releases/20260804-013000-v12149-shopee-avaliacoes-auto",
   "branch": "main",
-  "summary": "Completa a importacao dos 196 grupos do Facebook sem parada prematura."
+  "summary": "Responde automaticamente novas avaliacoes Shopee pela VPS e processa as pendentes autorizadas."
 }

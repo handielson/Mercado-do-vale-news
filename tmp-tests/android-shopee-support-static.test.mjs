@@ -13,6 +13,10 @@ for (const server of servers) {
   assert.match(server, /\/api\/v2\/sellerchat\/send_message/);
   assert.match(server, /fastify\.get\('\/admin\/shopee\/product-reviews'/);
   assert.match(server, /fastify\.post\('\/admin\/shopee\/product-reviews\/:commentId\/reply'/);
+  assert.match(server, /fastify\.get\('\/admin\/shopee\/product-reviews\/automation'/);
+  assert.match(server, /fastify\.post\('\/admin\/shopee\/product-reviews\/reply-open'/);
+  assert.match(server, /startShopeeReviewAutomationVps/);
+  assert.match(server, /shopee_review_automation_log/);
   assert.match(server, /fastify\.get\('\/admin\/shopee\/chat\/conversations'/);
   assert.match(server, /fastify\.post\('\/admin\/shopee\/chat\/conversations\/:conversationId\/messages'/);
   assert.match(server, /comment_list: \[\{ comment_id: safeId, comment: safeComment \}\]/);

@@ -6732,6 +6732,146 @@ async function replyMobileShopeeReviewVps(commentId, comment) {
   return { replied: true, comment_id: safeId };
 }
 
+const SHOPEE_REVIEW_AUTO_DEFAULTS_VPS = Object.freeze({
+  positive_template: 'Muito obrigado pela sua avaliação! Ficamos muito felizes com sua compra e esperamos atender você novamente.',
+  neutral_template: 'Obrigado pela sua avaliação e pelo seu feedback. Estamos à disposição para ajudar no que precisar.',
+  negative_template: 'Obrigado pelo seu feedback. Sentimos que sua experiência não foi como esperava. Fale conosco pelo chat para que possamos ajudar.',
+});
+let shopeeReviewAutomationRunningVps = false;
+
+function shopeeReviewAutoTextVps(review, settings) {
+  const rating = Number(review?.rating) || 0;
+  if (rating >= 4) return String(settings.positive_template || SHOPEE_REVIEW_AUTO_DEFAULTS_VPS.positive_template).trim();
+  if (rating === 3) return String(settings.neutral_template || SHOPEE_REVIEW_AUTO_DEFAULTS_VPS.neutral_template).trim();
+  return String(settings.negative_template || SHOPEE_REVIEW_AUTO_DEFAULTS_VPS.negative_template).trim();
+}
+
+async function loadShopeeReviewAutomationSettingsVps() {
+  const [rows] = await pool.query('SELECT * FROM shopee_review_automation_settings WHERE id = 1 LIMIT 1');
+  const row = rows?.[0] || {};
+  return {
+    enabled: Boolean(row.enabled),
+    positive_template: String(row.positive_template || SHOPEE_REVIEW_AUTO_DEFAULTS_VPS.positive_template),
+    neutral_template: String(row.neutral_template || SHOPEE_REVIEW_AUTO_DEFAULTS_VPS.neutral_template),
+    negative_template: String(row.negative_template || SHOPEE_REVIEW_AUTO_DEFAULTS_VPS.negative_template),
+    activated_at: row.activated_at ? new Date(row.activated_at).toISOString() : '',
+    last_checked_at: row.last_checked_at ? new Date(row.last_checked_at).toISOString() : '',
+    last_error: String(row.last_error || ''),
+  };
+}
+
+async function saveShopeeReviewAutomationSettingsVps(body = {}) {
+  const current = await loadShopeeReviewAutomationSettingsVps();
+  const enabled = body.enabled === undefined ? current.enabled : Boolean(body.enabled);
+  const cleanTemplate = (key) => {
+    const value = body[key] === undefined ? current[key] : String(body[key] || '').trim();
+    if (!value) throw new Error('Preencha todos os textos da resposta automática.');
+    if (value.length > 500) throw new Error('Cada resposta pode ter no máximo 500 caracteres.');
+    return value;
+  };
+  const positive = cleanTemplate('positive_template');
+  const neutral = cleanTemplate('neutral_template');
+  const negative = cleanTemplate('negative_template');
+  const activatedAt = enabled && !current.enabled ? new Date() : (current.activated_at ? new Date(current.activated_at) : null);
+  await pool.query(
+    `INSERT INTO shopee_review_automation_settings
+      (id, enabled, positive_template, neutral_template, negative_template, activated_at, last_error)
+     VALUES (1, ?, ?, ?, ?, ?, '')
+     ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), positive_template = VALUES(positive_template),
+       neutral_template = VALUES(neutral_template), negative_template = VALUES(negative_template),
+       activated_at = VALUES(activated_at), last_error = ''`,
+    [enabled ? 1 : 0, positive, neutral, negative, activatedAt],
+  );
+  return loadShopeeReviewAutomationSettingsVps();
+}
+
+async function loadAllOpenShopeeReviewsVps(maxPages = 20) {
+  const open = [];
+  let cursor = '';
+  const seenCursors = new Set();
+  for (let page = 0; page < maxPages; page += 1) {
+    const result = await loadMobileShopeeReviewsVps(100, cursor);
+    open.push(...result.reviews.filter((review) => !review.reply));
+    if (!result.more || !result.next_cursor || seenCursors.has(result.next_cursor)) break;
+    seenCursors.add(result.next_cursor);
+    cursor = result.next_cursor;
+  }
+  return open;
+}
+
+async function replyOpenShopeeReviewsVps({ includeExisting = false } = {}) {
+  const settings = await loadShopeeReviewAutomationSettingsVps();
+  const reviews = await loadAllOpenShopeeReviewsVps();
+  const activatedAtMs = settings.activated_at ? new Date(settings.activated_at).getTime() : Date.now();
+  const candidates = includeExisting
+    ? reviews
+    : reviews.filter((review) => {
+      const createdAtMs = new Date(review.created_at || 0).getTime();
+      return Number.isFinite(createdAtMs) && createdAtMs >= activatedAtMs;
+    });
+  let replied = 0;
+  let failed = 0;
+  for (const review of candidates) {
+    const commentId = String(review.comment_id || '');
+    if (!commentId) continue;
+    try {
+      const [existing] = await pool.query(
+        "SELECT status FROM shopee_review_automation_log WHERE comment_id = ? LIMIT 1",
+        [commentId],
+      );
+      if (!includeExisting && existing?.[0]?.status === 'replied') continue;
+      const responseText = shopeeReviewAutoTextVps(review, settings);
+      await replyMobileShopeeReviewVps(commentId, responseText);
+      await pool.query(
+        `INSERT INTO shopee_review_automation_log
+          (comment_id, order_sn, rating, response_text, status, attempts, replied_at, last_error)
+         VALUES (?, ?, ?, ?, 'replied', 1, NOW(), '')
+         ON DUPLICATE KEY UPDATE response_text = VALUES(response_text), status = 'replied',
+           attempts = attempts + 1, replied_at = NOW(), last_error = ''`,
+        [commentId, review.order_sn || '', review.rating || 0, responseText],
+      );
+      replied += 1;
+    } catch (error) {
+      failed += 1;
+      await pool.query(
+        `INSERT INTO shopee_review_automation_log
+          (comment_id, order_sn, rating, response_text, status, attempts, last_error)
+         VALUES (?, ?, ?, ?, 'failed', 1, ?)
+         ON DUPLICATE KEY UPDATE status = 'failed', attempts = attempts + 1, last_error = VALUES(last_error)`,
+        [commentId, review.order_sn || '', review.rating || 0, shopeeReviewAutoTextVps(review, settings), String(error.message || error).slice(0, 1000)],
+      ).catch(() => null);
+    }
+  }
+  await pool.query(
+    'UPDATE shopee_review_automation_settings SET last_checked_at = NOW(), last_error = ? WHERE id = 1',
+    [failed ? `${failed} avaliação(ões) não puderam ser respondidas.` : ''],
+  );
+  return { found: reviews.length, processed: candidates.length, replied, failed };
+}
+
+async function runShopeeReviewAutomationTickVps() {
+  if (shopeeReviewAutomationRunningVps) return;
+  shopeeReviewAutomationRunningVps = true;
+  try {
+    const settings = await loadShopeeReviewAutomationSettingsVps();
+    if (settings.enabled) await replyOpenShopeeReviewsVps({ includeExisting: false });
+  } catch (error) {
+    console.error('[shopee-review-automation]', error.message || error);
+    await pool.query(
+      'UPDATE shopee_review_automation_settings SET last_checked_at = NOW(), last_error = ? WHERE id = 1',
+      [String(error.message || error).slice(0, 1000)],
+    ).catch(() => null);
+  } finally {
+    shopeeReviewAutomationRunningVps = false;
+  }
+}
+
+function startShopeeReviewAutomationVps() {
+  const timer = setInterval(() => void runShopeeReviewAutomationTickVps(), 60_000);
+  timer.unref?.();
+  setTimeout(() => void runShopeeReviewAutomationTickVps(), 10_000).unref?.();
+}
+
 async function loadMobileShopeeConversationsVps(pageSize = 50, nextTimestamp = '') {
   const creds = await getShopeeCatalogCredentialsVps();
   const result = await shopeeCatalogGetVps('/api/v2/sellerchat/get_conversation_list', creds, encodeShopeeCatalogParamsVps({
@@ -12193,6 +12333,28 @@ fastify.post('/admin/shopee/product-reviews/:commentId/reply', { preHandler: req
     return await replyMobileShopeeReviewVps(request.params?.commentId, request.body?.text);
   } catch (error) {
     return reply.code(error.statusCode || 400).send({ error: error.message || 'Falha ao responder avaliacao da Shopee.' });
+  }
+});
+fastify.get('/admin/shopee/product-reviews/automation', { preHandler: requireAdminBearerToken }, async (_request, reply) => {
+  try {
+    reply.header('Cache-Control', 'no-store');
+    return await loadShopeeReviewAutomationSettingsVps();
+  } catch (error) {
+    return reply.code(500).send({ error: error.message || 'Falha ao carregar automação de avaliações.' });
+  }
+});
+fastify.post('/admin/shopee/product-reviews/automation', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    return await saveShopeeReviewAutomationSettingsVps(request.body || {});
+  } catch (error) {
+    return reply.code(400).send({ error: error.message || 'Falha ao salvar automação de avaliações.' });
+  }
+});
+fastify.post('/admin/shopee/product-reviews/reply-open', { preHandler: requireAdminBearerToken }, async (_request, reply) => {
+  try {
+    return await replyOpenShopeeReviewsVps({ includeExisting: true });
+  } catch (error) {
+    return reply.code(error.statusCode || 500).send({ error: error.message || 'Falha ao responder avaliações em aberto.' });
   }
 });
 fastify.get('/admin/shopee/chat/conversations', { preHandler: requireAdminBearerToken }, async (request, reply) => {
@@ -35036,6 +35198,40 @@ async function getDefaultCompanyIdForCatalog() {
 async function runMigrations() {
   await mobileSalesPushService.ensureTables();
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopee_review_automation_settings (
+      id TINYINT UNSIGNED PRIMARY KEY,
+      enabled TINYINT(1) NOT NULL DEFAULT 0,
+      positive_template VARCHAR(500) NOT NULL,
+      neutral_template VARCHAR(500) NOT NULL,
+      negative_template VARCHAR(500) NOT NULL,
+      activated_at DATETIME NULL,
+      last_checked_at DATETIME NULL,
+      last_error TEXT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(
+    `INSERT IGNORE INTO shopee_review_automation_settings
+      (id, enabled, positive_template, neutral_template, negative_template)
+     VALUES (1, 0, ?, ?, ?)`,
+    [SHOPEE_REVIEW_AUTO_DEFAULTS_VPS.positive_template, SHOPEE_REVIEW_AUTO_DEFAULTS_VPS.neutral_template, SHOPEE_REVIEW_AUTO_DEFAULTS_VPS.negative_template],
+  );
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopee_review_automation_log (
+      comment_id VARCHAR(64) PRIMARY KEY,
+      order_sn VARCHAR(80) NULL,
+      rating TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      response_text VARCHAR(500) NOT NULL,
+      status ENUM('replied', 'failed') NOT NULL,
+      attempts INT UNSIGNED NOT NULL DEFAULT 0,
+      replied_at DATETIME NULL,
+      last_error TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_shopee_review_automation_status (status, updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS customer_favorites (
       id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
       customer_id VARCHAR(255) NOT NULL,
@@ -37919,6 +38115,7 @@ scheduleNextSystemBackup();
 runMigrations().then(() => {
   scheduleSignedWarrantySync();
   startFacebookMarketplaceAutomationVps();
+  startShopeeReviewAutomationVps();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);
