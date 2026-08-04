@@ -1,21 +1,16 @@
-function collectVisibleGroups() {
-  const ignored = new Set(['feed', 'discover', 'create', 'joins', 'requests', 'notifications']);
-  const byUrl = new Map();
-  for (const anchor of document.querySelectorAll('a[href*="/groups/"]')) {
-    let url;
-    try { url = new URL(anchor.href, location.origin); } catch { continue; }
-    const parts = url.pathname.split('/').filter(Boolean);
-    if (parts[0] !== 'groups' || !parts[1] || ignored.has(parts[1].toLowerCase())) continue;
-    const normalizedUrl = `https://www.facebook.com/groups/${parts[1]}/`;
-    const name = String(anchor.innerText || anchor.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
-    if (!name || name.length > 255) continue;
-    byUrl.set(normalizedUrl, { name, url: normalizedUrl });
-  }
-  return [...byUrl.values()];
-}
-
+// Leitor de compatibilidade. A versão 1.1 usa chrome.scripting no processo principal,
+// portanto funciona inclusive quando a aba do Facebook já estava aberta na instalação.
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== 'MDV_READ_VISIBLE_FACEBOOK_GROUPS') return false;
-  sendResponse({ groups: collectVisibleGroups() });
+  const groups = [];
+  const seen = new Set();
+  for (const anchor of document.querySelectorAll('a[href*="/groups/"]')) {
+    const match = String(anchor.href || '').match(/facebook\.com\/groups\/([^/?#]+)/i);
+    const name = String(anchor.innerText || '').replace(/\s+(?:Última atividade|Visitado pela última vez).*$/i, '').trim();
+    if (!match || !name || seen.has(match[1])) continue;
+    seen.add(match[1]);
+    groups.push({ name, url: `https://www.facebook.com/groups/${match[1]}/` });
+  }
+  sendResponse({ groups });
   return false;
 });

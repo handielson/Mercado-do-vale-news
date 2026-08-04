@@ -19,9 +19,21 @@ assert.match(panel, /Repetir após \(h\)/);
 assert.match(panel, /selecione um ou vários/i);
 assert.match(panel, /Puxar da conta aberta/);
 assert.match(panel, /\^smartphones\?\$\/i/, 'new campaigns must prioritize the exact Smartphones category');
+assert.match(panel, /Somente grupos de vendas/);
+assert.match(panel, /SALES_GROUP_PATTERN/);
+
+const campaignService = readFileSync('services/facebookMarketplaceCampaignService.ts', 'utf8');
+assert.match(campaignService, /createGroups/);
+assert.match(campaignService, /id: crypto\.randomUUID\(\)/, 'groups and campaigns must include the required database id');
 
 const manifest = JSON.parse(readFileSync('browser-extensions/facebook-groups-sync/manifest.json', 'utf8'));
 assert.equal(manifest.manifest_version, 3);
 assert.ok(manifest.host_permissions.some((entry) => entry.includes('facebook.com')));
+assert.ok(manifest.permissions.includes('scripting'));
+
+const extensionBackground = readFileSync('browser-extensions/facebook-groups-sync/background.js', 'utf8');
+assert.match(extensionBackground, /chrome\.scripting\.executeScript/);
+assert.match(extensionBackground, /groups\/joins/);
+assert.match(extensionBackground, /window\.scrollBy/);
 
 console.log('facebook-marketplace-campaigns-static ok');

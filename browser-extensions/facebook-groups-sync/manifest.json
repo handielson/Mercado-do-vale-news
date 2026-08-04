@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Mercado do Vale - Grupos do Facebook",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Importa os grupos visíveis da conta Facebook aberta para o programador do Mercado do Vale.",
-  "permissions": ["tabs"],
+  "permissions": ["tabs", "scripting"],
   "host_permissions": [
     "https://www.facebook.com/*",
     "https://facebook.com/*",

@@ -60,7 +60,10 @@ export const facebookMarketplaceCampaignService = {
     return rowsOf(response).map(normalizeCampaign);
   },
   async createCampaign(input: FacebookMarketplaceCampaignInput) {
-    return normalizeCampaign(await vpsClient.post<FacebookMarketplaceCampaign>('/table-data/facebook_marketplace_campaigns', input));
+    return normalizeCampaign(await vpsClient.post<FacebookMarketplaceCampaign>('/table-data/facebook_marketplace_campaigns', {
+      id: crypto.randomUUID(),
+      ...input,
+    }));
   },
   async updateCampaign(id: string, input: Partial<FacebookMarketplaceCampaignInput>) {
     return normalizeCampaign(await vpsClient.patch<FacebookMarketplaceCampaign>(`/table-data/facebook_marketplace_campaigns/${encodeURIComponent(id)}?pk=id`, input));
@@ -73,7 +76,21 @@ export const facebookMarketplaceCampaignService = {
     return rowsOf(response).map((row) => ({ ...row, active: row.active === true || row.active === 1 }));
   },
   async createGroup(input: Pick<FacebookMarketplaceGroup, 'name' | 'url' | 'source'>) {
-    return vpsClient.post<FacebookMarketplaceGroup>('/table-data/facebook_marketplace_groups', { ...input, active: true, last_synced_at: new Date().toISOString() });
+    return vpsClient.post<FacebookMarketplaceGroup>('/table-data/facebook_marketplace_groups', {
+      id: crypto.randomUUID(),
+      ...input,
+      active: true,
+      last_synced_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+    });
+  },
+  async createGroups(inputs: Array<Pick<FacebookMarketplaceGroup, 'name' | 'url' | 'source'>>) {
+    if (!inputs.length) return;
+    await vpsClient.post('/table-data/facebook_marketplace_groups/bulk', inputs.map((input) => ({
+      id: crypto.randomUUID(),
+      ...input,
+      active: true,
+      last_synced_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+    })));
   },
   async deleteGroup(id: string) {
     await vpsClient.delete(`/table-data/facebook_marketplace_groups/${encodeURIComponent(id)}?pk=id`);

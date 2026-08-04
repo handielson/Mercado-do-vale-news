@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.145-facebook-categoria-smartphones
+version: v1.2.146-facebook-grupos-vendas
 date: 2026-08-03
 status: ready
-release_vps: /var/www/mdv-site/releases/20260803-215101-v12145-facebook-categoria-smartphones
+release_vps: /var/www/mdv-site/releases/20260804-010032-v12146-facebook-grupos-vendas
 branch: main
-summary: Prioriza Smartphones na campanha automática assistida do Facebook por categoria e estoque.
+summary: Corrige a importação completa de grupos do Facebook e adiciona filtros de grupos de vendas.
 ```

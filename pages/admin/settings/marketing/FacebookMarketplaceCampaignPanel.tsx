@@ -38,6 +38,8 @@ function formatDate(value?: string | null) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
+const SALES_GROUP_PATTERN = /\b(venda|vendas|compra|compras|classificados?|desapego|bazar|neg[oó]cios?|mercado\s*livre|olx|troca|ofertas?)\b/i;
+
 export default function FacebookMarketplaceCampaignPanel({ onGenerated }: { onGenerated?: () => void }) {
   const [campaigns, setCampaigns] = useState<FacebookMarketplaceCampaign[]>([]);
   const [groups, setGroups] = useState<FacebookMarketplaceGroup[]>([]);
@@ -50,6 +52,8 @@ export default function FacebookMarketplaceCampaignPanel({ onGenerated }: { onGe
   const [syncing, setSyncing] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [groupUrl, setGroupUrl] = useState('');
+  const [groupQuery, setGroupQuery] = useState('');
+  const [groupScope, setGroupScope] = useState<'all' | 'sales'>('sales');
 
   const load = async () => {
     setLoading(true);
@@ -76,12 +80,21 @@ export default function FacebookMarketplaceCampaignPanel({ onGenerated }: { onGe
       setSyncing(false);
       const received = Array.isArray(event.data.groups) ? event.data.groups : [];
       if (!received.length) return toast.error(event.data.error || 'Nenhum grupo visível foi encontrado na conta aberta.');
-      let imported = 0;
+      const pending: Array<{ name: string; url: string; source: 'chrome' }> = [];
       for (const item of received) {
         const name = String(item?.name || '').trim();
         const url = String(item?.url || '').trim();
         if (!name || !url || groups.some((group) => group.url === url)) continue;
-        try { await facebookMarketplaceCampaignService.createGroup({ name, url, source: 'chrome' }); imported += 1; } catch { /* duplicado */ }
+        pending.push({ name, url, source: 'chrome' });
+      }
+      let imported = pending.length;
+      try {
+        await facebookMarketplaceCampaignService.createGroups(pending);
+      } catch {
+        imported = 0;
+        for (const item of pending) {
+          try { await facebookMarketplaceCampaignService.createGroup(item); imported += 1; } catch { /* duplicado */ }
+        }
       }
       await load();
       toast.success(`${imported} grupo(s) importado(s) da conta do Facebook.`);
@@ -92,6 +105,10 @@ export default function FacebookMarketplaceCampaignPanel({ onGenerated }: { onGe
 
   const selectedUrls = useMemo(() => new Set(destinationList(form.destinations).filter((item) => item.type === 'group').map((item) => item.url)), [form.destinations]);
   const marketplaceSelected = destinationList(form.destinations).some((item) => item.type === 'marketplace');
+  const visibleGroups = useMemo(() => groups.filter((group) => {
+    if (groupScope === 'sales' && !SALES_GROUP_PATTERN.test(group.name)) return false;
+    return !groupQuery.trim() || group.name.toLocaleLowerCase('pt-BR').includes(groupQuery.trim().toLocaleLowerCase('pt-BR'));
+  }), [groupQuery, groupScope, groups]);
 
   const openNew = () => {
     const next = defaultForm();
@@ -146,7 +163,8 @@ export default function FacebookMarketplaceCampaignPanel({ onGenerated }: { onGe
   const requestChromeGroups = () => {
     setSyncing(true);
     window.postMessage({ type: 'MDV_FACEBOOK_GROUPS_REQUEST' }, window.location.origin);
-    window.setTimeout(() => setSyncing((current) => { if (current) toast.error('Extensão do Mercado do Vale não detectada. Instale-a no Chrome e tente novamente.'); return false; }), 5000);
+    toast.info('Abrindo e carregando a lista completa de grupos. Isso pode levar alguns segundos.');
+    window.setTimeout(() => setSyncing((current) => { if (current) toast.error('A extensão não respondeu. Recarregue-a no Chrome e tente novamente.'); return false; }), 35_000);
   };
 
   return (
@@ -161,7 +179,7 @@ export default function FacebookMarketplaceCampaignPanel({ onGenerated }: { onGe
         <div className="grid gap-4 sm:grid-cols-2"><label className="text-xs font-black uppercase text-slate-500">Nome<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-normal normal-case text-slate-900" /></label><label className="text-xs font-black uppercase text-slate-500">Categoria<select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-normal normal-case text-slate-900"><option value="">Selecione...</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
         <div className="grid gap-4 sm:grid-cols-4"><label className="text-xs font-black uppercase text-slate-500">Estoque mínimo<input type="number" min="1" value={form.min_stock} onChange={(e) => setForm({ ...form, min_stock: Number(e.target.value) })} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" /></label><label className="text-xs font-black uppercase text-slate-500">Intervalo (min)<input type="number" min="15" value={form.interval_minutes} onChange={(e) => setForm({ ...form, interval_minutes: Number(e.target.value) })} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" /></label><label className="text-xs font-black uppercase text-slate-500">Repetir após (h)<input type="number" min="1" value={form.republish_cooldown_hours} onChange={(e) => setForm({ ...form, republish_cooldown_hours: Number(e.target.value) })} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" /></label><label className="text-xs font-black uppercase text-slate-500">Limite/dia<input type="number" min="1" value={form.daily_limit} onChange={(e) => setForm({ ...form, daily_limit: Number(e.target.value) })} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" /></label></div>
         <div className="grid gap-4 sm:grid-cols-2"><label className="text-xs font-black uppercase text-slate-500">Começar<input type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" /></label><label className="text-xs font-black uppercase text-slate-500">Encerrar<input type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" /></label></div>
-        <div><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><label className="text-xs font-black uppercase text-slate-500">Destinos — selecione um ou vários</label><button onClick={requestChromeGroups} disabled={syncing} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-2.5 py-1.5 text-xs font-bold text-blue-700"><Chrome className="h-3.5 w-3.5" />{syncing ? 'Buscando...' : 'Puxar da conta aberta'}</button></div><div className="max-h-44 space-y-2 overflow-y-auto rounded-xl border p-3"><button onClick={() => toggleDestination({ name: 'Facebook Marketplace', type: 'marketplace' })} className={`flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm ${marketplaceSelected ? 'bg-blue-50 font-bold text-blue-800' : 'hover:bg-slate-50'}`}><span className={`grid h-5 w-5 place-items-center rounded border ${marketplaceSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'}`}>{marketplaceSelected && <Check className="h-3.5 w-3.5" />}</span>Facebook Marketplace</button>{groups.map((group) => { const selected = selectedUrls.has(group.url); return <div key={group.id} onClick={() => toggleDestination({ name: group.name, url: group.url, type: 'group' })} className={`flex w-full cursor-pointer items-center gap-2 rounded-lg p-2 text-left text-sm ${selected ? 'bg-blue-50 font-bold text-blue-800' : 'hover:bg-slate-50'}`}><span className={`grid h-5 w-5 place-items-center rounded border ${selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'}`}>{selected && <Check className="h-3.5 w-3.5" />}</span><span className="min-w-0 flex-1 truncate">{group.name}</span><button onClick={(event) => { event.stopPropagation(); void facebookMarketplaceCampaignService.deleteGroup(group.id).then(load); }} className="text-slate-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button></div>; })}</div><div className="mt-2 grid gap-2 sm:grid-cols-[1fr_2fr_auto]"><input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Nome do grupo" className="rounded-lg border px-3 py-2 text-xs" /><input value={groupUrl} onChange={(e) => setGroupUrl(e.target.value)} placeholder="https://facebook.com/groups/..." className="rounded-lg border px-3 py-2 text-xs" /><button onClick={() => void addGroup()} className="rounded-lg border px-3 py-2 text-xs font-bold">Adicionar</button></div></div>
+        <div><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><label className="text-xs font-black uppercase text-slate-500">Destinos — selecione um ou vários</label><button onClick={requestChromeGroups} disabled={syncing} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 px-2.5 py-1.5 text-xs font-bold text-blue-700"><Chrome className="h-3.5 w-3.5" />{syncing ? 'Buscando...' : 'Puxar da conta aberta'}</button></div><div className="mb-2 grid gap-2 sm:grid-cols-[180px_1fr]"><select value={groupScope} onChange={(event) => setGroupScope(event.target.value as 'all' | 'sales')} className="rounded-lg border px-3 py-2 text-xs font-bold"><option value="sales">Somente grupos de vendas</option><option value="all">Todos os grupos</option></select><input value={groupQuery} onChange={(event) => setGroupQuery(event.target.value)} placeholder="Pesquisar grupo por nome" className="rounded-lg border px-3 py-2 text-xs" /></div><p className="mb-2 text-[11px] text-slate-400">Mostrando {visibleGroups.length} de {groups.length} grupos importados.</p><div className="max-h-44 space-y-2 overflow-y-auto rounded-xl border p-3"><button onClick={() => toggleDestination({ name: 'Facebook Marketplace', type: 'marketplace' })} className={`flex w-full items-center gap-2 rounded-lg p-2 text-left text-sm ${marketplaceSelected ? 'bg-blue-50 font-bold text-blue-800' : 'hover:bg-slate-50'}`}><span className={`grid h-5 w-5 place-items-center rounded border ${marketplaceSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'}`}>{marketplaceSelected && <Check className="h-3.5 w-3.5" />}</span>Facebook Marketplace</button>{visibleGroups.map((group) => { const selected = selectedUrls.has(group.url); return <div key={group.id} onClick={() => toggleDestination({ name: group.name, url: group.url, type: 'group' })} className={`flex w-full cursor-pointer items-center gap-2 rounded-lg p-2 text-left text-sm ${selected ? 'bg-blue-50 font-bold text-blue-800' : 'hover:bg-slate-50'}`}><span className={`grid h-5 w-5 place-items-center rounded border ${selected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'}`}>{selected && <Check className="h-3.5 w-3.5" />}</span><span className="min-w-0 flex-1 truncate">{group.name}</span><button onClick={(event) => { event.stopPropagation(); void facebookMarketplaceCampaignService.deleteGroup(group.id).then(load); }} className="text-slate-400 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button></div>; })}</div><div className="mt-2 grid gap-2 sm:grid-cols-[1fr_2fr_auto]"><input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Nome do grupo" className="rounded-lg border px-3 py-2 text-xs" /><input value={groupUrl} onChange={(e) => setGroupUrl(e.target.value)} placeholder="https://facebook.com/groups/..." className="rounded-lg border px-3 py-2 text-xs" /><button onClick={() => void addGroup()} className="rounded-lg border px-3 py-2 text-xs font-bold">Adicionar</button></div></div>
         <label className="block text-xs font-black uppercase text-slate-500">Modelo da descrição<textarea rows={6} value={form.description_template || ''} onChange={(e) => setForm({ ...form, description_template: e.target.value })} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm font-normal normal-case" /><span className="font-normal normal-case text-slate-400">Campos: {'{produto} {preco} {estoque} {link} {sku}'}</span></label>
         <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={Boolean(form.active)} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Campanha ativa</label>
       </div><div className="sticky bottom-0 flex justify-between border-t bg-white px-6 py-4"><div>{editingId && <button onClick={() => { if (confirm('Excluir esta campanha?')) void facebookMarketplaceCampaignService.deleteCampaign(editingId).then(() => { setShowForm(false); return load(); }); }} className="text-xs font-bold text-red-600">Excluir campanha</button>}</div><div className="flex gap-2"><button onClick={() => setShowForm(false)} className="rounded-lg px-4 py-2 text-sm font-bold text-slate-600">Cancelar</button><button onClick={() => void save()} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-50">{saving && <Loader2 className="h-4 w-4 animate-spin" />} Salvar</button></div></div></div></div>}
