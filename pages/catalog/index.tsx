@@ -1183,11 +1183,14 @@ function CatalogContent() {
                         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                             <p className="text-xs text-slate-400 text-center md:text-left flex-1">{footerText}</p>
                             
-                            <div className="flex gap-4">
-                                <a href="/quem-somos" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors">
+                            <nav aria-label="Links institucionais" className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+                                <Link to="/quem-somos" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors">
                                     Quem Somos
-                                </a>
-                            </div>
+                                </Link>
+                                <Link to="/privacidade" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors">Privacidade</Link>
+                                <Link to="/termos-de-uso" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors">Termos</Link>
+                                <Link to="/exclusao-de-dados" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors">Excluir dados</Link>
+                            </nav>
                         </div>
                     </div>
                 </footer>

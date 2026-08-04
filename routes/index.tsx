@@ -145,6 +145,9 @@ const CashAuditPage = lazy(() => import('../pages/admin/financial/CashAuditPage'
 const AccountingPage = lazy(() => import('../pages/admin/accounting/AccountingPage'));
 const MySQLExplorerPage = lazy(() => import('../pages/admin/settings/MySQLExplorerPage').then(module => ({ default: module.MySQLExplorerPage })));
 const PublicPixPage = lazy(() => import('../pages/store/PublicPixPage'));
+const PrivacyPage = lazy(() => import('../pages/legal/LegalPages').then(module => ({ default: module.PrivacyPage })));
+const TermsPage = lazy(() => import('../pages/legal/LegalPages').then(module => ({ default: module.TermsPage })));
+const DataDeletionPage = lazy(() => import('../pages/legal/LegalPages').then(module => ({ default: module.DataDeletionPage })));
 
 const StorePage = () => (
   <div className="p-8 animate-in slide-in-from-bottom-4 duration-500">
@@ -1048,6 +1051,18 @@ export const router = createBrowserRouter([
         <FAQPage />
       </MaintenanceGuard>
     )
+  },
+  {
+    path: "/privacidade",
+    element: <PrivacyPage />
+  },
+  {
+    path: "/termos-de-uso",
+    element: <TermsPage />
+  },
+  {
+    path: "/exclusao-de-dados",
+    element: <DataDeletionPage />
   },
   {
     path: "/produto/:slug",
