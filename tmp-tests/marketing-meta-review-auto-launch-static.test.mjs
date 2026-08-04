@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const api = readFileSync('services/marketingCampaignApi.cjs', 'utf8');
+const panel = readFileSync('pages/admin/settings/marketing/MetaMarketingConnectionPanel.tsx', 'utf8');
+const service = readFileSync('services/metaMarketingConnectionService.ts', 'utf8');
+
+assert.match(api, /META_REVIEW_AUTO_LAUNCH_ACTION = 'meta\.activate_after_review\.v1'/);
+assert.match(api, /function metaReviewState\(entity\)/);
+assert.match(api, /effective === 'PENDING_REVIEW'/);
+assert.match(api, /effective === 'IN_PROCESS'/);
+assert.match(api, /effective === 'DISAPPROVED'/);
+assert.match(api, /configured === 'PAUSED'.*effective === 'CAMPAIGN_PAUSED'/s);
+assert.match(api, /https:\/\/adsmanager\.facebook\.com\/adsmanager\/manage\/ads/);
+assert.match(api, /selected_campaign_ids/);
+assert.match(api, /selected_adset_ids/);
+assert.match(api, /selected_ad_ids/);
+assert.match(api, /managedAdReviews/);
+assert.match(api, /review-auto-launch-approvals/);
+assert.match(api, /all_managed_ads_approved/);
+assert.match(api, /maximum > META_AUTHORIZED_MONTHLY_CEILING_BRL/);
+assert.match(api, /DATE_ADD\(NOW\(\), INTERVAL 24 HOUR\)/);
+
+const executor = api.slice(api.indexOf('async function executeMetaReviewAutoLaunch'), api.indexOf('async function runMetaReviewAutoLaunch'));
+assert.match(executor, /review\.state !== 'approved'/);
+assert.match(executor, /review\.campaignStatus !== 'PAUSED'/);
+assert.match(executor, /actualBudget !== currencyCents/);
+assert.match(executor, /graphPost\(item\.ad_id, token, \{ status: 'ACTIVE' \}\)/);
+assert.match(executor, /graphPost\(item\.adset_id, token/);
+assert.match(executor, /end_time: isoWithoutMilliseconds\(addDays\(new Date\(\), item\.duration_days\)\)/);
+const adActivation = executor.indexOf("graphPost(item.ad_id, token, { status: 'ACTIVE' })");
+const adsetActivation = executor.indexOf('graphPost(item.adset_id, token');
+const campaignActivation = executor.indexOf("graphPost(item.campaign_id, token, { status: 'ACTIVE' })");
+assert.ok(adActivation >= 0 && adsetActivation > adActivation && campaignActivation > adsetActivation, 'campaign parent must activate last');
+assert.match(executor, /graphPost\(item\.campaign_id, token, \{ status: 'PAUSED' \}\)\.catch/);
+assert.match(executor, /graphPost\(item\.adset_id, token, \{ status: 'PAUSED' \}\)\.catch/);
+assert.match(executor, /graphPost\(item\.ad_id, token, \{ status: 'PAUSED' \}\)\.catch/);
+
+assert.match(panel, /Análise dos anúncios na Meta/);
+assert.match(panel, /window\.setInterval/);
+assert.match(panel, /Ver na Meta/);
+assert.match(panel, /Preparar ativação automática/);
+assert.match(panel, /Abrir Central de Aprovações/);
+assert.match(service, /prepareReviewAutoLaunchApproval/);
+assert.match(service, /review-auto-launch-approvals/);
+
+console.log('marketing Meta review monitor and conditional auto-launch: OK');

@@ -54,7 +54,8 @@ assert.match(api, /SELECT approval_id,item_key FROM marketing_approval_execution
 assert.match(api, /Origem: \$\{item\.tracking_code\}/);
 assert.match(api, /immediateMaximum: 0/);
 assert.match(api, /delivery: 'PAUSED'/);
-assert.doesNotMatch(api, /status: 'ACTIVE'/);
+const pausedExecutor = api.slice(api.indexOf('async function executePausedWhatsappAdBundle'), api.indexOf('async function captureManagedReviewStatus'));
+assert.doesNotMatch(pausedExecutor, /graphPost\([^\n]+status: 'ACTIVE'/);
 
 assert.match(metaService, /preparePausedAdBundleApproval/);
 assert.match(metaService, /paused-ad-bundle-approvals/);

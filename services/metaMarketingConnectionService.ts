@@ -43,9 +43,29 @@ export interface MetaMarketingConnection {
         account?: MetaAdAccount & { amount_spent?: string; balance?: string; spend_cap?: string };
         instagram?: MetaInstagramAccount & { followers_count?: number; media_count?: number };
         campaignSummary?: { total: number; active: number; paused: number };
+        managedAdReviews?: MetaManagedAdReview[];
     } | null;
     lastAuditAt: string | null;
     lastError: string | null;
+}
+
+export interface MetaManagedAdReview {
+    itemKey: 'store-carousel' | 'smartphones' | string;
+    campaignId: string;
+    adsetId: string;
+    adId: string;
+    campaignName: string | null;
+    adsetName: string | null;
+    adName: string | null;
+    state: 'in_review' | 'approved' | 'rejected' | 'attention' | 'active';
+    configuredStatus: string | null;
+    effectiveStatus: string | null;
+    campaignStatus: string | null;
+    campaignEffectiveStatus: string | null;
+    adsetStatus: string | null;
+    adsetEffectiveStatus: string | null;
+    managerUrl: string;
+    capturedAt: string;
 }
 
 type ConnectionResponse = { ok: true; connection: MetaMarketingConnection };
@@ -177,6 +197,13 @@ export const metaMarketingConnectionService = {
         return await vpsClient.post<MetaCampaignDraftApprovalResponse>(
             '/admin/marketing/meta/paused-ad-bundle-approvals',
             retry ? { retry: true } : {},
+        );
+    },
+
+    async prepareReviewAutoLaunchApproval(): Promise<MetaCampaignDraftApprovalResponse> {
+        return await vpsClient.post<MetaCampaignDraftApprovalResponse>(
+            '/admin/marketing/meta/review-auto-launch-approvals',
+            {},
         );
     },
 };
