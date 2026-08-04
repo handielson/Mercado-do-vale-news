@@ -369,6 +369,21 @@ export default function MarketingApprovalCenterPanel() {
         }
     };
 
+    const copyFailureDebug = async (request: MarketingApprovalRequest) => {
+        const diagnostic = [
+            `Solicitação: ${request.title}`,
+            `Status: ${request.status}`,
+            `Data: ${formatDate(request.executed_at || request.updated_at || request.created_at)}`,
+            `Erro: ${request.last_error || 'Sem detalhe registrado.'}`,
+        ].join('\n');
+        try {
+            await navigator.clipboard.writeText(diagnostic);
+            toast.success('Diagnóstico copiado. Cole aqui na conversa.');
+        } catch {
+            toast.error('Não foi possível copiar o diagnóstico neste navegador.');
+        }
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
             <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-6 text-white shadow-lg">
@@ -447,7 +462,10 @@ export default function MarketingApprovalCenterPanel() {
                                             </div>
                                         )}
                                         {request.status === 'failed' && request.action_type.includes('paused_whatsapp_ad_bundle') && (
-                                            <button onClick={() => retryPausedAdPreparation(request)} disabled={retryingId === request.id} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-bold text-white hover:bg-sky-600 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${retryingId === request.id ? 'animate-spin' : ''}`} /> Tentar nova aprovação</button>
+                                            <div className="flex shrink-0 flex-wrap gap-2">
+                                                <button onClick={() => copyFailureDebug(request)} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"><History className="h-4 w-4" /> Copiar diagnóstico</button>
+                                                <button onClick={() => retryPausedAdPreparation(request)} disabled={retryingId === request.id} className="inline-flex items-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-bold text-white hover:bg-sky-600 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${retryingId === request.id ? 'animate-spin' : ''}`} /> Tentar nova aprovação</button>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
