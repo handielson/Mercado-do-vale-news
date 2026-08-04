@@ -27644,12 +27644,14 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
   }
 
   const [rows] = await pool.query(
-    `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
-     FROM products
-     WHERE category_id = ? AND status = 'active'
-     ORDER BY updated_at DESC, name ASC
+    `SELECT DISTINCT p.id, p.model_id, p.brand, p.name, p.sku, p.slug, p.images, p.image_url, p.video_url,
+            p.price_retail, p.stock_quantity, p.track_inventory, p.specs, p.custom_fields
+     FROM products p
+     LEFT JOIN product_categories pc ON pc.product_id = p.id
+     WHERE (p.category_id = ? OR pc.category_id = ?) AND p.status = 'active'
+     ORDER BY p.updated_at DESC, p.name ASC
      LIMIT 300`,
-    [campaign.category_id]
+    [campaign.category_id, campaign.category_id]
   );
   return rows.map(normalizeWhatsAppStatusProduct).filter(Boolean);
 }

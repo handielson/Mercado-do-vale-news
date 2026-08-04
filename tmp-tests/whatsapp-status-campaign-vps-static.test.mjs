@@ -45,6 +45,8 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /specs, custom_fields/);
   assert.match(source, /image_url, video_url, price_retail/);
   assert.match(source, /sameWhatsAppStatusMemoryVariation/);
+  assert.match(source, /LEFT JOIN product_categories pc ON pc\.product_id = p\.id/);
+  assert.match(source, /p\.category_id = \? OR pc\.category_id = \?/);
   assert.match(source, /runDueWhatsAppStatusCampaigns/);
   assert.match(source, /buildWhatsAppStatusProgress/);
   assert.match(source, /\/whatsapp\/status-campaigns\/progress/);
@@ -113,6 +115,8 @@ assert.match(panel, /getCampaignCopyableDebug/);
 assert.match(panel, /progress\?\.logs/);
 assert.match(panel, /copyDebug\(copyableDebug\)/);
 assert.match(panel, /Categoria completa/);
+assert.match(panel, /Reprogramar para outros dias/);
+assert.match(panel, /tomorrowDateValue/);
 assert.match(panel, /formatProductOptionLabel/);
 assert.match(panel, /const selectableProducts = useMemo/);
 assert.match(panel, /groupStatusProductsByVariation\(products\)/);

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Copy, ImageIcon, Loader2, MessageCircle, Play, Plus, RefreshCw, Save, Smartphone, Trash2, X, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { catalogService } from '../../../../services/catalogService';
@@ -26,6 +26,13 @@ import {
 function todayDateValue() {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function tomorrowDateValue() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const local = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
 }
 
@@ -397,6 +404,7 @@ function CampaignProgressBar({
 }
 
 export default function WhatsAppStatusCampaignPanel() {
+  const formRef = useRef<HTMLDivElement>(null);
   const [campaigns, setCampaigns] = useState<WhatsAppStatusCampaign[]>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
@@ -636,7 +644,7 @@ export default function WhatsAppStatusCampaignPanel() {
       : current);
   }
 
-  function startEdit(campaign: WhatsAppStatusCampaign) {
+  function startEdit(campaign: WhatsAppStatusCampaign, reprogram = false) {
     setEditingId(campaign.id);
     setForm({
       title: campaign.title,
@@ -648,14 +656,16 @@ export default function WhatsAppStatusCampaignPanel() {
       interval_minutes: campaign.interval_minutes,
       start_time: normalizeTime(campaign.start_time),
       frequency: campaign.frequency,
-      start_date: campaign.start_date || todayDateValue(),
+      start_date: reprogram ? tomorrowDateValue() : (campaign.start_date || todayDateValue()),
       repeat_days: campaign.repeat_days || 1,
       repeat_mode: campaign.repeat_mode || 'full_day',
       repeat_product_id: campaign.repeat_product_id || null,
-      active: Boolean(campaign.active),
+      active: reprogram ? true : Boolean(campaign.active),
     });
     setSelectedProducts([]);
     setPendingProductId('');
+    window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+    if (reprogram) toast.info('Escolha a nova data e por quantos dias a campanha deve repetir');
   }
 
   function resetForm() {
@@ -792,7 +802,7 @@ export default function WhatsAppStatusCampaignPanel() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,380px)_1fr]">
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div ref={formRef} className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="mb-4 flex items-center gap-2">
             <Plus className="h-4 w-4 text-emerald-600" />
             <h4 className="font-bold text-slate-800">{editingId ? 'Editar programacao' : 'Nova programacao'}</h4>
@@ -1189,6 +1199,14 @@ export default function WhatsAppStatusCampaignPanel() {
                   </div>
 
                   <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(campaign, true)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50"
+                      title="Reprogramar para outros dias"
+                    >
+                      <CalendarDays className="h-4 w-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => sendNow(campaign)}

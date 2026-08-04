@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.150-whatsapp-status-agenda-real",
+  "version": "v1.2.151-whatsapp-status-reprogramar",
   "date": "2026-08-03",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-015444-whatsapp-status-agenda-real",
+  "release_vps": "/var/www/mdv-site/releases/20260804-020529-whatsapp-status-reprogramar",
   "branch": "main",
-  "summary": "Executa campanhas de Status a cada minuto no fuso de Petrolina e publica a categoria completa em estoque."
+  "summary": "Reconhece todos os produtos vinculados à categoria e permite reprogramar campanhas de Status."
 }
