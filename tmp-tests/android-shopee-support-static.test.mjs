@@ -17,6 +17,7 @@ for (const server of servers) {
   assert.match(server, /fastify\.post\('\/admin\/shopee\/chat\/conversations\/:conversationId\/messages'/);
   assert.match(server, /comment_list: \[\{ comment_id: safeId, comment: safeComment \}\]/);
   assert.match(server, /message_type: 'text'/);
+  assert.match(server, /while \(milliseconds > 8_640_000_000_000_000\) milliseconds \/= 1000/);
 }
 
 assert.match(main, /Atendimento Shopee/);

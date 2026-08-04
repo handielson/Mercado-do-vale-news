@@ -6666,7 +6666,11 @@ async function loadMobileTikTokSalesVps(limit = 50, orderId = '') {
 function shopeeSupportIsoVps(value) {
   const numeric = Number(value);
   if (Number.isFinite(numeric) && numeric > 0) {
-    return new Date(numeric > 10_000_000_000 ? numeric : numeric * 1000).toISOString();
+    let milliseconds = numeric;
+    while (milliseconds > 8_640_000_000_000_000) milliseconds /= 1000;
+    if (milliseconds < 100_000_000_000) milliseconds *= 1000;
+    const numericDate = new Date(milliseconds);
+    return Number.isNaN(numericDate.getTime()) ? '' : numericDate.toISOString();
   }
   const parsed = new Date(value || 0);
   return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
