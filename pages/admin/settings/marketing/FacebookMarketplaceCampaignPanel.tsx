@@ -95,7 +95,9 @@ export default function FacebookMarketplaceCampaignPanel({ onGenerated }: { onGe
 
   const openNew = () => {
     const next = defaultForm();
-    next.category_id = categories.find((item) => /smartphone|celular/i.test(item.name))?.id || '';
+    next.category_id = categories.find((item) => /^smartphones?$/i.test(item.name.trim()))?.id
+      || categories.find((item) => /smartphone|celular/i.test(item.name))?.id
+      || '';
     setForm(next); setEditingId(null); setShowForm(true);
   };
 

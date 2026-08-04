@@ -18,6 +18,7 @@ assert.match(panel, /Intervalo \(min\)/);
 assert.match(panel, /Repetir após \(h\)/);
 assert.match(panel, /selecione um ou vários/i);
 assert.match(panel, /Puxar da conta aberta/);
+assert.match(panel, /\^smartphones\?\$\/i/, 'new campaigns must prioritize the exact Smartphones category');
 
 const manifest = JSON.parse(readFileSync('browser-extensions/facebook-groups-sync/manifest.json', 'utf8'));
 assert.equal(manifest.manifest_version, 3);

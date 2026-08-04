@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.144-facebook-campanhas-auto
+version: v1.2.145-facebook-categoria-smartphones
 date: 2026-08-03
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-003541-v12144-facebook-campanhas-auto
+release_vps: /var/www/mdv-site/releases/20260803-215101-v12145-facebook-categoria-smartphones
 branch: main
-summary: Automatiza a rotação assistida de anúncios do Facebook por categoria, estoque, intervalo e prazo de republicação.
+summary: Prioriza Smartphones na campanha automática assistida do Facebook por categoria e estoque.
 ```
