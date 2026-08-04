@@ -7,6 +7,7 @@ import android.app.TimePickerDialog
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -48,6 +49,9 @@ import br.com.mercadodovale.adminestoque.domain.ProductLabelProduct
 import br.com.mercadodovale.adminestoque.domain.SaleSummary
 import br.com.mercadodovale.adminestoque.domain.SaleStatusGroup
 import br.com.mercadodovale.adminestoque.domain.SalesChannel
+import br.com.mercadodovale.adminestoque.domain.ShopeeChatMessage
+import br.com.mercadodovale.adminestoque.domain.ShopeeConversation
+import br.com.mercadodovale.adminestoque.domain.ShopeeProductReview
 import br.com.mercadodovale.adminestoque.domain.StockLocationBox
 import br.com.mercadodovale.adminestoque.domain.StockLocationContent
 import br.com.mercadodovale.adminestoque.domain.StockTransferLine
@@ -86,6 +90,9 @@ class MainActivity : Activity() {
     private var currentSalesChannel: SalesChannel? = null
     private var currentSaleId: String? = null
     private var currentSalesFilter: SaleStatusGroup = SaleStatusGroup.TO_SHIP
+    private var currentShopeeConversationId: Long = 0
+    private var currentShopeeBuyerId: Long = 0
+    private var currentShopeeBuyerName: String = ""
     private var currentCustomLabelText: String = ""
     private var currentCustomLabelFontPercent: Int = 90
     private val syncingSalesChannels = mutableSetOf<SalesChannel>()
@@ -157,6 +164,9 @@ class MainActivity : Activity() {
             ?.getString(STATE_SALES_FILTER)
             ?.let { value -> SaleStatusGroup.entries.firstOrNull { it.name == value } }
             ?: SaleStatusGroup.TO_SHIP
+        currentShopeeConversationId = savedInstanceState?.getLong(STATE_SHOPEE_CONVERSATION_ID) ?: 0
+        currentShopeeBuyerId = savedInstanceState?.getLong(STATE_SHOPEE_BUYER_ID) ?: 0
+        currentShopeeBuyerName = savedInstanceState?.getString(STATE_SHOPEE_BUYER_NAME).orEmpty()
         currentCustomLabelText = savedInstanceState?.getString(STATE_CUSTOM_LABEL_TEXT).orEmpty()
         currentCustomLabelFontPercent = savedInstanceState
             ?.getInt(STATE_CUSTOM_LABEL_FONT_PERCENT, 90)
@@ -179,6 +189,20 @@ class MainActivity : Activity() {
                 }
                 SCREEN_SALES_LIST -> currentSalesChannel?.let(::showSalesList) ?: showSalesOverview()
                 SCREEN_SALES_SOUND -> showSalesSoundSettings()
+                SCREEN_SHOPEE_REVIEWS -> showShopeeProductReviews()
+                SCREEN_SHOPEE_CONVERSATION -> {
+                    if (currentShopeeConversationId > 0 && currentShopeeBuyerId > 0) {
+                        showShopeeConversation(
+                            currentShopeeConversationId,
+                            currentShopeeBuyerId,
+                            currentShopeeBuyerName.ifBlank { "Comprador Shopee" },
+                        )
+                    } else {
+                        showShopeeConversations()
+                    }
+                }
+                SCREEN_SHOPEE_CONVERSATIONS -> showShopeeConversations()
+                SCREEN_SHOPEE_SUPPORT -> showShopeeSupport()
                 SCREEN_SALES -> showSalesOverview()
                 SCREEN_LABELS -> showLabels()
                 SCREEN_CUSTOM_LABEL -> showCustomLabel()
@@ -214,6 +238,9 @@ class MainActivity : Activity() {
         outState.putString(STATE_SALES_CHANNEL, currentSalesChannel?.apiKey)
         outState.putString(STATE_SALE_ID, currentSaleId)
         outState.putString(STATE_SALES_FILTER, currentSalesFilter.name)
+        outState.putLong(STATE_SHOPEE_CONVERSATION_ID, currentShopeeConversationId)
+        outState.putLong(STATE_SHOPEE_BUYER_ID, currentShopeeBuyerId)
+        outState.putString(STATE_SHOPEE_BUYER_NAME, currentShopeeBuyerName)
         outState.putString(STATE_CUSTOM_LABEL_TEXT, currentCustomLabelText)
         outState.putInt(STATE_CUSTOM_LABEL_FONT_PERCENT, currentCustomLabelFontPercent)
         currentLabelProduct?.let { outState.putString(STATE_LABEL_PRODUCT, it.toStateJson()) }
@@ -400,6 +427,12 @@ class MainActivity : Activity() {
         )
         root.addView(salesChannelRow(SalesChannel.ONLINE, SalesChannel.PDV))
         root.addView(salesChannelRow(SalesChannel.SHOPEE, SalesChannel.TIKTOK))
+        root.addView(
+            card(
+                "Atendimento Shopee",
+                "Leia e responda avaliações de produtos e conversas com compradores.",
+            ) { showShopeeSupport() },
+        )
 
         val pushStatus = text(
             if (hasSalesNotificationPermission()) {
@@ -429,6 +462,246 @@ class MainActivity : Activity() {
         })
         root.addView(button("Configurar som das vendas") { showSalesSoundSettings() })
         showContent(root)
+    }
+
+    private fun showShopeeSupport() {
+        currentScreen = SCREEN_SHOPEE_SUPPORT
+        currentShopeeConversationId = 0
+        currentShopeeBuyerId = 0
+        currentShopeeBuyerName = ""
+        val root = screen()
+        root.addView(back("Atendimento Shopee") { showSalesOverview() })
+        root.addView(text("Atendimento Shopee", 28, Color.rgb(238, 77, 45)))
+        root.addView(text("As respostas são enviadas pela integração oficial da loja.", 15, Color.DKGRAY))
+        root.addView(card("Perguntas e conversas", "Veja mensagens de compradores e responda sem sair do Gestão MDV.") {
+            showShopeeConversations()
+        })
+        root.addView(card("Avaliações dos produtos", "Confira estrelas e comentários e publique a resposta da loja.") {
+            showShopeeProductReviews()
+        })
+        root.addView(
+            text(
+                "Para avaliar o comprador, abra uma venda Shopee concluída. O aplicativo copia o texto padrão e abre os pedidos concluídos.",
+                14,
+                Color.DKGRAY,
+            ),
+        )
+        showContent(root)
+    }
+
+    private fun showShopeeProductReviews() {
+        currentScreen = SCREEN_SHOPEE_REVIEWS
+        val root = screen()
+        root.addView(back("Avaliações Shopee") { showShopeeSupport() })
+        root.addView(text("Avaliações dos produtos", 27, Color.rgb(238, 77, 45)))
+        val status = text("Carregando avaliações…", 15, Color.DKGRAY)
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(button("Atualizar avaliações") { showShopeeProductReviews() })
+        root.addView(status)
+        root.addView(list)
+        showContent(root)
+        runAsync {
+            val result = VpsApiClient(token.orEmpty()).get("/admin/shopee/product-reviews?page_size=50")
+            runOnUiThread {
+                result.fold(
+                    onSuccess = { body ->
+                        runCatching { ShopeeProductReview.parseList(body) }.fold(
+                            onSuccess = { reviews ->
+                                status.text = if (reviews.isEmpty()) "Nenhuma avaliação retornada pela Shopee."
+                                else "${reviews.size} avaliação(ões) • ${reviews.count { !it.answered }} sem resposta"
+                                list.removeAllViews()
+                                reviews.forEach { list.addView(shopeeReviewCard(it, status)) }
+                            },
+                            onFailure = { status.text = it.message ?: "Resposta de avaliações inválida." },
+                        )
+                    },
+                    onFailure = { handleProtectedApiFailure(it, status, "Falha ao carregar avaliações.") },
+                )
+            }
+        }
+    }
+
+    private fun shopeeReviewCard(review: ShopeeProductReview, pageStatus: TextView) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(14), dp(16), dp(14))
+        setBackgroundColor(Color.WHITE)
+        addView(text("${"★".repeat(review.rating)}${"☆".repeat(5 - review.rating)}  ${review.buyerName}", 18, Color.rgb(15, 23, 42)))
+        addView(text(review.itemName, 16, green))
+        if (review.modelName.isNotBlank()) addView(text(review.modelName, 14, Color.DKGRAY))
+        addView(text(review.comment.ifBlank { "O comprador avaliou sem escrever comentário." }, 16, Color.rgb(15, 23, 42)))
+        if (review.orderSn.isNotBlank()) addView(text("Pedido #${review.orderSn}", 13, Color.GRAY))
+        if (review.answered) {
+            addView(saleDetailSection("Resposta da loja", review.reply))
+        } else {
+            val response = field("Digite a resposta da loja").apply {
+                minLines = 2
+                maxLines = 6
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            }
+            addView(response)
+            val send = button("Responder avaliação") {}
+            send.setOnClickListener {
+                val replyText = response.text.toString().trim()
+                if (replyText.isBlank()) {
+                    response.error = "Digite a resposta."
+                    return@setOnClickListener
+                }
+                send.isEnabled = false
+                pageStatus.text = "Enviando resposta para ${review.buyerName}…"
+                runAsync {
+                    val result = VpsApiClient(token.orEmpty()).post(
+                        "/admin/shopee/product-reviews/${review.commentId}/reply",
+                        JSONObject().put("text", replyText),
+                    )
+                    runOnUiThread {
+                        result.fold(
+                            onSuccess = {
+                                Toast.makeText(this@MainActivity, "Resposta publicada na Shopee.", Toast.LENGTH_LONG).show()
+                                showShopeeProductReviews()
+                            },
+                            onFailure = {
+                                send.isEnabled = true
+                                handleProtectedApiFailure(it, pageStatus, "Falha ao responder avaliação.")
+                            },
+                        )
+                    }
+                }
+            }
+            addView(send)
+        }
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = dp(12) }
+    }
+
+    private fun showShopeeConversations() {
+        currentScreen = SCREEN_SHOPEE_CONVERSATIONS
+        currentShopeeConversationId = 0
+        currentShopeeBuyerId = 0
+        currentShopeeBuyerName = ""
+        val root = screen()
+        root.addView(back("Conversas Shopee") { showShopeeSupport() })
+        root.addView(text("Perguntas e conversas", 27, Color.rgb(238, 77, 45)))
+        val status = text("Carregando conversas…", 15, Color.DKGRAY)
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(button("Atualizar conversas") { showShopeeConversations() })
+        root.addView(status)
+        root.addView(list)
+        showContent(root)
+        runAsync {
+            val result = VpsApiClient(token.orEmpty()).get("/admin/shopee/chat/conversations?page_size=50")
+            runOnUiThread {
+                result.fold(
+                    onSuccess = { body ->
+                        runCatching { ShopeeConversation.parseList(body) }.fold(
+                            onSuccess = { conversations ->
+                                status.text = if (conversations.isEmpty()) "Nenhuma conversa retornada pela Shopee."
+                                else "${conversations.size} conversa(s) • ${conversations.sumOf { it.unreadCount }} não lida(s)"
+                                list.removeAllViews()
+                                conversations.forEach { conversation -> list.addView(shopeeConversationCard(conversation)) }
+                            },
+                            onFailure = { status.text = it.message ?: "Resposta de conversas inválida." },
+                        )
+                    },
+                    onFailure = { handleProtectedApiFailure(it, status, "Falha ao carregar conversas.") },
+                )
+            }
+        }
+    }
+
+    private fun shopeeConversationCard(conversation: ShopeeConversation) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(14), dp(16), dp(14))
+        setBackgroundColor(Color.WHITE)
+        isClickable = true
+        isFocusable = true
+        setOnClickListener {
+            showShopeeConversation(conversation.conversationId, conversation.buyerId, conversation.buyerName)
+        }
+        addView(text(buildString {
+            append(conversation.buyerName)
+            if (conversation.unreadCount > 0) append("  •  ${conversation.unreadCount} nova(s)")
+        }, 18, if (conversation.unreadCount > 0) green else Color.rgb(15, 23, 42)))
+        addView(text(conversation.lastMessage.ifBlank { "Abrir conversa" }, 15, Color.DKGRAY))
+        addView(text("Abrir conversa  ›", 13, blue))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = dp(12) }
+    }
+
+    private fun showShopeeConversation(conversationId: Long, buyerId: Long, buyerName: String) {
+        currentScreen = SCREEN_SHOPEE_CONVERSATION
+        currentShopeeConversationId = conversationId
+        currentShopeeBuyerId = buyerId
+        currentShopeeBuyerName = buyerName
+        val root = screen()
+        root.addView(back("Conversa com $buyerName") { showShopeeConversations() })
+        root.addView(text(buyerName, 25, Color.rgb(238, 77, 45)))
+        val status = text("Carregando mensagens…", 14, Color.DKGRAY)
+        val messages = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val response = field("Digite sua resposta").apply {
+            minLines = 2
+            maxLines = 6
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        }
+        val send = button("Enviar resposta") {}
+        send.setOnClickListener {
+            val message = response.text.toString().trim()
+            if (message.isBlank()) {
+                response.error = "Digite a mensagem."
+                return@setOnClickListener
+            }
+            send.isEnabled = false
+            status.text = "Enviando mensagem…"
+            runAsync {
+                val result = VpsApiClient(token.orEmpty()).post(
+                    "/admin/shopee/chat/conversations/$conversationId/messages",
+                    JSONObject().put("buyer_id", buyerId).put("text", message),
+                )
+                runOnUiThread {
+                    result.fold(
+                        onSuccess = {
+                            Toast.makeText(this, "Mensagem enviada pela Shopee.", Toast.LENGTH_SHORT).show()
+                            showShopeeConversation(conversationId, buyerId, buyerName)
+                        },
+                        onFailure = {
+                            send.isEnabled = true
+                            handleProtectedApiFailure(it, status, "Falha ao enviar mensagem.")
+                        },
+                    )
+                }
+            }
+        }
+        root.addView(button("Atualizar mensagens") { showShopeeConversation(conversationId, buyerId, buyerName) })
+        root.addView(status)
+        root.addView(messages)
+        root.addView(response)
+        root.addView(send)
+        showContent(root)
+        runAsync {
+            val result = VpsApiClient(token.orEmpty()).get(
+                "/admin/shopee/chat/conversations/$conversationId/messages?page_size=50",
+            )
+            runOnUiThread {
+                result.fold(
+                    onSuccess = { body ->
+                        runCatching { ShopeeChatMessage.parseList(body) }.fold(
+                            onSuccess = { rows ->
+                                status.text = if (rows.isEmpty()) "Nenhuma mensagem retornada." else "${rows.size} mensagem(ns)"
+                                messages.removeAllViews()
+                                rows.forEach { message ->
+                                    messages.addView(saleDetailSection(if (message.fromBuyer) buyerName else "Mercado do Vale", message.text))
+                                }
+                            },
+                            onFailure = { status.text = it.message ?: "Resposta de mensagens inválida." },
+                        )
+                    },
+                    onFailure = { handleProtectedApiFailure(it, status, "Falha ao carregar mensagens.") },
+                )
+            }
+        }
     }
 
     private fun showSalesSoundSettings() {
@@ -858,7 +1131,59 @@ class MainActivity : Activity() {
         if (sale.channel == SalesChannel.PDV) {
             root.addView(signedWarrantySection(sale))
         }
+        if (sale.channel == SalesChannel.SHOPEE && sale.statusGroup == SaleStatusGroup.COMPLETED) {
+            root.addView(shopeeBuyerRatingSection(sale))
+        }
         showContent(root)
+    }
+
+    private fun shopeeBuyerRatingSection(sale: SaleSummary) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(16), dp(14), dp(16), dp(14))
+        setBackgroundColor(Color.rgb(255, 247, 237))
+        addView(text("Avaliar comprador na Shopee", 18, Color.rgb(154, 52, 18)))
+        addView(
+            text(
+                "A Shopee não informa pela API se esta avaliação está pendente. O botão copia o texto e abre os pedidos concluídos para você escolher as estrelas e colar.",
+                14,
+                Color.DKGRAY,
+            ),
+        )
+        val template = field("Texto padrão da avaliação").apply {
+            minLines = 3
+            maxLines = 7
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            setText(sessionPreferences.getString(SHOPEE_BUYER_RATING_TEMPLATE_KEY, DEFAULT_SHOPEE_BUYER_RATING_TEMPLATE))
+        }
+        addView(template)
+        addView(button("Salvar texto padrão") {
+            val value = template.text.toString().trim()
+            if (value.isBlank()) template.error = "Digite o texto da avaliação."
+            else {
+                sessionPreferences.edit().putString(SHOPEE_BUYER_RATING_TEMPLATE_KEY, value).apply()
+                Toast.makeText(this@MainActivity, "Texto padrão salvo.", Toast.LENGTH_SHORT).show()
+            }
+        })
+        addView(button("Copiar texto e abrir Shopee") {
+            val value = template.text.toString().trim()
+            if (value.isBlank()) {
+                template.error = "Digite o texto da avaliação."
+                return@button
+            }
+            sessionPreferences.edit().putString(SHOPEE_BUYER_RATING_TEMPLATE_KEY, value).apply()
+            getSystemService(ClipboardManager::class.java)
+                ?.setPrimaryClip(ClipData.newPlainText("Avaliação do comprador", value))
+            Toast.makeText(
+                this@MainActivity,
+                "Texto copiado. Escolha o pedido #${sale.shortId} e cole na avaliação.",
+                Toast.LENGTH_LONG,
+            ).show()
+            openUrl(SHOPEE_COMPLETED_ORDERS_URL)
+        })
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = dp(12) }
     }
 
     private fun signedWarrantySection(sale: SaleSummary) = LinearLayout(this).apply {
@@ -3357,6 +3682,7 @@ class MainActivity : Activity() {
         private const val LABEL_PRODUCT_KEY = "selected_label_product"
         private const val PRINTER_PROFILE_KEY = "printer_profile"
         private const val GENERIC_PRINTER_ADDRESS_KEY = "generic_printer_address"
+        private const val SHOPEE_BUYER_RATING_TEMPLATE_KEY = "shopee_buyer_rating_template"
         private const val STATE_LABEL_PRODUCT = "state_label_product"
         private const val STATE_SCREEN = "state_screen"
         private const val STATE_STOCK_LOCATION_ID = "state_stock_location_id"
@@ -3368,6 +3694,9 @@ class MainActivity : Activity() {
         private const val STATE_SALES_FILTER = "state_sales_filter"
         private const val STATE_CUSTOM_LABEL_TEXT = "state_custom_label_text"
         private const val STATE_CUSTOM_LABEL_FONT_PERCENT = "state_custom_label_font_percent"
+        private const val STATE_SHOPEE_CONVERSATION_ID = "state_shopee_conversation_id"
+        private const val STATE_SHOPEE_BUYER_ID = "state_shopee_buyer_id"
+        private const val STATE_SHOPEE_BUYER_NAME = "state_shopee_buyer_name"
         private const val SCREEN_LOGIN = "login"
         private const val SCREEN_DASHBOARD = "dashboard"
         private const val SCREEN_PERMISSIONS = "permissions"
@@ -3381,6 +3710,14 @@ class MainActivity : Activity() {
         private const val SCREEN_SALES_SOUND = "sales_sound"
         private const val SCREEN_SALES_LIST = "sales_list"
         private const val SCREEN_SALES_DETAIL = "sales_detail"
+        private const val SCREEN_SHOPEE_SUPPORT = "shopee_support"
+        private const val SCREEN_SHOPEE_REVIEWS = "shopee_reviews"
+        private const val SCREEN_SHOPEE_CONVERSATIONS = "shopee_conversations"
+        private const val SCREEN_SHOPEE_CONVERSATION = "shopee_conversation"
+        private const val SHOPEE_COMPLETED_ORDERS_URL =
+            "https://seller.shopee.com.br/portal/sale/order?type=completed"
+        private const val DEFAULT_SHOPEE_BUYER_RATING_TEMPLATE =
+            "Excelente comprador! Pagamento rápido e negociação tranquila. Agradecemos pela compra!"
         private val STOCK_LOCATION_FILTER_LABELS = listOf(
             "Todas as caixas",
             "Caixas 1 a 20",

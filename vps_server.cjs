@@ -6663,6 +6663,131 @@ async function loadMobileTikTokSalesVps(limit = 50, orderId = '') {
     .slice(0, Math.max(1, Math.min(100, Number(limit) || 50)));
 }
 
+function shopeeSupportIsoVps(value) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return new Date(numeric > 10_000_000_000 ? numeric : numeric * 1000).toISOString();
+  }
+  const parsed = new Date(value || 0);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
+}
+
+function shopeeSupportTextVps(value) {
+  if (typeof value === 'string') {
+    const parsed = mobileSalesParseJsonVps(value, null);
+    return parsed && typeof parsed === 'object' ? shopeeSupportTextVps(parsed) : value;
+  }
+  if (!value || typeof value !== 'object') return '';
+  return String(value.text || value.content || value.message || value.message_content || value.comment || '');
+}
+
+function requireShopeeSupportSuccessVps(result, fallback) {
+  if (!result?.ok || result?.data?.error) {
+    const error = new Error(result?.data?.message || result?.data?.error || fallback);
+    error.statusCode = Number(result?.status) >= 400 ? Number(result.status) : 502;
+    throw error;
+  }
+  return result?.data?.response || {};
+}
+
+async function loadMobileShopeeReviewsVps(pageSize = 50, cursor = '') {
+  const creds = await getShopeeCatalogCredentialsVps();
+  const result = await shopeeCatalogGetVps('/api/v2/product/get_comment', creds, encodeShopeeCatalogParamsVps({
+    cursor,
+    page_size: Math.max(1, Math.min(100, Number(pageSize) || 50)),
+  }));
+  const response = requireShopeeSupportSuccessVps(result, 'Falha ao carregar avaliacoes da Shopee.');
+  return {
+    reviews: (response.item_comment_list || []).map((row) => ({
+      comment_id: Number(row?.comment_id) || 0,
+      order_sn: String(row?.order_sn || ''),
+      buyer_name: String(row?.buyer_username || row?.buyer_name || 'Comprador Shopee'),
+      item_name: String(row?.item_name || row?.product_name || 'Produto'),
+      model_name: String(row?.model_name || ''),
+      comment: String(row?.comment || ''),
+      reply: String(row?.comment_reply?.comment || row?.comment_reply?.reply || row?.reply_comment || row?.reply || ''),
+      rating: Math.max(0, Math.min(5, Number(row?.rating_star ?? row?.rating) || 0)),
+      created_at: shopeeSupportIsoVps(row?.create_time || row?.ctime),
+    })),
+    more: Boolean(response.more),
+    next_cursor: String(response.next_cursor || ''),
+  };
+}
+
+async function replyMobileShopeeReviewVps(commentId, comment) {
+  const safeId = Number(commentId);
+  const safeComment = String(comment || '').trim();
+  if (!Number.isSafeInteger(safeId) || safeId <= 0) throw new Error('Avaliacao invalida.');
+  if (!safeComment) throw new Error('Digite a resposta da avaliacao.');
+  if (safeComment.length > 500) throw new Error('A resposta pode ter no maximo 500 caracteres.');
+  const creds = await getShopeeCatalogCredentialsVps();
+  const result = await shopeeCatalogPostVps('/api/v2/product/reply_comment', creds, {
+    comment_list: [{ comment_id: safeId, comment: safeComment }],
+  });
+  requireShopeeSupportSuccessVps(result, 'Falha ao responder avaliacao da Shopee.');
+  return { replied: true, comment_id: safeId };
+}
+
+async function loadMobileShopeeConversationsVps(pageSize = 50, nextTimestamp = '') {
+  const creds = await getShopeeCatalogCredentialsVps();
+  const result = await shopeeCatalogGetVps('/api/v2/sellerchat/get_conversation_list', creds, encodeShopeeCatalogParamsVps({
+    type: 'all', direction: 'latest', page_size: Math.max(1, Math.min(60, Number(pageSize) || 50)),
+    next_timestamp: nextTimestamp,
+  }));
+  const response = requireShopeeSupportSuccessVps(result, 'Falha ao carregar conversas da Shopee.');
+  const rows = Array.isArray(response.conversations) ? response.conversations : [];
+  return {
+    conversations: rows.map((row) => ({
+      conversation_id: Number(row?.conversation_id) || 0,
+      buyer_id: Number(row?.to_id ?? row?.buyer_id ?? row?.user_id) || 0,
+      buyer_name: String(row?.to_name || row?.buyer_name || row?.user_name || 'Comprador Shopee'),
+      last_message: shopeeSupportTextVps(row?.latest_message_content ?? row?.last_message ?? row?.latest_message),
+      unread_count: Math.max(0, Number(row?.unread_count) || 0),
+      updated_at: shopeeSupportIsoVps(row?.last_message_timestamp || row?.latest_message_timestamp || row?.update_time),
+    })).filter((row) => row.conversation_id > 0),
+    more: Boolean(response.more),
+    next_timestamp: String(response.next_timestamp || ''),
+  };
+}
+
+async function loadMobileShopeeMessagesVps(conversationId, pageSize = 50, offset = 0) {
+  const safeConversationId = Number(conversationId);
+  if (!Number.isSafeInteger(safeConversationId) || safeConversationId <= 0) throw new Error('Conversa invalida.');
+  const creds = await getShopeeCatalogCredentialsVps();
+  const result = await shopeeCatalogGetVps('/api/v2/sellerchat/get_message', creds, encodeShopeeCatalogParamsVps({
+    conversation_id: safeConversationId,
+    offset: Math.max(0, Number(offset) || 0),
+    page_size: Math.max(1, Math.min(60, Number(pageSize) || 50)),
+  }));
+  const response = requireShopeeSupportSuccessVps(result, 'Falha ao carregar mensagens da Shopee.');
+  const rows = Array.isArray(response.messages) ? response.messages : (response.message_list || []);
+  return {
+    messages: rows.map((row) => ({
+      message_id: String(row?.message_id || row?.id || ''),
+      from_buyer: String(row?.from_id || '') !== String(creds.shopId),
+      text: shopeeSupportTextVps(row?.content ?? row?.message_content ?? row?.message),
+      created_at: shopeeSupportIsoVps(row?.created_timestamp || row?.create_time || row?.timestamp),
+    })),
+    more: Boolean(response.more),
+  };
+}
+
+async function sendMobileShopeeMessageVps(buyerId, text) {
+  const safeBuyerId = Number(buyerId);
+  const safeText = String(text || '').trim();
+  if (!Number.isSafeInteger(safeBuyerId) || safeBuyerId <= 0) throw new Error('Comprador invalido.');
+  if (!safeText) throw new Error('Digite a mensagem.');
+  if (safeText.length > 600) throw new Error('A mensagem pode ter no maximo 600 caracteres.');
+  const creds = await getShopeeCatalogCredentialsVps();
+  const result = await shopeeCatalogPostVps('/api/v2/sellerchat/send_message', creds, {
+    to_id: safeBuyerId,
+    message_type: 'text',
+    content: { text: safeText },
+  });
+  const response = requireShopeeSupportSuccessVps(result, 'Falha ao enviar mensagem da Shopee.');
+  return { sent: true, message_id: String(response.message_id || '') };
+}
+
 async function recordMobilePdvSaleVps(saleId) {
   const sale = (await loadMobilePdvSalesVps(1, saleId))[0];
   return sale ? mobileSalesPushService.recordSaleEvent(sale) : null;
@@ -12049,6 +12174,44 @@ fastify.get('/admin/mobile-sales/:channel/:saleId', { preHandler: requireAdminBe
       error: 'Falha ao carregar os detalhes da venda.',
       detail: error.message || String(error),
     });
+  }
+});
+fastify.get('/admin/shopee/product-reviews', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    reply.header('Cache-Control', 'no-store');
+    return await loadMobileShopeeReviewsVps(request.query?.page_size, request.query?.cursor);
+  } catch (error) {
+    return reply.code(error.statusCode || 500).send({ error: error.message || 'Falha ao carregar avaliacoes da Shopee.' });
+  }
+});
+fastify.post('/admin/shopee/product-reviews/:commentId/reply', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    return await replyMobileShopeeReviewVps(request.params?.commentId, request.body?.text);
+  } catch (error) {
+    return reply.code(error.statusCode || 400).send({ error: error.message || 'Falha ao responder avaliacao da Shopee.' });
+  }
+});
+fastify.get('/admin/shopee/chat/conversations', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    reply.header('Cache-Control', 'no-store');
+    return await loadMobileShopeeConversationsVps(request.query?.page_size, request.query?.next_timestamp);
+  } catch (error) {
+    return reply.code(error.statusCode || 500).send({ error: error.message || 'Falha ao carregar conversas da Shopee.' });
+  }
+});
+fastify.get('/admin/shopee/chat/conversations/:conversationId/messages', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    reply.header('Cache-Control', 'no-store');
+    return await loadMobileShopeeMessagesVps(request.params?.conversationId, request.query?.page_size, request.query?.offset);
+  } catch (error) {
+    return reply.code(error.statusCode || 500).send({ error: error.message || 'Falha ao carregar mensagens da Shopee.' });
+  }
+});
+fastify.post('/admin/shopee/chat/conversations/:conversationId/messages', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  try {
+    return await sendMobileShopeeMessageVps(request.body?.buyer_id, request.body?.text);
+  } catch (error) {
+    return reply.code(error.statusCode || 400).send({ error: error.message || 'Falha ao enviar mensagem da Shopee.' });
   }
 });
 fastify.get('/api/tiktok-shop/settings', { preHandler: requireSyncKeyOrAdmin }, handleTikTokShopSettingsGetVps);
