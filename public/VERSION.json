@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.165-layout-revisao-meta",
+  "version": "v1.2.166-preparar-anuncios-meta",
   "date": "2026-08-04",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-183738-layout-revisao-meta",
+  "release_vps": "/var/www/mdv-site/releases/20260804-185633-preparar-anuncios-meta",
   "branch": "main",
-  "summary": "Corrige o layout responsivo da aprovação de criativos e explica quando e como a Meta inicia automaticamente a revisão dos anúncios."
+  "summary": "Prepara duas campanhas, conjuntos e anúncios de carrossel para WhatsApp, sempre pausados, com teto mensal, rastreamento e aprovação final no Gestão MV."
 }

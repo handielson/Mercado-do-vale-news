@@ -172,4 +172,11 @@ export const metaMarketingConnectionService = {
             payload,
         );
     },
+
+    async preparePausedAdBundleApproval(): Promise<MetaCampaignDraftApprovalResponse> {
+        return await vpsClient.post<MetaCampaignDraftApprovalResponse>(
+            '/admin/marketing/meta/paused-ad-bundle-approvals',
+            {},
+        );
+    },
 };

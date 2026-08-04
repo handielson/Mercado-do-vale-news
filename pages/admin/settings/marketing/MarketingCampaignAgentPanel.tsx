@@ -163,12 +163,12 @@ export default function MarketingCampaignAgentPanel() {
         setPreparingApproval(true);
         try {
             await marketingCampaignPortfolioService.save(portfolio);
-            const response = await metaMarketingConnectionService.prepareCampaignDraftApproval();
+            const response = await metaMarketingConnectionService.preparePausedAdBundleApproval();
             toast.success(response.reused
-                ? 'A solicitação segura já existe na Central de Aprovações.'
-                : 'Solicitação criada. Revise em Marketing > Aprovações.');
+                ? 'A preparação completa já está disponível na Central de Aprovações.'
+                : 'Preparação completa criada. Revise em Marketing > Aprovações.');
         } catch (error: any) {
-            toast.error(error?.message || 'Não foi possível preparar os rascunhos pausados.');
+            toast.error(error?.message || 'Não foi possível preparar os conjuntos e anúncios pausados.');
         } finally {
             setPreparingApproval(false);
         }
@@ -309,9 +309,9 @@ export default function MarketingCampaignAgentPanel() {
                             <p className="mt-1 max-w-3xl text-sm leading-6 text-sky-900">No primeiro mês, o agente mantém Petrolina–PE e Juazeiro–BA como limites rígidos e evita fragmentar o orçamento por lojas concorrentes. Um teste de proximidade física só será sugerido após 15–30 dias de dados, sem aumentar o teto mensal. Visitantes de perfis concorrentes não serão simulados nem coletados.</p>
                         </div>
                     </div>
-                    <button onClick={prepareDraftApproval} disabled={preparingApproval || configuredCount !== 2} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-sky-700 px-5 py-3 text-sm font-black text-white transition hover:bg-sky-600 disabled:opacity-50">{preparingApproval ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Preparar rascunhos pausados</button>
+                    <button onClick={prepareDraftApproval} disabled={preparingApproval || configuredCount !== 2} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-sky-700 px-5 py-3 text-sm font-black text-white transition hover:bg-sky-600 disabled:opacity-50">{preparingApproval ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Preparar anúncios completos</button>
                 </div>
-                <p className="mt-3 text-xs font-semibold text-sky-800">Esta ação cria somente uma solicitação. Depois da sua aprovação, a VPS poderá criar dois containers PAUSADOS, sem conjunto, anúncio, orçamento aplicado ou cobrança.</p>
+                <p className="mt-3 text-xs font-semibold leading-5 text-sky-800">Esta ação cria somente uma solicitação. Depois da sua aprovação, a VPS criará duas campanhas, dois conjuntos e dois anúncios completos em estado PAUSADO. A Meta iniciará a análise automaticamente, mas a veiculação e o gasto continuarão bloqueados.</p>
             </div>
 
             <div className="grid gap-5 xl:grid-cols-2">

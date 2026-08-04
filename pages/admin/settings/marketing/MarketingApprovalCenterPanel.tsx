@@ -74,6 +74,9 @@ const FIELD_LABELS: Record<string, string> = {
     budgetApplied: 'Orçamento aplicado agora',
     adSetsCreated: 'Conjuntos de anúncios criados',
     adsCreated: 'Anúncios criados',
+    campaignsCreated: 'Campanhas criadas',
+    metaReviewStartsAutomatically: 'Análise da Meta começa automaticamente',
+    deliveryStarts: 'Veiculação começa nesta etapa',
     audiencePlan: 'Plano de público',
     firstMonth: 'Público no primeiro mês',
     competitorPhysicalTest: 'Teste próximo a lojas concorrentes',
@@ -88,6 +91,12 @@ const FIELD_LABELS: Record<string, string> = {
     locations: 'Cidades da campanha',
     objective: 'Objetivo',
     publication: 'Publicação nesta etapa',
+    placements: 'Onde o anúncio aparecerá',
+    audience: 'Público',
+    optimization: 'Otimização',
+    trackingCode: 'Código de rastreamento',
+    configuredMaximum: 'Valor configurado para o período',
+    followerBaseline: 'Marco inicial de seguidores',
     categoryName: 'Categoria',
     priceCents: 'Preço exibido',
     stock: 'Estoque disponível',
@@ -244,6 +253,7 @@ function channelLabel(value: string): string {
 function targetTypeLabel(value: string): string {
     const labels: Record<string, string> = {
         meta_campaign_bundle: 'Grupo de campanhas da Meta',
+        meta_ad_bundle: 'Campanhas, conjuntos e anúncios da Meta',
         campaign: 'Campanha',
         ad_set: 'Conjunto de anúncios',
         ad: 'Anúncio',
@@ -265,11 +275,13 @@ function executionLabel(request: MarketingApprovalRequest) {
 function persistentOutcome(request: MarketingApprovalRequest): string {
     const creativePlan = request.action_type.includes('creative_plan');
     const campaignBundle = request.action_type.includes('campaign_bundle');
+    const pausedAdBundle = request.action_type.includes('paused_whatsapp_ad_bundle');
     if (request.status === 'pending') return 'Aguardando sua decisão.';
     if (request.status === 'approved' && creativePlan) return 'Criativos aprovados. O anúncio ainda não foi criado nem colocado em veiculação.';
     if (request.status === 'approved') return 'Aprovação registrada. A execução ainda não foi confirmada.';
     if (request.status === 'executing') return 'Aprovada e em execução. Isso ainda não confirma que a campanha entrou em veiculação.';
     if (request.status === 'succeeded' && creativePlan) return 'Criativos aprovados. Esta etapa não publica nem ativa anúncios.';
+    if (request.status === 'succeeded' && pausedAdBundle) return 'Anúncios completos criados e enviados para análise da Meta, mas permanecem pausados e sem gasto.';
     if (request.status === 'succeeded' && campaignBundle) return 'Estrutura criada na Meta e mantida pausada, sem entrega ou cobrança.';
     if (request.status === 'succeeded') return 'Execução concluída e registrada.';
     if (request.status === 'failed') return 'A execução falhou e precisa de atenção.';

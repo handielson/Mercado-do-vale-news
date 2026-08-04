@@ -7,6 +7,8 @@ const EXECUTION_MODES = new Set(['vps_meta_api', 'lenovo_chrome', 'manual']);
 const INSIGHTS_PRESETS = new Set(['last_7d', 'last_14d', 'last_30d', 'this_month']);
 const META_CAMPAIGN_SHELL_ACTION = 'meta.create_paused_campaign_bundle.v2';
 const META_CREATIVE_PLAN_ACTION = 'meta.approve_campaign_creative_plan.v1';
+const META_PAUSED_AD_BUNDLE_ACTION = 'meta.create_paused_whatsapp_ad_bundle.v1';
+const META_AUTHORIZED_MONTHLY_CEILING_BRL = 1000;
 const META_CAMPAIGN_SHELLS = Object.freeze([
   { itemKey: 'store-carousel', name: 'MDV | Loja inteira | Carrossel | Petrolina + Juazeiro' },
   { itemKey: 'smartphones', name: 'MDV | Smartphones | Petrolina + Juazeiro' },
@@ -32,6 +34,24 @@ function text(value, maxLength) {
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function currencyCents(value) {
+  return Math.max(0, Math.round(Number(value || 0) * 100));
+}
+
+function digits(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function isoWithoutMilliseconds(date) {
+  return new Date(date).toISOString().replace(/\.\d{3}Z$/, '+0000');
+}
+
+function addDays(date, days) {
+  const result = new Date(date);
+  result.setUTCDate(result.getUTCDate() + Number(days || 0));
+  return result;
 }
 
 function marketingConfig() {
@@ -532,6 +552,119 @@ function formatMetaExecutionError(error) {
   ].filter(Boolean).join(' · ');
 }
 
+function pausedAdBundlePayloadHash(item, accountId) {
+  return sha256(JSON.stringify({ schemaVersion: 1, accountId, item }));
+}
+
+async function findExecutionItem(pool, approvalId, itemKey) {
+  const [rows] = await pool.query(
+    'SELECT * FROM marketing_approval_execution_items WHERE approval_id=? AND item_key=? LIMIT 1',
+    [approvalId, itemKey],
+  );
+  return rows?.[0] || null;
+}
+
+async function saveExecutionItem(pool, approvalId, itemKey, payloadHash, values = {}) {
+  let externalId = values.externalId || null;
+  if (externalId) {
+    const [owners] = await pool.query(
+      'SELECT approval_id,item_key FROM marketing_approval_execution_items WHERE provider=\'meta\' AND external_id=? LIMIT 1',
+      [externalId],
+    );
+    const owner = owners?.[0];
+    if (owner && (String(owner.approval_id) !== String(approvalId) || String(owner.item_key) !== String(itemKey))) {
+      externalId = null;
+    }
+  }
+  await pool.query(
+    `INSERT INTO marketing_approval_execution_items
+      (approval_id,item_key,payload_hash,external_id,state,external_status,last_error)
+     VALUES (?,?,?,?,?,?,?)
+     ON DUPLICATE KEY UPDATE payload_hash=VALUES(payload_hash),external_id=COALESCE(VALUES(external_id),external_id),
+       state=VALUES(state),external_status=VALUES(external_status),last_error=VALUES(last_error)`,
+    [
+      approvalId,
+      itemKey,
+      payloadHash,
+      externalId,
+      values.state || 'pending',
+      values.externalStatus || null,
+      values.lastError || null,
+    ],
+  );
+}
+
+async function resolveApprovedCity(token, name, regionName) {
+  const response = await graphRequest('search', token, {
+    type: 'adgeolocation',
+    q: name,
+    location_types: JSON.stringify(['city']),
+    country_code: 'BR',
+    limit: 25,
+  });
+  const normalizedRegion = String(regionName).toLocaleLowerCase('pt-BR');
+  const match = (response?.data || []).find((item) => (
+    String(item?.name || '').toLocaleLowerCase('pt-BR') === String(name).toLocaleLowerCase('pt-BR')
+    && String(item?.region || item?.region_name || '').toLocaleLowerCase('pt-BR').includes(normalizedRegion)
+  ));
+  if (!match?.key) throw new Error(`A Meta não retornou a cidade aprovada ${name}-${regionName}. Atualize a conexão e tente novamente.`);
+  return { key: String(match.key), name: String(match.name || name), region: String(match.region || match.region_name || regionName) };
+}
+
+function whatsappProductLink(phone, message) {
+  return `https://api.whatsapp.com/send?phone=${encodeURIComponent(digits(phone))}&text=${encodeURIComponent(message)}`;
+}
+
+function buildCarouselStorySpec(item, pageId, instagramAccountId, whatsapp) {
+  const cards = item.cards.map((card) => {
+    const trackedMessage = `${card.whatsapp_message} | Origem: ${item.tracking_code}`;
+    const link = whatsappProductLink(whatsapp, trackedMessage);
+    return {
+      link,
+      picture: card.image_url,
+      name: `${card.name} — ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(card.price_cents / 100)}`,
+      description: card.headline,
+      call_to_action: { type: 'WHATSAPP_MESSAGE', value: { link } },
+    };
+  });
+  return {
+    page_id: pageId,
+    instagram_actor_id: instagramAccountId,
+    link_data: {
+      link: whatsappProductLink(whatsapp, `Quero comprar pelo Instagram | Origem: ${item.tracking_code}`),
+      message: item.primary_text,
+      name: item.headline,
+      caption: 'Mercado do Vale',
+      child_attachments: cards,
+      multi_share_end_card: false,
+      multi_share_optimized: true,
+      call_to_action: {
+        type: 'WHATSAPP_MESSAGE',
+        value: { link: whatsappProductLink(whatsapp, `Quero comprar pelo Instagram | Origem: ${item.tracking_code}`) },
+      },
+    },
+  };
+}
+
+async function revalidateApprovedProducts(pool, item) {
+  const ids = [...new Set((item.cards || []).map((card) => String(card.product_id || '')).filter(Boolean))];
+  if (ids.length < 2) throw new Error(`A campanha ${item.item_key} precisa de pelo menos dois produtos aprovados.`);
+  const [rows] = await pool.query(
+    'SELECT id, sku, name, price_retail, stock_quantity, status, hide_from_catalog FROM products WHERE id IN (?)',
+    [ids],
+  );
+  const byId = new Map(rows.map((row) => [String(row.id), row]));
+  for (const card of item.cards) {
+    const current = byId.get(String(card.product_id));
+    const active = ['active', 'ativo', 'a'].includes(String(current?.status || '').toLowerCase());
+    if (!current || !active || current.hide_from_catalog || Number(current.stock_quantity || 0) <= 0
+      || Number(current.price_retail || 0) !== Number(card.price_cents || 0)
+      || String(current.sku || '') !== String(card.sku || '')) {
+      throw new Error(`O produto ${card.sku || card.product_id} mudou depois da aprovação. Atualize e aprove novamente os criativos.`);
+    }
+  }
+}
+
 async function markApprovalExecution(pool, approvalId, succeeded, result, errorMessage = null) {
   const nextStatus = succeeded ? 'succeeded' : 'failed';
   await pool.query(
@@ -635,6 +768,171 @@ async function executePausedCampaignBundle(pool, approval) {
   return { operation: payload.operation, campaigns: results, financialImpact: 0 };
 }
 
+async function executePausedWhatsappAdBundle(pool, approval) {
+  const payload = approval.execution_payload;
+  if (!payload || payload.schema_version !== 1 || payload.operation !== 'meta.create_paused_whatsapp_ad_bundle') {
+    throw new Error('Unsupported Meta WhatsApp ad bundle payload');
+  }
+  if (!Array.isArray(payload.campaigns) || payload.campaigns.length !== META_CAMPAIGN_SHELLS.length) {
+    throw new Error('WhatsApp ad bundle must contain exactly two campaigns');
+  }
+  const row = await connectionRow(pool);
+  const config = marketingConfig();
+  const scopes = jsonParse(row?.granted_scopes, []);
+  if (!config.ready || !row || row.status !== 'connected') throw new Error('Meta connection is not ready');
+  if (!scopes.includes('ads_management')) throw new Error('Meta ads_management permission is missing');
+  if (row.selected_ad_account_id !== payload.connection_snapshot?.ad_account_id
+    || row.selected_page_id !== payload.connection_snapshot?.page_id
+    || row.selected_instagram_account_id !== payload.connection_snapshot?.instagram_account_id) {
+    throw new Error('Selected Meta assets changed after approval');
+  }
+  const approvedTotal = payload.campaigns.reduce((sum, item) => sum + Number(item.period_limit_brl || 0), 0);
+  if (approvedTotal <= 0 || approvedTotal > META_AUTHORIZED_MONTHLY_CEILING_BRL) {
+    throw new Error('Approved campaign total exceeds the R$ 1.000 monthly ceiling');
+  }
+  const whatsapp = digits(payload.official_whatsapp);
+  if (whatsapp.length < 12 || whatsapp.length > 15) throw new Error('Approved WhatsApp number is invalid');
+
+  for (const item of payload.campaigns) await revalidateApprovedProducts(pool, item);
+
+  const token = decryptToken(row, config.encryptionKey);
+  const [campaignResponse, adsetResponse, adResponse] = await Promise.all([
+    graphRequest(`${row.selected_ad_account_id}/campaigns`, token, { fields: 'id,name,status,effective_status,objective', limit: 100 }),
+    graphRequest(`${row.selected_ad_account_id}/adsets`, token, { fields: 'id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget', limit: 200 }),
+    graphRequest(`${row.selected_ad_account_id}/ads`, token, { fields: 'id,name,status,effective_status,adset_id', limit: 200 }),
+  ]);
+  const campaignsByName = new Map((campaignResponse?.data || []).map((item) => [item.name, item]));
+  const adsetsByName = new Map((adsetResponse?.data || []).map((item) => [item.name, item]));
+  const adsByName = new Map((adResponse?.data || []).map((item) => [item.name, item]));
+  const results = [];
+
+  for (const item of payload.campaigns) {
+    const expected = META_CAMPAIGN_SHELLS.find((shell) => shell.itemKey === item.item_key);
+    if (!expected || item.campaign_name !== expected.name || item.status !== 'PAUSED'
+      || item.destination !== 'WHATSAPP' || item.publisher_platform !== 'instagram'
+      || item.location_type !== 'home' || !Array.isArray(item.geo_cities) || item.geo_cities.length !== 2) {
+      throw new Error(`Invalid approved WhatsApp campaign: ${item.item_key}`);
+    }
+    const payloadHash = pausedAdBundlePayloadHash(item, row.selected_ad_account_id);
+    const campaignItemKey = `campaign:${item.item_key}`;
+    const adsetItemKey = `adset:${item.item_key}`;
+    const adItemKey = `ad:${item.item_key}`;
+
+    let campaign = campaignsByName.get(item.campaign_name);
+    const savedCampaign = await findExecutionItem(pool, approval.id, campaignItemKey);
+    if (!campaign && savedCampaign?.external_id) {
+      campaign = await graphRequest(savedCampaign.external_id, token, { fields: 'id,name,status,effective_status,objective' });
+    }
+    if (!campaign) {
+      await saveExecutionItem(pool, approval.id, campaignItemKey, payloadHash, { state: 'creating' });
+      try {
+        const created = await graphPost(`${row.selected_ad_account_id}/campaigns`, token, {
+          name: item.campaign_name,
+          objective: 'OUTCOME_SALES',
+          buying_type: 'AUCTION',
+          status: 'PAUSED',
+          special_ad_categories: '[]',
+          is_adset_budget_sharing_enabled: 'false',
+        });
+        campaign = await graphRequest(created.id, token, { fields: 'id,name,status,effective_status,objective' });
+      } catch (error) {
+        await saveExecutionItem(pool, approval.id, campaignItemKey, payloadHash, { state: error.metaCode ? 'failed' : 'ambiguous', lastError: formatMetaExecutionError(error) });
+        throw error;
+      }
+    }
+    if (!campaign?.id || campaign.name !== item.campaign_name || !String(campaign.effective_status || campaign.status).includes('PAUSED')) {
+      throw new Error(`Meta did not confirm paused campaign ${item.item_key}`);
+    }
+    await saveExecutionItem(pool, approval.id, campaignItemKey, payloadHash, {
+      state: 'succeeded', externalId: campaign.id, externalStatus: campaign.effective_status || campaign.status || 'PAUSED',
+    });
+
+    let adset = adsetsByName.get(item.adset_name);
+    const savedAdset = await findExecutionItem(pool, approval.id, adsetItemKey);
+    if (!adset && savedAdset?.external_id) {
+      adset = await graphRequest(savedAdset.external_id, token, { fields: 'id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget' });
+    }
+    if (!adset) {
+      const start = new Date();
+      start.setUTCMinutes(start.getUTCMinutes() + 10);
+      const schedule = { start_time: isoWithoutMilliseconds(start), end_time: isoWithoutMilliseconds(addDays(start, item.duration_days)) };
+      const budget = item.budget_type === 'lifetime'
+        ? { lifetime_budget: String(currencyCents(item.authorized_amount_brl)), ...schedule }
+        : { daily_budget: String(currencyCents(item.authorized_amount_brl)), ...schedule };
+      await saveExecutionItem(pool, approval.id, adsetItemKey, payloadHash, { state: 'creating' });
+      try {
+        const created = await graphPost(`${row.selected_ad_account_id}/adsets`, token, {
+          name: item.adset_name,
+          campaign_id: campaign.id,
+          status: 'PAUSED',
+          billing_event: 'IMPRESSIONS',
+          optimization_goal: 'CONVERSATIONS',
+          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+          destination_type: 'WHATSAPP',
+          promoted_object: JSON.stringify({ page_id: row.selected_page_id }),
+          targeting: JSON.stringify({
+            geo_locations: { cities: item.geo_cities.map((city) => ({ key: city.key })), location_types: ['home'] },
+            publisher_platforms: ['instagram'],
+          }),
+          attribution_spec: JSON.stringify([
+            { event_type: 'CLICK_THROUGH', window_days: 7 },
+            { event_type: 'VIEW_THROUGH', window_days: 1 },
+          ]),
+          ...budget,
+        });
+        adset = await graphRequest(created.id, token, { fields: 'id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget' });
+      } catch (error) {
+        await saveExecutionItem(pool, approval.id, adsetItemKey, payloadHash, { state: error.metaCode ? 'failed' : 'ambiguous', lastError: formatMetaExecutionError(error) });
+        throw error;
+      }
+    }
+    if (!adset?.id || adset.name !== item.adset_name || String(adset.campaign_id) !== String(campaign.id)
+      || !String(adset.effective_status || adset.status).includes('PAUSED')) {
+      throw new Error(`Meta did not confirm paused ad set ${item.item_key}`);
+    }
+    await saveExecutionItem(pool, approval.id, adsetItemKey, payloadHash, {
+      state: 'succeeded', externalId: adset.id, externalStatus: adset.effective_status || adset.status || 'PAUSED',
+    });
+
+    let ad = adsByName.get(item.ad_name);
+    const savedAd = await findExecutionItem(pool, approval.id, adItemKey);
+    if (!ad && savedAd?.external_id) {
+      ad = await graphRequest(savedAd.external_id, token, { fields: 'id,name,status,effective_status,adset_id' });
+    }
+    if (!ad) {
+      await saveExecutionItem(pool, approval.id, adItemKey, payloadHash, { state: 'creating' });
+      try {
+        const created = await graphPost(`${row.selected_ad_account_id}/ads`, token, {
+          name: item.ad_name,
+          adset_id: adset.id,
+          status: 'PAUSED',
+          creative: JSON.stringify({ object_story_spec: buildCarouselStorySpec(item, row.selected_page_id, row.selected_instagram_account_id, whatsapp) }),
+        });
+        ad = await graphRequest(created.id, token, { fields: 'id,name,status,effective_status,adset_id' });
+      } catch (error) {
+        await saveExecutionItem(pool, approval.id, adItemKey, payloadHash, { state: error.metaCode ? 'failed' : 'ambiguous', lastError: formatMetaExecutionError(error) });
+        throw error;
+      }
+    }
+    if (!ad?.id || ad.name !== item.ad_name || String(ad.adset_id) !== String(adset.id)
+      || !String(ad.effective_status || ad.status).includes('PAUSED')) {
+      throw new Error(`Meta did not confirm paused ad ${item.item_key}`);
+    }
+    await saveExecutionItem(pool, approval.id, adItemKey, payloadHash, {
+      state: 'succeeded', externalId: ad.id, externalStatus: ad.effective_status || ad.status || 'PAUSED',
+    });
+    results.push({
+      itemKey: item.item_key,
+      campaignId: campaign.id,
+      adsetId: adset.id,
+      adId: ad.id,
+      status: ad.effective_status || ad.status || 'PAUSED',
+      metaReview: 'AUTOMATIC_AFTER_AD_CREATION',
+    });
+  }
+  return { operation: payload.operation, campaigns: results, financialImpact: 0, delivery: 'PAUSED' };
+}
+
 async function runNextMetaApproval(pool) {
   const connection = await pool.getConnection();
   let approval = null;
@@ -642,9 +940,9 @@ async function runNextMetaApproval(pool) {
     await connection.beginTransaction();
     const [rows] = await connection.query(
       `SELECT * FROM marketing_approval_requests
-       WHERE status='approved' AND execution_mode='vps_meta_api' AND action_type=?
+       WHERE status='approved' AND execution_mode='vps_meta_api' AND action_type IN (?, ?)
        ORDER BY approved_at ASC, created_at ASC LIMIT 1 FOR UPDATE`,
-      [META_CAMPAIGN_SHELL_ACTION],
+      [META_CAMPAIGN_SHELL_ACTION, META_PAUSED_AD_BUNDLE_ACTION],
     );
     approval = rows?.[0] || null;
     if (!approval) { await connection.rollback(); return null; }
@@ -667,7 +965,9 @@ async function runNextMetaApproval(pool) {
     throw error;
   } finally { connection.release(); }
   try {
-    const result = await executePausedCampaignBundle(pool, approval);
+    const result = approval.action_type === META_PAUSED_AD_BUNDLE_ACTION
+      ? await executePausedWhatsappAdBundle(pool, approval)
+      : await executePausedCampaignBundle(pool, approval);
     await markApprovalExecution(pool, approval.id, true, result);
     return result;
   } catch (error) {
@@ -892,7 +1192,7 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
     const config = marketingConfig();
     const row = await connectionRow(pool);
     const scopes = jsonParse(row?.granted_scopes, []);
-    if (!config.ready || !row || row.status !== 'connected') return reply.code(409).send({ error: 'Meta is not connected' });
+    if (!config.ready || !row || row.status !== 'connected') return reply.code(409).send({ error: 'A Meta não está conectada. Conecte a conta antes de preparar os anúncios.' });
     if (!row.selected_ad_account_id || !row.selected_page_id || !row.selected_instagram_account_id) {
       return reply.code(409).send({ error: 'Select Meta assets before preparing campaigns' });
     }
@@ -1123,6 +1423,232 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
       financial_impact: 0,
     });
     return reply.code(201).send({ ok: true, approval: parseApproval(await findApproval(pool, id)), reused: false });
+  });
+
+  fastify.post('/admin/marketing/meta/paused-ad-bundle-approvals', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+    const config = marketingConfig();
+    const row = await connectionRow(pool);
+    const scopes = jsonParse(row?.granted_scopes, []);
+    if (!config.ready || !row || row.status !== 'connected') return reply.code(409).send({ error: 'A Meta não está conectada. Conecte a conta antes de preparar os anúncios.' });
+    if (!row.selected_ad_account_id || !row.selected_page_id || !row.selected_instagram_account_id) {
+      return reply.code(409).send({ error: 'Selecione a conta de anúncios, a Página e o Instagram antes de preparar os anúncios.' });
+    }
+    if (!scopes.includes('ads_management')) return reply.code(409).send({ error: 'A permissão ads_management da Meta está ausente.' });
+
+    const [preferenceRows] = await pool.query(
+      "SELECT value_json FROM admin_preferences WHERE preference_key='marketing.instagram.campaign_portfolio' LIMIT 1",
+    );
+    const portfolio = jsonParse(preferenceRows?.[0]?.value_json, null);
+    const configured = Array.isArray(portfolio?.campaigns) ? portfolio.campaigns : [];
+    const configuredById = new Map(configured.map((item) => [item.id, item]));
+    const budgets = META_CAMPAIGN_SHELLS.map((shell) => {
+      const item = configuredById.get(shell.itemKey);
+      const amount = Number(item?.authorizedAmount || 0);
+      const days = Math.max(1, Math.min(90, Number(item?.durationDays || 0)));
+      const budgetType = item?.budgetType === 'lifetime' ? 'lifetime' : 'daily';
+      const periodLimit = budgetType === 'lifetime' ? amount : amount * days;
+      if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(periodLimit) || periodLimit <= 0) return null;
+      return { itemKey: shell.itemKey, budgetType, authorizedAmount: amount, durationDays: days, periodLimit };
+    });
+    if (budgets.some((item) => !item)) return reply.code(409).send({ error: 'Defina primeiro o orçamento das duas campanhas.' });
+    const monthlyCeiling = budgets.reduce((sum, item) => sum + item.periodLimit, 0);
+    if (monthlyCeiling > META_AUTHORIZED_MONTHLY_CEILING_BRL + 0.001) {
+      return reply.code(409).send({ error: 'As campanhas configuradas ultrapassam o limite mensal autorizado de R$ 1.000.' });
+    }
+
+    const [creativeRows] = await pool.query(
+      `SELECT * FROM marketing_approval_requests
+       WHERE action_type=? AND status IN ('approved','succeeded')
+       ORDER BY approved_at DESC, created_at DESC LIMIT 20`,
+      [META_CREATIVE_PLAN_ACTION],
+    );
+    const creativeByCampaign = new Map();
+    const creativeApprovalByCampaign = new Map();
+    for (const raw of creativeRows) {
+      const approval = parseApproval(raw);
+      const campaign = Array.isArray(approval?.proposed_state?.campaigns) ? approval.proposed_state.campaigns[0] : null;
+      if (campaign?.itemKey && !creativeByCampaign.has(campaign.itemKey)) {
+        creativeByCampaign.set(campaign.itemKey, campaign);
+        creativeApprovalByCampaign.set(campaign.itemKey, approval.id);
+      }
+    }
+    const missingCreativeApprovals = META_CAMPAIGN_SHELLS.filter((shell) => !creativeByCampaign.has(shell.itemKey));
+    if (missingCreativeApprovals.length) {
+      return reply.code(409).send({
+        error: `Aprove primeiro os criativos de: ${missingCreativeApprovals.map((item) => item.itemKey === 'smartphones' ? 'Smartphones' : 'Loja inteira').join(' e ')}.`,
+      });
+    }
+
+    const [[companySettings]] = await pool.query('SELECT phone FROM company_settings LIMIT 1');
+    const officialWhatsapp = digits(companySettings?.phone);
+    if (officialWhatsapp.length < 12 || officialWhatsapp.length > 15) {
+      return reply.code(409).send({ error: 'O WhatsApp oficial cadastrado para a loja é inválido.' });
+    }
+    const token = decryptToken(row, config.encryptionKey);
+    const [petrolina, juazeiro] = await Promise.all([
+      resolveApprovedCity(token, 'Petrolina', 'Pernambuco'),
+      resolveApprovedCity(token, 'Juazeiro', 'Bahia'),
+    ]);
+    const geoCities = [petrolina, juazeiro];
+    const monthKey = new Date().toISOString().slice(0, 7).replace('-', '');
+    const campaigns = META_CAMPAIGN_SHELLS.map((shell) => {
+      const budget = budgets.find((item) => item.itemKey === shell.itemKey);
+      const creative = creativeByCampaign.get(shell.itemKey);
+      const cards = (creative.cards || []).slice(0, 10).map((card) => ({
+        product_id: text(card.productId, 80),
+        sku: text(card.sku, 80),
+        name: text(card.name, 255),
+        price_cents: Math.max(0, Number(card.priceCents || 0)),
+        stock: Math.max(0, Number(card.stock || 0)),
+        image_url: /^https:\/\//i.test(String(card.imageUrl || '')) ? text(card.imageUrl, 2000) : '',
+        headline: text(card.headline, 255),
+        whatsapp_message: text(card.whatsappMessage, 500),
+      }));
+      const creativeHash = sha256(JSON.stringify(cards)).slice(0, 8);
+      const shortName = shell.itemKey === 'smartphones' ? 'Smartphones' : 'Loja inteira';
+      return {
+        item_key: shell.itemKey,
+        campaign_name: shell.name,
+        adset_name: `Petrolina + Juazeiro | Moradores | Instagram | WhatsApp | ${budget.budgetType}-${currencyCents(budget.authorizedAmount)}`,
+        ad_name: `Carrossel | ${shortName} | ${creativeHash}`,
+        status: 'PAUSED',
+        destination: 'WHATSAPP',
+        publisher_platform: 'instagram',
+        location_type: 'home',
+        geo_cities: geoCities,
+        budget_type: budget.budgetType,
+        authorized_amount_brl: budget.authorizedAmount,
+        duration_days: budget.durationDays,
+        period_limit_brl: budget.periodLimit,
+        optimization_goal: 'CONVERSATIONS',
+        tracking_code: shell.itemKey === 'smartphones' ? `IG-MDV-SMART-${monthKey}` : `IG-MDV-LOJA-${monthKey}`,
+        primary_text: shell.itemKey === 'smartphones'
+          ? 'Escolha seu próximo smartphone e fale agora com o Mercado do Vale pelo WhatsApp. Modelo, preço e atendimento rápido em poucos toques.'
+          : 'Produtos selecionados do Mercado do Vale com preço claro e atendimento rápido. Escolha um item do carrossel e fale conosco pelo WhatsApp.',
+        headline: shell.itemKey === 'smartphones' ? 'Seu próximo smartphone está aqui' : 'Escolha fácil, compra rápida',
+        cards,
+      };
+    });
+    if (campaigns.some((campaign) => campaign.cards.length < 2
+      || campaign.cards.some((card) => !card.product_id || !card.sku || !card.image_url || !card.price_cents || !card.stock))) {
+      return reply.code(409).send({ error: 'Os criativos aprovados estão incompletos. Atualize a seleção e aprove-os novamente.' });
+    }
+    for (const campaign of campaigns) await revalidateApprovedProducts(pool, campaign);
+
+    const executionPayload = {
+      schema_version: 1,
+      operation: 'meta.create_paused_whatsapp_ad_bundle',
+      connection_snapshot: {
+        connection_id: 1,
+        ad_account_id: row.selected_ad_account_id,
+        page_id: row.selected_page_id,
+        instagram_account_id: row.selected_instagram_account_id,
+        graph_api_version: config.graphApiVersion,
+      },
+      official_whatsapp: officialWhatsapp,
+      campaigns,
+    };
+    const idempotencyKey = `meta-paused-ads-v1:${sha256(JSON.stringify(executionPayload)).slice(0, 120)}`;
+    const [existingRows] = await pool.query(
+      'SELECT * FROM marketing_approval_requests WHERE idempotency_key=? LIMIT 1',
+      [idempotencyKey],
+    );
+    if (existingRows?.[0]) return { ok: true, approval: parseApproval(existingRows[0]), reused: true };
+
+    const id = crypto.randomUUID();
+    const auth = await getBearerAuthContext(req);
+    const proposedState = {
+      campaigns: campaigns.map((campaign) => ({
+        itemKey: campaign.item_key,
+        name: campaign.campaign_name,
+        budgetType: campaign.budget_type,
+        authorizedAmount: campaign.authorized_amount_brl,
+        periodLimit: campaign.period_limit_brl,
+        durationDays: campaign.duration_days,
+        status: 'PAUSED',
+        destination: 'WhatsApp oficial da loja',
+        placements: 'Somente Instagram',
+        audience: 'Moradores de Petrolina-PE e Juazeiro-BA',
+        optimization: 'Conversas iniciadas no WhatsApp',
+        trackingCode: campaign.tracking_code,
+        cards: campaign.cards.map((card) => ({
+          productId: card.product_id,
+          sku: card.sku,
+          name: card.name,
+          priceCents: card.price_cents,
+          stock: card.stock,
+          imageUrl: card.image_url,
+          headline: card.headline,
+          whatsappMessage: `${card.whatsapp_message} | Origem: ${campaign.tracking_code}`,
+        })),
+      })),
+      externalCreation: {
+        status: 'PAUSED',
+        campaignsCreated: true,
+        adSetsCreated: true,
+        adsCreated: true,
+        metaReviewStartsAutomatically: true,
+        deliveryStarts: false,
+      },
+      officialWhatsapp,
+      locations: ['Petrolina-PE', 'Juazeiro-BA'],
+      followerBaseline: 'Registrado automaticamente quando cada campanha ficar ativa',
+    };
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(
+        `INSERT INTO marketing_approval_requests
+          (id,channel,action_type,title,target_type,target_name,execution_mode,current_state,proposed_state,
+           evidence,financial_impact,success_criteria,rollback_plan,execution_payload,requested_by,requested_by_label,
+           idempotency_key,approval_expires_at)
+         VALUES (?, 'instagram', ?, ?, 'meta_ad_bundle', ?, 'vps_meta_api', ?, ?, ?, ?, ?, ?, ?,
+                 'marketing-agent', 'Agente especialista de campanhas', ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
+        [
+          id,
+          META_PAUSED_AD_BUNDLE_ACTION,
+          'Preparar dois anúncios completos e pausados para análise da Meta',
+          META_CAMPAIGN_SHELLS.map((item) => item.name).join(' + '),
+          jsonValue({
+            activeCampaigns: row.last_audit ? jsonParse(row.last_audit, {})?.campaignSummary?.active || 0 : null,
+            approvedCreativeRequests: Object.fromEntries(creativeApprovalByCampaign),
+          }),
+          jsonValue(proposedState),
+          jsonValue({
+            source: 'Criativos aprovados, estoque e preços revalidados, Meta conectada e WhatsApp oficial cadastrado',
+            requestedByAdmin: auth.userId || auth.customerId || null,
+          }),
+          jsonValue({
+            currency: 'BRL',
+            immediateMaximum: 0,
+            authorizedMonthlyCeiling: META_AUTHORIZED_MONTHLY_CEILING_BRL,
+            configuredMaximum: monthlyCeiling,
+            reason: 'Campanhas, conjuntos e anúncios serão criados pausados. O orçamento só poderá ser consumido depois de uma aprovação separada para ativar.',
+          }),
+          jsonValue({
+            required: 'Duas campanhas, dois conjuntos e dois anúncios confirmados como pausados; WhatsApp e cidades corretos; análise automática da Meta iniciada; gasto zero.',
+          }),
+          'Os anúncios continuarão pausados. Se algo estiver incorreto, uma nova aprovação poderá ajustar ou arquivar os rascunhos sem ativá-los.',
+          jsonValue(executionPayload),
+          idempotencyKey,
+        ],
+      );
+      await approvalEvent(connection, id, 'requested', { id: 'marketing-agent', label: 'Agente especialista de campanhas' }, {
+        action_type: META_PAUSED_AD_BUNDLE_ACTION,
+        execution_mode: 'vps_meta_api',
+        financial_impact: 0,
+        configured_monthly_ceiling: monthlyCeiling,
+      });
+      await connection.commit();
+      return reply.code(201).send({ ok: true, approval: parseApproval(await findApproval(pool, id)), reused: false });
+    } catch (error) {
+      await connection.rollback();
+      if (error?.code === 'ER_DUP_ENTRY') {
+        const [rows] = await pool.query('SELECT * FROM marketing_approval_requests WHERE idempotency_key=? LIMIT 1', [idempotencyKey]);
+        if (rows?.[0]) return { ok: true, approval: parseApproval(rows[0]), reused: true };
+      }
+      throw error;
+    } finally { connection.release(); }
   });
 
   fastify.post('/admin/marketing/meta/oauth/start', { preHandler: requireAdminBearerToken }, async (req, reply) => {
