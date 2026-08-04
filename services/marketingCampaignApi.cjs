@@ -1549,7 +1549,9 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
       official_whatsapp: officialWhatsapp,
       campaigns,
     };
-    const idempotencyKey = `meta-paused-ads-v1:${sha256(JSON.stringify(executionPayload)).slice(0, 120)}`;
+    // A corrected executor must be able to request a new human approval after an older
+    // execution with the same approved payload has failed.
+    const idempotencyKey = `meta-paused-ads-v2:${sha256(JSON.stringify(executionPayload)).slice(0, 120)}`;
     const [existingRows] = await pool.query(
       'SELECT * FROM marketing_approval_requests WHERE idempotency_key=? LIMIT 1',
       [idempotencyKey],

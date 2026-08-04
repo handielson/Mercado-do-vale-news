@@ -19,6 +19,8 @@ assert.match(api, /optimization_goal: 'CONVERSATIONS'/);
 assert.match(api, /event_type: 'CLICK_THROUGH', window_days: 1/);
 assert.match(api, /event_type: 'VIEW_THROUGH', window_days: 0/);
 assert.doesNotMatch(api, /event_type: 'CLICK_THROUGH', window_days: 7/);
+assert.match(api, /meta-paused-ads-v2:/);
+assert.doesNotMatch(api, /meta-paused-ads-v1:/);
 assert.match(api, /end_time: isoWithoutMilliseconds\(addDays\(start, item\.duration_days\)\)/);
 assert.match(api, /call_to_action: \{ type: 'WHATSAPP_MESSAGE'/);
 assert.match(api, /status: 'PAUSED'/);

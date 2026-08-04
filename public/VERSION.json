@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.168-meta-attribution-window",
+  "version": "v1.2.169-meta-approval-retry",
   "date": "2026-08-04",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-193435-meta-attribution-window",
+  "release_vps": "/var/www/mdv-site/releases/20260804-205148-meta-approval-retry",
   "branch": "main",
-  "summary": "Usa a janela de atribuição aceita pela Meta para preparar anúncios de conversa no WhatsApp."
+  "summary": "Permite uma nova solicitação de preparação após uma execução anterior falhar."
 }
