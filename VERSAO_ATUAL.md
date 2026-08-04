@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.169-meta-approval-retry
+version: v1.2.170-meta-execution-debug
 date: 2026-08-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-205148-meta-approval-retry
+release_vps: /var/www/mdv-site/releases/20260804-210000-v12170-meta-execution-debug
 branch: main
-summary: Permite uma nova solicitação de preparação após uma execução anterior falhar.
+summary: Registra diagnóstico seguro e detalhado para falhas na preparação de anúncios Meta.
 ```

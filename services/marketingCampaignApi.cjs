@@ -496,6 +496,7 @@ async function graphRequest(pathname, token, params = {}) {
     error.metaSubcode = meta.error_subcode;
     error.metaUserTitle = meta.error_user_title;
     error.metaUserMessage = meta.error_user_msg;
+    error.metaTraceId = meta.fbtrace_id;
     throw error;
   }
   return data;
@@ -525,6 +526,7 @@ async function graphPost(pathname, token, params = {}) {
     error.metaSubcode = meta.error_subcode;
     error.metaUserTitle = meta.error_user_title;
     error.metaUserMessage = meta.error_user_msg;
+    error.metaTraceId = meta.fbtrace_id;
     throw error;
   }
   return data;
@@ -546,10 +548,21 @@ function campaignShellPayloadHash(item, accountId) {
 
 function formatMetaExecutionError(error) {
   return [
+    error?.executionStage ? `Etapa ${text(error.executionStage, 160)}` : null,
+    error?.executionTarget ? `Alvo ${text(error.executionTarget, 255)}` : null,
     text(error?.message, 8000) || 'Meta execution failed',
+    error?.statusCode ? `HTTP ${error.statusCode}` : null,
     error?.metaCode ? `Meta code ${error.metaCode}` : null,
     error?.metaSubcode ? `subcode ${error.metaSubcode}` : null,
+    error?.metaUserTitle ? `Meta: ${text(error.metaUserTitle, 500)}` : null,
+    error?.metaTraceId ? `trace ${text(error.metaTraceId, 160)}` : null,
   ].filter(Boolean).join(' · ');
+}
+
+function tagMetaExecutionError(error, stage, target) {
+  error.executionStage = stage;
+  error.executionTarget = target;
+  return error;
 }
 
 function pausedAdBundlePayloadHash(item, accountId) {
@@ -836,8 +849,9 @@ async function executePausedWhatsappAdBundle(pool, approval) {
         });
         campaign = await graphRequest(created.id, token, { fields: 'id,name,status,effective_status,objective' });
       } catch (error) {
-        await saveExecutionItem(pool, approval.id, campaignItemKey, payloadHash, { state: error.metaCode ? 'failed' : 'ambiguous', lastError: formatMetaExecutionError(error) });
-        throw error;
+        const diagnostic = tagMetaExecutionError(error, 'criar campanha pausada', item.campaign_name);
+        await saveExecutionItem(pool, approval.id, campaignItemKey, payloadHash, { state: diagnostic.metaCode ? 'failed' : 'ambiguous', lastError: formatMetaExecutionError(diagnostic) });
+        throw diagnostic;
       }
     }
     if (!campaign?.id || campaign.name !== item.campaign_name || !String(campaign.effective_status || campaign.status).includes('PAUSED')) {
@@ -883,8 +897,9 @@ async function executePausedWhatsappAdBundle(pool, approval) {
         });
         adset = await graphRequest(created.id, token, { fields: 'id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget' });
       } catch (error) {
-        await saveExecutionItem(pool, approval.id, adsetItemKey, payloadHash, { state: error.metaCode ? 'failed' : 'ambiguous', lastError: formatMetaExecutionError(error) });
-        throw error;
+        const diagnostic = tagMetaExecutionError(error, 'criar conjunto pausado', item.adset_name);
+        await saveExecutionItem(pool, approval.id, adsetItemKey, payloadHash, { state: diagnostic.metaCode ? 'failed' : 'ambiguous', lastError: formatMetaExecutionError(diagnostic) });
+        throw diagnostic;
       }
     }
     if (!adset?.id || adset.name !== item.adset_name || String(adset.campaign_id) !== String(campaign.id)
@@ -911,8 +926,9 @@ async function executePausedWhatsappAdBundle(pool, approval) {
         });
         ad = await graphRequest(created.id, token, { fields: 'id,name,status,effective_status,adset_id' });
       } catch (error) {
-        await saveExecutionItem(pool, approval.id, adItemKey, payloadHash, { state: error.metaCode ? 'failed' : 'ambiguous', lastError: formatMetaExecutionError(error) });
-        throw error;
+        const diagnostic = tagMetaExecutionError(error, 'criar anúncio pausado', item.ad_name);
+        await saveExecutionItem(pool, approval.id, adItemKey, payloadHash, { state: diagnostic.metaCode ? 'failed' : 'ambiguous', lastError: formatMetaExecutionError(diagnostic) });
+        throw diagnostic;
       }
     }
     if (!ad?.id || ad.name !== item.ad_name || String(ad.adset_id) !== String(adset.id)
