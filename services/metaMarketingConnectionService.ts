@@ -64,6 +64,8 @@ export interface MetaAdAccountCampaignAudit {
         name: string;
         status?: string;
         effective_status?: string;
+        deliveryStatus: 'ACTIVE' | 'NOT_DELIVERING';
+        activeAdCount: number;
         managerUrl: string;
     }>;
 }

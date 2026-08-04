@@ -608,12 +608,24 @@ function campaignManagerUrl(adAccountId, campaignId) {
 async function readAllAdAccountCampaigns(row, token) {
   const accounts = jsonParse(row?.available_ad_accounts, []);
   return Promise.all(accounts.map(async (account) => {
-    const response = await graphRequest(`${account.id}/campaigns`, token, {
-      fields: 'id,name,status,effective_status,objective,daily_budget,lifetime_budget,created_time,updated_time',
-      limit: 100,
-    });
-    const campaigns = (response?.data || []).map((campaign) => ({
+    const [campaignResponse, adResponse] = await Promise.all([
+      graphRequest(`${account.id}/campaigns`, token, {
+        fields: 'id,name,status,effective_status,objective,daily_budget,lifetime_budget,created_time,updated_time',
+        limit: 100,
+      }),
+      graphRequest(`${account.id}/ads`, token, {
+        fields: 'id,name,status,effective_status,campaign_id,adset_id',
+        limit: 500,
+      }),
+    ]);
+    const ads = adResponse?.data || [];
+    const activeCampaignIds = new Set(
+      ads.filter((ad) => ad.effective_status === 'ACTIVE').map((ad) => String(ad.campaign_id)),
+    );
+    const campaigns = (campaignResponse?.data || []).map((campaign) => ({
       ...campaign,
+      deliveryStatus: activeCampaignIds.has(String(campaign.id)) ? 'ACTIVE' : 'NOT_DELIVERING',
+      activeAdCount: ads.filter((ad) => ad.effective_status === 'ACTIVE' && String(ad.campaign_id) === String(campaign.id)).length,
       managerUrl: campaignManagerUrl(account.id, campaign.id),
     }));
     return {
@@ -625,7 +637,7 @@ async function readAllAdAccountCampaigns(row, token) {
       },
       campaignSummary: {
         total: campaigns.length,
-        active: campaigns.filter((campaign) => campaign.effective_status === 'ACTIVE').length,
+        active: campaigns.filter((campaign) => campaign.deliveryStatus === 'ACTIVE').length,
         paused: campaigns.filter((campaign) => campaign.effective_status === 'PAUSED').length,
       },
       campaigns,
@@ -637,7 +649,7 @@ function activeCampaignsOutsideTargets(accountAudits, targetCampaignIds) {
   const targets = new Set((targetCampaignIds || []).map(String));
   return (accountAudits || []).flatMap((accountAudit) => (
     (accountAudit.campaigns || [])
-      .filter((campaign) => campaign.effective_status === 'ACTIVE' && !targets.has(String(campaign.id)))
+      .filter((campaign) => campaign.deliveryStatus === 'ACTIVE' && !targets.has(String(campaign.id)))
       .map((campaign) => ({ ...campaign, account: accountAudit.account }))
   ));
 }

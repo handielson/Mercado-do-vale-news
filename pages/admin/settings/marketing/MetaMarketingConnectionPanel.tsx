@@ -111,7 +111,7 @@ export default function MetaMarketingConnectionPanel() {
     const managedCampaignIds = new Set(reviews.map((item) => item.campaignId));
     const activeOutsidePortfolio = (connection.lastAudit?.accountAudits || []).flatMap((accountAudit) => (
         accountAudit.campaigns
-            .filter((campaign) => campaign.effective_status === 'ACTIVE' && !managedCampaignIds.has(campaign.id))
+            .filter((campaign) => campaign.deliveryStatus === 'ACTIVE' && !managedCampaignIds.has(campaign.id))
             .map((campaign) => ({ ...campaign, account: accountAudit.account }))
     ));
 
