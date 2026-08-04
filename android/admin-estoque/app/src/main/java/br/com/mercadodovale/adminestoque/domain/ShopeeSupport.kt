@@ -44,8 +44,8 @@ data class ShopeeProductReview(
 }
 
 data class ShopeeConversation(
-    val conversationId: Long,
-    val buyerId: Long,
+    val conversationId: String,
+    val buyerId: String,
     val buyerName: String,
     val lastMessage: String,
     val unreadCount: Int,
@@ -60,8 +60,8 @@ data class ShopeeConversation(
                     val row = rows.optJSONObject(index) ?: continue
                     add(
                         ShopeeConversation(
-                            conversationId = row.optLong("conversation_id"),
-                            buyerId = row.optLong("buyer_id"),
+                            conversationId = row.optString("conversation_id"),
+                            buyerId = row.optString("buyer_id"),
                             buyerName = row.optString("buyer_name", "Comprador Shopee"),
                             lastMessage = row.optString("last_message"),
                             unreadCount = row.optInt("unread_count").coerceAtLeast(0),

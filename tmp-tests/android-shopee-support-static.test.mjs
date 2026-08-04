@@ -18,6 +18,8 @@ for (const server of servers) {
   assert.match(server, /comment_list: \[\{ comment_id: safeId, comment: safeComment \}\]/);
   assert.match(server, /message_type: 'text'/);
   assert.match(server, /while \(milliseconds > 8_640_000_000_000_000\) milliseconds \/= 1000/);
+  assert.match(server, /conversation_id: String\(row\?\.conversation_id \|\| ''\)/);
+  assert.match(server, /if \(!\/\^\\d\{1,32\}\$\/\.test\(safeConversationId\)\)/);
 }
 
 assert.match(main, /Atendimento Shopee/);

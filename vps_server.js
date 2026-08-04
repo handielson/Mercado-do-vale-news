@@ -6742,21 +6742,21 @@ async function loadMobileShopeeConversationsVps(pageSize = 50, nextTimestamp = '
   const rows = Array.isArray(response.conversations) ? response.conversations : [];
   return {
     conversations: rows.map((row) => ({
-      conversation_id: Number(row?.conversation_id) || 0,
-      buyer_id: Number(row?.to_id ?? row?.buyer_id ?? row?.user_id) || 0,
+      conversation_id: String(row?.conversation_id || ''),
+      buyer_id: String(row?.to_id ?? row?.buyer_id ?? row?.user_id ?? ''),
       buyer_name: String(row?.to_name || row?.buyer_name || row?.user_name || 'Comprador Shopee'),
       last_message: shopeeSupportTextVps(row?.latest_message_content ?? row?.last_message ?? row?.latest_message),
       unread_count: Math.max(0, Number(row?.unread_count) || 0),
       updated_at: shopeeSupportIsoVps(row?.last_message_timestamp || row?.latest_message_timestamp || row?.update_time),
-    })).filter((row) => row.conversation_id > 0),
+    })).filter((row) => row.conversation_id),
     more: Boolean(response.more),
     next_timestamp: String(response.next_timestamp || ''),
   };
 }
 
 async function loadMobileShopeeMessagesVps(conversationId, pageSize = 50, offset = 0) {
-  const safeConversationId = Number(conversationId);
-  if (!Number.isSafeInteger(safeConversationId) || safeConversationId <= 0) throw new Error('Conversa invalida.');
+  const safeConversationId = String(conversationId || '').trim();
+  if (!/^\d{1,32}$/.test(safeConversationId)) throw new Error('Conversa invalida.');
   const creds = await getShopeeCatalogCredentialsVps();
   const result = await shopeeCatalogGetVps('/api/v2/sellerchat/get_message', creds, encodeShopeeCatalogParamsVps({
     conversation_id: safeConversationId,
@@ -6777,9 +6777,9 @@ async function loadMobileShopeeMessagesVps(conversationId, pageSize = 50, offset
 }
 
 async function sendMobileShopeeMessageVps(buyerId, text) {
-  const safeBuyerId = Number(buyerId);
+  const safeBuyerId = String(buyerId || '').trim();
   const safeText = String(text || '').trim();
-  if (!Number.isSafeInteger(safeBuyerId) || safeBuyerId <= 0) throw new Error('Comprador invalido.');
+  if (!/^\d{1,32}$/.test(safeBuyerId)) throw new Error('Comprador invalido.');
   if (!safeText) throw new Error('Digite a mensagem.');
   if (safeText.length > 600) throw new Error('A mensagem pode ter no maximo 600 caracteres.');
   const creds = await getShopeeCatalogCredentialsVps();

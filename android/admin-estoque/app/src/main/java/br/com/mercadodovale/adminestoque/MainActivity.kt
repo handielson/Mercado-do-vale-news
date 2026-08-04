@@ -90,8 +90,8 @@ class MainActivity : Activity() {
     private var currentSalesChannel: SalesChannel? = null
     private var currentSaleId: String? = null
     private var currentSalesFilter: SaleStatusGroup = SaleStatusGroup.TO_SHIP
-    private var currentShopeeConversationId: Long = 0
-    private var currentShopeeBuyerId: Long = 0
+    private var currentShopeeConversationId: String = ""
+    private var currentShopeeBuyerId: String = ""
     private var currentShopeeBuyerName: String = ""
     private var currentCustomLabelText: String = ""
     private var currentCustomLabelFontPercent: Int = 90
@@ -164,8 +164,8 @@ class MainActivity : Activity() {
             ?.getString(STATE_SALES_FILTER)
             ?.let { value -> SaleStatusGroup.entries.firstOrNull { it.name == value } }
             ?: SaleStatusGroup.TO_SHIP
-        currentShopeeConversationId = savedInstanceState?.getLong(STATE_SHOPEE_CONVERSATION_ID) ?: 0
-        currentShopeeBuyerId = savedInstanceState?.getLong(STATE_SHOPEE_BUYER_ID) ?: 0
+        currentShopeeConversationId = savedInstanceState?.getString(STATE_SHOPEE_CONVERSATION_ID).orEmpty()
+        currentShopeeBuyerId = savedInstanceState?.getString(STATE_SHOPEE_BUYER_ID).orEmpty()
         currentShopeeBuyerName = savedInstanceState?.getString(STATE_SHOPEE_BUYER_NAME).orEmpty()
         currentCustomLabelText = savedInstanceState?.getString(STATE_CUSTOM_LABEL_TEXT).orEmpty()
         currentCustomLabelFontPercent = savedInstanceState
@@ -191,7 +191,7 @@ class MainActivity : Activity() {
                 SCREEN_SALES_SOUND -> showSalesSoundSettings()
                 SCREEN_SHOPEE_REVIEWS -> showShopeeProductReviews()
                 SCREEN_SHOPEE_CONVERSATION -> {
-                    if (currentShopeeConversationId > 0 && currentShopeeBuyerId > 0) {
+                    if (currentShopeeConversationId.isNotBlank() && currentShopeeBuyerId.isNotBlank()) {
                         showShopeeConversation(
                             currentShopeeConversationId,
                             currentShopeeBuyerId,
@@ -238,8 +238,8 @@ class MainActivity : Activity() {
         outState.putString(STATE_SALES_CHANNEL, currentSalesChannel?.apiKey)
         outState.putString(STATE_SALE_ID, currentSaleId)
         outState.putString(STATE_SALES_FILTER, currentSalesFilter.name)
-        outState.putLong(STATE_SHOPEE_CONVERSATION_ID, currentShopeeConversationId)
-        outState.putLong(STATE_SHOPEE_BUYER_ID, currentShopeeBuyerId)
+        outState.putString(STATE_SHOPEE_CONVERSATION_ID, currentShopeeConversationId)
+        outState.putString(STATE_SHOPEE_BUYER_ID, currentShopeeBuyerId)
         outState.putString(STATE_SHOPEE_BUYER_NAME, currentShopeeBuyerName)
         outState.putString(STATE_CUSTOM_LABEL_TEXT, currentCustomLabelText)
         outState.putInt(STATE_CUSTOM_LABEL_FONT_PERCENT, currentCustomLabelFontPercent)
@@ -466,8 +466,8 @@ class MainActivity : Activity() {
 
     private fun showShopeeSupport() {
         currentScreen = SCREEN_SHOPEE_SUPPORT
-        currentShopeeConversationId = 0
-        currentShopeeBuyerId = 0
+        currentShopeeConversationId = ""
+        currentShopeeBuyerId = ""
         currentShopeeBuyerName = ""
         val root = screen()
         root.addView(back("Atendimento Shopee") { showSalesOverview() })
@@ -577,8 +577,8 @@ class MainActivity : Activity() {
 
     private fun showShopeeConversations() {
         currentScreen = SCREEN_SHOPEE_CONVERSATIONS
-        currentShopeeConversationId = 0
-        currentShopeeBuyerId = 0
+        currentShopeeConversationId = ""
+        currentShopeeBuyerId = ""
         currentShopeeBuyerName = ""
         val root = screen()
         root.addView(back("Conversas Shopee") { showShopeeSupport() })
@@ -631,7 +631,7 @@ class MainActivity : Activity() {
         ).apply { bottomMargin = dp(12) }
     }
 
-    private fun showShopeeConversation(conversationId: Long, buyerId: Long, buyerName: String) {
+    private fun showShopeeConversation(conversationId: String, buyerId: String, buyerName: String) {
         currentScreen = SCREEN_SHOPEE_CONVERSATION
         currentShopeeConversationId = conversationId
         currentShopeeBuyerId = buyerId
