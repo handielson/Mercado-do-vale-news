@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.166-preparar-anuncios-meta
+version: v1.2.167-approval-modal-fullscreen
 date: 2026-08-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-190300-v12166-preparar-anuncios-meta
+release_vps: /var/www/mdv-site/releases/20260804-162200-v12167-approval-modal-fullscreen
 branch: main
-summary: Prepara duas campanhas, conjuntos e anúncios de carrossel para WhatsApp, sempre pausados, com teto mensal, rastreamento e aprovação final no Gestão MV.
+summary: Exibe a confirmação de aprovação em tela cheia, com leitura e rolagem adequadas.
 ```

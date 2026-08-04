@@ -454,16 +454,16 @@ export default function MarketingApprovalCenterPanel() {
             )}
 
             {decisionTarget && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-                        <div className={`border-b p-5 ${decision === 'approve' ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
+                <div className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm">
+                    <div role="dialog" aria-modal="true" aria-labelledby="marketing-approval-dialog-title" className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-white shadow-2xl">
+                        <div className={`shrink-0 border-b p-5 sm:px-8 ${decision === 'approve' ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
                             <p className={`text-xs font-black uppercase tracking-[0.18em] ${decision === 'approve' ? 'text-emerald-600' : 'text-rose-600'}`}>{decision === 'approve' ? 'Confirmação final' : 'Bloquear execução'}</p>
-                            <h3 className="mt-1 text-xl font-black text-slate-900">{decisionTarget.title}</h3>
+                            <h3 id="marketing-approval-dialog-title" className="mt-1 text-xl font-black text-slate-900">{decisionTarget.title}</h3>
                             <p className="mt-1 text-sm text-slate-600">{decisionTarget.target_name || decisionTarget.target_id || 'Alvo a confirmar'}</p>
                         </div>
-                        <div className="max-h-[65vh] space-y-4 overflow-y-auto p-5">
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-5 sm:p-8">
                             <PlainLanguageSummary request={decisionTarget} />
-                            <div className="grid gap-4 md:grid-cols-2">
+                            <div className="grid gap-4 xl:grid-cols-2">
                                 <section className="rounded-xl border border-slate-200 p-4"><p className="mb-3 text-xs font-black uppercase tracking-wide text-slate-400">Antes</p><Snapshot value={decisionTarget.current_state} emptyLabel="Novo ativo." /></section>
                                 <section className="rounded-xl border border-blue-200 bg-blue-50/40 p-4"><p className="mb-3 text-xs font-black uppercase tracking-wide text-blue-500">Depois</p><Snapshot value={decisionTarget.proposed_state} emptyLabel="Sem dados." /></section>
                             </div>
@@ -471,7 +471,7 @@ export default function MarketingApprovalCenterPanel() {
                             <section className="rounded-xl border border-slate-200 p-4"><p className="text-xs font-black uppercase tracking-wide text-slate-400">Como desfazer</p><p className="mt-2 text-sm font-medium text-slate-700">{translateText(decisionTarget.rollback_plan)}</p></section>
                             <label className="block"><span className="text-sm font-bold text-slate-700">{decision === 'approve' ? 'Observação da aprovação (opcional)' : 'Motivo da rejeição'}</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500" placeholder={decision === 'approve' ? 'Ex.: aprovado somente dentro do teto exibido.' : 'Explique o que precisa ser corrigido.'} /></label>
                         </div>
-                        <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 p-4">
+                        <div className="flex shrink-0 justify-end gap-3 border-t border-slate-100 bg-slate-50 p-4 sm:px-8">
                             <button onClick={() => setDecisionTarget(null)} disabled={submitting} className="rounded-lg px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200">Cancelar</button>
                             <button onClick={submitDecision} disabled={submitting} className={`inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-black text-white disabled:opacity-50 ${decision === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>{submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : decision === 'approve' ? <ShieldCheck className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}{decision === 'approve' ? 'Confirmar aprovação' : 'Confirmar rejeição'}</button>
                         </div>
