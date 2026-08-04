@@ -35,7 +35,7 @@ function marketingConfig() {
   const encryptionKey = String(process.env.META_TOKEN_ENCRYPTION_KEY || '').trim();
   const scopes = String(process.env.META_OAUTH_SCOPES || [
     'ads_read', 'ads_management', 'business_management', 'pages_show_list',
-    'pages_read_engagement', 'instagram_basic',
+    'pages_read_engagement',
   ].join(',')).split(',').map((item) => item.trim()).filter(Boolean);
   return {
     graphApiVersion, appId, appSecret, redirectUri, encryptionKey, scopes,

@@ -1148,7 +1148,6 @@ function getMetaMarketingConfig() {
     'business_management',
     'pages_show_list',
     'pages_read_engagement',
-    'instagram_basic',
   ].join(','))
     .split(',')
     .map((value) => value.trim())
