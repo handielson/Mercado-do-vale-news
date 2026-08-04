@@ -4,7 +4,7 @@
 version: v1.2.166-preparar-anuncios-meta
 date: 2026-08-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-185633-preparar-anuncios-meta
+release_vps: /var/www/mdv-site/releases/20260804-190300-v12166-preparar-anuncios-meta
 branch: main
 summary: Prepara duas campanhas, conjuntos e anúncios de carrossel para WhatsApp, sempre pausados, com teto mensal, rastreamento e aprovação final no Gestão MV.
 ```
