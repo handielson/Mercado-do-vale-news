@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     BrainCircuit,
+    Clock3,
     CircleDollarSign,
     Lightbulb,
     Loader2,
@@ -9,6 +10,7 @@ import {
     Save,
     ShieldCheck,
     Images,
+    ExternalLink,
     RefreshCw,
     Target,
     Smartphone,
@@ -256,14 +258,17 @@ export default function MarketingCampaignAgentPanel() {
                             <CreativeCarouselPreview title="Loja inteira" cards={creativeSelection.storeCarousel} accent="indigo" />
                             <CreativeCarouselPreview title="Somente smartphones" cards={creativeSelection.smartphoneCarousel} accent="emerald" />
                         </div>
-                        <div className="flex flex-col gap-3 rounded-xl border border-violet-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-                            <p className="text-sm leading-6 text-slate-600"><strong className="text-slate-900">WhatsApp:</strong> usa o telefone principal cadastrado na loja. Cada campanha possui sua própria aprovação; aprovar os criativos não ativa anúncios nem gera cobrança.</p>
-                            <div className="flex flex-col gap-2 sm:flex-row">
-                                <button onClick={() => prepareCreativeApproval('store-carousel')} disabled={preparingCreativeApproval || !officialWhatsapp || creativeSelection.storeCarousel.length < 2} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-700 px-4 py-3 text-sm font-black text-white hover:bg-indigo-600 disabled:opacity-50">
-                                    {preparingCreativeApproval ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Aprovar loja inteira
+                        <div className="grid min-w-0 gap-4 rounded-xl border border-violet-200 bg-white p-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)] lg:items-end">
+                            <div className="min-w-0">
+                                <p className="text-xs font-black uppercase tracking-wide text-violet-700">Etapa 1 · Aprovação interna do Gestão MV</p>
+                                <p className="mt-1 text-sm leading-6 text-slate-600"><strong className="text-slate-900">WhatsApp:</strong> usa o telefone principal cadastrado na loja. Cada campanha possui sua própria aprovação interna; esta etapa confirma os criativos, mas não publica anúncios nem gera cobrança.</p>
+                            </div>
+                            <div className="grid w-full min-w-0 gap-2 sm:grid-cols-2">
+                                <button onClick={() => prepareCreativeApproval('store-carousel')} disabled={preparingCreativeApproval || !officialWhatsapp || creativeSelection.storeCarousel.length < 2} className="inline-flex min-w-0 items-center justify-center gap-2 rounded-xl bg-indigo-700 px-3 py-3 text-sm font-black text-white hover:bg-indigo-600 disabled:opacity-50">
+                                    {preparingCreativeApproval ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <ShieldCheck className="h-4 w-4 shrink-0" />} <span>Loja inteira</span>
                                 </button>
-                                <button onClick={() => prepareCreativeApproval('smartphones')} disabled={preparingCreativeApproval || !officialWhatsapp || creativeSelection.smartphoneCarousel.length < 2} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black text-white hover:bg-emerald-600 disabled:opacity-50">
-                                    {preparingCreativeApproval ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Aprovar smartphones
+                                <button onClick={() => prepareCreativeApproval('smartphones')} disabled={preparingCreativeApproval || !officialWhatsapp || creativeSelection.smartphoneCarousel.length < 2} className="inline-flex min-w-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-3 text-sm font-black text-white hover:bg-emerald-600 disabled:opacity-50">
+                                    {preparingCreativeApproval ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <ShieldCheck className="h-4 w-4 shrink-0" />} <span>Smartphones</span>
                                 </button>
                             </div>
                         </div>
@@ -272,6 +277,28 @@ export default function MarketingCampaignAgentPanel() {
                     <p className="mt-5 rounded-xl bg-white p-5 text-sm font-semibold text-rose-700">Não foi possível montar uma seleção segura com o estoque atual.</p>
                 )}
             </div>
+
+            <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                        <Clock3 className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-wide text-amber-700">Etapas 2 a 4 · Revisão oficial da Meta</p>
+                            <h3 className="mt-1 font-black text-amber-950">Como pedir a aprovação da Meta</h3>
+                            <p className="mt-2 max-w-4xl text-sm leading-6 text-amber-900">Não existe um botão manual para pedir essa aprovação. Primeiro precisam existir o conjunto e o anúncio completos. Depois de você aprovar a publicação na Central do Gestão MV, o anúncio é publicado e a Meta inicia automaticamente a análise antes da veiculação.</p>
+                        </div>
+                    </div>
+                    <a href="https://www.facebook.com/business/ads/review-policy-guidelines" target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-black text-amber-900 hover:bg-amber-100">
+                        Processo oficial da Meta <ExternalLink className="h-4 w-4" />
+                    </a>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <div className="rounded-xl border border-amber-200 bg-white p-4"><p className="text-xs font-black uppercase text-amber-700">2 · Preparar</p><p className="mt-1 text-sm font-bold text-slate-900">Criar conjuntos e anúncios completos, ainda sem veiculação.</p></div>
+                    <div className="rounded-xl border border-amber-200 bg-white p-4"><p className="text-xs font-black uppercase text-amber-700">3 · Autorizar</p><p className="mt-1 text-sm font-bold text-slate-900">Você revisa publicação, público, orçamento e impacto no Gestão MV.</p></div>
+                    <div className="rounded-xl border border-amber-200 bg-white p-4"><p className="text-xs font-black uppercase text-amber-700">4 · Meta analisa</p><p className="mt-1 text-sm font-bold text-slate-900">Após a publicação, a Meta marca o anúncio como Em análise, Aprovado ou Rejeitado.</p></div>
+                </div>
+                <p className="mt-4 rounded-xl bg-amber-100 px-4 py-3 text-sm font-bold text-amber-950"><strong>Estado atual:</strong> os criativos foram aprovados internamente, mas ainda não existem conjuntos e anúncios publicados para a Meta analisar. As campanhas continuam pausadas e sem gasto.</p>
+            </section>
 
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

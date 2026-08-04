@@ -66,5 +66,11 @@ assert.match(panel, /categories: smartphoneCategoryIds/);
 assert.match(panel, /prepareCreativeApproval\('store-carousel'\)/);
 assert.match(panel, /prepareCreativeApproval\('smartphones'\)/);
 assert.match(panel, /Cada campanha possui sua própria aprovação/);
+assert.match(panel, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(280px,420px\)\]/);
+assert.match(panel, /Etapa 1 · Aprovação interna do Gestão MV/);
+assert.match(panel, /Como pedir a aprovação da Meta/);
+assert.match(panel, /Não existe um botão manual para pedir essa aprovação/);
+assert.match(panel, /a Meta inicia automaticamente a análise/);
+assert.match(panel, /ainda não existem conjuntos e anúncios publicados para a Meta analisar/);
 
 console.log('marketing campaign creative selection: OK');
