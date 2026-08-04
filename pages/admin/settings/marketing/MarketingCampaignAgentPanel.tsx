@@ -29,6 +29,7 @@ import { catalogService } from '../../../../services/catalogService';
 import { vpsApiService } from '../../../../services/vpsApiService';
 import {
     marketingCreativeSelectionKey,
+    marketingSmartphoneCategoryIds,
     selectMarketingCampaignCreatives,
     type MarketingCreativeCard,
     type MarketingCreativeSelection,
@@ -97,11 +98,18 @@ export default function MarketingCampaignAgentPanel() {
     const loadCreativeSelection = async () => {
         setLoadingCreatives(true);
         try {
-            const [catalog, categories] = await Promise.all([
+            const categories = await vpsApiService.getCategories();
+            const smartphoneCategoryIds = marketingSmartphoneCategoryIds(categories || []);
+            const [catalog, smartphones] = await Promise.all([
                 catalogService.getProducts({ inStockOnly: true }, 1, 1000, true),
-                vpsApiService.getCategories(),
+                smartphoneCategoryIds.length > 0
+                    ? catalogService.getProducts({ inStockOnly: true, categories: smartphoneCategoryIds }, 1, 2000, true)
+                    : Promise.resolve({ products: [], total: 0, hasMore: false }),
             ]);
-            const selection = selectMarketingCampaignCreatives(catalog.products, categories || []);
+            const products = [...new Map(
+                [...catalog.products, ...smartphones.products].map((product) => [product.id, product]),
+            ).values()];
+            const selection = selectMarketingCampaignCreatives(products, categories || []);
             setCreativeSelection(selection);
         } catch (error: any) {
             toast.error(error?.message || 'Não foi possível selecionar os produtos dos carrosséis.');
@@ -164,7 +172,7 @@ export default function MarketingCampaignAgentPanel() {
         }
     };
 
-    const prepareCreativeApproval = async () => {
+    const prepareCreativeApproval = async (campaignId: MarketingCampaignBlueprint['id']) => {
         if (!creativeSelection || !officialWhatsapp) {
             toast.error('Aguarde a seleção dos produtos e a validação do WhatsApp oficial.');
             return;
@@ -172,27 +180,24 @@ export default function MarketingCampaignAgentPanel() {
         setPreparingCreativeApproval(true);
         try {
             await marketingCampaignPortfolioService.save(portfolio);
+            const isSmartphone = campaignId === 'smartphones';
+            const cards = isSmartphone ? creativeSelection.smartphoneCarousel : creativeSelection.storeCarousel;
+            const campaign = portfolio.campaigns.find((item) => item.id === campaignId);
             const response = await metaMarketingConnectionService.prepareCreativePlanApproval({
-                selectionKey: marketingCreativeSelectionKey(creativeSelection),
+                selectionKey: `${campaignId}:${marketingCreativeSelectionKey(creativeSelection)}`,
                 whatsapp: officialWhatsapp,
                 campaigns: [
                     {
-                        itemKey: 'store-carousel',
-                        name: 'Loja inteira — Carrossel',
-                        budget: portfolio.campaigns.find((item) => item.id === 'store-carousel')?.authorizedAmount,
-                        cards: creativeSelection.storeCarousel,
-                    },
-                    {
-                        itemKey: 'smartphones',
-                        name: 'Somente Smartphones',
-                        budget: portfolio.campaigns.find((item) => item.id === 'smartphones')?.authorizedAmount,
-                        cards: creativeSelection.smartphoneCarousel,
+                        itemKey: campaignId,
+                        name: isSmartphone ? 'Somente Smartphones' : 'Loja inteira — Carrossel',
+                        budget: campaign?.authorizedAmount,
+                        cards,
                     },
                 ],
             });
             toast.success(response.reused
-                ? 'A proposta visual já está disponível em Aprovações.'
-                : 'Proposta visual enviada para Aprovações, com os criativos visíveis.');
+                ? `A proposta de ${campaign?.name || 'campanha'} já está disponível em Aprovações.`
+                : `Criativos de ${campaign?.name || 'campanha'} enviados para uma aprovação separada.`);
         } catch (error: any) {
             toast.error(error?.message || 'Não foi possível preparar a aprovação dos criativos.');
         } finally {
@@ -252,10 +257,15 @@ export default function MarketingCampaignAgentPanel() {
                             <CreativeCarouselPreview title="Somente smartphones" cards={creativeSelection.smartphoneCarousel} accent="emerald" />
                         </div>
                         <div className="flex flex-col gap-3 rounded-xl border border-violet-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-                            <p className="text-sm leading-6 text-slate-600"><strong className="text-slate-900">WhatsApp:</strong> usa o telefone principal cadastrado na loja. Aprovar esta etapa confirma produtos, textos e aparência; não ativa anúncios nem gera cobrança.</p>
-                            <button onClick={prepareCreativeApproval} disabled={preparingCreativeApproval || !officialWhatsapp || creativeSelection.storeCarousel.length < 2 || creativeSelection.smartphoneCarousel.length < 2} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-violet-700 px-5 py-3 text-sm font-black text-white hover:bg-violet-600 disabled:opacity-50">
-                                {preparingCreativeApproval ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Enviar criativos para aprovação
-                            </button>
+                            <p className="text-sm leading-6 text-slate-600"><strong className="text-slate-900">WhatsApp:</strong> usa o telefone principal cadastrado na loja. Cada campanha possui sua própria aprovação; aprovar os criativos não ativa anúncios nem gera cobrança.</p>
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                                <button onClick={() => prepareCreativeApproval('store-carousel')} disabled={preparingCreativeApproval || !officialWhatsapp || creativeSelection.storeCarousel.length < 2} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-indigo-700 px-4 py-3 text-sm font-black text-white hover:bg-indigo-600 disabled:opacity-50">
+                                    {preparingCreativeApproval ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Aprovar loja inteira
+                                </button>
+                                <button onClick={() => prepareCreativeApproval('smartphones')} disabled={preparingCreativeApproval || !officialWhatsapp || creativeSelection.smartphoneCarousel.length < 2} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-black text-white hover:bg-emerald-600 disabled:opacity-50">
+                                    {preparingCreativeApproval ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Aprovar smartphones
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : (

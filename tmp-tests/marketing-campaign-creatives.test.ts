@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { selectMarketingCampaignCreatives } from '../services/marketingCampaignCreativeService';
+import { readFileSync } from 'node:fs';
+import { marketingSmartphoneCategoryIds, selectMarketingCampaignCreatives } from '../services/marketingCampaignCreativeService';
 
 const categories = [
     { id: 'phones', name: 'Smartphones' },
@@ -58,5 +59,12 @@ assert.ok(first.smartphoneCarousel.every((card) => card.categoryId === 'phones')
 assert.ok([...first.storeCarousel, ...first.smartphoneCarousel].every((card) => card.stock > 0 && card.imageUrl.startsWith('https://')));
 assert.deepEqual(first.storeCarousel.map((card) => card.productId), repeated.storeCarousel.map((card) => card.productId));
 assert.match(first.smartphoneCarousel[0].whatsappMessage, /smartphone: .* \| Codigo: SKU-/);
+assert.deepEqual(marketingSmartphoneCategoryIds(categories), ['phones']);
+
+const panel = readFileSync('pages/admin/settings/marketing/MarketingCampaignAgentPanel.tsx', 'utf8');
+assert.match(panel, /categories: smartphoneCategoryIds/);
+assert.match(panel, /prepareCreativeApproval\('store-carousel'\)/);
+assert.match(panel, /prepareCreativeApproval\('smartphones'\)/);
+assert.match(panel, /Cada campanha possui sua própria aprovação/);
 
 console.log('marketing campaign creative selection: OK');

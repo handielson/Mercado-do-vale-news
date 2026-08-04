@@ -32,6 +32,13 @@ function normalized(value: unknown): string {
         .trim();
 }
 
+export function marketingSmartphoneCategoryIds(categories: CategoryLike[]): string[] {
+    return categories
+        .filter((item) => normalized(`${item.name || ''} ${item.slug || ''}`).includes('smartphone'))
+        .map((item) => String(item.id || ''))
+        .filter(Boolean);
+}
+
 function deterministicNumber(value: string, seed: string): number {
     let hash = 2166136261;
     const input = `${seed}:${value}`;
@@ -88,11 +95,7 @@ export function selectMarketingCampaignCreatives(
     seed = new Date().toISOString().slice(0, 10),
 ): MarketingCreativeSelection {
     const categoryNames = new Map(categories.map((item) => [String(item.id || ''), String(item.name || item.slug || '')]));
-    const smartphoneCategoryIds = new Set(
-        categories
-            .filter((item) => normalized(`${item.name || ''} ${item.slug || ''}`).includes('smartphone'))
-            .map((item) => String(item.id || '')),
-    );
+    const smartphoneCategoryIds = new Set(marketingSmartphoneCategoryIds(categories));
     const eligible = products.filter(isEligible);
     const ranked = [...eligible].sort((left, right) => {
         const stockDifference = Math.min(Number(right.stock_quantity || 0), 5) - Math.min(Number(left.stock_quantity || 0), 5);

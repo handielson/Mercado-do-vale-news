@@ -89,8 +89,24 @@ data class MarketingApproval(
         }
     }
 
-    fun reviewText(): String = buildString {
-        appendLine(statusLabel)
+    fun errorExplanation(): String {
+        val normalized = lastError.trim().lowercase(Locale.ROOT)
+        return when {
+            normalized == "invalid parameter" || normalized.contains("invalid parameter") ->
+                "a Meta recusou um parâmetro enviado."
+            normalized.contains("permission") || normalized.contains("permiss") ->
+                "a Meta recusou a permissão usada nessa tentativa."
+            normalized.contains("token") || normalized.contains("oauth") ->
+                "a conexão com a Meta precisava ser renovada nessa tentativa."
+            else -> "a tentativa não pôde ser concluída."
+        }
+    }
+
+    fun reviewText(superseded: Boolean = false): String = buildString {
+        appendLine(if (superseded) "Tentativa antiga — substituída com sucesso" else statusLabel)
+        if (superseded) {
+            appendLine("Esta tentativa não está mais ativa. Uma nova solicitação equivalente foi concluída corretamente.")
+        }
         appendLine()
         appendLine("Alvo:")
         appendLine(campaignSummary())
@@ -110,8 +126,8 @@ data class MarketingApproval(
         }
         if (lastError.isNotBlank()) {
             appendLine()
-            appendLine("Erro registrado:")
-            appendLine(lastError)
+            appendLine("Motivo desta tentativa:")
+            appendLine(errorExplanation())
         }
     }.trim()
 

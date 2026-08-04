@@ -179,6 +179,22 @@ async function ensureMarketingCampaignTables(pool) {
       INDEX idx_meta_oauth_state_expiry (expires_at, used_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS meta_campaign_follower_tracking (
+      campaign_id VARCHAR(120) NOT NULL PRIMARY KEY,
+      campaign_name VARCHAR(255) NOT NULL,
+      instagram_account_id VARCHAR(80) NOT NULL,
+      baseline_followers INT UNSIGNED NULL,
+      baseline_at DATETIME NULL,
+      baseline_source VARCHAR(40) NULL,
+      latest_followers INT UNSIGNED NULL,
+      latest_at DATETIME NULL,
+      last_effective_status VARCHAR(80) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_meta_follower_tracking_instagram (instagram_account_id, updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 function parseApproval(row) {
@@ -775,6 +791,72 @@ async function campaignInsights(token, accountId, range, campaigns) {
   return (Array.isArray(result?.data) ? result.data : []).map((row) => normalizeInsight(row, campaigns));
 }
 
+function withManagedCampaigns(items, campaigns) {
+  const result = [...items];
+  const seen = new Set(result.map((item) => item.campaignId));
+  const managedNames = new Set(META_CAMPAIGN_SHELLS.map((item) => item.name));
+  for (const campaign of campaigns.values()) {
+    if (!managedNames.has(campaign.name) || seen.has(campaign.id)) continue;
+    result.push(normalizeInsight({ campaign_id: campaign.id, campaign_name: campaign.name }, campaigns));
+  }
+  return result;
+}
+
+async function campaignFollowerTracking(pool, connection, campaigns, currentFollowers) {
+  const managedNames = new Set(META_CAMPAIGN_SHELLS.map((item) => item.name));
+  const managed = [...campaigns.values()].filter((campaign) => managedNames.has(campaign.name));
+  const hasCurrent = Number.isFinite(currentFollowers) && currentFollowers >= 0;
+  if (hasCurrent) {
+    for (const campaign of managed) {
+      await pool.query(
+        `INSERT INTO meta_campaign_follower_tracking
+          (campaign_id,campaign_name,instagram_account_id,latest_followers,latest_at,last_effective_status)
+         VALUES (?,?,?,?,NOW(),?)
+         ON DUPLICATE KEY UPDATE campaign_name=VALUES(campaign_name),
+           instagram_account_id=VALUES(instagram_account_id),latest_followers=VALUES(latest_followers),
+           latest_at=NOW(),last_effective_status=VALUES(last_effective_status)`,
+        [campaign.id, campaign.name, connection.selected_instagram_account_id, currentFollowers, campaign.effective_status || 'UNKNOWN'],
+      );
+      if (campaign.effective_status === 'ACTIVE') {
+        await pool.query(
+          `UPDATE meta_campaign_follower_tracking
+              SET baseline_followers=?,baseline_at=NOW(),baseline_source='auto_first_active_observation'
+            WHERE campaign_id=? AND baseline_followers IS NULL`,
+          [currentFollowers, campaign.id],
+        );
+      }
+    }
+  }
+  if (managed.length === 0) return new Map();
+  const [rows] = await pool.query(
+    'SELECT * FROM meta_campaign_follower_tracking WHERE campaign_id IN (?)',
+    [managed.map((campaign) => campaign.id)],
+  );
+  return new Map(rows.map((row) => [String(row.campaign_id), row]));
+}
+
+function followerView(campaign, tracking, currentFollowers) {
+  const baseline = tracking?.baseline_followers == null ? null : number(tracking.baseline_followers);
+  const current = Number.isFinite(currentFollowers) && currentFollowers >= 0
+    ? currentFollowers
+    : tracking?.latest_followers == null ? null : number(tracking.latest_followers);
+  const change = baseline == null || current == null ? null : current - baseline;
+  return {
+    accountLevel: true,
+    status: baseline == null ? 'awaiting_activation' : 'tracking',
+    baselineFollowers: baseline,
+    currentFollowers: current,
+    gainedFollowers: change,
+    growthPercent: change == null || !baseline ? null : change / baseline * 100,
+    baselineAt: tracking?.baseline_at || null,
+    latestAt: tracking?.latest_at || null,
+    campaignStatus: campaign.status,
+    explanation: baseline == null
+      ? 'O marco inicial será registrado automaticamente quando a campanha for detectada como ativa.'
+      : 'Crescimento total da conta observado durante a campanha; não é atribuição exclusiva deste anúncio.',
+  };
+}
+
 function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerAuthContext, getPublicAppUrl }) {
   function redirect(reply, query) {
     const target = new URL('/admin/settings/marketing', getPublicAppUrl());
@@ -906,8 +988,8 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
   fastify.post('/admin/marketing/meta/creative-plan-approvals', { preHandler: requireAdminBearerToken }, async (req, reply) => {
     const campaigns = Array.isArray(req.body?.campaigns) ? req.body.campaigns : [];
     const selectionKey = text(req.body?.selectionKey, 120);
-    if (!selectionKey || campaigns.length !== 2) {
-      return reply.code(400).send({ error: 'Creative selection, official WhatsApp and both campaigns are required' });
+    if (!selectionKey || campaigns.length !== 1) {
+      return reply.code(400).send({ error: 'Send exactly one campaign per creative approval' });
     }
     const normalizedCampaigns = campaigns.map((campaign) => {
       const cards = Array.isArray(campaign?.cards) ? campaign.cards : [];
@@ -981,7 +1063,8 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
       objective: 'Vendas pelo WhatsApp',
       publication: 'Nenhum anúncio será ativado nesta aprovação',
     };
-    const idempotencyKey = `meta-creatives-v1:${selectionKey}:${sha256(JSON.stringify(proposedState)).slice(0, 80)}`;
+    const campaignLabel = normalizedCampaigns[0].name;
+    const idempotencyKey = `meta-creatives-v2:${selectionKey}:${sha256(JSON.stringify(proposedState)).slice(0, 80)}`;
     const [existingRows] = await pool.query(
       'SELECT * FROM marketing_approval_requests WHERE idempotency_key=? LIMIT 1',
       [idempotencyKey],
@@ -999,8 +1082,8 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
       [
         id,
         META_CREATIVE_PLAN_ACTION,
-        'Aprovar criativos dos dois carrosséis',
-        normalizedCampaigns.map((campaign) => campaign.name).join(' + '),
+        `Aprovar criativos: ${campaignLabel}`,
+        campaignLabel,
         jsonValue({ campaignsCreated: true, campaignStatus: 'PAUSED', adsCreated: false }),
         jsonValue(proposedState),
         jsonValue({ source: 'Estoque ativo, preços atuais e telefone principal cadastrado no Gestão MV' }),
@@ -1010,8 +1093,8 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
           authorizedMonthlyCeiling: monthlyCeiling,
           reason: 'Esta aprovação confirma somente produtos, textos e aparência; não publica nem ativa anúncios',
         }),
-        jsonValue({ required: 'Os dois carrosséis devem exibir imagens, nomes, preços, SKU e mensagem específica para o WhatsApp' }),
-        'Rejeitar ou deixar expirar mantém os anúncios inexistentes e as duas campanhas pausadas.',
+        jsonValue({ required: 'Este carrossel deve exibir imagens, nomes, preços, SKU e mensagem específica para o WhatsApp' }),
+        'Rejeitar ou deixar expirar mantém os anúncios desta campanha inexistentes e a campanha pausada.',
         idempotencyKey,
       ],
     );
@@ -1176,14 +1259,32 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
       const ranges = insightRanges(preset);
       const campaignsResult = await graphRequest(`${row.selected_ad_account_id}/campaigns`, token, { fields: 'id,name,effective_status', limit: 100 });
       const campaigns = new Map((campaignsResult?.data || []).map((item) => [item.id, item]));
-      const [current, previous] = await Promise.all([
+      const [currentRows, previousRows, instagramResult] = await Promise.all([
         campaignInsights(token, row.selected_ad_account_id, ranges.current, campaigns),
         campaignInsights(token, row.selected_ad_account_id, ranges.previous, campaigns),
+        row.selected_instagram_account_id
+          ? graphRequest(row.selected_instagram_account_id, token, { fields: 'id,username,followers_count' }).catch(() => null)
+          : Promise.resolve(null),
       ]);
+      const currentFollowers = instagramResult && Number.isFinite(Number(instagramResult.followers_count))
+        ? Number(instagramResult.followers_count)
+        : null;
+      const tracking = await campaignFollowerTracking(pool, row, campaigns, currentFollowers);
+      const current = withManagedCampaigns(currentRows, campaigns).map((campaign) => ({
+        ...campaign,
+        followers: followerView(campaign, tracking.get(campaign.campaignId), currentFollowers),
+      }));
+      const previous = withManagedCampaigns(previousRows, campaigns);
       return {
         ok: true, mode: 'read_only', datePreset: preset,
         attribution: 'Meta action_report_time=conversion; a janela efetiva segue a configuração unificada da conta/campanha',
         ranges,
+        instagramFollowers: {
+          accountLevel: true,
+          currentFollowers,
+          capturedAt: new Date().toISOString(),
+          explanation: 'Total atual da conta profissional do Instagram. O crescimento por campanha usa um marco temporal e não atribui exclusivamente cada seguidor.',
+        },
         current: { totals: insightTotals(current), campaigns: current },
         previous: { totals: insightTotals(previous), campaigns: previous },
         fetchedAt: new Date().toISOString(),

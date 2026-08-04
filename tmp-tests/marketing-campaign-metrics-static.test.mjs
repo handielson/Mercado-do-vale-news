@@ -27,5 +27,14 @@ assert.match(panel, /período anterior/);
 assert.match(productionApi, /\/admin\/marketing\/meta\/insights/);
 assert.match(productionApi, /level: 'campaign'/);
 assert.match(productionApi, /action_report_time: 'conversion'/);
+assert.match(panel, /Crescimento de seguidores durante a campanha/);
+assert.match(panel, /Seguidores no início/);
+assert.match(panel, /Aumento observado/);
+assert.match(panel, /Total da conta Instagram/);
+assert.match(productionApi, /meta_campaign_follower_tracking/);
+assert.match(productionApi, /followers_count/);
+assert.match(productionApi, /auto_first_active_observation/);
+assert.match(productionApi, /withManagedCampaigns/);
+assert.match(service, /MetaCampaignFollowerTracking/);
 
 console.log('marketing campaign metrics dashboard: OK');

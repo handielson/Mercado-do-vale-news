@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.162-marketing-criativos-whatsapp
+version: v1.2.163-seguidores-campanhas
 date: 2026-08-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-172433-marketing-criativos-whatsapp
+release_vps: /var/www/mdv-site/releases/20260804-181351-seguidores-campanhas
 branch: main
-summary: Exibe os criativos reais dos dois carrosséis, usa o WhatsApp principal da loja e leva fotos, preços, códigos e mensagens para aprovação no site e no Android.
+summary: Registra seguidores no início e durante cada campanha, corrige a seleção de smartphones e separa as aprovações de criativos no site e no Android.
 ```

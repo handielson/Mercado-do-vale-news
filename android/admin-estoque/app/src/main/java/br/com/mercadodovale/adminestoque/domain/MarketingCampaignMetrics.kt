@@ -86,7 +86,31 @@ data class MarketingCampaignInsight(
     val name: String,
     val status: String,
     val metrics: MarketingMetricValues,
+    val followers: MarketingFollowerTracking?,
 )
+
+data class MarketingFollowerTracking(
+    val baselineFollowers: Double?,
+    val currentFollowers: Double?,
+    val gainedFollowers: Double?,
+    val growthPercent: Double?,
+    val explanation: String,
+) {
+    companion object {
+        fun parse(value: JSONObject?): MarketingFollowerTracking? {
+            val json = value ?: return null
+            fun optionalNumber(key: String): Double? = if (!json.has(key) || json.isNull(key)) null
+            else json.optDouble(key).takeIf(Double::isFinite)
+            return MarketingFollowerTracking(
+                baselineFollowers = optionalNumber("baselineFollowers"),
+                currentFollowers = optionalNumber("currentFollowers"),
+                gainedFollowers = optionalNumber("gainedFollowers"),
+                growthPercent = optionalNumber("growthPercent"),
+                explanation = json.optString("explanation"),
+            )
+        }
+    }
+}
 
 data class MarketingCampaignReport(
     val currentSince: String,
@@ -118,6 +142,7 @@ data class MarketingCampaignReport(
                                 name = item.optString("campaignName", id),
                                 status = item.optString("status", "UNKNOWN"),
                                 metrics = MarketingMetricValues.parse(item.optJSONObject("metrics")),
+                                followers = MarketingFollowerTracking.parse(item.optJSONObject("followers")),
                             ),
                         )
                     }

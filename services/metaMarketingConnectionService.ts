@@ -76,6 +76,19 @@ export interface MetaCampaignMetrics {
     thruPlays: number;
 }
 
+export interface MetaCampaignFollowerTracking {
+    accountLevel: true;
+    status: 'awaiting_activation' | 'tracking';
+    baselineFollowers: number | null;
+    currentFollowers: number | null;
+    gainedFollowers: number | null;
+    growthPercent: number | null;
+    baselineAt: string | null;
+    latestAt: string | null;
+    campaignStatus: string;
+    explanation: string;
+}
+
 export interface MetaCampaignInsightItem {
     campaignId: string;
     campaignName: string;
@@ -84,6 +97,7 @@ export interface MetaCampaignInsightItem {
     dateStop: string | null;
     currency: string | null;
     metrics: MetaCampaignMetrics;
+    followers?: MetaCampaignFollowerTracking;
     actions: Array<{ action_type: string; value: string }>;
 }
 
@@ -94,6 +108,12 @@ export interface MetaCampaignInsightsReport {
     ranges: {
         current: { since: string; until: string };
         previous: { since: string; until: string };
+    };
+    instagramFollowers?: {
+        accountLevel: true;
+        currentFollowers: number | null;
+        capturedAt: string;
+        explanation: string;
     };
     current: { totals: MetaCampaignMetrics; campaigns: MetaCampaignInsightItem[] };
     previous: { totals: MetaCampaignMetrics; campaigns: MetaCampaignInsightItem[] };

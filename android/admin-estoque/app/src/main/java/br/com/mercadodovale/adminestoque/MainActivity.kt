@@ -504,20 +504,50 @@ class MainActivity : Activity() {
                     onSuccess = { body ->
                         runCatching { MarketingApproval.parseList(body) }.fold(
                             onSuccess = { approvals ->
-                                val visible = approvals.filter {
-                                    it.status in setOf("pending", "approved", "executing", "failed")
+                                val active = approvals.filter {
+                                    it.status in setOf("pending", "approved", "executing")
                                 }
-                                val pending = visible.count { it.status == "pending" }
-                                status.text = if (visible.isEmpty()) {
-                                    "Nenhuma aprovação pendente ou falha recente."
+                                val recentFailures = approvals.filter { it.status == "failed" }.take(5)
+                                val pending = active.count { it.status == "pending" }
+                                val executing = active.count { it.status in setOf("approved", "executing") }
+                                status.text = if (active.isEmpty()) {
+                                    "Nenhuma ação aguardando decisão. Não há falha atual nas campanhas."
                                 } else {
-                                    "$pending aguardando sua decisão"
+                                    buildList {
+                                        if (pending > 0) add("$pending aguardando sua decisão")
+                                        if (executing > 0) add("$executing em andamento")
+                                    }.joinToString(" · ")
                                 }
                                 content.removeAllViews()
-                                visible.forEach { approval ->
+                                if (active.isNotEmpty()) {
+                                    content.addView(text("Ações atuais", 18, Color.rgb(30, 64, 175)))
+                                }
+                                active.forEach { approval ->
                                     content.addView(
                                         marketingApprovalCard(approval) {
-                                            showMarketingApprovalReview(approval, status, content)
+                                            showMarketingApprovalReview(approval, status, content, false)
+                                        },
+                                    )
+                                }
+                                if (recentFailures.isNotEmpty()) {
+                                    content.addView(text("Histórico recente", 18, Color.rgb(71, 85, 105)))
+                                    content.addView(
+                                        text(
+                                            "Tentativas encerradas ficam aqui apenas para consulta e não representam falha atual.",
+                                            14,
+                                            Color.DKGRAY,
+                                        ),
+                                    )
+                                }
+                                recentFailures.forEach { approval ->
+                                    val superseded = approvals.any {
+                                        it.status == "succeeded" &&
+                                            it.title == approval.title &&
+                                            it.createdAt > approval.createdAt
+                                    }
+                                    content.addView(
+                                        marketingApprovalCard(approval, historical = true, superseded = superseded) {
+                                            showMarketingApprovalReview(approval, status, content, superseded)
                                         },
                                     )
                                 }
@@ -540,6 +570,8 @@ class MainActivity : Activity() {
 
     private fun marketingApprovalCard(
         approval: MarketingApproval,
+        historical: Boolean = false,
+        superseded: Boolean = false,
         review: () -> Unit,
     ) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
@@ -547,11 +579,21 @@ class MainActivity : Activity() {
         setBackgroundColor(
             when (approval.status) {
                 "pending" -> Color.rgb(255, 251, 235)
-                "failed" -> Color.rgb(254, 242, 242)
+                "failed" -> if (superseded) Color.rgb(248, 250, 252) else Color.rgb(255, 247, 237)
                 else -> Color.rgb(239, 246, 255)
             },
         )
-        addView(text(approval.statusLabel, 14, if (approval.status == "failed") Color.rgb(185, 28, 28) else Color.rgb(30, 64, 175)))
+        val displayStatus = when {
+            superseded -> "Tentativa antiga — substituída com sucesso"
+            historical -> "Tentativa encerrada"
+            else -> approval.statusLabel
+        }
+        val statusColor = when {
+            superseded -> Color.rgb(22, 101, 52)
+            historical -> Color.rgb(180, 83, 9)
+            else -> Color.rgb(30, 64, 175)
+        }
+        addView(text(displayStatus, 14, statusColor))
         addView(text(approval.title, 19, Color.rgb(15, 23, 42)))
         addView(text(approval.campaignSummary(), 14, Color.DKGRAY))
         addView(text(approval.financialSummary(), 14, Color.rgb(71, 85, 105)))
@@ -560,9 +602,18 @@ class MainActivity : Activity() {
             addView(marketingCreativeGallery(cards.take(4)))
         }
         if (approval.lastError.isNotBlank()) {
-            addView(text("Falha: ${approval.lastError}", 14, Color.rgb(185, 28, 28)))
+            addView(text("Motivo desta tentativa: ${approval.errorExplanation()}", 14, Color.rgb(71, 85, 105)))
         }
-        addView(button(if (approval.status == "pending") "Revisar e decidir" else "Ver detalhes", review))
+        addView(
+            button(
+                when {
+                    approval.status == "pending" -> "Revisar e decidir"
+                    historical -> "Entender o histórico"
+                    else -> "Ver detalhes"
+                },
+                review,
+            ),
+        )
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -573,11 +624,12 @@ class MainActivity : Activity() {
         approval: MarketingApproval,
         status: TextView,
         content: LinearLayout,
+        superseded: Boolean,
     ) {
         val reviewContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(12), dp(20), dp(12))
-            addView(text(approval.reviewText(), 15, Color.rgb(51, 65, 85)))
+            addView(text(approval.reviewText(superseded), 15, Color.rgb(51, 65, 85)))
             approval.creativeCards().takeIf { it.isNotEmpty() }?.let { cards ->
                 addView(text("Criativos que você está aprovando", 18, Color.rgb(91, 33, 182)))
                 addView(marketingCreativeGallery(cards))
@@ -802,6 +854,7 @@ class MainActivity : Activity() {
                 if (campaign.status == "ACTIVE") Color.rgb(21, 128, 61) else Color.DKGRAY,
             ),
         )
+        campaign.followers?.let { addView(marketingFollowerView(it)) }
         MARKETING_METRIC_SECTIONS.forEach { section ->
             addView(text(section.title, 18, Color.rgb(30, 41, 59)))
             addView(text(section.subtitle, 13, Color.GRAY))
@@ -817,6 +870,25 @@ class MainActivity : Activity() {
         }
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = dp(18)
+        }
+    }
+
+    private fun marketingFollowerView(followers: br.com.mercadodovale.adminestoque.domain.MarketingFollowerTracking) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(14), dp(14), dp(14), dp(14))
+        setBackgroundColor(Color.rgb(236, 253, 245))
+        addView(text("Crescimento de seguidores durante a campanha", 17, Color.rgb(6, 95, 70)))
+        addView(text("Seguidores no início: ${followers.baselineFollowers?.let(MARKETING_INTEGER::format) ?: "será registrado ao ativar"}", 15, Color.rgb(15, 23, 42)))
+        addView(text("Seguidores atuais: ${followers.currentFollowers?.let(MARKETING_INTEGER::format) ?: "indisponível"}", 15, Color.rgb(15, 23, 42)))
+        val gained = followers.gainedFollowers
+        addView(text("Aumento observado: ${gained?.let { "${if (it >= 0) "+" else ""}${MARKETING_INTEGER.format(it)}" } ?: "a calcular"}", 15, Color.rgb(15, 23, 42)))
+        val growth = followers.growthPercent
+        addView(text("Crescimento: ${growth?.let { "${if (it >= 0) "+" else ""}${MARKETING_DECIMAL.format(it)}%" } ?: "a calcular"}", 15, Color.rgb(15, 23, 42)))
+        addView(text(followers.explanation, 13, Color.rgb(6, 78, 59)))
+        addView(text("Indicador auxiliar da conta; vendas e conversas qualificadas continuam sendo o objetivo principal.", 13, Color.rgb(71, 85, 105)))
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(10)
+            bottomMargin = dp(12)
         }
     }
 
