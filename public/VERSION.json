@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.172-meta-copy-debug",
+  "version": "v1.2.173-meta-adset-confirmation",
   "date": "2026-08-04",
   "status": "ready",
   "release_vps": "/var/www/mdv-site/releases/20260804-212000-v12172-meta-copy-debug",
   "branch": "main",
-  "summary": "Permite copiar o diagnóstico de uma falha Meta diretamente na Central de Aprovações."
+  "summary": "Aguarda a confirmação do conjunto pausado pela Meta antes de marcar a preparação como falha."
 }

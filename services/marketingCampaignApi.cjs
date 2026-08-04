@@ -895,6 +895,8 @@ async function executePausedWhatsappAdBundle(pool, approval) {
           ]),
           ...budget,
         });
+        // The Graph API can acknowledge the create before effective_status is readable.
+        await new Promise((resolve) => setTimeout(resolve, 1200));
         adset = await graphRequest(created.id, token, { fields: 'id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget' });
       } catch (error) {
         const diagnostic = tagMetaExecutionError(error, 'criar conjunto pausado', item.adset_name);
@@ -904,7 +906,7 @@ async function executePausedWhatsappAdBundle(pool, approval) {
     }
     if (!adset?.id || adset.name !== item.adset_name || String(adset.campaign_id) !== String(campaign.id)
       || !String(adset.effective_status || adset.status).includes('PAUSED')) {
-      throw new Error(`Meta did not confirm paused ad set ${item.item_key}`);
+      throw new Error(`Meta did not confirm paused ad set ${item.item_key}: ${JSON.stringify({ id: adset?.id || null, name: adset?.name || null, status: adset?.status || null, effective_status: adset?.effective_status || null, campaign_id: adset?.campaign_id || null })}`);
     }
     await saveExecutionItem(pool, approval.id, adsetItemKey, payloadHash, {
       state: 'succeeded', externalId: adset.id, externalStatus: adset.effective_status || adset.status || 'PAUSED',

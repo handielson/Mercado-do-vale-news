@@ -23,6 +23,8 @@ assert.match(api, /meta-paused-ads-v2:/);
 assert.doesNotMatch(api, /meta-paused-ads-v1:/);
 assert.match(api, /tagMetaExecutionError\(error, 'criar campanha pausada'/);
 assert.match(api, /tagMetaExecutionError\(error, 'criar conjunto pausado'/);
+assert.match(api, /setTimeout\(resolve, 1200\)/);
+assert.match(api, /Meta did not confirm paused ad set .*effective_status/);
 assert.match(api, /tagMetaExecutionError\(error, 'criar anúncio pausado'/);
 assert.match(api, /error\.metaTraceId = meta\.fbtrace_id/);
 assert.match(api, /end_time: isoWithoutMilliseconds\(addDays\(start, item\.duration_days\)\)/);
