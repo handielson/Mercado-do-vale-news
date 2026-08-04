@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.160-marketing-impacto-legivel
+version: v1.2.161-marketing-impacto-polido
 date: 2026-08-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-135909-marketing-impacto-legivel
+release_vps: /var/www/mdv-site/releases/20260804-140316-marketing-impacto-polido
 branch: main
-summary: Transforma o impacto completo das aprovações de campanhas em cartões visuais, com termos em português e sem JSON.
+summary: Refina o impacto completo com melhor aproveitamento de espaço, campanhas lado a lado e linguagem totalmente acessível.
 ```

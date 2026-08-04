@@ -98,6 +98,7 @@ const VALUE_LABELS: Record<string, string> = {
     'Not targetable; use only authorized first-party audiences and broad signals': 'A Meta não permite segmentar diretamente os visitantes de perfis concorrentes. Serão usados apenas públicos próprios autorizados e sinais amplos.',
     'Exactly two campaigns confirmed PAUSED; zero ad sets, ads and spend': 'As duas campanhas devem ser confirmadas como pausadas, sem conjuntos de anúncios, sem anúncios publicados e sem qualquer gasto.',
     'This approval creates only paused campaign shells without budget, ad sets or ads': 'Esta aprovação cria somente a estrutura das campanhas pausadas, sem aplicar orçamento, criar conjuntos ou publicar anúncios.',
+    'Os containers permanecem pausados. Qualquer exclusão ou arquivamento exige nova aprovação.': 'As estruturas das campanhas permanecem pausadas. Qualquer exclusão ou arquivamento exige uma nova aprovação.',
 };
 
 function humanizeKey(value: string): string {
@@ -132,7 +133,7 @@ function ReadableValue({ value, field, depth = 0 }: { value: unknown; field?: st
     if (Array.isArray(value)) {
         if (!value.length) return <span className="text-sm text-slate-400">Nenhum item.</span>;
         return (
-            <div className="grid gap-3">
+            <div className={`grid gap-3 ${field === 'campaigns' ? 'md:grid-cols-2' : ''}`}>
                 {value.map((item, index) => (
                     <div key={index} className="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
                         <p className="mb-3 inline-flex items-center gap-2 text-sm font-black text-slate-800">
@@ -223,7 +224,7 @@ function executionLabel(request: MarketingApprovalRequest) {
     if (request.execution_mode === 'manual') {
         return { label: 'Execução manual', icon: Bot, className: 'text-slate-700 bg-slate-100' };
     }
-    return { label: 'VPS + API Meta', icon: CloudCog, className: 'text-cyan-700 bg-cyan-50' };
+    return { label: 'Automático pelo servidor', icon: CloudCog, className: 'text-cyan-700 bg-cyan-50' };
 }
 
 export default function MarketingApprovalCenterPanel() {
@@ -375,8 +376,8 @@ export default function MarketingApprovalCenterPanel() {
                                 {expanded && (
                                     <div className="grid gap-4 border-t border-slate-100 p-5 lg:grid-cols-2">
                                         <PlainLanguageSummary request={request} />
-                                        <section className="rounded-xl border border-slate-200 p-4"><p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Estado atual</p><Snapshot value={request.current_state} emptyLabel="Novo ativo, sem estado anterior." /></section>
-                                        <section className="rounded-xl border border-blue-200 bg-blue-50/40 p-4"><p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-blue-600">O que será preparado</p><Snapshot value={request.proposed_state} emptyLabel="Proposta não informada." /></section>
+                                        <section className="rounded-xl border border-slate-200 p-4 lg:col-span-2"><p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Estado atual</p><Snapshot value={request.current_state} emptyLabel="Novo ativo, sem estado anterior." /></section>
+                                        <section className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 lg:col-span-2"><p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-blue-600">O que será preparado</p><Snapshot value={request.proposed_state} emptyLabel="Proposta não informada." /></section>
                                         <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-4"><p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-amber-700">Limites financeiros</p><Snapshot value={request.financial_impact} emptyLabel="Sem impacto financeiro informado." /></section>
                                         <section className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4"><p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-700">Como saberemos que deu certo</p><Snapshot value={request.success_criteria} emptyLabel="Critério ainda não informado." /></section>
                                         <section className="rounded-xl border border-slate-200 p-4 lg:col-span-2"><p className="mb-2 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-slate-500"><RotateCcw className="h-4 w-4" /> Como desfazer</p><p className="text-sm font-medium leading-relaxed text-slate-700">{translateText(request.rollback_plan)}</p></section>

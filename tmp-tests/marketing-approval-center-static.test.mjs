@@ -19,6 +19,8 @@ assert.match(panel, /Impacto financeiro máximo/);
 assert.match(panel, /Gasto imediato máximo/);
 assert.match(panel, /Limite mensal autorizado/);
 assert.match(panel, /Público amplo e local/);
+assert.match(panel, /Automático pelo servidor/);
+assert.match(panel, /As estruturas das campanhas permanecem pausadas/);
 assert.match(panel, /Campanha \{index \+ 1\}/);
 assert.doesNotMatch(panel, /JSON\.stringify\(value\)/);
 assert.match(panel, /Como desfazer/);
