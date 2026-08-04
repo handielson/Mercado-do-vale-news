@@ -508,10 +508,13 @@ class MainActivity : Activity() {
                                     it.status in setOf("pending", "approved", "executing")
                                 }
                                 val recentFailures = approvals.filter { it.status == "failed" }.take(5)
+                                val recentDecisions = approvals.filter {
+                                    it.status in setOf("succeeded", "rejected", "cancelled", "expired")
+                                }.take(8)
                                 val pending = active.count { it.status == "pending" }
                                 val executing = active.count { it.status in setOf("approved", "executing") }
                                 status.text = if (active.isEmpty()) {
-                                    "Nenhuma ação aguardando decisão. Não há falha atual nas campanhas."
+                                    "Nenhuma ação aguardando. As últimas decisões continuam visíveis abaixo."
                                 } else {
                                     buildList {
                                         if (pending > 0) add("$pending aguardando sua decisão")
@@ -525,6 +528,23 @@ class MainActivity : Activity() {
                                 active.forEach { approval ->
                                     content.addView(
                                         marketingApprovalCard(approval) {
+                                            showMarketingApprovalReview(approval, status, content, false)
+                                        },
+                                    )
+                                }
+                                if (recentDecisions.isNotEmpty()) {
+                                    content.addView(text("Últimas decisões e resultados", 18, Color.rgb(22, 101, 52)))
+                                    content.addView(
+                                        text(
+                                            "Estes comprovantes permanecem na tela. Aprovação de criativo não significa anúncio em veiculação.",
+                                            14,
+                                            Color.DKGRAY,
+                                        ),
+                                    )
+                                }
+                                recentDecisions.forEach { approval ->
+                                    content.addView(
+                                        marketingApprovalCard(approval, historical = true) {
                                             showMarketingApprovalReview(approval, status, content, false)
                                         },
                                     )
@@ -585,17 +605,18 @@ class MainActivity : Activity() {
         )
         val displayStatus = when {
             superseded -> "Tentativa antiga — substituída com sucesso"
-            historical -> "Tentativa encerrada"
-            else -> approval.statusLabel
+            else -> approval.persistentStatusLabel()
         }
         val statusColor = when {
             superseded -> Color.rgb(22, 101, 52)
-            historical -> Color.rgb(180, 83, 9)
+            approval.status == "succeeded" -> Color.rgb(22, 101, 52)
+            approval.status in setOf("rejected", "cancelled", "expired", "failed") -> Color.rgb(180, 83, 9)
             else -> Color.rgb(30, 64, 175)
         }
         addView(text(displayStatus, 14, statusColor))
         addView(text(approval.title, 19, Color.rgb(15, 23, 42)))
         addView(text(approval.campaignSummary(), 14, Color.DKGRAY))
+        addView(text(approval.publicationExplanation(), 14, Color.rgb(51, 65, 85)))
         addView(text(approval.financialSummary(), 14, Color.rgb(71, 85, 105)))
         approval.creativeCards().takeIf { it.isNotEmpty() }?.let { cards ->
             addView(text("Prévia dos criativos", 15, Color.rgb(91, 33, 182)))
@@ -608,7 +629,7 @@ class MainActivity : Activity() {
             button(
                 when {
                     approval.status == "pending" -> "Revisar e decidir"
-                    historical -> "Entender o histórico"
+                    historical -> "Ver comprovante"
                     else -> "Ver detalhes"
                 },
                 review,
@@ -849,7 +870,12 @@ class MainActivity : Activity() {
         addView(text(campaign.name, 21, green))
         addView(
             text(
-                if (campaign.status == "ACTIVE") "● Ativa" else "Status: ${campaign.status}",
+                when (campaign.status) {
+                    "ACTIVE" -> "● Em veiculação"
+                    "PAUSED" -> "● Pausada — sem veiculação"
+                    "ARCHIVED" -> "● Arquivada — sem veiculação"
+                    else -> "Status da Meta: ${campaign.status}"
+                },
                 14,
                 if (campaign.status == "ACTIVE") Color.rgb(21, 128, 61) else Color.DKGRAY,
             ),

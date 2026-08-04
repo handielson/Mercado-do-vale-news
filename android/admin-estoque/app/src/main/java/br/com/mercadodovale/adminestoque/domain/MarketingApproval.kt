@@ -16,6 +16,7 @@ data class MarketingCreativeCard(
 data class MarketingApproval(
     val id: String,
     val status: String,
+    val actionType: String,
     val title: String,
     val targetName: String,
     val executionMode: String,
@@ -39,6 +40,32 @@ data class MarketingApproval(
             "cancelled" -> "Cancelada"
             else -> status
         }
+
+    fun persistentStatusLabel(): String = when {
+        status == "pending" -> "Aguardando sua aprovação"
+        status == "approved" && actionType.contains("creative_plan") ->
+            "Criativos aprovados — ainda não publicados"
+        status == "approved" -> "Aprovada — aguardando execução"
+        status == "executing" -> "Aprovada — execução em andamento"
+        status == "succeeded" && actionType.contains("creative_plan") ->
+            "Criativos aprovados — ainda não publicados"
+        status == "succeeded" && actionType.contains("campaign_bundle") ->
+            "Estrutura criada na Meta — campanha pausada"
+        status == "succeeded" -> "Execução concluída"
+        else -> statusLabel
+    }
+
+    fun publicationExplanation(): String = when {
+        actionType.contains("creative_plan") && status in setOf("approved", "succeeded") ->
+            "A aprovação confirmou produtos, textos e aparência. Ela não criou o anúncio e não colocou a campanha em veiculação."
+        actionType.contains("campaign_bundle") && status == "succeeded" ->
+            "A estrutura foi criada na Meta e permanece pausada, sem anúncio, entrega ou cobrança."
+        status == "approved" ->
+            "A decisão foi registrada e aguarda o executor. Isso ainda não confirma veiculação."
+        status == "executing" ->
+            "O servidor está executando a ação aprovada. A veiculação só será indicada após confirmação da Meta."
+        else -> "Consulte abaixo o estado registrado desta solicitação."
+    }
 
     fun financialSummary(): String {
         val impact = financialImpact ?: return "Impacto financeiro não informado"
@@ -103,10 +130,11 @@ data class MarketingApproval(
     }
 
     fun reviewText(superseded: Boolean = false): String = buildString {
-        appendLine(if (superseded) "Tentativa antiga — substituída com sucesso" else statusLabel)
+        appendLine(if (superseded) "Tentativa antiga — substituída com sucesso" else persistentStatusLabel())
         if (superseded) {
             appendLine("Esta tentativa não está mais ativa. Uma nova solicitação equivalente foi concluída corretamente.")
         }
+        if (!superseded) appendLine(publicationExplanation())
         appendLine()
         appendLine("Alvo:")
         appendLine(campaignSummary())
@@ -141,6 +169,7 @@ data class MarketingApproval(
                         MarketingApproval(
                             id = item.optString("id"),
                             status = item.optString("status"),
+                            actionType = item.optString("action_type"),
                             title = item.optString("title", "Ação de marketing"),
                             targetName = item.optString("target_name"),
                             executionMode = item.optString("execution_mode"),

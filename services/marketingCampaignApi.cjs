@@ -227,7 +227,18 @@ async function findApproval(connection, id, lock = false) {
 async function expireApprovals(pool) {
   await pool.query(
     `UPDATE marketing_approval_requests SET status = 'expired', updated_at = CURRENT_TIMESTAMP
-     WHERE status IN ('pending', 'approved') AND approval_expires_at IS NOT NULL AND approval_expires_at <= NOW()`,
+     WHERE (status = 'pending' OR (status = 'approved' AND execution_mode <> 'manual'))
+       AND approval_expires_at IS NOT NULL AND approval_expires_at <= NOW()`,
+  );
+}
+
+async function completeApprovedManualReviews(pool) {
+  await pool.query(
+    `UPDATE marketing_approval_requests
+        SET status='succeeded',executed_at=COALESCE(executed_at,approved_at,updated_at),
+            execution_result=COALESCE(execution_result,?)
+      WHERE status='approved' AND execution_mode='manual'`,
+    [jsonValue({ confirmed: true, publicationExecuted: false, explanation: 'Manual review completed; no ad was published or activated' })],
   );
 }
 
@@ -241,6 +252,7 @@ function registerApprovalRoutes(fastify, { pool, requireAdminBearerToken, requir
   }
 
   fastify.get('/admin/marketing/approvals', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+    await completeApprovedManualReviews(pool);
     await expireApprovals(pool);
     const status = text(req.query?.status, 30);
     if (status && !APPROVAL_STATUSES.has(status)) return reply.code(400).send({ error: 'Invalid approval status' });
@@ -330,12 +342,19 @@ function registerApprovalRoutes(fastify, { pool, requireAdminBearerToken, requir
         await connection.commit();
         return reply.code(409).send({ error: 'Approval request expired' });
       }
-      const nextStatus = decision === 'approve' ? 'approved' : 'rejected';
+      const manualCompletion = decision === 'approve' && current.execution_mode === 'manual';
+      const nextStatus = decision === 'approve' ? (manualCompletion ? 'succeeded' : 'approved') : 'rejected';
+      const manualResult = manualCompletion
+        ? jsonValue({ confirmed: true, publicationExecuted: false, explanation: 'Manual review completed; no ad was published or activated' })
+        : null;
       await connection.query(
         `UPDATE marketing_approval_requests SET status = ?, reviewed_by = ?, review_note = ?,
-         approved_at = IF(? = 'approved', NOW(), approved_at), rejected_at = IF(? = 'rejected', NOW(), rejected_at)
+         approved_at = IF(? IN ('approved','succeeded'), NOW(), approved_at),
+         rejected_at = IF(? = 'rejected', NOW(), rejected_at),
+         executed_at = IF(? = 'succeeded', NOW(), executed_at),
+         execution_result = IF(? = 'succeeded', ?, execution_result)
          WHERE id = ?`,
-        [nextStatus, auth.userId || auth.customerId, note || null, nextStatus, nextStatus, current.id],
+        [nextStatus, auth.userId || auth.customerId, note || null, nextStatus, nextStatus, nextStatus, nextStatus, manualResult, current.id],
       );
       await approvalEvent(connection, current.id, nextStatus, { id: auth.userId || auth.customerId, label: 'Administrador Gestão MV' }, { note: note || null });
       await connection.commit();

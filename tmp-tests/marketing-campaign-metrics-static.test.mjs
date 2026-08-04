@@ -28,6 +28,8 @@ assert.match(productionApi, /\/admin\/marketing\/meta\/insights/);
 assert.match(productionApi, /level: 'campaign'/);
 assert.match(productionApi, /action_report_time: 'conversion'/);
 assert.match(panel, /Crescimento de seguidores durante a campanha/);
+assert.match(panel, /Pausada — sem veiculação/);
+assert.match(panel, /Em veiculação/);
 assert.match(panel, /Seguidores no início/);
 assert.match(panel, /Aumento observado/);
 assert.match(panel, /Total da conta Instagram/);

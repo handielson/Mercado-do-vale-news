@@ -78,6 +78,13 @@ const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const decimal = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+function campaignStatus(status: string) {
+    if (status === 'ACTIVE') return { label: 'Em veiculação', className: 'bg-emerald-50 text-emerald-700' };
+    if (status === 'PAUSED') return { label: 'Pausada — sem veiculação', className: 'bg-amber-50 text-amber-700' };
+    if (status === 'ARCHIVED') return { label: 'Arquivada — sem veiculação', className: 'bg-slate-100 text-slate-600' };
+    return { label: `Status da Meta: ${status}`, className: 'bg-slate-100 text-slate-600' };
+}
+
 function formatMetric(value: number, format: MetricFormat, unavailable: boolean) {
     if (unavailable) return 'Não mensurado';
     if (format === 'currency') return money.format(value || 0);
@@ -119,9 +126,10 @@ function CampaignMetrics({ item, previous, expandedInfo, onToggle }: {
     expandedInfo: string | null;
     onToggle: (key: string) => void;
 }) {
+    const status = campaignStatus(item.status);
     return (
         <article className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60">
-            <header className="flex flex-col gap-2 border-b border-slate-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-wide text-indigo-500">Campanha Meta</p><h3 className="mt-1 text-lg font-black text-slate-900">{item.campaignName}</h3></div><span className={`w-fit rounded-full px-2.5 py-1 text-xs font-black ${item.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{item.status === 'ACTIVE' ? 'Ativa' : item.status}</span></header>
+            <header className="flex flex-col gap-2 border-b border-slate-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-wide text-indigo-500">Campanha Meta</p><h3 className="mt-1 text-lg font-black text-slate-900">{item.campaignName}</h3></div><span className={`w-fit rounded-full px-2.5 py-1 text-xs font-black ${status.className}`}>{status.label}</span></header>
             <div className="space-y-6 p-5">
                 {item.followers && <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                     <div className="flex items-start gap-2"><UserPlus className="mt-0.5 h-5 w-5 text-emerald-700" /><div><h4 className="font-black text-emerald-950">Crescimento de seguidores durante a campanha</h4><p className="mt-1 text-xs leading-5 text-emerald-900">{item.followers.explanation}</p></div></div>

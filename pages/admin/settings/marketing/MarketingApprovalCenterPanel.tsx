@@ -262,8 +262,22 @@ function executionLabel(request: MarketingApprovalRequest) {
     return { label: 'Automático pelo servidor', icon: CloudCog, className: 'text-cyan-700 bg-cyan-50' };
 }
 
+function persistentOutcome(request: MarketingApprovalRequest): string {
+    const creativePlan = request.action_type.includes('creative_plan');
+    const campaignBundle = request.action_type.includes('campaign_bundle');
+    if (request.status === 'pending') return 'Aguardando sua decisão.';
+    if (request.status === 'approved' && creativePlan) return 'Criativos aprovados. O anúncio ainda não foi criado nem colocado em veiculação.';
+    if (request.status === 'approved') return 'Aprovação registrada. A execução ainda não foi confirmada.';
+    if (request.status === 'executing') return 'Aprovada e em execução. Isso ainda não confirma que a campanha entrou em veiculação.';
+    if (request.status === 'succeeded' && creativePlan) return 'Criativos aprovados. Esta etapa não publica nem ativa anúncios.';
+    if (request.status === 'succeeded' && campaignBundle) return 'Estrutura criada na Meta e mantida pausada, sem entrega ou cobrança.';
+    if (request.status === 'succeeded') return 'Execução concluída e registrada.';
+    if (request.status === 'failed') return 'A execução falhou e precisa de atenção.';
+    return `Decisão registrada: ${STATUS_META[request.status].label.toLowerCase()}.`;
+}
+
 export default function MarketingApprovalCenterPanel() {
-    const [filter, setFilter] = useState<ApprovalFilter>('pending');
+    const [filter, setFilter] = useState<ApprovalFilter>('all');
     const [requests, setRequests] = useState<MarketingApprovalRequest[]>([]);
     const [counts, setCounts] = useState<Partial<Record<MarketingApprovalStatus, number>>>({});
     const [loading, setLoading] = useState(true);
@@ -273,10 +287,10 @@ export default function MarketingApprovalCenterPanel() {
     const [note, setNote] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
-    const load = useCallback(async (quiet = false) => {
+    const load = useCallback(async (quiet = false, requestedFilter: ApprovalFilter = filter) => {
         if (!quiet) setLoading(true);
         try {
-            const response = await marketingApprovalService.list(filter);
+            const response = await marketingApprovalService.list(requestedFilter);
             setRequests(response.items || []);
             setCounts(response.counts || {});
         } catch (error: any) {
@@ -314,9 +328,10 @@ export default function MarketingApprovalCenterPanel() {
         setSubmitting(true);
         try {
             await marketingApprovalService.decide(decisionTarget.id, decision, note.trim());
-            toast.success(decision === 'approve' ? 'Ação aprovada e liberada para o executor.' : 'Ação rejeitada.');
+            toast.success(decision === 'approve' ? 'Aprovação registrada. O comprovante continuará visível na tela.' : 'Ação rejeitada.');
             setDecisionTarget(null);
-            await load(true);
+            setFilter('all');
+            await load(true, 'all');
         } catch (error: any) {
             toast.error(error?.message || 'Não foi possível registrar a decisão.');
         } finally {
@@ -391,6 +406,7 @@ export default function MarketingApprovalCenterPanel() {
                                                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{channelLabel(request.channel)}</span>
                                             </div>
                                             <h3 className="mt-3 text-lg font-black text-slate-900">{request.title}</h3>
+                                            <p className={`mt-2 rounded-lg px-3 py-2 text-sm font-bold ${request.status === 'succeeded' ? 'bg-emerald-50 text-emerald-800' : request.status === 'failed' ? 'bg-rose-50 text-rose-800' : 'bg-blue-50 text-blue-800'}`}>{persistentOutcome(request)}</p>
                                             <p className="mt-1 text-sm text-slate-500">{targetTypeLabel(request.target_type)}: <strong className="text-slate-700">{request.target_name || request.target_id || 'alvo a confirmar'}</strong></p>
                                             <p className="mt-2 text-xs text-slate-400">Solicitada em {formatDate(request.created_at)}{request.approval_expires_at ? ` · expira em ${formatDate(request.approval_expires_at)}` : ''}</p>
                                         </div>
