@@ -38,6 +38,7 @@ assert.match(api, /adPayload\(false\)/);
 assert.match(api, /includeInstagramActor/);
 assert.match(api, /end_time: isoWithoutMilliseconds\(addDays\(start, item\.duration_days\)\)/);
 assert.match(api, /call_to_action: \{ type: 'WHATSAPP_MESSAGE'/);
+assert.doesNotMatch(api, /caption: 'Mercado do Vale'/);
 assert.match(api, /status: 'PAUSED'/);
 assert.match(api, /revalidateApprovedProducts/);
 assert.match(api, /SELECT approval_id,item_key FROM marketing_approval_execution_items WHERE provider=.*external_id=/);

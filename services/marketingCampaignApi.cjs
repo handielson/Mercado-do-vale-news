@@ -646,7 +646,6 @@ function buildCarouselStorySpec(item, pageId, instagramAccountId, whatsapp, { in
       link: whatsappProductLink(whatsapp, `Quero comprar pelo Instagram | Origem: ${item.tracking_code}`),
       message: item.primary_text,
       name: item.headline,
-      caption: 'Mercado do Vale',
       child_attachments: cards,
       multi_share_end_card: false,
       multi_share_optimized: true,
