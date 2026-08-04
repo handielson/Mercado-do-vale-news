@@ -27366,7 +27366,7 @@ fastify.post('/whatsapp/automation/test-send', { preHandler: requireSyncKey }, a
   return sendWhatsAppAutomationTemplateTestVps(req.body || {});
 });
 
-const MAX_WHATSAPP_STATUS_PRODUCTS_PER_RUN = 10;
+const MAX_WHATSAPP_STATUS_PRODUCTS_PER_RUN = 300;
 
 function clampWhatsAppStatusDailyLimit(value) {
   const parsed = Math.floor(Number(value) || 0);
@@ -27739,6 +27739,57 @@ function getWhatsAppStatusEffectiveDailyLimit(campaign) {
     : clampWhatsAppStatusDailyLimit(campaign?.daily_limit);
 }
 
+function isWhatsAppStatusFullCategoryCampaign(campaign) {
+  return campaign?.source_type === 'category'
+    && campaign?.repeat_mode !== 'single_product';
+}
+
+async function resolveWhatsAppStatusDailyLimit(campaign, loadedProducts = null) {
+  if (campaign?.repeat_mode === 'single_product' && campaign?.repeat_product_id) return 1;
+  if (!isWhatsAppStatusFullCategoryCampaign(campaign)) return getWhatsAppStatusEffectiveDailyLimit(campaign);
+  const products = loadedProducts || await getWhatsAppStatusCampaignProducts(campaign);
+  return Math.max(1, rotateWhatsAppStatusProducts(products, null).length);
+}
+
+const WHATSAPP_STATUS_TIME_ZONE = 'America/Sao_Paulo';
+
+function getWhatsAppStatusLocalClock(value = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: WHATSAPP_STATUS_TIME_ZONE,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(value).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return {
+    dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+    minuteOfDay: Number(parts.hour || 0) * 60 + Number(parts.minute || 0),
+  };
+}
+
+function getWhatsAppStatusDateKey(value) {
+  if (!value) return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function getWhatsAppStatusDayIndex(currentDateKey, startDateKey) {
+  if (!currentDateKey || !startDateKey) return 0;
+  const current = Date.parse(`${currentDateKey}T00:00:00Z`);
+  const start = Date.parse(`${startDateKey}T00:00:00Z`);
+  return Number.isFinite(current) && Number.isFinite(start) ? Math.floor((current - start) / 86400000) : 0;
+}
+
+function buildWhatsAppStatusScheduledTime(dateKey, totalMinutes, iso = false) {
+  const base = new Date(`${dateKey}T00:00:00Z`);
+  base.setUTCMinutes(totalMinutes);
+  const normalizedDate = base.toISOString().slice(0, 10);
+  const hours = String(base.getUTCHours()).padStart(2, '0');
+  const minutes = String(base.getUTCMinutes()).padStart(2, '0');
+  return iso
+    ? `${normalizedDate}T${hours}:${minutes}:00-03:00`
+    : `${normalizedDate} ${hours}:${minutes}:00`;
+}
+
 async function resolveWhatsAppStatusVideoUrl(product) {
   const timeoutMs = Math.max(1000, Number(process.env.WAHA_STATUS_MEDIA_CHECK_TIMEOUT_MS || 5000));
   for (const candidate of buildWhatsAppStatusVideoCandidates(product)) {
@@ -27871,10 +27922,13 @@ async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledF
     ? loadedProducts.filter((product) => product.id === campaign.repeat_product_id)
     : loadedProducts;
   const stableDayProducts = rotateWhatsAppStatusProducts(products, null);
+  const resolvedMaxProducts = maxProducts == null
+    ? await resolveWhatsAppStatusDailyLimit(campaign, products)
+    : Math.max(1, Number(maxProducts) || 1);
   const selected = scheduledFor && slotIndex !== null && campaign.start_date
     ? stableDayProducts.slice(slotIndex, slotIndex + 1)
     : rotateWhatsAppStatusProducts(products, campaign.last_product_id)
-      .slice(0, clampWhatsAppStatusDailyLimit(maxProducts || getWhatsAppStatusEffectiveDailyLimit(campaign)));
+      .slice(0, clampWhatsAppStatusDailyLimit(resolvedMaxProducts));
   await appendWhatsAppStatusTrace({ runId, campaignId: campaign.id, stage: 'campaign.products', state: 'ok', message: 'Produtos elegiveis selecionados', details: { loaded_products: products.length, selected_products: selected.length, trigger: slotIndex == null ? 'manual' : 'scheduled' } });
 
   if (!selected.length) {
@@ -27926,7 +27980,7 @@ async function executeWhatsAppStatusCampaign(campaign, { maxProducts, scheduledF
   return { ok: failed === 0, run_id: runId, sent, failed, debug: debug || undefined, logs };
 }
 
-function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
+async function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
   const logsByCampaign = new Map();
   for (const log of Array.isArray(logs) ? logs : []) {
     const campaignLogs = logsByCampaign.get(log.campaign_id) || [];
@@ -27934,33 +27988,39 @@ function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
     logsByCampaign.set(log.campaign_id, campaignLogs);
   }
 
-  const now = new Date();
-  return campaigns.map((campaign) => {
+  const localClock = getWhatsAppStatusLocalClock();
+  return Promise.all(campaigns.map(async (campaign) => {
     const campaignLogs = logsByCampaign.get(campaign.id) || [];
     const scheduledLogs = campaignLogs.filter((log) => log.slot_index !== null && log.slot_index !== undefined);
     const completedSlots = new Set(scheduledLogs.map((log) => Number(log.slot_index)).filter((slot) => Number.isFinite(slot)));
-    const total = getWhatsAppStatusEffectiveDailyLimit(campaign);
+    const total = await resolveWhatsAppStatusDailyLimit(campaign);
+    const startDateKey = getWhatsAppStatusDateKey(campaign.start_date) || localClock.dateKey;
+    const dayIndex = getWhatsAppStatusDayIndex(localClock.dateKey, startDateKey);
+    const repeatDays = normalizeWhatsAppStatusRepeatDays(campaign.repeat_days);
+    const eligibleToday = dayIndex >= 0 && dayIndex < repeatDays
+      && (campaign.frequency !== 'weekly' || dayIndex % 7 === 0)
+      && (campaign.frequency !== 'once' || dayIndex === 0);
     let nextSlotIndex = null;
+    const interval = normalizeWhatsAppStatusInterval(campaign.interval_minutes);
+    const [startHours, startMinutes] = String(campaign.start_time || '08:00').split(':').map((part) => Number(part) || 0);
+    const startTotal = startHours * 60 + startMinutes;
     for (let slot = 0; slot < total; slot += 1) {
-      if (!completedSlots.has(slot)) {
+      const slotEnd = startTotal + (slot + 1) * interval;
+      if (eligibleToday && !completedSlots.has(slot) && slotEnd > localClock.minuteOfDay) {
         nextSlotIndex = slot;
         break;
       }
     }
-
-    const interval = normalizeWhatsAppStatusInterval(campaign.interval_minutes);
-    const [startHours, startMinutes] = String(campaign.start_time || '08:00').split(':').map((part) => Number(part) || 0);
-    const startTotal = startHours * 60 + startMinutes;
-    const nextDate = nextSlotIndex === null
+    const nextScheduledFor = nextSlotIndex === null
       ? null
-      : new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, startTotal + nextSlotIndex * interval, 0);
+      : buildWhatsAppStatusScheduledTime(localClock.dateKey, startTotal + nextSlotIndex * interval, true);
     const countStatus = (items, status) => items.filter((log) => log.status === status).length;
 
     return {
       campaign_id: campaign.id,
       daily_limit: total,
       start_date: campaign.start_date || null,
-      repeat_days: normalizeWhatsAppStatusRepeatDays(campaign.repeat_days),
+      repeat_days: repeatDays,
       repeat_mode: campaign.repeat_mode || 'full_day',
       repeat_product_id: campaign.repeat_product_id || null,
       interval_minutes: interval,
@@ -27974,7 +28034,7 @@ function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
         skipped: countStatus(scheduledLogs, 'skipped'),
         percent: total > 0 ? Math.round((Math.min(total, completedSlots.size) / total) * 100) : 0,
         next_slot_index: nextSlotIndex,
-        next_scheduled_for: nextDate ? nextDate.toISOString() : null,
+        next_scheduled_for: nextScheduledFor,
       },
       today: {
         total_logs: campaignLogs.length,
@@ -27988,11 +28048,12 @@ function buildWhatsAppStatusProgress(campaigns, logs, traceEvents = []) {
         : [],
       logs: campaignLogs.slice(0, 10),
     };
-  });
+  }));
 }
 
 fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey }, async () => {
   await markStaleWhatsAppStatusSendingLogs();
+  const localDateKey = getWhatsAppStatusLocalClock().dateKey;
   const [campaigns] = await pool.query(
     `SELECT id, title, active, daily_limit, interval_minutes, start_time,
             start_date, repeat_days, repeat_mode, repeat_product_id
@@ -28005,9 +28066,10 @@ fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey 
             l.scheduled_for, l.slot_index, l.created_at
      FROM whatsapp_status_campaign_logs l
      LEFT JOIN products p ON p.id = l.product_id
-     WHERE DATE(l.created_at) = CURDATE()
+     WHERE DATE(CONVERT_TZ(l.created_at, '+00:00', '-03:00')) = ?
      ORDER BY l.created_at DESC
-     LIMIT 500`
+     LIMIT 500`,
+    [localDateKey]
   );
   const runIds = Array.from(new Set(logs.map((log) => log.run_id).filter(Boolean)));
   let traceEvents = [];
@@ -28025,7 +28087,7 @@ fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey 
   return {
     ok: true,
     generated_at: new Date().toISOString(),
-    campaigns: buildWhatsAppStatusProgress(campaigns, logs, traceEvents),
+    campaigns: await buildWhatsAppStatusProgress(campaigns, logs, traceEvents),
   };
 });
 
@@ -28061,7 +28123,7 @@ fastify.post('/whatsapp/status-campaigns/:id/send-now', { preHandler: requireSyn
   const runId = crypto.randomUUID();
   await appendWhatsAppStatusTrace({ runId, campaignId: campaign.id, stage: 'request.accepted', state: 'ok', message: 'Envio manual aceito e colocado na fila' });
   setImmediate(() => {
-    executeWhatsAppStatusCampaign(campaign, { maxProducts: campaign.daily_limit, runId }).catch(async (error) => {
+    executeWhatsAppStatusCampaign(campaign, { runId }).catch(async (error) => {
       const debug = buildWhatsAppStatusDebug({
         campaign,
         endpoint: 'envio manual/agora',
@@ -28077,62 +28139,78 @@ fastify.post('/whatsapp/status-campaigns/:id/send-now', { preHandler: requireSyn
 });
 
 async function runDueWhatsAppStatusCampaigns() {
-  await pool.query(
-    `UPDATE whatsapp_status_campaigns
-     SET active = 0
-     WHERE active = 1
-       AND start_date IS NOT NULL
-       AND CURDATE() >= DATE_ADD(start_date, INTERVAL repeat_days DAY)`
-  );
   const [campaigns] = await pool.query(
-    `SELECT *, IF(start_date IS NULL, NULL, DATEDIFF(CURDATE(), start_date)) AS repeat_day_index
+    `SELECT *
      FROM whatsapp_status_campaigns
      WHERE active = 1
        AND frequency IN ('daily', 'weekly', 'once')
-       AND (start_date IS NULL OR (
-         CURDATE() >= start_date
-         AND CURDATE() < DATE_ADD(start_date, INTERVAL repeat_days DAY)
-       ))
-       AND start_time <= CURTIME()
      ORDER BY start_time ASC
      LIMIT 20`
   );
   const results = [];
-  const now = new Date();
+  const localClock = getWhatsAppStatusLocalClock();
   for (const campaign of campaigns) {
+    const startDateKey = getWhatsAppStatusDateKey(campaign.start_date) || localClock.dateKey;
+    const repeatDays = normalizeWhatsAppStatusRepeatDays(campaign.repeat_days);
+    const dayIndex = getWhatsAppStatusDayIndex(localClock.dateKey, startDateKey);
+    if (dayIndex >= repeatDays) {
+      await pool.query('UPDATE whatsapp_status_campaigns SET active = 0 WHERE id = ?', [campaign.id]);
+      continue;
+    }
+    if (dayIndex < 0) continue;
+    if (campaign.frequency === 'weekly' && dayIndex % 7 !== 0) continue;
+    if (campaign.frequency === 'once' && dayIndex !== 0) continue;
+
     const interval = normalizeWhatsAppStatusInterval(campaign.interval_minutes);
-    const limit = getWhatsAppStatusEffectiveDailyLimit(campaign);
+    const limit = await resolveWhatsAppStatusDailyLimit(campaign);
     const [startHours, startMinutes] = String(campaign.start_time || '08:00').split(':').map((part) => Number(part) || 0);
     const startTotal = startHours * 60 + startMinutes;
-    const nowTotal = now.getHours() * 60 + now.getMinutes();
-    const elapsed = nowTotal - startTotal;
+    const elapsed = localClock.minuteOfDay - startTotal;
     if (elapsed < 0) continue;
     const slotIndex = Math.floor(elapsed / interval);
     if (slotIndex < 0 || slotIndex >= limit) continue;
 
     const [existingLogs] = await pool.query(
       `SELECT id FROM whatsapp_status_campaign_logs
-       WHERE campaign_id = ? AND slot_index = ? AND DATE(created_at) = CURDATE()
+       WHERE campaign_id = ? AND slot_index = ?
+         AND DATE(CONVERT_TZ(created_at, '+00:00', '-03:00')) = ?
        LIMIT 1`,
-      [campaign.id, slotIndex]
+      [campaign.id, slotIndex, localClock.dateKey]
     );
     if (existingLogs.length > 0) continue;
 
-    const scheduledFor = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, startTotal + slotIndex * interval, 0);
+    const scheduledFor = buildWhatsAppStatusScheduledTime(localClock.dateKey, startTotal + slotIndex * interval);
     const result = await executeWhatsAppStatusCampaign(campaign, {
       maxProducts: 1,
-      scheduledFor: scheduledFor.toISOString().slice(0, 19).replace('T', ' '),
+      scheduledFor,
       slotIndex,
     });
     results.push({ campaignId: campaign.id, slotIndex, ...result });
 
-    const repeatDays = normalizeWhatsAppStatusRepeatDays(campaign.repeat_days);
-    const boundedDayIndex = campaign.repeat_day_index == null ? -1 : Number(campaign.repeat_day_index);
-    if ((campaign.frequency === 'once' || (boundedDayIndex === repeatDays - 1)) && slotIndex >= limit - 1) {
+    if ((campaign.frequency === 'once' || dayIndex === repeatDays - 1) && slotIndex >= limit - 1) {
       await pool.query('UPDATE whatsapp_status_campaigns SET active = 0 WHERE id = ?', [campaign.id]);
     }
   }
   return { ok: true, campaigns: campaigns.length, results };
+}
+
+let whatsAppStatusAutomationRunningVps = false;
+async function runWhatsAppStatusAutomationTickVps() {
+  if (whatsAppStatusAutomationRunningVps) return;
+  whatsAppStatusAutomationRunningVps = true;
+  try {
+    await runDueWhatsAppStatusCampaigns();
+  } catch (error) {
+    console.error('[whatsapp-status-automation] tick failed:', error?.message || String(error));
+  } finally {
+    whatsAppStatusAutomationRunningVps = false;
+  }
+}
+
+function startWhatsAppStatusAutomationVps() {
+  const timer = setInterval(() => void runWhatsAppStatusAutomationTickVps(), 60_000);
+  timer.unref?.();
+  setTimeout(() => void runWhatsAppStatusAutomationTickVps(), 15_000).unref?.();
 }
 
 fastify.post('/whatsapp/status-campaigns/run-due', { preHandler: requireSyncKey }, async () => {
@@ -38115,6 +38193,7 @@ scheduleNextSystemBackup();
 runMigrations().then(() => {
   scheduleSignedWarrantySync();
   startFacebookMarketplaceAutomationVps();
+  startWhatsAppStatusAutomationVps();
   startShopeeReviewAutomationVps();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }

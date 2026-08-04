@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.149-shopee-avaliacoes-auto",
+  "version": "v1.2.150-whatsapp-status-agenda-real",
   "date": "2026-08-03",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-013000-v12149-shopee-avaliacoes-auto",
+  "release_vps": "/var/www/mdv-site/releases/20260804-015444-whatsapp-status-agenda-real",
   "branch": "main",
-  "summary": "Responde automaticamente novas avaliacoes Shopee pela VPS e processa as pendentes autorizadas."
+  "summary": "Executa campanhas de Status a cada minuto no fuso de Petrolina e publica a categoria completa em estoque."
 }

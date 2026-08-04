@@ -140,7 +140,9 @@ function normalizeCampaign(row: WhatsAppStatusCampaign): WhatsAppStatusCampaign 
   return {
     ...row,
     product_ids: productIds,
-    daily_limit: Math.max(1, Math.min(10, Number(row.daily_limit || 1))),
+    daily_limit: Number(row.daily_limit) === 0
+      ? 0
+      : Math.max(1, Math.min(300, Number(row.daily_limit || 1))),
     interval_minutes: Math.max(1, Number(row.interval_minutes || 30)),
     start_date: row.start_date ? String(row.start_date).slice(0, 10) : null,
     repeat_days: Math.max(1, Math.min(30, Number(row.repeat_days || 1))),

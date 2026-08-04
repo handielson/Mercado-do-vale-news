@@ -35,7 +35,7 @@ const DEFAULT_FORM: WhatsAppStatusCampaignInput = {
   product_id: null,
   product_ids: [],
   category_id: null,
-  daily_limit: 10,
+  daily_limit: 0,
   interval_minutes: 30,
   start_time: '08:00',
   frequency: 'daily',
@@ -206,7 +206,11 @@ function scheduleSlotTime(startTime: string, intervalMinutes: number, slotIndex:
 
 function ScheduleDiagram({ form, products }: { form: WhatsAppStatusCampaignInput; products: CatalogProduct[] }) {
   const repeatDays = Math.max(1, Math.min(30, Number(form.repeat_days || 1)));
-  const totalSlots = form.repeat_mode === 'single_product' ? 1 : Math.max(1, Math.min(10, Number(form.daily_limit || 1)));
+  const totalSlots = form.repeat_mode === 'single_product'
+    ? 1
+    : form.source_type === 'category'
+      ? Math.max(1, products.length)
+      : Math.max(1, Math.min(300, Number(form.daily_limit || 1)));
   const interval = Math.max(1, Number(form.interval_minutes || 30));
   const specific = products.find((product) => product.id === form.repeat_product_id);
   const labels = form.repeat_mode === 'single_product'
@@ -670,7 +674,11 @@ export default function WhatsAppStatusCampaignPanel() {
     try {
       const payload = {
         ...form,
-        daily_limit: form.repeat_mode === 'single_product' ? 1 : Math.max(1, Math.min(10, Number(form.daily_limit || 1))),
+      daily_limit: form.repeat_mode === 'single_product'
+        ? 1
+        : form.source_type === 'category'
+          ? 0
+          : Math.max(1, Math.min(300, Number(form.daily_limit || 1))),
         interval_minutes: Math.max(1, Number(form.interval_minutes || 30)),
         start_date: form.start_date || todayDateValue(),
         repeat_days: Math.max(1, Math.min(30, Number(form.repeat_days || 1))),
@@ -900,17 +908,18 @@ export default function WhatsAppStatusCampaignPanel() {
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Qtd. por dia</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={form.daily_limit}
-                  onChange={(event) => updateForm('daily_limit', Number(event.target.value))}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </label>
+              <div className="block">
+                <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Quantidade</span>
+                {form.source_type === 'category' ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
+                    Categoria completa
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">
+                    {selectedProductIds.length || 0} produto(s)
+                  </div>
+                )}
+              </div>
               <label className="block">
                 <span className="mb-1 block text-xs font-bold uppercase text-slate-500">Intervalo min.</span>
                 <input
@@ -1145,7 +1154,9 @@ export default function WhatsAppStatusCampaignPanel() {
                         {campaign.source_type === 'category' ? 'Categoria' : 'Produto'}
                       </span>
                       <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                        {campaign.daily_limit}/dia
+                        {campaign.source_type === 'category'
+                          ? 'Categoria completa'
+                          : `${campaign.daily_limit}/dia`}
                       </span>
                       <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">
                         {campaign.interval_minutes} min
