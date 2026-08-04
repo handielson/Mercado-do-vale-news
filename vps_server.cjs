@@ -11654,6 +11654,116 @@ function cronDispatcherSaoPauloDateTimeVps(date) {
   return `${value('year')}-${value('month')}-${value('day')} ${value('hour')}:${value('minute')}:${value('second')}`;
 }
 
+function facebookCampaignJsonArrayVps(value) {
+  if (Array.isArray(value)) return value;
+  try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
+}
+
+function facebookCampaignDescriptionVps(campaign, product, priceCents) {
+  const price = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(priceCents / 100);
+  const link = product.slug ? `https://mercadodovale.com.br/produto/${product.slug}` : 'https://mercadodovale.com.br/';
+  const template = String(campaign.description_template || [
+    '{produto}',
+    '',
+    'Preco: {preco}',
+    'Disponivel em estoque.',
+    '',
+    '{link}',
+    'Chame no WhatsApp para confirmar a disponibilidade.',
+  ].join('\n'));
+  return template
+    .replace(/\{produto\}/g, String(product.name || ''))
+    .replace(/\{preco\}/g, price)
+    .replace(/\{estoque\}/g, String(product.stock_quantity || 0))
+    .replace(/\{link\}/g, link)
+    .replace(/\{sku\}/g, String(product.sku || ''));
+}
+
+async function maybeGenerateFacebookMarketplaceCampaignsVps(now) {
+  const localNow = cronDispatcherSaoPauloDateTimeVps(now);
+  const localDate = localNow.slice(0, 10);
+  const localTime = localNow.slice(11, 19);
+  try {
+    const [campaigns] = await pool.query(
+      `SELECT * FROM facebook_marketplace_campaigns
+       WHERE active = 1 AND (next_run_at IS NULL OR next_run_at <= ?)
+       ORDER BY COALESCE(next_run_at, created_at) ASC LIMIT 20`,
+      [localNow],
+    );
+    let generated = 0;
+    for (const campaign of campaigns) {
+      const startTime = String(campaign.start_time || '08:00:00').slice(0, 8);
+      const endTime = String(campaign.end_time || '20:00:00').slice(0, 8);
+      if (localTime < startTime || localTime > endTime) continue;
+
+      const intervalMinutes = Math.max(15, Number(campaign.interval_minutes || 180));
+      const [claim] = await pool.query(
+        `UPDATE facebook_marketplace_campaigns
+         SET next_run_at = DATE_ADD(?, INTERVAL ? MINUTE), last_error = NULL
+         WHERE id = ? AND active = 1 AND (next_run_at IS NULL OR next_run_at <= ?)`,
+        [localNow, intervalMinutes, campaign.id, localNow],
+      );
+      if (!claim.affectedRows) continue;
+
+      const [todayRows] = await pool.query(
+        `SELECT COUNT(*) AS total FROM facebook_marketplace_schedule
+         WHERE campaign_id = ? AND DATE(scheduled_for) = ? AND status <> 'cancelled'`,
+        [campaign.id, localDate],
+      );
+      if (Number(todayRows[0]?.total || 0) >= Math.max(1, Number(campaign.daily_limit || 4))) continue;
+
+      const cooldownHours = Math.max(1, Number(campaign.republish_cooldown_hours || 168));
+      const minStock = Math.max(1, Number(campaign.min_stock || 1));
+      const [products] = await pool.query(
+        `SELECT p.id, p.name, p.sku, p.slug, p.price_retail, p.price_promo, p.stock_quantity, p.images, p.image_url
+         FROM products p
+         WHERE p.category_id = ? AND p.status = 'active'
+           AND COALESCE(p.is_parent, 0) = 0 AND COALESCE(p.stock_quantity, 0) >= ?
+           AND NOT EXISTS (
+             SELECT 1 FROM facebook_marketplace_schedule s
+             WHERE s.product_id = p.id AND s.status <> 'cancelled'
+               AND TIMESTAMPDIFF(HOUR, s.scheduled_for, ?) < ?
+           )
+         ORDER BY (p.id = ?) ASC, p.stock_quantity DESC, p.updated_at ASC
+         LIMIT 1`,
+        [campaign.category_id, minStock, localNow, cooldownHours, campaign.last_product_id || ''],
+      );
+      const product = products[0];
+      if (!product) {
+        await pool.query('UPDATE facebook_marketplace_campaigns SET last_error = ? WHERE id = ?', [
+          `Nenhum produto ativo com estoque ${minStock} fora do prazo de republicacao de ${cooldownHours}h.`,
+          campaign.id,
+        ]);
+        continue;
+      }
+
+      const priceCents = Math.max(0, Number(product.price_promo || product.price_retail || 0));
+      let imageUrls = facebookCampaignJsonArrayVps(product.images).filter(Boolean).slice(0, 10);
+      if (!imageUrls.length && product.image_url) imageUrls = [product.image_url];
+      let destinations = facebookCampaignJsonArrayVps(campaign.destinations);
+      if (!destinations.length) destinations = [{ name: 'Facebook Marketplace', type: 'marketplace' }];
+      const scheduleId = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO facebook_marketplace_schedule
+         (id, campaign_id, source, product_id, product_name, price_cents, description, image_urls, destinations, scheduled_for, status, notes)
+         VALUES (?, ?, 'campaign', ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?)`,
+        [scheduleId, campaign.id, product.id, product.name, priceCents,
+          facebookCampaignDescriptionVps(campaign, product, priceCents), JSON.stringify(imageUrls), JSON.stringify(destinations), localNow,
+          `Gerado automaticamente pela campanha ${campaign.title}`],
+      );
+      await pool.query(
+        'UPDATE facebook_marketplace_campaigns SET last_product_id = ?, last_generated_at = ?, last_error = NULL WHERE id = ?',
+        [product.id, localNow, campaign.id],
+      );
+      generated += 1;
+    }
+    return generated;
+  } catch (error) {
+    if (error?.code === 'ER_NO_SUCH_TABLE' || error?.code === 'ER_BAD_FIELD_ERROR') return 0;
+    throw error;
+  }
+}
+
 async function maybeSendFacebookMarketplaceRemindersVps(settings, now) {
   try {
     const localNow = cronDispatcherSaoPauloDateTimeVps(now);
@@ -11706,6 +11816,31 @@ async function maybeSendFacebookMarketplaceRemindersVps(settings, now) {
   }
 }
 
+let facebookMarketplaceAutomationRunningVps = false;
+async function runFacebookMarketplaceAutomationTickVps() {
+  if (facebookMarketplaceAutomationRunningVps) return;
+  facebookMarketplaceAutomationRunningVps = true;
+  try {
+    const now = new Date();
+    await maybeGenerateFacebookMarketplaceCampaignsVps(now);
+    const [settingsRows] = await pool.query('SELECT * FROM telegram_settings LIMIT 1');
+    const settings = settingsRows[0];
+    if (settings?.active && settings?.bot_token && settings?.chat_id) {
+      await maybeSendFacebookMarketplaceRemindersVps(settings, now);
+    }
+  } catch (error) {
+    console.error('[facebook-marketplace-automation] tick failed:', error?.message || String(error));
+  } finally {
+    facebookMarketplaceAutomationRunningVps = false;
+  }
+}
+
+function startFacebookMarketplaceAutomationVps() {
+  const timer = setInterval(() => void runFacebookMarketplaceAutomationTickVps(), 60_000);
+  timer.unref?.();
+  setTimeout(() => void runFacebookMarketplaceAutomationTickVps(), 10_000).unref?.();
+}
+
 async function handleCronDispatcherVps(request, reply) {
   if (!String(process.env.CRON_SECRET || process.env.SYNC_SECRET || '').trim()) {
     return reply.code(503).send({ error: 'Cron secret not configured' });
@@ -11715,6 +11850,7 @@ async function handleCronDispatcherVps(request, reply) {
   }
 
   try {
+    const now = new Date();
     const birthdaySummary = await sendBirthdayGreetingsForToday({ birthdaySummary: true }).catch((err) => ({ birthdaySummary: true, error: err.message || String(err) }));
     const whatsappStatusSummary = await runDueWhatsAppStatusCampaigns().catch((err) => ({
       ok: false,
@@ -11722,12 +11858,19 @@ async function handleCronDispatcherVps(request, reply) {
     }));
     const rows = await vpsDbSelect('telegram_settings', 'select=*&limit=1');
     const settings = cronDispatcherFirstRowVps(rows);
+    let facebookMarketplaceCampaignsGenerated = 0;
+    try {
+      facebookMarketplaceCampaignsGenerated = await maybeGenerateFacebookMarketplaceCampaignsVps(now);
+    } catch (err) {
+      console.error('[cron-dispatcher] Failed to generate Facebook Marketplace campaigns:', err.message);
+    }
     const hasConfiguredTelegramCredential = !!settings?.bot_token;
     if (!settings || !settings.active || !settings.bot_token || !settings.chat_id) {
       return reply.code(200).send({
         message: 'Telegram integration inactive or not fully configured',
         birthdaySummary,
         whatsappStatusSummary,
+        facebookMarketplaceCampaignsGenerated,
         debug: buildCopyableDebug('cron-dispatcher', {
           hasSettings: !!settings,
           isActive: !!settings?.active,
@@ -11737,7 +11880,6 @@ async function handleCronDispatcherVps(request, reply) {
       });
     }
 
-    const now = new Date();
     const timeParts = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).formatToParts(now);
     const hour = timeParts.find((part) => part.type === 'hour')?.value || '00';
     const currentHourPrefix = `${hour}:`;
@@ -34793,6 +34935,47 @@ async function runMigrations() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS facebook_marketplace_groups (
+      id CHAR(36) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      url VARCHAR(700) NOT NULL,
+      source ENUM('manual', 'chrome') NOT NULL DEFAULT 'manual',
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      last_synced_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_facebook_marketplace_group_url (url(255))
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS facebook_marketplace_campaigns (
+      id CHAR(36) PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      category_id CHAR(36) NOT NULL,
+      min_stock INT NOT NULL DEFAULT 1,
+      interval_minutes INT NOT NULL DEFAULT 180,
+      republish_cooldown_hours INT NOT NULL DEFAULT 168,
+      daily_limit INT NOT NULL DEFAULT 4,
+      start_time TIME NOT NULL DEFAULT '08:00:00',
+      end_time TIME NOT NULL DEFAULT '20:00:00',
+      destinations JSON NULL,
+      description_template TEXT NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      last_product_id CHAR(36) NULL,
+      last_generated_at DATETIME NULL,
+      next_run_at DATETIME NULL,
+      last_error TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_facebook_campaign_due (active, next_run_at),
+      INDEX idx_facebook_campaign_category (category_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await addColumnIfMissing('facebook_marketplace_schedule', 'campaign_id', 'CHAR(36) NULL AFTER id');
+  await addColumnIfMissing('facebook_marketplace_schedule', 'source', "ENUM('manual', 'campaign') NOT NULL DEFAULT 'manual' AFTER campaign_id");
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS instagram_schedule (
       id CHAR(36) PRIMARY KEY,
       day_of_week TINYINT UNSIGNED NOT NULL,
@@ -37568,6 +37751,7 @@ scheduleNextSystemBackup();
 
 runMigrations().then(() => {
   scheduleSignedWarrantySync();
+  startFacebookMarketplaceAutomationVps();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);

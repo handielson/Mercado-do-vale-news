@@ -9,6 +9,8 @@ import {
     type FacebookMarketplaceSchedule,
     type FacebookMarketplaceStatus,
 } from '../../../../services/facebookMarketplaceScheduleService';
+import FacebookMarketplaceCampaignPanel from './FacebookMarketplaceCampaignPanel';
+import { facebookMarketplaceCampaignService, type FacebookMarketplaceGroup } from '../../../../services/facebookMarketplaceCampaignService';
 
 const MARKETPLACE_CREATE_URL = 'https://www.facebook.com/marketplace/create/item';
 
@@ -83,6 +85,8 @@ export default function FacebookMarketplaceSchedulerPanel({ initialProduct, init
     const [price, setPrice] = useState('');
     const [description, setDescription] = useState('');
     const [groupLines, setGroupLines] = useState('');
+    const [savedGroups, setSavedGroups] = useState<FacebookMarketplaceGroup[]>([]);
+    const [selectedGroupUrls, setSelectedGroupUrls] = useState<string[]>([]);
     const [notes, setNotes] = useState('');
 
     const load = async () => {
@@ -97,7 +101,10 @@ export default function FacebookMarketplaceSchedulerPanel({ initialProduct, init
         }
     };
 
-    useEffect(() => { void load(); }, []);
+    useEffect(() => {
+        void load();
+        facebookMarketplaceCampaignService.listGroups().then(setSavedGroups).catch(() => setSavedGroups([]));
+    }, []);
 
     useEffect(() => {
         if (!initialProduct || showForm) return;
@@ -122,6 +129,7 @@ export default function FacebookMarketplaceSchedulerPanel({ initialProduct, init
     const openNew = () => {
         setScheduledFor(toLocalInputValue());
         setGroupLines(localStorage.getItem('facebook_marketplace_groups') || '');
+        setSelectedGroupUrls([]);
         setNotes('');
         fillFromProduct(initialProduct ?? null, initialDescription);
         setShowForm(true);
@@ -149,7 +157,11 @@ export default function FacebookMarketplaceSchedulerPanel({ initialProduct, init
 
         setSaving(true);
         try {
-            const destinations = parseDestinations(groupLines);
+            const savedDestinations = savedGroups
+                .filter((group) => selectedGroupUrls.includes(group.url))
+                .map((group) => ({ name: group.name, url: group.url, type: 'group' as const }));
+            const destinations = [...parseDestinations(groupLines), ...savedDestinations]
+                .filter((destination, index, list) => list.findIndex((item) => item.type === destination.type && item.url === destination.url) === index);
             localStorage.setItem('facebook_marketplace_groups', groupLines);
             const created = await facebookMarketplaceScheduleService.create({
                 product_id: product.id,
@@ -225,6 +237,8 @@ export default function FacebookMarketplaceSchedulerPanel({ initialProduct, init
                 O Facebook não disponibiliza publicação automática oficial para anúncios comuns do Marketplace. No horário, o sistema avisa, copia o texto e abre o formulário correto para conclusão manual.
             </div>
 
+            <FacebookMarketplaceCampaignPanel onGenerated={() => void load()} />
+
             {loading ? (
                 <div className="flex items-center justify-center gap-2 p-8 text-sm text-slate-400"><Loader2 className="h-4 w-4 animate-spin" /> Carregando fila...</div>
             ) : items.length === 0 ? (
@@ -298,7 +312,7 @@ export default function FacebookMarketplaceSchedulerPanel({ initialProduct, init
                                 <div><label className="mb-1 block text-xs font-black uppercase text-slate-500">Preço (R$)</label><input inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0,00" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></div>
                             </div>
                             <div><label className="mb-1 block text-xs font-black uppercase text-slate-500">Descrição pronta para copiar</label><textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={7} className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm" /></div>
-                            <div><label className="mb-1 block text-xs font-black uppercase text-slate-500">Grupos de venda (opcional)</label><textarea value={groupLines} onChange={(event) => setGroupLines(event.target.value)} rows={4} placeholder={'Classificados Petrolina | https://facebook.com/groups/...\nCompra e venda Vale do São Francisco | https://facebook.com/groups/...'} className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm" /><p className="mt-1 text-[11px] text-slate-400">Um grupo por linha, no formato Nome | URL. A lista fica salva para as próximas programações.</p></div>
+                            <div><label className="mb-1 block text-xs font-black uppercase text-slate-500">Grupos de venda (selecione um ou vários)</label>{savedGroups.length > 0 && <div className="mb-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border p-2">{savedGroups.map((group) => { const checked = selectedGroupUrls.includes(group.url); return <label key={group.id} className={`flex cursor-pointer items-center gap-2 rounded-lg p-2 text-sm ${checked ? 'bg-blue-50 font-bold text-blue-800' : 'hover:bg-slate-50'}`}><input type="checkbox" checked={checked} onChange={() => setSelectedGroupUrls((current) => checked ? current.filter((url) => url !== group.url) : [...current, group.url])} />{group.name}</label>; })}</div>}<textarea value={groupLines} onChange={(event) => setGroupLines(event.target.value)} rows={3} placeholder={'Grupo adicional | https://facebook.com/groups/...'} className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm" /><p className="mt-1 text-[11px] text-slate-400">Os grupos salvos aparecem acima. Use o campo somente para um destino avulso.</p></div>
                             <div><label className="mb-1 block text-xs font-black uppercase text-slate-500">Observações internas</label><input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Ex.: destacar garantia e entrega" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" /></div>
                         </div>
                         <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-100 bg-white px-6 py-4"><button onClick={() => setShowForm(false)} className="rounded-lg px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100">Cancelar</button><button onClick={() => void save()} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-50">{saving && <Loader2 className="h-4 w-4 animate-spin" />} Programar</button></div>

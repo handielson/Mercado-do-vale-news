@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Mercado do Vale - Grupos do Facebook",
+  "version": "1.0.0",
+  "description": "Importa os grupos visíveis da conta Facebook aberta para o programador do Mercado do Vale.",
+  "permissions": ["tabs"],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://facebook.com/*",
+    "https://mercadodovale.com.br/*",
+    "https://www.mercadodovale.com.br/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://mercadodovale.com.br/*", "https://www.mercadodovale.com.br/*"],
+      "js": ["mdv-bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.facebook.com/*", "https://facebook.com/*"],
+      "js": ["facebook-reader.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

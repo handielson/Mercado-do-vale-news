@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.143-canais-marketing-separados
+version: v1.2.144-facebook-campanhas-auto
 date: 2026-08-03
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-002455-v12143-canais-marketing-separados
+release_vps: /var/www/mdv-site/releases/20260804-003541-v12144-facebook-campanhas-auto
 branch: main
-summary: Restaura a agenda e separa Studio, Instagram, Facebook e WhatsApp em areas visuais independentes.
+summary: Automatiza a rotação assistida de anúncios do Facebook por categoria, estoque, intervalo e prazo de republicação.
 ```

@@ -10,6 +10,8 @@ export interface FacebookMarketplaceDestination {
 
 export interface FacebookMarketplaceSchedule {
     id: string;
+    campaign_id?: string | null;
+    source?: 'manual' | 'campaign';
     product_id: string | null;
     product_name: string;
     price_cents: number;
