@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.142-cliente-foto-moedas
+version: v1.2.143-canais-marketing-separados
 date: 2026-08-03
 status: ready
-release_vps: /var/www/mdv-site/releases/20260803-162911-v12142-cliente-foto-moedas
+release_vps: /var/www/mdv-site/releases/20260804-002455-v12143-canais-marketing-separados
 branch: main
-summary: Mantem produtos comprados com foto no historico e torna o credito de Moedas do Vale automatico, seguro e reconciliavel.
+summary: Restaura a agenda e separa Studio, Instagram, Facebook e WhatsApp em areas visuais independentes.
 ```

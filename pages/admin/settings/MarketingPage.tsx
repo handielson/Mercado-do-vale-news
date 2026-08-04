@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { flushSync } from 'react-dom';
-import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, CheckCircle2, Calendar, Trash2, Clock, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, CheckCircle2, Calendar, Trash2, Clock, ToggleLeft, ToggleRight, Facebook, Instagram, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { toBlob, toPng } from 'html-to-image';
 import { catalogService } from '../../../services/catalogService';
@@ -238,7 +238,7 @@ export default function MarketingPage() {
     const [companyInfo, setCompanyInfo] = useState<Company | null>(null);
     const [format, setFormat] = useState<MarketingAssetFormat>('sticker');
     const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
-    const [activeTab, setActiveTab] = useState<'studio' | 'agenda'>('studio');
+    const [activeTab, setActiveTab] = useState<'studio' | 'instagram' | 'facebook' | 'whatsapp'>('studio');
     const safeStickerSettings = sanitizeMarketingStickerSettings(stickerSettings);
     const isStickerFormat = format === 'sticker';
     const updateStickerSetting = <K extends keyof MarketingStickerSettings>(
@@ -862,7 +862,7 @@ export default function MarketingPage() {
             sort_order: scheduleSlots.filter((slot) => slot.day_of_week === todayDayIndex).length,
         });
         setShowSlotForm(true);
-        setActiveTab('agenda');
+        setActiveTab('instagram');
         recordCooldownForProduct(studioPrimaryProduct);
     };
 
@@ -1252,9 +1252,9 @@ export default function MarketingPage() {
                     </div>
                     <div>
                         <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Marketing Studio</p>
-                        <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900">Versão completa para teste</h1>
+                        <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900">Central de Conteúdo</h1>
                         <p className="mt-2 text-sm text-slate-500">
-                            Studio editorial, figurinha flexível e fase de agendamento no mesmo fluxo.
+                            Crie a arte e organize cada canal em seu próprio espaço.
                         </p>
                     </div>
                 </div>
@@ -1268,17 +1268,37 @@ export default function MarketingPage() {
                                 : 'text-slate-600 hover:bg-slate-100'
                         }`}
                     >
-                        Studio
+                        <span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4" /> Studio</span>
                     </button>
                     <button
-                        onClick={() => setActiveTab('agenda')}
+                        onClick={() => setActiveTab('instagram')}
                         className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-                            activeTab === 'agenda'
+                            activeTab === 'instagram'
                                 ? 'bg-slate-900 text-white'
                                 : 'text-slate-600 hover:bg-slate-100'
                         }`}
                     >
-                        Fase de Agendamento
+                        <span className="inline-flex items-center gap-2"><Instagram className="h-4 w-4" /> Instagram</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('facebook')}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
+                            activeTab === 'facebook'
+                                ? 'bg-blue-600 text-white'
+                                : 'text-slate-600 hover:bg-blue-50 hover:text-blue-700'
+                        }`}
+                    >
+                        <span className="inline-flex items-center gap-2"><Facebook className="h-4 w-4" /> Facebook</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('whatsapp')}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
+                            activeTab === 'whatsapp'
+                                ? 'bg-emerald-600 text-white'
+                                : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                        }`}
+                    >
+                        <span className="inline-flex items-center gap-2"><MessageCircle className="h-4 w-4" /> WhatsApp</span>
                     </button>
                 </div>
             </div>
@@ -1309,10 +1329,10 @@ export default function MarketingPage() {
                     </div>
                 )}
 
-                {activeTab === 'agenda' && (
+                {activeTab === 'instagram' && (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Fase de agendamento</p>
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Agenda do Instagram</p>
                             <h2 className="mt-2 text-lg font-black text-slate-900">{DAY_LABELS_FULL[selectedDay] ?? 'Dia selecionado'}</h2>
                             <p className="mt-1 text-sm text-slate-500">{scheduleSlots.filter((slot) => slot.day_of_week === selectedDay).length} slot(s) no dia</p>
                         </div>
@@ -2059,7 +2079,7 @@ export default function MarketingPage() {
                             </div>
                         </div>
                     )}
-                    {/* ═══════════ AGENDA SEMANAL ═══════════ */}
+                    {/* Canais separados: Instagram, Facebook e WhatsApp */}
                     {activeTab === 'studio' && (
                         <MarketingKitPanel
                             statusLabel={kitStatusLabel}
@@ -2075,14 +2095,21 @@ export default function MarketingPage() {
                             onCreateSlot={handleCreateSlotFromKit}
                         />
                     )}
-                    {activeTab === 'agenda' && (
-                        <div className="space-y-6 animate-in fade-in duration-300">
+                    {activeTab === 'whatsapp' && (
+                        <div className="animate-in fade-in duration-300">
                             <WhatsAppStatusCampaignPanel />
+                        </div>
+                    )}
+                    {activeTab === 'facebook' && (
+                        <div className="animate-in fade-in duration-300">
                             <FacebookMarketplaceSchedulerPanel
                                 initialProduct={studioPrimaryProduct}
                                 initialDescription={marketingKit.caption}
                             />
-
+                        </div>
+                    )}
+                    {activeTab === 'instagram' && (
+                        <div className="space-y-6 animate-in fade-in duration-300">
                             {/* Day Selector */}
                             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
                                 <div className="flex gap-1 overflow-x-auto pb-1">
