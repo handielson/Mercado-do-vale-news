@@ -13,8 +13,14 @@ const migration = readFileSync('migrations/010_marketing_approval_center.sql', '
 assert.match(page, /activeTab.*approvals/);
 assert.match(page, /<MarketingApprovalCenterPanel/);
 assert.match(panel, /Estado atual/);
-assert.match(panel, /Estado proposto/);
+assert.match(panel, /Resumo em linguagem simples/);
+assert.match(panel, /O que será preparado/);
 assert.match(panel, /Impacto financeiro máximo/);
+assert.match(panel, /Gasto imediato máximo/);
+assert.match(panel, /Limite mensal autorizado/);
+assert.match(panel, /Público amplo e local/);
+assert.match(panel, /Campanha \{index \+ 1\}/);
+assert.doesNotMatch(panel, /JSON\.stringify\(value\)/);
 assert.match(panel, /Como desfazer/);
 assert.match(panel, /Confirmar aprovação/);
 assert.match(service, /\/admin\/marketing\/approvals/);

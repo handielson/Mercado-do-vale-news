@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.159-meta-budget-sharing-android-approvals
+version: v1.2.160-marketing-impacto-legivel
 date: 2026-08-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-134128-meta-budget-sharing-android-approvals
+release_vps: /var/www/mdv-site/releases/20260804-135909-marketing-impacto-legivel
 branch: main
-summary: Corrige o novo parâmetro de orçamento da Meta e adiciona a Central de Aprovações ao aplicativo Android Gestão MDV 0.13.1.
+summary: Transforma o impacto completo das aprovações de campanhas em cartões visuais, com termos em português e sem JSON.
 ```
