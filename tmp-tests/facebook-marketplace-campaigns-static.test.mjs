@@ -34,6 +34,10 @@ assert.ok(manifest.permissions.includes('scripting'));
 const extensionBackground = readFileSync('browser-extensions/facebook-groups-sync/background.js', 'utf8');
 assert.match(extensionBackground, /chrome\.scripting\.executeScript/);
 assert.match(extensionBackground, /groups\/joins/);
-assert.match(extensionBackground, /window\.scrollBy/);
+assert.match(extensionBackground, /targetCount/);
+assert.match(extensionBackground, /round < 160/);
+assert.match(extensionBackground, /window\.scrollTo/);
+assert.match(panel, /130_000/);
+assert.equal(manifest.version, '1.2.0');
 
 console.log('facebook-marketplace-campaigns-static ok');

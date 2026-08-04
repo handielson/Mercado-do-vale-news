@@ -11,6 +11,11 @@ async function waitForTab(tabId) {
 async function scrapeAllVisibleGroups() {
   const ignored = new Set(['feed', 'discover', 'create', 'joins', 'requests', 'notifications']);
   const byUrl = new Map();
+  const readTargetCount = () => {
+    const match = String(document.body?.innerText || '').match(/Todos os grupos dos quais voc[eê] participa\s*\(([\d.]+)\)/i);
+    return Number(String(match?.[1] || '').replace(/\D/g, '')) || 0;
+  };
+  let targetCount = readTargetCount();
   const collect = () => {
     for (const anchor of document.querySelectorAll('a[href*="/groups/"]')) {
       let url;
@@ -31,13 +36,21 @@ async function scrapeAllVisibleGroups() {
   };
 
   let stableRounds = 0;
-  let previousSize = 0;
-  for (let round = 0; round < 40 && stableRounds < 8; round += 1) {
+  let previousSize = -1;
+  for (let round = 0; round < 160; round += 1) {
     collect();
+    targetCount = Math.max(targetCount, readTargetCount());
+    if (targetCount && byUrl.size >= targetCount) break;
     stableRounds = byUrl.size === previousSize ? stableRounds + 1 : 0;
     previousSize = byUrl.size;
-    window.scrollBy(0, Math.max(window.innerHeight * 0.9, 700));
-    await new Promise((resolve) => setTimeout(resolve, 450));
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    await new Promise((resolve) => setTimeout(resolve, 650));
+    if (stableRounds > 0 && stableRounds % 8 === 0) {
+      window.scrollBy(0, -Math.max(window.innerHeight * 0.7, 500));
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    }
+    if (!targetCount && stableRounds >= 24) break;
   }
   collect();
   return [...byUrl.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));

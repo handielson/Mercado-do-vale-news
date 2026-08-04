@@ -163,8 +163,8 @@ export default function FacebookMarketplaceCampaignPanel({ onGenerated }: { onGe
   const requestChromeGroups = () => {
     setSyncing(true);
     window.postMessage({ type: 'MDV_FACEBOOK_GROUPS_REQUEST' }, window.location.origin);
-    toast.info('Abrindo e carregando a lista completa de grupos. Isso pode levar alguns segundos.');
-    window.setTimeout(() => setSyncing((current) => { if (current) toast.error('A extensão não respondeu. Recarregue-a no Chrome e tente novamente.'); return false; }), 35_000);
+    toast.info('Abrindo a lista completa do Facebook. Contas com muitos grupos podem levar até 2 minutos.');
+    window.setTimeout(() => setSyncing((current) => { if (current) toast.error('A extensão não respondeu. Recarregue-a no Chrome e tente novamente.'); return false; }), 130_000);
   };
 
   return (
