@@ -809,6 +809,7 @@ async function executePausedWhatsappAdBundle(pool, approval) {
   for (const item of payload.campaigns) await revalidateApprovedProducts(pool, item);
 
   const token = decryptToken(row, config.encryptionKey);
+  await assertInstagramActorEligibleForAdAccount(row.selected_ad_account_id, row.selected_instagram_account_id, token);
   const [campaignResponse, adsetResponse, adResponse] = await Promise.all([
     graphRequest(`${row.selected_ad_account_id}/campaigns`, token, { fields: 'id,name,status,effective_status,objective', limit: 100 }),
     graphRequest(`${row.selected_ad_account_id}/adsets`, token, { fields: 'id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget', limit: 200 }),
@@ -1015,6 +1016,18 @@ async function discoverAssets(token) {
     pages: Array.isArray(pages?.data) ? pages.data : [],
     grantedScopes: (permissions?.data || []).filter((item) => item.status === 'granted').map((item) => item.permission),
   };
+}
+
+async function assertInstagramActorEligibleForAdAccount(adAccountId, instagramAccountId, token) {
+  const result = await graphRequest(`${adAccountId}/instagram_accounts`, token, {
+    fields: 'id,username,name', limit: 100,
+  });
+  const accounts = Array.isArray(result?.data) ? result.data : [];
+  const eligible = accounts.find((account) => String(account.id) === String(instagramAccountId));
+  if (!eligible) {
+    throw new Error('O Instagram selecionado não está habilitado para anunciar nesta conta. No Gerenciador de Anúncios da Meta, vincule @mercadodovale_ à conta de anúncios e conceda a tarefa Anunciar; depois reconecte a Meta e confirme as contas.');
+  }
+  return eligible;
 }
 
 function dateText(date) { return date.toISOString().slice(0, 10); }
@@ -1453,6 +1466,12 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
       return reply.code(409).send({ error: 'Selecione a conta de anúncios, a Página e o Instagram antes de preparar os anúncios.' });
     }
     if (!scopes.includes('ads_management')) return reply.code(409).send({ error: 'A permissão ads_management da Meta está ausente.' });
+    try {
+      const token = decryptToken(row, config.encryptionKey);
+      await assertInstagramActorEligibleForAdAccount(row.selected_ad_account_id, row.selected_instagram_account_id, token);
+    } catch (error) {
+      return reply.code(409).send({ error: text(error.message, 1000) || 'Não foi possível validar se o Instagram pode anunciar nesta conta.' });
+    }
 
     const [preferenceRows] = await pool.query(
       "SELECT value_json FROM admin_preferences WHERE preference_key='marketing.instagram.campaign_portfolio' LIMIT 1",

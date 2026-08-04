@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.173-meta-adset-confirmation",
+  "version": "v1.2.174-meta-instagram-actor-validation",
   "date": "2026-08-04",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-212000-v12172-meta-copy-debug",
+  "release_vps": "/var/www/mdv-site/releases/20260804-212440-meta-instagram-actor-validation",
   "branch": "main",
-  "summary": "Aguarda a confirmação do conjunto pausado pela Meta antes de marcar a preparação como falha."
+  "summary": "Valida na Meta se o Instagram selecionado pode anunciar na conta antes de criar campanhas, conjuntos ou anúncios."
 }
