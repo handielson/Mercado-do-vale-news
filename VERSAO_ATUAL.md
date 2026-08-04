@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.153-whatsapp-status-total-categoria
+version: v1.2.154-whatsapp-status-query-categoria
 date: 2026-08-03
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-021107-whatsapp-status-total-categoria
+release_vps: /var/www/mdv-site/releases/20260804-021252-whatsapp-status-query-categoria
 branch: main
-summary: Exibe o total real de modelos elegíveis da categoria na agenda de Status.
+summary: Corrige a consulta MySQL da categoria completa no Status WhatsApp.
 ```

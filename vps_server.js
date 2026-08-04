@@ -27659,11 +27659,13 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
   if (!categoryIdList.length) return [];
   const categoryPlaceholders = categoryIdList.map(() => '?').join(',');
   const [rows] = await pool.query(
-    `SELECT DISTINCT p.id, p.model_id, p.brand, p.name, p.sku, p.slug, p.images, p.image_url, p.video_url,
+    `SELECT p.id, p.model_id, p.brand, p.name, p.sku, p.slug, p.images, p.image_url, p.video_url,
             p.price_retail, p.stock_quantity, p.track_inventory, p.specs, p.custom_fields
      FROM products p
-     LEFT JOIN product_categories pc ON pc.product_id = p.id
-     WHERE (p.category_id IN (${categoryPlaceholders}) OR pc.category_id IN (${categoryPlaceholders}))
+     WHERE (p.category_id IN (${categoryPlaceholders}) OR EXISTS (
+       SELECT 1 FROM product_categories pc
+       WHERE pc.product_id = p.id AND pc.category_id IN (${categoryPlaceholders})
+     ))
        AND p.status = 'active'
      ORDER BY p.updated_at DESC, p.name ASC
      LIMIT 300`,
