@@ -598,6 +598,50 @@ function adsManagerUrl(adAccountId, target) {
   return url.toString();
 }
 
+function campaignManagerUrl(adAccountId, campaignId) {
+  const url = new URL('https://adsmanager.facebook.com/adsmanager/manage/campaigns');
+  url.searchParams.set('act', String(adAccountId || '').replace(/^act_/, ''));
+  url.searchParams.set('selected_campaign_ids', String(campaignId));
+  return url.toString();
+}
+
+async function readAllAdAccountCampaigns(row, token) {
+  const accounts = jsonParse(row?.available_ad_accounts, []);
+  return Promise.all(accounts.map(async (account) => {
+    const response = await graphRequest(`${account.id}/campaigns`, token, {
+      fields: 'id,name,status,effective_status,objective,daily_budget,lifetime_budget,created_time,updated_time',
+      limit: 100,
+    });
+    const campaigns = (response?.data || []).map((campaign) => ({
+      ...campaign,
+      managerUrl: campaignManagerUrl(account.id, campaign.id),
+    }));
+    return {
+      account: {
+        id: account.id,
+        account_id: account.account_id || String(account.id).replace(/^act_/, ''),
+        name: account.name || account.business_name || account.id,
+        currency: account.currency || null,
+      },
+      campaignSummary: {
+        total: campaigns.length,
+        active: campaigns.filter((campaign) => campaign.effective_status === 'ACTIVE').length,
+        paused: campaigns.filter((campaign) => campaign.effective_status === 'PAUSED').length,
+      },
+      campaigns,
+    };
+  }));
+}
+
+function activeCampaignsOutsideTargets(accountAudits, targetCampaignIds) {
+  const targets = new Set((targetCampaignIds || []).map(String));
+  return (accountAudits || []).flatMap((accountAudit) => (
+    (accountAudit.campaigns || [])
+      .filter((campaign) => campaign.effective_status === 'ACTIVE' && !targets.has(String(campaign.id)))
+      .map((campaign) => ({ ...campaign, account: accountAudit.account }))
+  ));
+}
+
 async function latestManagedAdTargets(pool) {
   const [rows] = await pool.query(
     `SELECT execution_result FROM marketing_approval_requests
@@ -1067,7 +1111,10 @@ async function captureManagedReviewStatus(pool) {
     const row = await connectionRow(pool);
     if (!config.ready || !row || row.status !== 'connected' || !row.selected_ad_account_id) return null;
     const token = decryptToken(row, config.encryptionKey);
-    const managedAdReviews = await readManagedAdReviews(pool, row, token);
+    const [managedAdReviews, accountAudits] = await Promise.all([
+      readManagedAdReviews(pool, row, token),
+      readAllAdAccountCampaigns(row, token),
+    ]);
     if (!managedAdReviews.length) return [];
     const previous = jsonParse(row.last_audit, {}) || {};
     const audit = {
@@ -1075,6 +1122,12 @@ async function captureManagedReviewStatus(pool) {
       mode: 'read_only',
       capturedAt: new Date().toISOString(),
       managedAdReviews,
+      accountAudits,
+      campaignSummary: {
+        ...(previous.campaignSummary || {}),
+        totalAcrossAccounts: accountAudits.reduce((sum, item) => sum + item.campaignSummary.total, 0),
+        activeAcrossAccounts: accountAudits.reduce((sum, item) => sum + item.campaignSummary.active, 0),
+      },
     };
     await pool.query(
       "UPDATE meta_marketing_connections SET last_audit=?,last_audit_at=NOW(),last_error=NULL,status='connected' WHERE id=1",
@@ -1113,6 +1166,14 @@ async function executeMetaReviewAutoLaunch(pool, approval) {
     throw new Error('Selected Meta ad account changed after approval');
   }
   const token = decryptToken(row, config.encryptionKey);
+  const accountAudits = await readAllAdAccountCampaigns(row, token);
+  const activeOutsideTargets = activeCampaignsOutsideTargets(
+    accountAudits,
+    payload.campaigns.map((item) => item.campaign_id),
+  );
+  if (activeOutsideTargets.length) {
+    throw new Error(`Auto-launch blocked by active campaign outside the managed targets: ${activeOutsideTargets.map((item) => `${item.name} (${item.account.account_id})`).join(', ')}`);
+  }
   const reviews = await readManagedAdReviews(pool, row, token);
   const reviewsByAd = new Map(reviews.map((item) => [String(item.adId), item]));
   for (const item of payload.campaigns) {
@@ -1218,6 +1279,13 @@ async function runMetaReviewAutoLaunch(pool) {
     return null;
   }
   if (reviews.length !== META_CAMPAIGN_SHELLS.length || reviews.some((item) => item.state !== 'approved')) return null;
+  const accountAudits = await readAllAdAccountCampaigns(row, decryptToken(row, config.encryptionKey));
+  const payload = jsonParse(raw.execution_payload, null);
+  const activeOutsideTargets = activeCampaignsOutsideTargets(
+    accountAudits,
+    (payload?.campaigns || []).map((item) => item.campaign_id),
+  );
+  if (activeOutsideTargets.length) return null;
 
   const connection = await pool.getConnection();
   let approval;
@@ -2064,6 +2132,17 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
     if (reviews.some((item) => item.state === 'rejected' || item.state === 'attention')) {
       return reply.code(409).send({ error: 'Existe anúncio reprovado ou com atenção necessária. Corrija-o antes de preparar a ativação.' });
     }
+    const accountAudits = await readAllAdAccountCampaigns(row, token);
+    const activeOutsideTargets = activeCampaignsOutsideTargets(
+      accountAudits,
+      campaigns.map((item) => item.campaign_id),
+    );
+    if (activeOutsideTargets.length) {
+      return reply.code(409).send({
+        error: `Existe campanha ativa fora do portfólio gerenciado: ${activeOutsideTargets.map((item) => `${item.name} — conta ${item.account.account_id}`).join('; ')}. Revise-a antes de autorizar as duas novas campanhas.`,
+        activeCampaigns: activeOutsideTargets,
+      });
+    }
     const executionPayload = {
       schema_version: 1,
       operation: 'meta.activate_after_review',
@@ -2250,22 +2329,26 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
     if (!row.selected_ad_account_id || !row.selected_page_id || !row.selected_instagram_account_id) return reply.code(409).send({ error: 'Select Meta assets before auditing' });
     try {
       const token = decryptToken(row, config.encryptionKey);
-      const [account, campaigns, instagram, managedAdReviews] = await Promise.all([
+      const [account, instagram, managedAdReviews, accountAudits] = await Promise.all([
         graphRequest(row.selected_ad_account_id, token, { fields: 'id,account_id,name,account_status,currency,timezone_name,amount_spent,balance,spend_cap' }),
-        graphRequest(`${row.selected_ad_account_id}/campaigns`, token, { fields: 'id,name,status,effective_status,objective,daily_budget,lifetime_budget,created_time,updated_time', limit: 100 }),
         graphRequest(row.selected_instagram_account_id, token, { fields: 'id,username,name,followers_count,media_count,profile_picture_url' }),
         readManagedAdReviews(pool, row, token),
+        readAllAdAccountCampaigns(row, token),
       ]);
-      const items = Array.isArray(campaigns?.data) ? campaigns.data : [];
+      const selectedAccountAudit = accountAudits.find((item) => item.account.id === row.selected_ad_account_id);
+      const items = selectedAccountAudit?.campaigns || [];
       const audit = {
         mode: 'read_only', capturedAt: new Date().toISOString(), account, instagram,
         campaignSummary: {
           total: items.length,
           active: items.filter((item) => item.effective_status === 'ACTIVE').length,
           paused: items.filter((item) => item.effective_status === 'PAUSED').length,
+          totalAcrossAccounts: accountAudits.reduce((sum, item) => sum + item.campaignSummary.total, 0),
+          activeAcrossAccounts: accountAudits.reduce((sum, item) => sum + item.campaignSummary.active, 0),
         },
         campaigns: items,
         managedAdReviews,
+        accountAudits,
       };
       await pool.query("UPDATE meta_marketing_connections SET last_audit=?,last_audit_at=NOW(),last_error=NULL,status='connected' WHERE id=1", [JSON.stringify(audit)]);
       return { ok: true, audit, connection: sanitizeConnection(await connectionRow(pool), config) };

@@ -42,11 +42,30 @@ export interface MetaMarketingConnection {
         capturedAt: string;
         account?: MetaAdAccount & { amount_spent?: string; balance?: string; spend_cap?: string };
         instagram?: MetaInstagramAccount & { followers_count?: number; media_count?: number };
-        campaignSummary?: { total: number; active: number; paused: number };
+        campaignSummary?: {
+            total: number;
+            active: number;
+            paused: number;
+            totalAcrossAccounts?: number;
+            activeAcrossAccounts?: number;
+        };
         managedAdReviews?: MetaManagedAdReview[];
+        accountAudits?: MetaAdAccountCampaignAudit[];
     } | null;
     lastAuditAt: string | null;
     lastError: string | null;
+}
+
+export interface MetaAdAccountCampaignAudit {
+    account: MetaAdAccount;
+    campaignSummary: { total: number; active: number; paused: number };
+    campaigns: Array<{
+        id: string;
+        name: string;
+        status?: string;
+        effective_status?: string;
+        managerUrl: string;
+    }>;
 }
 
 export interface MetaManagedAdReview {

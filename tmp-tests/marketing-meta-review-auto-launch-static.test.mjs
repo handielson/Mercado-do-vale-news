@@ -16,6 +16,10 @@ assert.match(api, /selected_campaign_ids/);
 assert.match(api, /selected_adset_ids/);
 assert.match(api, /selected_ad_ids/);
 assert.match(api, /managedAdReviews/);
+assert.match(api, /function readAllAdAccountCampaigns/);
+assert.match(api, /function activeCampaignsOutsideTargets/);
+assert.match(api, /activeAcrossAccounts/);
+assert.match(api, /Auto-launch blocked by active campaign outside the managed targets/);
 assert.match(api, /review-auto-launch-approvals/);
 assert.match(api, /all_managed_ads_approved/);
 assert.match(api, /maximum > META_AUTHORIZED_MONTHLY_CEILING_BRL/);
@@ -37,6 +41,8 @@ assert.match(executor, /graphPost\(item\.adset_id, token, \{ status: 'PAUSED' \}
 assert.match(executor, /graphPost\(item\.ad_id, token, \{ status: 'PAUSED' \}\)\.catch/);
 
 assert.match(panel, /Análise dos anúncios na Meta/);
+assert.match(panel, /Campanha ativa fora do portfólio gerenciado/);
+assert.match(panel, /Ativas · todas as contas/);
 assert.match(panel, /window\.setInterval/);
 assert.match(panel, /Ver na Meta/);
 assert.match(panel, /Preparar ativação automática/);

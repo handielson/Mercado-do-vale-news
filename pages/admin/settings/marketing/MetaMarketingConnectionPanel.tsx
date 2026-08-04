@@ -108,6 +108,12 @@ export default function MetaMarketingConnectionPanel() {
     const pagesWithInstagram = connection.availablePages.filter((page) => page.instagram_business_account?.id);
     const readyToAudit = connection.status === 'connected' && Boolean(connection.selectedAdAccount && connection.selectedPage);
     const reviews = connection.lastAudit?.managedAdReviews || [];
+    const managedCampaignIds = new Set(reviews.map((item) => item.campaignId));
+    const activeOutsidePortfolio = (connection.lastAudit?.accountAudits || []).flatMap((accountAudit) => (
+        accountAudit.campaigns
+            .filter((campaign) => campaign.effective_status === 'ACTIVE' && !managedCampaignIds.has(campaign.id))
+            .map((campaign) => ({ ...campaign, account: accountAudit.account }))
+    ));
 
     return (
         <section className="rounded-2xl border border-blue-200 bg-white shadow-sm">
@@ -135,7 +141,16 @@ export default function MetaMarketingConnectionPanel() {
                     <button onClick={audit} disabled={!readyToAudit || working !== null} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-50">{working === 'audit' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}Auditar agora</button>
                 </div>
 
-                {connection.lastAudit && <div className="grid gap-3 sm:grid-cols-4"><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">Instagram</p><p className="mt-1 font-black text-slate-900">@{connection.lastAudit.instagram?.username || connection.instagramUsername || '—'}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">Seguidores</p><p className="mt-1 font-black text-slate-900">{connection.lastAudit.instagram?.followers_count ?? '—'}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">Campanhas encontradas</p><p className="mt-1 font-black text-slate-900">{connection.lastAudit.campaignSummary?.total ?? 0}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">Ativas agora</p><p className="mt-1 font-black text-slate-900">{connection.lastAudit.campaignSummary?.active ?? 0}</p></div></div>}
+                {connection.lastAudit && <div className="grid gap-3 sm:grid-cols-4"><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">Instagram</p><p className="mt-1 font-black text-slate-900">@{connection.lastAudit.instagram?.username || connection.instagramUsername || '—'}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">Seguidores</p><p className="mt-1 font-black text-slate-900">{connection.lastAudit.instagram?.followers_count ?? '—'}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">Campanhas · todas as contas</p><p className="mt-1 font-black text-slate-900">{connection.lastAudit.campaignSummary?.totalAcrossAccounts ?? connection.lastAudit.campaignSummary?.total ?? 0}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-bold text-slate-500">Ativas · todas as contas</p><p className="mt-1 font-black text-slate-900">{connection.lastAudit.campaignSummary?.activeAcrossAccounts ?? connection.lastAudit.campaignSummary?.active ?? 0}</p></div></div>}
+
+                {activeOutsidePortfolio.length > 0 && (
+                    <section className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                        <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-700" /><div className="min-w-0 flex-1"><p className="text-sm font-black text-rose-900">Campanha ativa fora do portfólio gerenciado</p><p className="mt-1 text-xs text-rose-800">Ela pertence a outra conta de anúncios e não será pausada ou alterada automaticamente. Enquanto estiver ativa, a autorização das duas novas campanhas permanece bloqueada para respeitar o limite operacional.</p></div></div>
+                        <div className="mt-3 space-y-2">
+                            {activeOutsidePortfolio.map((campaign) => <div key={`${campaign.account.id}:${campaign.id}`} className="flex flex-col gap-2 rounded-lg border border-rose-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-black text-slate-900">{campaign.name}</p><p className="text-xs text-slate-500">Conta: {campaign.account.name || campaign.account.id} · {campaign.account.account_id || campaign.account.id.replace(/^act_/, '')}</p></div><a href={campaign.managerUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-black text-blue-700 hover:underline">Ver campanha antiga na Meta <ExternalLink className="h-3.5 w-3.5" /></a></div>)}
+                        </div>
+                    </section>
+                )}
 
                 {reviews.length > 0 && (
                     <section className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
