@@ -4,6 +4,15 @@ import org.json.JSONObject
 import java.text.NumberFormat
 import java.util.Locale
 
+data class MarketingCreativeCard(
+    val name: String,
+    val sku: String,
+    val imageUrl: String,
+    val priceCents: Double,
+    val stock: Int,
+    val whatsappMessage: String,
+)
+
 data class MarketingApproval(
     val id: String,
     val status: String,
@@ -54,6 +63,30 @@ data class MarketingApproval(
                 add(if (amount.isNaN()) name else "$name — ${NumberFormat.getCurrencyInstance(Locale("pt", "BR")).format(amount)}")
             }
         }.joinToString("\n").ifBlank { targetName }
+    }
+
+    fun creativeCards(): List<MarketingCreativeCard> {
+        val campaigns = proposedState?.optJSONArray("campaigns") ?: return emptyList()
+        return buildList {
+            for (campaignIndex in 0 until campaigns.length()) {
+                val cards = campaigns.optJSONObject(campaignIndex)?.optJSONArray("cards") ?: continue
+                for (cardIndex in 0 until cards.length()) {
+                    val card = cards.optJSONObject(cardIndex) ?: continue
+                    val imageUrl = card.optString("imageUrl")
+                    if (imageUrl.isBlank()) continue
+                    add(
+                        MarketingCreativeCard(
+                            name = card.optString("name", "Produto"),
+                            sku = card.optString("sku"),
+                            imageUrl = imageUrl,
+                            priceCents = card.optDouble("priceCents", 0.0),
+                            stock = card.optInt("stock", 0),
+                            whatsappMessage = card.optString("whatsappMessage"),
+                        ),
+                    )
+                }
+            }
+        }
     }
 
     fun reviewText(): String = buildString {

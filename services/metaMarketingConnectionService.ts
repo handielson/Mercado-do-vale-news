@@ -145,4 +145,11 @@ export const metaMarketingConnectionService = {
             {},
         );
     },
+
+    async prepareCreativePlanApproval(payload: Record<string, unknown>): Promise<MetaCampaignDraftApprovalResponse> {
+        return await vpsClient.post<MetaCampaignDraftApprovalResponse>(
+            '/admin/marketing/meta/creative-plan-approvals',
+            payload,
+        );
+    },
 };

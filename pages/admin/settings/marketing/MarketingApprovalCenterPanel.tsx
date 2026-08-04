@@ -83,6 +83,17 @@ const FIELD_LABELS: Record<string, string> = {
     authorizedMonthlyCeiling: 'Limite mensal autorizado',
     reason: 'Por que este é o limite',
     required: 'O que precisa acontecer',
+    cards: 'Criativos do carrossel',
+    officialWhatsapp: 'WhatsApp oficial da loja',
+    locations: 'Cidades da campanha',
+    objective: 'Objetivo',
+    publication: 'Publicação nesta etapa',
+    categoryName: 'Categoria',
+    priceCents: 'Preço exibido',
+    stock: 'Estoque disponível',
+    headline: 'Frase principal',
+    callToAction: 'Botão de ação',
+    whatsappMessage: 'Mensagem preparada para o bot',
 };
 
 const VALUE_LABELS: Record<string, string> = {
@@ -123,6 +134,7 @@ function formatValue(value: unknown, field?: string): string {
         if (field === 'authorizedAmount' || field === 'periodLimit' || field === 'immediateMaximum' || field === 'authorizedMonthlyCeiling') {
             return formatCurrency(value);
         }
+        if (field === 'priceCents') return formatCurrency(value / 100);
         if (field === 'durationDays') return `${value} dias`;
         return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(value);
     }
@@ -132,6 +144,29 @@ function formatValue(value: unknown, field?: string): string {
 function ReadableValue({ value, field, depth = 0 }: { value: unknown; field?: string; depth?: number }) {
     if (Array.isArray(value)) {
         if (!value.length) return <span className="text-sm text-slate-400">Nenhum item.</span>;
+        if (field === 'cards') {
+            return (
+                <div className="flex snap-x gap-3 overflow-x-auto pb-2">
+                    {value.map((raw, index) => {
+                        const card = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+                        const imageUrl = typeof card.imageUrl === 'string' ? card.imageUrl : '';
+                        return (
+                            <article key={String(card.productId || index)} className="w-[220px] shrink-0 snap-start overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                                <div className="aspect-square bg-gradient-to-br from-white to-slate-100 p-3">
+                                    {imageUrl ? <img src={imageUrl} alt={String(card.name || 'Produto')} className="h-full w-full object-contain" loading="lazy" /> : null}
+                                </div>
+                                <div className="space-y-1.5 border-t border-slate-100 p-3">
+                                    <p className="line-clamp-2 text-sm font-black text-slate-900">{String(card.name || 'Produto')}</p>
+                                    <p className="text-base font-black text-emerald-700">{formatValue(card.priceCents, 'priceCents')}</p>
+                                    <p className="text-xs font-semibold text-slate-500">Código: {String(card.sku || '—')} · estoque {String(card.stock || '—')}</p>
+                                    <p className="rounded-lg bg-green-50 p-2 text-[11px] font-semibold leading-4 text-green-800">{String(card.whatsappMessage || '')}</p>
+                                </div>
+                            </article>
+                        );
+                    })}
+                </div>
+            );
+        }
         return (
             <div className={`grid gap-3 ${field === 'campaigns' ? 'md:grid-cols-2' : ''}`}>
                 {value.map((item, index) => (
@@ -147,7 +182,7 @@ function ReadableValue({ value, field, depth = 0 }: { value: unknown; field?: st
     }
 
     if (value && typeof value === 'object') {
-        const entries = Object.entries(value as Record<string, unknown>).filter(([key]) => key !== 'itemKey');
+        const entries = Object.entries(value as Record<string, unknown>).filter(([key]) => key !== 'itemKey' && key !== 'imageUrl' && key !== 'productId');
         if (!entries.length) return <span className="text-sm text-slate-400">Nenhuma informação.</span>;
         return (
             <dl className={depth > 0 ? 'space-y-2' : 'space-y-3'}>

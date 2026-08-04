@@ -23,5 +23,9 @@ assert.match(panel, /Campanhas configuradas/);
 assert.match(panel, /Público inicial: amplo e local/);
 assert.match(panel, /Preparar rascunhos pausados/);
 assert.match(metaService, /campaign-draft-approvals/);
+assert.match(metaService, /creative-plan-approvals/);
+assert.match(panel, /Criativos que irão para aprovação/);
+assert.match(panel, /Enviar criativos para aprovação/);
+assert.match(panel, /Mensagem pronta:/);
 
 console.log('marketing campaign agent portfolio: OK');

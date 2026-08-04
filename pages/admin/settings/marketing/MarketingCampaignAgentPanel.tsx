@@ -8,6 +8,8 @@ import {
     MessageCircle,
     Save,
     ShieldCheck,
+    Images,
+    RefreshCw,
     Target,
     Smartphone,
     Store,
@@ -23,8 +25,48 @@ import { getCompanyData } from '../../../../services/companyService';
 import MetaMarketingConnectionPanel from './MetaMarketingConnectionPanel';
 import MarketingCampaignMetricsPanel from './MarketingCampaignMetricsPanel';
 import { metaMarketingConnectionService } from '../../../../services/metaMarketingConnectionService';
+import { catalogService } from '../../../../services/catalogService';
+import { vpsApiService } from '../../../../services/vpsApiService';
+import {
+    marketingCreativeSelectionKey,
+    selectMarketingCampaignCreatives,
+    type MarketingCreativeCard,
+    type MarketingCreativeSelection,
+} from '../../../../services/marketingCampaignCreativeService';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+function CreativeCarouselPreview({ title, cards, accent }: { title: string; cards: MarketingCreativeCard[]; accent: 'indigo' | 'emerald' }) {
+    const badge = accent === 'indigo' ? 'bg-indigo-600' : 'bg-emerald-600';
+    const border = accent === 'indigo' ? 'border-indigo-200' : 'border-emerald-200';
+    return (
+        <section className={`rounded-2xl border ${border} bg-white p-4 shadow-sm`}>
+            <div className="mb-4 flex items-center justify-between gap-3">
+                <div><p className="text-xs font-black uppercase tracking-wide text-slate-400">Prévia real do carrossel</p><h4 className="mt-1 font-black text-slate-900">{title}</h4></div>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-black text-white ${badge}`}>{cards.length} produtos</span>
+            </div>
+            <div className="flex snap-x gap-3 overflow-x-auto pb-2">
+                {cards.map((card) => (
+                    <article key={card.productId} className="w-[230px] shrink-0 snap-start overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-md">
+                        <div className="relative aspect-square bg-gradient-to-br from-white via-slate-50 to-slate-200 p-4">
+                            <span className={`absolute left-3 top-3 z-10 rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white ${badge}`}>Mercado do Vale</span>
+                            <img src={card.imageUrl} alt={card.name} className="h-full w-full object-contain" loading="lazy" />
+                            <div className="absolute inset-x-3 bottom-3 rounded-xl bg-slate-950/90 p-3 text-white backdrop-blur">
+                                <p className="line-clamp-2 text-sm font-black leading-tight">{card.name}</p>
+                                <p className="mt-1 text-lg font-black text-amber-300">{money.format(card.priceCents / 100)}</p>
+                            </div>
+                        </div>
+                        <div className="space-y-2 p-3 text-white">
+                            <p className="text-xs font-bold text-slate-300">{card.headline}</p>
+                            <div className={`rounded-lg py-2 text-center text-xs font-black text-white ${badge}`}>{card.callToAction}</div>
+                            <p className="line-clamp-2 text-[10px] leading-4 text-slate-400">Mensagem pronta: {card.whatsappMessage}</p>
+                        </div>
+                    </article>
+                ))}
+            </div>
+        </section>
+    );
+}
 
 function calculatePeriodLimit(campaign: MarketingCampaignBlueprint): number | null {
     if (!campaign.authorizedAmount) return null;
@@ -38,6 +80,9 @@ export default function MarketingCampaignAgentPanel() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [preparingApproval, setPreparingApproval] = useState(false);
+    const [preparingCreativeApproval, setPreparingCreativeApproval] = useState(false);
+    const [loadingCreatives, setLoadingCreatives] = useState(true);
+    const [creativeSelection, setCreativeSelection] = useState<MarketingCreativeSelection | null>(null);
     const [officialWhatsapp, setOfficialWhatsapp] = useState('');
 
     useEffect(() => {
@@ -47,6 +92,26 @@ export default function MarketingCampaignAgentPanel() {
             .catch((error: any) => toast.error(error?.message || 'Não foi possível carregar as campanhas.'))
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
+    }, []);
+
+    const loadCreativeSelection = async () => {
+        setLoadingCreatives(true);
+        try {
+            const [catalog, categories] = await Promise.all([
+                catalogService.getProducts({ inStockOnly: true }, 1, 1000, true),
+                vpsApiService.getCategories(),
+            ]);
+            const selection = selectMarketingCampaignCreatives(catalog.products, categories || []);
+            setCreativeSelection(selection);
+        } catch (error: any) {
+            toast.error(error?.message || 'Não foi possível selecionar os produtos dos carrosséis.');
+        } finally {
+            setLoadingCreatives(false);
+        }
+    };
+
+    useEffect(() => {
+        loadCreativeSelection();
     }, []);
 
     useEffect(() => {
@@ -99,6 +164,42 @@ export default function MarketingCampaignAgentPanel() {
         }
     };
 
+    const prepareCreativeApproval = async () => {
+        if (!creativeSelection || !officialWhatsapp) {
+            toast.error('Aguarde a seleção dos produtos e a validação do WhatsApp oficial.');
+            return;
+        }
+        setPreparingCreativeApproval(true);
+        try {
+            await marketingCampaignPortfolioService.save(portfolio);
+            const response = await metaMarketingConnectionService.prepareCreativePlanApproval({
+                selectionKey: marketingCreativeSelectionKey(creativeSelection),
+                whatsapp: officialWhatsapp,
+                campaigns: [
+                    {
+                        itemKey: 'store-carousel',
+                        name: 'Loja inteira — Carrossel',
+                        budget: portfolio.campaigns.find((item) => item.id === 'store-carousel')?.authorizedAmount,
+                        cards: creativeSelection.storeCarousel,
+                    },
+                    {
+                        itemKey: 'smartphones',
+                        name: 'Somente Smartphones',
+                        budget: portfolio.campaigns.find((item) => item.id === 'smartphones')?.authorizedAmount,
+                        cards: creativeSelection.smartphoneCarousel,
+                    },
+                ],
+            });
+            toast.success(response.reused
+                ? 'A proposta visual já está disponível em Aprovações.'
+                : 'Proposta visual enviada para Aprovações, com os criativos visíveis.');
+        } catch (error: any) {
+            toast.error(error?.message || 'Não foi possível preparar a aprovação dos criativos.');
+        } finally {
+            setPreparingCreativeApproval(false);
+        }
+    };
+
     if (loading) {
         return <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white p-12 text-slate-500"><Loader2 className="h-5 w-5 animate-spin" /> Carregando especialista de campanhas...</div>;
     }
@@ -128,6 +229,39 @@ export default function MarketingCampaignAgentPanel() {
             </div>
 
             <MarketingCampaignMetricsPanel />
+
+            <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-start gap-3">
+                        <Images className="mt-0.5 h-5 w-5 text-violet-700" />
+                        <div>
+                            <h3 className="font-black text-violet-950">Criativos que irão para aprovação</h3>
+                            <p className="mt-1 max-w-3xl text-sm leading-6 text-violet-900">Os produtos abaixo vêm do estoque ativo, possuem preço, imagem e código. A seleção da loja inteira evita repetição de categoria; a de smartphones evita repetir o mesmo modelo.</p>
+                        </div>
+                    </div>
+                    <button onClick={loadCreativeSelection} disabled={loadingCreatives} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-violet-300 bg-white px-4 py-2.5 text-sm font-black text-violet-800 hover:bg-violet-100 disabled:opacity-50">
+                        <RefreshCw className={`h-4 w-4 ${loadingCreatives ? 'animate-spin' : ''}`} /> Atualizar seleção segura
+                    </button>
+                </div>
+                {loadingCreatives ? (
+                    <div className="mt-5 flex items-center justify-center gap-2 rounded-xl bg-white p-8 text-sm font-semibold text-slate-500"><Loader2 className="h-5 w-5 animate-spin" /> Conferindo estoque, preços e imagens...</div>
+                ) : creativeSelection ? (
+                    <div className="mt-5 space-y-4">
+                        <div className="grid gap-4 xl:grid-cols-2">
+                            <CreativeCarouselPreview title="Loja inteira" cards={creativeSelection.storeCarousel} accent="indigo" />
+                            <CreativeCarouselPreview title="Somente smartphones" cards={creativeSelection.smartphoneCarousel} accent="emerald" />
+                        </div>
+                        <div className="flex flex-col gap-3 rounded-xl border border-violet-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-sm leading-6 text-slate-600"><strong className="text-slate-900">WhatsApp:</strong> usa o telefone principal cadastrado na loja. Aprovar esta etapa confirma produtos, textos e aparência; não ativa anúncios nem gera cobrança.</p>
+                            <button onClick={prepareCreativeApproval} disabled={preparingCreativeApproval || !officialWhatsapp || creativeSelection.storeCarousel.length < 2 || creativeSelection.smartphoneCarousel.length < 2} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-violet-700 px-5 py-3 text-sm font-black text-white hover:bg-violet-600 disabled:opacity-50">
+                                {preparingCreativeApproval ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Enviar criativos para aprovação
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <p className="mt-5 rounded-xl bg-white p-5 text-sm font-semibold text-rose-700">Não foi possível montar uma seleção segura com o estoque atual.</p>
+                )}
+            </div>
 
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

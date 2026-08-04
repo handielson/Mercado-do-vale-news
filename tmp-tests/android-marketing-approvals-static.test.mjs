@@ -23,7 +23,11 @@ assert.match(model, /Teto mensal autorizado/);
 assert.match(model, /Critério de sucesso/);
 assert.match(model, /Como desfazer/);
 assert.match(model, /Erro registrado/);
-assert.match(gradle, /versionCode = 58/);
-assert.match(gradle, /versionName = "0\.13\.1"/);
+assert.match(model, /fun creativeCards\(\)/);
+assert.match(activity, /Criativos que você está aprovando/);
+assert.match(activity, /marketingCreativeGallery/);
+assert.match(activity, /loadProductImage\(card\.imageUrl, photo\)/);
+assert.match(gradle, /versionCode = 59/);
+assert.match(gradle, /versionName = "0\.13\.2"/);
 
 console.log('android marketing approvals: OK');

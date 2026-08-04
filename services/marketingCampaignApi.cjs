@@ -6,6 +6,7 @@ const APPROVAL_STATUSES = new Set([
 const EXECUTION_MODES = new Set(['vps_meta_api', 'lenovo_chrome', 'manual']);
 const INSIGHTS_PRESETS = new Set(['last_7d', 'last_14d', 'last_30d', 'this_month']);
 const META_CAMPAIGN_SHELL_ACTION = 'meta.create_paused_campaign_bundle.v2';
+const META_CREATIVE_PLAN_ACTION = 'meta.approve_campaign_creative_plan.v1';
 const META_CAMPAIGN_SHELLS = Object.freeze([
   { itemKey: 'store-carousel', name: 'MDV | Loja inteira | Carrossel | Petrolina + Juazeiro' },
   { itemKey: 'smartphones', name: 'MDV | Smartphones | Petrolina + Juazeiro' },
@@ -900,6 +901,126 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
       }
       throw error;
     } finally { connection.release(); }
+  });
+
+  fastify.post('/admin/marketing/meta/creative-plan-approvals', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+    const campaigns = Array.isArray(req.body?.campaigns) ? req.body.campaigns : [];
+    const selectionKey = text(req.body?.selectionKey, 120);
+    if (!selectionKey || campaigns.length !== 2) {
+      return reply.code(400).send({ error: 'Creative selection, official WhatsApp and both campaigns are required' });
+    }
+    const normalizedCampaigns = campaigns.map((campaign) => {
+      const cards = Array.isArray(campaign?.cards) ? campaign.cards : [];
+      return {
+        itemKey: text(campaign?.itemKey, 40),
+        name: text(campaign?.name, 160),
+        periodLimit: Number(campaign?.budget || 0),
+        cards: cards.slice(0, 10).map((card) => ({
+          productId: text(card?.productId, 80),
+          sku: text(card?.sku, 80),
+          name: text(card?.name, 255),
+          categoryName: text(card?.categoryName, 160),
+          priceCents: Math.max(0, Number(card?.priceCents || 0)),
+          stock: Math.max(0, Number(card?.stock || 0)),
+          imageUrl: /^https:\/\//i.test(String(card?.imageUrl || '')) ? text(card.imageUrl, 2000) : '',
+          headline: text(card?.headline, 255),
+          callToAction: text(card?.callToAction, 120),
+          whatsappMessage: text(card?.whatsappMessage, 500),
+        })),
+      };
+    });
+    if (normalizedCampaigns.some((campaign) => !campaign.itemKey || !campaign.name || campaign.cards.length < 2
+      || campaign.cards.some((card) => !card.productId || !card.sku || !card.name || !card.imageUrl || !card.priceCents || !card.stock))) {
+      return reply.code(400).send({ error: 'Every creative must have an in-stock product, SKU, price and secure image' });
+    }
+    const allowedKeys = new Set(['store-carousel', 'smartphones']);
+    if (normalizedCampaigns.some((campaign) => !allowedKeys.has(campaign.itemKey))) {
+      return reply.code(400).send({ error: 'Unexpected campaign in creative plan' });
+    }
+    const productIds = [...new Set(normalizedCampaigns.flatMap((campaign) => campaign.cards.map((card) => card.productId)))];
+    const [productRows] = await pool.query(
+      'SELECT id, sku, name, price_retail, stock_quantity, status, hide_from_catalog FROM products WHERE id IN (?)',
+      [productIds],
+    );
+    const productsById = new Map(productRows.map((product) => [String(product.id), product]));
+    for (const campaign of normalizedCampaigns) {
+      campaign.cards = campaign.cards.map((card) => {
+        const product = productsById.get(card.productId);
+        const stock = Number(product?.stock_quantity || 0);
+        const priceCents = Number(product?.price_retail || 0);
+        const status = String(product?.status || '').toLowerCase();
+        if (!product || stock <= 0 || priceCents <= 0 || !['active', 'ativo', 'a'].includes(status) || product.hide_from_catalog) {
+          return null;
+        }
+        const name = text(product.name, 255);
+        const sku = text(product.sku, 80);
+        return {
+          ...card,
+          name,
+          sku,
+          priceCents,
+          stock,
+          headline: campaign.itemKey === 'smartphones' ? 'Seu próximo smartphone está aqui' : 'Escolha fácil, compra rápida',
+          callToAction: 'Chamar no WhatsApp',
+          whatsappMessage: campaign.itemKey === 'smartphones'
+            ? `Quero comprar o smartphone: ${name} | Codigo: ${sku}`
+            : `Quero comprar: ${name} | Codigo: ${sku}`,
+        };
+      }).filter(Boolean);
+    }
+    if (normalizedCampaigns.some((campaign) => campaign.cards.length < 2)) {
+      return reply.code(409).send({ error: 'The selected products changed or are no longer eligible; refresh the creative selection' });
+    }
+    const [[companySettings]] = await pool.query('SELECT phone FROM company_settings LIMIT 1');
+    const whatsapp = text(companySettings?.phone, 40);
+    if (!whatsapp) return reply.code(409).send({ error: 'The store phone is missing from company settings' });
+    const proposedState = {
+      campaigns: normalizedCampaigns,
+      officialWhatsapp: whatsapp,
+      locations: ['Petrolina-PE', 'Juazeiro-BA'],
+      objective: 'Vendas pelo WhatsApp',
+      publication: 'Nenhum anúncio será ativado nesta aprovação',
+    };
+    const idempotencyKey = `meta-creatives-v1:${selectionKey}:${sha256(JSON.stringify(proposedState)).slice(0, 80)}`;
+    const [existingRows] = await pool.query(
+      'SELECT * FROM marketing_approval_requests WHERE idempotency_key=? LIMIT 1',
+      [idempotencyKey],
+    );
+    if (existingRows?.[0]) return { ok: true, approval: parseApproval(existingRows[0]), reused: true };
+    const id = crypto.randomUUID();
+    const monthlyCeiling = normalizedCampaigns.reduce((sum, campaign) => sum + Math.max(0, campaign.periodLimit), 0);
+    await pool.query(
+      `INSERT INTO marketing_approval_requests
+        (id,channel,action_type,title,target_type,target_name,execution_mode,current_state,proposed_state,
+         evidence,financial_impact,success_criteria,rollback_plan,execution_payload,requested_by,requested_by_label,
+         idempotency_key,approval_expires_at)
+       VALUES (?, 'instagram', ?, ?, 'creative', ?, 'manual', ?, ?, ?, ?, ?, ?, NULL,
+               'marketing-agent', 'Agente especialista de campanhas', ?, DATE_ADD(NOW(), INTERVAL 72 HOUR))`,
+      [
+        id,
+        META_CREATIVE_PLAN_ACTION,
+        'Aprovar criativos dos dois carrosséis',
+        normalizedCampaigns.map((campaign) => campaign.name).join(' + '),
+        jsonValue({ campaignsCreated: true, campaignStatus: 'PAUSED', adsCreated: false }),
+        jsonValue(proposedState),
+        jsonValue({ source: 'Estoque ativo, preços atuais e telefone principal cadastrado no Gestão MV' }),
+        jsonValue({
+          currency: 'BRL',
+          immediateMaximum: 0,
+          authorizedMonthlyCeiling: monthlyCeiling,
+          reason: 'Esta aprovação confirma somente produtos, textos e aparência; não publica nem ativa anúncios',
+        }),
+        jsonValue({ required: 'Os dois carrosséis devem exibir imagens, nomes, preços, SKU e mensagem específica para o WhatsApp' }),
+        'Rejeitar ou deixar expirar mantém os anúncios inexistentes e as duas campanhas pausadas.',
+        idempotencyKey,
+      ],
+    );
+    await approvalEvent(pool, id, 'requested', { id: 'marketing-agent', label: 'Agente especialista de campanhas' }, {
+      action_type: META_CREATIVE_PLAN_ACTION,
+      execution_mode: 'manual',
+      financial_impact: 0,
+    });
+    return reply.code(201).send({ ok: true, approval: parseApproval(await findApproval(pool, id)), reused: false });
   });
 
   fastify.post('/admin/marketing/meta/oauth/start', { preHandler: requireAdminBearerToken }, async (req, reply) => {

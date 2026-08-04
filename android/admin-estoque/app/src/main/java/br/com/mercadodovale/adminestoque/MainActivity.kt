@@ -49,6 +49,7 @@ import br.com.mercadodovale.adminestoque.domain.LabelSize
 import br.com.mercadodovale.adminestoque.domain.MarketingCampaignInsight
 import br.com.mercadodovale.adminestoque.domain.MarketingCampaignReport
 import br.com.mercadodovale.adminestoque.domain.MarketingApproval
+import br.com.mercadodovale.adminestoque.domain.MarketingCreativeCard
 import br.com.mercadodovale.adminestoque.domain.MarketingMetricValues
 import br.com.mercadodovale.adminestoque.domain.ProductLabelProduct
 import br.com.mercadodovale.adminestoque.domain.SaleSummary
@@ -554,6 +555,10 @@ class MainActivity : Activity() {
         addView(text(approval.title, 19, Color.rgb(15, 23, 42)))
         addView(text(approval.campaignSummary(), 14, Color.DKGRAY))
         addView(text(approval.financialSummary(), 14, Color.rgb(71, 85, 105)))
+        approval.creativeCards().takeIf { it.isNotEmpty() }?.let { cards ->
+            addView(text("Prévia dos criativos", 15, Color.rgb(91, 33, 182)))
+            addView(marketingCreativeGallery(cards.take(4)))
+        }
         if (approval.lastError.isNotBlank()) {
             addView(text("Falha: ${approval.lastError}", 14, Color.rgb(185, 28, 28)))
         }
@@ -569,9 +574,18 @@ class MainActivity : Activity() {
         status: TextView,
         content: LinearLayout,
     ) {
+        val reviewContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+            addView(text(approval.reviewText(), 15, Color.rgb(51, 65, 85)))
+            approval.creativeCards().takeIf { it.isNotEmpty() }?.let { cards ->
+                addView(text("Criativos que você está aprovando", 18, Color.rgb(91, 33, 182)))
+                addView(marketingCreativeGallery(cards))
+            }
+        }
         val dialog = AlertDialog.Builder(this)
             .setTitle(approval.title)
-            .setMessage(approval.reviewText())
+            .setView(ScrollView(this).apply { addView(reviewContent) })
             .setNegativeButton("Fechar", null)
         if (approval.status == "pending") {
             dialog.setNeutralButton("Rejeitar") { _, _ ->
@@ -582,6 +596,39 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    private fun marketingCreativeGallery(cards: List<MarketingCreativeCard>) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        cards.forEach { card ->
+            addView(
+                LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(dp(10), dp(10), dp(10), dp(10))
+                    setBackgroundColor(Color.rgb(248, 250, 252))
+                    val photo = ImageView(this@MainActivity).apply {
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        setBackgroundColor(Color.WHITE)
+                    }
+                    addView(photo, LinearLayout.LayoutParams(dp(96), dp(96)).apply { marginEnd = dp(12) })
+                    addView(
+                        LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            val price = NumberFormat.getCurrencyInstance(Locale("pt", "BR")).format(card.priceCents / 100.0)
+                            addView(text(card.name, 15, Color.rgb(15, 23, 42)))
+                            addView(text(price, 17, Color.rgb(5, 150, 105)))
+                            addView(text("Código: ${card.sku} · estoque ${card.stock}", 12, Color.DKGRAY))
+                            if (card.whatsappMessage.isNotBlank()) addView(text(card.whatsappMessage, 12, Color.rgb(22, 101, 52)))
+                        },
+                        LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+                    )
+                    loadProductImage(card.imageUrl, photo)
+                },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    bottomMargin = dp(8)
+                },
+            )
+        }
     }
 
     private fun showMarketingApprovalRejection(
