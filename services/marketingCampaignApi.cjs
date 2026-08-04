@@ -875,8 +875,9 @@ async function executePausedWhatsappAdBundle(pool, approval) {
             publisher_platforms: ['instagram'],
           }),
           attribution_spec: JSON.stringify([
-            { event_type: 'CLICK_THROUGH', window_days: 7 },
-            { event_type: 'VIEW_THROUGH', window_days: 1 },
+            // Conversations with a WhatsApp destination only accept Meta's 1-day click window.
+            { event_type: 'CLICK_THROUGH', window_days: 1 },
+            { event_type: 'VIEW_THROUGH', window_days: 0 },
           ]),
           ...budget,
         });

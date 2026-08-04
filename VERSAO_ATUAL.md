@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.167-approval-modal-fullscreen
+version: v1.2.168-meta-attribution-window
 date: 2026-08-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-162200-v12167-approval-modal-fullscreen
+release_vps: /var/www/mdv-site/releases/20260804-193435-meta-attribution-window
 branch: main
-summary: Exibe a confirmação de aprovação em tela cheia, com leitura e rolagem adequadas.
+summary: Usa a janela de atribuição aceita pela Meta para preparar anúncios de conversa no WhatsApp.
 ```
