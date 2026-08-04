@@ -32,6 +32,8 @@ assert.match(panel, /persistentOutcome/);
 assert.match(panel, /h-\[100dvh\] w-screen flex-col/);
 assert.match(panel, /aria-modal="true"/);
 assert.match(panel, /min-h-0 flex-1 space-y-4 overflow-y-auto/);
+assert.match(panel, /Tentar nova aprovação/);
+assert.match(panel, /preparePausedAdBundleApproval/);
 assert.match(panel, /O comprovante continuará visível na tela/);
 assert.match(panel, /Criativos aprovados\. O anúncio ainda não foi criado nem colocado em veiculação/);
 assert.match(panel, /Anúncios completos criados e enviados para análise da Meta, mas permanecem pausados e sem gasto/);

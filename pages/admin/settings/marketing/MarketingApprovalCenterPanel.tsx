@@ -26,6 +26,7 @@ import {
     type MarketingApprovalStatus,
     type MarketingJson,
 } from '../../../../services/marketingApprovalService';
+import { metaMarketingConnectionService } from '../../../../services/metaMarketingConnectionService';
 
 type ApprovalFilter = MarketingApprovalStatus | 'all';
 
@@ -298,6 +299,7 @@ export default function MarketingApprovalCenterPanel() {
     const [decision, setDecision] = useState<MarketingApprovalDecision>('approve');
     const [note, setNote] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [retryingId, setRetryingId] = useState<string | null>(null);
 
     const load = useCallback(async (quiet = false, requestedFilter: ApprovalFilter = filter) => {
         if (!quiet) setLoading(true);
@@ -348,6 +350,22 @@ export default function MarketingApprovalCenterPanel() {
             toast.error(error?.message || 'Não foi possível registrar a decisão.');
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    const retryPausedAdPreparation = async (request: MarketingApprovalRequest) => {
+        setRetryingId(request.id);
+        try {
+            const response = await metaMarketingConnectionService.preparePausedAdBundleApproval();
+            toast.success(response.reused
+                ? 'A nova solicitação já está disponível em Aprovações.'
+                : 'Nova solicitação criada. Revise e aprove antes de qualquer execução.');
+            setFilter('all');
+            await load(true, 'all');
+        } catch (error: any) {
+            toast.error(error?.message || 'Não foi possível criar uma nova solicitação de preparação.');
+        } finally {
+            setRetryingId(null);
         }
     };
 
@@ -427,6 +445,9 @@ export default function MarketingApprovalCenterPanel() {
                                                 <button onClick={() => openDecision(request, 'reject')} className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50"><XCircle className="h-4 w-4" /> Rejeitar</button>
                                                 <button onClick={() => openDecision(request, 'approve')} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700"><ShieldCheck className="h-4 w-4" /> Revisar e aprovar</button>
                                             </div>
+                                        )}
+                                        {request.status === 'failed' && request.action_type.includes('paused_whatsapp_ad_bundle') && (
+                                            <button onClick={() => retryPausedAdPreparation(request)} disabled={retryingId === request.id} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-bold text-white hover:bg-sky-600 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${retryingId === request.id ? 'animate-spin' : ''}`} /> Tentar nova aprovação</button>
                                         )}
                                     </div>
                                 </div>

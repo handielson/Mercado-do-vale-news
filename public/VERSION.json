@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.170-meta-execution-debug",
+  "version": "v1.2.171-meta-retry-button",
   "date": "2026-08-04",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-210000-v12170-meta-execution-debug",
+  "release_vps": "/var/www/mdv-site/releases/20260804-211000-v12171-meta-retry-button",
   "branch": "main",
-  "summary": "Registra diagnóstico seguro e detalhado para falhas na preparação de anúncios Meta."
+  "summary": "Permite criar uma nova aprovação de preparação diretamente a partir de uma falha da Meta."
 }
