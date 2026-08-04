@@ -5,6 +5,12 @@ const APPROVAL_STATUSES = new Set([
 ]);
 const EXECUTION_MODES = new Set(['vps_meta_api', 'lenovo_chrome', 'manual']);
 const INSIGHTS_PRESETS = new Set(['last_7d', 'last_14d', 'last_30d', 'this_month']);
+const META_CAMPAIGN_SHELL_ACTION = 'meta.create_paused_campaign_bundle.v1';
+const META_CAMPAIGN_SHELLS = Object.freeze([
+  { itemKey: 'store-carousel', name: 'MDV | Loja inteira | Carrossel | Petrolina + Juazeiro' },
+  { itemKey: 'smartphones', name: 'MDV | Smartphones | Petrolina + Juazeiro' },
+]);
+let metaApprovalWorkerStarted = false;
 
 function jsonParse(value, fallback) {
   if (value == null) return fallback;
@@ -118,6 +124,23 @@ async function ensureMarketingCampaignTables(pool) {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_marketing_approval_events_request (approval_id, id),
       INDEX idx_marketing_approval_events_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marketing_approval_execution_items (
+      approval_id CHAR(36) NOT NULL,
+      provider VARCHAR(32) NOT NULL DEFAULT 'meta',
+      item_key VARCHAR(80) NOT NULL,
+      payload_hash CHAR(64) NOT NULL,
+      external_id VARCHAR(120) NULL,
+      state ENUM('pending', 'creating', 'succeeded', 'ambiguous', 'failed') NOT NULL DEFAULT 'pending',
+      external_status VARCHAR(80) NULL,
+      last_error TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (approval_id, item_key),
+      UNIQUE KEY uq_marketing_execution_external (provider, external_id),
+      INDEX idx_marketing_execution_state (state, updated_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
   await pool.query(`
@@ -280,6 +303,10 @@ function registerApprovalRoutes(fastify, { pool, requireAdminBearerToken, requir
       const current = await findApproval(connection, req.params.id, true);
       if (!current) { await connection.rollback(); return reply.code(404).send({ error: 'Approval request not found' }); }
       if (current.status !== 'pending') { await connection.rollback(); return reply.code(409).send({ error: `Approval request is already ${current.status}` }); }
+      if (current.requested_by && current.requested_by === (auth.userId || auth.customerId)) {
+        await connection.rollback();
+        return reply.code(403).send({ error: 'The requester cannot approve their own marketing action' });
+      }
       if (current.approval_expires_at && new Date(current.approval_expires_at).getTime() <= Date.now()) {
         await connection.query("UPDATE marketing_approval_requests SET status = 'expired' WHERE id = ?", [current.id]);
         await approvalEvent(connection, current.id, 'expired', { id: auth.userId, label: 'Gestão MV' });
@@ -411,6 +438,182 @@ async function graphRequest(pathname, token, params = {}) {
     throw error;
   }
   return data;
+}
+
+async function graphPost(pathname, token, params = {}) {
+  const config = marketingConfig();
+  const url = new URL(`https://graph.facebook.com/${config.graphApiVersion}/${String(pathname).replace(/^\/+/, '')}`);
+  const body = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') body.set(key, String(value));
+  }
+  body.set('access_token', token);
+  body.set('appsecret_proof', crypto.createHmac('sha256', config.appSecret).update(token).digest('hex'));
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) {
+    const error = new Error(data?.error?.message || `Meta Graph API returned ${response.status}`);
+    error.statusCode = response.status;
+    error.metaCode = data?.error?.code;
+    throw error;
+  }
+  return data;
+}
+
+function campaignShellPayloadHash(item, accountId) {
+  return sha256(JSON.stringify({
+    schemaVersion: 1,
+    accountId,
+    itemKey: item.itemKey,
+    name: item.name,
+    objective: 'OUTCOME_SALES',
+    buyingType: 'AUCTION',
+    status: 'PAUSED',
+    specialAdCategories: [],
+  }));
+}
+
+async function markApprovalExecution(pool, approvalId, succeeded, result, errorMessage = null) {
+  const nextStatus = succeeded ? 'succeeded' : 'failed';
+  await pool.query(
+    `UPDATE marketing_approval_requests
+     SET status=?, execution_result=?, last_error=?, executed_at=NOW()
+     WHERE id=? AND status='executing'`,
+    [nextStatus, jsonValue(result), succeeded ? null : text(errorMessage, 10000) || 'Execution failed', approvalId],
+  );
+  const connection = await pool.getConnection();
+  try {
+    await approvalEvent(connection, approvalId, nextStatus, { id: 'vps-meta-api', label: 'VPS Meta API' }, {
+      result: succeeded ? result : null,
+      error: succeeded ? null : text(errorMessage, 10000) || 'Execution failed',
+    });
+  } finally { connection.release(); }
+}
+
+async function executePausedCampaignBundle(pool, approval) {
+  const payload = approval.execution_payload;
+  if (!payload || payload.schema_version !== 1 || payload.operation !== 'meta.create_paused_campaign_bundle') {
+    throw new Error('Unsupported Meta campaign approval payload');
+  }
+  if (!Array.isArray(payload.campaigns) || payload.campaigns.length !== META_CAMPAIGN_SHELLS.length) {
+    throw new Error('Meta campaign bundle must contain exactly two campaigns');
+  }
+  const row = await connectionRow(pool);
+  const config = marketingConfig();
+  const scopes = jsonParse(row?.granted_scopes, []);
+  if (!config.ready || !row || row.status !== 'connected') throw new Error('Meta connection is not ready');
+  if (!scopes.includes('ads_management')) throw new Error('Meta ads_management permission is missing');
+  if (row.selected_ad_account_id !== payload.connection_snapshot?.ad_account_id) {
+    throw new Error('Selected Meta ad account changed after approval');
+  }
+  const token = decryptToken(row, config.encryptionKey);
+  const remote = await graphRequest(`${row.selected_ad_account_id}/campaigns`, token, {
+    fields: 'id,name,status,effective_status,objective',
+    limit: 100,
+  });
+  const remoteByName = new Map((remote?.data || []).map((item) => [item.name, item]));
+  const results = [];
+  for (const expected of META_CAMPAIGN_SHELLS) {
+    const approved = payload.campaigns.find((item) => item.item_key === expected.itemKey);
+    if (!approved || approved.name !== expected.name || approved.status !== 'PAUSED'
+      || approved.meta_objective !== 'OUTCOME_SALES' || approved.buying_type !== 'AUCTION'
+      || JSON.stringify(approved.special_ad_categories) !== '[]') {
+      throw new Error(`Invalid approved campaign shell: ${expected.itemKey}`);
+    }
+    const payloadHash = campaignShellPayloadHash(expected, row.selected_ad_account_id);
+    const [itemRows] = await pool.query(
+      'SELECT * FROM marketing_approval_execution_items WHERE approval_id=? AND item_key=? LIMIT 1',
+      [approval.id, expected.itemKey],
+    );
+    const saved = itemRows?.[0] || null;
+    if (saved?.state === 'succeeded' && saved.external_id) {
+      results.push({ itemKey: expected.itemKey, campaignId: saved.external_id, status: saved.external_status || 'PAUSED', reused: true });
+      continue;
+    }
+    let campaign = saved?.external_id ? await graphRequest(saved.external_id, token, { fields: 'id,name,status,effective_status,objective' }) : remoteByName.get(expected.name);
+    if (!campaign) {
+      await pool.query(
+        `INSERT INTO marketing_approval_execution_items
+          (approval_id,item_key,payload_hash,state) VALUES (?,?,?,'creating')
+         ON DUPLICATE KEY UPDATE payload_hash=VALUES(payload_hash),state='creating',last_error=NULL`,
+        [approval.id, expected.itemKey, payloadHash],
+      );
+      const created = await graphPost(`${row.selected_ad_account_id}/campaigns`, token, {
+        name: expected.name,
+        objective: 'OUTCOME_SALES',
+        buying_type: 'AUCTION',
+        status: 'PAUSED',
+        special_ad_categories: '[]',
+      });
+      campaign = await graphRequest(created.id, token, { fields: 'id,name,status,effective_status,objective' });
+    }
+    if (!campaign?.id || campaign.name !== expected.name || !['PAUSED', 'CAMPAIGN_PAUSED'].includes(campaign.effective_status || campaign.status)) {
+      throw new Error(`Meta did not confirm paused state for ${expected.itemKey}`);
+    }
+    await pool.query(
+      `INSERT INTO marketing_approval_execution_items
+        (approval_id,item_key,payload_hash,external_id,state,external_status,last_error)
+       VALUES (?,?,?,?, 'succeeded', ?, NULL)
+       ON DUPLICATE KEY UPDATE external_id=VALUES(external_id),state='succeeded',external_status=VALUES(external_status),last_error=NULL`,
+      [approval.id, expected.itemKey, payloadHash, campaign.id, campaign.effective_status || campaign.status || 'PAUSED'],
+    );
+    results.push({ itemKey: expected.itemKey, campaignId: campaign.id, status: campaign.effective_status || campaign.status || 'PAUSED', reused: Boolean(remoteByName.get(expected.name)) });
+  }
+  return { operation: payload.operation, campaigns: results, financialImpact: 0 };
+}
+
+async function runNextMetaApproval(pool) {
+  const connection = await pool.getConnection();
+  let approval = null;
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      `SELECT * FROM marketing_approval_requests
+       WHERE status='approved' AND execution_mode='vps_meta_api' AND action_type=?
+       ORDER BY approved_at ASC, created_at ASC LIMIT 1 FOR UPDATE`,
+      [META_CAMPAIGN_SHELL_ACTION],
+    );
+    approval = rows?.[0] || null;
+    if (!approval) { await connection.rollback(); return null; }
+    if ((approval.approval_expires_at && new Date(approval.approval_expires_at).getTime() <= Date.now())
+      || !approval.reviewed_by || approval.reviewed_by === approval.requested_by) {
+      await connection.query("UPDATE marketing_approval_requests SET status='expired',last_error='Invalid or expired approval' WHERE id=?", [approval.id]);
+      await approvalEvent(connection, approval.id, 'expired', { id: 'vps-meta-api', label: 'VPS Meta API' }, { reason: 'invalid_or_expired_approval' });
+      await connection.commit();
+      return null;
+    }
+    await connection.query(
+      "UPDATE marketing_approval_requests SET status='executing',runner_id='vps-meta-api',execution_started_at=NOW(),attempt_count=attempt_count+1 WHERE id=?",
+      [approval.id],
+    );
+    await approvalEvent(connection, approval.id, 'claimed', { id: 'vps-meta-api', label: 'VPS Meta API' });
+    await connection.commit();
+    approval = parseApproval({ ...approval, status: 'executing', runner_id: 'vps-meta-api' });
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
+  try {
+    const result = await executePausedCampaignBundle(pool, approval);
+    await markApprovalExecution(pool, approval.id, true, result);
+    return result;
+  } catch (error) {
+    await markApprovalExecution(pool, approval.id, false, null, error.message);
+    return null;
+  }
+}
+
+function startMetaApprovalWorker(pool) {
+  if (metaApprovalWorkerStarted) return;
+  metaApprovalWorkerStarted = true;
+  const timer = setInterval(() => {
+    runNextMetaApproval(pool).catch((error) => console.error('[meta-approval-worker]', text(error.message, 1000)));
+  }, 15000);
+  timer.unref?.();
 }
 
 async function discoverAssets(token) {
@@ -549,6 +752,121 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
   fastify.get('/admin/marketing/meta/status', { preHandler: requireAdminBearerToken }, async () => ({
     ok: true, connection: sanitizeConnection(await connectionRow(pool)),
   }));
+
+  fastify.post('/admin/marketing/meta/campaign-draft-approvals', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+    const config = marketingConfig();
+    const row = await connectionRow(pool);
+    const scopes = jsonParse(row?.granted_scopes, []);
+    if (!config.ready || !row || row.status !== 'connected') return reply.code(409).send({ error: 'Meta is not connected' });
+    if (!row.selected_ad_account_id || !row.selected_page_id || !row.selected_instagram_account_id) {
+      return reply.code(409).send({ error: 'Select Meta assets before preparing campaigns' });
+    }
+    if (!scopes.includes('ads_management')) return reply.code(409).send({ error: 'Meta ads_management permission is missing' });
+    const [preferenceRows] = await pool.query(
+      "SELECT value_json FROM admin_preferences WHERE preference_key='marketing.instagram.campaign_portfolio' LIMIT 1",
+    );
+    const portfolio = jsonParse(preferenceRows?.[0]?.value_json, null);
+    const configured = Array.isArray(portfolio?.campaigns) ? portfolio.campaigns : [];
+    const byId = new Map(configured.map((item) => [item.id, item]));
+    const budgets = META_CAMPAIGN_SHELLS.map((shell) => {
+      const item = byId.get(shell.itemKey);
+      const amount = Number(item?.authorizedAmount || 0);
+      const days = Math.max(1, Math.min(90, Number(item?.durationDays || 0)));
+      if (!Number.isFinite(amount) || amount <= 0 || !days) return null;
+      return {
+        itemKey: shell.itemKey,
+        name: shell.name,
+        budgetType: item.budgetType === 'lifetime' ? 'lifetime' : 'daily',
+        authorizedAmount: amount,
+        durationDays: days,
+        periodLimit: item.budgetType === 'lifetime' ? amount : amount * days,
+      };
+    });
+    if (budgets.some((item) => !item)) return reply.code(409).send({ error: 'Configure both campaign budgets first' });
+    const payload = {
+      schema_version: 1,
+      operation: 'meta.create_paused_campaign_bundle',
+      connection_snapshot: {
+        connection_id: 1,
+        ad_account_id: row.selected_ad_account_id,
+        page_id: row.selected_page_id,
+        instagram_account_id: row.selected_instagram_account_id,
+        graph_api_version: config.graphApiVersion,
+      },
+      campaigns: META_CAMPAIGN_SHELLS.map((item) => ({
+        item_key: item.itemKey,
+        name: item.name,
+        logical_objective: 'sales',
+        meta_objective: 'OUTCOME_SALES',
+        buying_type: 'AUCTION',
+        status: 'PAUSED',
+        special_ad_categories: [],
+      })),
+    };
+    const idempotencyKey = `meta-shells-v1:${sha256(JSON.stringify(payload)).slice(0, 120)}`;
+    const [existingRows] = await pool.query(
+      'SELECT * FROM marketing_approval_requests WHERE idempotency_key=? LIMIT 1',
+      [idempotencyKey],
+    );
+    if (existingRows?.[0]) return { ok: true, approval: parseApproval(existingRows[0]), reused: true };
+    const id = crypto.randomUUID();
+    const auth = await getBearerAuthContext(req);
+    const proposedState = {
+      campaigns: budgets,
+      externalCreation: { status: 'PAUSED', budgetApplied: false, adSetsCreated: false, adsCreated: false },
+      audiencePlan: {
+        firstMonth: 'Broad local audience within Petrolina-PE and Juazeiro-BA',
+        competitorPhysicalTest: 'Only after 15-30 days of baseline data and without increasing the monthly cap',
+        competitorInstagramVisitors: 'Not targetable; use only authorized first-party audiences and broad signals',
+      },
+    };
+    const financialImpact = {
+      currency: 'BRL',
+      immediateMaximum: 0,
+      authorizedMonthlyCeiling: budgets.reduce((sum, item) => sum + item.periodLimit, 0),
+      reason: 'This approval creates only paused campaign shells without budget, ad sets or ads',
+    };
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(
+        `INSERT INTO marketing_approval_requests
+          (id,channel,action_type,title,target_type,target_name,execution_mode,current_state,proposed_state,
+           evidence,financial_impact,success_criteria,rollback_plan,execution_payload,requested_by,requested_by_label,
+           idempotency_key,approval_expires_at)
+         VALUES (?, 'instagram', ?, ?, 'meta_campaign_bundle', ?, 'vps_meta_api', ?, ?, ?, ?, ?, ?, ?,
+                 'marketing-agent', 'Agente especialista de campanhas', ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
+        [
+          id,
+          META_CAMPAIGN_SHELL_ACTION,
+          'Criar duas campanhas Meta pausadas para o Mercado do Vale',
+          META_CAMPAIGN_SHELLS.map((item) => item.name).join(' + '),
+          jsonValue({ activeCampaigns: row.last_audit ? jsonParse(row.last_audit, {})?.campaignSummary?.active || 0 : null }),
+          jsonValue(proposedState),
+          jsonValue({ source: 'Meta audit + saved Gestão MV portfolio', requestedByAdmin: auth.userId || auth.customerId || null }),
+          jsonValue(financialImpact),
+          jsonValue({ required: 'Exactly two campaigns confirmed PAUSED; zero ad sets, ads and spend' }),
+          'Os containers permanecem pausados. Qualquer exclusão ou arquivamento exige nova aprovação.',
+          jsonValue(payload),
+          idempotencyKey,
+        ],
+      );
+      await approvalEvent(connection, id, 'requested', { id: 'marketing-agent', label: 'Agente especialista de campanhas' }, {
+        action_type: META_CAMPAIGN_SHELL_ACTION,
+        execution_mode: 'vps_meta_api',
+        financial_impact: 0,
+      });
+      await connection.commit();
+      return reply.code(201).send({ ok: true, approval: parseApproval(await findApproval(pool, id)), reused: false });
+    } catch (error) {
+      await connection.rollback();
+      if (error?.code === 'ER_DUP_ENTRY') {
+        const [rows] = await pool.query('SELECT * FROM marketing_approval_requests WHERE idempotency_key=? LIMIT 1', [idempotencyKey]);
+        if (rows?.[0]) return { ok: true, approval: parseApproval(rows[0]), reused: true };
+      }
+      throw error;
+    } finally { connection.release(); }
+  });
 
   fastify.post('/admin/marketing/meta/oauth/start', { preHandler: requireAdminBearerToken }, async (req, reply) => {
     const config = marketingConfig();
@@ -726,6 +1044,7 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
 function registerMarketingCampaignRoutes(fastify, dependencies) {
   registerApprovalRoutes(fastify, dependencies);
   registerMetaRoutes(fastify, dependencies);
+  startMetaApprovalWorker(dependencies.pool);
 }
 
 module.exports = { ensureMarketingCampaignTables, registerMarketingCampaignRoutes };

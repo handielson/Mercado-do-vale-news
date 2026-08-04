@@ -52,6 +52,15 @@ Os números de conversa, compra, receita e ROAS exibem `Não mensurado` quando n
 
 As duas campanhas têm objetivo fixo de vendas e destino no WhatsApp oficial cadastrado na loja. A mensagem inicial inclui nome/modelo e SKU para o bot identificar o produto sem obrigar o cliente a repetir a escolha. Antes da ativação, o agente ainda deve validar o número, o vínculo da Meta com o WhatsApp e o roteamento real do bot.
 
-## Próxima etapa
+## Execução em duas aprovações
 
-Configurar as credenciais na VPS e conectar a conta pela tela. Após a auditoria real, criar os dois rascunhos pausados e o adapter `vps_meta_api`; somente então decidir se existe alguma lacuna que justifique o executor `lenovo_chrome`.
+A primeira aprovação usa a ação fixa `meta.create_paused_campaign_bundle.v1`. O executor da VPS cria somente dois recipientes de campanha, ambos pausados e sem conjuntos de anúncios, anúncios ou orçamento aplicado:
+
+- `MDV | Loja inteira | Carrossel | Petrolina + Juazeiro`;
+- `MDV | Smartphones | Petrolina + Juazeiro`.
+
+O executor revalida a conexão, a permissão `ads_management`, a conta de anúncios aprovada e a existência de campanhas com os mesmos nomes. Cada item possui registro próprio de execução, evitando uma segunda criação quando houver repetição ou retomada do processamento.
+
+A configuração de público local, posicionamentos, criativos, destino no WhatsApp e orçamento será preparada depois e exigirá uma nova aprovação. Essa segunda etapa deve respeitar o teto mensal autorizado de R$ 1.000,00, sendo R$ 400,00 para a loja inteira e R$ 600,00 para smartphones. Nenhuma campanha poderá ser ativada nessa primeira aprovação.
+
+O Lenovo e uma possível extensão de Chrome continuam como alternativas somente se uma lacuna comprovada da API oficial impedir alguma ação necessária.

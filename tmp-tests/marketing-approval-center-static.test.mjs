@@ -32,5 +32,10 @@ assert.match(vpsServerCjs, /registerMarketingCampaignRoutes/);
 assert.match(vpsServerCjs, /ensureMarketingCampaignTables/);
 assert.match(productionApi, /\/admin\/marketing\/approvals/);
 assert.match(productionApi, /\/marketing-runner\/approvals/);
+assert.match(productionApi, /meta\.create_paused_campaign_bundle\.v1/);
+assert.match(productionApi, /marketing_approval_execution_items/);
+assert.match(productionApi, /OUTCOME_SALES/);
+assert.match(productionApi, /status: 'PAUSED'/);
+assert.match(productionApi, /requester cannot approve their own/);
 
 console.log('marketing approval center contract: OK');

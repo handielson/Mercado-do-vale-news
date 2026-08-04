@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.157-meta-oauth-scopes
+version: v1.2.158-meta-paused-campaign-drafts
 date: 2026-08-04
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-155919-meta-oauth-scopes
+release_vps: /var/www/mdv-site/releases/20260804-131808-meta-paused-campaign-drafts
 branch: main
-summary: Corrige o conjunto de permissões OAuth da Meta e preserva a descoberta do Instagram pela Página vinculada.
+summary: Adiciona aprovação e execução idempotente para criar somente dois rascunhos de campanha Meta pausados e sem gasto.
 ```

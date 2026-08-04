@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const panel = readFileSync('pages/admin/settings/marketing/MarketingCampaignAgentPanel.tsx', 'utf8');
 const service = readFileSync('services/marketingCampaignPortfolioService.ts', 'utf8');
+const metaService = readFileSync('services/metaMarketingConnectionService.ts', 'utf8');
 
 assert.match(service, /id: 'store-carousel'/);
 assert.match(service, /id: 'smartphones'/);
@@ -19,5 +20,8 @@ assert.match(panel, /Mensagem preparada para o bot/);
 assert.match(panel, /teto autorizado, não uma ordem para gastar tudo/);
 assert.match(panel, /Salvar aqui não ativa nem gasta nada/);
 assert.match(panel, /Campanhas configuradas/);
+assert.match(panel, /Público inicial: amplo e local/);
+assert.match(panel, /Preparar rascunhos pausados/);
+assert.match(metaService, /campaign-draft-approvals/);
 
 console.log('marketing campaign agent portfolio: OK');

@@ -8,6 +8,7 @@ import {
     MessageCircle,
     Save,
     ShieldCheck,
+    Target,
     Smartphone,
     Store,
 } from 'lucide-react';
@@ -21,6 +22,7 @@ import {
 import { getCompanyData } from '../../../../services/companyService';
 import MetaMarketingConnectionPanel from './MetaMarketingConnectionPanel';
 import MarketingCampaignMetricsPanel from './MarketingCampaignMetricsPanel';
+import { metaMarketingConnectionService } from '../../../../services/metaMarketingConnectionService';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -35,6 +37,7 @@ export default function MarketingCampaignAgentPanel() {
     const [portfolio, setPortfolio] = useState<MarketingCampaignPortfolio>(DEFAULT_MARKETING_CAMPAIGN_PORTFOLIO);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [preparingApproval, setPreparingApproval] = useState(false);
     const [officialWhatsapp, setOfficialWhatsapp] = useState('');
 
     useEffect(() => {
@@ -81,6 +84,21 @@ export default function MarketingCampaignAgentPanel() {
         }
     };
 
+    const prepareDraftApproval = async () => {
+        setPreparingApproval(true);
+        try {
+            await marketingCampaignPortfolioService.save(portfolio);
+            const response = await metaMarketingConnectionService.prepareCampaignDraftApproval();
+            toast.success(response.reused
+                ? 'A solicitação segura já existe na Central de Aprovações.'
+                : 'Solicitação criada. Revise em Marketing > Aprovações.');
+        } catch (error: any) {
+            toast.error(error?.message || 'Não foi possível preparar os rascunhos pausados.');
+        } finally {
+            setPreparingApproval(false);
+        }
+    };
+
     if (loading) {
         return <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white p-12 text-slate-500"><Loader2 className="h-5 w-5 animate-spin" /> Carregando especialista de campanhas...</div>;
     }
@@ -110,6 +128,20 @@ export default function MarketingCampaignAgentPanel() {
             </div>
 
             <MarketingCampaignMetricsPanel />
+
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-start gap-3">
+                        <Target className="mt-0.5 h-5 w-5 text-sky-700" />
+                        <div>
+                            <h3 className="font-black text-sky-950">Público inicial: amplo e local</h3>
+                            <p className="mt-1 max-w-3xl text-sm leading-6 text-sky-900">No primeiro mês, o agente mantém Petrolina–PE e Juazeiro–BA como limites rígidos e evita fragmentar o orçamento por lojas concorrentes. Um teste de proximidade física só será sugerido após 15–30 dias de dados, sem aumentar o teto mensal. Visitantes de perfis concorrentes não serão simulados nem coletados.</p>
+                        </div>
+                    </div>
+                    <button onClick={prepareDraftApproval} disabled={preparingApproval || configuredCount !== 2} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-sky-700 px-5 py-3 text-sm font-black text-white transition hover:bg-sky-600 disabled:opacity-50">{preparingApproval ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Preparar rascunhos pausados</button>
+                </div>
+                <p className="mt-3 text-xs font-semibold text-sky-800">Esta ação cria somente uma solicitação. Depois da sua aprovação, a VPS poderá criar dois containers PAUSADOS, sem conjunto, anúncio, orçamento aplicado ou cobrança.</p>
+            </div>
 
             <div className="grid gap-5 xl:grid-cols-2">
                 {portfolio.campaigns.map((campaign) => {

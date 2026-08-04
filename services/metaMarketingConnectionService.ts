@@ -100,6 +100,12 @@ export interface MetaCampaignInsightsReport {
     fetchedAt: string;
 }
 
+export interface MetaCampaignDraftApprovalResponse {
+    ok: true;
+    reused: boolean;
+    approval: { id: string; status: string; title: string };
+}
+
 export const metaMarketingConnectionService = {
     async getStatus(): Promise<MetaMarketingConnection> {
         return (await vpsClient.get<ConnectionResponse>('/admin/marketing/meta/status')).connection;
@@ -130,6 +136,13 @@ export const metaMarketingConnectionService = {
     async getInsights(datePreset: MetaInsightsDatePreset): Promise<MetaCampaignInsightsReport> {
         return await vpsClient.get<MetaCampaignInsightsReport & { ok: true }>(
             `/admin/marketing/meta/insights?datePreset=${encodeURIComponent(datePreset)}`,
+        );
+    },
+
+    async prepareCampaignDraftApproval(): Promise<MetaCampaignDraftApprovalResponse> {
+        return await vpsClient.post<MetaCampaignDraftApprovalResponse>(
+            '/admin/marketing/meta/campaign-draft-approvals',
+            {},
         );
     },
 };
