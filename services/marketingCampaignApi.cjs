@@ -569,15 +569,11 @@ function pausedAdBundlePayloadHash(item, accountId) {
   return sha256(JSON.stringify({ schemaVersion: 1, accountId, item }));
 }
 
-function confirmsPausedAdDuringReview(ad) {
-  const status = String(ad?.status || '').toUpperCase();
-  const effectiveStatus = String(ad?.effective_status || '').toUpperCase();
-  // Meta documents that an ad created with status=PAUSED can temporarily be
-  // PENDING_REVIEW before returning to the selected PAUSED status. Campaign
-  // and ad set are independently confirmed PAUSED before this check.
-  return status === 'PAUSED'
-    || status === 'PENDING_REVIEW'
-    || effectiveStatus === 'PENDING_REVIEW';
+function confirmsConfiguredPaused(entity) {
+  // Meta separates the configured status from effective_status. A resource
+  // configured as PAUSED can temporarily report PENDING_REVIEW or IN_PROCESS
+  // as its effective status while Meta processes it.
+  return String(entity?.status || '').toUpperCase() === 'PAUSED';
 }
 
 async function findExecutionItem(pool, approvalId, itemKey) {
@@ -874,8 +870,8 @@ async function executePausedWhatsappAdBundle(pool, approval) {
         throw diagnostic;
       }
     }
-    if (!campaign?.id || campaign.name !== item.campaign_name || !String(campaign.effective_status || campaign.status).includes('PAUSED')) {
-      throw new Error(`Meta did not confirm paused campaign ${item.item_key}`);
+    if (!campaign?.id || campaign.name !== item.campaign_name || !confirmsConfiguredPaused(campaign)) {
+      throw new Error(`Meta did not confirm paused campaign ${item.item_key}: ${JSON.stringify({ id: campaign?.id || null, name: campaign?.name || null, status: campaign?.status || null, effective_status: campaign?.effective_status || null })}`);
     }
     await saveExecutionItem(pool, approval.id, campaignItemKey, payloadHash, {
       state: 'succeeded', externalId: campaign.id, externalStatus: campaign.effective_status || campaign.status || 'PAUSED',
@@ -925,7 +921,7 @@ async function executePausedWhatsappAdBundle(pool, approval) {
       }
     }
     if (!adset?.id || adset.name !== item.adset_name || String(adset.campaign_id) !== String(campaign.id)
-      || !String(adset.effective_status || adset.status).includes('PAUSED')) {
+      || !confirmsConfiguredPaused(adset)) {
       throw new Error(`Meta did not confirm paused ad set ${item.item_key}: ${JSON.stringify({ id: adset?.id || null, name: adset?.name || null, status: adset?.status || null, effective_status: adset?.effective_status || null, campaign_id: adset?.campaign_id || null })}`);
     }
     await saveExecutionItem(pool, approval.id, adsetItemKey, payloadHash, {
@@ -975,7 +971,7 @@ async function executePausedWhatsappAdBundle(pool, approval) {
       }
     }
     if (!ad?.id || ad.name !== item.ad_name || String(ad.adset_id) !== String(adset.id)
-      || !confirmsPausedAdDuringReview(ad)) {
+      || !confirmsConfiguredPaused(ad)) {
       throw new Error(`Meta did not confirm paused ad ${item.item_key}: ${JSON.stringify({ id: ad?.id || null, name: ad?.name || null, status: ad?.status || null, effective_status: ad?.effective_status || null, adset_id: ad?.adset_id || null })}`);
     }
     await saveExecutionItem(pool, approval.id, adItemKey, payloadHash, {
@@ -986,7 +982,8 @@ async function executePausedWhatsappAdBundle(pool, approval) {
       campaignId: campaign.id,
       adsetId: adset.id,
       adId: ad.id,
-      status: ad.effective_status || ad.status || 'PAUSED',
+      status: ad.status || 'PAUSED',
+      effectiveStatus: ad.effective_status || null,
       metaReview: 'AUTOMATIC_AFTER_AD_CREATION',
     });
   }
