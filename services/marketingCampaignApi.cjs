@@ -5,7 +5,7 @@ const APPROVAL_STATUSES = new Set([
 ]);
 const EXECUTION_MODES = new Set(['vps_meta_api', 'lenovo_chrome', 'manual']);
 const INSIGHTS_PRESETS = new Set(['last_7d', 'last_14d', 'last_30d', 'this_month']);
-const META_CAMPAIGN_SHELL_ACTION = 'meta.create_paused_campaign_bundle.v1';
+const META_CAMPAIGN_SHELL_ACTION = 'meta.create_paused_campaign_bundle.v2';
 const META_CAMPAIGN_SHELLS = Object.freeze([
   { itemKey: 'store-carousel', name: 'MDV | Loja inteira | Carrossel | Petrolina + Juazeiro' },
   { itemKey: 'smartphones', name: 'MDV | Smartphones | Petrolina + Juazeiro' },
@@ -432,9 +432,14 @@ async function graphRequest(pathname, token, params = {}) {
   const response = await fetch(url, { headers: { Accept: 'application/json' } });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.error) {
-    const error = new Error(data?.error?.message || `Meta Graph API returned ${response.status}`);
+    const meta = data?.error || {};
+    const detail = meta.error_user_msg || meta.error_user_title || meta.message;
+    const error = new Error(detail || `Meta Graph API returned ${response.status}`);
     error.statusCode = response.status;
-    error.metaCode = data?.error?.code;
+    error.metaCode = meta.code;
+    error.metaSubcode = meta.error_subcode;
+    error.metaUserTitle = meta.error_user_title;
+    error.metaUserMessage = meta.error_user_msg;
     throw error;
   }
   return data;
@@ -456,9 +461,14 @@ async function graphPost(pathname, token, params = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.error) {
-    const error = new Error(data?.error?.message || `Meta Graph API returned ${response.status}`);
+    const meta = data?.error || {};
+    const detail = meta.error_user_msg || meta.error_user_title || meta.message;
+    const error = new Error(detail || `Meta Graph API returned ${response.status}`);
     error.statusCode = response.status;
-    error.metaCode = data?.error?.code;
+    error.metaCode = meta.code;
+    error.metaSubcode = meta.error_subcode;
+    error.metaUserTitle = meta.error_user_title;
+    error.metaUserMessage = meta.error_user_msg;
     throw error;
   }
   return data;
@@ -466,7 +476,7 @@ async function graphPost(pathname, token, params = {}) {
 
 function campaignShellPayloadHash(item, accountId) {
   return sha256(JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     accountId,
     itemKey: item.itemKey,
     name: item.name,
@@ -474,7 +484,16 @@ function campaignShellPayloadHash(item, accountId) {
     buyingType: 'AUCTION',
     status: 'PAUSED',
     specialAdCategories: [],
+    isAdsetBudgetSharingEnabled: false,
   }));
+}
+
+function formatMetaExecutionError(error) {
+  return [
+    text(error?.message, 8000) || 'Meta execution failed',
+    error?.metaCode ? `Meta code ${error.metaCode}` : null,
+    error?.metaSubcode ? `subcode ${error.metaSubcode}` : null,
+  ].filter(Boolean).join(' · ');
 }
 
 async function markApprovalExecution(pool, approvalId, succeeded, result, errorMessage = null) {
@@ -496,7 +515,7 @@ async function markApprovalExecution(pool, approvalId, succeeded, result, errorM
 
 async function executePausedCampaignBundle(pool, approval) {
   const payload = approval.execution_payload;
-  if (!payload || payload.schema_version !== 1 || payload.operation !== 'meta.create_paused_campaign_bundle') {
+  if (!payload || payload.schema_version !== 2 || payload.operation !== 'meta.create_paused_campaign_bundle') {
     throw new Error('Unsupported Meta campaign approval payload');
   }
   if (!Array.isArray(payload.campaigns) || payload.campaigns.length !== META_CAMPAIGN_SHELLS.length) {
@@ -521,7 +540,8 @@ async function executePausedCampaignBundle(pool, approval) {
     const approved = payload.campaigns.find((item) => item.item_key === expected.itemKey);
     if (!approved || approved.name !== expected.name || approved.status !== 'PAUSED'
       || approved.meta_objective !== 'OUTCOME_SALES' || approved.buying_type !== 'AUCTION'
-      || JSON.stringify(approved.special_ad_categories) !== '[]') {
+      || JSON.stringify(approved.special_ad_categories) !== '[]'
+      || approved.is_adset_budget_sharing_enabled !== false) {
       throw new Error(`Invalid approved campaign shell: ${expected.itemKey}`);
     }
     const payloadHash = campaignShellPayloadHash(expected, row.selected_ad_account_id);
@@ -542,13 +562,26 @@ async function executePausedCampaignBundle(pool, approval) {
          ON DUPLICATE KEY UPDATE payload_hash=VALUES(payload_hash),state='creating',last_error=NULL`,
         [approval.id, expected.itemKey, payloadHash],
       );
-      const created = await graphPost(`${row.selected_ad_account_id}/campaigns`, token, {
-        name: expected.name,
-        objective: 'OUTCOME_SALES',
-        buying_type: 'AUCTION',
-        status: 'PAUSED',
-        special_ad_categories: '[]',
-      });
+      let created;
+      try {
+        created = await graphPost(`${row.selected_ad_account_id}/campaigns`, token, {
+          name: expected.name,
+          objective: 'OUTCOME_SALES',
+          buying_type: 'AUCTION',
+          status: 'PAUSED',
+          special_ad_categories: '[]',
+          is_adset_budget_sharing_enabled: 'false',
+        });
+      } catch (error) {
+        const state = error.metaCode ? 'failed' : 'ambiguous';
+        const diagnostic = formatMetaExecutionError(error);
+        await pool.query(
+          `UPDATE marketing_approval_execution_items
+           SET state=?,last_error=? WHERE approval_id=? AND item_key=?`,
+          [state, text(diagnostic, 10000), approval.id, expected.itemKey],
+        );
+        throw error;
+      }
       campaign = await graphRequest(created.id, token, { fields: 'id,name,status,effective_status,objective' });
     }
     if (!campaign?.id || campaign.name !== expected.name || !['PAUSED', 'CAMPAIGN_PAUSED'].includes(campaign.effective_status || campaign.status)) {
@@ -602,7 +635,7 @@ async function runNextMetaApproval(pool) {
     await markApprovalExecution(pool, approval.id, true, result);
     return result;
   } catch (error) {
-    await markApprovalExecution(pool, approval.id, false, null, error.message);
+    await markApprovalExecution(pool, approval.id, false, null, formatMetaExecutionError(error));
     return null;
   }
 }
@@ -784,7 +817,7 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
     });
     if (budgets.some((item) => !item)) return reply.code(409).send({ error: 'Configure both campaign budgets first' });
     const payload = {
-      schema_version: 1,
+      schema_version: 2,
       operation: 'meta.create_paused_campaign_bundle',
       connection_snapshot: {
         connection_id: 1,
@@ -801,9 +834,10 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
         buying_type: 'AUCTION',
         status: 'PAUSED',
         special_ad_categories: [],
+        is_adset_budget_sharing_enabled: false,
       })),
     };
-    const idempotencyKey = `meta-shells-v1:${sha256(JSON.stringify(payload)).slice(0, 120)}`;
+    const idempotencyKey = `meta-shells-v2:${sha256(JSON.stringify(payload)).slice(0, 120)}`;
     const [existingRows] = await pool.query(
       'SELECT * FROM marketing_approval_requests WHERE idempotency_key=? LIMIT 1',
       [idempotencyKey],

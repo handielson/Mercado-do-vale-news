@@ -54,7 +54,7 @@ As duas campanhas têm objetivo fixo de vendas e destino no WhatsApp oficial cad
 
 ## Execução em duas aprovações
 
-A primeira aprovação usa a ação fixa `meta.create_paused_campaign_bundle.v1`. O executor da VPS cria somente dois recipientes de campanha, ambos pausados e sem conjuntos de anúncios, anúncios ou orçamento aplicado:
+A primeira aprovação usa a ação fixa `meta.create_paused_campaign_bundle.v2`. O executor da VPS cria somente dois recipientes de campanha, ambos pausados e sem conjuntos de anúncios, anúncios ou orçamento aplicado. A versão 2 informa explicitamente `is_adset_budget_sharing_enabled=false`, exigência da Meta para campanhas sem orçamento no nível da campanha:
 
 - `MDV | Loja inteira | Carrossel | Petrolina + Juazeiro`;
 - `MDV | Smartphones | Petrolina + Juazeiro`.

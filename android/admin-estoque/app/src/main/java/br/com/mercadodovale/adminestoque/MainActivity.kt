@@ -3,6 +3,7 @@ package br.com.mercadodovale.adminestoque
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.TimePickerDialog
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
@@ -47,6 +48,7 @@ import br.com.mercadodovale.adminestoque.data.VpsApiClient
 import br.com.mercadodovale.adminestoque.domain.LabelSize
 import br.com.mercadodovale.adminestoque.domain.MarketingCampaignInsight
 import br.com.mercadodovale.adminestoque.domain.MarketingCampaignReport
+import br.com.mercadodovale.adminestoque.domain.MarketingApproval
 import br.com.mercadodovale.adminestoque.domain.MarketingMetricValues
 import br.com.mercadodovale.adminestoque.domain.ProductLabelProduct
 import br.com.mercadodovale.adminestoque.domain.SaleSummary
@@ -452,6 +454,21 @@ class MainActivity : Activity() {
                 Color.DKGRAY,
             ),
         )
+        val approvalStatus = text("Carregando aprovações…", 15, Color.DKGRAY)
+        val approvalContent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(text("Central de Aprovações", 22, Color.rgb(30, 64, 175)))
+        root.addView(
+            text(
+                "Revise alvo, impacto financeiro, critério de sucesso e reversão. Aprovar aqui tem o mesmo efeito da Central do Gestão MV web.",
+                14,
+                Color.DKGRAY,
+            ),
+        )
+        root.addView(button("Atualizar aprovações") {
+            loadMarketingApprovals(approvalStatus, approvalContent)
+        })
+        root.addView(approvalStatus)
+        root.addView(approvalContent)
         val periodLabels = MARKETING_PERIODS.map { it.second }
         val periodSpinner = Spinner(this).apply {
             adapter = ArrayAdapter(
@@ -472,7 +489,166 @@ class MainActivity : Activity() {
         root.addView(status)
         root.addView(content)
         showContent(root)
+        loadMarketingApprovals(approvalStatus, approvalContent)
         loadMarketingCampaigns(initialPreset, status, content)
+    }
+
+    private fun loadMarketingApprovals(status: TextView, content: LinearLayout) {
+        status.text = "Buscando aprovações…"
+        content.removeAllViews()
+        runAsync {
+            val result = VpsApiClient(token.orEmpty()).get("/admin/marketing/approvals?limit=30")
+            runOnUiThread {
+                result.fold(
+                    onSuccess = { body ->
+                        runCatching { MarketingApproval.parseList(body) }.fold(
+                            onSuccess = { approvals ->
+                                val visible = approvals.filter {
+                                    it.status in setOf("pending", "approved", "executing", "failed")
+                                }
+                                val pending = visible.count { it.status == "pending" }
+                                status.text = if (visible.isEmpty()) {
+                                    "Nenhuma aprovação pendente ou falha recente."
+                                } else {
+                                    "$pending aguardando sua decisão"
+                                }
+                                content.removeAllViews()
+                                visible.forEach { approval ->
+                                    content.addView(
+                                        marketingApprovalCard(approval) {
+                                            showMarketingApprovalReview(approval, status, content)
+                                        },
+                                    )
+                                }
+                            },
+                            onFailure = { status.text = it.message ?: "Resposta de aprovações inválida." },
+                        )
+                    },
+                    onFailure = { error ->
+                        val message = error.message ?: "Não foi possível carregar as aprovações."
+                        if (VpsApiClient.isUnauthorized(error)) {
+                            handleProtectedApiFailure(error, status, message)
+                        } else {
+                            status.text = message
+                        }
+                    },
+                )
+            }
+        }
+    }
+
+    private fun marketingApprovalCard(
+        approval: MarketingApproval,
+        review: () -> Unit,
+    ) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(18), dp(16), dp(18), dp(16))
+        setBackgroundColor(
+            when (approval.status) {
+                "pending" -> Color.rgb(255, 251, 235)
+                "failed" -> Color.rgb(254, 242, 242)
+                else -> Color.rgb(239, 246, 255)
+            },
+        )
+        addView(text(approval.statusLabel, 14, if (approval.status == "failed") Color.rgb(185, 28, 28) else Color.rgb(30, 64, 175)))
+        addView(text(approval.title, 19, Color.rgb(15, 23, 42)))
+        addView(text(approval.campaignSummary(), 14, Color.DKGRAY))
+        addView(text(approval.financialSummary(), 14, Color.rgb(71, 85, 105)))
+        if (approval.lastError.isNotBlank()) {
+            addView(text("Falha: ${approval.lastError}", 14, Color.rgb(185, 28, 28)))
+        }
+        addView(button(if (approval.status == "pending") "Revisar e decidir" else "Ver detalhes", review))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { bottomMargin = dp(14) }
+    }
+
+    private fun showMarketingApprovalReview(
+        approval: MarketingApproval,
+        status: TextView,
+        content: LinearLayout,
+    ) {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(approval.title)
+            .setMessage(approval.reviewText())
+            .setNegativeButton("Fechar", null)
+        if (approval.status == "pending") {
+            dialog.setNeutralButton("Rejeitar") { _, _ ->
+                showMarketingApprovalRejection(approval, status, content)
+            }
+            dialog.setPositiveButton("Confirmar aprovação") { _, _ ->
+                decideMarketingApproval(approval, "approve", null, status, content)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showMarketingApprovalRejection(
+        approval: MarketingApproval,
+        status: TextView,
+        content: LinearLayout,
+    ) {
+        val note = EditText(this).apply {
+            hint = "Explique por que a ação foi rejeitada"
+            minLines = 3
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Rejeitar ação")
+            .setView(note)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Confirmar rejeição", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val reason = note.text.toString().trim()
+                if (reason.isBlank()) {
+                    note.error = "Informe o motivo da rejeição."
+                } else {
+                    dialog.dismiss()
+                    decideMarketingApproval(approval, "reject", reason, status, content)
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun decideMarketingApproval(
+        approval: MarketingApproval,
+        decision: String,
+        note: String?,
+        status: TextView,
+        content: LinearLayout,
+    ) {
+        status.text = if (decision == "approve") "Registrando aprovação…" else "Registrando rejeição…"
+        runAsync {
+            val payload = JSONObject().put("decision", decision)
+            if (!note.isNullOrBlank()) payload.put("note", note)
+            val result = VpsApiClient(token.orEmpty()).post(
+                "/admin/marketing/approvals/${URLEncoder.encode(approval.id, "UTF-8")}/decision",
+                payload,
+            )
+            runOnUiThread {
+                result.fold(
+                    onSuccess = {
+                        Toast.makeText(
+                            this,
+                            if (decision == "approve") "Ação aprovada." else "Ação rejeitada.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        loadMarketingApprovals(status, content)
+                    },
+                    onFailure = { error ->
+                        val message = error.message ?: "Não foi possível registrar a decisão."
+                        if (VpsApiClient.isUnauthorized(error)) {
+                            handleProtectedApiFailure(error, status, message)
+                        } else {
+                            status.text = message
+                        }
+                    },
+                )
+            }
+        }
     }
 
     private fun loadMarketingCampaigns(

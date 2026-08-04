@@ -37,6 +37,7 @@ O aplicativo nunca incorpora `x-sync-key`, `VITE_VPS_SYNC_KEY`, Supabase ou cred
 - Avaliacoes de produtos Shopee com estrelas, comentario e resposta oficial da loja.
 - Atalho nas vendas Shopee concluidas para salvar/copiar um texto padrao e abrir os pedidos concluidos para avaliar o comprador.
 - Painel nativo de campanhas do Instagram com períodos comparáveis, indicadores de vendas, WhatsApp, investimento, entrega, cliques, interação e explicação de cada métrica.
+- Central de Aprovações de marketing no próprio aplicativo, com impacto financeiro, critério de sucesso, reversão, aprovação, rejeição justificada e falhas recentes.
 
 ## Validacao fisica
 
