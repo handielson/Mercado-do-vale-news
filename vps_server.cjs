@@ -28073,7 +28073,7 @@ fastify.get('/whatsapp/status-campaigns/progress', { preHandler: requireSyncKey 
   await markStaleWhatsAppStatusSendingLogs();
   const localDateKey = getWhatsAppStatusLocalClock().dateKey;
   const [campaigns] = await pool.query(
-    `SELECT id, title, active, daily_limit, interval_minutes, start_time,
+    `SELECT id, title, source_type, category_id, active, daily_limit, interval_minutes, start_time,
             start_date, repeat_days, repeat_mode, repeat_product_id
      FROM whatsapp_status_campaigns
      ORDER BY updated_at DESC

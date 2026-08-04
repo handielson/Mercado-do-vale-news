@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.152-whatsapp-status-categoria-pai",
+  "version": "v1.2.153-whatsapp-status-total-categoria",
   "date": "2026-08-03",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-020745-whatsapp-status-categoria-pai",
+  "release_vps": "/var/www/mdv-site/releases/20260804-021107-whatsapp-status-total-categoria",
   "branch": "main",
-  "summary": "Inclui todas as subcategorias na campanha completa de Status WhatsApp."
+  "summary": "Exibe o total real de modelos elegíveis da categoria na agenda de Status."
 }

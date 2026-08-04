@@ -52,6 +52,7 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /runDueWhatsAppStatusCampaigns/);
   assert.match(source, /buildWhatsAppStatusProgress/);
   assert.match(source, /\/whatsapp\/status-campaigns\/progress/);
+  assert.match(source, /SELECT id, title, source_type, category_id, active, daily_limit/);
   assert.match(source, /ENUM\('sending','sent','failed','skipped'\)/);
   assert.match(source, /WAHA_STATUS_TIMEOUT_MS/);
   assert.match(source, /WAHA_STATUS_SERVER_URL/);
