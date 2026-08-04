@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.146-facebook-grupos-vendas
+version: v1.2.147-facebook-grupos-vendas
 date: 2026-08-03
 status: ready
-release_vps: /var/www/mdv-site/releases/20260804-010032-v12146-facebook-grupos-vendas
+release_vps: /var/www/mdv-site/releases/20260804-010032-v12147-facebook-grupos-vendas
 branch: main
 summary: Corrige a importação completa de grupos do Facebook e adiciona filtros de grupos de vendas.
 ```

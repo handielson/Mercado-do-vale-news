@@ -33,6 +33,9 @@ O aplicativo nunca incorpora `x-sync-key`, `VITE_VPS_SYNC_KEY`, Supabase ou cred
 - Impressao bitmap pelo protocolo nativo 0x1F, com ZLIB de 1 KB compativel com o firmware.
 - Envio BLE confirmado em pacotes de 200 bytes e finalizacao em duas fases.
 - Tela explicativa para permissoes de camera e dispositivos proximos.
+- Central de atendimento Shopee com leitura e resposta de conversas de compradores.
+- Avaliacoes de produtos Shopee com estrelas, comentario e resposta oficial da loja.
+- Atalho nas vendas Shopee concluidas para salvar/copiar um texto padrao e abrir os pedidos concluidos para avaliar o comprador.
 
 ## Validacao fisica
 
