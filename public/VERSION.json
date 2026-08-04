@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.155-campanhas-instagram",
+  "version": "v1.2.156-meta-env-seguro",
   "date": "2026-08-04",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-150718-campanhas-instagram",
+  "release_vps": "/var/www/mdv-site/releases/20260804-153115-meta-env-seguro",
   "branch": "main",
-  "summary": "Adiciona agente de campanhas, aprovações, conexão Meta segura e indicadores explicados no Gestão MV web e Android."
+  "summary": "Prepara versão da API Meta, callback OAuth e chave de criptografia segura na VPS, preservando credenciais existentes."
 }

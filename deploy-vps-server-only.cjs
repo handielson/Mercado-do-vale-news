@@ -1,4 +1,5 @@
 const { Client } = require('ssh2');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -171,6 +172,20 @@ function upsertEnv(content, entries) {
   return `${next.join('\n').replace(/\n+$/, '')}\n`;
 }
 
+function readEnvValue(content, key) {
+  const match = String(content || '')
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .find((line) => line.startsWith(`${key}=`));
+  if (!match) return '';
+  return match
+    .slice(key.length + 1)
+    .trim()
+    .replace(/^"|"$/g, '')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
+}
+
 async function ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath = null) {
   const remoteEnv = `${appDir}/.env`;
   let wahaStatusApiKey = String(process.env.WAHA_STATUS_API_KEY || '').trim();
@@ -185,12 +200,18 @@ async function ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath = null)
   }
   await withSftp(async (sftp) => {
     const current = await readRemoteText(sftp, remoteEnv);
+    const currentMetaEncryptionKey = readEnvValue(current, 'META_TOKEN_ENCRYPTION_KEY');
     const entries = {
       WAHA_STATUS_SERVER_URL: wahaStatusServerUrl,
       WAHA_STATUS_TIMEOUT_MS: process.env.WAHA_STATUS_TIMEOUT_MS || '300000',
       WAHA_STATUS_MEDIA_INTERVAL_MS: process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || '3000',
       WHATSAPP_STATUS_STALE_SENDING_SECONDS: process.env.WHATSAPP_STATUS_STALE_SENDING_SECONDS || '120',
+      META_GRAPH_API_VERSION: process.env.META_GRAPH_API_VERSION || readEnvValue(current, 'META_GRAPH_API_VERSION') || 'v25.0',
+      META_OAUTH_REDIRECT_URI: process.env.META_OAUTH_REDIRECT_URI || readEnvValue(current, 'META_OAUTH_REDIRECT_URI') || 'https://api.xiaomipetrolina.com.br/integrations/meta/oauth/callback',
+      META_TOKEN_ENCRYPTION_KEY: process.env.META_TOKEN_ENCRYPTION_KEY || currentMetaEncryptionKey || crypto.randomBytes(32).toString('hex'),
     };
+    if (process.env.META_APP_ID) entries.META_APP_ID = process.env.META_APP_ID;
+    if (process.env.META_APP_SECRET) entries.META_APP_SECRET = process.env.META_APP_SECRET;
     if (wahaStatusApiKey) entries.WAHA_STATUS_API_KEY = wahaStatusApiKey;
     entries.WAHA_STATUS_SESSION = process.env.WAHA_STATUS_SESSION || 'statusloja-wpp';
     if (adminEmail && adminPassword) {
@@ -202,6 +223,17 @@ async function ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath = null)
     }
     const next = upsertEnv(current, entries);
     await writeRemoteText(sftp, remoteEnv, next);
+    const requiredMetaKeys = [
+      'META_GRAPH_API_VERSION',
+      'META_APP_ID',
+      'META_APP_SECRET',
+      'META_OAUTH_REDIRECT_URI',
+      'META_TOKEN_ENCRYPTION_KEY',
+    ];
+    const missingMetaKeys = requiredMetaKeys.filter((key) => !readEnvValue(next, key));
+    console.log(missingMetaKeys.length
+      ? `Meta runtime configuration pending: ${missingMetaKeys.join(', ')}`
+      : 'Meta runtime configuration ready');
   });
   console.log(`Remote runtime env synced at ${remoteEnv}`);
 }
