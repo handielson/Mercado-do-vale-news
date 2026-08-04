@@ -198,6 +198,20 @@ function requireSyncKey(request, reply, done) {
   done();
 }
 
+function requireMarketingRunnerKey(request, reply, done) {
+  const configuredKey = String(process.env.MARKETING_RUNNER_SECRET || '').trim();
+  const receivedKey = String(request.headers['x-marketing-runner-key'] || '').trim();
+  if (!configuredKey) {
+    reply.code(503).send({ error: 'Marketing runner is not configured' });
+    return;
+  }
+  if (!receivedKey || receivedKey !== configuredKey) {
+    reply.code(401).send({ error: 'Invalid marketing runner key' });
+    return;
+  }
+  done();
+}
+
 function requireAutoresponderToken(request, reply, done) {
   const configuredToken = process.env.AUTORESPONDER_TOKEN || '';
   const receivedToken =
@@ -1119,6 +1133,866 @@ fastify.patch('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, 
     key,
     value: JSON.parse(valueJson),
   };
+});
+
+// ─── Integração Meta para campanhas (OAuth + auditoria somente leitura) ─────
+function getMetaMarketingConfig() {
+  const graphApiVersion = String(process.env.META_GRAPH_API_VERSION || '').trim();
+  const appId = String(process.env.META_APP_ID || '').trim();
+  const appSecret = String(process.env.META_APP_SECRET || '').trim();
+  const redirectUri = String(process.env.META_OAUTH_REDIRECT_URI || '').trim();
+  const encryptionKey = String(process.env.META_TOKEN_ENCRYPTION_KEY || '').trim();
+  const scopes = String(process.env.META_OAUTH_SCOPES || [
+    'ads_read',
+    'ads_management',
+    'business_management',
+    'pages_show_list',
+    'pages_read_engagement',
+    'instagram_basic',
+  ].join(','))
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return {
+    graphApiVersion,
+    appId,
+    appSecret,
+    redirectUri,
+    encryptionKey,
+    scopes,
+    ready: Boolean(graphApiVersion && appId && appSecret && redirectUri && encryptionKey),
+  };
+}
+
+function encryptMetaToken(token, secret) {
+  const key = crypto.createHash('sha256').update(secret).digest();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(String(token), 'utf8'), cipher.final()]);
+  return {
+    ciphertext: ciphertext.toString('base64'),
+    iv: iv.toString('base64'),
+    authTag: cipher.getAuthTag().toString('base64'),
+  };
+}
+
+function decryptMetaToken(row, secret) {
+  if (!row?.token_ciphertext || !row?.token_iv || !row?.token_auth_tag) return '';
+  const key = crypto.createHash('sha256').update(secret).digest();
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(row.token_iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(row.token_auth_tag, 'base64'));
+  return Buffer.concat([
+    decipher.update(Buffer.from(row.token_ciphertext, 'base64')),
+    decipher.final(),
+  ]).toString('utf8');
+}
+
+function parseMetaJson(value, fallback) {
+  if (value == null) return fallback;
+  if (typeof value === 'string') return safeJsonParse(value, fallback);
+  return value;
+}
+
+function sanitizeMetaConnection(row, config = getMetaMarketingConfig()) {
+  const adAccounts = parseMetaJson(row?.available_ad_accounts, []);
+  const pages = parseMetaJson(row?.available_pages, []);
+  const selectedAdAccount = adAccounts.find((item) => item.id === row?.selected_ad_account_id) || null;
+  const selectedPage = pages.find((item) => item.id === row?.selected_page_id) || null;
+  return {
+    configured: config.ready,
+    missingConfiguration: [
+      !config.graphApiVersion && 'META_GRAPH_API_VERSION',
+      !config.appId && 'META_APP_ID',
+      !config.appSecret && 'META_APP_SECRET',
+      !config.redirectUri && 'META_OAUTH_REDIRECT_URI',
+      !config.encryptionKey && 'META_TOKEN_ENCRYPTION_KEY',
+    ].filter(Boolean),
+    status: row?.status || 'disconnected',
+    graphApiVersion: config.graphApiVersion || row?.graph_api_version || null,
+    redirectUri: config.redirectUri || null,
+    grantedScopes: parseMetaJson(row?.granted_scopes, []),
+    availableAdAccounts: adAccounts,
+    availablePages: pages,
+    selectedAdAccount,
+    selectedPage,
+    selectedInstagramAccountId: row?.selected_instagram_account_id || null,
+    instagramUsername: row?.instagram_username || null,
+    tokenExpiresAt: row?.token_expires_at || null,
+    connectedAt: row?.connected_at || null,
+    lastAudit: parseMetaJson(row?.last_audit, null),
+    lastAuditAt: row?.last_audit_at || null,
+    lastError: row?.last_error || null,
+  };
+}
+
+async function getMetaConnection() {
+  const [rows] = await pool.query('SELECT * FROM meta_marketing_connections WHERE id = 1 LIMIT 1');
+  return rows?.[0] || null;
+}
+
+async function metaGraphRequest(pathname, token, params = {}) {
+  const config = getMetaMarketingConfig();
+  const url = new URL(`https://graph.facebook.com/${config.graphApiVersion}/${String(pathname).replace(/^\/+/, '')}`);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+  });
+  url.searchParams.set('access_token', token);
+  url.searchParams.set('appsecret_proof', crypto.createHmac('sha256', config.appSecret).update(token).digest('hex'));
+  const response = await fetch(url, { headers: { Accept: 'application/json' } });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) {
+    const error = new Error(data?.error?.message || `Meta Graph API returned ${response.status}`);
+    error.statusCode = response.status;
+    error.metaCode = data?.error?.code;
+    throw error;
+  }
+  return data;
+}
+
+async function discoverMetaAssets(token) {
+  const [adAccountResult, pageResult, permissionResult] = await Promise.all([
+    metaGraphRequest('me/adaccounts', token, {
+      fields: 'id,account_id,name,account_status,currency,timezone_name,business_name',
+      limit: 100,
+    }),
+    metaGraphRequest('me/accounts', token, {
+      fields: 'id,name,instagram_business_account{id,username,name,profile_picture_url}',
+      limit: 100,
+    }),
+    metaGraphRequest('me/permissions', token),
+  ]);
+  const grantedScopes = (permissionResult?.data || [])
+    .filter((permission) => permission.status === 'granted')
+    .map((permission) => permission.permission);
+  return {
+    adAccounts: Array.isArray(adAccountResult?.data) ? adAccountResult.data : [],
+    pages: Array.isArray(pageResult?.data) ? pageResult.data : [],
+    grantedScopes,
+  };
+}
+
+function metaMarketingRedirect(reply, query) {
+  const target = new URL('/admin/settings/marketing', getPublicAppUrl());
+  target.searchParams.set('tab', 'campaigns');
+  Object.entries(query).forEach(([key, value]) => target.searchParams.set(key, String(value)));
+  return reply.redirect(target.toString());
+}
+
+fastify.get('/admin/marketing/meta/status', { preHandler: requireAdminBearerToken }, async () => {
+  return { ok: true, connection: sanitizeMetaConnection(await getMetaConnection()) };
+});
+
+fastify.post('/admin/marketing/meta/oauth/start', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const config = getMetaMarketingConfig();
+  if (!config.ready) {
+    return reply.code(503).send({
+      error: 'Meta integration is not configured',
+      connection: sanitizeMetaConnection(await getMetaConnection(), config),
+    });
+  }
+  const auth = await getVpsBearerAuthContext(req);
+  const state = crypto.randomBytes(32).toString('base64url');
+  await pool.query(
+    `INSERT INTO meta_marketing_oauth_states (state_hash, requested_by, expires_at)
+     VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))`,
+    [sha256Hex(state), auth.userId || auth.customerId || null],
+  );
+  await pool.query('DELETE FROM meta_marketing_oauth_states WHERE expires_at < DATE_SUB(NOW(), INTERVAL 1 DAY)');
+  const authorizationUrl = new URL(`https://www.facebook.com/${config.graphApiVersion}/dialog/oauth`);
+  authorizationUrl.searchParams.set('client_id', config.appId);
+  authorizationUrl.searchParams.set('redirect_uri', config.redirectUri);
+  authorizationUrl.searchParams.set('state', state);
+  authorizationUrl.searchParams.set('scope', config.scopes.join(','));
+  authorizationUrl.searchParams.set('response_type', 'code');
+  return { ok: true, authorizationUrl: authorizationUrl.toString() };
+});
+
+fastify.get('/integrations/meta/oauth/callback', async (req, reply) => {
+  const config = getMetaMarketingConfig();
+  const query = req.query || {};
+  if (!config.ready) return metaMarketingRedirect(reply, { meta: 'error', reason: 'not_configured' });
+  if (query.error) return metaMarketingRedirect(reply, { meta: 'error', reason: query.error_reason || query.error });
+  if (!query.code || !query.state) return metaMarketingRedirect(reply, { meta: 'error', reason: 'missing_code_or_state' });
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const stateHash = sha256Hex(query.state);
+    const [stateRows] = await connection.query(
+      `SELECT * FROM meta_marketing_oauth_states
+       WHERE state_hash = ? AND used_at IS NULL AND expires_at > NOW() LIMIT 1 FOR UPDATE`,
+      [stateHash],
+    );
+    const oauthState = stateRows?.[0];
+    if (!oauthState) {
+      await connection.rollback();
+      return metaMarketingRedirect(reply, { meta: 'error', reason: 'invalid_or_expired_state' });
+    }
+    await connection.query('UPDATE meta_marketing_oauth_states SET used_at = NOW() WHERE state_hash = ?', [stateHash]);
+    await connection.commit();
+
+    const tokenUrl = new URL(`https://graph.facebook.com/${config.graphApiVersion}/oauth/access_token`);
+    tokenUrl.searchParams.set('client_id', config.appId);
+    tokenUrl.searchParams.set('client_secret', config.appSecret);
+    tokenUrl.searchParams.set('redirect_uri', config.redirectUri);
+    tokenUrl.searchParams.set('code', String(query.code));
+    const tokenResponse = await fetch(tokenUrl, { headers: { Accept: 'application/json' } });
+    const tokenData = await tokenResponse.json().catch(() => ({}));
+    if (!tokenResponse.ok || !tokenData?.access_token) {
+      throw new Error(tokenData?.error?.message || `Token exchange returned ${tokenResponse.status}`);
+    }
+
+    let accessToken = tokenData.access_token;
+    let expiresIn = Number(tokenData.expires_in || 3600);
+    const longLivedUrl = new URL(`https://graph.facebook.com/${config.graphApiVersion}/oauth/access_token`);
+    longLivedUrl.searchParams.set('grant_type', 'fb_exchange_token');
+    longLivedUrl.searchParams.set('client_id', config.appId);
+    longLivedUrl.searchParams.set('client_secret', config.appSecret);
+    longLivedUrl.searchParams.set('fb_exchange_token', accessToken);
+    const longLivedResponse = await fetch(longLivedUrl, { headers: { Accept: 'application/json' } });
+    const longLivedData = await longLivedResponse.json().catch(() => ({}));
+    if (longLivedResponse.ok && longLivedData?.access_token) {
+      accessToken = longLivedData.access_token;
+      expiresIn = Number(longLivedData.expires_in || expiresIn);
+    }
+
+    const assets = await discoverMetaAssets(accessToken);
+    const encrypted = encryptMetaToken(accessToken, config.encryptionKey);
+    const firstAdAccount = assets.adAccounts.length === 1 ? assets.adAccounts[0] : null;
+    const pagesWithInstagram = assets.pages.filter((page) => page.instagram_business_account?.id);
+    const firstPage = pagesWithInstagram.length === 1 ? pagesWithInstagram[0] : null;
+    await pool.query(
+      `INSERT INTO meta_marketing_connections
+        (id, status, graph_api_version, token_ciphertext, token_iv, token_auth_tag, token_expires_at,
+         granted_scopes, available_ad_accounts, available_pages, selected_ad_account_id,
+         selected_page_id, selected_instagram_account_id, instagram_username, last_error,
+         connected_by, connected_at)
+       VALUES (1, 'connected', ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), ?, ?, ?, ?, ?, ?, ?, NULL, ?, NOW())
+       ON DUPLICATE KEY UPDATE
+         status = VALUES(status), graph_api_version = VALUES(graph_api_version),
+         token_ciphertext = VALUES(token_ciphertext), token_iv = VALUES(token_iv),
+         token_auth_tag = VALUES(token_auth_tag), token_expires_at = VALUES(token_expires_at),
+         granted_scopes = VALUES(granted_scopes), available_ad_accounts = VALUES(available_ad_accounts),
+         available_pages = VALUES(available_pages), selected_ad_account_id = VALUES(selected_ad_account_id),
+         selected_page_id = VALUES(selected_page_id), selected_instagram_account_id = VALUES(selected_instagram_account_id),
+         instagram_username = VALUES(instagram_username), last_error = NULL,
+         connected_by = VALUES(connected_by), connected_at = NOW()`,
+      [
+        config.graphApiVersion, encrypted.ciphertext, encrypted.iv, encrypted.authTag,
+        Math.max(60, expiresIn), JSON.stringify(assets.grantedScopes), JSON.stringify(assets.adAccounts),
+        JSON.stringify(assets.pages), firstAdAccount?.id || null, firstPage?.id || null,
+        firstPage?.instagram_business_account?.id || null,
+        firstPage?.instagram_business_account?.username || null, oauthState.requested_by || null,
+      ],
+    );
+    return metaMarketingRedirect(reply, { meta: 'connected' });
+  } catch (error) {
+    if (connection.connection?._closing !== true) await connection.rollback().catch(() => {});
+    console.warn('[meta-oauth] callback failed:', error.message);
+    await pool.query(
+      `INSERT INTO meta_marketing_connections (id, status, graph_api_version, last_error)
+       VALUES (1, 'error', ?, ?)
+       ON DUPLICATE KEY UPDATE status = 'error', last_error = VALUES(last_error)`,
+      [config.graphApiVersion, limitText(error.message, 2000)],
+    ).catch(() => {});
+    return metaMarketingRedirect(reply, { meta: 'error', reason: 'connection_failed' });
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.patch('/admin/marketing/meta/selection', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const row = await getMetaConnection();
+  if (!row || row.status !== 'connected') return reply.code(409).send({ error: 'Meta is not connected' });
+  const adAccounts = parseMetaJson(row.available_ad_accounts, []);
+  const pages = parseMetaJson(row.available_pages, []);
+  const adAccount = adAccounts.find((item) => item.id === req.body?.adAccountId);
+  const page = pages.find((item) => item.id === req.body?.pageId);
+  if (!adAccount || !page?.instagram_business_account?.id) {
+    return reply.code(400).send({ error: 'Select a discovered ad account and a Page linked to Instagram' });
+  }
+  await pool.query(
+    `UPDATE meta_marketing_connections
+     SET selected_ad_account_id = ?, selected_page_id = ?, selected_instagram_account_id = ?,
+         instagram_username = ?, last_error = NULL WHERE id = 1`,
+    [adAccount.id, page.id, page.instagram_business_account.id, page.instagram_business_account.username || null],
+  );
+  return { ok: true, connection: sanitizeMetaConnection(await getMetaConnection()) };
+});
+
+fastify.post('/admin/marketing/meta/audit', { preHandler: requireAdminBearerToken }, async (_req, reply) => {
+  const config = getMetaMarketingConfig();
+  const row = await getMetaConnection();
+  if (!config.ready || !row || row.status !== 'connected') {
+    return reply.code(409).send({ error: 'Meta is not connected and configured' });
+  }
+  if (!row.selected_ad_account_id || !row.selected_page_id || !row.selected_instagram_account_id) {
+    return reply.code(409).send({ error: 'Select the ad account and Instagram Page before auditing' });
+  }
+  try {
+    const token = decryptMetaToken(row, config.encryptionKey);
+    const [account, campaigns, instagram] = await Promise.all([
+      metaGraphRequest(row.selected_ad_account_id, token, {
+        fields: 'id,account_id,name,account_status,currency,timezone_name,amount_spent,balance,spend_cap',
+      }),
+      metaGraphRequest(`${row.selected_ad_account_id}/campaigns`, token, {
+        fields: 'id,name,status,effective_status,objective,daily_budget,lifetime_budget,created_time,updated_time',
+        limit: 100,
+      }),
+      metaGraphRequest(row.selected_instagram_account_id, token, {
+        fields: 'id,username,name,followers_count,media_count,profile_picture_url',
+      }),
+    ]);
+    const campaignItems = Array.isArray(campaigns?.data) ? campaigns.data : [];
+    const audit = {
+      mode: 'read_only',
+      capturedAt: new Date().toISOString(),
+      account,
+      instagram,
+      campaignSummary: {
+        total: campaignItems.length,
+        active: campaignItems.filter((campaign) => campaign.effective_status === 'ACTIVE').length,
+        paused: campaignItems.filter((campaign) => campaign.effective_status === 'PAUSED').length,
+      },
+      campaigns: campaignItems,
+    };
+    await pool.query(
+      `UPDATE meta_marketing_connections
+       SET last_audit = ?, last_audit_at = NOW(), last_error = NULL, status = 'connected' WHERE id = 1`,
+      [JSON.stringify(audit)],
+    );
+    return { ok: true, audit, connection: sanitizeMetaConnection(await getMetaConnection(), config) };
+  } catch (error) {
+    const status = error.metaCode === 190 ? 'expired' : 'error';
+    await pool.query(
+      'UPDATE meta_marketing_connections SET status = ?, last_error = ? WHERE id = 1',
+      [status, limitText(error.message, 2000)],
+    );
+    return reply.code(error.statusCode === 401 ? 401 : 502).send({ error: error.message, status });
+  }
+});
+
+const META_INSIGHTS_DATE_PRESETS = new Set(['last_7d', 'last_14d', 'last_30d', 'this_month']);
+
+function formatMetaDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function buildMetaInsightsRanges(datePreset) {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  let since;
+  if (datePreset === 'this_month') {
+    since = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  } else {
+    const days = Number(String(datePreset).match(/\d+/)?.[0] || 7);
+    since = new Date(today);
+    since.setUTCDate(since.getUTCDate() - days + 1);
+  }
+  const durationDays = Math.max(1, Math.round((today.getTime() - since.getTime()) / 86400000) + 1);
+  const previousUntil = new Date(since);
+  previousUntil.setUTCDate(previousUntil.getUTCDate() - 1);
+  const previousSince = new Date(previousUntil);
+  previousSince.setUTCDate(previousSince.getUTCDate() - durationDays + 1);
+  return {
+    current: { since: formatMetaDate(since), until: formatMetaDate(today) },
+    previous: { since: formatMetaDate(previousSince), until: formatMetaDate(previousUntil) },
+  };
+}
+
+function metaMetricNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function metaActionValue(items, preferredTypes) {
+  if (!Array.isArray(items)) return 0;
+  for (const actionType of preferredTypes) {
+    const match = items.find((item) => item.action_type === actionType);
+    if (match) return metaMetricNumber(match.value);
+  }
+  return 0;
+}
+
+const META_MESSAGE_ACTION_TYPES = [
+  'onsite_conversion.messaging_conversation_started_7d',
+  'onsite_conversion.messaging_first_reply',
+  'messaging_conversation_started_7d',
+  'messaging_first_reply',
+];
+const META_PURCHASE_ACTION_TYPES = [
+  'omni_purchase',
+  'purchase',
+  'offsite_conversion.fb_pixel_purchase',
+];
+const META_LINK_CLICK_ACTION_TYPES = ['link_click', 'outbound_click'];
+
+function normalizeMetaInsightRow(row, campaignById) {
+  const spend = metaMetricNumber(row.spend);
+  const impressions = metaMetricNumber(row.impressions);
+  const reach = metaMetricNumber(row.reach);
+  const clicks = metaMetricNumber(row.clicks);
+  const linkClicks = metaMetricNumber(row.inline_link_clicks)
+    || metaActionValue(row.actions, META_LINK_CLICK_ACTION_TYPES);
+  const conversations = metaActionValue(row.actions, META_MESSAGE_ACTION_TYPES);
+  const purchases = metaActionValue(row.actions, META_PURCHASE_ACTION_TYPES);
+  const purchaseValue = metaActionValue(row.action_values, META_PURCHASE_ACTION_TYPES);
+  return {
+    campaignId: row.campaign_id,
+    campaignName: row.campaign_name || campaignById.get(row.campaign_id)?.name || row.campaign_id,
+    status: campaignById.get(row.campaign_id)?.effective_status || 'UNKNOWN',
+    dateStart: row.date_start || null,
+    dateStop: row.date_stop || null,
+    currency: row.account_currency || null,
+    metrics: {
+      spend,
+      impressions,
+      reach,
+      frequency: metaMetricNumber(row.frequency) || (reach > 0 ? impressions / reach : 0),
+      cpm: metaMetricNumber(row.cpm) || (impressions > 0 ? spend / impressions * 1000 : 0),
+      clicks,
+      uniqueClicks: metaMetricNumber(row.unique_clicks),
+      linkClicks,
+      outboundClicks: metaActionValue(row.outbound_clicks, ['outbound_click']),
+      ctr: metaMetricNumber(row.ctr) || (impressions > 0 ? clicks / impressions * 100 : 0),
+      cpc: metaMetricNumber(row.cpc) || (clicks > 0 ? spend / clicks : 0),
+      costPerLinkClick: linkClicks > 0 ? spend / linkClicks : 0,
+      engagements: metaMetricNumber(row.inline_post_engagement),
+      conversations,
+      costPerConversation: conversations > 0 ? spend / conversations : 0,
+      purchases,
+      costPerPurchase: purchases > 0 ? spend / purchases : 0,
+      purchaseValue,
+      roas: spend > 0 ? purchaseValue / spend : 0,
+      videoPlays: metaActionValue(row.video_play_actions, ['video_view']),
+      thruPlays: metaActionValue(row.video_thruplay_watched_actions, ['video_view']),
+    },
+    actions: Array.isArray(row.actions) ? row.actions : [],
+    actionValues: Array.isArray(row.action_values) ? row.action_values : [],
+  };
+}
+
+function sumMetaInsightMetrics(items) {
+  const keys = [
+    'spend', 'impressions', 'reach', 'clicks', 'uniqueClicks', 'linkClicks', 'outboundClicks',
+    'engagements', 'conversations', 'purchases', 'purchaseValue', 'videoPlays', 'thruPlays',
+  ];
+  const totals = Object.fromEntries(keys.map((key) => [key, 0]));
+  for (const item of items) {
+    for (const key of keys) totals[key] += metaMetricNumber(item.metrics?.[key]);
+  }
+  totals.frequency = totals.reach > 0 ? totals.impressions / totals.reach : 0;
+  totals.cpm = totals.impressions > 0 ? totals.spend / totals.impressions * 1000 : 0;
+  totals.ctr = totals.impressions > 0 ? totals.clicks / totals.impressions * 100 : 0;
+  totals.cpc = totals.clicks > 0 ? totals.spend / totals.clicks : 0;
+  totals.costPerLinkClick = totals.linkClicks > 0 ? totals.spend / totals.linkClicks : 0;
+  totals.costPerConversation = totals.conversations > 0 ? totals.spend / totals.conversations : 0;
+  totals.costPerPurchase = totals.purchases > 0 ? totals.spend / totals.purchases : 0;
+  totals.roas = totals.spend > 0 ? totals.purchaseValue / totals.spend : 0;
+  return totals;
+}
+
+async function fetchMetaCampaignInsights(token, adAccountId, timeRange, campaignById) {
+  const result = await metaGraphRequest(`${adAccountId}/insights`, token, {
+    level: 'campaign',
+    time_range: JSON.stringify(timeRange),
+    time_increment: 'all_days',
+    action_report_time: 'conversion',
+    action_breakdowns: 'action_type',
+    limit: 100,
+    fields: [
+      'date_start', 'date_stop', 'account_currency', 'campaign_id', 'campaign_name',
+      'spend', 'impressions', 'reach', 'frequency', 'clicks', 'unique_clicks',
+      'inline_link_clicks', 'inline_post_engagement', 'outbound_clicks', 'ctr', 'cpc', 'cpm',
+      'actions', 'action_values', 'video_play_actions', 'video_thruplay_watched_actions',
+    ].join(','),
+  });
+  return (Array.isArray(result?.data) ? result.data : [])
+    .map((row) => normalizeMetaInsightRow(row, campaignById));
+}
+
+fastify.get('/admin/marketing/meta/insights', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const datePreset = META_INSIGHTS_DATE_PRESETS.has(req.query?.datePreset)
+    ? req.query.datePreset
+    : 'last_7d';
+  const config = getMetaMarketingConfig();
+  const row = await getMetaConnection();
+  if (!config.ready || !row || row.status !== 'connected' || !row.selected_ad_account_id) {
+    return reply.code(409).send({ error: 'Connect and select a Meta ad account before reading insights' });
+  }
+  try {
+    const token = decryptMetaToken(row, config.encryptionKey);
+    const ranges = buildMetaInsightsRanges(datePreset);
+    const campaignsResult = await metaGraphRequest(`${row.selected_ad_account_id}/campaigns`, token, {
+      fields: 'id,name,effective_status',
+      limit: 100,
+    });
+    const campaignById = new Map((campaignsResult?.data || []).map((campaign) => [campaign.id, campaign]));
+    const [currentItems, previousItems] = await Promise.all([
+      fetchMetaCampaignInsights(token, row.selected_ad_account_id, ranges.current, campaignById),
+      fetchMetaCampaignInsights(token, row.selected_ad_account_id, ranges.previous, campaignById),
+    ]);
+    return {
+      ok: true,
+      mode: 'read_only',
+      datePreset,
+      attribution: 'Meta action_report_time=conversion; a janela efetiva segue a configuração unificada da conta/campanha',
+      ranges,
+      current: { totals: sumMetaInsightMetrics(currentItems), campaigns: currentItems },
+      previous: { totals: sumMetaInsightMetrics(previousItems), campaigns: previousItems },
+      fetchedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    const status = error.metaCode === 190 ? 'expired' : 'error';
+    await pool.query(
+      'UPDATE meta_marketing_connections SET status = ?, last_error = ? WHERE id = 1',
+      [status, limitText(error.message, 2000)],
+    );
+    return reply.code(error.statusCode === 401 ? 401 : 502).send({ error: error.message, status });
+  }
+});
+
+// ─── Central de aprovações de Marketing ─────────────────────────────────────
+const MARKETING_APPROVAL_STATUSES = new Set([
+  'pending', 'approved', 'rejected', 'executing', 'succeeded', 'failed', 'cancelled', 'expired',
+]);
+const MARKETING_EXECUTION_MODES = new Set(['vps_meta_api', 'lenovo_chrome', 'manual']);
+
+function normalizeMarketingApprovalJson(value, { required = false, maxLength = 100000 } = {}) {
+  if (value === null || value === undefined) return required ? null : null;
+  if (typeof value !== 'object') return null;
+  const serialized = JSON.stringify(value);
+  if (!serialized || serialized.length > maxLength) return null;
+  return serialized;
+}
+
+function parseMarketingApprovalRow(row) {
+  if (!row) return null;
+  const jsonFields = [
+    'current_state', 'proposed_state', 'evidence', 'financial_impact',
+    'success_criteria', 'execution_payload', 'execution_result',
+  ];
+  const parsed = { ...row };
+  for (const field of jsonFields) {
+    if (typeof parsed[field] === 'string') parsed[field] = safeJsonParse(parsed[field], null);
+  }
+  parsed.attempt_count = Number(parsed.attempt_count || 0);
+  return parsed;
+}
+
+async function appendMarketingApprovalEvent(connection, approvalId, eventType, actor, details = null) {
+  await connection.query(
+    `INSERT INTO marketing_approval_events
+      (approval_id, event_type, actor_id, actor_label, details)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      approvalId,
+      limitText(eventType, 60),
+      limitText(actor?.id, 80) || null,
+      limitText(actor?.label, 255) || null,
+      normalizeMarketingApprovalJson(details),
+    ],
+  );
+}
+
+async function findMarketingApproval(connection, id, lock = false) {
+  const [rows] = await connection.query(
+    `SELECT * FROM marketing_approval_requests WHERE id = ? LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
+    [id],
+  );
+  return rows?.[0] || null;
+}
+
+async function expireMarketingApprovals() {
+  await pool.query(
+    `UPDATE marketing_approval_requests
+     SET status = 'expired', updated_at = CURRENT_TIMESTAMP
+     WHERE status IN ('pending', 'approved') AND approval_expires_at IS NOT NULL AND approval_expires_at <= NOW()`,
+  );
+}
+
+fastify.get('/admin/marketing/approvals', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  await expireMarketingApprovals();
+  const status = limitText(req.query?.status, 30);
+  if (status && !MARKETING_APPROVAL_STATUSES.has(status)) {
+    return reply.code(400).send({ error: 'Invalid approval status' });
+  }
+  const channel = limitText(req.query?.channel, 40);
+  const rawLimit = Number(req.query?.limit || 100);
+  const limit = Math.max(1, Math.min(200, Number.isFinite(rawLimit) ? rawLimit : 100));
+  const clauses = [];
+  const params = [];
+  if (status) {
+    clauses.push('status = ?');
+    params.push(status);
+  }
+  if (channel) {
+    clauses.push('channel = ?');
+    params.push(channel);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const [rows] = await pool.query(
+    `SELECT * FROM marketing_approval_requests ${where}
+     ORDER BY FIELD(status, 'pending', 'approved', 'executing', 'failed', 'succeeded', 'rejected', 'cancelled', 'expired'), created_at DESC
+     LIMIT ?`,
+    [...params, limit],
+  );
+  const [countRows] = await pool.query(
+    'SELECT status, COUNT(*) AS total FROM marketing_approval_requests GROUP BY status',
+  );
+  const counts = Object.fromEntries(countRows.map((row) => [row.status, Number(row.total || 0)]));
+  return { ok: true, items: rows.map(parseMarketingApprovalRow), counts };
+});
+
+fastify.post('/admin/marketing/approvals', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const body = req.body || {};
+  const auth = await getVpsBearerAuthContext(req);
+  const idempotencyKey = limitText(body.idempotency_key, 160);
+  const title = limitText(body.title, 255);
+  const actionType = limitText(body.action_type, 60);
+  const targetType = limitText(body.target_type, 60);
+  const targetId = limitText(body.target_id, 255);
+  const targetName = limitText(body.target_name, 255);
+  const rollbackPlan = limitText(body.rollback_plan, 10000);
+  const proposedState = normalizeMarketingApprovalJson(body.proposed_state, { required: true });
+  const financialImpact = normalizeMarketingApprovalJson(body.financial_impact, { required: true });
+  const successCriteria = normalizeMarketingApprovalJson(body.success_criteria, { required: true });
+  const executionMode = MARKETING_EXECUTION_MODES.has(body.execution_mode)
+    ? body.execution_mode
+    : 'vps_meta_api';
+
+  if (!idempotencyKey || !title || !actionType || !targetType || (!targetId && !targetName)
+      || !rollbackPlan || !proposedState || !financialImpact || !successCriteria) {
+    return reply.code(400).send({
+      error: 'Target, proposed_state, financial_impact, success_criteria, rollback_plan and idempotency data are required',
+    });
+  }
+
+  const [existingRows] = await pool.query(
+    'SELECT * FROM marketing_approval_requests WHERE idempotency_key = ? LIMIT 1',
+    [idempotencyKey],
+  );
+  if (existingRows?.[0]) return parseMarketingApprovalRow(existingRows[0]);
+
+  const id = crypto.randomUUID();
+  const requestedBy = auth.userId || limitText(body.requested_by, 80) || 'marketing-agent';
+  const requestedByLabel = limitText(body.requested_by_label, 255) || (auth.isAdmin ? 'Administrador Gestão MV' : 'Agente de Marketing');
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(
+      `INSERT INTO marketing_approval_requests
+        (id, channel, action_type, title, target_type, target_id, target_name, execution_mode,
+         current_state, proposed_state, evidence, financial_impact, success_criteria, rollback_plan,
+         execution_payload, requested_by, requested_by_label, idempotency_key, approval_expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, DATE_ADD(NOW(), INTERVAL 24 HOUR)))`,
+      [
+        id,
+        limitText(body.channel, 40) || 'instagram',
+        actionType,
+        title,
+        targetType,
+        targetId || null,
+        targetName || null,
+        executionMode,
+        normalizeMarketingApprovalJson(body.current_state),
+        proposedState,
+        normalizeMarketingApprovalJson(body.evidence),
+        financialImpact,
+        successCriteria,
+        rollbackPlan,
+        normalizeMarketingApprovalJson(body.execution_payload),
+        requestedBy,
+        requestedByLabel,
+        idempotencyKey,
+        body.approval_expires_at || null,
+      ],
+    );
+    await appendMarketingApprovalEvent(connection, id, 'requested', {
+      id: requestedBy,
+      label: requestedByLabel,
+    }, {
+      execution_mode: executionMode,
+      action_type: actionType,
+      target_type: targetType,
+    });
+    await connection.commit();
+    const row = await findMarketingApproval(pool, id);
+    return reply.code(201).send(parseMarketingApprovalRow(row));
+  } catch (error) {
+    await connection.rollback();
+    if (error?.code === 'ER_DUP_ENTRY') {
+      const [rows] = await pool.query(
+        'SELECT * FROM marketing_approval_requests WHERE idempotency_key = ? LIMIT 1',
+        [idempotencyKey],
+      );
+      if (rows?.[0]) return parseMarketingApprovalRow(rows[0]);
+    }
+    throw error;
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.post('/admin/marketing/approvals/:id/decision', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+  const decision = req.body?.decision;
+  const note = limitText(req.body?.note, 10000);
+  if (!['approve', 'reject'].includes(decision)) {
+    return reply.code(400).send({ error: 'Decision must be approve or reject' });
+  }
+  if (decision === 'reject' && !note) {
+    return reply.code(400).send({ error: 'A rejection note is required' });
+  }
+  const auth = await getVpsBearerAuthContext(req);
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const current = await findMarketingApproval(connection, req.params.id, true);
+    if (!current) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Approval request not found' });
+    }
+    if (current.status !== 'pending') {
+      await connection.rollback();
+      return reply.code(409).send({ error: `Approval request is already ${current.status}` });
+    }
+    if (current.approval_expires_at && new Date(current.approval_expires_at).getTime() <= Date.now()) {
+      await connection.query("UPDATE marketing_approval_requests SET status = 'expired' WHERE id = ?", [current.id]);
+      await appendMarketingApprovalEvent(connection, current.id, 'expired', { id: auth.userId, label: 'Gestão MV' });
+      await connection.commit();
+      return reply.code(409).send({ error: 'Approval request expired' });
+    }
+    const nextStatus = decision === 'approve' ? 'approved' : 'rejected';
+    await connection.query(
+      `UPDATE marketing_approval_requests
+       SET status = ?, reviewed_by = ?, review_note = ?,
+           approved_at = IF(? = 'approved', NOW(), approved_at),
+           rejected_at = IF(? = 'rejected', NOW(), rejected_at),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [nextStatus, auth.userId || auth.customerId, note || null, nextStatus, nextStatus, current.id],
+    );
+    await appendMarketingApprovalEvent(connection, current.id, nextStatus, {
+      id: auth.userId || auth.customerId,
+      label: 'Administrador Gestão MV',
+    }, { note: note || null });
+    await connection.commit();
+    const updated = await findMarketingApproval(pool, current.id);
+    return parseMarketingApprovalRow(updated);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.get('/admin/marketing/approvals/:id/events', { preHandler: requireAdminBearerToken }, async (req) => {
+  const [rows] = await pool.query(
+    `SELECT id, approval_id, event_type, actor_id, actor_label, details, created_at
+     FROM marketing_approval_events WHERE approval_id = ? ORDER BY id ASC`,
+    [req.params.id],
+  );
+  return {
+    ok: true,
+    items: rows.map((row) => ({
+      ...row,
+      details: typeof row.details === 'string' ? safeJsonParse(row.details, null) : row.details,
+    })),
+  };
+});
+
+fastify.get('/marketing-runner/approvals', { preHandler: requireMarketingRunnerKey }, async (req) => {
+  await expireMarketingApprovals();
+  const executionMode = MARKETING_EXECUTION_MODES.has(req.query?.execution_mode)
+    ? req.query.execution_mode
+    : 'vps_meta_api';
+  const [rows] = await pool.query(
+    `SELECT * FROM marketing_approval_requests
+     WHERE status = 'approved' AND execution_mode = ?
+     ORDER BY approved_at ASC, created_at ASC LIMIT 20`,
+    [executionMode],
+  );
+  return { ok: true, items: rows.map(parseMarketingApprovalRow) };
+});
+
+fastify.post('/marketing-runner/approvals/:id/claim', { preHandler: requireMarketingRunnerKey }, async (req, reply) => {
+  const runnerId = limitText(req.body?.runner_id, 120);
+  if (!runnerId) return reply.code(400).send({ error: 'runner_id is required' });
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const current = await findMarketingApproval(connection, req.params.id, true);
+    if (!current) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Approval request not found' });
+    }
+    if (current.status !== 'approved') {
+      await connection.rollback();
+      return reply.code(409).send({ error: `Approval request is ${current.status}` });
+    }
+    if (current.approval_expires_at && new Date(current.approval_expires_at).getTime() <= Date.now()) {
+      await connection.query("UPDATE marketing_approval_requests SET status = 'expired' WHERE id = ?", [current.id]);
+      await appendMarketingApprovalEvent(connection, current.id, 'expired', { id: runnerId, label: runnerId });
+      await connection.commit();
+      return reply.code(409).send({ error: 'Approval request expired before execution' });
+    }
+    await connection.query(
+      `UPDATE marketing_approval_requests
+       SET status = 'executing', runner_id = ?, execution_started_at = NOW(),
+           attempt_count = attempt_count + 1, last_error = NULL
+       WHERE id = ?`,
+      [runnerId, current.id],
+    );
+    await appendMarketingApprovalEvent(connection, current.id, 'claimed', { id: runnerId, label: runnerId });
+    await connection.commit();
+    return parseMarketingApprovalRow(await findMarketingApproval(pool, current.id));
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+});
+
+fastify.post('/marketing-runner/approvals/:id/complete', { preHandler: requireMarketingRunnerKey }, async (req, reply) => {
+  const runnerId = limitText(req.body?.runner_id, 120);
+  const succeeded = req.body?.succeeded === true;
+  const result = normalizeMarketingApprovalJson(req.body?.result);
+  const errorMessage = limitText(req.body?.error, 10000);
+  if (!runnerId) return reply.code(400).send({ error: 'runner_id is required' });
+  if (!succeeded && !errorMessage) return reply.code(400).send({ error: 'error is required when execution fails' });
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const current = await findMarketingApproval(connection, req.params.id, true);
+    if (!current) {
+      await connection.rollback();
+      return reply.code(404).send({ error: 'Approval request not found' });
+    }
+    if (current.status !== 'executing' || current.runner_id !== runnerId) {
+      await connection.rollback();
+      return reply.code(409).send({ error: 'Approval request is not claimed by this runner' });
+    }
+    const nextStatus = succeeded ? 'succeeded' : 'failed';
+    await connection.query(
+      `UPDATE marketing_approval_requests
+       SET status = ?, execution_result = ?, last_error = ?, executed_at = NOW()
+       WHERE id = ?`,
+      [nextStatus, result, succeeded ? null : errorMessage, current.id],
+    );
+    await appendMarketingApprovalEvent(connection, current.id, nextStatus, { id: runnerId, label: runnerId }, {
+      result: req.body?.result || null,
+      error: succeeded ? null : errorMessage,
+    });
+    await connection.commit();
+    return parseMarketingApprovalRow(await findMarketingApproval(pool, current.id));
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 });
 
 function normalizeVpsProxyPath(input) {
@@ -22923,6 +23797,99 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] admin_preferences table: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marketing_approval_requests (
+      id CHAR(36) PRIMARY KEY,
+      channel VARCHAR(40) NOT NULL DEFAULT 'instagram',
+      action_type VARCHAR(60) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      target_type VARCHAR(60) NOT NULL,
+      target_id VARCHAR(255) NULL,
+      target_name VARCHAR(255) NULL,
+      status ENUM('pending', 'approved', 'rejected', 'executing', 'succeeded', 'failed', 'cancelled', 'expired') NOT NULL DEFAULT 'pending',
+      execution_mode ENUM('vps_meta_api', 'lenovo_chrome', 'manual') NOT NULL DEFAULT 'vps_meta_api',
+      current_state JSON NULL,
+      proposed_state JSON NOT NULL,
+      evidence JSON NULL,
+      financial_impact JSON NULL,
+      success_criteria JSON NULL,
+      rollback_plan TEXT NOT NULL,
+      execution_payload JSON NULL,
+      execution_result JSON NULL,
+      requested_by VARCHAR(80) NULL,
+      requested_by_label VARCHAR(255) NULL,
+      reviewed_by VARCHAR(80) NULL,
+      review_note TEXT NULL,
+      runner_id VARCHAR(120) NULL,
+      idempotency_key VARCHAR(160) NOT NULL,
+      approval_expires_at DATETIME NULL,
+      approved_at DATETIME NULL,
+      rejected_at DATETIME NULL,
+      execution_started_at DATETIME NULL,
+      executed_at DATETIME NULL,
+      attempt_count INT NOT NULL DEFAULT 0,
+      last_error TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_marketing_approval_idempotency (idempotency_key),
+      INDEX idx_marketing_approval_queue (status, created_at),
+      INDEX idx_marketing_approval_channel (channel, status),
+      INDEX idx_marketing_approval_expiry (status, approval_expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS marketing_approval_events (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      approval_id CHAR(36) NOT NULL,
+      event_type VARCHAR(60) NOT NULL,
+      actor_id VARCHAR(80) NULL,
+      actor_label VARCHAR(255) NULL,
+      details JSON NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_marketing_approval_events_request (approval_id, id),
+      INDEX idx_marketing_approval_events_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] marketing approval center tables: OK');
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS meta_marketing_connections (
+      id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+      status ENUM('disconnected', 'connected', 'expired', 'error') NOT NULL DEFAULT 'disconnected',
+      graph_api_version VARCHAR(24) NOT NULL,
+      token_ciphertext TEXT NULL,
+      token_iv VARCHAR(64) NULL,
+      token_auth_tag VARCHAR(64) NULL,
+      token_expires_at DATETIME NULL,
+      granted_scopes JSON NULL,
+      available_ad_accounts JSON NULL,
+      available_pages JSON NULL,
+      selected_ad_account_id VARCHAR(80) NULL,
+      selected_page_id VARCHAR(80) NULL,
+      selected_instagram_account_id VARCHAR(80) NULL,
+      instagram_username VARCHAR(255) NULL,
+      last_audit JSON NULL,
+      last_audit_at DATETIME NULL,
+      last_error TEXT NULL,
+      connected_by VARCHAR(80) NULL,
+      connected_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS meta_marketing_oauth_states (
+      state_hash CHAR(64) NOT NULL PRIMARY KEY,
+      requested_by VARCHAR(80) NULL,
+      expires_at DATETIME NOT NULL,
+      used_at DATETIME NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_meta_oauth_state_expiry (expires_at, used_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  console.log('[migration] Meta marketing connection tables: OK');
 
   await ensureDefaultAdminAccount();
 }

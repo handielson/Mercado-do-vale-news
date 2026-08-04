@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const page = readFileSync('pages/admin/settings/MarketingPage.tsx', 'utf8');
+const panel = readFileSync('pages/admin/settings/marketing/MarketingApprovalCenterPanel.tsx', 'utf8');
+const service = readFileSync('services/marketingApprovalService.ts', 'utf8');
+const server = readFileSync('server.js', 'utf8');
+const vpsServer = readFileSync('vps_server.js', 'utf8');
+const vpsServerCjs = readFileSync('vps_server.cjs', 'utf8');
+const productionApi = readFileSync('services/marketingCampaignApi.cjs', 'utf8');
+const migration = readFileSync('migrations/010_marketing_approval_center.sql', 'utf8');
+
+assert.match(page, /activeTab.*approvals/);
+assert.match(page, /<MarketingApprovalCenterPanel/);
+assert.match(panel, /Estado atual/);
+assert.match(panel, /Estado proposto/);
+assert.match(panel, /Impacto financeiro máximo/);
+assert.match(panel, /Como desfazer/);
+assert.match(panel, /Confirmar aprovação/);
+assert.match(service, /\/admin\/marketing\/approvals/);
+assert.match(server, /\/admin\/marketing\/approvals\/.*\/decision/);
+assert.match(server, /requireAdminBearerToken/);
+assert.match(server, /MARKETING_RUNNER_SECRET/);
+assert.match(server, /financial_impact, success_criteria/);
+assert.match(server, /DATE_ADD\(NOW\(\), INTERVAL 24 HOUR\)/);
+assert.match(server, /status IN \('pending', 'approved'\)/);
+assert.match(migration, /UNIQUE KEY uq_marketing_approval_idempotency/);
+assert.match(migration, /CREATE TABLE IF NOT EXISTS marketing_approval_events/);
+assert.match(vpsServer, /registerMarketingCampaignRoutes/);
+assert.match(vpsServer, /ensureMarketingCampaignTables/);
+assert.match(vpsServerCjs, /registerMarketingCampaignRoutes/);
+assert.match(vpsServerCjs, /ensureMarketingCampaignTables/);
+assert.match(productionApi, /\/admin\/marketing\/approvals/);
+assert.match(productionApi, /\/marketing-runner\/approvals/);
+
+console.log('marketing approval center contract: OK');

@@ -45,6 +45,9 @@ import androidx.core.content.FileProvider
 import br.com.mercadodovale.adminestoque.data.SalesCache
 import br.com.mercadodovale.adminestoque.data.VpsApiClient
 import br.com.mercadodovale.adminestoque.domain.LabelSize
+import br.com.mercadodovale.adminestoque.domain.MarketingCampaignInsight
+import br.com.mercadodovale.adminestoque.domain.MarketingCampaignReport
+import br.com.mercadodovale.adminestoque.domain.MarketingMetricValues
 import br.com.mercadodovale.adminestoque.domain.ProductLabelProduct
 import br.com.mercadodovale.adminestoque.domain.SaleSummary
 import br.com.mercadodovale.adminestoque.domain.SaleStatusGroup
@@ -73,10 +76,29 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.text.NumberFormat
 import java.text.Normalizer
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private enum class MarketingMetricFormat { CURRENCY, INTEGER, DECIMAL, PERCENT, RATIO }
+
+private data class MarketingMetricDefinition(
+    val key: String,
+    val label: String,
+    val format: MarketingMetricFormat,
+    val explanation: String,
+    val interpretation: String,
+    val zeroCanMeanUnmeasured: Boolean = false,
+)
+
+private data class MarketingMetricSection(
+    val title: String,
+    val subtitle: String,
+    val metrics: List<MarketingMetricDefinition>,
+)
 
 class MainActivity : Activity() {
     private var token: String? = null
@@ -203,6 +225,7 @@ class MainActivity : Activity() {
                 }
                 SCREEN_SHOPEE_CONVERSATIONS -> showShopeeConversations()
                 SCREEN_SHOPEE_SUPPORT -> showShopeeSupport()
+                SCREEN_MARKETING -> showMarketingCampaigns()
                 SCREEN_SALES -> showSalesOverview()
                 SCREEN_LABELS -> showLabels()
                 SCREEN_CUSTOM_LABEL -> showCustomLabel()
@@ -393,6 +416,12 @@ class MainActivity : Activity() {
                 "Visualizar a etiqueta e imprimir na P50 ou em uma impressora Bluetooth genérica.",
             ) { showLabels() },
         )
+        root.addView(
+            card(
+                "Campanhas Instagram",
+                "Acompanhe vendas, conversas, gasto, alcance, cliques e todos os indicadores explicados.",
+            ) { showMarketingCampaigns() },
+        )
         root.addView(card("Permissões do celular", permissionSummary()) { showPermissions() })
         root.addView(button("Sair") {
             val accessToken = token.orEmpty()
@@ -409,6 +438,200 @@ class MainActivity : Activity() {
         })
         root.addView(appVersionText())
         showContent(root)
+    }
+
+    private fun showMarketingCampaigns(initialPreset: String = "last_7d") {
+        currentScreen = SCREEN_MARKETING
+        val root = screen()
+        root.addView(back("Campanhas Instagram") { showDashboard() })
+        root.addView(text("Campanhas Instagram", 28, green))
+        root.addView(
+            text(
+                "Indicadores oficiais da Meta organizados por resultado, investimento, intenção e interação. Cada item explica o que representa.",
+                15,
+                Color.DKGRAY,
+            ),
+        )
+        val periodLabels = MARKETING_PERIODS.map { it.second }
+        val periodSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                periodLabels,
+            )
+            setSelection(MARKETING_PERIODS.indexOfFirst { it.first == initialPreset }.coerceAtLeast(0))
+        }
+        val status = text("Carregando indicadores…", 15, Color.DKGRAY)
+        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(text("Período", 14, Color.DKGRAY))
+        root.addView(periodSpinner)
+        root.addView(button("Atualizar indicadores") {
+            val preset = MARKETING_PERIODS.getOrNull(periodSpinner.selectedItemPosition)?.first ?: "last_7d"
+            loadMarketingCampaigns(preset, status, content)
+        })
+        root.addView(status)
+        root.addView(content)
+        showContent(root)
+        loadMarketingCampaigns(initialPreset, status, content)
+    }
+
+    private fun loadMarketingCampaigns(
+        datePreset: String,
+        status: TextView,
+        content: LinearLayout,
+    ) {
+        status.text = "Buscando dados oficiais da Meta…"
+        content.removeAllViews()
+        runAsync {
+            val result = VpsApiClient(token.orEmpty()).get(
+                "/admin/marketing/meta/insights?datePreset=${URLEncoder.encode(datePreset, "UTF-8")}",
+            )
+            runOnUiThread {
+                result.fold(
+                    onSuccess = { body ->
+                        runCatching { MarketingCampaignReport.parse(body) }.fold(
+                            onSuccess = { report -> renderMarketingCampaignReport(report, status, content) },
+                            onFailure = { status.text = it.message ?: "Resposta de indicadores inválida." },
+                        )
+                    },
+                    onFailure = { error ->
+                        val message = when (error) {
+                            is VpsApiClient.HttpException -> when (error.statusCode) {
+                                404 -> "O painel de campanhas ainda precisa ser publicado na VPS."
+                                409 -> "Conecte a conta Meta e selecione a conta de anúncios no Gestão MV web."
+                                else -> error.message ?: "Não foi possível carregar os indicadores."
+                            }
+                            else -> error.message ?: "Não foi possível carregar os indicadores."
+                        }
+                        if (VpsApiClient.isUnauthorized(error)) {
+                            handleProtectedApiFailure(error, status, message)
+                        } else {
+                            status.text = message
+                        }
+                    },
+                )
+            }
+        }
+    }
+
+    private fun renderMarketingCampaignReport(
+        report: MarketingCampaignReport,
+        status: TextView,
+        content: LinearLayout,
+    ) {
+        status.text = if (report.campaigns.isEmpty()) {
+            "Nenhuma entrega de campanha registrada no período."
+        } else {
+            "${report.campaigns.size} campanha(s) • ${report.currentSince} até ${report.currentUntil}"
+        }
+        content.removeAllViews()
+        content.addView(marketingOverview(report.totals))
+        content.addView(
+            text(
+                "Comparação: ${report.previousSince} até ${report.previousUntil}. ${report.attribution}",
+                13,
+                Color.GRAY,
+            ),
+        )
+        report.campaigns.forEach { campaign ->
+            content.addView(
+                marketingCampaignCard(
+                    campaign,
+                    report.previousByCampaign[campaign.id],
+                ),
+            )
+        }
+        content.addView(
+            text(
+                "Atenção: conversa, compra, receita ou ROAS zerados podem indicar mensuração incompleta entre anúncio, WhatsApp, bot e fechamento — não necessariamente ausência de venda.",
+                14,
+                Color.rgb(146, 64, 14),
+            ),
+        )
+    }
+
+    private fun marketingOverview(totals: MarketingMetricValues) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(18), dp(16), dp(18), dp(16))
+        setBackgroundColor(Color.rgb(238, 242, 255))
+        addView(text("Resumo do período", 20, Color.rgb(49, 46, 129)))
+        addView(text("Gasto: ${formatMarketingMetric(totals.spend, MarketingMetricFormat.CURRENCY, false)}", 17, Color.rgb(15, 23, 42)))
+        addView(text("Conversas atribuídas: ${formatMarketingMetric(totals.conversations, MarketingMetricFormat.INTEGER, totals.conversations == 0.0)}", 16, Color.rgb(15, 23, 42)))
+        addView(text("Compras atribuídas: ${formatMarketingMetric(totals.purchases, MarketingMetricFormat.INTEGER, totals.purchases == 0.0)}", 16, Color.rgb(15, 23, 42)))
+        addView(text("ROAS: ${formatMarketingMetric(totals.roas, MarketingMetricFormat.RATIO, totals.roas == 0.0)}", 16, Color.rgb(15, 23, 42)))
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(16)
+        }
+    }
+
+    private fun marketingCampaignCard(
+        campaign: MarketingCampaignInsight,
+        previous: MarketingCampaignInsight?,
+    ) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(18), dp(18), dp(18), dp(18))
+        setBackgroundColor(Color.WHITE)
+        addView(text(campaign.name, 21, green))
+        addView(
+            text(
+                if (campaign.status == "ACTIVE") "● Ativa" else "Status: ${campaign.status}",
+                14,
+                if (campaign.status == "ACTIVE") Color.rgb(21, 128, 61) else Color.DKGRAY,
+            ),
+        )
+        MARKETING_METRIC_SECTIONS.forEach { section ->
+            addView(text(section.title, 18, Color.rgb(30, 41, 59)))
+            addView(text(section.subtitle, 13, Color.GRAY))
+            section.metrics.forEach { definition ->
+                addView(
+                    marketingMetricView(
+                        definition,
+                        campaign.metrics[definition.key],
+                        previous?.metrics?.get(definition.key) ?: 0.0,
+                    ),
+                )
+            }
+        }
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(18)
+        }
+    }
+
+    private fun marketingMetricView(
+        definition: MarketingMetricDefinition,
+        current: Double,
+        previous: Double,
+    ) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+        setBackgroundColor(Color.rgb(248, 250, 252))
+        val unavailable = definition.zeroCanMeanUnmeasured && current == 0.0
+        addView(text(definition.label, 15, Color.rgb(71, 85, 105)))
+        addView(text(formatMarketingMetric(current, definition.format, unavailable), 20, Color.rgb(15, 23, 42)))
+        if (!unavailable && previous != 0.0) {
+            val change = (current - previous) / kotlin.math.abs(previous) * 100.0
+            addView(text("${if (change >= 0) "+" else ""}${MARKETING_DECIMAL.format(change)}% vs. período anterior", 12, Color.GRAY))
+        }
+        addView(text("O que representa: ${definition.explanation}", 13, Color.DKGRAY))
+        addView(text("Como interpretar: ${definition.interpretation}", 13, Color.rgb(71, 85, 105)))
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(10)
+        }
+    }
+
+    private fun formatMarketingMetric(
+        value: Double,
+        format: MarketingMetricFormat,
+        unavailable: Boolean,
+    ): String {
+        if (unavailable) return "Não mensurado"
+        return when (format) {
+            MarketingMetricFormat.CURRENCY -> MARKETING_CURRENCY.format(value)
+            MarketingMetricFormat.INTEGER -> MARKETING_INTEGER.format(value)
+            MarketingMetricFormat.DECIMAL -> MARKETING_DECIMAL.format(value)
+            MarketingMetricFormat.PERCENT -> "${MARKETING_DECIMAL.format(value)}%"
+            MarketingMetricFormat.RATIO -> "${MARKETING_DECIMAL.format(value)}x"
+        }
     }
 
     private fun showSalesOverview() {
@@ -3714,10 +3937,70 @@ class MainActivity : Activity() {
         private const val SCREEN_SHOPEE_REVIEWS = "shopee_reviews"
         private const val SCREEN_SHOPEE_CONVERSATIONS = "shopee_conversations"
         private const val SCREEN_SHOPEE_CONVERSATION = "shopee_conversation"
+        private const val SCREEN_MARKETING = "marketing"
         private const val SHOPEE_COMPLETED_ORDERS_URL =
             "https://seller.shopee.com.br/portal/sale/order?type=completed"
         private const val DEFAULT_SHOPEE_BUYER_RATING_TEMPLATE =
             "Excelente comprador! Pagamento rápido e negociação tranquila. Agradecemos pela compra!"
+        private val MARKETING_CURRENCY = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR"))
+        private val MARKETING_INTEGER = NumberFormat.getIntegerInstance(Locale.forLanguageTag("pt-BR"))
+        private val MARKETING_DECIMAL = NumberFormat.getNumberInstance(Locale.forLanguageTag("pt-BR")).apply {
+            minimumFractionDigits = 2
+            maximumFractionDigits = 2
+        }
+        private val MARKETING_PERIODS = listOf(
+            "last_7d" to "Últimos 7 dias",
+            "last_14d" to "Últimos 14 dias",
+            "last_30d" to "Últimos 30 dias",
+            "this_month" to "Este mês",
+        )
+        private val MARKETING_METRIC_SECTIONS = listOf(
+            MarketingMetricSection(
+                "Resultados de negócio",
+                "Indicadores mais próximos das vendas e do atendimento no WhatsApp.",
+                listOf(
+                    MarketingMetricDefinition("conversations", "Conversas iniciadas", MarketingMetricFormat.INTEGER, "Conversas atribuídas pela Meta aos anúncios.", "Confira no bot se as conversas são qualificadas.", true),
+                    MarketingMetricDefinition("costPerConversation", "Custo por conversa", MarketingMetricFormat.CURRENCY, "Gasto dividido pelas conversas atribuídas.", "Analise junto da qualidade e da taxa de fechamento.", true),
+                    MarketingMetricDefinition("purchases", "Compras atribuídas", MarketingMetricFormat.INTEGER, "Compras que a Meta conseguiu atribuir à campanha.", "Zero também pode indicar que a mensuração ainda não foi configurada.", true),
+                    MarketingMetricDefinition("purchaseValue", "Receita atribuída", MarketingMetricFormat.CURRENCY, "Valor das compras atribuído aos anúncios.", "Depende do envio correto de valores pelo Pixel, CAPI ou atendimento.", true),
+                    MarketingMetricDefinition("costPerPurchase", "Custo por compra", MarketingMetricFormat.CURRENCY, "Gasto dividido pelas compras atribuídas.", "Compare com margem, lucro e ticket médio.", true),
+                    MarketingMetricDefinition("roas", "ROAS", MarketingMetricFormat.RATIO, "Receita atribuída dividida pelo gasto.", "ROAS 3x significa R$ 3 atribuídos por R$ 1 investido; não é lucro.", true),
+                ),
+            ),
+            MarketingMetricSection(
+                "Investimento e entrega",
+                "Quanto foi gasto e como os anúncios foram distribuídos.",
+                listOf(
+                    MarketingMetricDefinition("spend", "Gasto realizado", MarketingMetricFormat.CURRENCY, "Valor efetivamente consumido no período.", "Compare com o orçamento autorizado e os resultados."),
+                    MarketingMetricDefinition("impressions", "Impressões", MarketingMetricFormat.INTEGER, "Total de exibições, incluindo repetições.", "Não representa pessoas únicas."),
+                    MarketingMetricDefinition("reach", "Alcance", MarketingMetricFormat.INTEGER, "Estimativa de pessoas únicas alcançadas.", "Ajuda a avaliar cobertura em Petrolina e Juazeiro."),
+                    MarketingMetricDefinition("frequency", "Frequência", MarketingMetricFormat.DECIMAL, "Média de exibições por pessoa alcançada.", "Alta com queda de resposta pode indicar saturação."),
+                    MarketingMetricDefinition("cpm", "CPM", MarketingMetricFormat.CURRENCY, "Custo para mil impressões.", "Diagnostica o preço da entrega; CPM baixo não garante venda."),
+                ),
+            ),
+            MarketingMetricSection(
+                "Cliques e intenção",
+                "Separa interações amplas das ações que aproximam o cliente do WhatsApp.",
+                listOf(
+                    MarketingMetricDefinition("clicks", "Todos os cliques", MarketingMetricFormat.INTEGER, "Qualquer clique no anúncio.", "Pode incluir ações sem intenção de compra."),
+                    MarketingMetricDefinition("uniqueClicks", "Cliques únicos", MarketingMetricFormat.INTEGER, "Pessoas diferentes que clicaram.", "Reduz o efeito de cliques repetidos."),
+                    MarketingMetricDefinition("linkClicks", "Cliques no link/CTA", MarketingMetricFormat.INTEGER, "Cliques no destino ou chamada principal.", "Deve aproximar o cliente do WhatsApp."),
+                    MarketingMetricDefinition("outboundClicks", "Cliques de saída", MarketingMetricFormat.INTEGER, "Cliques que saíram das superfícies da Meta.", "Ajuda a confirmar avanço ao destino."),
+                    MarketingMetricDefinition("ctr", "CTR", MarketingMetricFormat.PERCENT, "Percentual de impressões que gerou clique.", "Mede capacidade de gerar ação, não qualidade da conversa."),
+                    MarketingMetricDefinition("cpc", "CPC", MarketingMetricFormat.CURRENCY, "Gasto dividido por todos os cliques.", "É diagnóstico; venda e conversa qualificada continuam prioritárias."),
+                    MarketingMetricDefinition("costPerLinkClick", "Custo por clique no CTA", MarketingMetricFormat.CURRENCY, "Gasto dividido pelos cliques no link principal.", "É mais específico para o caminho até o WhatsApp."),
+                ),
+            ),
+            MarketingMetricSection(
+                "Interação e vídeo",
+                "Sinais auxiliares do criativo, sem confundir engajamento com venda.",
+                listOf(
+                    MarketingMetricDefinition("engagements", "Interações com o anúncio", MarketingMetricFormat.INTEGER, "Interações registradas pela Meta.", "Ajuda a entender atenção, mas não comprova compra."),
+                    MarketingMetricDefinition("videoPlays", "Reproduções de vídeo", MarketingMetricFormat.INTEGER, "Reproduções dos criativos em vídeo.", "Use apenas quando o anúncio tiver vídeo.", true),
+                    MarketingMetricDefinition("thruPlays", "ThruPlays", MarketingMetricFormat.INTEGER, "Visualizações qualificadas pelo critério da Meta.", "Ajuda a avaliar retenção; não é resultado de venda.", true),
+                ),
+            ),
+        )
         private val STOCK_LOCATION_FILTER_LABELS = listOf(
             "Todas as caixas",
             "Caixas 1 a 20",

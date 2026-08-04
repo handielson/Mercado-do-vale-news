@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { flushSync } from 'react-dom';
-import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, CheckCircle2, Calendar, Trash2, Clock, ToggleLeft, ToggleRight, Facebook, Instagram, MessageCircle } from 'lucide-react';
+import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Layers, Plus, Search, X, Copy, PenTool, CheckCircle2, Calendar, Trash2, Clock, ToggleLeft, ToggleRight, Facebook, Instagram, MessageCircle, ShieldCheck, BrainCircuit } from 'lucide-react';
 import { toast } from 'sonner';
 import { toBlob, toPng } from 'html-to-image';
 import { catalogService } from '../../../services/catalogService';
@@ -30,6 +30,8 @@ import MarketingStickerTypographyEditor from './marketing/MarketingStickerTypogr
 import MarketingTypographyText from './marketing/MarketingTypographyText';
 import WhatsAppStatusCampaignPanel from './marketing/WhatsAppStatusCampaignPanel';
 import FacebookMarketplaceSchedulerPanel from './marketing/FacebookMarketplaceSchedulerPanel';
+import MarketingApprovalCenterPanel from './marketing/MarketingApprovalCenterPanel';
+import MarketingCampaignAgentPanel from './marketing/MarketingCampaignAgentPanel';
 import { ensureMarketingTypographyFontLoaded } from './marketing/marketingTypographyFonts';
 import {
     DAY_LABELS_FULL,
@@ -238,7 +240,13 @@ export default function MarketingPage() {
     const [companyInfo, setCompanyInfo] = useState<Company | null>(null);
     const [format, setFormat] = useState<MarketingAssetFormat>('sticker');
     const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
-    const [activeTab, setActiveTab] = useState<'studio' | 'instagram' | 'facebook' | 'whatsapp'>('studio');
+    const [activeTab, setActiveTab] = useState<'studio' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'>(() => {
+        if (typeof window === 'undefined') return 'studio';
+        const tab = new URLSearchParams(window.location.search).get('tab');
+        return ['studio', 'instagram', 'facebook', 'whatsapp', 'campaigns', 'approvals'].includes(tab || '')
+            ? tab as 'studio' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'
+            : 'studio';
+    });
     const safeStickerSettings = sanitizeMarketingStickerSettings(stickerSettings);
     const isStickerFormat = format === 'sticker';
     const updateStickerSetting = <K extends keyof MarketingStickerSettings>(
@@ -1300,6 +1308,26 @@ export default function MarketingPage() {
                     >
                         <span className="inline-flex items-center gap-2"><MessageCircle className="h-4 w-4" /> WhatsApp</span>
                     </button>
+                    <button
+                        onClick={() => setActiveTab('campaigns')}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
+                            activeTab === 'campaigns'
+                                ? 'bg-indigo-600 text-white'
+                                : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-700'
+                        }`}
+                    >
+                        <span className="inline-flex items-center gap-2"><BrainCircuit className="h-4 w-4" /> Campanhas IA</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('approvals')}
+                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
+                            activeTab === 'approvals'
+                                ? 'bg-emerald-600 text-white'
+                                : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                        }`}
+                    >
+                        <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Aprovações</span>
+                    </button>
                 </div>
             </div>
 
@@ -2108,6 +2136,8 @@ export default function MarketingPage() {
                             />
                         </div>
                     )}
+                    {activeTab === 'campaigns' && <MarketingCampaignAgentPanel />}
+                    {activeTab === 'approvals' && <MarketingApprovalCenterPanel />}
                     {activeTab === 'instagram' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
                             {/* Day Selector */}

@@ -16,8 +16,8 @@ android {
         applicationId = "br.com.mercadodovale.adminestoque"
         minSdk = 26
         targetSdk = 35
-        versionCode = 56
-        versionName = "0.12.8"
+        versionCode = 57
+        versionName = "0.13.0"
         buildConfigField("String", "VPS_BASE_URL", "\"${vpsBaseUrl.trimEnd('/')}\"")
     }
 

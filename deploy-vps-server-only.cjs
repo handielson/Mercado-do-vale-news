@@ -16,6 +16,7 @@ const localServer = path.join(__dirname, 'vps_server.js');
 const localServerCjs = path.join(__dirname, 'vps_server.cjs');
 const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim();
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
+const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
 const autoresponderEngineFiles = [
   'services/autoresponder/engine/types.js',
   'services/autoresponder/engine/state.js',
@@ -128,6 +129,15 @@ async function uploadMobileSalesPushFiles(appDir) {
     remotePathJoin(appDir, mobileSalesServicePath),
   );
   console.log(`Uploaded ${mobileSalesServicePath}`);
+}
+
+async function uploadMarketingCampaignFiles(appDir) {
+  await exec(`mkdir -p ${appDir}/services`);
+  await upload(
+    path.join(__dirname, marketingCampaignServicePath),
+    remotePathJoin(appDir, marketingCampaignServicePath),
+  );
+  console.log(`Uploaded ${marketingCampaignServicePath}`);
 }
 
 async function ensureRemoteFirebaseCredentials(appDir) {
@@ -244,6 +254,7 @@ async function main() {
   await uploadAutoresponderEngineFiles(appDir);
   await uploadSignedWarrantyFiles(appDir);
   await uploadMobileSalesPushFiles(appDir);
+  await uploadMarketingCampaignFiles(appDir);
   const remoteFirebaseCredentialPath = await ensureRemoteFirebaseCredentials(appDir);
   await ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath);
   await ensureRemoteMediaDocumentDependencies(appDir);

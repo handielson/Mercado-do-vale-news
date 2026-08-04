@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const panel = readFileSync('pages/admin/settings/marketing/MarketingCampaignAgentPanel.tsx', 'utf8');
+const service = readFileSync('services/marketingCampaignPortfolioService.ts', 'utf8');
+
+assert.match(service, /id: 'store-carousel'/);
+assert.match(service, /id: 'smartphones'/);
+assert.match(service, /Petrolina–PE/);
+assert.match(service, /Juazeiro–BA/);
+assert.match(service, /Aleatoriedade controlada/);
+assert.match(service, /marketing\.instagram\.campaign_portfolio/);
+assert.match(service, /objective: 'sales'/);
+assert.match(service, /destination: 'whatsapp'/);
+assert.match(service, /Quero comprar: \{nome_produto\} \| Codigo: \{sku\}/);
+assert.match(panel, /Valor autorizado/);
+assert.match(panel, /WhatsApp oficial:/);
+assert.match(panel, /Mensagem preparada para o bot/);
+assert.match(panel, /teto autorizado, não uma ordem para gastar tudo/);
+assert.match(panel, /Salvar aqui não ativa nem gasta nada/);
+assert.match(panel, /Campanhas configuradas/);
+
+console.log('marketing campaign agent portfolio: OK');

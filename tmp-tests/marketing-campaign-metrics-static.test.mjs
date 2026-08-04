@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const server = readFileSync('server.js', 'utf8');
+const panel = readFileSync('pages/admin/settings/marketing/MarketingCampaignMetricsPanel.tsx', 'utf8');
+const agentPanel = readFileSync('pages/admin/settings/marketing/MarketingCampaignAgentPanel.tsx', 'utf8');
+const service = readFileSync('services/metaMarketingConnectionService.ts', 'utf8');
+const productionApi = readFileSync('services/marketingCampaignApi.cjs', 'utf8');
+
+assert.match(server, /\/admin\/marketing\/meta\/insights/);
+assert.match(server, /level: 'campaign'/);
+assert.match(server, /action_report_time: 'conversion'/);
+assert.match(server, /current: \{ totals:/);
+assert.match(server, /previous: \{ totals:/);
+assert.match(service, /getInsights\(datePreset/);
+assert.match(agentPanel, /<MarketingCampaignMetricsPanel/);
+assert.match(panel, /Resultados de negócio/);
+assert.match(panel, /Investimento e entrega/);
+assert.match(panel, /Cliques e intenção/);
+assert.match(panel, /Interação e vídeo/);
+assert.match(panel, /Custo por conversa/);
+assert.match(panel, /Compras atribuídas/);
+assert.match(panel, /ROAS/);
+assert.match(panel, /Como interpretar:/);
+assert.match(panel, /Todas as ações adicionais informadas pela Meta/);
+assert.match(panel, /período anterior/);
+assert.match(productionApi, /\/admin\/marketing\/meta\/insights/);
+assert.match(productionApi, /level: 'campaign'/);
+assert.match(productionApi, /action_report_time: 'conversion'/);
+
+console.log('marketing campaign metrics dashboard: OK');

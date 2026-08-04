@@ -21,6 +21,10 @@ const {
 const {
   createMobileSalesPushService,
 } = require('./services/mobileSalesPushService.cjs');
+const {
+  ensureMarketingCampaignTables,
+  registerMarketingCampaignRoutes,
+} = require('./services/marketingCampaignApi.cjs');
 require('dotenv').config({ path: path.join(__dirname, '.env.tiktok.local'), override: false });
 
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -1588,6 +1592,14 @@ fastify.patch('/admin/preferences/:key', { preHandler: requireSyncKeyOrAdmin }, 
     key,
     value: JSON.parse(valueJson),
   };
+});
+
+registerMarketingCampaignRoutes(fastify, {
+  pool,
+  requireAdminBearerToken,
+  requireSyncKeyOrAdmin,
+  getBearerAuthContext: getVpsBearerAuthContext,
+  getPublicAppUrl,
 });
 
 fastify.get('/admin/label-templates', { preHandler: requireSyncKeyOrAdmin }, async () => {
@@ -36451,6 +36463,9 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[migration] admin_preferences table: OK');
+
+  await ensureMarketingCampaignTables(pool);
+  console.log('[migration] marketing campaign tables: OK');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS avulso_receipts (
