@@ -27643,15 +27643,31 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
     return Array.from(byId.values());
   }
 
+  const [categoryRows] = await pool.query('SELECT id, parent_id FROM categories');
+  const categoryIds = new Set([String(campaign.category_id || '')].filter(Boolean));
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (const category of categoryRows) {
+      if (category.parent_id && categoryIds.has(String(category.parent_id)) && !categoryIds.has(String(category.id))) {
+        categoryIds.add(String(category.id));
+        expanded = true;
+      }
+    }
+  }
+  const categoryIdList = Array.from(categoryIds);
+  if (!categoryIdList.length) return [];
+  const categoryPlaceholders = categoryIdList.map(() => '?').join(',');
   const [rows] = await pool.query(
     `SELECT DISTINCT p.id, p.model_id, p.brand, p.name, p.sku, p.slug, p.images, p.image_url, p.video_url,
             p.price_retail, p.stock_quantity, p.track_inventory, p.specs, p.custom_fields
      FROM products p
      LEFT JOIN product_categories pc ON pc.product_id = p.id
-     WHERE (p.category_id = ? OR pc.category_id = ?) AND p.status = 'active'
+     WHERE (p.category_id IN (${categoryPlaceholders}) OR pc.category_id IN (${categoryPlaceholders}))
+       AND p.status = 'active'
      ORDER BY p.updated_at DESC, p.name ASC
      LIMIT 300`,
-    [campaign.category_id, campaign.category_id]
+    [...categoryIdList, ...categoryIdList]
   );
   return rows.map(normalizeWhatsAppStatusProduct).filter(Boolean);
 }

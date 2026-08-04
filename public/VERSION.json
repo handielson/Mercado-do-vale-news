@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.151-whatsapp-status-reprogramar",
+  "version": "v1.2.152-whatsapp-status-categoria-pai",
   "date": "2026-08-03",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-020529-whatsapp-status-reprogramar",
+  "release_vps": "/var/www/mdv-site/releases/20260804-020745-whatsapp-status-categoria-pai",
   "branch": "main",
-  "summary": "Reconhece todos os produtos vinculados à categoria e permite reprogramar campanhas de Status."
+  "summary": "Inclui todas as subcategorias na campanha completa de Status WhatsApp."
 }

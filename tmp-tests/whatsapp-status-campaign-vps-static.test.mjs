@@ -46,7 +46,9 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /image_url, video_url, price_retail/);
   assert.match(source, /sameWhatsAppStatusMemoryVariation/);
   assert.match(source, /LEFT JOIN product_categories pc ON pc\.product_id = p\.id/);
-  assert.match(source, /p\.category_id = \? OR pc\.category_id = \?/);
+  assert.match(source, /SELECT id, parent_id FROM categories/);
+  assert.match(source, /categoryIds\.has\(String\(category\.parent_id\)\)/);
+  assert.match(source, /p\.category_id IN \(\$\{categoryPlaceholders\}\)/);
   assert.match(source, /runDueWhatsAppStatusCampaigns/);
   assert.match(source, /buildWhatsAppStatusProgress/);
   assert.match(source, /\/whatsapp\/status-campaigns\/progress/);
