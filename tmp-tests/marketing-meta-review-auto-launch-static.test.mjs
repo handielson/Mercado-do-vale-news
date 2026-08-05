@@ -6,6 +6,15 @@ const panel = readFileSync('pages/admin/settings/marketing/MetaMarketingConnecti
 const service = readFileSync('services/metaMarketingConnectionService.ts', 'utf8');
 
 assert.match(api, /META_REVIEW_AUTO_LAUNCH_ACTION = 'meta\.activate_after_review\.v1'/);
+assert.match(api, /META_SECURITY_REVIEW_ACTION = 'meta\.submit_security_review\.v1'/);
+assert.match(api, /CREATE TABLE IF NOT EXISTS meta_managed_ad_review_state/);
+assert.match(api, /async function readManagedAdReviewsLightweight/);
+assert.match(api, /async function persistManagedAdReviews/);
+assert.match(api, /function reviewPollDelaySeconds/);
+assert.match(api, /\[60, 120, 300, 600, 1200, 1800\]/);
+assert.match(api, /async function completeSecurityReviewApprovals/);
+assert.match(api, /security-review-approvals\/\:itemKey/);
+assert.match(api, /status='connected',last_error=\?/);
 assert.match(api, /function metaReviewState\(entity\)/);
 assert.match(api, /effective === 'PENDING_REVIEW'/);
 assert.match(api, /effective === 'IN_PROCESS'/);
@@ -57,8 +66,11 @@ assert.match(panel, /currentTotals\.costPerConversation/);
 assert.match(panel, /campaign\.ads\.map/);
 assert.match(panel, /Ver na Meta/);
 assert.match(panel, /Preparar ativação automática/);
+assert.match(panel, /Preparar confirmação na Meta/);
+assert.match(panel, /Próxima consulta automática/);
 assert.match(panel, /Abrir Central de Aprovações/);
 assert.match(service, /prepareReviewAutoLaunchApproval/);
+assert.match(service, /prepareSecurityReviewApproval/);
 assert.match(service, /review-auto-launch-approvals/);
 
 console.log('marketing Meta review monitor and conditional auto-launch: OK');

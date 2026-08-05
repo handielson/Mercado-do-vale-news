@@ -95,6 +95,9 @@ export interface MetaManagedAdReview {
     adsetEffectiveStatus: string | null;
     managerUrl: string;
     capturedAt: string;
+    nextCheckAt?: string | null;
+    lastError?: string | null;
+    failureCount?: number;
 }
 
 type ConnectionResponse = { ok: true; connection: MetaMarketingConnection };
@@ -266,6 +269,13 @@ export const metaMarketingConnectionService = {
     async prepareReviewAutoLaunchApproval(): Promise<MetaCampaignDraftApprovalResponse> {
         return await vpsClient.post<MetaCampaignDraftApprovalResponse>(
             '/admin/marketing/meta/review-auto-launch-approvals',
+            {},
+        );
+    },
+
+    async prepareSecurityReviewApproval(itemKey: string): Promise<MetaCampaignDraftApprovalResponse> {
+        return await vpsClient.post<MetaCampaignDraftApprovalResponse>(
+            `/admin/marketing/meta/security-review-approvals/${encodeURIComponent(itemKey)}`,
             {},
         );
     },

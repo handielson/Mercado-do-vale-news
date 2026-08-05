@@ -30,7 +30,7 @@ const formatPercent = (value: number) => `${new Intl.NumberFormat('pt-BR', { min
 export default function MetaMarketingConnectionPanel() {
     const [connection, setConnection] = useState<MetaMarketingConnection | null>(null);
     const [loading, setLoading] = useState(true);
-    const [working, setWorking] = useState<'connect' | 'select' | 'audit' | 'launch' | null>(null);
+    const [working, setWorking] = useState<'connect' | 'select' | 'audit' | 'launch' | 'security' | null>(null);
     const [adAccountId, setAdAccountId] = useState('');
     const [pageId, setPageId] = useState('');
 
@@ -84,8 +84,10 @@ export default function MetaMarketingConnectionPanel() {
     const audit = async () => {
         setWorking('audit');
         try {
-            setConnection(await metaMarketingConnectionService.audit());
-            toast.success('Auditoria somente leitura concluída. Nenhuma campanha foi alterada.');
+            const next = await metaMarketingConnectionService.audit();
+            setConnection(next);
+            if (next.lastError) toast.warning(next.lastError);
+            else toast.success('Auditoria somente leitura concluída. Nenhuma campanha foi alterada.');
         } catch (error: any) {
             toast.error(error?.message || 'Não foi possível auditar a conta Meta.');
             await load().catch(() => {});
@@ -103,6 +105,20 @@ export default function MetaMarketingConnectionPanel() {
                 : 'Autorização condicional criada. Revise e aprove na Central de Aprovações.');
         } catch (error: any) {
             toast.error(error?.message || 'Não foi possível preparar a ativação automática.');
+        } finally {
+            setWorking(null);
+        }
+    };
+
+    const prepareSecurityReview = async (itemKey: string) => {
+        setWorking('security');
+        try {
+            const result = await metaMarketingConnectionService.prepareSecurityReviewApproval(itemKey);
+            toast.success(result.reused
+                ? 'A confirmação já está na Central de Aprovações.'
+                : 'Confirmação preparada. Aprove-a na Central e abra o link da Meta por lá.');
+        } catch (error: any) {
+            toast.error(error?.message || 'Não foi possível preparar a confirmação deste anúncio.');
         } finally {
             setWorking(null);
         }
@@ -236,6 +252,13 @@ export default function MetaMarketingConnectionPanel() {
                                             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-black ${status.className}`}><StatusIcon className="h-3.5 w-3.5" />{status.label}</span>
                                         </div>
                                         <p className="mt-3 text-xs text-slate-500">Configurado: <strong>{review.configuredStatus || '—'}</strong> · Efetivo: <strong>{review.effectiveStatus || '—'}</strong></p>
+                                        {review.lastError && <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-800">{review.lastError}</p>}
+                                        {review.nextCheckAt && <p className="mt-2 text-[11px] text-slate-400">Próxima consulta automática: {new Date(review.nextCheckAt).toLocaleString('pt-BR')}</p>}
+                                        {review.state === 'attention' && (
+                                            <button onClick={() => prepareSecurityReview(review.itemKey)} disabled={working !== null} className="mt-3 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-xs font-black text-white hover:bg-orange-500 disabled:opacity-50">
+                                                {working === 'security' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}Preparar confirmação na Meta
+                                            </button>
+                                        )}
                                         <div className="mt-3 flex items-center justify-between gap-3">
                                             <p className="text-[11px] text-slate-400">Atualizado em {new Date(review.capturedAt).toLocaleString('pt-BR')}</p>
                                             <a href={review.managerUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-black text-blue-700 hover:underline">Ver na Meta <ExternalLink className="h-3.5 w-3.5" /></a>

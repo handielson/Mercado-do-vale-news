@@ -7,6 +7,7 @@ import {
     ChevronUp,
     Clock3,
     CloudCog,
+    ExternalLink,
     History,
     Laptop,
     MapPin,
@@ -277,10 +278,13 @@ function persistentOutcome(request: MarketingApprovalRequest): string {
     const creativePlan = request.action_type.includes('creative_plan');
     const campaignBundle = request.action_type.includes('campaign_bundle');
     const pausedAdBundle = request.action_type.includes('paused_whatsapp_ad_bundle');
+    const securityReview = request.action_type.includes('submit_security_review');
     if (request.status === 'pending') return 'Aguardando sua decisão.';
+    if (request.status === 'approved' && securityReview) return 'Aprovação registrada. Abra a Meta, marque “Confio nesse anúncio” e publique a alteração. O monitor registrará o resultado automaticamente.';
     if (request.status === 'approved' && creativePlan) return 'Criativos aprovados. O anúncio ainda não foi criado nem colocado em veiculação.';
     if (request.status === 'approved') return 'Aprovação registrada. A execução ainda não foi confirmada.';
     if (request.status === 'executing') return 'Aprovada e em execução. Isso ainda não confirma que a campanha entrou em veiculação.';
+    if (request.status === 'succeeded' && securityReview) return 'A Meta recebeu a confirmação e o monitor registrou a mudança de estado. O anúncio continuou pausado.';
     if (request.status === 'succeeded' && creativePlan) return 'Criativos aprovados. Esta etapa não publica nem ativa anúncios.';
     if (request.status === 'succeeded' && pausedAdBundle) return 'Anúncios completos criados e enviados para análise da Meta, mas permanecem pausados e sem gasto.';
     if (request.status === 'succeeded' && campaignBundle) return 'Estrutura criada na Meta e mantida pausada, sem entrega ou cobrança.';
@@ -440,6 +444,10 @@ export default function MarketingApprovalCenterPanel() {
                         const executor = executionLabel(request);
                         const ExecutorIcon = executor.icon;
                         const expanded = expandedId === request.id;
+                        const executionPayload = request.execution_payload && !Array.isArray(request.execution_payload)
+                            ? request.execution_payload as Record<string, unknown>
+                            : null;
+                        const managerUrl = typeof executionPayload?.manager_url === 'string' ? executionPayload.manager_url : null;
                         return (
                             <article key={request.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                                 <div className="p-5">
@@ -460,6 +468,11 @@ export default function MarketingApprovalCenterPanel() {
                                                 <button onClick={() => openDecision(request, 'reject')} className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50"><XCircle className="h-4 w-4" /> Rejeitar</button>
                                                 <button onClick={() => openDecision(request, 'approve')} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700"><ShieldCheck className="h-4 w-4" /> Revisar e aprovar</button>
                                             </div>
+                                        )}
+                                        {request.status === 'approved' && request.action_type.includes('submit_security_review') && managerUrl && (
+                                            <a href={managerUrl} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-600">
+                                                <ExternalLink className="h-4 w-4" /> Abrir anúncio na Meta
+                                            </a>
                                         )}
                                         {request.status === 'failed' && request.action_type.includes('paused_whatsapp_ad_bundle') && (
                                             <div className="flex shrink-0 flex-wrap gap-2">

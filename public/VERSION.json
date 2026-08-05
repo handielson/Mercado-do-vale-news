@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.183-meta-legacy-performance",
-  "date": "2026-08-04",
+  "version": "v1.2.184-meta-review-auto-launch",
+  "date": "2026-08-05",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260804-233811-meta-legacy-performance",
+  "release_vps": "/var/www/mdv-site/releases/20260805-010136-meta-review-auto-launch",
   "branch": "main",
-  "summary": "Analisa campanhas e anúncios antigos em veiculação para orientar os novos com métricas comparáveis da Meta."
+  "summary": "Automatiza o acompanhamento da revisão Meta, registra a confirmação humana e ativa os dois anúncios somente após aprovação e revalidação de segurança."
 }

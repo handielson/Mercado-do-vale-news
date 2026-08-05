@@ -30,6 +30,7 @@ export interface MarketingApprovalRequest {
     financial_impact: MarketingJson | null;
     success_criteria: MarketingJson | null;
     rollback_plan: string;
+    execution_payload: MarketingJson | null;
     execution_result: MarketingJson | null;
     requested_by: string | null;
     requested_by_label: string | null;
@@ -102,6 +103,7 @@ function normalizeRequest(row: MarketingApprovalRequest): MarketingApprovalReque
         evidence: parseJson(row.evidence),
         financial_impact: parseJson(row.financial_impact),
         success_criteria: parseJson(row.success_criteria),
+        execution_payload: parseJson(row.execution_payload),
         execution_result: parseJson(row.execution_result),
         attempt_count: Number(row.attempt_count || 0),
     };

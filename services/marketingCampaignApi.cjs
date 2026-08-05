@@ -9,6 +9,7 @@ const META_CAMPAIGN_SHELL_ACTION = 'meta.create_paused_campaign_bundle.v2';
 const META_CREATIVE_PLAN_ACTION = 'meta.approve_campaign_creative_plan.v1';
 const META_PAUSED_AD_BUNDLE_ACTION = 'meta.create_paused_whatsapp_ad_bundle.v1';
 const META_REVIEW_AUTO_LAUNCH_ACTION = 'meta.activate_after_review.v1';
+const META_SECURITY_REVIEW_ACTION = 'meta.submit_security_review.v1';
 const META_AUTHORIZED_MONTHLY_CEILING_BRL = 1000;
 const META_CAMPAIGN_SHELLS = Object.freeze([
   { itemKey: 'store-carousel', name: 'MDV | Loja inteira | Carrossel | Petrolina + Juazeiro' },
@@ -217,6 +218,27 @@ async function ensureMarketingCampaignTables(pool) {
       INDEX idx_meta_follower_tracking_instagram (instagram_account_id, updated_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS meta_managed_ad_review_state (
+      item_key VARCHAR(80) NOT NULL PRIMARY KEY,
+      campaign_id VARCHAR(120) NOT NULL,
+      adset_id VARCHAR(120) NOT NULL,
+      ad_id VARCHAR(120) NOT NULL,
+      review_state VARCHAR(32) NOT NULL,
+      configured_status VARCHAR(80) NULL,
+      effective_status VARCHAR(80) NULL,
+      manager_url TEXT NULL,
+      payload JSON NULL,
+      captured_at DATETIME NULL,
+      failure_count INT UNSIGNED NOT NULL DEFAULT 0,
+      next_poll_at DATETIME NULL,
+      last_error TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_meta_managed_review_ad (ad_id),
+      INDEX idx_meta_managed_review_poll (next_poll_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 }
 
 function parseApproval(row) {
@@ -266,7 +288,9 @@ async function completeApprovedManualReviews(pool) {
 
 function registerApprovalRoutes(fastify, { pool, requireAdminBearerToken, requireSyncKeyOrAdmin, getBearerAuthContext }) {
   function requireRunner(request, reply, done) {
-    const configured = String(process.env.MARKETING_RUNNER_SECRET || '').trim();
+    const configured = String(
+      process.env.MARKETING_RUNNER_SECRET || process.env.SYNC_SECRET || process.env.VPS_SYNC_KEY || '',
+    ).trim();
     const received = String(request.headers['x-marketing-runner-key'] || '').trim();
     if (!configured) return reply.code(503).send({ error: 'Marketing runner is not configured' });
     if (!received || received !== configured) return reply.code(401).send({ error: 'Invalid marketing runner key' });
@@ -712,6 +736,107 @@ async function readManagedAdReviews(pool, row, token) {
   }));
 }
 
+function isMetaRateLimitError(error) {
+  const code = Number(error?.metaCode || error?.code || 0);
+  return [4, 17, 32, 613, 80004].includes(code)
+    || /rate limit|too many calls|request limit/i.test(String(error?.message || ''));
+}
+
+function reviewPollDelaySeconds(reviews, failureCount = 0) {
+  if (failureCount > 0) return [60, 120, 300, 600, 1200, 1800][Math.min(failureCount - 1, 5)];
+  return (reviews || []).every((item) => ['approved', 'active'].includes(item.state)) ? 300 : 60;
+}
+
+async function cachedManagedAdReviews(pool) {
+  const [rows] = await pool.query(
+    'SELECT payload,next_poll_at,last_error,failure_count FROM meta_managed_ad_review_state ORDER BY item_key',
+  );
+  return rows.map((row) => ({
+    ...jsonParse(row.payload, {}),
+    nextCheckAt: row.next_poll_at || null,
+    lastError: row.last_error || null,
+    failureCount: Number(row.failure_count || 0),
+  })).filter((item) => item?.adId);
+}
+
+async function persistManagedAdReviews(pool, reviews, options = {}) {
+  const failureCount = Number(options.failureCount || 0);
+  const delaySeconds = reviewPollDelaySeconds(reviews, failureCount);
+  for (const review of reviews) {
+    const payload = { ...review };
+    delete payload.nextCheckAt;
+    delete payload.lastError;
+    delete payload.failureCount;
+    await pool.query(
+      `INSERT INTO meta_managed_ad_review_state
+        (item_key,campaign_id,adset_id,ad_id,review_state,configured_status,effective_status,
+         manager_url,payload,captured_at,failure_count,next_poll_at,last_error)
+       VALUES (?,?,?,?,?,?,?,?,?,NOW(),?,DATE_ADD(NOW(), INTERVAL ? SECOND),?)
+       ON DUPLICATE KEY UPDATE campaign_id=VALUES(campaign_id),adset_id=VALUES(adset_id),ad_id=VALUES(ad_id),
+         review_state=VALUES(review_state),configured_status=VALUES(configured_status),
+         effective_status=VALUES(effective_status),manager_url=VALUES(manager_url),payload=VALUES(payload),
+         captured_at=IF(VALUES(last_error) IS NULL,NOW(),captured_at),failure_count=VALUES(failure_count),
+         next_poll_at=VALUES(next_poll_at),last_error=VALUES(last_error)`,
+      [
+        review.itemKey, review.campaignId, review.adsetId, review.adId, review.state,
+        review.configuredStatus, review.effectiveStatus, review.managerUrl, jsonValue(payload),
+        failureCount, delaySeconds, options.lastError || null,
+      ],
+    );
+  }
+  return cachedManagedAdReviews(pool);
+}
+
+async function readManagedAdReviewsLightweight(pool, row, token) {
+  const targets = await latestManagedAdTargets(pool);
+  const cached = await cachedManagedAdReviews(pool);
+  const cachedByAd = new Map(cached.map((item) => [String(item.adId), item]));
+  return Promise.all(targets.map(async (target) => {
+    const previous = cachedByAd.get(String(target.adId)) || {};
+    const ad = await graphRequest(target.adId, token, { fields: 'id,name,status,effective_status,adset_id' });
+    return {
+      ...previous,
+      itemKey: target.itemKey,
+      campaignId: String(target.campaignId),
+      adsetId: String(target.adsetId),
+      adId: String(target.adId),
+      adName: ad.name || previous.adName || null,
+      state: metaReviewState(ad),
+      configuredStatus: ad.status || null,
+      effectiveStatus: ad.effective_status || null,
+      managerUrl: adsManagerUrl(row.selected_ad_account_id, target),
+      capturedAt: new Date().toISOString(),
+    };
+  }));
+}
+
+async function completeSecurityReviewApprovals(pool, reviews) {
+  const reviewByKey = new Map((reviews || []).map((item) => [String(item.itemKey), item]));
+  const [rows] = await pool.query(
+    `SELECT * FROM marketing_approval_requests
+     WHERE action_type=? AND execution_mode='lenovo_chrome' AND status IN ('approved','executing')`,
+    [META_SECURITY_REVIEW_ACTION],
+  );
+  for (const raw of rows) {
+    const review = reviewByKey.get(String(raw.target_id));
+    if (!review || !['in_review', 'approved', 'active'].includes(review.state)) continue;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(
+        `UPDATE marketing_approval_requests SET status='succeeded',runner_id='vps-meta-review-monitor',
+          executed_at=NOW(),last_error=NULL,execution_result=? WHERE id=? AND status IN ('approved','executing')`,
+        [jsonValue({ confirmedByMetaMonitor: true, state: review.state, financialImpact: 0, managerUrl: review.managerUrl, capturedAt: review.capturedAt }), raw.id],
+      );
+      await approvalEvent(connection, raw.id, 'meta_review_detected', { id: 'vps-meta-review-monitor', label: 'Monitor de revisão Meta' }, { state: review.state, adId: review.adId });
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally { connection.release(); }
+  }
+}
+
 async function findExecutionItem(pool, approvalId, itemKey) {
   const [rows] = await pool.query(
     'SELECT * FROM marketing_approval_execution_items WHERE approval_id=? AND item_key=? LIMIT 1',
@@ -1133,11 +1258,15 @@ async function captureManagedReviewStatus(pool) {
     const config = marketingConfig();
     const row = await connectionRow(pool);
     if (!config.ready || !row || row.status !== 'connected' || !row.selected_ad_account_id) return null;
+    const cached = await cachedManagedAdReviews(pool);
+    const [pollRows] = await pool.query(
+      'SELECT MIN(next_poll_at) AS next_poll_at FROM meta_managed_ad_review_state',
+    );
+    const nextPollAt = pollRows?.[0]?.next_poll_at ? new Date(pollRows[0].next_poll_at).getTime() : 0;
+    if (cached.length && nextPollAt > Date.now()) return cached;
     const token = decryptToken(row, config.encryptionKey);
-    const [managedAdReviews, accountAudits] = await Promise.all([
-      readManagedAdReviews(pool, row, token),
-      readAllAdAccountCampaigns(row, token),
-    ]);
+    const freshReviews = await readManagedAdReviewsLightweight(pool, row, token);
+    const managedAdReviews = await persistManagedAdReviews(pool, freshReviews);
     if (!managedAdReviews.length) return [];
     const previous = jsonParse(row.last_audit, {}) || {};
     const audit = {
@@ -1145,20 +1274,30 @@ async function captureManagedReviewStatus(pool) {
       mode: 'read_only',
       capturedAt: new Date().toISOString(),
       managedAdReviews,
-      accountAudits,
-      campaignSummary: {
-        ...(previous.campaignSummary || {}),
-        totalAcrossAccounts: accountAudits.reduce((sum, item) => sum + item.campaignSummary.total, 0),
-        activeAcrossAccounts: accountAudits.reduce((sum, item) => sum + item.campaignSummary.active, 0),
-      },
     };
     await pool.query(
       "UPDATE meta_marketing_connections SET last_audit=?,last_audit_at=NOW(),last_error=NULL,status='connected' WHERE id=1",
       [JSON.stringify(audit)],
     );
+    await completeSecurityReviewApprovals(pool, managedAdReviews);
     return managedAdReviews;
   } catch (error) {
     console.error('[meta-review-monitor]', text(error.message, 1000));
+    const cached = await cachedManagedAdReviews(pool).catch(() => []);
+    const previousFailures = Math.max(0, ...cached.map((item) => Number(item.failureCount || 0)));
+    if (cached.length) {
+      const message = isMetaRateLimitError(error)
+        ? 'A Meta limitou temporariamente as consultas. O monitor usará o último resultado e tentará novamente com intervalo progressivo.'
+        : text(error.message, 1000);
+      const reviews = await persistManagedAdReviews(pool, cached, { failureCount: previousFailures + 1, lastError: message });
+      const row = await connectionRow(pool);
+      const previous = jsonParse(row?.last_audit, {}) || {};
+      await pool.query(
+        "UPDATE meta_marketing_connections SET status='connected',last_error=?,last_audit=? WHERE id=1",
+        [message, JSON.stringify({ ...previous, managedAdReviews: reviews })],
+      );
+      return reviews;
+    }
     return null;
   } finally {
     metaReviewMonitorRunning = false;
@@ -1282,8 +1421,8 @@ async function runMetaReviewAutoLaunch(pool) {
   const row = await connectionRow(pool);
   const config = marketingConfig();
   if (!config.ready || !row || row.status !== 'connected') return null;
-  const reviews = await readManagedAdReviews(pool, row, decryptToken(row, config.encryptionKey));
-  if (reviews.some((item) => item.state === 'rejected' || item.state === 'attention')) {
+  const reviews = await cachedManagedAdReviews(pool);
+  if (reviews.some((item) => item.state === 'rejected')) {
     const reason = reviews.map((item) => `${item.itemKey}:${item.state}`).join(', ');
     const errorMessage = `Meta review did not approve all targets: ${reason}`;
     const connection = await pool.getConnection();
@@ -1801,7 +1940,7 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
            evidence,financial_impact,success_criteria,rollback_plan,execution_payload,requested_by,requested_by_label,
            idempotency_key,approval_expires_at)
          VALUES (?, 'instagram', ?, ?, 'meta_campaign_bundle', ?, 'vps_meta_api', ?, ?, ?, ?, ?, ?, ?,
-                 'marketing-agent', 'Agente especialista de campanhas', ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
+                  'marketing-agent', 'Agente especialista de campanhas', ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
         [
           id,
           META_CAMPAIGN_SHELL_ACTION,
@@ -2149,7 +2288,7 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
            evidence,financial_impact,success_criteria,rollback_plan,execution_payload,requested_by,requested_by_label,
            idempotency_key,approval_expires_at)
          VALUES (?, 'instagram', ?, ?, 'meta_ad_bundle', ?, 'vps_meta_api', ?, ?, ?, ?, ?, ?, ?,
-                 'marketing-agent', 'Agente especialista de campanhas', ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
+                   'marketing-agent', 'Agente especialista de campanhas', ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
         [
           id,
           META_PAUSED_AD_BUNDLE_ACTION,
@@ -2197,6 +2336,62 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
     } finally { connection.release(); }
   });
 
+  fastify.post('/admin/marketing/meta/security-review-approvals/:itemKey', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+    const itemKey = text(req.params?.itemKey, 80);
+    const row = await connectionRow(pool);
+    const reviews = await cachedManagedAdReviews(pool);
+    const review = reviews.find((item) => item.itemKey === itemKey);
+    if (!row || row.status !== 'connected' || !review) {
+      return reply.code(409).send({ error: 'Atualize a auditoria da Meta antes de preparar esta confirmação.' });
+    }
+    if (review.state === 'rejected') {
+      return reply.code(409).send({ error: 'Este anúncio foi reprovado pela Meta e precisa ser corrigido.' });
+    }
+    if (['in_review', 'approved', 'active'].includes(review.state)) {
+      return reply.code(409).send({ error: 'Este anúncio não precisa mais da confirmação de segurança.' });
+    }
+    const idempotencyBase = `meta-security-review-v1:${review.adId}`;
+    const [existingRows] = await pool.query(
+      'SELECT * FROM marketing_approval_requests WHERE idempotency_key LIKE ? ORDER BY created_at DESC',
+      [`${idempotencyBase}%`],
+    );
+    const reusable = existingRows.find((item) => !['failed', 'rejected', 'cancelled', 'expired'].includes(item.status));
+    if (reusable) return { ok: true, approval: parseApproval(reusable), reused: true };
+    const idempotencyKey = existingRows.length ? `${idempotencyBase}:retry:${existingRows.length + 1}` : idempotencyBase;
+    const id = crypto.randomUUID();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(
+        `INSERT INTO marketing_approval_requests
+          (id,channel,action_type,title,target_type,target_id,target_name,execution_mode,current_state,
+           proposed_state,evidence,financial_impact,success_criteria,rollback_plan,execution_payload,
+           requested_by,requested_by_label,idempotency_key,approval_expires_at)
+         VALUES (?,'instagram',?,'Confirmar anúncio para análise da Meta','ad',?,?,'lenovo_chrome',
+                 ?,?,?,?,?,?,?,?,'marketing-agent','Agente especialista de campanhas',?,DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
+        [
+          id, META_SECURITY_REVIEW_ACTION, itemKey, review.adName || review.campaignName || review.adId,
+          jsonValue({ state: review.state, configuredStatus: review.configuredStatus, effectiveStatus: review.effectiveStatus }),
+          jsonValue({ action: 'Marcar "Confio nesse anúncio e ele está correto" no Gerenciador da Meta', delivery: 'PAUSED' }),
+          jsonValue({ source: 'Graph API da Meta', capturedAt: review.capturedAt, adId: review.adId }),
+          jsonValue({ currency: 'BRL', maximum: 0, immediate: 0 }),
+          jsonValue({ required: 'A Meta deixa de indicar atenção e passa o anúncio para análise, aprovação ou veiculação; o anúncio continua pausado.' }),
+          'Não há alteração de orçamento nem veiculação. Se não confirmar na Meta, a solicitação expira sem efeito.',
+          jsonValue({ manager_url: review.managerUrl, ad_id: review.adId, item_key: itemKey, expected_delivery: 'PAUSED' }),
+          idempotencyKey,
+        ],
+      );
+      await approvalEvent(connection, id, 'requested', { id: 'marketing-agent', label: 'Agente especialista de campanhas' }, {
+        action_type: META_SECURITY_REVIEW_ACTION, financial_impact: 0, manager_url: review.managerUrl,
+      });
+      await connection.commit();
+      return reply.code(201).send({ ok: true, approval: parseApproval(await findApproval(pool, id)), reused: false });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally { connection.release(); }
+  });
+
   fastify.post('/admin/marketing/meta/review-auto-launch-approvals', { preHandler: requireAdminBearerToken }, async (_req, reply) => {
     const config = marketingConfig();
     const row = await connectionRow(pool);
@@ -2238,23 +2433,13 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
       return reply.code(409).send({ error: 'O valor total não corresponde ao teto autorizado de até R$ 1.000.' });
     }
     const token = decryptToken(row, config.encryptionKey);
-    const reviews = await readManagedAdReviews(pool, row, token);
+    const cachedReviews = await cachedManagedAdReviews(pool);
+    const reviews = cachedReviews.length ? cachedReviews : await readManagedAdReviews(pool, row, token);
     if (reviews.length !== META_CAMPAIGN_SHELLS.length) {
       return reply.code(409).send({ error: 'A Meta ainda não retornou os dois anúncios gerenciados.' });
     }
-    if (reviews.some((item) => item.state === 'rejected' || item.state === 'attention')) {
-      return reply.code(409).send({ error: 'Existe anúncio reprovado ou com atenção necessária. Corrija-o antes de preparar a ativação.' });
-    }
-    const accountAudits = await readAllAdAccountCampaigns(row, token);
-    const activeOutsideTargets = activeCampaignsOutsideTargets(
-      accountAudits,
-      campaigns.map((item) => item.campaign_id),
-    );
-    if (activeOutsideTargets.length) {
-      return reply.code(409).send({
-        error: `Existe campanha ativa fora do portfólio gerenciado: ${activeOutsideTargets.map((item) => `${item.name} — conta ${item.account.account_id}`).join('; ')}. Revise-a antes de autorizar as duas novas campanhas.`,
-        activeCampaigns: activeOutsideTargets,
-      });
+    if (reviews.some((item) => item.state === 'rejected')) {
+      return reply.code(409).send({ error: 'Existe anúncio reprovado pela Meta. Corrija-o antes de preparar a ativação.' });
     }
     const executionPayload = {
       schema_version: 1,
@@ -2281,7 +2466,7 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
            evidence,financial_impact,success_criteria,rollback_plan,execution_payload,requested_by,requested_by_label,
            idempotency_key,approval_expires_at)
          VALUES (?, 'instagram', ?, ?, 'meta_ad_bundle', ?, 'vps_meta_api', ?, ?, ?, ?, ?, ?, ?,
-                 'marketing-agent', 'Agente especialista de campanhas', ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
+                  'marketing-agent', 'Agente especialista de campanhas', ?, DATE_ADD(NOW(), INTERVAL 7 DAY))`,
         [
           id,
           META_REVIEW_AUTO_LAUNCH_ACTION,
@@ -2469,9 +2654,22 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
         accountAudits,
         legacyAnalysis,
       };
+      await persistManagedAdReviews(pool, managedAdReviews);
       await pool.query("UPDATE meta_marketing_connections SET last_audit=?,last_audit_at=NOW(),last_error=NULL,status='connected' WHERE id=1", [JSON.stringify(audit)]);
       return { ok: true, audit, connection: sanitizeConnection(await connectionRow(pool), config) };
     } catch (error) {
+      if (isMetaRateLimitError(error)) {
+        const warning = 'A Meta limitou temporariamente as consultas. Exibindo a última auditoria salva; o monitor tentará novamente automaticamente.';
+        await pool.query("UPDATE meta_marketing_connections SET status='connected',last_error=? WHERE id=1", [warning]);
+        const current = await connectionRow(pool);
+        return {
+          ok: true,
+          cached: true,
+          warning,
+          audit: jsonParse(current?.last_audit, null),
+          connection: sanitizeConnection(current, config),
+        };
+      }
       const status = error.metaCode === 190 ? 'expired' : 'error';
       await pool.query('UPDATE meta_marketing_connections SET status=?,last_error=? WHERE id=1', [status, text(error.message, 2000)]);
       return reply.code(error.statusCode === 401 ? 401 : 502).send({ error: error.message, status });
