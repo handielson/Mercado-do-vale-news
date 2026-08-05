@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.197-whatsapp-produto-midia
+version: v1.2.198-seo-product-uuid
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260805-155242-v12197-whatsapp-produto-midia
+release_vps: /var/www/mdv-site/releases/20260805-160017-v12198-seo-product-uuid
 branch: main
-summary: Adiciona listas segmentadas do WhatsApp, mídia de marketing por produto e corrige imagens e rotas de variações.
+summary: Corrige a abertura de produtos por UUID na rota pública de SEO.
 ```

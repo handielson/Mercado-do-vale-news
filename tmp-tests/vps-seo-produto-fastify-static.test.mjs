@@ -11,6 +11,11 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /function\s+normalizeSeoImages\(/, `${file} must normalize JSON/string image arrays`);
   assert.match(source, /async function\s+loadSeoProductBySlug\(/, `${file} must load the product directly from MySQL`);
   assert.match(source, /WHERE slug = \?[\s\S]*WHERE id = \?/, `${file} must support slug lookup with UUID fallback`);
+  const uuidMatcherBody = source.match(/function isUuidLike\(value\) \{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(uuidMatcherBody, `${file} must expose the UUID matcher used by SEO lookup`);
+  const isUuidLike = new Function('value', uuidMatcherBody);
+  assert.equal(isUuidLike('efbf25ff-c705-4034-8d37-766be5a8c0fa'), true, `${file} must recognize real product UUIDs`);
+  assert.equal(isUuidLike('poco-x8-pro'), false, `${file} must not treat slugs as UUIDs`);
   assert.match(source, /meta property="og:type" content="product"/, `${file} must inject product Open Graph tags`);
   assert.match(source, /<link rel="canonical" href="\$\{url\}" \/>/, `${file} must inject a canonical product URL`);
   assert.match(source, /application\/ld\+json/, `${file} must inject Schema.org JSON-LD`);
