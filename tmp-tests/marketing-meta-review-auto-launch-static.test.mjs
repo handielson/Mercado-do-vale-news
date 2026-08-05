@@ -13,6 +13,7 @@ assert.match(api, /async function persistManagedAdReviews/);
 assert.match(api, /function lastAuditManagedAdReviews/);
 assert.match(api, /function hasStoredMetaRateLimit/);
 assert.match(api, /row\?\.status === 'error' && hasStoredMetaRateLimit\(row\)/);
+assert.match(api, /'lenovo_chrome',\s*\?,\?,\?,\?,\?,\?,\?,'marketing-agent'/);
 assert.match(api, /reviews = lastAuditManagedAdReviews\(row\)/);
 assert.match(api, /monitor recuperou a última auditoria salva/);
 assert.match(api, /function reviewPollDelaySeconds/);

@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.186-meta-rate-limit-recovery
+version: v1.2.187-meta-security-review-sql
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260805-011450-meta-rate-limit-recovery
+release_vps: /var/www/mdv-site/releases/20260805-011826-meta-security-review-sql
 branch: main
-summary: Permite recuperar a auditoria Meta no primeiro clique quando a conexão está marcada por rate limit.
+summary: Corrige a gravação da confirmação de segurança da Meta na Central de Aprovações.
 ```

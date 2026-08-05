@@ -2410,7 +2410,7 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
            proposed_state,evidence,financial_impact,success_criteria,rollback_plan,execution_payload,
            requested_by,requested_by_label,idempotency_key,approval_expires_at)
          VALUES (?,'instagram',?,'Confirmar anúncio para análise da Meta','ad',?,?,'lenovo_chrome',
-                 ?,?,?,?,?,?,?,?,'marketing-agent','Agente especialista de campanhas',?,DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
+                 ?,?,?,?,?,?,?,'marketing-agent','Agente especialista de campanhas',?,DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
         [
           id, META_SECURITY_REVIEW_ACTION, itemKey, review.adName || review.campaignName || review.adId,
           jsonValue({ state: review.state, configuredStatus: review.configuredStatus, effectiveStatus: review.effectiveStatus }),
