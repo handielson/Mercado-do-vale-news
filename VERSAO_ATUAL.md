@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.203-product-entry-model-image-fallback
+version: v1.2.204-product-entry-full-image-detail
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260805-173130-v12203-product-entry-model-image-fallback
+release_vps: /var/www/mdv-site/releases/20260805-173445-v12204-product-entry-full-image-detail
 branch: main
-summary: Usa também a imagem geral do modelo como fallback final na entrada por SKU.
+summary: Carrega o detalhe completo do produto para mostrar as fotos existentes na entrada por SKU.
 ```

@@ -987,7 +987,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         colorName?: string | null;
         colors: any[];
     }) => {
-        const directImages = resolveExistingProductImages(localProduct);
+        const fullLocalProduct = localProduct?.id
+            ? await vpsApiService.getProductById(localProduct.id, true).catch(() => null)
+            : null;
+        const catalogProduct = fullLocalProduct || localProduct;
+        const directImages = resolveExistingProductImages(catalogProduct);
         if (directImages.length > 0) return directImages;
 
         if (modelId && colorName) {
@@ -1016,11 +1020,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         }).catch(() => null);
 
         return resolveSiblingProductImages(siblingProducts, {
-            ...localProduct,
+            ...catalogProduct,
             model_id: modelId,
             specs: {
-                ...(localProduct?.specs || {}),
-                color: colorName || localProduct?.specs?.color,
+                ...(catalogProduct?.specs || {}),
+                color: colorName || catalogProduct?.specs?.color,
             },
         });
     };
