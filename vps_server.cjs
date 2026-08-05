@@ -26120,7 +26120,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       price_promo=?, promo_start=?, promo_end=?,
       stock_quantity=?, status=?, category_id=?, brand=?, model_id=?,
       images=?, specs=?, custom_fields=?, dimensions=?, weight_kg=?,
-      ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?, is_parent=?,
+      ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?, is_parent=COALESCE(?, is_parent, 0),
       video_url=?, marketing_background_url=?, marketing_video_url=?, track_inventory=?, is_gift=?,
       warranty_type=?, warranty_template_id=?, kits=?,
       hide_from_catalog=?, meta_title=?, meta_description=?, keywords=?,

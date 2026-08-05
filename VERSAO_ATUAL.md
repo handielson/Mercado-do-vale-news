@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.199-product-friendly-variant-url
+version: v1.2.200-product-update-parent-preserve
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260805-160717-v12199-product-friendly-variant-url
+release_vps: /var/www/mdv-site/releases/20260805-165604-v12200-product-update-parent-preserve
 branch: main
-summary: Usa nome, cor e memória da variação nas URLs públicas em vez do UUID.
+summary: Preserva a classificação de produto pai quando a edição não envia esse campo.
 ```
