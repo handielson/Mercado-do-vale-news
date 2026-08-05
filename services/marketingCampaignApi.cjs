@@ -747,6 +747,13 @@ function reviewPollDelaySeconds(reviews, failureCount = 0) {
   return (reviews || []).every((item) => ['approved', 'active'].includes(item.state)) ? 300 : 60;
 }
 
+function lastAuditManagedAdReviews(row) {
+  const audit = jsonParse(row?.last_audit, {}) || {};
+  return Array.isArray(audit.managedAdReviews)
+    ? audit.managedAdReviews.filter((item) => item?.itemKey && item?.campaignId && item?.adsetId && item?.adId)
+    : [];
+}
+
 async function cachedManagedAdReviews(pool) {
   const [rows] = await pool.query(
     'SELECT payload,next_poll_at,last_error,failure_count FROM meta_managed_ad_review_state ORDER BY item_key',
@@ -1258,7 +1265,19 @@ async function captureManagedReviewStatus(pool) {
     const config = marketingConfig();
     const row = await connectionRow(pool);
     if (!config.ready || !row || row.status !== 'connected' || !row.selected_ad_account_id) return null;
-    const cached = await cachedManagedAdReviews(pool);
+    let cached = await cachedManagedAdReviews(pool);
+    if (!cached.length) {
+      const previousReviews = lastAuditManagedAdReviews(row);
+      if (previousReviews.length) {
+        const message = 'A Meta limitou temporariamente as consultas. O monitor recuperou a última auditoria salva e tentará novamente automaticamente.';
+        cached = await persistManagedAdReviews(pool, previousReviews, { failureCount: 1, lastError: message });
+        const previous = jsonParse(row.last_audit, {}) || {};
+        await pool.query(
+          "UPDATE meta_marketing_connections SET status='connected',last_error=?,last_audit=? WHERE id=1",
+          [message, JSON.stringify({ ...previous, managedAdReviews: cached })],
+        );
+      }
+    }
     const [pollRows] = await pool.query(
       'SELECT MIN(next_poll_at) AS next_poll_at FROM meta_managed_ad_review_state',
     );
@@ -1283,7 +1302,11 @@ async function captureManagedReviewStatus(pool) {
     return managedAdReviews;
   } catch (error) {
     console.error('[meta-review-monitor]', text(error.message, 1000));
-    const cached = await cachedManagedAdReviews(pool).catch(() => []);
+    let cached = await cachedManagedAdReviews(pool).catch(() => []);
+    if (!cached.length) {
+      const current = await connectionRow(pool).catch(() => null);
+      cached = lastAuditManagedAdReviews(current);
+    }
     const previousFailures = Math.max(0, ...cached.map((item) => Number(item.failureCount || 0)));
     if (cached.length) {
       const message = isMetaRateLimitError(error)
@@ -2339,7 +2362,20 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
   fastify.post('/admin/marketing/meta/security-review-approvals/:itemKey', { preHandler: requireAdminBearerToken }, async (req, reply) => {
     const itemKey = text(req.params?.itemKey, 80);
     const row = await connectionRow(pool);
-    const reviews = await cachedManagedAdReviews(pool);
+    let reviews = await cachedManagedAdReviews(pool);
+    if (!reviews.length) {
+      reviews = lastAuditManagedAdReviews(row);
+      if (reviews.length) {
+        reviews = await persistManagedAdReviews(pool, reviews, {
+          failureCount: 1,
+          lastError: 'Estado recuperado da última auditoria enquanto a Meta limita novas consultas.',
+        });
+        await pool.query(
+          "UPDATE meta_marketing_connections SET status='connected',last_error=? WHERE id=1",
+          ['A Meta limitou temporariamente as consultas. Usando a última auditoria salva até a próxima atualização automática.'],
+        );
+      }
+    }
     const review = reviews.find((item) => item.itemKey === itemKey);
     if (!row || row.status !== 'connected' || !review) {
       return reply.code(409).send({ error: 'Atualize a auditoria da Meta antes de preparar esta confirmação.' });

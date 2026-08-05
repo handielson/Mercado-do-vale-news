@@ -10,6 +10,9 @@ assert.match(api, /META_SECURITY_REVIEW_ACTION = 'meta\.submit_security_review\.
 assert.match(api, /CREATE TABLE IF NOT EXISTS meta_managed_ad_review_state/);
 assert.match(api, /async function readManagedAdReviewsLightweight/);
 assert.match(api, /async function persistManagedAdReviews/);
+assert.match(api, /function lastAuditManagedAdReviews/);
+assert.match(api, /reviews = lastAuditManagedAdReviews\(row\)/);
+assert.match(api, /monitor recuperou a última auditoria salva/);
 assert.match(api, /function reviewPollDelaySeconds/);
 assert.match(api, /\[60, 120, 300, 600, 1200, 1800\]/);
 assert.match(api, /async function completeSecurityReviewApprovals/);
