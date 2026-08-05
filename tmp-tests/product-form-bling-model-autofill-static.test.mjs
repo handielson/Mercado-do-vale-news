@@ -13,7 +13,7 @@ assert.match(
 
 assert.match(
   source,
-  /model_id:\s*localProduct\?\.model_id\s*\|\|\s*blingModelSuggestion\?\.id\s*\|\|\s*null/,
+  /const resolvedModelId = localProduct\?\.model_id \|\| blingModelSuggestion\?\.id \|\| null/,
   'Bling SKU autofill should preselect an existing local model when the Bling name matches',
 );
 
@@ -57,6 +57,24 @@ assert.match(
   basicInfoSource,
   /setValue\('parent_id', parent\.id, \{ shouldValidate: true, shouldDirty: true \}\)/,
   'Resolved Bling parent should fill the local products.parent_id field',
+);
+
+assert.match(
+  source,
+  /fetchBlingProductDetail\(parentId\)[\s\S]*importBlingProducts\([\s\S]*\[parentDetail\]/,
+  'Missing Bling structure parents should be imported during automatic SKU linking',
+);
+
+assert.match(
+  source,
+  /\/admin\/migrate\/close-parent-linkage/,
+  'Importing a missing parent should also close existing sibling parent links',
+);
+
+assert.match(
+  source,
+  /setValue\('parent_id', link\.parentProduct\.id, \{ shouldDirty: true, shouldValidate: true \}\)/,
+  'The newly imported parent should immediately fill the current form',
 );
 
 assert.match(

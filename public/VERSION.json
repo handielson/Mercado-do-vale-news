@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.193-bling-parent-autofill",
+  "version": "v1.2.194-bling-parent-auto-import",
   "date": "2026-08-05",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260805-114732-v12193-bling-parent-autofill",
+  "release_vps": "/var/www/mdv-site/releases/20260805-115629-v12194-bling-parent-auto-import",
   "branch": "main",
-  "summary": "Preenche automaticamente o Produto Pai local usando o ID do pai recebido do Bling."
+  "summary": "Importa automaticamente o pai ausente do Bling e preenche o vínculo local da variação."
 }

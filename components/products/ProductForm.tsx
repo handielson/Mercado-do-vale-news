@@ -36,7 +36,7 @@ import { getAuthSessionToken } from '../../services/authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
 import { unitService } from '../../services/units';
-import { findBlingProductByExactSku } from '../../services/blingService';
+import { fetchBlingProductDetail, findBlingProductByExactSku, importBlingProducts } from '../../services/blingService';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
@@ -71,6 +71,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [isCompressing, setIsCompressing] = useState(false);
     const [blingId, setBlingId] = useState<number | undefined>(initialData?.bling_id);
     const [blingParentId, setBlingParentId] = useState<number | undefined>(initialData?.bling_parent_id);
+    const [blingParentProduct, setBlingParentProduct] = useState<Product | undefined>();
     const [isBlingLinkManualOverride, setIsBlingLinkManualOverride] = useState(false);
     const [isAutoLinkingBling, setIsAutoLinkingBling] = useState(false);
     const [shopeeItemId, setShopeeItemId] = useState<number | undefined>(initialData?.shopee_item_id);
@@ -869,6 +870,47 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         return containedModel || { id: null, name: suggestedName };
     };
 
+    const ensureLocalBlingParent = async (
+        parentId: number,
+        categoryId?: string | null,
+        modelId?: string | null,
+    ): Promise<Product | null> => {
+        const findExisting = async () => {
+            const rows = await vpsApiService.getProducts({
+                bling_id: String(parentId),
+                status: 'all',
+                limit: 1,
+                noCache: true,
+            }).catch(() => null);
+            return (rows?.[0] as Product | undefined) || null;
+        };
+
+        const existing = await findExisting();
+        if (existing) return existing;
+        if (!categoryId) return null;
+
+        const parentDetail = await fetchBlingProductDetail(parentId);
+        if (!parentDetail) return null;
+
+        const result = await importBlingProducts(
+            [parentDetail],
+            new Set<string>(),
+            categoryId,
+            () => undefined,
+            modelId || undefined,
+        );
+        if (result.errors.length > 0) {
+            throw new Error(result.errors[0]?.reason || `Nao foi possivel importar o produto pai ${parentId}.`);
+        }
+
+        await fetch(buildVpsUrl('/admin/migrate/close-parent-linkage', { method: 'POST' }), {
+            method: 'POST',
+            headers: getVpsSyncHeaders(),
+        }).catch(() => null);
+
+        return findExisting();
+    };
+
     const findLocalProductForBlingLink = async (sku: string, blingProductId: number) => {
         const bySku = await vpsApiService.getProducts({
             sku,
@@ -936,6 +978,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         if (link.model) {
             setValue('model', link.model, { shouldDirty: true, shouldValidate: true });
         }
+        if (link.parentProduct?.id) {
+            setBlingParentProduct(link.parentProduct);
+            setValue('parent_id', link.parentProduct.id, { shouldDirty: true, shouldValidate: true });
+        }
         if (link.productName && !String(getValues('name') || '').trim()) {
             setValue('name', link.productName, { shouldDirty: true, shouldValidate: true });
         }
@@ -973,14 +1019,20 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         const colors = await colorService.listActive().catch(() => []);
         const specAutofill = getBlingSkuSpecAutofill({ product, colors });
         const blingModelSuggestion = localProduct?.model_id ? null : await resolveBlingModelSuggestion(product);
+        const resolvedModelId = localProduct?.model_id || blingModelSuggestion?.id || null;
+        const resolvedCategoryId = localProduct?.category_id || blingModelSuggestion?.category_id || getValues('category_id') || null;
+        const parentProduct = parentId
+            ? await ensureLocalBlingParent(parentId, resolvedCategoryId, resolvedModelId)
+            : null;
 
         return {
             id: product.id,
             parentId,
             ean: resolvedEans[0] || null,
             eans: resolvedEans,
-            model_id: localProduct?.model_id || blingModelSuggestion?.id || null,
+            model_id: resolvedModelId,
             model: localProductModelName || blingModelSuggestion?.name || null,
+            parentProduct,
             productName: resolveBlingProductDisplayName(product),
             priceAutofill,
             specAutofill
@@ -1599,6 +1651,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 onModelSelected={(model) => setSelectedModel(model ?? undefined)}
                 blingId={blingId}
                 blingParentId={blingParentId}
+                blingParentProduct={blingParentProduct}
                 isAutoLinkingBling={isAutoLinkingBling}
             />
 

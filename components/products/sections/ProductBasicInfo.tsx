@@ -60,6 +60,7 @@ interface ProductBasicInfoProps {
     onModelSelected?: (model: Model | null) => void;
     blingId?: number;
     blingParentId?: number;
+    blingParentProduct?: Product;
     isAutoLinkingBling?: boolean;
 }
 
@@ -128,6 +129,7 @@ export function ProductBasicInfo({
     onModelSelected,
     blingId,
     blingParentId,
+    blingParentProduct,
     isAutoLinkingBling
 }: ProductBasicInfoProps) {
     const [selectedModel, setSelectedModel] = useState<Model | null>(null);
@@ -153,6 +155,15 @@ export function ProductBasicInfo({
     }, [watch('parent_id'), allProducts]);
 
     useEffect(() => {
+        if (blingParentProduct?.id) {
+            setAllProducts(current => current.some(product => product.id === blingParentProduct.id)
+                ? current
+                : [...current, blingParentProduct]);
+            setSelectedParent(blingParentProduct);
+            setParentSearch('');
+            setValue('parent_id', blingParentProduct.id, { shouldValidate: true, shouldDirty: true });
+            return;
+        }
         if (!blingParentId || watch('parent_id') || allProducts.length === 0) return;
 
         const parent = allProducts.find(product =>
@@ -163,7 +174,7 @@ export function ProductBasicInfo({
         setSelectedParent(parent);
         setParentSearch('');
         setValue('parent_id', parent.id, { shouldValidate: true, shouldDirty: true });
-    }, [blingParentId, allProducts, setValue, watch('parent_id')]);
+    }, [blingParentId, blingParentProduct, allProducts, setValue, watch('parent_id')]);
 
     const selectedModelName = watch('model');
 
