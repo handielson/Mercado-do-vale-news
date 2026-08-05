@@ -26,6 +26,7 @@ assert.deepEqual(
 );
 
 assert.equal(resolveExistingProductImages({ images: [] }).length, 0);
+assert.equal(resolveExistingProductImages(null).length, 0);
 
 assert.deepEqual(
   resolveSiblingProductImages([

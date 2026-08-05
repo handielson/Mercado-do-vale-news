@@ -16,12 +16,13 @@ function parseImageValue(value) {
 }
 
 export function resolveExistingProductImages(product = {}, limit = 5) {
+  const source = product || {};
   const candidates = [
-    ...parseImageValue(product.images),
-    ...parseImageValue(product.product_images),
-    ...parseImageValue(product.custom_images),
-    ...parseImageValue(product.image_url),
-    ...parseImageValue(product.image),
+    ...parseImageValue(source.images),
+    ...parseImageValue(source.product_images),
+    ...parseImageValue(source.custom_images),
+    ...parseImageValue(source.image_url),
+    ...parseImageValue(source.image),
   ];
   const seen = new Set();
 
