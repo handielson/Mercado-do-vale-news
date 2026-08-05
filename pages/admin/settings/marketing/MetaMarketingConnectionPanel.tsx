@@ -96,20 +96,6 @@ export default function MetaMarketingConnectionPanel() {
         }
     };
 
-    const prepareAutoLaunch = async () => {
-        setWorking('launch');
-        try {
-            const result = await metaMarketingConnectionService.prepareReviewAutoLaunchApproval();
-            toast.success(result.reused
-                ? 'A autorização condicional já está disponível na Central de Aprovações.'
-                : 'Autorização condicional criada. Revise e aprove na Central de Aprovações.');
-        } catch (error: any) {
-            toast.error(error?.message || 'Não foi possível preparar a ativação automática.');
-        } finally {
-            setWorking(null);
-        }
-    };
-
     const prepareSecurityReview = async (itemKey: string) => {
         setWorking('security');
         try {
@@ -249,14 +235,9 @@ export default function MetaMarketingConnectionPanel() {
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
                                 <p className="text-sm font-black text-slate-900">Análise dos anúncios na Meta</p>
-                                <p className="mt-1 text-xs text-slate-600">O monitor atualiza o resultado automaticamente. A veiculação só começa após sua autorização condicional na Central e a aprovação dos dois anúncios pela Meta.</p>
+                                <p className="mt-1 text-xs text-slate-600">Cada campanha é controlada separadamente. Preparar ativação cria uma solicitação; somente depois da sua aprovação na Central o sistema ativa campanha, conjunto e anúncio.</p>
                             </div>
-                            <div className="flex flex-col gap-2 sm:items-end">
-                                <button onClick={prepareAutoLaunch} disabled={working !== null || reviews.every((item) => item.state === 'active')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-black text-white hover:bg-violet-600 disabled:opacity-50">
-                                    {working === 'launch' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}Preparar ativação automática
-                                </button>
-                                <a href="?tab=approvals" className="text-xs font-black text-violet-700 hover:underline">Abrir Central de Aprovações</a>
-                            </div>
+                            <a href="?tab=approvals" className="inline-flex items-center justify-center rounded-xl border border-violet-300 bg-white px-4 py-2.5 text-xs font-black text-violet-700 hover:bg-violet-50">Abrir Central de Aprovações</a>
                         </div>
                         <div className="grid gap-3 lg:grid-cols-2">
                             {reviews.map((review) => {

@@ -603,13 +603,19 @@ function confirmsConfiguredPaused(entity) {
   return String(entity?.status || '').toUpperCase() === 'PAUSED';
 }
 
-function metaReviewState(entity) {
+function metaReviewState(entity, options = {}) {
   const configured = String(entity?.status || '').toUpperCase();
   const effective = String(entity?.effective_status || '').toUpperCase();
   if (effective === 'ACTIVE') return 'active';
   if (effective === 'DISAPPROVED') return 'rejected';
   if (effective === 'WITH_ISSUES' || effective === 'ERROR') return 'attention';
   if (effective === 'PENDING_REVIEW' || effective === 'IN_PROCESS' || effective === 'PENDING_BILLING_INFO') return 'in_review';
+  // Once the Meta monitor has observed this exact ad entering review, a paused
+  // parent only masks delivery; it does not invalidate the completed security
+  // confirmation. Preserve that evidence so the Central can activate all three
+  // hierarchy levels together instead of trapping the campaign in attention.
+  if (configured === 'ACTIVE' && options.securityReviewConfirmed
+    && (effective === 'CAMPAIGN_PAUSED' || effective === 'ADSET_PAUSED')) return 'approved';
   if (configured === 'PAUSED' && (effective === 'PAUSED' || effective === 'CAMPAIGN_PAUSED' || effective === 'ADSET_PAUSED' || !effective)) return 'approved';
   return 'attention';
 }
@@ -703,15 +709,43 @@ async function latestManagedAdTargets(pool) {
     : [];
 }
 
+async function confirmedSecurityReviewsByItem(pool) {
+  const [rows] = await pool.query(
+    `SELECT target_id,execution_payload,execution_result,executed_at
+     FROM marketing_approval_requests
+     WHERE action_type=? AND status='succeeded' AND execution_result IS NOT NULL
+     ORDER BY executed_at DESC,created_at DESC`,
+    [META_SECURITY_REVIEW_ACTION],
+  );
+  const confirmations = new Map();
+  for (const row of rows) {
+    const itemKey = String(row.target_id || '');
+    if (!itemKey || confirmations.has(itemKey)) continue;
+    const payload = jsonParse(row.execution_payload, {}) || {};
+    const result = jsonParse(row.execution_result, {}) || {};
+    if (result.confirmedByMetaMonitor !== true
+      || !['in_review', 'approved', 'active'].includes(String(result.state || ''))
+      || !payload.ad_id) continue;
+    confirmations.set(itemKey, {
+      adId: String(payload.ad_id),
+      confirmedAt: row.executed_at || result.capturedAt || null,
+    });
+  }
+  return confirmations;
+}
+
 async function readManagedAdReviews(pool, row, token) {
   const targets = await latestManagedAdTargets(pool);
+  const securityConfirmations = await confirmedSecurityReviewsByItem(pool);
   return Promise.all(targets.map(async (target) => {
     const [campaign, adset, ad] = await Promise.all([
       graphRequest(target.campaignId, token, { fields: 'id,name,status,effective_status' }),
       graphRequest(target.adsetId, token, { fields: 'id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,start_time,end_time' }),
       graphRequest(target.adId, token, { fields: 'id,name,status,effective_status,adset_id' }),
     ]);
-    const state = metaReviewState(ad);
+    const securityConfirmation = securityConfirmations.get(String(target.itemKey));
+    const securityReviewConfirmed = securityConfirmation?.adId === String(target.adId);
+    const state = metaReviewState(ad, { securityReviewConfirmed });
     return {
       itemKey: target.itemKey,
       campaignId: String(target.campaignId),
@@ -721,6 +755,8 @@ async function readManagedAdReviews(pool, row, token) {
       adsetName: adset.name || null,
       adName: ad.name || null,
       state,
+      securityReviewConfirmed,
+      securityReviewConfirmedAt: securityReviewConfirmed ? securityConfirmation.confirmedAt : null,
       configuredStatus: ad.status || null,
       effectiveStatus: ad.effective_status || null,
       campaignStatus: campaign.status || null,
@@ -802,10 +838,13 @@ async function persistManagedAdReviews(pool, reviews, options = {}) {
 async function readManagedAdReviewsLightweight(pool, row, token) {
   const targets = await latestManagedAdTargets(pool);
   const cached = await cachedManagedAdReviews(pool);
+  const securityConfirmations = await confirmedSecurityReviewsByItem(pool);
   const cachedByAd = new Map(cached.map((item) => [String(item.adId), item]));
   return Promise.all(targets.map(async (target) => {
     const previous = cachedByAd.get(String(target.adId)) || {};
     const ad = await graphRequest(target.adId, token, { fields: 'id,name,status,effective_status,adset_id' });
+    const securityConfirmation = securityConfirmations.get(String(target.itemKey));
+    const securityReviewConfirmed = securityConfirmation?.adId === String(target.adId);
     return {
       ...previous,
       itemKey: target.itemKey,
@@ -813,7 +852,9 @@ async function readManagedAdReviewsLightweight(pool, row, token) {
       adsetId: String(target.adsetId),
       adId: String(target.adId),
       adName: ad.name || previous.adName || null,
-      state: metaReviewState(ad),
+      state: metaReviewState(ad, { securityReviewConfirmed }),
+      securityReviewConfirmed,
+      securityReviewConfirmedAt: securityReviewConfirmed ? securityConfirmation.confirmedAt : null,
       configuredStatus: ad.status || null,
       effectiveStatus: ad.effective_status || null,
       managerUrl: adsManagerUrl(row.selected_ad_account_id, target),

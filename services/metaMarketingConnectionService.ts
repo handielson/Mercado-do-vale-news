@@ -87,6 +87,8 @@ export interface MetaManagedAdReview {
     adsetName: string | null;
     adName: string | null;
     state: 'in_review' | 'approved' | 'rejected' | 'attention' | 'active';
+    securityReviewConfirmed?: boolean;
+    securityReviewConfirmedAt?: string | null;
     configuredStatus: string | null;
     effectiveStatus: string | null;
     campaignStatus: string | null;
