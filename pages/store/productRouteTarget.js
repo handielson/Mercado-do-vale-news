@@ -17,6 +17,19 @@ export function getPublicProductRouteTarget(product) {
   return slugifyProductName(product.name) || String(product.id);
 }
 
+export function getPublicProductDisambiguatedRouteTarget(product) {
+  const routeTarget = getPublicProductRouteTarget(product);
+  if (!product || !product.id) return routeTarget;
+
+  const specs = product.specs && typeof product.specs === 'object' ? product.specs : {};
+  const suffixParts = [specs.color || specs.cor, specs.ram, specs.storage]
+    .map(slugifyProductName)
+    .filter((part, index, parts) => part && parts.indexOf(part) === index);
+  const suffix = suffixParts.join('-') || slugifyProductName(product.sku);
+
+  return suffix ? `${routeTarget}-${suffix}` : routeTarget;
+}
+
 export function getPublicProductVariantRouteTarget(product, routePeers = []) {
   const routeTarget = getPublicProductRouteTarget(product);
   if (!product || !product.id) return routeTarget;
@@ -27,5 +40,5 @@ export function getPublicProductVariantRouteTarget(product, routePeers = []) {
     getPublicProductRouteTarget(peer).toLowerCase() === routeTarget.toLowerCase()
   ));
 
-  return hasSlugCollision ? String(product.id) : routeTarget;
+  return hasSlugCollision ? getPublicProductDisambiguatedRouteTarget(product) : routeTarget;
 }

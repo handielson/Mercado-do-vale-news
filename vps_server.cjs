@@ -12556,6 +12556,29 @@ async function loadSeoProductBySlug(slug) {
        LIMIT 1`,
       [slug]
     );
+    if (rows.length && rows[0].slug) {
+      const [routePeers] = await pool.query(
+        `${select}
+         WHERE slug = ?
+           ${filter}`,
+        [rows[0].slug]
+      );
+      rows[0].seo_route_target = getPublicProductVariantRouteTargetVps(rows[0], routePeers);
+    }
+  }
+
+  if (!rows.length) {
+    const [routeCandidates] = await pool.query(
+      `${select}
+       WHERE ? LIKE CONCAT(slug, '-%')
+         ${filter}
+       LIMIT 200`,
+      [slug]
+    );
+    const matchedRoute = routeCandidates.find((product) => (
+      getPublicProductVariantRouteTargetVps(product, routeCandidates).toLowerCase() === slug.toLowerCase()
+    ));
+    if (matchedRoute) rows = [{ ...matchedRoute, seo_route_target: slug }];
   }
 
   return rows[0] || null;
@@ -12673,7 +12696,7 @@ fastify.get('/api/seo-produto', async (request, reply) => {
     const title = product.meta_title || `${product.name} | Mercado do Vale`;
     const cleanDescription = stripSeoHtml(product.meta_description || product.description || '');
     const description = cleanDescription.slice(0, 155) || `Compre ${product.name} no Mercado do Vale com o melhor preco.`;
-    const canonicalSlug = product.slug || slug;
+    const canonicalSlug = product.seo_route_target || product.slug || slug;
     const url = `${baseUrl}/produto/${encodeURIComponent(canonicalSlug)}`;
     const image = publicImages[0] || `${baseUrl}/og-cover.jpg`;
     const stockQuantity = product.computed_stock_quantity ?? product.stock_quantity ?? 0;
@@ -17006,6 +17029,25 @@ function getPublicProductRouteTargetVps(product) {
   const slug = String(product?.slug || '').trim();
   if (slug) return slug;
   return slugifyPublicProductRouteTargetVps(product?.name) || String(product?.id || '').trim();
+}
+
+function getPublicProductDisambiguatedRouteTargetVps(product) {
+  const routeTarget = getPublicProductRouteTargetVps(product);
+  const specs = parsePublicJson(product?.specs, {});
+  const suffixParts = [specs?.color || specs?.cor, specs?.ram, specs?.storage]
+    .map(slugifyPublicProductRouteTargetVps)
+    .filter((part, index, parts) => part && parts.indexOf(part) === index);
+  const suffix = suffixParts.join('-') || slugifyPublicProductRouteTargetVps(product?.sku);
+  return suffix ? `${routeTarget}-${suffix}` : routeTarget;
+}
+
+function getPublicProductVariantRouteTargetVps(product, routePeers = []) {
+  const routeTarget = getPublicProductRouteTargetVps(product);
+  const hasSlugCollision = routePeers.some((peer) => (
+    String(peer?.id || '') !== String(product?.id || '') &&
+    getPublicProductRouteTargetVps(peer).toLowerCase() === routeTarget.toLowerCase()
+  ));
+  return hasSlugCollision ? getPublicProductDisambiguatedRouteTargetVps(product) : routeTarget;
 }
 
 function getAutoresponderProductUrl(product) {
@@ -24147,6 +24189,24 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
        FROM products WHERE id = ?`,
       [slugParam]
     );
+  }
+
+  if (!rows.length) {
+    const [routeCandidates] = await pool.query(
+      `SELECT *,
+        ${comboStockSql('products')} AS stock_quantity
+       FROM products
+       WHERE ? LIKE CONCAT(slug, '-%')
+         AND status = 'active'
+         AND (is_parent = 0 OR is_parent IS NULL)
+       ORDER BY updated_at DESC
+       LIMIT 200`,
+      [slugParam]
+    );
+    const matchedRoute = routeCandidates.find((product) => (
+      getPublicProductVariantRouteTargetVps(product, routeCandidates).toLowerCase() === slugParam.toLowerCase()
+    ));
+    if (matchedRoute) rows = [matchedRoute];
   }
 
   if (!rows.length) { reply.code(404); return { error: 'Not found' }; }

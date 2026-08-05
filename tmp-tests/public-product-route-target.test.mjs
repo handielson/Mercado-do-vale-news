@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  getPublicProductDisambiguatedRouteTarget,
   getPublicProductRouteTarget,
   getPublicProductVariantRouteTarget,
 } from '../pages/store/productRouteTarget.js';
@@ -8,12 +9,14 @@ const greenVariant = {
   id: '0e381a4b-fcdd-4989-9dee-c73ed0f12f77',
   sku: 'PC858256V',
   slug: 'poco-c85',
+  specs: { color: 'Verde', ram: '8GB', storage: '256GB' },
 };
 
 const purpleVariant = {
   id: '030b8a2e-85a9-47aa-a4a3-bd1d2e66b565',
   sku: 'PC858256R',
   slug: 'poco-c85',
+  specs: { color: 'Roxo', ram: '8GB', storage: '256GB' },
 };
 
 assert.equal(
@@ -24,8 +27,19 @@ assert.equal(
 
 assert.equal(
   getPublicProductVariantRouteTarget(greenVariant, [greenVariant, purpleVariant]),
-  greenVariant.id,
-  'variant navigation must use id when another product shares the same slug',
+  'poco-c85-verde-8gb-256gb',
+  'variant navigation must use a readable unique URL when another product shares the same slug',
+);
+
+assert.equal(
+  getPublicProductDisambiguatedRouteTarget({
+    id: 'efbf25ff-c705-4034-8d37-766be5a8c0fa',
+    sku: 'PX85G12512A',
+    slug: 'poco-x8-pro',
+    specs: { color: 'Amarelo', ram: '12GB', storage: '512GB' },
+  }),
+  'poco-x8-pro-amarelo-12gb-512gb',
+  'UUID routes must be replaceable with the readable selected-variation URL',
 );
 
 assert.equal(

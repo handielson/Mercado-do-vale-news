@@ -32,7 +32,7 @@ import { modelColorImagesService } from '@/services/model-color-images';
 import { colorService } from '@/services/colors';
 import { buildProductVideoPlaylist, isMp4VideoUrl } from '@/utils/product-video-playlist';
 import { getPublicProductName } from './publicProductName.js';
-import { getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
+import { getPublicProductDisambiguatedRouteTarget, getPublicProductRouteTarget, getPublicProductVariantRouteTarget } from './productRouteTarget.js';
 import { customFieldsService } from '@/services/custom-fields';
 /**
  * PublicProductPage
@@ -333,8 +333,10 @@ export const PublicProductPage: React.FC = () => {
                     return;
                 }
 
-                const canonicalRouteTarget = getPublicProductRouteTarget(data);
-                if (!isUuid && canonicalRouteTarget && canonicalRouteTarget !== slug) {
+                const canonicalRouteTarget = isUuid
+                    ? getPublicProductDisambiguatedRouteTarget(data)
+                    : getPublicProductRouteTarget(data);
+                if (canonicalRouteTarget && canonicalRouteTarget !== slug) {
                     window.history.replaceState(null, '', `/produto/${encodeURIComponent(canonicalRouteTarget)}`);
                 }
 

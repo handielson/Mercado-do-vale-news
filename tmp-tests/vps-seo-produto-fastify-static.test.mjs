@@ -16,6 +16,8 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   const isUuidLike = new Function('value', uuidMatcherBody);
   assert.equal(isUuidLike('efbf25ff-c705-4034-8d37-766be5a8c0fa'), true, `${file} must recognize real product UUIDs`);
   assert.equal(isUuidLike('poco-x8-pro'), false, `${file} must not treat slugs as UUIDs`);
+  assert.match(source, /getPublicProductVariantRouteTargetVps\(product, routeCandidates\)/, `${file} must resolve readable variation aliases`);
+  assert.match(source, /product\.seo_route_target \|\| product\.slug \|\| slug/, `${file} must keep the readable variation alias canonical`);
   assert.match(source, /meta property="og:type" content="product"/, `${file} must inject product Open Graph tags`);
   assert.match(source, /<link rel="canonical" href="\$\{url\}" \/>/, `${file} must inject a canonical product URL`);
   assert.match(source, /application\/ld\+json/, `${file} must inject Schema.org JSON-LD`);
