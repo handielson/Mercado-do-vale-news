@@ -46,7 +46,7 @@ import { buildSerializedBatchPlan, findSerializedBatchDuplicates, findSerialized
 import { getProductSaveProgressPercent } from './productSaveProgress.js';
 import { getBlingSkuPriceAutofill } from './blingSkuPriceAutofill.js';
 import { getBlingSkuSpecAutofill } from './blingSkuSpecAutofill.js';
-import { resolveExistingProductImages } from './blingSkuExistingImages.js';
+import { resolveExistingProductImages, resolveSiblingProductImages } from './blingSkuExistingImages.js';
 import { UnitStatus } from '../../utils/field-standards';
 
 interface ProductFormProps {
@@ -975,6 +975,50 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         return byBling?.[0] || null;
     };
 
+    const resolveLocalCatalogImagesForBlingLink = async ({
+        localProduct,
+        modelId,
+        colorName,
+        colors,
+    }: {
+        localProduct: any;
+        modelId?: string | null;
+        colorName?: string | null;
+        colors: any[];
+    }) => {
+        const directImages = resolveExistingProductImages(localProduct);
+        if (directImages.length > 0) return directImages;
+
+        if (modelId && colorName) {
+            const normalizedColor = colorName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+            const color = colors.find((candidate) => (
+                String(candidate?.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === normalizedColor
+            ));
+            if (color?.id) {
+                const modelColorImages = await modelColorImagesService.get(modelId, color.id).catch(() => null);
+                const exactColorImages = resolveExistingProductImages(modelColorImages);
+                if (exactColorImages.length > 0) return exactColorImages;
+            }
+        }
+
+        if (!modelId) return [];
+        const siblingProducts = await vpsApiService.getProducts({
+            model_id: modelId,
+            status: 'all',
+            limit: 200,
+            noCache: true,
+        }).catch(() => null);
+
+        return resolveSiblingProductImages(siblingProducts, {
+            ...localProduct,
+            model_id: modelId,
+            specs: {
+                ...(localProduct?.specs || {}),
+                color: colorName || localProduct?.specs?.color,
+            },
+        });
+    };
+
     const findLocalProductByBlingIdForBlingLink = async (blingProductId: number) => {
         const byBling = await vpsApiService.getProducts({
             bling_id: String(blingProductId),
@@ -1073,6 +1117,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         const specAutofill = getBlingSkuSpecAutofill({ product, colors });
         const blingModelSuggestion = localProduct?.model_id ? null : await resolveBlingModelSuggestion(product);
         const resolvedModelId = localProduct?.model_id || blingModelSuggestion?.id || null;
+        const resolvedImages = await resolveLocalCatalogImagesForBlingLink({
+            localProduct,
+            modelId: resolvedModelId,
+            colorName: specAutofill.color || localProduct?.specs?.color,
+            colors,
+        });
         const resolvedCategoryId = localProduct?.category_id || blingModelSuggestion?.category_id || getValues('category_id') || null;
         const parentProduct = parentId
             ? await ensureLocalBlingParent(parentId, resolvedCategoryId, resolvedModelId)
@@ -1085,7 +1135,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             eans: resolvedEans,
             model_id: resolvedModelId,
             model: localProductModelName || blingModelSuggestion?.name || null,
-            images: resolveExistingProductImages(localProduct),
+            images: resolvedImages,
             parentProduct,
             productName: resolveBlingProductDisplayName(product),
             priceAutofill,

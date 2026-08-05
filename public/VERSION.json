@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.201-product-entry-existing-images",
+  "version": "v1.2.202-product-entry-image-fallback",
   "date": "2026-08-05",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260805-172703-v12201-product-entry-existing-images",
+  "release_vps": "/var/www/mdv-site/releases/20260805-172955-v12202-product-entry-image-fallback",
   "branch": "main",
-  "summary": "Exibe as fotos já cadastradas do produto ao dar entrada por um SKU existente."
+  "summary": "Busca a foto no produto, modelo/cor ou item equivalente ao dar entrada por SKU."
 }

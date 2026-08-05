@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { resolveExistingProductImages } from '../components/products/blingSkuExistingImages.js';
+import { resolveExistingProductImages, resolveSiblingProductImages } from '../components/products/blingSkuExistingImages.js';
 
 assert.deepEqual(
   resolveExistingProductImages({
@@ -27,8 +27,21 @@ assert.deepEqual(
 
 assert.equal(resolveExistingProductImages({ images: [] }).length, 0);
 
+assert.deepEqual(
+  resolveSiblingProductImages([
+    { id: 'same-product', specs: { color: 'Amarelo' }, images: [] },
+    { id: 'green', specs: { color: 'Verde' }, images: ['https://cdn.example.com/verde.jpg'] },
+    { id: 'yellow', specs: { color: 'amarelo' }, images: ['https://cdn.example.com/amarelo.jpg'] },
+  ], {
+    id: 'same-product',
+    specs: { color: 'Amárelo' },
+  }),
+  ['https://cdn.example.com/amarelo.jpg'],
+);
+
 const productForm = await readFile(new URL('../components/products/ProductForm.tsx', import.meta.url), 'utf8');
-assert.match(productForm, /images: resolveExistingProductImages\(localProduct\)/);
+assert.match(productForm, /resolveLocalCatalogImagesForBlingLink/);
+assert.match(productForm, /resolveSiblingProductImages\(siblingProducts/);
 assert.match(productForm, /setValue\('images', linkImages/);
 assert.match(productForm, /setImagePreviews\(linkImages\)/);
 
