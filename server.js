@@ -19671,10 +19671,33 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
   return { ok: true };
 });
 
-// Delete product (and children)
+// Delete product, its variations and their serialized inventory.
+// `units.product_id` is not backed by an ON DELETE CASCADE constraint, so the
+// units must be removed explicitly or their IMEI/serial remains blocked.
 fastify.delete('/products/:id', { preHandler: requireSyncKey }, async (req, reply) => {
-  await pool.query(`DELETE FROM products WHERE id=? OR parent_id=?`, [req.params.id, req.params.id]);
-  return { ok: true };
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [products] = await connection.query(
+      'SELECT id FROM products WHERE id=? OR parent_id=?',
+      [req.params.id, req.params.id]
+    );
+    const productIds = products.map((product) => product.id);
+
+    if (productIds.length > 0) {
+      const placeholders = productIds.map(() => '?').join(', ');
+      await connection.query(`DELETE FROM units WHERE product_id IN (${placeholders})`, productIds);
+      await connection.query(`DELETE FROM products WHERE id IN (${placeholders})`, productIds);
+    }
+
+    await connection.commit();
+    return { ok: true, deleted_products: productIds.length };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 });
 
 // Update images by SKU (used by image bank sync)
