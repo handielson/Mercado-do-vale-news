@@ -6,6 +6,7 @@ import { WhatsAppChatGptPanel } from '../../../components/whatsapp/WhatsAppChatG
 import { WhatsAppInternalBotTester } from '../../../components/whatsapp/WhatsAppInternalBotTester';
 import { WhatsAppAutomationTemplatesPanel } from '../../../components/whatsapp/WhatsAppAutomationTemplatesPanel';
 import { WhatsAppNumberSwitchPanel } from '../../../components/whatsapp/WhatsAppNumberSwitchPanel';
+import { WhatsAppBroadcastPanel } from '../../../components/whatsapp/WhatsAppBroadcastPanel';
 
 export default function WhatsAppPage() {
   return (
@@ -24,6 +25,7 @@ export default function WhatsAppPage() {
         <WhatsAppNumberSwitchPanel />
         <WhatsAppBotSettingsPanel />
         <WhatsAppAutomationTemplatesPanel />
+        <WhatsAppBroadcastPanel />
         <WhatsAppChatGptPanel />
         <WhatsAppInternalBotTester />
         <WhatsAppAttendantsPanel />

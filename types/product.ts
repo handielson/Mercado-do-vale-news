@@ -161,6 +161,8 @@ export interface Product {
 
     // Media Add-ons
     video_url?: string;        // URL do vídeo do produto (YouTube, Synology, etc.)
+    marketing_background_url?: string; // Fundo exclusivo para criativos de marketing
+    marketing_video_url?: string; // Vídeo exclusivo para divulgação
 
     // Product Kits (Volume Pricing)
     kits?: ProductKit[];       // Descontos por quantidade no mesmo produto
@@ -229,6 +231,8 @@ export interface ProductInput {
     shopee_item_id?: number;
     // Media Add-ons
     video_url?: string;
+    marketing_background_url?: string;
+    marketing_video_url?: string;
 
     // Product Combos (Bundles)
     is_combo?: boolean;

@@ -5156,6 +5156,8 @@ async function probeTikTokDraftVideoUrlVps(videoUrl) {
 
 async function resolveTikTokDraftVideoUrlVps(product) {
   const candidates = [];
+  const marketingVideo = String(product?.marketing_video_url || '').trim();
+  if (/^https?:\/\//i.test(marketingVideo)) candidates.push(marketingVideo);
   const configured = String(product?.video_url || '').trim();
   if (/^https?:\/\//i.test(configured)) candidates.push(configured);
   const parentId = String(product?.is_parent ? product?.id : product?.parent_id || '').trim();
@@ -5352,7 +5354,7 @@ async function handleTikTokShopCreateDraftVps(request, reply) {
   try {
     const [[product]] = await pool.query(
       `SELECT id, company_id, name, sku, description, images, image_url,
-              video_url, parent_id, is_parent, specs, price_retail, stock_quantity, weight_kg, dimensions, model_id
+              video_url, marketing_video_url, parent_id, is_parent, specs, price_retail, stock_quantity, weight_kg, dimensions, model_id
        FROM products
        WHERE id = ?
        LIMIT 1`,
@@ -18026,7 +18028,7 @@ async function handleAutoresponderPhoneListOptIn({ sender, message, settings, sh
     ? 'phone_list_opt_in'
     : await classifyAutoresponderNeedsPromptReplyWithAi({ message, settings });
   if (classification === 'phone_list_opt_in') {
-    // Continue below and send the phone catalog.
+    await subscribeWhatsAppBroadcastContactToTopic(sender, 'celulares');
   } else {
     return null;
   }
@@ -20106,6 +20108,14 @@ async function buildAutoresponderTestReply({ message, sender, contactFirstName }
   const aiIntentPlan = await buildAutoresponderAiIntentPlan({ message, contactFirstName, settings, sender: normalizedSender });
   shouldPrefixGreeting = shouldPrefixGreeting || Boolean(aiIntentPlan?.greeting);
 
+  const testBroadcastPreferenceReply = await handleWhatsAppBroadcastPreferenceReply({ sender: normalizedSender, message });
+  if (testBroadcastPreferenceReply) return {
+    intent: 'broadcast_preferences',
+    matched_count: 0,
+    replies: testBroadcastPreferenceReply.replies,
+    sender: normalizedSender,
+  };
+
   if (isAutoresponderGenericPhoneCatalogRequest(message)) {
     const catalogData = await buildAutoresponderCatalogCategoryReplyData(message, settings, shouldPrefixGreeting);
     if (catalogData) {
@@ -20674,6 +20684,9 @@ fastify.route({
       if (isGroup) {
         return { replies: [] };
       }
+
+      const broadcastPreferenceReply = await handleWhatsAppBroadcastPreferenceReply({ sender: senderKey, message });
+      if (broadcastPreferenceReply) return broadcastPreferenceReply;
 
       const isAudioPayload = isAutoresponderAudioPayload(payload, message);
       if (!message && !isAudioPayload) {
@@ -23847,7 +23860,7 @@ fastify.get('/pdv/product-search', { config: { rateLimit: { max: 900, timeWindow
        ${comboStockSql('products')} AS stock_quantity,
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
-       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
+       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_video_url,
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -23947,7 +23960,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
        ${imgCol},
-       status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
+       status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_video_url,
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -23959,7 +23972,7 @@ fastify.get('/products', { config: { rateLimit: { max: 900, timeWindow: '1 minut
        ${comboStockSql('products')} AS stock_quantity,
        track_inventory, is_gift,
        warranty_type, warranty_template_id,
-       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url,
+       images, status, parent_id, is_parent, bling_id, bling_parent_id, video_url, marketing_background_url, marketing_video_url,
        slug, origin, specs, custom_fields, kits,
        offer_type, offer_parent_product_id, offer_visibility,
        shopee_strategy, shopee_offer_status, shopee_offer_error,
@@ -24114,7 +24127,15 @@ fastify.get('/products/by-slug/:slug', async (req, reply) => {
   [rows] = await pool.query(
     `SELECT *,
       ${comboStockSql('products')} AS stock_quantity
-     FROM products WHERE slug = ?`,
+     FROM products WHERE slug = ?
+     ORDER BY
+       (status = 'active') DESC,
+       (sku NOT LIKE 'ARCH-%') DESC,
+       (is_parent = 0 OR is_parent IS NULL) DESC,
+       (track_inventory = 0 OR stock_quantity > 0) DESC,
+       updated_at DESC,
+       id ASC
+     LIMIT 1`,
     [slugParam]
   );
 
@@ -25905,6 +25926,14 @@ fastify.post('/products/batch', { preHandler: requireSyncKey }, async (req, repl
           optionalBool(p.is_parent),
         ]
       );
+      if ('marketing_background_url' in p || 'marketing_video_url' in p) {
+        await pool.query(
+          `UPDATE products
+              SET marketing_background_url = ?, marketing_video_url = ?
+            WHERE id = ?`,
+          [p.marketing_background_url || null, p.marketing_video_url || null, p.id]
+        );
+      }
       results.upserted++;
       results.resolved.push({ requested_id: requestedId, id: p.id, bling_id: p.bling_id || null, matched_existing: matchedExisting });
     } catch (err) {
@@ -26032,7 +26061,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       stock_quantity=?, status=?, category_id=?, brand=?, model_id=?,
       images=?, specs=?, custom_fields=?, dimensions=?, weight_kg=?,
       ncm=?, cest=?, origin=?, bling_id=?, bling_parent_id=?, parent_id=?, is_parent=?,
-      video_url=?, track_inventory=?, is_gift=?,
+      video_url=?, marketing_background_url=?, marketing_video_url=?, track_inventory=?, is_gift=?,
       warranty_type=?, warranty_template_id=?, kits=?,
       hide_from_catalog=?, meta_title=?, meta_description=?, keywords=?,
       production_days=?,
@@ -26051,7 +26080,7 @@ fastify.put('/products/:id', { preHandler: requireSyncKey }, async (req, reply) 
       jsonStr(p.dimensions), p.weight_kg || null,
       p.ncm || null, p.cest || null, p.origin || null,
       p.bling_id || null, p.bling_parent_id || null, p.parent_id || null, optionalBool(p.is_parent),
-      p.video_url || null,
+      p.video_url || null, p.marketing_background_url || null, p.marketing_video_url || null,
       p.track_inventory ? 1 : 0, p.is_gift ? 1 : 0,
       p.warranty_type || 'brand', p.warranty_template_id || null, jsonStr(p.kits),
       p.hide_from_catalog ? 1 : 0,
@@ -27401,6 +27430,124 @@ fastify.post('/whatsapp/automation/test-send', { preHandler: requireSyncKey }, a
   return sendWhatsAppAutomationTemplateTestVps(req.body || {});
 });
 
+fastify.get('/whatsapp/broadcast/topics', { preHandler: requireSyncKeyOrAdmin }, async () => {
+  const [rows] = await pool.query(
+    `SELECT t.*, c.name AS category_name,
+            COUNT(DISTINCT CASE WHEN s.active = 1 THEN s.contact_id END) AS subscriber_count
+       FROM whatsapp_broadcast_topics t
+       LEFT JOIN categories c ON c.id = t.category_id
+       LEFT JOIN whatsapp_broadcast_subscriptions s ON s.topic_id = t.id
+      GROUP BY t.id
+      ORDER BY t.sort_order ASC, t.name ASC`
+  );
+  return rows;
+});
+
+fastify.post('/whatsapp/broadcast/topics', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const name = String(req.body?.name || '').trim();
+  if (!name) return reply.code(400).send({ error: 'name_required' });
+  const slug = normalizeAutoresponderText(req.body?.slug || name).replace(/\s+/g, '-').slice(0, 100);
+  const id = crypto.randomUUID();
+  await pool.query(
+    `INSERT INTO whatsapp_broadcast_topics (id, name, slug, category_id, active, sort_order)
+     VALUES (?, ?, ?, ?, 1, ?)`,
+    [id, name, slug, req.body?.category_id || null, Number(req.body?.sort_order || 100)]
+  );
+  const [rows] = await pool.query('SELECT * FROM whatsapp_broadcast_topics WHERE id = ? LIMIT 1', [id]);
+  return reply.code(201).send(rows[0]);
+});
+
+fastify.patch('/whatsapp/broadcast/topics/:id', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const fields = [];
+  const values = [];
+  for (const field of ['name', 'category_id', 'sort_order']) {
+    if (req.body?.[field] !== undefined) {
+      fields.push(`${field} = ?`);
+      values.push(req.body[field] || null);
+    }
+  }
+  if (req.body?.active !== undefined) {
+    fields.push('active = ?');
+    values.push(req.body.active ? 1 : 0);
+  }
+  if (!fields.length) return reply.code(400).send({ error: 'no_fields' });
+  values.push(req.params.id);
+  await pool.query(`UPDATE whatsapp_broadcast_topics SET ${fields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, values);
+  return { ok: true };
+});
+
+fastify.get('/whatsapp/broadcast/subscribers', { preHandler: requireSyncKeyOrAdmin }, async () => {
+  const [rows] = await pool.query(
+    `SELECT c.id, c.phone, c.name, c.customer_id, c.consent_status, c.invited_at, c.consented_at, c.opted_out_at,
+            GROUP_CONCAT(CASE WHEN s.active = 1 THEN t.name END ORDER BY t.sort_order SEPARATOR ', ') AS topics
+       FROM whatsapp_broadcast_contacts c
+       LEFT JOIN whatsapp_broadcast_subscriptions s ON s.contact_id = c.id
+       LEFT JOIN whatsapp_broadcast_topics t ON t.id = s.topic_id
+      GROUP BY c.id
+      ORDER BY COALESCE(c.consented_at, c.invited_at, c.created_at) DESC
+      LIMIT 1000`
+  );
+  return rows;
+});
+
+fastify.post('/whatsapp/broadcast/invite', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const phone = normalizeDeliveryWhatsAppNumber(req.body?.phone);
+  if (!phone) return reply.code(400).send({ error: 'phone_required' });
+  const topics = await getActiveWhatsAppBroadcastTopics();
+  if (!topics.length) return reply.code(400).send({ error: 'no_active_topics' });
+  const contact = await upsertWhatsAppBroadcastContact(phone, req.body?.name);
+  await pool.query("UPDATE whatsapp_broadcast_contacts SET consent_status = 'invited', invited_at = CURRENT_TIMESTAMP, opted_out_at = NULL WHERE id = ?", [contact.id]);
+  const firstName = String(req.body?.name || '').trim().split(/\s+/)[0];
+  const greeting = firstName ? `Ola, ${firstName}!` : 'Ola!';
+  const message = `${greeting} O Mercado do Vale criou listas gratuitas para avisar somente sobre os produtos que voce escolher.\n\n${buildWhatsAppBroadcastTopicMenu(topics)}\n\nResponda com os numeros desejados, por exemplo 1,2. Voce pode sair quando quiser respondendo SAIR.`;
+  const result = await sendDeliveryWhatsappText(phone, message);
+  if (!result?.ok) return reply.code(502).send({ error: 'whatsapp_send_failed', status: result?.status || null });
+  return { ok: true, contact_id: contact.id, phone };
+});
+
+fastify.post('/whatsapp/broadcast/topics/:id/send', { preHandler: requireSyncKeyOrAdmin }, async (req, reply) => {
+  const message = String(req.body?.message || '').trim();
+  if (!message) return reply.code(400).send({ error: 'message_required' });
+  const [topics] = await pool.query('SELECT * FROM whatsapp_broadcast_topics WHERE id = ? AND active = 1 LIMIT 1', [req.params.id]);
+  const topic = topics[0];
+  if (!topic) return reply.code(404).send({ error: 'topic_not_found' });
+  const [contacts] = await pool.query(
+    `SELECT c.id, c.phone
+       FROM whatsapp_broadcast_subscriptions s
+       JOIN whatsapp_broadcast_contacts c ON c.id = s.contact_id
+      WHERE s.topic_id = ? AND s.active = 1 AND c.consent_status = 'subscribed'
+      ORDER BY c.id ASC
+      LIMIT 1000`,
+    [topic.id]
+  );
+  const summary = { ok: true, topic: topic.name, total: contacts.length, sent: 0, failed: 0 };
+  const outboundMessage = `${message}\n\nVoce recebe esta mensagem porque escolheu a lista ${topic.name}. Para sair, responda SAIR.`;
+  for (const contact of contacts) {
+    try {
+      const result = await sendDeliveryWhatsappText(contact.phone, outboundMessage);
+      const status = result?.ok ? 'sent' : 'failed';
+      summary[status === 'sent' ? 'sent' : 'failed'] += 1;
+      await pool.query(
+        'INSERT INTO whatsapp_broadcast_logs (topic_id, contact_id, status, message, error_message) VALUES (?, ?, ?, ?, ?)',
+        [topic.id, contact.id, status, outboundMessage, result?.ok ? null : `HTTP ${result?.status || 'unknown'}`]
+      );
+    } catch (error) {
+      summary.failed += 1;
+      await pool.query(
+        'INSERT INTO whatsapp_broadcast_logs (topic_id, contact_id, status, message, error_message) VALUES (?, ?, ?, ?, ?)',
+        [topic.id, contact.id, 'failed', outboundMessage, String(error?.message || error).slice(0, 1000)]
+      );
+    }
+  }
+  return summary;
+});
+
+fastify.delete('/whatsapp/broadcast/subscribers/:id', { preHandler: requireSyncKeyOrAdmin }, async (req) => {
+  await pool.query('UPDATE whatsapp_broadcast_subscriptions SET active = 0, unsubscribed_at = CURRENT_TIMESTAMP WHERE contact_id = ?', [req.params.id]);
+  await pool.query("UPDATE whatsapp_broadcast_contacts SET consent_status = 'opted_out', opted_out_at = CURRENT_TIMESTAMP WHERE id = ?", [req.params.id]);
+  return { ok: true };
+});
+
 const MAX_WHATSAPP_STATUS_PRODUCTS_PER_RUN = 300;
 
 function clampWhatsAppStatusDailyLimit(value) {
@@ -27651,7 +27798,7 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
     if (!productIds.length) return [];
     const placeholders = productIds.map(() => '?').join(',');
     const [rows] = await pool.query(
-      `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
+      `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, marketing_background_url, marketing_video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
        FROM products WHERE id IN (${placeholders})`,
       productIds
     );
@@ -27662,7 +27809,7 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
     if (!modelIds.length) return selectedProducts;
     const modelPlaceholders = modelIds.map(() => '?').join(',');
     const [siblings] = await pool.query(
-      `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
+      `SELECT id, model_id, brand, name, sku, slug, images, image_url, video_url, marketing_background_url, marketing_video_url, price_retail, stock_quantity, track_inventory, specs, custom_fields
        FROM products
        WHERE model_id IN (${modelPlaceholders}) AND status = 'active'
        ORDER BY name ASC
@@ -27694,7 +27841,7 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
   if (!categoryIdList.length) return [];
   const categoryPlaceholders = categoryIdList.map(() => '?').join(',');
   const [rows] = await pool.query(
-    `SELECT p.id, p.model_id, p.brand, p.name, p.sku, p.slug, p.images, p.image_url, p.video_url,
+    `SELECT p.id, p.model_id, p.brand, p.name, p.sku, p.slug, p.images, p.image_url, p.video_url, p.marketing_background_url, p.marketing_video_url,
             p.price_retail, p.stock_quantity, p.track_inventory, p.specs, p.custom_fields
      FROM products p
      WHERE (p.category_id IN (${categoryPlaceholders}) OR EXISTS (
@@ -27779,6 +27926,8 @@ async function appendWhatsAppStatusTrace({ runId, logId = null, campaignId, prod
 
 function buildWhatsAppStatusVideoCandidates(product) {
   const candidates = [];
+  const marketingVideo = String(product?.marketing_video_url || '').trim();
+  if (/^https?:\/\//i.test(marketingVideo)) candidates.push(marketingVideo);
   const configured = String(product?.video_url || '').trim();
   if (/^https?:\/\//i.test(configured)) candidates.push(configured);
   const sku = String(product?.sku || '').trim().replace(/\s+/g, '');
@@ -27795,6 +27944,117 @@ function getWhatsAppStatusEffectiveDailyLimit(campaign) {
   return campaign?.repeat_mode === 'single_product' && campaign?.repeat_product_id
     ? 1
     : clampWhatsAppStatusDailyLimit(campaign?.daily_limit);
+}
+
+function buildWhatsAppBroadcastTopicMenu(topics) {
+  return (topics || []).map((topic, index) => `${index + 1} - ${topic.name}`).join('\n');
+}
+
+async function getActiveWhatsAppBroadcastTopics() {
+  const [rows] = await pool.query(
+    `SELECT id, name, slug, category_id, active, sort_order
+       FROM whatsapp_broadcast_topics
+      WHERE active = 1
+      ORDER BY sort_order ASC, name ASC`
+  );
+  return rows;
+}
+
+async function upsertWhatsAppBroadcastContact(sender, name = '') {
+  const phone = normalizeDeliveryWhatsAppNumber(sender);
+  if (!phone) return null;
+  await pool.query(
+    `INSERT INTO whatsapp_broadcast_contacts (id, phone, name, consent_status, last_interaction_at)
+     VALUES (UUID(), ?, NULLIF(?, ''), 'invited', CURRENT_TIMESTAMP)
+     ON DUPLICATE KEY UPDATE
+       name = COALESCE(NULLIF(VALUES(name), ''), name),
+       last_interaction_at = CURRENT_TIMESTAMP`,
+    [phone, String(name || '').trim()]
+  );
+  const [rows] = await pool.query('SELECT * FROM whatsapp_broadcast_contacts WHERE phone = ? LIMIT 1', [phone]);
+  return rows[0] || null;
+}
+
+async function subscribeWhatsAppBroadcastContactToTopic(sender, topicSlug) {
+  const contact = await upsertWhatsAppBroadcastContact(sender);
+  if (!contact) return false;
+  const [topics] = await pool.query('SELECT id FROM whatsapp_broadcast_topics WHERE slug = ? AND active = 1 LIMIT 1', [topicSlug]);
+  if (!topics[0]) return false;
+  await pool.query(
+    `INSERT INTO whatsapp_broadcast_subscriptions (id, contact_id, topic_id, active, subscribed_at, unsubscribed_at)
+     VALUES (UUID(), ?, ?, 1, CURRENT_TIMESTAMP, NULL)
+     ON DUPLICATE KEY UPDATE active = 1, subscribed_at = CURRENT_TIMESTAMP, unsubscribed_at = NULL`,
+    [contact.id, topics[0].id]
+  );
+  await pool.query("UPDATE whatsapp_broadcast_contacts SET consent_status = 'subscribed', consented_at = CURRENT_TIMESTAMP, opted_out_at = NULL WHERE id = ?", [contact.id]);
+  return true;
+}
+
+function isWhatsAppBroadcastOptOutMessage(message) {
+  const normalized = normalizeAutoresponderText(message);
+  return /^(sair|parar|cancelar|descadastrar|remover)(\s|$)/.test(normalized);
+}
+
+async function handleWhatsAppBroadcastPreferenceReply({ sender, message }) {
+  const phone = normalizeDeliveryWhatsAppNumber(sender);
+  if (!phone || !String(message || '').trim()) return null;
+  const [contactRows] = await pool.query(
+    'SELECT * FROM whatsapp_broadcast_contacts WHERE phone = ? LIMIT 1',
+    [phone]
+  );
+  const contact = contactRows[0] || null;
+  const normalizedMessage = normalizeAutoresponderText(message);
+
+  if (isWhatsAppBroadcastOptOutMessage(message)) {
+    if (!contact) return null;
+    await pool.query('UPDATE whatsapp_broadcast_subscriptions SET active = 0, unsubscribed_at = CURRENT_TIMESTAMP WHERE contact_id = ? AND active = 1', [contact.id]);
+    await pool.query("UPDATE whatsapp_broadcast_contacts SET consent_status = 'opted_out', opted_out_at = CURRENT_TIMESTAMP, last_interaction_at = CURRENT_TIMESTAMP WHERE id = ?", [contact.id]);
+    return { replies: [{ message: 'Tudo certo. Voce saiu das listas de atualizacoes do Mercado do Vale. Se quiser voltar, responda LISTAS.' }] };
+  }
+
+  const askedForLists = /^(listas?|preferencias?|atualizacoes?)$/.test(normalizedMessage);
+  const invitedRecently = contact?.invited_at && (Date.now() - new Date(contact.invited_at).getTime()) <= 14 * 24 * 60 * 60 * 1000;
+  if (!contact && !askedForLists) return null;
+  if (!askedForLists && !invitedRecently && contact?.consent_status !== 'selecting') return null;
+
+  const topics = await getActiveWhatsAppBroadcastTopics();
+  if (!topics.length) return null;
+  const menu = buildWhatsAppBroadcastTopicMenu(topics);
+  const isAffirmative = isAutoresponderYes(message) || /^(quero|aceito|participar)$/.test(normalizedMessage);
+
+  if (askedForLists || isAffirmative) {
+    const currentContact = contact || await upsertWhatsAppBroadcastContact(sender);
+    await pool.query("UPDATE whatsapp_broadcast_contacts SET consent_status = 'selecting', last_interaction_at = CURRENT_TIMESTAMP WHERE id = ?", [currentContact.id]);
+    return { replies: [{ message: `Escolha as atualizacoes que deseja receber:\n\n${menu}\n\nResponda com os numeros separados por virgula. Ex.: 1,2. Para cancelar quando quiser, responda SAIR.` }] };
+  }
+
+  const selectedIds = new Set();
+  const selectedNumbers = String(message || '').match(/\d+/g) || [];
+  for (const value of selectedNumbers) {
+    const topic = topics[Number(value) - 1];
+    if (topic) selectedIds.add(topic.id);
+  }
+  for (const topic of topics) {
+    if (normalizedMessage.includes(normalizeAutoresponderText(topic.name)) || normalizedMessage.includes(normalizeAutoresponderText(topic.slug))) {
+      selectedIds.add(topic.id);
+    }
+  }
+  if (!selectedIds.size) {
+    return { replies: [{ message: `Nao consegui identificar a opcao. Responda com os numeros desejados:\n\n${menu}\n\nPara cancelar, responda SAIR.` }] };
+  }
+
+  const currentContact = contact || await upsertWhatsAppBroadcastContact(sender);
+  for (const topicId of selectedIds) {
+    await pool.query(
+      `INSERT INTO whatsapp_broadcast_subscriptions (id, contact_id, topic_id, active, subscribed_at, unsubscribed_at)
+       VALUES (UUID(), ?, ?, 1, CURRENT_TIMESTAMP, NULL)
+       ON DUPLICATE KEY UPDATE active = 1, subscribed_at = CURRENT_TIMESTAMP, unsubscribed_at = NULL`,
+      [currentContact.id, topicId]
+    );
+  }
+  await pool.query("UPDATE whatsapp_broadcast_contacts SET consent_status = 'subscribed', consented_at = CURRENT_TIMESTAMP, opted_out_at = NULL, last_interaction_at = CURRENT_TIMESTAMP WHERE id = ?", [currentContact.id]);
+  const selectedNames = topics.filter((topic) => selectedIds.has(topic.id)).map((topic) => topic.name);
+  return { replies: [{ message: `Cadastro concluido! Voce recebera atualizacoes de: ${selectedNames.join(', ')}. Para alterar, responda LISTAS. Para sair, responda SAIR.` }] };
 }
 
 function isWhatsAppStatusFullCategoryCampaign(campaign) {
@@ -35551,6 +35811,8 @@ async function runMigrations() {
   await addColumnIfMissing('products', 'meta_description', "TEXT NULL");
   await addColumnIfMissing('products', 'keywords', "TEXT NULL");
   await addColumnIfMissing('products', 'view_count', "INT DEFAULT 0");
+  await addColumnIfMissing('products', 'marketing_background_url', 'TEXT NULL');
+  await addColumnIfMissing('products', 'marketing_video_url', 'TEXT NULL');
   await addColumnIfMissing('sales', 'subtotal', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('sales', 'discount_total', 'INT NOT NULL DEFAULT 0');
   await addColumnIfMissing('sales', 'cost_total', 'INT NOT NULL DEFAULT 0');
@@ -36488,6 +36750,79 @@ async function runMigrations() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_broadcast_topics (
+      id CHAR(36) PRIMARY KEY,
+      name VARCHAR(120) NOT NULL,
+      slug VARCHAR(120) NOT NULL UNIQUE,
+      category_id CHAR(36) NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      sort_order INT NOT NULL DEFAULT 100,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_whatsapp_broadcast_topics_active (active, sort_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_broadcast_contacts (
+      id CHAR(36) PRIMARY KEY,
+      phone VARCHAR(30) NOT NULL UNIQUE,
+      name VARCHAR(160) NULL,
+      customer_id CHAR(36) NULL,
+      consent_status VARCHAR(30) NOT NULL DEFAULT 'invited',
+      invited_at TIMESTAMP NULL,
+      consented_at TIMESTAMP NULL,
+      opted_out_at TIMESTAMP NULL,
+      last_interaction_at TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_whatsapp_broadcast_contacts_status (consent_status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_broadcast_subscriptions (
+      id CHAR(36) PRIMARY KEY,
+      contact_id CHAR(36) NOT NULL,
+      topic_id CHAR(36) NOT NULL,
+      active TINYINT(1) NOT NULL DEFAULT 1,
+      subscribed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      unsubscribed_at TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_whatsapp_broadcast_subscription (contact_id, topic_id),
+      INDEX idx_whatsapp_broadcast_subscriptions_topic (topic_id, active)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_broadcast_logs (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      topic_id CHAR(36) NULL,
+      contact_id CHAR(36) NULL,
+      status VARCHAR(30) NOT NULL,
+      message TEXT NULL,
+      error_message TEXT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_whatsapp_broadcast_logs_topic (topic_id, created_at),
+      INDEX idx_whatsapp_broadcast_logs_status (status, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await pool.query(
+    `INSERT IGNORE INTO whatsapp_broadcast_topics (id, name, slug, category_id, active, sort_order)
+     SELECT UUID(), 'Celulares', 'celulares', id, 1, 10 FROM categories
+      WHERE LOWER(name) LIKE '%smartphone%' OR LOWER(name) LIKE '%celular%'
+      ORDER BY CASE WHEN LOWER(name) = 'smartphones' THEN 0 ELSE 1 END LIMIT 1`
+  );
+  await pool.query(
+    `INSERT IGNORE INTO whatsapp_broadcast_topics (id, name, slug, category_id, active, sort_order)
+     SELECT UUID(), 'Receptores', 'receptores', id, 1, 20 FROM categories
+      WHERE LOWER(name) LIKE '%receptor%'
+      ORDER BY name ASC LIMIT 1`
+  );
+  await pool.query(
+    `INSERT IGNORE INTO whatsapp_broadcast_topics (id, name, slug, category_id, active, sort_order)
+     VALUES (UUID(), 'Celulares', 'celulares', NULL, 1, 10), (UUID(), 'Receptores', 'receptores', NULL, 1, 20)`
+  );
   console.log('[migration] admin_preferences table: OK');
 
   await ensureMarketingCampaignTables(pool);

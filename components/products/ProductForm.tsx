@@ -35,6 +35,7 @@ import { colorService } from '../../services/colors';
 import { getAuthSessionToken } from '../../services/authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
+import { vpsClient } from '../../services/vpsClient';
 import { unitService } from '../../services/units';
 import { fetchBlingProductDetail, findBlingProductByExactSku, importBlingProducts } from '../../services/blingService';
 import { BlingLinkSection } from './sections/BlingLinkSection';
@@ -77,6 +78,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [shopeeItemId, setShopeeItemId] = useState<number | undefined>(initialData?.shopee_item_id);
     const [isSavingForm, setIsSavingForm] = useState(false);
     const [saveProgress, setSaveProgress] = useState<{ current: number; total: number; message: string } | null>(null);
+    const [marketingUploadKind, setMarketingUploadKind] = useState<'background' | 'video' | null>(null);
     const saveInFlightRef = useRef(false);
 
     // Estado para armazenar as regras da categoria (Traffic Light)
@@ -871,6 +873,44 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         return containedModel || { id: null, name: suggestedName };
     };
 
+    const handleMarketingAssetUpload = async (file: File, kind: 'background' | 'video') => {
+        const sku = String(watch('sku') || '').trim().replace(/\s+/g, '');
+        if (!sku) {
+            toast.warning('Preencha o SKU antes de enviar a mídia de marketing.');
+            return;
+        }
+        if (kind === 'background' && !file.type.startsWith('image/')) {
+            toast.error('Selecione uma imagem para o fundo de marketing.');
+            return;
+        }
+        if (kind === 'video' && !file.type.startsWith('video/')) {
+            toast.error('Selecione um arquivo de vídeo para a propaganda.');
+            return;
+        }
+
+        setMarketingUploadKind(kind);
+        try {
+            const extension = file.name.split('.').pop()?.toLowerCase() || (kind === 'video' ? 'mp4' : 'jpg');
+            const targetName = `marketing-${sku}-${kind}.${extension}`;
+            const renamedFile = new File([file], targetName, { type: file.type });
+            const formData = new FormData();
+            formData.append('file', renamedFile);
+            const upload = await vpsClient.upload<{ url?: string }>(
+                `/synology/upload?folder=${kind === 'video' ? 'videos' : 'imagens'}`,
+                formData,
+            );
+            if (!upload.url) throw new Error('A VPS não retornou a URL da mídia.');
+            const field = kind === 'video' ? 'marketing_video_url' : 'marketing_background_url';
+            setValue(field, upload.url, { shouldDirty: true, shouldValidate: true });
+            toast.success(kind === 'video' ? 'Vídeo de marketing enviado.' : 'Fundo de marketing enviado.');
+        } catch (error) {
+            console.error('Erro no upload da mídia de marketing:', error);
+            toast.error(error instanceof Error ? error.message : 'Erro ao enviar mídia de marketing.');
+        } finally {
+            setMarketingUploadKind(null);
+        }
+    };
+
     const ensureLocalBlingParent = async (
         parentId: number,
         categoryId?: string | null,
@@ -1191,6 +1231,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             const currentWarrantyType = watch('warranty_type');
             const currentWarrantyTemplateId = watch('warranty_template_id');
             const currentVideoUrl = watch('video_url');
+            const currentMarketingBackgroundUrl = watch('marketing_background_url');
+            const currentMarketingVideoUrl = watch('marketing_video_url');
 
             // Injeção dos campos não registrados de SEO
             const currentExcludeFromSeo = watch('exclude_from_seo');
@@ -1209,6 +1251,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             mergedData.warranty_type = currentWarrantyType || 'brand';
             mergedData.warranty_template_id = currentWarrantyTemplateId || null;
             mergedData.video_url = currentVideoUrl || null;
+            mergedData.marketing_background_url = currentMarketingBackgroundUrl || null;
+            mergedData.marketing_video_url = currentMarketingVideoUrl || null;
             mergedData.exclude_from_seo = currentExcludeFromSeo || false;
             mergedData.description = currentDescription || null;
             mergedData.slug = currentSlug || null;
@@ -1902,6 +1946,48 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     <p className="text-xs text-slate-500 mt-1">
                         Cole o link público de um vídeo do YouTube ou do seu Synology NAS. Ele aparecerá junto com as imagens do produto.
                     </p>
+                </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl border border-emerald-200 shadow-sm mt-4">
+                <h3 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+                    <ImageIcon size={18} className="text-emerald-600" />
+                    Mídia de Marketing (Opcional)
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">
+                    O fundo será aplicado automaticamente no estúdio de criativos. O vídeo de marketing terá prioridade nos status; se estiver vazio, o sistema continuará usando o vídeo normal do produto.
+                </p>
+                <div className="grid gap-4 md:grid-cols-2">
+                    {([
+                        { kind: 'background' as const, label: 'Imagem de fundo', field: 'marketing_background_url' as const, accept: 'image/*' },
+                        { kind: 'video' as const, label: 'Vídeo de propaganda', field: 'marketing_video_url' as const, accept: 'video/*' },
+                    ]).map((item) => (
+                        <div key={item.kind} className="rounded-lg border border-slate-200 p-3">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">{item.label}</label>
+                            <input
+                                type="url"
+                                value={watch(item.field) || ''}
+                                onChange={(event) => setValue(item.field, event.target.value, { shouldDirty: true, shouldValidate: true })}
+                                placeholder="Cole uma URL ou envie um arquivo"
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                            <label className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100">
+                                {marketingUploadKind === item.kind ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                {marketingUploadKind === item.kind ? 'Enviando...' : 'Enviar arquivo'}
+                                <input
+                                    type="file"
+                                    accept={item.accept}
+                                    className="hidden"
+                                    disabled={marketingUploadKind !== null}
+                                    onChange={(event) => {
+                                        const file = event.target.files?.[0];
+                                        event.target.value = '';
+                                        if (file) void handleMarketingAssetUpload(file, item.kind);
+                                    }}
+                                />
+                            </label>
+                        </div>
+                    ))}
                 </div>
             </div>
 

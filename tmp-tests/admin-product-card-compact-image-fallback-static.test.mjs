@@ -15,10 +15,11 @@ assert.match(
   'ProductCard must hydrate both the cover and editable gallery from the full product images',
 );
 
-assert.match(
-  source,
-  /if \(!isMounted \|\| fetchedImageUrl\) return;/,
-  'ProductCard must only use the full-product fallback after the model/color image fallback is missing',
+const fullProductLookupIndex = source.indexOf('vpsApiService.getProductById(product.id, true)');
+const modelFallbackIndex = source.indexOf('getModelImageWithCache(product.model_id, product.specs?.color)', fullProductLookupIndex);
+assert.ok(
+  fullProductLookupIndex >= 0 && modelFallbackIndex > fullProductLookupIndex,
+  'ProductCard must prefer the real full-product images before the shared model/color fallback',
 );
 
 assert.match(

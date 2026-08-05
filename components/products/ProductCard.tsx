@@ -962,7 +962,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         await persistProductImages(nextImages);
     };
 
-    // Resolve cover image from the compact admin row, then model/color, then full product.
+    // Resolve a capa pela imagem real do produto antes de usar modelo/cor como fallback.
     useEffect(() => {
         let isMounted = true;
         const cleanImages = normalizeImageList(product.images);
@@ -977,25 +977,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
         setFetchedImages([]);
 
         const resolveFallbackImages = async () => {
-            let fetchedImageUrl: string | null = null;
-
-            if (product.model_id) {
-                fetchedImageUrl = await getModelImageWithCache(product.model_id, product.specs?.color);
-                if (!isMounted) return;
-                if (fetchedImageUrl) {
-                    setFetchedImages([fetchedImageUrl]);
-                    return;
-                }
-            }
-
             try {
                 const fullProduct = await vpsApiService.getProductById(product.id, true);
-                if (!isMounted || fetchedImageUrl) return;
+                if (!isMounted) return;
                 const fullProductImages = normalizeImageList(fullProduct?.images);
                 if (fullProductImages.length > 0) {
                     setProductImages(fullProductImages);
                     setFetchedImages(fullProductImages);
                     return;
+                }
+
+                if (product.model_id) {
+                    const fetchedImageUrl = await getModelImageWithCache(product.model_id, product.specs?.color);
+                    if (!isMounted) return;
+                    if (fetchedImageUrl) {
+                        setFetchedImages([fetchedImageUrl]);
+                        return;
+                    }
                 }
 
                 if (product.model_id) {
@@ -1511,7 +1509,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onEdit, onDel
                             style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 3 }}
                         >
                             <a
-                                href={`/produto/${product.slug || product.id}`}
+                                href={`/produto/${product.id}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="hover:underline hover:text-blue-600 transition-colors"

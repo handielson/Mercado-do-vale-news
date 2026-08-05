@@ -421,6 +421,13 @@ export default function MarketingPage() {
     }, [selectedProduct?.id, format]);
 
     useEffect(() => {
+        const productBackground = selectedProduct?.marketing_background_url
+            ? toBrowserSafeMediaUrl(selectedProduct.marketing_background_url)
+            : null;
+        setCustomBgUrl(productBackground && hasRenderableMediaUrl(productBackground) ? productBackground : null);
+    }, [selectedProduct?.id, selectedProduct?.marketing_background_url]);
+
+    useEffect(() => {
         if (carouselSlideIndex < carouselSlides.length) return;
         setCarouselSlideIndex(0);
     }, [carouselSlideIndex, carouselSlides.length]);

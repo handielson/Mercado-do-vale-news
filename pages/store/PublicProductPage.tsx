@@ -334,7 +334,7 @@ export const PublicProductPage: React.FC = () => {
                 }
 
                 const canonicalRouteTarget = getPublicProductRouteTarget(data);
-                if (canonicalRouteTarget && canonicalRouteTarget !== slug) {
+                if (!isUuid && canonicalRouteTarget && canonicalRouteTarget !== slug) {
                     window.history.replaceState(null, '', `/produto/${encodeURIComponent(canonicalRouteTarget)}`);
                 }
 

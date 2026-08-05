@@ -33,6 +33,8 @@ export const productSchema = z.object({
     images: z.array(z.string()).optional(),
     eans: z.array(z.string()).optional(),
     video_url: z.string().nullable().optional(),
+    marketing_background_url: z.string().nullable().optional(),
+    marketing_video_url: z.string().nullable().optional(),
 
     // Specifications (flexible object)
     specs: z.record(z.any()).optional(),
