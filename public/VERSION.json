@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.208-product-entry-null-image-fallback",
+  "version": "v1.2.209-product-entry-bling-loop-guard",
   "date": "2026-08-05",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260805-175151-v12208-product-entry-null-image-fallback",
+  "release_vps": "/var/www/mdv-site/releases/20260805-181946-v12209-product-entry-bling-loop-guard",
   "branch": "main",
-  "summary": "Evita falha com galeria nula e carrega as fotos disponíveis nos produtos irmãos."
+  "summary": "Evita espera prolongada e aparente loop na busca automatica de produtos por SKU no Bling."
 }

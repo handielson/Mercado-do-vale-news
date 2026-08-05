@@ -45,7 +45,7 @@ assert.match(productForm, /resolveLocalCatalogImagesForBlingLink/);
 assert.match(productForm, /vpsApiService\.getProductById\(localProduct\.id, true\)/);
 assert.match(productForm, /resolveExistingProductImages\(catalogProduct\)/);
 assert.match(productForm, /hydrateExistingLocalProductImagesBySku/);
-assert.match(productForm, /await hydrateExistingLocalProductImagesBySku\(cleanSku\)/);
+assert.match(productForm, /void hydrateExistingLocalProductImagesBySku\(cleanSku\)/);
 assert.match(productForm, /search: sku/);
 assert.match(productForm, /exactSearchSku/);
 assert.match(productForm, /limit: 5000/);

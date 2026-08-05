@@ -14,6 +14,7 @@ for (const file of ['vps_server.js', 'vps_server.cjs']) {
   assert.match(source, /codigo=\$\{encodeURIComponent\(search\)\}/, `${file} must query Bling products by SKU`);
   assert.match(source, /searchMode: 'direct'/, `${file} must label direct search responses`);
   assert.match(source, /searchMode: 'loose'/, `${file} must label loose fallback responses`);
+  assert.match(source, /normalizeBlingSearchTextVps\(item\.codigo\) === normalizeBlingSearchTextVps\(search\)/, `${file} must stop fallback pagination as soon as the exact SKU is found`);
   assert.match(source, /buildCopyableDebug\('bling-products'/, `${file} must return copyable product debug details`);
 
   const debugPayloads = source.match(/buildCopyableDebug\('bling-products',\s*(?:\{[\s\S]*?\n\s*\}|responseDebug|debug)\)/g) || [];

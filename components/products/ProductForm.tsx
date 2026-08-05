@@ -82,6 +82,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [saveProgress, setSaveProgress] = useState<{ current: number; total: number; message: string } | null>(null);
     const [marketingUploadKind, setMarketingUploadKind] = useState<'background' | 'video' | null>(null);
     const saveInFlightRef = useRef(false);
+    const automaticBlingLookupRef = useRef<{ sku: string; requestId: number; promise: Promise<any> } | null>(null);
+    const automaticBlingRequestIdRef = useRef(0);
 
     // Estado para armazenar as regras da categoria (Traffic Light)
     const [categoryConfig, setCategoryConfig] = useState<CategoryConfig | null>(null);
@@ -1150,14 +1152,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         }
     };
 
-    const findBlingLinkBySku = async (sku?: string | null) => {
+    const findBlingLinkBySku = async (
+        sku?: string | null,
+        options: { skipLocalProductLookup?: boolean } = {},
+    ) => {
         const cleanSku = String(sku || '').trim();
         if (!cleanSku) return null;
 
         const product = await findBlingProductByExactSku(cleanSku);
         if (!product) return null;
 
-        const localProduct = await findLocalProductForBlingLink(cleanSku, product.id);
+        const localProduct = options.skipLocalProductLookup
+            ? null
+            : await findLocalProductForBlingLink(cleanSku, product.id);
         const parentId = product.variacao?.produtoPai?.id;
         const blingEan = String(product.gtin || '').trim();
         const localProductEans = getLocalProductEansForBlingLink(localProduct);
@@ -1194,35 +1201,52 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         };
     };
 
-    const resolveAutomaticBlingLink = async (sku?: string | null) => {
+    const resolveAutomaticBlingLink = (sku?: string | null) => {
         const cleanSku = String(sku || '').trim();
         if (!cleanSku || blingId || isBlingLinkManualOverride) return null;
+        const normalizedSku = cleanSku.toLowerCase();
+        const inFlightLookup = automaticBlingLookupRef.current;
+        if (inFlightLookup?.sku === normalizedSku) return inFlightLookup.promise;
 
-        try {
-            setIsAutoLinkingBling(true);
-            await hydrateExistingLocalProductImagesBySku(cleanSku);
-            const link = await findBlingLinkBySku(cleanSku);
-            if (!link) return null;
+        const requestId = ++automaticBlingRequestIdRef.current;
+        setIsAutoLinkingBling(true);
+        void hydrateExistingLocalProductImagesBySku(cleanSku).catch((error) => {
+            console.warn('[ProductForm] Local image hydration skipped:', error);
+        });
 
-            applyBlingLinkAutofillToForm(link);
-            toast.info('Vinculado automaticamente pelo SKU no Bling.', {
-                id: 'bling-auto-sku-link',
-                description: (link.priceAutofill.price_cost || link.priceAutofill.price_retail || link.specAutofill.color || link.specAutofill.ram || link.specAutofill.storage)
-                    ? [
-                        (link.priceAutofill.price_cost || link.priceAutofill.price_retail) ? 'Precos de compra e varejo preenchidos para conferencia.' : '',
-                        link.specAutofill.color ? `Cor preenchida: ${link.specAutofill.color}.` : '',
-                        link.specAutofill.ram ? `RAM preenchida: ${link.specAutofill.ram}.` : '',
-                        link.specAutofill.storage ? `Armazenamento preenchido: ${link.specAutofill.storage}.` : '',
-                    ].filter(Boolean).join(' ')
-                    : undefined,
-            });
-            return link;
-        } catch (error) {
-            console.warn('[ProductForm] Auto Bling SKU link skipped:', error);
-            return null;
-        } finally {
-            setIsAutoLinkingBling(false);
-        }
+        const lookupPromise = (async () => {
+            try {
+                const link = await findBlingLinkBySku(cleanSku, { skipLocalProductLookup: true });
+                const isLatestLookup = automaticBlingRequestIdRef.current === requestId;
+                const currentSku = String(getValues('sku') || '').trim().toLowerCase();
+                if (!link || !isLatestLookup || currentSku !== normalizedSku) return null;
+
+                applyBlingLinkAutofillToForm(link);
+                toast.info('Vinculado automaticamente pelo SKU no Bling.', {
+                    id: 'bling-auto-sku-link',
+                    description: (link.priceAutofill.price_cost || link.priceAutofill.price_retail || link.specAutofill.color || link.specAutofill.ram || link.specAutofill.storage)
+                        ? [
+                            (link.priceAutofill.price_cost || link.priceAutofill.price_retail) ? 'Precos de compra e varejo preenchidos para conferencia.' : '',
+                            link.specAutofill.color ? `Cor preenchida: ${link.specAutofill.color}.` : '',
+                            link.specAutofill.ram ? `RAM preenchida: ${link.specAutofill.ram}.` : '',
+                            link.specAutofill.storage ? `Armazenamento preenchido: ${link.specAutofill.storage}.` : '',
+                        ].filter(Boolean).join(' ')
+                        : undefined,
+                });
+                return link;
+            } catch (error) {
+                console.warn('[ProductForm] Auto Bling SKU link skipped:', error);
+                return null;
+            } finally {
+                if (automaticBlingRequestIdRef.current === requestId) {
+                    automaticBlingLookupRef.current = null;
+                    setIsAutoLinkingBling(false);
+                }
+            }
+        })();
+
+        automaticBlingLookupRef.current = { sku: normalizedSku, requestId, promise: lookupPromise };
+        return lookupPromise;
     };
 
     const hydrateExistingBlingLinkFields = async () => {

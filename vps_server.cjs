@@ -8574,6 +8574,9 @@ async function fetchLooseBlingProductSearchVps(base, headers, search, debug) {
     for (const item of items) {
       if (!item?.id || seen.has(item.id)) continue;
       if (!matchesLooseBlingProductSearchVps(item, search)) continue;
+      if (normalizeBlingSearchTextVps(item.codigo) === normalizeBlingSearchTextVps(search)) {
+        return [item];
+      }
       seen.add(item.id);
       matched.push(item);
     }

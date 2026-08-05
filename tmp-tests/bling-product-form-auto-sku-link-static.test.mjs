@@ -31,6 +31,24 @@ assert.match(
 
 assert.match(
   form,
+  /automaticBlingLookupRef\.current/,
+  'Automatic Bling lookup must deduplicate concurrent requests for the same SKU'
+);
+
+assert.match(
+  form,
+  /automaticBlingRequestIdRef\.current === requestId/,
+  'Automatic Bling lookup must ignore stale requests after the SKU changes'
+);
+
+assert.match(
+  form,
+  /findBlingLinkBySku\(cleanSku, \{ skipLocalProductLookup: true \}\)/,
+  'Automatic Bling lookup must not wait for slow local catalog fallbacks'
+);
+
+assert.match(
+  form,
   /mergedData\.bling_id = automaticBlingLink\.id;/,
   'Automatic Bling link must be included in the submitted payload'
 );
@@ -55,14 +73,14 @@ assert.match(
 
 assert.match(
   form,
-  /setValue\('eans', \[blingEan\], \{ shouldDirty: true, shouldValidate: true \}\);/,
-  'Automatic SKU link must fill the first EAN when the form has no EANs yet'
+  /setValue\('eans', linkEans, \{ shouldDirty: true, shouldValidate: true \}\);/,
+  'Automatic SKU link must fill the resolved EAN list when the form has no EANs yet'
 );
 
 assert.match(
   form,
-  /mergedData\.eans = \[automaticBlingLink\.ean\];/,
-  'Submit payload must include the Bling EAN when it was auto-filled during submit'
+  /mergedData\.eans = automaticBlingLink\.eans \|\| \[automaticBlingLink\.ean\];/,
+  'Submit payload must include all resolved Bling EANs when they were auto-filled during submit'
 );
 
 assert.match(
