@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.185-meta-review-cache-fallback
+version: v1.2.186-meta-rate-limit-recovery
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260805-010834-meta-review-cache-fallback
+release_vps: /var/www/mdv-site/releases/20260805-011450-meta-rate-limit-recovery
 branch: main
-summary: Recupera automaticamente a última auditoria Meta salva quando o rate limit impede preencher o novo cache de revisão.
+summary: Permite recuperar a auditoria Meta no primeiro clique quando a conexão está marcada por rate limit.
 ```

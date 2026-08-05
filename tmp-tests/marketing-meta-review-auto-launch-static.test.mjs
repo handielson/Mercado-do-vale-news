@@ -11,6 +11,8 @@ assert.match(api, /CREATE TABLE IF NOT EXISTS meta_managed_ad_review_state/);
 assert.match(api, /async function readManagedAdReviewsLightweight/);
 assert.match(api, /async function persistManagedAdReviews/);
 assert.match(api, /function lastAuditManagedAdReviews/);
+assert.match(api, /function hasStoredMetaRateLimit/);
+assert.match(api, /row\?\.status === 'error' && hasStoredMetaRateLimit\(row\)/);
 assert.match(api, /reviews = lastAuditManagedAdReviews\(row\)/);
 assert.match(api, /monitor recuperou a última auditoria salva/);
 assert.match(api, /function reviewPollDelaySeconds/);

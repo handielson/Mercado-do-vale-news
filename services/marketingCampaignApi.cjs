@@ -742,6 +742,10 @@ function isMetaRateLimitError(error) {
     || /rate limit|too many calls|request limit/i.test(String(error?.message || ''));
 }
 
+function hasStoredMetaRateLimit(row) {
+  return /rate limit|too many calls|request limit|many calls to this ad-account/i.test(String(row?.last_error || ''));
+}
+
 function reviewPollDelaySeconds(reviews, failureCount = 0) {
   if (failureCount > 0) return [60, 120, 300, 600, 1200, 1800][Math.min(failureCount - 1, 5)];
   return (reviews || []).every((item) => ['approved', 'active'].includes(item.state)) ? 300 : 60;
@@ -1264,7 +1268,8 @@ async function captureManagedReviewStatus(pool) {
   try {
     const config = marketingConfig();
     const row = await connectionRow(pool);
-    if (!config.ready || !row || row.status !== 'connected' || !row.selected_ad_account_id) return null;
+    const recoverableConnection = row?.status === 'connected' || (row?.status === 'error' && hasStoredMetaRateLimit(row));
+    if (!config.ready || !row || !recoverableConnection || !row.selected_ad_account_id) return null;
     let cached = await cachedManagedAdReviews(pool);
     if (!cached.length) {
       const previousReviews = lastAuditManagedAdReviews(row);
@@ -2377,7 +2382,8 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
       }
     }
     const review = reviews.find((item) => item.itemKey === itemKey);
-    if (!row || row.status !== 'connected' || !review) {
+    const recoverableConnection = row?.status === 'connected' || (row?.status === 'error' && hasStoredMetaRateLimit(row));
+    if (!row || !recoverableConnection || !review) {
       return reply.code(409).send({ error: 'Atualize a auditoria da Meta antes de preparar esta confirmação.' });
     }
     if (review.state === 'rejected') {
