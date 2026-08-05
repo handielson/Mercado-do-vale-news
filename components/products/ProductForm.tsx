@@ -103,6 +103,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         eans?: string[];
         bling_id?: number;
         bling_parent_id?: number;
+        parent_id?: string;
         model_id?: string;
         model?: string;
         imei1?: string;
@@ -946,6 +947,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const buildBlingLinkFromLocalProduct = async (blingProductId: number, localProduct: any, parentId?: number) => {
         const localProductEans = getLocalProductEansForBlingLink(localProduct);
         const localProductModelName = await getLocalProductModelNameForBlingLink(localProduct);
+        const parentProduct = parentId
+            ? await ensureLocalBlingParent(parentId, localProduct?.category_id, localProduct?.model_id)
+            : null;
 
         return {
             id: blingProductId,
@@ -954,6 +958,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             eans: localProductEans,
             model_id: localProduct?.model_id || null,
             model: localProductModelName,
+            parentProduct,
             priceAutofill: {},
             specAutofill: {},
         };
@@ -1116,6 +1121,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     ...batchItem,
                     bling_id: link.id,
                     bling_parent_id: link.parentId,
+                    parent_id: link.parentProduct?.id || batchItem.parent_id,
                     eans: link.eans?.length ? link.eans : (link.ean ? [link.ean] : batchItem.eans),
                     model_id: link.model_id || batchItem.model_id,
                     model: link.model || batchItem.model,
@@ -1271,6 +1277,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             if (automaticBlingLink) {
                 mergedData.bling_id = automaticBlingLink.id;
                 mergedData.bling_parent_id = automaticBlingLink.parentId;
+                if (automaticBlingLink.parentProduct?.id) {
+                    mergedData.parent_id = automaticBlingLink.parentProduct.id;
+                }
                 const currentPayloadEans = Array.isArray(mergedData.eans) ? mergedData.eans : [];
                 if (automaticBlingLink.ean && !currentPayloadEans.some((ean) => String(ean || '').trim())) {
                     mergedData.eans = automaticBlingLink.eans || [automaticBlingLink.ean];
@@ -1362,6 +1371,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                             ...item,
                             bling_id: link.id,
                             bling_parent_id: link.parentId,
+                            parent_id: link.parentProduct?.id || item.parent_id,
                             eans: link.eans?.length ? link.eans : (link.ean ? [link.ean] : item.eans),
                             model_id: link.model_id || item.model_id,
                             model: link.model || item.model,

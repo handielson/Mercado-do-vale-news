@@ -78,6 +78,24 @@ assert.match(
 );
 
 assert.match(
+  source,
+  /mergedData\.parent_id = automaticBlingLink\.parentProduct\.id/,
+  'Automatic SKU linking should copy the local parent UUID into the submitted payload',
+);
+
+assert.match(
+  source,
+  /parent_id: link\.parentProduct\?\.id \|\| batchItem\.parent_id/,
+  'Manual batch linking should retain the local parent UUID on the batch item',
+);
+
+assert.match(
+  source,
+  /parent_id: link\.parentProduct\?\.id \|\| item\.parent_id/,
+  'Automatic batch linking should retain the local parent UUID before building products',
+);
+
+assert.match(
   modelSelectSource,
   /setNewModelName\(searchTerm\.trim\(\)\)/,
   'Model create dialog should start from the typed suggestion to avoid retyping and duplicates',

@@ -71,6 +71,7 @@ export function buildSerializedBatchPlan(baseData, items) {
     eans: Array.isArray(item.eans) && item.eans.length > 0 ? item.eans : baseData.eans,
     bling_id: item.bling_id ?? baseData.bling_id,
     bling_parent_id: item.bling_parent_id ?? baseData.bling_parent_id,
+    parent_id: cleanValue(item.parent_id) || baseData.parent_id,
     stock_quantity: 1,
     specs: {
       ...(baseData.specs || {}),

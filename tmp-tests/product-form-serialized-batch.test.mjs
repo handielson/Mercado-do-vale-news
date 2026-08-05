@@ -10,9 +10,9 @@ const {
 
 {
   const plan = buildSerializedBatchPlan(
-    { name: 'Redmi A7 Pro', track_inventory: true, stock_quantity: undefined, specs: { color: 'Preto' } },
+    { name: 'Redmi A7 Pro', parent_id: 'parent-local', track_inventory: true, stock_quantity: undefined, specs: { color: 'Preto' } },
     [
-      { sku: 'RN-A7-PRETO-1', eans: ['7891111111111'], bling_id: 101, bling_parent_id: 100, imei1: '869084081597944', imei2: '869084081597951', serial: '74453;66NQ07676', color: 'Preto', storage: '128GB', ram: '4GB', version: 'Global', battery_health: '100% (Nova)' },
+      { sku: 'RN-A7-PRETO-1', eans: ['7891111111111'], bling_id: 101, bling_parent_id: 100, parent_id: 'parent-item', imei1: '869084081597944', imei2: '869084081597951', serial: '74453;66NQ07676', color: 'Preto', storage: '128GB', ram: '4GB', version: 'Global', battery_health: '100% (Nova)' },
       { sku: 'RN-A7-PRETO-2', eans: ['7892222222222'], bling_id: 102, bling_parent_id: 100, imei1: '869084081562781', imei2: '869084081562799', serial: '74453;66NQ07339', color: 'Preto', storage: '128GB', ram: '4GB', version: 'Global', battery_health: '100% (Nova)' },
     ],
   );
@@ -30,6 +30,7 @@ const {
   assert.deepEqual(plan.items.map((item) => item.eans), [['7891111111111'], ['7892222222222']]);
   assert.deepEqual(plan.items.map((item) => item.bling_id), [101, 102]);
   assert.deepEqual(plan.items.map((item) => item.bling_parent_id), [100, 100]);
+  assert.deepEqual(plan.items.map((item) => item.parent_id), ['parent-item', 'parent-local']);
 }
 
 {
