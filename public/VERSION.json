@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.204-product-entry-full-image-detail",
+  "version": "v1.2.205-product-entry-local-images",
   "date": "2026-08-05",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260805-173445-v12204-product-entry-full-image-detail",
+  "release_vps": "/var/www/mdv-site/releases/20260805-173836-v12205-product-entry-local-images",
   "branch": "main",
-  "summary": "Carrega o detalhe completo do produto para mostrar as fotos existentes na entrada por SKU."
+  "summary": "Mostra as fotos existentes pelo SKU mesmo quando o Bling não retorna o produto."
 }

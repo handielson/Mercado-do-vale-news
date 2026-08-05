@@ -954,7 +954,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         return findExisting();
     };
 
-    const findLocalProductForBlingLink = async (sku: string, blingProductId: number) => {
+    const findLocalProductForBlingLink = async (sku: string, blingProductId?: number) => {
         const bySku = await vpsApiService.getProducts({
             sku,
             status: 'all',
@@ -966,6 +966,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             String(product?.sku || '').trim().toLowerCase() === sku.toLowerCase()
         );
         if (exactSku) return exactSku;
+
+        if (!blingProductId) return null;
 
         const byBling = await vpsApiService.getProducts({
             bling_id: String(blingProductId),
@@ -1027,6 +1029,24 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 color: colorName || catalogProduct?.specs?.color,
             },
         });
+    };
+
+    const hydrateExistingLocalProductImagesBySku = async (sku: string) => {
+        const localProduct = await findLocalProductForBlingLink(sku);
+        if (!localProduct) return;
+
+        const colors = await colorService.listActive().catch(() => []);
+        const localImages = await resolveLocalCatalogImagesForBlingLink({
+            localProduct,
+            modelId: localProduct?.model_id || null,
+            colorName: localProduct?.specs?.color || null,
+            colors,
+        });
+        const currentImages = resolveExistingProductImages({ images: getValues('images') });
+        if (localImages.length > 0 && currentImages.length === 0) {
+            setValue('images', localImages, { shouldDirty: true, shouldValidate: true });
+            setImagePreviews(localImages);
+        }
     };
 
     const findLocalProductByBlingIdForBlingLink = async (blingProductId: number) => {
@@ -1159,6 +1179,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
         try {
             setIsAutoLinkingBling(true);
+            await hydrateExistingLocalProductImagesBySku(cleanSku);
             const link = await findBlingLinkBySku(cleanSku);
             if (!link) return null;
 
