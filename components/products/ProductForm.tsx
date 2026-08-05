@@ -186,7 +186,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         const item: BatchItem = {
             id: crypto.randomUUID(),
             sku: watch('sku') || undefined,
-            eans: [],
+            eans: watch('eans') || [],
+            model_id: watch('model_id') || undefined,
+            model: watch('model') || undefined,
             imei1: overrides.imei1 || watch('specs.imei1') || undefined,
             imei2: overrides.imei2 || watch('specs.imei2') || undefined,
             serial: normalizeSerializedTextInput('serial', overrides.serial || watch('specs.serial')),
@@ -852,7 +854,19 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             normalizeBlingModelMatchName(model.name) === normalizedSuggestion
         );
 
-        return exactModel || { id: null, name: suggestedName };
+        if (exactModel) return exactModel;
+
+        const containedModel = models
+            .map((model) => ({
+                model,
+                normalizedName: normalizeBlingModelMatchName(model.name),
+            }))
+            .filter(({ normalizedName }) =>
+                normalizedName.length >= 5 && normalizedSuggestion.includes(normalizedName)
+            )
+            .sort((first, second) => second.normalizedName.length - first.normalizedName.length)[0]?.model;
+
+        return containedModel || { id: null, name: suggestedName };
     };
 
     const findLocalProductForBlingLink = async (sku: string, blingProductId: number) => {
@@ -1111,6 +1125,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
             // 0. Buscar modelo selecionado para pegar template_values
             let mergedData = { ...data };
+
+            mergedData.model_id = getValues('model_id') || mergedData.model_id;
+            mergedData.model = getValues('model') || mergedData.model;
 
             // CRITICAL FIX: Manually add un-registered fields from watch() since they're not in data
             const currentWarrantyType = watch('warranty_type');

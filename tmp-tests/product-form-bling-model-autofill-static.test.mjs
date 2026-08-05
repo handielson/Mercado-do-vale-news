@@ -29,6 +29,24 @@ assert.match(
 );
 
 assert.match(
+  source,
+  /normalizedSuggestion\.includes\(normalizedName\)/,
+  'Bling SKU autofill should match an active model when the Bling name includes variation details',
+);
+
+assert.match(
+  source,
+  /model_id:\s*watch\('model_id'\)\s*\|\|\s*undefined/,
+  'Serialized batch rows should retain the selected model id',
+);
+
+assert.match(
+  source,
+  /mergedData\.model_id\s*=\s*getValues\('model_id'\)\s*\|\|\s*mergedData\.model_id/,
+  'Saving should use the latest automatically resolved model id',
+);
+
+assert.match(
   modelSelectSource,
   /setNewModelName\(searchTerm\.trim\(\)\)/,
   'Model create dialog should start from the typed suggestion to avoid retyping and duplicates',
