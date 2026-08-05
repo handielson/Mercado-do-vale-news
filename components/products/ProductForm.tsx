@@ -46,6 +46,7 @@ import { buildSerializedBatchPlan, findSerializedBatchDuplicates, findSerialized
 import { getProductSaveProgressPercent } from './productSaveProgress.js';
 import { getBlingSkuPriceAutofill } from './blingSkuPriceAutofill.js';
 import { getBlingSkuSpecAutofill } from './blingSkuSpecAutofill.js';
+import { resolveExistingProductImages } from './blingSkuExistingImages.js';
 import { UnitStatus } from '../../utils/field-standards';
 
 interface ProductFormProps {
@@ -998,6 +999,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             eans: localProductEans,
             model_id: localProduct?.model_id || null,
             model: localProductModelName,
+            images: resolveExistingProductImages(localProduct),
             parentProduct,
             priceAutofill: {},
             specAutofill: {},
@@ -1022,6 +1024,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         }
         if (link.model) {
             setValue('model', link.model, { shouldDirty: true, shouldValidate: true });
+        }
+        const linkImages = resolveExistingProductImages({ images: link.images });
+        const currentImages = resolveExistingProductImages({ images: getValues('images') });
+        if (linkImages.length > 0 && currentImages.length === 0) {
+            setValue('images', linkImages, { shouldDirty: true, shouldValidate: true });
+            setImagePreviews(linkImages);
         }
         if (link.parentProduct?.id) {
             setBlingParentProduct(link.parentProduct);
@@ -1077,6 +1085,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             eans: resolvedEans,
             model_id: resolvedModelId,
             model: localProductModelName || blingModelSuggestion?.name || null,
+            images: resolveExistingProductImages(localProduct),
             parentProduct,
             productName: resolveBlingProductDisplayName(product),
             priceAutofill,
