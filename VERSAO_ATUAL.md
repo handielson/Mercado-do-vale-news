@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.211-bling-disconnected-status
+version: v1.2.212-banner-product-slug
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260805-193126-v12211-bling-disconnected-status
+release_vps: /var/www/mdv-site/releases/20260805-204346-v12212-banner-product-slug
 branch: main
-summary: Distingue Bling desconectado de SKU inexistente no cadastro de produtos.
+summary: Mantem banner visivel ao usar URL publica com slug do produto.
 ```

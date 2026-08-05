@@ -17,8 +17,14 @@ assert.match(
 
 assert.match(
   source,
-  /vpsApiService\.getProductById\(productId,\s*true\)/,
-  'linked banner product lookup must bypass stale cache',
+  /PRODUCT_ID_PATTERN\.test\(productIdentifier\)[\s\S]*vpsApiService\.getProductById\(productIdentifier,\s*true\)[\s\S]*vpsApiService\.getProductBySlug\(productIdentifier\)/,
+  'linked banner product lookup must resolve UUIDs by ID and public URLs by slug',
+);
+
+assert.match(
+  source,
+  /banner\.link_type === 'product'[\s\S]*`\/produto\/\$\{linkTarget\}`/,
+  'bare product slugs must be persisted as unambiguous product paths',
 );
 
 assert.match(

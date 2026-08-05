@@ -38,7 +38,10 @@ function mapToVPS(banner: any): any {
         delete payload.is_active;
     }
     if ('link_target' in banner) {
-        payload.link_url = banner.link_target || null;
+        const linkTarget = String(banner.link_target || '').trim();
+        payload.link_url = banner.link_type === 'product' && linkTarget && !/^https?:\/\//i.test(linkTarget) && !/^\/produto\//i.test(linkTarget)
+            ? `/produto/${linkTarget}`
+            : linkTarget || null;
         delete payload.link_target;
     }
     delete payload.link_type;
@@ -97,13 +100,20 @@ function filterActiveBanners(allBanners: Banner[], customerType?: CustomerType) 
     return banners;
 }
 
-function getLinkedProductId(banner: Banner): string | null {
+const PRODUCT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function getLinkedProductIdentifier(banner: Banner): string | null {
     if (banner.link_type !== 'product') return null;
     const raw = String(banner.link_target || banner.link_url || '').trim();
-    const productId = raw.includes('/produto/')
-        ? raw.split('/produto/')[1]?.split(/[?#]/)[0]?.replace(/^\/+|\/+$/g, '')
+    const identifier = /\/produto\//i.test(raw)
+        ? raw.split(/\/produto\//i)[1]?.split(/[?#]/)[0]?.replace(/^\/+|\/+$/g, '')
         : raw;
-    return productId || null;
+    if (!identifier) return null;
+    try {
+        return decodeURIComponent(identifier);
+    } catch {
+        return identifier;
+    }
 }
 
 function hasSellableStock(product: any): boolean {
@@ -116,10 +126,12 @@ function hasSellableStock(product: any): boolean {
 }
 
 async function hasAvailableLinkedProduct(banner: Banner): Promise<boolean> {
-    const productId = getLinkedProductId(banner);
-    if (!productId) return true;
+    const productIdentifier = getLinkedProductIdentifier(banner);
+    if (!productIdentifier) return true;
 
-    const product = await vpsApiService.getProductById(productId, true);
+    const product = PRODUCT_ID_PATTERN.test(productIdentifier)
+        ? await vpsApiService.getProductById(productIdentifier, true)
+        : await vpsApiService.getProductBySlug(productIdentifier);
     if (!product) return false;
     if (hasSellableStock(product)) return true;
 
