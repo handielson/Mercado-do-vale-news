@@ -31,6 +31,7 @@ import { Model } from '../../types/model';
 import { modelService } from '../../services/models';
 import { averagePriceService } from '../../services/averagePriceService';
 import { modelColorImagesService } from '../../services/model-color-images';
+import { getModelImageWithCache } from '../../services/modelImageCache';
 import { colorService } from '../../services/colors';
 import { getAuthSessionToken } from '../../services/authSession';
 import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
@@ -999,6 +1000,11 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 const exactColorImages = resolveExistingProductImages(modelColorImages);
                 if (exactColorImages.length > 0) return exactColorImages;
             }
+        }
+
+        if (modelId) {
+            const modelFallbackImage = await getModelImageWithCache(modelId, colorName || undefined).catch(() => null);
+            if (modelFallbackImage) return [modelFallbackImage];
         }
 
         if (!modelId) return [];

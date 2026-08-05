@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.202-product-entry-image-fallback
+version: v1.2.203-product-entry-model-image-fallback
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260805-172955-v12202-product-entry-image-fallback
+release_vps: /var/www/mdv-site/releases/20260805-173130-v12203-product-entry-model-image-fallback
 branch: main
-summary: Busca a foto no produto, modelo/cor ou item equivalente ao dar entrada por SKU.
+summary: Usa também a imagem geral do modelo como fallback final na entrada por SKU.
 ```

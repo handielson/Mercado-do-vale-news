@@ -41,6 +41,7 @@ assert.deepEqual(
 
 const productForm = await readFile(new URL('../components/products/ProductForm.tsx', import.meta.url), 'utf8');
 assert.match(productForm, /resolveLocalCatalogImagesForBlingLink/);
+assert.match(productForm, /getModelImageWithCache\(modelId, colorName \|\| undefined\)/);
 assert.match(productForm, /resolveSiblingProductImages\(siblingProducts/);
 assert.match(productForm, /setValue\('images', linkImages/);
 assert.match(productForm, /setImagePreviews\(linkImages\)/);
