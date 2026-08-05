@@ -104,26 +104,35 @@ export function useEANAutofill({
                         console.log(`  ${isExcluded ? '❌' : '✅'} ${fieldName}: ${isExcluded ? 'EXCLUDED' : 'filling'}`);
                         return !isExcluded;
                     };
+                    const hasValue = (value: unknown) => {
+                        if (Array.isArray(value)) return value.length > 0;
+                        if (typeof value === 'number') return value > 0;
+                        if (typeof value === 'string') return value.trim().length > 0;
+                        return value !== null && value !== undefined;
+                    };
+                    const shouldFillEmpty = (fieldName: string) => (
+                        shouldFill(fieldName) && !hasValue(watch(fieldName as any))
+                    );
 
                     // Fill basic fields
-                    if (shouldFill('category_id')) setValue('category_id', foundProduct.category_id);
-                    if (shouldFill('brand') && foundProduct.brand) setValue('brand', foundProduct.brand);
-                    if (shouldFill('model') && foundProduct.model) setValue('model', foundProduct.model);
-                    if (shouldFill('name')) setValue('name', foundProduct.model || foundProduct.name);
-                    if (shouldFill('description') && foundProduct.description) setValue('description', foundProduct.description);
+                    if (shouldFillEmpty('category_id')) setValue('category_id', foundProduct.category_id);
+                    if (shouldFillEmpty('brand') && foundProduct.brand) setValue('brand', foundProduct.brand);
+                    if (shouldFillEmpty('model') && foundProduct.model) setValue('model', foundProduct.model);
+                    if (shouldFillEmpty('name')) setValue('name', foundProduct.model || foundProduct.name);
+                    if (shouldFillEmpty('description') && foundProduct.description) setValue('description', foundProduct.description);
 
                     // Fill specs (check with specs. prefix)
                     if (foundProduct.specs) {
-                        if (shouldFill('specs.color') && foundProduct.specs.color) setValue('specs.color', foundProduct.specs.color);
-                        if (shouldFill('specs.storage') && foundProduct.specs.storage) setValue('specs.storage', foundProduct.specs.storage);
-                        if (shouldFill('specs.ram') && foundProduct.specs.ram) setValue('specs.ram', foundProduct.specs.ram);
-                        if (shouldFill('specs.version') && foundProduct.specs.version) setValue('specs.version', foundProduct.specs.version);
-                        if (shouldFill('specs.battery_health') && foundProduct.specs.battery_health) setValue('specs.battery_health', foundProduct.specs.battery_health);
+                        if (shouldFillEmpty('specs.color') && foundProduct.specs.color) setValue('specs.color', foundProduct.specs.color);
+                        if (shouldFillEmpty('specs.storage') && foundProduct.specs.storage) setValue('specs.storage', foundProduct.specs.storage);
+                        if (shouldFillEmpty('specs.ram') && foundProduct.specs.ram) setValue('specs.ram', foundProduct.specs.ram);
+                        if (shouldFillEmpty('specs.version') && foundProduct.specs.version) setValue('specs.version', foundProduct.specs.version);
+                        if (shouldFillEmpty('specs.battery_health') && foundProduct.specs.battery_health) setValue('specs.battery_health', foundProduct.specs.battery_health);
 
                         // Fill custom fields
                         Object.keys(foundProduct.specs).forEach(key => {
                             if (!['color', 'storage', 'ram', 'version', 'battery_health', 'imei1', 'imei2', 'serial'].includes(key)) {
-                                if (shouldFill(`specs.${key}`)) {
+                                if (shouldFillEmpty(`specs.${key}`)) {
                                     setValue(`specs.${key}`, foundProduct.specs[key]);
                                 }
                             }
@@ -131,13 +140,14 @@ export function useEANAutofill({
                     }
 
                     // Fill prices
-                    if (shouldFill('price_cost') && foundProduct.price_cost) setValue('price_cost', foundProduct.price_cost);
-                    if (shouldFill('price_retail') && foundProduct.price_retail) setValue('price_retail', foundProduct.price_retail);
-                    if (shouldFill('price_reseller') && foundProduct.price_reseller) setValue('price_reseller', foundProduct.price_reseller);
-                    if (shouldFill('price_wholesale') && foundProduct.price_wholesale) setValue('price_wholesale', foundProduct.price_wholesale);
+                    if (shouldFillEmpty('price_cost') && foundProduct.price_cost) setValue('price_cost', foundProduct.price_cost);
+                    if (shouldFillEmpty('price_retail') && foundProduct.price_retail) setValue('price_retail', foundProduct.price_retail);
+                    if (shouldFillEmpty('price_reseller') && foundProduct.price_reseller) setValue('price_reseller', foundProduct.price_reseller);
+                    if (shouldFillEmpty('price_wholesale') && foundProduct.price_wholesale) setValue('price_wholesale', foundProduct.price_wholesale);
 
                     // Fill images if configured to reuse
-                    if (shouldFill('images') && foundProduct.images && foundProduct.images.length > 0) {
+                    const hasProductIdentity = hasValue(watch('model_id')) || hasValue(watch('model')) || hasValue(watch('specs.color' as any));
+                    if (shouldFillEmpty('images') && !hasProductIdentity && foundProduct.images && foundProduct.images.length > 0) {
                         setValue('images', foundProduct.images);
                         console.log('📸 [EAN Autofill] Images reused:', foundProduct.images.length);
                     }

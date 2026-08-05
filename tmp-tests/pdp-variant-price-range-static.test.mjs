@@ -15,8 +15,14 @@ assert.match(
 
 assert.match(
   source,
-  /variantPriceRange\.hasRange\s*\?\s*\(/,
-  'PDP buybox must render a min-to-max price range when sibling variants have different prices',
+  /\.filter\(\(item\)\s*=>\s*item\.track_inventory\s*===\s*false\s*\|\|\s*Number\(item\.stock_quantity\s*\|\|\s*0\)\s*>\s*0\)/,
+  'PDP price range must ignore out-of-stock variants',
+);
+
+assert.match(
+  source,
+  /shouldShowVariantPriceRange\s*\?\s*\(/,
+  'PDP buybox must render a min-to-max price range only before a sellable variation is selected',
 );
 
 assert.match(

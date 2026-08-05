@@ -17,6 +17,12 @@ assert.match(
 
 assert.match(
   source,
+  /setSelectedVariantId\(String\(data\.id\)\)/,
+  'direct product routes must select the loaded variation and show its exact price',
+);
+
+assert.match(
+  source,
   /const\s+shouldShowVariantPriceRange\s*=\s*variantPriceRange\.hasRange\s*&&\s*!selectedVariantId\s*&&\s*!isKitSelected/,
   'PDP must show variant price range only when no variant is selected',
 );

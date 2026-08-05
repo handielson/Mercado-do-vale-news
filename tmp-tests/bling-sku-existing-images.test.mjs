@@ -40,6 +40,18 @@ assert.deepEqual(
   ['https://cdn.example.com/amarelo.jpg'],
 );
 
+assert.deepEqual(
+  resolveSiblingProductImages([
+    { id: 'blue', specs: { color: 'Azul' }, name: 'Redmi 15C', images: ['https://cdn.example.com/azul.jpg'] },
+    { id: 'green', specs: { color: 'Verde' }, name: 'Redmi 15C', images: ['https://cdn.example.com/verde.jpg'] },
+  ], {
+    id: 'black',
+    specs: { color: 'Preto' },
+    name: 'Redmi 15C',
+  }),
+  [],
+);
+
 const productForm = await readFile(new URL('../components/products/ProductForm.tsx', import.meta.url), 'utf8');
 assert.match(productForm, /resolveLocalCatalogImagesForBlingLink/);
 assert.match(productForm, /vpsApiService\.getProductById\(localProduct\.id, true\)/);
@@ -50,7 +62,8 @@ assert.match(productForm, /search: sku/);
 assert.match(productForm, /exactSearchSku/);
 assert.match(productForm, /limit: 5000/);
 assert.match(productForm, /exactCatalogSku/);
-assert.match(productForm, /getModelImageWithCache\(modelId, colorName \|\| undefined\)/);
+assert.match(productForm, /if \(modelId && !colorName\)/);
+assert.match(productForm, /getModelImageWithCache\(modelId\)/);
 assert.match(productForm, /resolveSiblingProductImages\(siblingProducts/);
 assert.match(productForm, /setValue\('images', linkImages/);
 assert.match(productForm, /setImagePreviews\(linkImages\)/);

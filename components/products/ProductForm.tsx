@@ -1031,8 +1031,8 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
             }
         }
 
-        if (modelId) {
-            const modelFallbackImage = await getModelImageWithCache(modelId, colorName || undefined).catch(() => null);
+        if (modelId && !colorName) {
+            const modelFallbackImage = await getModelImageWithCache(modelId).catch(() => null);
             if (modelFallbackImage) return [modelFallbackImage];
         }
 

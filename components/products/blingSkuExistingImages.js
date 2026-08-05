@@ -55,6 +55,8 @@ export function resolveSiblingProductImages(products, product, limit = 5) {
       if (images.length === 0) return null;
 
       const candidateColor = normalizeComparableText(candidate?.specs?.color);
+      if (productColor && candidateColor !== productColor) return null;
+
       const candidateSlug = normalizeComparableText(candidate?.slug || candidate?.specs?.slug);
       const candidateName = normalizeComparableText(candidate?.name);
       let score = 0;

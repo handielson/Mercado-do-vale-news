@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.209-product-entry-bling-loop-guard",
+  "version": "v1.2.210-product-color-price-isolation",
   "date": "2026-08-05",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260805-181946-v12209-product-entry-bling-loop-guard",
+  "release_vps": "/var/www/mdv-site/releases/20260805-190813-v12210-product-color-price-isolation",
   "branch": "main",
-  "summary": "Evita espera prolongada e aparente loop na busca automatica de produtos por SKU no Bling."
+  "summary": "Impede fotos e precos de outras variacoes no cadastro e na pagina publica do produto."
 }

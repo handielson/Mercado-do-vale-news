@@ -170,6 +170,7 @@ export const PublicProductPage: React.FC = () => {
         });
 
         const prices = Array.from(variantsById.values())
+            .filter((item) => item.track_inventory === false || Number(item.stock_quantity || 0) > 0)
             .map((item) => {
                 const price = getEffectivePrice(item, customer) / 100;
                 const discounted = item.discount_percentage
@@ -456,7 +457,7 @@ export const PublicProductPage: React.FC = () => {
                     ? { ...formattedProduct, images: resolvedImages, image_url: resolvedImages[0] }
                     : formattedProduct;
 
-                setSelectedVariantId(null);
+                setSelectedVariantId(String(data.id));
                 setProduct(displayProduct as unknown as CatalogProduct);
                 criticalProductLoaded = true;
                 trackViewItem(displayProduct);
