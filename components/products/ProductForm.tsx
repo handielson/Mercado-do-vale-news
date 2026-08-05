@@ -967,6 +967,17 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         );
         if (exactSku) return exactSku;
 
+        const bySearch = await vpsApiService.getProducts({
+            search: sku,
+            status: 'all',
+            limit: 20,
+            noCache: true,
+        }).catch(() => null);
+        const exactSearchSku = (bySearch || []).find((product: any) =>
+            String(product?.sku || '').trim().toLowerCase() === sku.toLowerCase()
+        );
+        if (exactSearchSku) return exactSearchSku;
+
         if (!blingProductId) return null;
 
         const byBling = await vpsApiService.getProducts({

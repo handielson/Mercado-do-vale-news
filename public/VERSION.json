@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.205-product-entry-local-images",
+  "version": "v1.2.206-product-entry-sku-search-fallback",
   "date": "2026-08-05",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260805-173836-v12205-product-entry-local-images",
+  "release_vps": "/var/www/mdv-site/releases/20260805-174125-v12206-product-entry-sku-search-fallback",
   "branch": "main",
-  "summary": "Mostra as fotos existentes pelo SKU mesmo quando o Bling não retorna o produto."
+  "summary": "Localiza o produto pela busca geral do catálogo quando a consulta direta por SKU não retorna dados."
 }
