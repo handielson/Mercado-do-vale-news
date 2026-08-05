@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.210-product-color-price-isolation
+version: v1.2.211-bling-disconnected-status
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260805-190813-v12210-product-color-price-isolation
+release_vps: /var/www/mdv-site/releases/20260805-193126-v12211-bling-disconnected-status
 branch: main
-summary: Impede fotos e precos de outras variacoes no cadastro e na pagina publica do produto.
+summary: Distingue Bling desconectado de SKU inexistente no cadastro de produtos.
 ```

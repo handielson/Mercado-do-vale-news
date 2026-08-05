@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const service = readFileSync('services/blingService.ts', 'utf8');
 const form = readFileSync('components/products/ProductForm.tsx', 'utf8');
 const section = readFileSync('components/products/sections/BlingLinkSection.tsx', 'utf8');
+const basicInfo = readFileSync('components/products/sections/ProductBasicInfo.tsx', 'utf8');
 
 assert.match(
   service,
@@ -45,6 +46,24 @@ assert.match(
   form,
   /findBlingLinkBySku\(cleanSku, \{ skipLocalProductLookup: true \}\)/,
   'Automatic Bling lookup must not wait for slow local catalog fallbacks'
+);
+
+assert.match(
+  form,
+  /isBlingReconnectRequired\(error\)[\s\S]*Bling desconectado\. Reconecte a integracao para buscar este SKU\./,
+  'Automatic SKU lookup must distinguish an expired Bling connection from a missing SKU'
+);
+
+assert.match(
+  form,
+  /blingLookupError=\{blingLookupError\}/,
+  'Product form must expose the Bling lookup failure to the compact status field'
+);
+
+assert.match(
+  basicInfo,
+  /href="\/admin\/settings\/bling"[\s\S]*Reconectar/,
+  'Disconnected Bling status must provide a direct reconnect action'
 );
 
 assert.match(

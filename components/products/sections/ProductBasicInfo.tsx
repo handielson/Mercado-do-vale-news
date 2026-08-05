@@ -62,18 +62,21 @@ interface ProductBasicInfoProps {
     blingParentId?: number;
     blingParentProduct?: Product;
     isAutoLinkingBling?: boolean;
+    blingLookupError?: string | null;
 }
 
 function VinculoBlingCompacto({
     blingId,
     blingParentId,
     sku,
-    isAutoLinkingBling
+    isAutoLinkingBling,
+    blingLookupError
 }: {
     blingId?: number;
     blingParentId?: number;
     sku?: string;
     isAutoLinkingBling?: boolean;
+    blingLookupError?: string | null;
 }) {
     const hasSku = !!sku?.trim();
 
@@ -111,6 +114,17 @@ function VinculoBlingCompacto({
         );
     }
 
+    if (blingLookupError) {
+        return (
+            <div className="min-h-[46px] rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 flex items-center justify-between gap-3">
+                <span>{blingLookupError}</span>
+                <a href="/admin/settings/bling" className="font-semibold underline shrink-0">
+                    Reconectar
+                </a>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-[46px] rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 flex items-center">
             {hasSku
@@ -130,7 +144,8 @@ export function ProductBasicInfo({
     blingId,
     blingParentId,
     blingParentProduct,
-    isAutoLinkingBling
+    isAutoLinkingBling,
+    blingLookupError
 }: ProductBasicInfoProps) {
     const [selectedModel, setSelectedModel] = useState<Model | null>(null);
     const [isLoadingModel, setIsLoadingModel] = useState(false);
@@ -319,6 +334,7 @@ export function ProductBasicInfo({
                             blingParentId={blingParentId}
                             sku={watch('sku') || ''}
                             isAutoLinkingBling={isAutoLinkingBling}
+                            blingLookupError={blingLookupError}
                         />
                     </div>
 

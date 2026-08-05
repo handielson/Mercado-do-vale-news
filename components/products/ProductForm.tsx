@@ -38,7 +38,7 @@ import { buildVpsUrl, getVpsSyncHeaders } from '../../services/vpsProxyBase';
 import { vpsApiService } from '../../services/vpsApiService';
 import { vpsClient } from '../../services/vpsClient';
 import { unitService } from '../../services/units';
-import { fetchBlingProductDetail, findBlingProductByExactSku, importBlingProducts } from '../../services/blingService';
+import { fetchBlingProductDetail, findBlingProductByExactSku, importBlingProducts, isBlingReconnectRequired } from '../../services/blingService';
 import { BlingLinkSection } from './sections/BlingLinkSection';
 import { ShopeeLinkSection } from './sections/ShopeeLinkSection';
 import { ProductKitsSection } from './sections/ProductKitsSection';
@@ -77,6 +77,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
     const [blingParentProduct, setBlingParentProduct] = useState<Product | undefined>();
     const [isBlingLinkManualOverride, setIsBlingLinkManualOverride] = useState(false);
     const [isAutoLinkingBling, setIsAutoLinkingBling] = useState(false);
+    const [blingLookupError, setBlingLookupError] = useState<string | null>(null);
     const [shopeeItemId, setShopeeItemId] = useState<number | undefined>(initialData?.shopee_item_id);
     const [isSavingForm, setIsSavingForm] = useState(false);
     const [saveProgress, setSaveProgress] = useState<{ current: number; total: number; message: string } | null>(null);
@@ -1210,6 +1211,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
 
         const requestId = ++automaticBlingRequestIdRef.current;
         setIsAutoLinkingBling(true);
+        setBlingLookupError(null);
         void hydrateExistingLocalProductImagesBySku(cleanSku).catch((error) => {
             console.warn('[ProductForm] Local image hydration skipped:', error);
         });
@@ -1222,6 +1224,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 if (!link || !isLatestLookup || currentSku !== normalizedSku) return null;
 
                 applyBlingLinkAutofillToForm(link);
+                setBlingLookupError(null);
                 toast.info('Vinculado automaticamente pelo SKU no Bling.', {
                     id: 'bling-auto-sku-link',
                     description: (link.priceAutofill.price_cost || link.priceAutofill.price_retail || link.specAutofill.color || link.specAutofill.ram || link.specAutofill.storage)
@@ -1236,6 +1239,9 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 return link;
             } catch (error) {
                 console.warn('[ProductForm] Auto Bling SKU link skipped:', error);
+                setBlingLookupError(isBlingReconnectRequired(error)
+                    ? 'Bling desconectado. Reconecte a integracao para buscar este SKU.'
+                    : 'Nao foi possivel consultar o Bling agora. Tente novamente.');
                 return null;
             } finally {
                 if (automaticBlingRequestIdRef.current === requestId) {
@@ -1842,6 +1848,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                 blingParentId={blingParentId}
                 blingParentProduct={blingParentProduct}
                 isAutoLinkingBling={isAutoLinkingBling}
+                blingLookupError={blingLookupError}
             />
 
             {/* 1. TIPO DE PRODUTO */}
