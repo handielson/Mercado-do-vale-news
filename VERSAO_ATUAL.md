@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.206-product-entry-sku-search-fallback
+version: v1.2.207-product-entry-full-catalog-fallback
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260805-174125-v12206-product-entry-sku-search-fallback
+release_vps: /var/www/mdv-site/releases/20260805-174412-v12207-product-entry-full-catalog-fallback
 branch: main
-summary: Localiza o produto pela busca geral do catálogo quando a consulta direta por SKU não retorna dados.
+summary: Localiza o SKU no mesmo conjunto completo carregado pela lista administrativa.
 ```

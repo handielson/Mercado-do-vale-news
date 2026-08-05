@@ -47,6 +47,8 @@ assert.match(productForm, /hydrateExistingLocalProductImagesBySku/);
 assert.match(productForm, /await hydrateExistingLocalProductImagesBySku\(cleanSku\)/);
 assert.match(productForm, /search: sku/);
 assert.match(productForm, /exactSearchSku/);
+assert.match(productForm, /limit: 5000/);
+assert.match(productForm, /exactCatalogSku/);
 assert.match(productForm, /getModelImageWithCache\(modelId, colorName \|\| undefined\)/);
 assert.match(productForm, /resolveSiblingProductImages\(siblingProducts/);
 assert.match(productForm, /setValue\('images', linkImages/);

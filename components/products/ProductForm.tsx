@@ -978,6 +978,16 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
         );
         if (exactSearchSku) return exactSearchSku;
 
+        const catalogProducts = await vpsApiService.getProducts({
+            status: 'all',
+            limit: 5000,
+            noCache: true,
+        }).catch(() => null);
+        const exactCatalogSku = (catalogProducts || []).find((product: any) =>
+            String(product?.sku || '').trim().toLowerCase() === sku.toLowerCase()
+        );
+        if (exactCatalogSku) return exactCatalogSku;
+
         if (!blingProductId) return null;
 
         const byBling = await vpsApiService.getProducts({
