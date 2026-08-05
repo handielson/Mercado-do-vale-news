@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.189-meta-review-confirmation
+version: v1.2.190-meta-delivery-review-confirmation
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260805-020456-meta-review-confirmation
+release_vps: /var/www/mdv-site/releases/20260805-021730-meta-delivery-review-confirmation
 branch: main
-summary: Preserva a confirmação da Meta e simplifica a ativação individual de campanhas.
+summary: Preserva a confirmação de segurança da Meta durante a revalidação da ativação individual.
 ```

@@ -10,6 +10,9 @@ assert.match(api, /delivery-status-approvals/);
 assert.match(api, /async function executeMetaDeliveryStatusChange/);
 assert.match(api, /Legacy campaigns can only be paused/);
 assert.match(api, /Meta has not approved/);
+assert.match(api, /const securityConfirmations = await confirmedSecurityReviewsByItem\(pool\)/);
+assert.match(api, /metaReviewState\(ad, \{ securityReviewConfirmed \}\)/);
+assert.match(api, /metaReviewState\(confirmedAd, \{ securityReviewConfirmed \}\)/);
 assert.match(api, /Activation blocked by active campaign outside the managed portfolio/);
 assert.match(api, /Pause primeiro as campanhas antigas ativas/);
 

@@ -1556,9 +1556,13 @@ async function executeMetaDeliveryStatusChange(pool, approval) {
   let confirmedCampaign;
   let confirmedAdset;
   let confirmedAd;
+  let securityReviewConfirmed = false;
   try {
     if (payload.desired_status === 'ACTIVE') {
-      const reviewState = metaReviewState(ad);
+      const securityConfirmations = await confirmedSecurityReviewsByItem(pool);
+      const securityConfirmation = securityConfirmations.get(String(payload.item_key));
+      securityReviewConfirmed = securityConfirmation?.adId === String(payload.ad_id);
+      const reviewState = metaReviewState(ad, { securityReviewConfirmed });
       if (!['approved', 'active'].includes(reviewState)) throw new Error(`Meta has not approved ${payload.item_key}: ${reviewState}`);
       const actualBudget = Number(adset.lifetime_budget || adset.daily_budget || 0);
       if (actualBudget !== currencyCents(payload.authorized_amount_brl)) throw new Error('Meta budget changed after approval');
@@ -1597,7 +1601,7 @@ async function executeMetaDeliveryStatusChange(pool, approval) {
   const cachedReviews = await cachedManagedAdReviews(pool);
   const updatedReviews = cachedReviews.map((item) => (item.itemKey === payload.item_key ? {
     ...item,
-    state: metaReviewState(confirmedAd),
+    state: metaReviewState(confirmedAd, { securityReviewConfirmed }),
     configuredStatus: confirmedAd.status,
     effectiveStatus: confirmedAd.effective_status || null,
     campaignStatus: confirmedCampaign.status,
