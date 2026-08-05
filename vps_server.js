@@ -27714,11 +27714,14 @@ async function getWhatsAppStatusCardPlan(priceRetailCents) {
     `SELECT installments, applied_fee_pct
      FROM payment_fees
      WHERE installments = 12
-       AND method IN ('credit', 'card', 'credit_card')
-     ORDER BY channel = 'all' DESC, applied_fee_pct ASC
+       AND channel = 'presencial'
+     ORDER BY updated_at DESC
      LIMIT 1`
   );
-  const feePct = Number(rows[0]?.applied_fee_pct || 0);
+  if (!rows[0]) {
+    throw new Error('Taxa presencial de 12x nao configurada em payment_fees');
+  }
+  const feePct = Number(rows[0].applied_fee_pct || 0);
   const total = Math.round(Number(priceRetailCents || 0) * (1 + feePct / 100));
   return { installments: 12, value: Math.round(total / 12), total };
 }

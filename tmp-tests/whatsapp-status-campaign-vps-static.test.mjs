@@ -45,6 +45,9 @@ for (const source of [server, serverCjs]) {
   assert.match(source, /specs, custom_fields/);
   assert.match(source, /image_url, video_url, price_retail/);
   assert.match(source, /sameWhatsAppStatusMemoryVariation/);
+  assert.match(source, /WHERE installments = 12\s+AND channel = 'presencial'/);
+  assert.doesNotMatch(source, /method IN \('credit', 'card', 'credit_card'\)/);
+  assert.match(source, /Taxa presencial de 12x nao configurada em payment_fees/);
   assert.match(source, /EXISTS \(\s*SELECT 1 FROM product_categories pc/);
   assert.match(source, /SELECT id, parent_id FROM categories/);
   assert.match(source, /categoryIds\.has\(String\(category\.parent_id\)\)/);

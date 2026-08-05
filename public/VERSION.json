@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.194-bling-parent-auto-import",
+  "version": "v1.2.195-whatsapp-status-card-fee",
   "date": "2026-08-05",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260805-115629-v12194-bling-parent-auto-import",
+  "release_vps": "/var/www/mdv-site/releases/20260805-121445-v12195-whatsapp-status-card-fee",
   "branch": "main",
-  "summary": "Importa automaticamente o pai ausente do Bling e preenche o vínculo local da variação."
+  "summary": "Calcula as parcelas dos Status do WhatsApp com a taxa presencial de 12x cadastrada no sistema."
 }
