@@ -152,6 +152,19 @@ export function ProductBasicInfo({
         }
     }, [watch('parent_id'), allProducts]);
 
+    useEffect(() => {
+        if (!blingParentId || watch('parent_id') || allProducts.length === 0) return;
+
+        const parent = allProducts.find(product =>
+            String(product.bling_id || '') === String(blingParentId)
+        );
+        if (!parent) return;
+
+        setSelectedParent(parent);
+        setParentSearch('');
+        setValue('parent_id', parent.id, { shouldValidate: true, shouldDirty: true });
+    }, [blingParentId, allProducts, setValue, watch('parent_id')]);
+
     const selectedModelName = watch('model');
 
     // Load model data when model is selected

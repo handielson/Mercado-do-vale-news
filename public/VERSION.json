@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.192-bling-model-batch",
+  "version": "v1.2.193-bling-parent-autofill",
   "date": "2026-08-05",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260805-113006-v12192-bling-model-batch",
+  "release_vps": "/var/www/mdv-site/releases/20260805-114732-v12193-bling-parent-autofill",
   "branch": "main",
-  "summary": "Preserva o modelo no cadastro em massa e reconhece modelos no nome de variacoes do Bling."
+  "summary": "Preenche automaticamente o Produto Pai local usando o ID do pai recebido do Bling."
 }

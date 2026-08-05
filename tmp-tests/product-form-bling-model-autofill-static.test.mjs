@@ -3,6 +3,7 @@ import fs from 'node:fs';
 
 const source = fs.readFileSync('components/products/ProductForm.tsx', 'utf8');
 const modelSelectSource = fs.readFileSync('components/products/selectors/ModelSelect.tsx', 'utf8');
+const basicInfoSource = fs.readFileSync('components/products/sections/ProductBasicInfo.tsx', 'utf8');
 
 assert.match(
   source,
@@ -44,6 +45,18 @@ assert.match(
   source,
   /mergedData\.model_id\s*=\s*getValues\('model_id'\)\s*\|\|\s*mergedData\.model_id/,
   'Saving should use the latest automatically resolved model id',
+);
+
+assert.match(
+  basicInfoSource,
+  /String\(product\.bling_id \|\| ''\) === String\(blingParentId\)/,
+  'Product form should resolve the local parent by the Bling parent id',
+);
+
+assert.match(
+  basicInfoSource,
+  /setValue\('parent_id', parent\.id, \{ shouldValidate: true, shouldDirty: true \}\)/,
+  'Resolved Bling parent should fill the local products.parent_id field',
 );
 
 assert.match(
