@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, Facebook, Loader2, PlayCircle, RefreshCw, Search, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, Facebook, Loader2, PauseCircle, PlayCircle, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     metaMarketingConnectionService,
@@ -30,7 +30,7 @@ const formatPercent = (value: number) => `${new Intl.NumberFormat('pt-BR', { min
 export default function MetaMarketingConnectionPanel() {
     const [connection, setConnection] = useState<MetaMarketingConnection | null>(null);
     const [loading, setLoading] = useState(true);
-    const [working, setWorking] = useState<'connect' | 'select' | 'audit' | 'launch' | 'security' | null>(null);
+    const [working, setWorking] = useState<string | null>(null);
     const [adAccountId, setAdAccountId] = useState('');
     const [pageId, setPageId] = useState('');
 
@@ -124,6 +124,20 @@ export default function MetaMarketingConnectionPanel() {
         }
     };
 
+    const prepareDeliveryStatus = async (payload: Parameters<typeof metaMarketingConnectionService.prepareDeliveryStatusApproval>[0], key: string) => {
+        setWorking(key);
+        try {
+            const result = await metaMarketingConnectionService.prepareDeliveryStatusApproval(payload);
+            toast.success(result.reused
+                ? 'Esta alteração de veiculação já está aguardando decisão na Central.'
+                : 'Alteração preparada. Revise o estado, impacto e orçamento na Central de Aprovações.');
+        } catch (error: any) {
+            toast.error(error?.message || 'Não foi possível preparar a alteração de veiculação.');
+        } finally {
+            setWorking(null);
+        }
+    };
+
     if (loading) return <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />Consultando conexão Meta...</div>;
     if (!connection) return null;
 
@@ -170,7 +184,10 @@ export default function MetaMarketingConnectionPanel() {
                     <section className="rounded-xl border border-rose-200 bg-rose-50 p-4">
                         <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-700" /><div className="min-w-0 flex-1"><p className="text-sm font-black text-rose-900">Campanha ativa fora do portfólio gerenciado</p><p className="mt-1 text-xs text-rose-800">Ela pertence a outra conta de anúncios e não será pausada ou alterada automaticamente. Enquanto estiver ativa, a autorização das duas novas campanhas permanece bloqueada para respeitar o limite operacional.</p></div></div>
                         <div className="mt-3 space-y-2">
-                            {activeOutsidePortfolio.map((campaign) => <div key={`${campaign.account.id}:${campaign.id}`} className="flex flex-col gap-2 rounded-lg border border-rose-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-black text-slate-900">{campaign.name}</p><p className="text-xs text-slate-500">Conta: {campaign.account.name || campaign.account.id} · {campaign.account.account_id || campaign.account.id.replace(/^act_/, '')}</p></div><a href={campaign.managerUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-black text-blue-700 hover:underline">Ver campanha antiga na Meta <ExternalLink className="h-3.5 w-3.5" /></a></div>)}
+                            {activeOutsidePortfolio.map((campaign) => {
+                                const pauseKey = `legacy:${campaign.account.id}:${campaign.id}:PAUSED`;
+                                return <div key={`${campaign.account.id}:${campaign.id}`} className="flex flex-col gap-2 rounded-lg border border-rose-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-black text-slate-900">{campaign.name}</p><p className="text-xs text-slate-500">Conta: {campaign.account.name || campaign.account.id} · {campaign.account.account_id || campaign.account.id.replace(/^act_/, '')}</p></div><div className="flex flex-wrap items-center gap-2"><button onClick={() => prepareDeliveryStatus({ targetKind: 'legacy_campaign', campaignId: campaign.id, adAccountId: campaign.account.id, desiredStatus: 'PAUSED' }, pauseKey)} disabled={working !== null} className="inline-flex items-center gap-1.5 rounded-lg bg-rose-700 px-3 py-2 text-xs font-black text-white hover:bg-rose-600 disabled:opacity-50">{working === pauseKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PauseCircle className="h-3.5 w-3.5" />}Preparar pausa</button><a href={campaign.managerUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-black text-blue-700 hover:underline">Ver na Meta <ExternalLink className="h-3.5 w-3.5" /></a></div></div>;
+                            })}
                         </div>
                     </section>
                 )}
@@ -245,6 +262,9 @@ export default function MetaMarketingConnectionPanel() {
                             {reviews.map((review) => {
                                 const status = REVIEW_LABELS[review.state];
                                 const StatusIcon = status.icon;
+                                const configuredActive = review.campaignStatus === 'ACTIVE' && review.adsetStatus === 'ACTIVE' && review.configuredStatus === 'ACTIVE';
+                                const desiredStatus = configuredActive ? 'PAUSED' : 'ACTIVE';
+                                const deliveryKey = `managed:${review.itemKey}:${desiredStatus}`;
                                 return (
                                     <article key={review.adId} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                                         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -259,6 +279,14 @@ export default function MetaMarketingConnectionPanel() {
                                                 {working === 'security' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}Preparar confirmação na Meta
                                             </button>
                                         )}
+                                        {(configuredActive || review.state === 'approved') && (
+                                            <button onClick={() => prepareDeliveryStatus({ targetKind: 'managed_campaign', itemKey: review.itemKey, desiredStatus }, deliveryKey)} disabled={working !== null || (!configuredActive && activeOutsidePortfolio.length > 0)} title={!configuredActive && activeOutsidePortfolio.length > 0 ? 'Pause primeiro as campanhas antigas ativas.' : undefined} className={`mt-3 inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-black text-white disabled:opacity-50 ${configuredActive ? 'bg-rose-700 hover:bg-rose-600' : 'bg-emerald-700 hover:bg-emerald-600'}`}>
+                                                {working === deliveryKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : configuredActive ? <PauseCircle className="h-3.5 w-3.5" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                                                {configuredActive ? 'Preparar pausa' : 'Preparar ativação'}
+                                            </button>
+                                        )}
+                                        {!configuredActive && review.state === 'approved' && activeOutsidePortfolio.length > 0 && <p className="mt-2 text-[11px] font-semibold text-rose-700">Pause primeiro as campanhas antigas ativas.</p>}
+                                        {!configuredActive && review.state === 'in_review' && <p className="mt-3 text-[11px] font-semibold text-amber-700">A ativação será liberada quando a Meta concluir a análise.</p>}
                                         <div className="mt-3 flex items-center justify-between gap-3">
                                             <p className="text-[11px] text-slate-400">Atualizado em {new Date(review.capturedAt).toLocaleString('pt-BR')}</p>
                                             <a href={review.managerUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-black text-blue-700 hover:underline">Ver na Meta <ExternalLink className="h-3.5 w-3.5" /></a>

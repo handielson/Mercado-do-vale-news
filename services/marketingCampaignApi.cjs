@@ -10,6 +10,7 @@ const META_CREATIVE_PLAN_ACTION = 'meta.approve_campaign_creative_plan.v1';
 const META_PAUSED_AD_BUNDLE_ACTION = 'meta.create_paused_whatsapp_ad_bundle.v1';
 const META_REVIEW_AUTO_LAUNCH_ACTION = 'meta.activate_after_review.v1';
 const META_SECURITY_REVIEW_ACTION = 'meta.submit_security_review.v1';
+const META_DELIVERY_STATUS_ACTION = 'meta.set_delivery_status.v1';
 const META_AUTHORIZED_MONTHLY_CEILING_BRL = 1000;
 const META_CAMPAIGN_SHELLS = Object.freeze([
   { itemKey: 'store-carousel', name: 'MDV | Loja inteira | Carrossel | Petrolina + Juazeiro' },
@@ -1432,6 +1433,159 @@ async function executeMetaReviewAutoLaunch(pool, approval) {
   }
 }
 
+async function executeMetaDeliveryStatusChange(pool, approval) {
+  const payload = approval.execution_payload;
+  if (!payload || payload.schema_version !== 1 || payload.operation !== 'meta.set_delivery_status') {
+    throw new Error('Unsupported Meta delivery status payload');
+  }
+  if (!['ACTIVE', 'PAUSED'].includes(payload.desired_status)) throw new Error('Unsupported Meta delivery status');
+  const row = await connectionRow(pool);
+  const config = marketingConfig();
+  if (!config.ready || !row || row.status !== 'connected') throw new Error('Meta connection is not ready');
+  const token = decryptToken(row, config.encryptionKey);
+
+  if (payload.target_kind === 'legacy_campaign') {
+    if (payload.desired_status !== 'PAUSED') throw new Error('Legacy campaigns can only be paused from Gestão MV');
+    const accountAudits = await readAllAdAccountCampaigns(row, token);
+    const accountAudit = accountAudits.find((item) => String(item.account.id) === String(payload.ad_account_id));
+    const campaign = accountAudit?.campaigns.find((item) => String(item.id) === String(payload.campaign_id));
+    if (!campaign || campaign.name !== payload.campaign_name) throw new Error('Legacy campaign target changed after approval');
+    await graphPost(payload.campaign_id, token, { status: 'PAUSED' });
+    const confirmed = await graphRequest(payload.campaign_id, token, { fields: 'id,name,status,effective_status' });
+    if (confirmed.status !== 'PAUSED') throw new Error('Meta did not confirm PAUSED for the legacy campaign');
+    const nextAccountAudits = accountAudits.map((audit) => {
+      if (String(audit.account.id) !== String(payload.ad_account_id)) return audit;
+      const campaigns = audit.campaigns.map((item) => (String(item.id) === String(payload.campaign_id)
+        ? { ...item, status: 'PAUSED', effective_status: confirmed.effective_status || 'PAUSED', deliveryStatus: 'NOT_DELIVERING', activeAdCount: 0, activeAds: [] }
+        : item));
+      return {
+        ...audit,
+        campaigns,
+        campaignSummary: {
+          total: campaigns.length,
+          active: campaigns.filter((item) => item.deliveryStatus === 'ACTIVE').length,
+          paused: campaigns.filter((item) => item.status === 'PAUSED' || item.effective_status === 'PAUSED').length,
+        },
+      };
+    });
+    const previous = jsonParse(row.last_audit, {}) || {};
+    const selectedAudit = nextAccountAudits.find((item) => String(item.account.id) === String(row.selected_ad_account_id));
+    await pool.query(
+      'UPDATE meta_marketing_connections SET last_audit=?,last_audit_at=NOW(),last_error=NULL WHERE id=1',
+      [JSON.stringify({
+        ...previous,
+        capturedAt: new Date().toISOString(),
+        accountAudits: nextAccountAudits,
+        campaignSummary: {
+          ...(previous.campaignSummary || {}),
+          total: selectedAudit?.campaignSummary.total || 0,
+          active: selectedAudit?.campaignSummary.active || 0,
+          paused: selectedAudit?.campaignSummary.paused || 0,
+          totalAcrossAccounts: nextAccountAudits.reduce((sum, item) => sum + item.campaignSummary.total, 0),
+          activeAcrossAccounts: nextAccountAudits.reduce((sum, item) => sum + item.campaignSummary.active, 0),
+        },
+      })],
+    );
+    return {
+      operation: payload.operation,
+      targetKind: payload.target_kind,
+      campaignId: payload.campaign_id,
+      status: confirmed.status,
+      effectiveStatus: confirmed.effective_status || null,
+      financialImpact: 0,
+    };
+  }
+
+  if (payload.target_kind !== 'managed_campaign') throw new Error('Unsupported Meta delivery target');
+  const targets = await latestManagedAdTargets(pool);
+  const target = targets.find((item) => item.itemKey === payload.item_key);
+  if (!target || String(target.campaignId) !== String(payload.campaign_id)
+    || String(target.adsetId) !== String(payload.adset_id) || String(target.adId) !== String(payload.ad_id)) {
+    throw new Error('Managed Meta target changed after approval');
+  }
+  const [campaign, adset, ad] = await Promise.all([
+    graphRequest(payload.campaign_id, token, { fields: 'id,name,status,effective_status' }),
+    graphRequest(payload.adset_id, token, { fields: 'id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget' }),
+    graphRequest(payload.ad_id, token, { fields: 'id,name,status,effective_status,adset_id' }),
+  ]);
+  if (String(adset.campaign_id) !== String(payload.campaign_id) || String(ad.adset_id) !== String(payload.adset_id)) {
+    throw new Error('Managed Meta hierarchy changed after approval');
+  }
+
+  let confirmedCampaign;
+  let confirmedAdset;
+  let confirmedAd;
+  try {
+    if (payload.desired_status === 'ACTIVE') {
+      const reviewState = metaReviewState(ad);
+      if (!['approved', 'active'].includes(reviewState)) throw new Error(`Meta has not approved ${payload.item_key}: ${reviewState}`);
+      const actualBudget = Number(adset.lifetime_budget || adset.daily_budget || 0);
+      if (actualBudget !== currencyCents(payload.authorized_amount_brl)) throw new Error('Meta budget changed after approval');
+      const allManagedCampaignIds = targets.map((item) => item.campaignId);
+      const accountAudits = await readAllAdAccountCampaigns(row, token);
+      const outside = activeCampaignsOutsideTargets(accountAudits, allManagedCampaignIds);
+      if (outside.length) throw new Error(`Activation blocked by active campaign outside the managed portfolio: ${outside.map((item) => item.name).join(', ')}`);
+      await graphPost(payload.ad_id, token, { status: 'ACTIVE' });
+      await graphPost(payload.adset_id, token, {
+        status: 'ACTIVE',
+        end_time: isoWithoutMilliseconds(addDays(new Date(), payload.duration_days)),
+      });
+      await graphPost(payload.campaign_id, token, { status: 'ACTIVE' });
+    } else {
+      await graphPost(payload.campaign_id, token, { status: 'PAUSED' });
+      await graphPost(payload.adset_id, token, { status: 'PAUSED' });
+      await graphPost(payload.ad_id, token, { status: 'PAUSED' });
+    }
+
+    [confirmedCampaign, confirmedAdset, confirmedAd] = await Promise.all([
+      graphRequest(payload.campaign_id, token, { fields: 'id,name,status,effective_status' }),
+      graphRequest(payload.adset_id, token, { fields: 'id,name,status,effective_status,campaign_id' }),
+      graphRequest(payload.ad_id, token, { fields: 'id,name,status,effective_status,adset_id' }),
+    ]);
+    if ([confirmedCampaign, confirmedAdset, confirmedAd].some((item) => item.status !== payload.desired_status)) {
+      throw new Error(`Meta did not confirm ${payload.desired_status} at every managed level`);
+    }
+  } catch (error) {
+    if (payload.desired_status === 'ACTIVE') {
+      await graphPost(payload.campaign_id, token, { status: 'PAUSED' }).catch(() => {});
+      await graphPost(payload.adset_id, token, { status: 'PAUSED' }).catch(() => {});
+      await graphPost(payload.ad_id, token, { status: 'PAUSED' }).catch(() => {});
+    }
+    throw error;
+  }
+  const cachedReviews = await cachedManagedAdReviews(pool);
+  const updatedReviews = cachedReviews.map((item) => (item.itemKey === payload.item_key ? {
+    ...item,
+    state: metaReviewState(confirmedAd),
+    configuredStatus: confirmedAd.status,
+    effectiveStatus: confirmedAd.effective_status || null,
+    campaignStatus: confirmedCampaign.status,
+    campaignEffectiveStatus: confirmedCampaign.effective_status || null,
+    adsetStatus: confirmedAdset.status,
+    adsetEffectiveStatus: confirmedAdset.effective_status || null,
+    capturedAt: new Date().toISOString(),
+  } : item));
+  const managedAdReviews = await persistManagedAdReviews(pool, updatedReviews);
+  const previous = jsonParse(row.last_audit, {}) || {};
+  await pool.query(
+    'UPDATE meta_marketing_connections SET last_audit=?,last_audit_at=NOW(),last_error=NULL WHERE id=1',
+    [JSON.stringify({ ...previous, capturedAt: new Date().toISOString(), managedAdReviews })],
+  );
+  return {
+    operation: payload.operation,
+    targetKind: payload.target_kind,
+    itemKey: payload.item_key,
+    campaignId: payload.campaign_id,
+    adsetId: payload.adset_id,
+    adId: payload.ad_id,
+    status: payload.desired_status,
+    effectiveStatus: confirmedCampaign.effective_status || null,
+    financialImpact: payload.desired_status === 'ACTIVE'
+      ? { currency: 'BRL', maximum: payload.period_limit_brl, durationDays: payload.duration_days }
+      : 0,
+  };
+}
+
 async function runMetaReviewAutoLaunch(pool) {
   const [rows] = await pool.query(
     `SELECT * FROM marketing_approval_requests
@@ -1513,9 +1667,9 @@ async function runNextMetaApproval(pool) {
     await connection.beginTransaction();
     const [rows] = await connection.query(
       `SELECT * FROM marketing_approval_requests
-       WHERE status='approved' AND execution_mode='vps_meta_api' AND action_type IN (?, ?)
+       WHERE status='approved' AND execution_mode='vps_meta_api' AND action_type IN (?, ?, ?)
        ORDER BY approved_at ASC, created_at ASC LIMIT 1 FOR UPDATE`,
-      [META_CAMPAIGN_SHELL_ACTION, META_PAUSED_AD_BUNDLE_ACTION],
+      [META_CAMPAIGN_SHELL_ACTION, META_PAUSED_AD_BUNDLE_ACTION, META_DELIVERY_STATUS_ACTION],
     );
     approval = rows?.[0] || null;
     if (!approval) { await connection.rollback(); return null; }
@@ -1540,7 +1694,9 @@ async function runNextMetaApproval(pool) {
   try {
     const result = approval.action_type === META_PAUSED_AD_BUNDLE_ACTION
       ? await executePausedWhatsappAdBundle(pool, approval)
-      : await executePausedCampaignBundle(pool, approval);
+      : approval.action_type === META_DELIVERY_STATUS_ACTION
+        ? await executeMetaDeliveryStatusChange(pool, approval)
+        : await executePausedCampaignBundle(pool, approval);
     await markApprovalExecution(pool, approval.id, true, result);
     return result;
   } catch (error) {
@@ -2425,6 +2581,157 @@ function registerMetaRoutes(fastify, { pool, requireAdminBearerToken, getBearerA
       );
       await approvalEvent(connection, id, 'requested', { id: 'marketing-agent', label: 'Agente especialista de campanhas' }, {
         action_type: META_SECURITY_REVIEW_ACTION, financial_impact: 0, manager_url: review.managerUrl,
+      });
+      await connection.commit();
+      return reply.code(201).send({ ok: true, approval: parseApproval(await findApproval(pool, id)), reused: false });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally { connection.release(); }
+  });
+
+  fastify.post('/admin/marketing/meta/delivery-status-approvals', { preHandler: requireAdminBearerToken }, async (req, reply) => {
+    const config = marketingConfig();
+    const row = await connectionRow(pool);
+    if (!config.ready || !row || row.status !== 'connected' || !row.selected_ad_account_id) {
+      return reply.code(409).send({ error: 'Conecte e selecione a conta Meta antes de alterar a veiculação.' });
+    }
+    const targetKind = text(req.body?.targetKind, 40);
+    const desiredStatus = text(req.body?.desiredStatus, 20).toUpperCase();
+    if (!['ACTIVE', 'PAUSED'].includes(desiredStatus)) return reply.code(400).send({ error: 'Status Meta inválido.' });
+
+    let targetType;
+    let targetId;
+    let targetName;
+    let currentState;
+    let evidence;
+    let financialImpact;
+    let successCriteria;
+    let rollbackPlan;
+    let executionPayload;
+
+    if (targetKind === 'managed_campaign') {
+      const itemKey = text(req.body?.itemKey, 80);
+      const reviews = await cachedManagedAdReviews(pool);
+      const review = reviews.find((item) => item.itemKey === itemKey);
+      if (!review) return reply.code(409).send({ error: 'Atualize a auditoria antes de alterar esta campanha.' });
+      const configuredActive = review.campaignStatus === 'ACTIVE'
+        && review.adsetStatus === 'ACTIVE' && review.configuredStatus === 'ACTIVE';
+      if (desiredStatus === 'ACTIVE' && !['approved', 'active'].includes(review.state)) {
+        return reply.code(409).send({ error: 'A Meta ainda não aprovou este anúncio para veiculação.' });
+      }
+      if (desiredStatus === 'ACTIVE') {
+        const audit = jsonParse(row.last_audit, {}) || {};
+        const managedIds = reviews.map((item) => item.campaignId);
+        const outside = activeCampaignsOutsideTargets(audit.accountAudits || [], managedIds);
+        if (outside.length) {
+          return reply.code(409).send({ error: 'Pause primeiro as campanhas antigas ativas para respeitar o portfólio autorizado.' });
+        }
+      }
+      if ((desiredStatus === 'ACTIVE') === configuredActive) {
+        return reply.code(409).send({ error: desiredStatus === 'ACTIVE' ? 'Esta campanha já está configurada como ativa.' : 'Esta campanha já está pausada.' });
+      }
+      const [sourceRows] = await pool.query(
+        `SELECT execution_payload,execution_result FROM marketing_approval_requests
+         WHERE action_type=? AND status='succeeded' AND execution_result IS NOT NULL
+         ORDER BY executed_at DESC,created_at DESC LIMIT 1`,
+        [META_PAUSED_AD_BUNDLE_ACTION],
+      );
+      const sourcePayload = jsonParse(sourceRows?.[0]?.execution_payload, null);
+      const sourceCampaign = (sourcePayload?.campaigns || []).find((item) => item.item_key === itemKey);
+      if (!sourceCampaign) return reply.code(409).send({ error: 'Não foi possível recuperar o orçamento autorizado desta campanha.' });
+      targetType = 'meta_managed_campaign';
+      targetId = review.campaignId;
+      targetName = review.campaignName || review.adName || itemKey;
+      currentState = {
+        delivery: configuredActive ? 'ACTIVE' : 'PAUSED',
+        campaignStatus: review.campaignStatus,
+        adsetStatus: review.adsetStatus,
+        adStatus: review.configuredStatus,
+        metaReview: review.state,
+      };
+      evidence = { source: 'Monitor da Graph API da Meta', capturedAt: review.capturedAt, managerUrl: review.managerUrl };
+      financialImpact = desiredStatus === 'ACTIVE'
+        ? { currency: 'BRL', maximum: Number(sourceCampaign.period_limit_brl || 0), durationDays: Number(sourceCampaign.duration_days || 0) }
+        : { currency: 'BRL', maximum: 0, effect: 'Interrompe nova veiculação e gasto desta campanha' };
+      successCriteria = { required: `Campanha, conjunto e anúncio confirmados ${desiredStatus} pela Meta.` };
+      rollbackPlan = desiredStatus === 'ACTIVE'
+        ? 'Em qualquer falha, pausar a campanha-pai imediatamente. Uma nova aprovação pode pausar os três níveis.'
+        : 'Uma nova ativação exige aprovação, revisão Meta válida e nova conferência de orçamento.';
+      executionPayload = {
+        schema_version: 1,
+        operation: 'meta.set_delivery_status',
+        target_kind: targetKind,
+        desired_status: desiredStatus,
+        item_key: itemKey,
+        campaign_id: review.campaignId,
+        adset_id: review.adsetId,
+        ad_id: review.adId,
+        authorized_amount_brl: Number(sourceCampaign.authorized_amount_brl || 0),
+        period_limit_brl: Number(sourceCampaign.period_limit_brl || 0),
+        duration_days: Number(sourceCampaign.duration_days || 0),
+      };
+    } else if (targetKind === 'legacy_campaign') {
+      if (desiredStatus !== 'PAUSED') return reply.code(409).send({ error: 'Campanhas antigas só podem ser pausadas por este controle.' });
+      const campaignId = text(req.body?.campaignId, 80);
+      const adAccountId = text(req.body?.adAccountId, 80);
+      const audit = jsonParse(row.last_audit, {}) || {};
+      const accountAudit = (audit.accountAudits || []).find((item) => String(item.account?.id) === adAccountId);
+      const campaign = accountAudit?.campaigns?.find((item) => String(item.id) === campaignId);
+      if (!campaign || campaign.deliveryStatus !== 'ACTIVE') {
+        return reply.code(409).send({ error: 'Atualize a auditoria: esta campanha antiga não está confirmada como ativa.' });
+      }
+      targetType = 'meta_legacy_campaign';
+      targetId = campaignId;
+      targetName = campaign.name;
+      currentState = { delivery: 'ACTIVE', activeAdCount: campaign.activeAdCount, account: accountAudit.account };
+      evidence = { source: 'Auditoria da Graph API da Meta', capturedAt: audit.capturedAt, managerUrl: campaign.managerUrl };
+      financialImpact = { currency: accountAudit.account.currency || 'BRL', maximum: 0, effect: 'Interrompe nova veiculação e gasto da campanha antiga' };
+      successCriteria = { required: 'Campanha antiga confirmada PAUSED pela Meta.' };
+      rollbackPlan = 'Retomar esta campanha antiga exigirá uma nova solicitação específica e revisão do limite de campanhas ativas.';
+      executionPayload = {
+        schema_version: 1,
+        operation: 'meta.set_delivery_status',
+        target_kind: targetKind,
+        desired_status: 'PAUSED',
+        ad_account_id: adAccountId,
+        campaign_id: campaignId,
+        campaign_name: campaign.name,
+      };
+    } else {
+      return reply.code(400).send({ error: 'Alvo Meta inválido.' });
+    }
+
+    const idempotencyBase = `meta-delivery-v1:${targetKind}:${targetId}:${desiredStatus}`;
+    const [existingRows] = await pool.query(
+      `SELECT * FROM marketing_approval_requests WHERE idempotency_key LIKE ?
+       AND status IN ('pending','approved','executing') ORDER BY created_at DESC LIMIT 1`,
+      [`${idempotencyBase}%`],
+    );
+    if (existingRows?.[0]) return { ok: true, approval: parseApproval(existingRows[0]), reused: true };
+    const id = crypto.randomUUID();
+    const idempotencyKey = `${idempotencyBase}:${Date.now()}`;
+    const title = `${desiredStatus === 'ACTIVE' ? 'Ativar' : 'Pausar'} campanha na Meta: ${targetName}`;
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(
+        `INSERT INTO marketing_approval_requests
+          (id,channel,action_type,title,target_type,target_id,target_name,execution_mode,current_state,
+           proposed_state,evidence,financial_impact,success_criteria,rollback_plan,execution_payload,
+           requested_by,requested_by_label,idempotency_key,approval_expires_at)
+         VALUES (?,'instagram',?,?,?,?,?,'vps_meta_api',?,?,?,?,?,?,?,
+                 'marketing-agent','Agente especialista de campanhas',?,DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
+        [
+          id, META_DELIVERY_STATUS_ACTION, title, targetType, targetId, targetName,
+          jsonValue(currentState), jsonValue({ delivery: desiredStatus }), jsonValue(evidence),
+          jsonValue(financialImpact), jsonValue(successCriteria), rollbackPlan, jsonValue(executionPayload), idempotencyKey,
+        ],
+      );
+      await approvalEvent(connection, id, 'requested', { id: 'marketing-agent', label: 'Agente especialista de campanhas' }, {
+        action_type: META_DELIVERY_STATUS_ACTION,
+        desired_status: desiredStatus,
+        financial_impact: financialImpact,
       });
       await connection.commit();
       return reply.code(201).send({ ok: true, approval: parseApproval(await findApproval(pool, id)), reused: false });

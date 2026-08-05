@@ -212,6 +212,17 @@ export interface MetaCampaignDraftApprovalResponse {
     approval: { id: string; status: string; title: string };
 }
 
+export type MetaDeliveryStatusApprovalPayload = {
+    targetKind: 'managed_campaign';
+    itemKey: string;
+    desiredStatus: 'ACTIVE' | 'PAUSED';
+} | {
+    targetKind: 'legacy_campaign';
+    campaignId: string;
+    adAccountId: string;
+    desiredStatus: 'PAUSED';
+};
+
 export const metaMarketingConnectionService = {
     async getStatus(): Promise<MetaMarketingConnection> {
         return (await vpsClient.get<ConnectionResponse>('/admin/marketing/meta/status')).connection;
@@ -277,6 +288,13 @@ export const metaMarketingConnectionService = {
         return await vpsClient.post<MetaCampaignDraftApprovalResponse>(
             `/admin/marketing/meta/security-review-approvals/${encodeURIComponent(itemKey)}`,
             {},
+        );
+    },
+
+    async prepareDeliveryStatusApproval(payload: MetaDeliveryStatusApprovalPayload): Promise<MetaCampaignDraftApprovalResponse> {
+        return await vpsClient.post<MetaCampaignDraftApprovalResponse>(
+            '/admin/marketing/meta/delivery-status-approvals',
+            payload,
         );
     },
 };
