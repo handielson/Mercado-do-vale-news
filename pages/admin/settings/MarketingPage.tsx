@@ -37,6 +37,7 @@ import ProductMarketingCard from './marketing/ProductMarketingCard';
 import { buildProductMarketingArtworkData, normalizeBrazilianWhatsapp } from './marketing/productMarketingArtwork';
 import { paymentFeesService } from '../../../services/payment-fees';
 import type { PaymentFee } from '../../../types/payment-fees';
+import { vpsClient } from '../../../services/vpsClient';
 import { ensureMarketingTypographyFontLoaded } from './marketing/marketingTypographyFonts';
 import {
     DAY_LABELS_FULL,
@@ -243,6 +244,65 @@ const triggerImageDownload = (href: string, filename: string) => {
     link.href = href;
     link.click();
 };
+
+type MarketingArtworkUploadResponse = {
+    uploadId?: string;
+    status?: string;
+    url?: string;
+    error?: string | null;
+    message?: string | null;
+};
+
+const waitForMarketingArtworkUpload = async (uploadId: string): Promise<MarketingArtworkUploadResponse> => {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+        const status = await vpsClient.get<MarketingArtworkUploadResponse>(
+            `/synology/upload-status?id=${encodeURIComponent(uploadId)}`,
+        );
+        if (status.status === 'success') return status;
+        if (status.status === 'error') {
+            throw new Error(status.error || status.message || 'Falha ao salvar a arte no armazenamento');
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 750));
+    }
+    throw new Error('O armazenamento não confirmou a arte do Status dentro do prazo');
+};
+
+const saveMarketingArtworkForWhatsappStatus = async (
+    product: CatalogProduct,
+    pngDataUrl: string,
+): Promise<string> => {
+    if (!product.id) throw new Error('Produto sem identificador para vincular a arte');
+
+    const imageResponse = await fetch(pngDataUrl);
+    const imageBlob = await imageResponse.blob();
+    const fileKey = String(product.sku || product.id)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase() || product.id;
+    const file = new File([imageBlob], `status-${fileKey}.png`, { type: 'image/png' });
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const queued = await vpsClient.upload<MarketingArtworkUploadResponse>(
+        '/synology/upload?folder=imagens',
+        formData,
+    );
+    const completed = queued.uploadId
+        ? await waitForMarketingArtworkUpload(queued.uploadId)
+        : queued;
+    const publicUrl = String(completed.url || queued.url || '').trim();
+    if (!publicUrl) throw new Error('O armazenamento não retornou a URL pública da arte');
+
+    const versionedUrl = `${publicUrl}${publicUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+    await vpsClient.patch(
+        `/table-data/products/${encodeURIComponent(product.id)}?pk=id`,
+        { marketing_background_url: versionedUrl },
+    );
+    return versionedUrl;
+};
+
 export default function MarketingPage() {
     const { settings } = useTheme();
     const [selectedBg, setSelectedBg] = useState(BACKGROUND_OPTIONS[0]);
@@ -445,13 +505,6 @@ export default function MarketingPage() {
     useEffect(() => {
         setCarouselSlideIndex(0);
     }, [selectedProduct?.id, format]);
-
-    useEffect(() => {
-        const productBackground = selectedProduct?.marketing_background_url
-            ? toBrowserSafeMediaUrl(selectedProduct.marketing_background_url)
-            : null;
-        setCustomBgUrl(productBackground && hasRenderableMediaUrl(productBackground) ? productBackground : null);
-    }, [selectedProduct?.id, selectedProduct?.marketing_background_url]);
 
     useEffect(() => {
         if (carouselSlideIndex < carouselSlides.length) return;
@@ -1037,6 +1090,12 @@ export default function MarketingPage() {
                     );
                 } else {
                     const dataUrl = await exportCurrentCanvasPng(slide.imageUrl);
+                    if (format === 'status' && showArtworkPrice && selectedProduct && slide.slideNumber === 1) {
+                        const savedUrl = await saveMarketingArtworkForWhatsappStatus(selectedProduct, dataUrl);
+                        setSelectedProduct((current) => current?.id === selectedProduct.id
+                            ? { ...current, marketing_background_url: savedUrl }
+                            : current);
+                    }
                     triggerImageDownload(
                         dataUrl,
                         buildMarketingDownloadName(selectedProduct?.name, slide.slideNumber, slide.totalSlides),
@@ -1049,6 +1108,8 @@ export default function MarketingPage() {
             toast.success(
                 isStickerFormat
                     ? `Figurinha ${currentStickerExportMode.toUpperCase()} gerada com sucesso! ${slidesToExport.length} arquivo(s) baixado(s).`
+                    : format === 'status' && showArtworkPrice && selectedProduct
+                    ? 'Arte baixada e salva automaticamente como foto de marketing do Status!'
                     : slidesToExport.length > 1
                     ? `Carrossel gerado com sucesso! ${slidesToExport.length} slides baixados.`
                     : 'Arte gerada e baixada com sucesso!'
@@ -1056,7 +1117,7 @@ export default function MarketingPage() {
             recordCooldownForProduct(selectedProduct ?? studioPrimaryProduct);
         } catch (err) {
             console.error('Falha ao gerar imagem', err);
-            toast.error('Ocorreu um erro ao gerar a arte, tente novamente.');
+            toast.error(err instanceof Error ? err.message : 'Ocorreu um erro ao gerar a arte, tente novamente.');
         } finally {
             flushSync(() => {
                 setCarouselSlideIndex(previousSlideIndex);
@@ -1111,6 +1172,9 @@ export default function MarketingPage() {
                     completedSlides += 1;
                 } else {
                     const dataUrl = await exportCurrentCanvasPng(slide.imageUrl);
+                    if (format === 'status' && showArtworkPrice && slide.slideNumber === 1) {
+                        await saveMarketingArtworkForWhatsappStatus(slide.product, dataUrl);
+                    }
                     triggerImageDownload(
                         dataUrl,
                         buildMarketingDownloadName(slide.product.name, slide.slideNumber, slide.totalSlides),
@@ -1124,13 +1188,17 @@ export default function MarketingPage() {
                 if (!canvasRef.current) break;
             }
 
-            toast.success(`Lote gerado com sucesso! ${completedSlides} imagens baixadas.`);
+            toast.success(
+                format === 'status' && showArtworkPrice
+                    ? `Lote gerado: ${completedSlides} imagens baixadas e vinculadas automaticamente ao Status.`
+                    : `Lote gerado com sucesso! ${completedSlides} imagens baixadas.`,
+            );
             setBulkSelectedIds(new Set());
             productsToGenerate.forEach((product) => recordCooldownForProduct(product));
 
         } catch (error) {
             console.error('Erro ao gerar lote:', error);
-            toast.error('Ocorreu um erro gerando o lote. Processo interrompido.');
+            toast.error(error instanceof Error ? error.message : 'Ocorreu um erro gerando o lote. Processo interrompido.');
         } finally {
             setIsGeneratingBulk(false);
             flushSync(() => {
@@ -1488,6 +1556,11 @@ export default function MarketingPage() {
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-3">
+                                        {format === 'status' && showArtworkPrice && (
+                                            <span className="hidden max-w-[190px] text-right text-[11px] font-bold leading-4 text-emerald-700 xl:block">
+                                                Ao baixar, a arte também será salva no produto para o Status.
+                                            </span>
+                                        )}
                                         <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-1">
                                             <button type="button" onClick={() => setShowArtworkPrice(true)} className={`rounded-md px-3 py-1.5 text-xs font-black ${showArtworkPrice ? 'bg-white text-slate-900 shadow' : 'text-slate-500'}`}>COM PREÇO</button>
                                             <button type="button" onClick={() => setShowArtworkPrice(false)} className={`rounded-md px-3 py-1.5 text-xs font-black ${!showArtworkPrice ? 'bg-white text-slate-900 shadow' : 'text-slate-500'}`}>META SEM PREÇO</button>

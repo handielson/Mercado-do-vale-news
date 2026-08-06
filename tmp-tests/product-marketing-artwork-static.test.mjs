@@ -18,6 +18,13 @@ assert.match(page, /modelColorImagesService\.getByModelIds/);
 assert.match(page, /row\.model_id === product\.model_id && row\.color_id === colorId/);
 assert.match(page, /Cadastre uma foto para este modelo e esta cor na galeria/);
 assert.doesNotMatch(page, /getModelImageWithCache/);
+assert.match(page, /saveMarketingArtworkForWhatsappStatus/);
+assert.match(page, /\/synology\/upload\?folder=imagens/);
+assert.match(page, /\/synology\/upload-status\?id=/);
+assert.match(page, /marketing_background_url: versionedUrl/);
+assert.match(page, /format === 'status' && showArtworkPrice/);
+assert.match(page, /salva automaticamente como foto de marketing do Status/);
+assert.doesNotMatch(page, /const productBackground = selectedProduct\?\.marketing_background_url/);
 
 assert.match(card, /CONSULTE CORES DISPONÍVEIS/);
 assert.match(card, /Total a prazo:/);
