@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.218-gerador-artes-fiel
+version: v1.2.219-status-midias-marketing
 date: 2026-08-06
 status: ready
-release_vps: /var/www/mdv-site/releases/20260806-153926-gerador-artes-fiel
+release_vps: /var/www/mdv-site/releases/20260806-184334-status-midias-marketing
 branch: main
-summary: Aproxima a arte do modelo aprovado, usa preco PIX e vincula a imagem exata da galeria por modelo e cor.
+summary: Publica no Status somente foto e video de marketing e remove os precos repetidos da legenda.
 ```

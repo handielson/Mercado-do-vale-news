@@ -34,42 +34,12 @@ export function resolveScheduledSendTimes({ startTime = '08:00', count = 1, inte
   return Array.from({ length: safeCount }, (_, index) => minutesToTime(start + index * safeInterval));
 }
 
-function parseStatusImages(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.map((image) => String(image || '').trim()).filter(Boolean);
-  if (typeof value === 'string') {
-    const text = value.trim();
-    if (!text) return [];
-    try {
-      const parsed = JSON.parse(text);
-      return Array.isArray(parsed) ? parsed.map((image) => String(image || '').trim()).filter(Boolean) : [text];
-    } catch {
-      return [text];
-    }
-  }
-  return [];
-}
-
 export function getStatusProductImage(product) {
-  const candidates = [
-    ...parseStatusImages(product?.images),
-    product?.image_url,
-    product?.imageUrl,
-    product?.thumbnail,
-    product?.main_image_url,
-    product?.image,
-    ...parseStatusImages(product?.product_images),
-    ...parseStatusImages(product?.custom_images),
-  ];
-  return String(candidates.find((image) => String(image || '').trim()) || '').trim();
+  return String(product?.marketing_background_url || '').trim();
 }
 
 function hasUsableImage(product) {
   return Boolean(getStatusProductImage(product));
-}
-
-function hasUsablePrice(product) {
-  return Number(product?.price_retail || 0) > 0;
 }
 
 function hasStock(product) {
@@ -229,7 +199,6 @@ export function selectStatusProducts(products, { dailyLimit = MAX_STATUS_PRODUCT
   const eligible = (Array.isArray(products) ? products : [])
     .filter((product) => product?.id)
     .filter(hasUsableImage)
-    .filter(hasUsablePrice)
     .filter(hasStock);
 
   if (!eligible.length) return [];
@@ -240,15 +209,7 @@ export function selectStatusProducts(products, { dailyLimit = MAX_STATUS_PRODUCT
   return rotated.slice(0, clampDailyProductLimit(dailyLimit));
 }
 
-export function formatStatusMoney(cents) {
-  const value = Number(cents || 0) / 100;
-  return value.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).replace(/\u00a0/g, ' ');
-}
-
-export function buildStatusCaption({ product, cardPlan, siteBaseUrl = 'https://mercadodovale.com.br' }) {
+export function buildStatusCaption({ product, siteBaseUrl = 'https://mercadodovale.com.br' }) {
   const productName = String(product?.name || 'Produto').trim();
   const variation = product?.status_variation || getStatusProductVariation(product);
   const memoryLine = [variation?.ram ? `${variation.ram} RAM` : '', variation?.storage ? `${variation.storage} armazenamento` : '']
@@ -258,10 +219,6 @@ export function buildStatusCaption({ product, cardPlan, siteBaseUrl = 'https://m
     ? variation.colors
     : [variation?.color].filter(Boolean);
   const colorLine = colors.length ? `Cores disponiveis: ${colors.join(', ')}` : '';
-  const priceLine = `A vista no PIX: ${formatStatusMoney(product?.price_retail)}`;
-  const cardLine = cardPlan?.installments && cardPlan?.value
-    ? `Cartao: ${cardPlan.installments}x de ${formatStatusMoney(cardPlan.value)}`
-    : '';
   const link = product?.slug
     ? `${String(siteBaseUrl).replace(/\/+$/, '')}/produto/${product.slug}`
     : String(siteBaseUrl).replace(/\/+$/, '');
@@ -271,8 +228,7 @@ export function buildStatusCaption({ product, cardPlan, siteBaseUrl = 'https://m
     memoryLine ? `Memoria: ${memoryLine}` : '',
     colorLine,
     '',
-    priceLine,
-    cardLine,
+    'Confira os detalhes e as condicoes na arte.',
     '',
     'Veja no site:',
     link,

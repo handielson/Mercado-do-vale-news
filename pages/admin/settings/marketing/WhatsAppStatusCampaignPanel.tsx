@@ -5,8 +5,6 @@ import { catalogService } from '../../../../services/catalogService';
 import { vpsApiService } from '../../../../services/vpsApiService';
 import { normalizeProduct } from '../../../../services/productNormalizer';
 import type { CatalogProduct } from '../../../../types/catalog';
-import { calculateInstallmentFromFees } from '../../../../services/installmentCalculator';
-import { paymentFeesService, type PaymentFee } from '../../../../services/payment-fees';
 import {
   buildStatusCaption,
   buildStatusPayload,
@@ -113,11 +111,9 @@ function findGroupedPreviewProducts(products: CatalogProduct[], selectedProductI
     .filter(Boolean);
 }
 
-function StatusPreviewCard({ product, paymentFees }: { product: any; paymentFees: PaymentFee[] }) {
-  const cardPlan = calculateInstallmentFromFees(Number(product?.price_retail || 0), paymentFees, 12);
+function StatusPreviewCard({ product }: { product: any }) {
   const caption = buildStatusCaption({
     product,
-    cardPlan,
     siteBaseUrl: 'https://mercadodovale.com.br',
   });
   const payload = buildStatusPayload({ product, caption });
@@ -410,7 +406,6 @@ export default function WhatsAppStatusCampaignPanel() {
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [categoryPreviewProducts, setCategoryPreviewProducts] = useState<CatalogProduct[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [paymentFees, setPaymentFees] = useState<PaymentFee[]>([]);
   const [form, setForm] = useState<WhatsAppStatusCampaignInput>(DEFAULT_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -470,7 +465,6 @@ export default function WhatsAppStatusCampaignPanel() {
   useEffect(() => {
     loadData();
     loadProgress();
-    paymentFeesService.list().then(setPaymentFees).catch(() => setPaymentFees([]));
   }, []);
 
   useEffect(() => {
@@ -592,7 +586,9 @@ export default function WhatsAppStatusCampaignPanel() {
   }, [categoryPreviewProducts, form.daily_limit, form.source_type, selectedProductIds, selectedProducts]);
 
   const selectableProducts = useMemo(
-    () => deduplicateProductOptions(groupStatusProductsByVariation(products) as CatalogProduct[]),
+    () => deduplicateProductOptions(groupStatusProductsByVariation(
+      products.filter((product) => Boolean(String(product.marketing_background_url || '').trim())),
+    ) as CatalogProduct[]),
     [products],
   );
 
@@ -789,7 +785,7 @@ export default function WhatsAppStatusCampaignPanel() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-black text-slate-900">Status WhatsApp</h3>
-          <p className="text-sm text-slate-500">Envie produtos ou categorias para o Status com intervalo entre cada item.</p>
+          <p className="text-sm text-slate-500">Envia a foto e o vídeo de marketing cadastrados, sem repetir preços na legenda.</p>
         </div>
         <button
           type="button"
@@ -1076,7 +1072,7 @@ export default function WhatsAppStatusCampaignPanel() {
                     <ChevronLeft className="h-4 w-4" />
                   </button>
                   <div className="w-full max-w-[280px]">
-                    <StatusPreviewCard product={previewProducts[previewIndex]} paymentFees={paymentFees} />
+                    <StatusPreviewCard product={previewProducts[previewIndex]} />
                   </div>
                   <button
                     type="button"
@@ -1106,7 +1102,7 @@ export default function WhatsAppStatusCampaignPanel() {
                 <MessageCircle className="mb-3 h-8 w-8 text-slate-300" />
                 <p className="text-sm font-bold text-slate-500">Escolha um produto ou categoria para ver o preview.</p>
                 <p className="mt-1 max-w-md text-xs text-slate-400">
-                  O preview mostra a imagem, legenda, cores disponiveis, preco no PIX, 12x no cartao e link que serao enviados no Status.
+                  O preview mostra a foto de marketing, o nome, as cores e o link. Depois da foto, o vídeo de marketing também será publicado quando estiver cadastrado.
                 </p>
               </div>
             )}

@@ -27650,13 +27650,6 @@ function normalizeWhatsAppStatusInterval(value) {
   return Math.max(1, parsed);
 }
 
-function formatWhatsAppStatusMoney(cents) {
-  return (Number(cents || 0) / 100).toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).replace(/\u00a0/g, ' ');
-}
-
 function sanitizeWhatsAppStatusDebugText(value) {
   return String(value || '')
     .replace(/(apikey\s*[:=]\s*)[^\s,;]+/gi, '$1[redacted]')
@@ -27703,17 +27696,7 @@ function normalizeWhatsAppStatusProduct(row) {
 }
 
 function getWhatsAppStatusProductImage(product) {
-  const candidates = [
-    ...parseWhatsAppStatusImages(product?.images),
-    product?.image_url,
-    product?.imageUrl,
-    product?.thumbnail,
-    product?.main_image_url,
-    product?.image,
-    ...parseWhatsAppStatusImages(product?.product_images),
-    ...parseWhatsAppStatusImages(product?.custom_images),
-  ];
-  return String(candidates.find((image) => String(image || '').trim()) || '').trim();
+  return String(product?.marketing_background_url || '').trim();
 }
 
 function parseWhatsAppStatusProductIds(value, fallbackProductId = null) {
@@ -27734,7 +27717,6 @@ function parseWhatsAppStatusProductIds(value, fallbackProductId = null) {
 
 function isWhatsAppStatusProductEligible(product) {
   if (!product?.id) return false;
-  if (Number(product.price_retail || 0) <= 0) return false;
   if (Number(product.stock_quantity ?? 0) <= 0 && product.track_inventory !== 0 && product.track_inventory !== false) return false;
   return Boolean(getWhatsAppStatusProductImage(product));
 }
@@ -27946,24 +27928,7 @@ async function getWhatsAppStatusCampaignProducts(campaign) {
   return rows.map(normalizeWhatsAppStatusProduct).filter(Boolean);
 }
 
-async function getWhatsAppStatusCardPlan(priceRetailCents) {
-  const [rows] = await pool.query(
-    `SELECT installments, applied_fee_pct
-     FROM payment_fees
-     WHERE installments = 12
-       AND channel = 'presencial'
-     ORDER BY updated_at DESC
-     LIMIT 1`
-  );
-  if (!rows[0]) {
-    throw new Error('Taxa presencial de 12x nao configurada em payment_fees');
-  }
-  const feePct = Number(rows[0].applied_fee_pct || 0);
-  const total = Math.round(Number(priceRetailCents || 0) * (1 + feePct / 100));
-  return { installments: 12, value: Math.round(total / 12), total };
-}
-
-function buildWhatsAppStatusCaption(product, cardPlan) {
+function buildWhatsAppStatusCaption(product) {
   const siteBaseUrl = String(process.env.PUBLIC_SITE_URL || 'https://mercadodovale.com.br').replace(/\/+$/, '');
   const routeTarget = getPublicProductRouteTargetVps(product);
   const link = routeTarget ? `${siteBaseUrl}/produto/${encodeURIComponent(routeTarget)}` : siteBaseUrl;
@@ -27978,8 +27943,7 @@ function buildWhatsAppStatusCaption(product, cardPlan) {
     memoryLine ? `Memoria: ${memoryLine}` : '',
     colors.length ? `Cores disponiveis: ${colors.join(', ')}` : '',
     '',
-    `A vista no PIX: ${formatWhatsAppStatusMoney(product.price_retail)}`,
-    `Cartao: ${cardPlan.installments}x de ${formatWhatsAppStatusMoney(cardPlan.value)}`,
+    'Confira os detalhes e as condicoes na arte.',
     '',
     'Veja no site:',
     link,
@@ -28015,14 +27979,8 @@ async function appendWhatsAppStatusTrace({ runId, logId = null, campaignId, prod
 }
 
 function buildWhatsAppStatusVideoCandidates(product) {
-  const candidates = [];
   const marketingVideo = String(product?.marketing_video_url || '').trim();
-  if (/^https?:\/\//i.test(marketingVideo)) candidates.push(marketingVideo);
-  const configured = String(product?.video_url || '').trim();
-  if (/^https?:\/\//i.test(configured)) candidates.push(configured);
-  const sku = String(product?.sku || '').trim().replace(/\s+/g, '');
-  if (sku) candidates.push(`https://videos.mercadodovale.com.br/${encodeURIComponent(sku)}.mp4`);
-  return Array.from(new Set(candidates));
+  return /^https?:\/\//i.test(marketingVideo) ? [marketingVideo] : [];
 }
 
 function normalizeWhatsAppStatusRepeatDays(value) {
@@ -28332,8 +28290,7 @@ async function sendWhatsAppStatusProduct(campaign, product, scheduledFor = null,
   const session = String(process.env.WAHA_STATUS_SESSION || '').trim();
   const image = getWhatsAppStatusProductImage(product);
   const video = await resolveWhatsAppStatusVideoUrl(product);
-  const cardPlan = await getWhatsAppStatusCardPlan(product.price_retail);
-  const caption = buildWhatsAppStatusCaption(product, cardPlan);
+  const caption = buildWhatsAppStatusCaption(product);
   const timeoutMs = Math.max(10000, Number(process.env.WAHA_STATUS_TIMEOUT_MS || 300000));
   const mediaIntervalMs = Math.max(0, Number(process.env.WAHA_STATUS_MEDIA_INTERVAL_MS || 3000));
   const startedAt = Date.now();

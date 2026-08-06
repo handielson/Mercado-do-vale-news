@@ -19,6 +19,7 @@ const products = Array.from({ length: 12 }, (_, index) => ({
   price_retail: 100000 + index * 1000,
   stock_quantity: 2,
   images: [`https://cdn.example.com/p-${index + 1}.jpg`],
+  marketing_background_url: `https://cdn.example.com/marketing-p-${index + 1}.png`,
 }));
 
 assert.equal(clampDailyProductLimit(99), 10);
@@ -45,6 +46,7 @@ const variantProducts = [
     price_retail: 250000,
     stock_quantity: 2,
     images: ['https://cdn.example.com/azul.jpg'],
+    marketing_background_url: 'https://cdn.example.com/marketing-azul.png',
     specs: { ram: '8GB', storage: '512GB', color: 'Azul' },
   },
   {
@@ -56,6 +58,7 @@ const variantProducts = [
     price_retail: 245000,
     stock_quantity: 3,
     images: ['https://cdn.example.com/preto.jpg'],
+    marketing_background_url: 'https://cdn.example.com/marketing-preto.png',
     specs: { ram: '8GB', storage: '512GB', color: 'Preto' },
   },
   {
@@ -67,6 +70,7 @@ const variantProducts = [
     price_retail: 255000,
     stock_quantity: 1,
     images: ['https://cdn.example.com/verde.jpg'],
+    marketing_background_url: 'https://cdn.example.com/marketing-verde.png',
     specs: { ram: '8GB', storage: '512GB', color: 'Verde' },
   },
   {
@@ -78,6 +82,7 @@ const variantProducts = [
     price_retail: 230000,
     stock_quantity: 2,
     images: ['https://cdn.example.com/preto-256.jpg'],
+    marketing_background_url: 'https://cdn.example.com/marketing-preto-256.png',
     specs: { ram: '8GB', storage: '256GB', color: 'Preto' },
   },
 ];
@@ -103,24 +108,22 @@ assert.equal(selectedVariants.length, 2);
 
 const groupedCaption = buildStatusCaption({
   product: selectedVariants.find((product) => product.status_variation.storage === '512GB'),
-  cardPlan: { installments: 12, value: 23000, total: 276000 },
   siteBaseUrl: 'https://mercadodovale.com.br',
 });
 
 assert.match(groupedCaption, /Poco X8 Pro 5G/);
 assert.match(groupedCaption, /Memoria: 8GB RAM \+ 512GB armazenamento/);
 assert.match(groupedCaption, /Cores disponiveis: Azul, Preto, Verde/);
-assert.match(groupedCaption, /A vista no PIX: R\$ 2\.450,00/);
+assert.match(groupedCaption, /Confira os detalhes e as condicoes na arte/);
+assert.doesNotMatch(groupedCaption, /PIX|Cartao|R\$/);
 
 const caption = buildStatusCaption({
   product: products[0],
-  cardPlan: { installments: 12, value: 9250, total: 111000 },
   siteBaseUrl: 'https://mercadodovale.com.br',
 });
 
 assert.match(caption, /Produto 1/);
-assert.match(caption, /A vista no PIX: R\$ 1\.000,00/);
-assert.match(caption, /Cartao: 12x de R\$ 92,50/);
+assert.doesNotMatch(caption, /PIX|Cartao|R\$/);
 assert.match(caption, /https:\/\/mercadodovale\.com\.br\/produto\/produto-1/);
 
 assert.deepEqual(
@@ -130,7 +133,7 @@ assert.deepEqual(
   }),
   {
     type: 'image',
-    content: 'https://cdn.example.com/p-1.jpg',
+    content: 'https://cdn.example.com/marketing-p-1.png',
     caption,
     allContacts: false,
     statusJidList: [],
@@ -146,14 +149,22 @@ const imageUrlOnlyProduct = {
   image_url: 'https://cdn.example.com/image-url-only.jpg',
 };
 
-assert.equal(getStatusProductImage(imageUrlOnlyProduct), 'https://cdn.example.com/image-url-only.jpg');
-assert.equal(selectStatusProducts([imageUrlOnlyProduct], { dailyLimit: 1 }).length, 1);
+assert.equal(getStatusProductImage(imageUrlOnlyProduct), '');
+assert.equal(selectStatusProducts([imageUrlOnlyProduct], { dailyLimit: 1 }).length, 0);
+
+const marketingImageProduct = {
+  ...imageUrlOnlyProduct,
+  marketing_background_url: 'https://cdn.example.com/status-art.png',
+};
+
+assert.equal(getStatusProductImage(marketingImageProduct), 'https://cdn.example.com/status-art.png');
+assert.equal(selectStatusProducts([marketingImageProduct], { dailyLimit: 1 }).length, 1);
 assert.equal(
   buildStatusPayload({
-    product: imageUrlOnlyProduct,
+    product: marketingImageProduct,
     caption,
   }).content,
-  'https://cdn.example.com/image-url-only.jpg',
+  'https://cdn.example.com/status-art.png',
 );
 
 const debug = buildStatusSendDebug({

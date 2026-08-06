@@ -2097,12 +2097,12 @@ export function ProductForm({ initialData, onSubmit, onCancel, onBatchComplete, 
                     Mídia de Marketing (Opcional)
                 </h3>
                 <p className="text-xs text-slate-500 mb-4">
-                    O fundo será aplicado automaticamente no estúdio de criativos. O vídeo de marketing terá prioridade nos status; se estiver vazio, o sistema continuará usando o vídeo normal do produto.
+                    Esta foto e este vídeo são as mídias oficiais do produto para o Status do WhatsApp. O sistema não substitui arquivos ausentes por fotos ou vídeos comuns do cadastro.
                 </p>
                 <div className="grid gap-4 md:grid-cols-2">
                     {([
-                        { kind: 'background' as const, label: 'Imagem de fundo', field: 'marketing_background_url' as const, accept: 'image/*' },
-                        { kind: 'video' as const, label: 'Vídeo de propaganda', field: 'marketing_video_url' as const, accept: 'video/*' },
+                        { kind: 'background' as const, label: 'Foto de marketing (Status)', field: 'marketing_background_url' as const, accept: 'image/*' },
+                        { kind: 'video' as const, label: 'Vídeo de marketing (Status)', field: 'marketing_video_url' as const, accept: 'video/*' },
                     ]).map((item) => (
                         <div key={item.kind} className="rounded-lg border border-slate-200 p-3">
                             <label className="block text-sm font-medium text-slate-700 mb-2">{item.label}</label>

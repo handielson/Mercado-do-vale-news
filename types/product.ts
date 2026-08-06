@@ -161,8 +161,8 @@ export interface Product {
 
     // Media Add-ons
     video_url?: string;        // URL do vídeo do produto (YouTube, Synology, etc.)
-    marketing_background_url?: string; // Fundo exclusivo para criativos de marketing
-    marketing_video_url?: string; // Vídeo exclusivo para divulgação
+    marketing_background_url?: string; // Foto oficial de marketing usada no Status
+    marketing_video_url?: string; // Vídeo oficial de marketing usado no Status
 
     // Product Kits (Volume Pricing)
     kits?: ProductKit[];       // Descontos por quantidade no mesmo produto
