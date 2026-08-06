@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.215-whatsapp-listas-desativadas",
-  "date": "2026-08-05",
+  "version": "v1.2.216-marketing-artes-dinamicas",
+  "date": "2026-08-06",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260806-024030-whatsapp-listas-desativadas",
+  "release_vps": "/var/www/mdv-site/releases/20260806-150403-marketing-artes-dinamicas",
   "branch": "main",
-  "summary": "Mantem as listas do WhatsApp prontas, com o fluxo de conversa desativado por padrao."
+  "summary": "Adiciona gerador dinamico de artes de produtos, selecao de variante e modo Meta sem preco."
 }

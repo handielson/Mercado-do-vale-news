@@ -4,7 +4,7 @@ import { Camera, Download, Upload, Image as ImageIcon, Sparkles, Smartphone, Lay
 import { toast } from 'sonner';
 import { toBlob, toPng } from 'html-to-image';
 import { catalogService } from '../../../services/catalogService';
-import type { CatalogProduct } from '../../../types/catalog';
+import type { CatalogProduct, ProductGroup } from '../../../types/catalog';
 import { groupProductsByVariants } from '../../../services/productGrouping';
 import { getModelImageWithCache, prefetchModelImages } from '../../../services/modelImageCache';
 import { getMarketingBulkExportSlides, getMarketingExportSlides } from '../../../utils/marketing-carousel';
@@ -32,6 +32,10 @@ import WhatsAppStatusCampaignPanel from './marketing/WhatsAppStatusCampaignPanel
 import FacebookMarketplaceSchedulerPanel from './marketing/FacebookMarketplaceSchedulerPanel';
 import MarketingApprovalCenterPanel from './marketing/MarketingApprovalCenterPanel';
 import MarketingCampaignAgentPanel from './marketing/MarketingCampaignAgentPanel';
+import ProductMarketingCard from './marketing/ProductMarketingCard';
+import { buildProductMarketingArtworkData, normalizeBrazilianWhatsapp } from './marketing/productMarketingArtwork';
+import { paymentFeesService } from '../../../services/payment-fees';
+import type { PaymentFee } from '../../../types/payment-fees';
 import { ensureMarketingTypographyFontLoaded } from './marketing/marketingTypographyFonts';
 import {
     DAY_LABELS_FULL,
@@ -165,6 +169,37 @@ const prepareMarketingProducts = async (products: CatalogProduct[]): Promise<Cat
     return Promise.all(products.map(hydrateMarketingProductMedia));
 };
 
+const MARKETING_PRIMARY_VARIANTS_KEY = 'marketing_primary_variants';
+
+const readMarketingPrimaryVariants = (): Record<string, string> => {
+    try {
+        return JSON.parse(localStorage.getItem(MARKETING_PRIMARY_VARIANTS_KEY) || '{}');
+    } catch {
+        return {};
+    }
+};
+
+const getGroupProducts = (group: ProductGroup): CatalogProduct[] =>
+    group.variants.flatMap((variant) => variant.products);
+
+const chooseMarketingPrimaryProduct = (group: ProductGroup): CatalogProduct => {
+    const products = getGroupProducts(group);
+    const savedId = readMarketingPrimaryVariants()[group.groupKey];
+    const saved = products.find((product) => product.id === savedId);
+    if (saved) return saved;
+
+    return [...products].sort((a, b) => {
+        const mediaScore = (product: CatalogProduct) => getRenderableProductImages(product).length > 0 ? 10000 : 0;
+        const stockScore = (product: CatalogProduct) => product.track_inventory ? Number(product.stock_quantity || 0) : 1;
+        return (mediaScore(b) + stockScore(b)) - (mediaScore(a) + stockScore(a));
+    })[0] || group.representativeProduct;
+};
+
+const saveMarketingPrimaryProduct = (groupKey: string, productId: string) => {
+    const saved = readMarketingPrimaryVariants();
+    localStorage.setItem(MARKETING_PRIMARY_VARIANTS_KEY, JSON.stringify({ ...saved, [groupKey]: productId }));
+};
+
 const waitForPreviewAssets = async (
     node: HTMLElement,
     expectedProductImageUrl?: string | null,
@@ -239,6 +274,8 @@ export default function MarketingPage() {
     const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
     const [companyInfo, setCompanyInfo] = useState<Company | null>(null);
     const [format, setFormat] = useState<MarketingAssetFormat>('sticker');
+    const [showArtworkPrice, setShowArtworkPrice] = useState(true);
+    const [marketingPaymentFees, setMarketingPaymentFees] = useState<PaymentFee[]>([]);
     const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
     const [activeTab, setActiveTab] = useState<'studio' | 'instagram' | 'facebook' | 'whatsapp' | 'campaigns' | 'approvals'>(() => {
         if (typeof window === 'undefined') return 'studio';
@@ -300,6 +337,7 @@ export default function MarketingPage() {
 
     useEffect(() => {
         loadCompanyData();
+        paymentFeesService.list().then(setMarketingPaymentFees).catch(() => setMarketingPaymentFees([]));
 
         // Sempre que o usuário voltar pra aba ou janela, atualiza os dados
         const handleFocus = () => loadCompanyData();
@@ -398,6 +436,14 @@ export default function MarketingPage() {
         ? exportImageOverride
         : activeCarouselSlide?.imageUrl ?? null;
     const showCarouselPreview = carouselSlides.length > 1;
+    const productArtworkData = useMemo(
+        () => selectedProduct ? buildProductMarketingArtworkData(selectedProduct, marketingPaymentFees) : null,
+        [selectedProduct, marketingPaymentFees],
+    );
+    const artworkWhatsapp = normalizeBrazilianWhatsapp(companyInfo?.phone) || '(87) 98803-2612';
+    const artworkWebsite = (companyInfo?.socialMedia?.website || 'mercadodovale.com.br')
+        .replace(/^https?:\/\//i, '')
+        .replace(/\/$/, '');
 
     const stageMarketingCanvasForExport = async (
         product: CatalogProduct | null,
@@ -450,7 +496,10 @@ export default function MarketingPage() {
     // Category & Grouping Logic
     const [selectedCategory, setSelectedCategory] = useState<string>('');
     const [categories, setCategories] = useState<{ id: string, name: string }[]>([]);
-    const [groupedResults, setGroupedResults] = useState<any[]>([]);
+    const [groupedResults, setGroupedResults] = useState<ProductGroup[]>([]);
+    const selectedProductGroup = useMemo(() => groupedResults.find((group) =>
+        getGroupProducts(group).some((product) => product.id === selectedProduct?.id)
+    ) || null, [groupedResults, selectedProduct?.id]);
     const selectedCategoryName = selectedProduct?.category_id
         ? categories.find((category) => category.id === selectedProduct.category_id)?.name ?? ''
         : '';
@@ -510,8 +559,8 @@ export default function MarketingPage() {
             return;
         }
 
-        const precoBaseCents = selectedProduct.price_retail || 0;
-        const parcelas = formatCurrency(Math.floor((precoBaseCents * 1.15) / 12));
+        const precoBaseCents = productArtworkData?.price || selectedProduct.price_retail || 0;
+        const parcelas = formatCurrency(productArtworkData?.installmentValue || Math.floor(precoBaseCents / 12));
         const vista = formatCurrency(precoBaseCents);
         const nomeEmpresa = settings.company_name || 'Mercado do Vale';
 
@@ -536,10 +585,10 @@ export default function MarketingPage() {
         const productLink = `${window.location.origin}/?search=${encodeURIComponent(selectedProduct.name)}`;
 
         const catName = categories.find(c => c.id === selectedProduct.category_id)?.name || 'Eletro';
-        const specsRam = selectedProduct.specs?.ram || '';
-        const specsStorage = selectedProduct.specs?.storage || '';
-        const specsBattery = selectedProduct.specs?.battery || '';
-        const specsProcessor = selectedProduct.specs?.processor || '';
+        const specsRam = productArtworkData?.specs.find((spec) => spec.key === 'ram')?.value || '';
+        const specsStorage = productArtworkData?.specs.find((spec) => spec.key === 'storage')?.value || '';
+        const specsBattery = productArtworkData?.specs.find((spec) => spec.key === 'battery')?.value || '';
+        const specsProcessor = productArtworkData?.specs.find((spec) => spec.key === 'processor')?.value || '';
 
         // Remove as tags HTML que vêm do rich-text da descrição original do aparelho
         const rawDesc = selectedProduct.description || 'Descrição completa no nosso site!';
@@ -562,7 +611,7 @@ export default function MarketingPage() {
             .replace(/{descricao}/g, descriptionTxt);
 
         setGeneratedCopy(finalCopy);
-    }, [selectedProduct, settings, companyInfo, captionTemplate, categories]);
+    }, [selectedProduct, productArtworkData, settings, companyInfo, captionTemplate, categories]);
 
     // Debounced Search & Category Fetch
     useEffect(() => {
@@ -586,7 +635,10 @@ export default function MarketingPage() {
                 const preparedProducts = await prepareMarketingProducts(res.products);
                 if (requestId !== searchRequestRef.current) return;
 
-                const grouped = groupProductsByVariants(preparedProducts);
+                const grouped = groupProductsByVariants(preparedProducts).map((group) => ({
+                    ...group,
+                    representativeProduct: chooseMarketingPrimaryProduct(group),
+                }));
                 setGroupedResults(grouped);
                 setSelectedProduct((current) => {
                     if (!current) return current;
@@ -1429,14 +1481,20 @@ export default function MarketingPage() {
                                         </button>
                                     </div>
                                 ) : (
-                                    <button
-                                        onClick={() => handleDownload()}
-                                        disabled={isGenerating || (!selectedProduct && !customBgUrl)}
-                                        className="bg-pink-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-700 transition-colors disabled:opacity-50"
-                                    >
-                                        <Download className="w-5 h-5" />
-                                        {isGenerating ? 'Gerando...' : showCarouselPreview ? 'Baixar Carrossel' : 'Baixar Arte'}
-                                    </button>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-1">
+                                            <button type="button" onClick={() => setShowArtworkPrice(true)} className={`rounded-md px-3 py-1.5 text-xs font-black ${showArtworkPrice ? 'bg-white text-slate-900 shadow' : 'text-slate-500'}`}>COM PREÇO</button>
+                                            <button type="button" onClick={() => setShowArtworkPrice(false)} className={`rounded-md px-3 py-1.5 text-xs font-black ${!showArtworkPrice ? 'bg-white text-slate-900 shadow' : 'text-slate-500'}`}>META SEM PREÇO</button>
+                                        </div>
+                                        <button
+                                            onClick={() => handleDownload()}
+                                            disabled={isGenerating || (!selectedProduct && !customBgUrl)}
+                                            className="bg-pink-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-700 transition-colors disabled:opacity-50"
+                                        >
+                                            <Download className="w-5 h-5" />
+                                            {isGenerating ? 'Gerando...' : showCarouselPreview ? 'Baixar Carrossel' : 'Baixar Arte'}
+                                        </button>
+                                    </div>
                                 )}
                             </div>
 
@@ -1688,6 +1746,32 @@ export default function MarketingPage() {
                                                             )}
                                                         </div>
                                                     </div>
+                                                    {selectedProductGroup && getGroupProducts(selectedProductGroup).length > 1 && (
+                                                        <div className="mt-3 border-t border-slate-200 pt-3">
+                                                            <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Foto/variante principal da arte</label>
+                                                            <select
+                                                                value={selectedProduct.id}
+                                                                onChange={(event) => {
+                                                                    const product = getGroupProducts(selectedProductGroup).find((item) => item.id === event.target.value);
+                                                                    if (!product) return;
+                                                                    saveMarketingPrimaryProduct(selectedProductGroup.groupKey, product.id);
+                                                                    setSelectedProduct(product);
+                                                                    toast.success('Variante principal salva para este modelo');
+                                                                }}
+                                                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
+                                                            >
+                                                                {getGroupProducts(selectedProductGroup).map((product) => {
+                                                                    const ram = product.specs?.ram || '';
+                                                                    const storage = product.specs?.storage || '';
+                                                                    const color = product.specs?.color || product.specs?.cor || 'Cor não informada';
+                                                                    const stock = product.track_inventory ? `${product.stock_quantity || 0} em estoque` : 'estoque livre';
+                                                                    const photo = getRenderableProductImages(product).length ? 'com foto' : 'sem foto';
+                                                                    return <option key={product.id} value={product.id}>{[ram, storage, color, stock, photo].filter(Boolean).join(' · ')}</option>;
+                                                                })}
+                                                            </select>
+                                                            <p className="mt-1 text-[10px] leading-snug text-slate-500">A escolha fica salva por modelo e tem prioridade sobre a seleção automática.</p>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
 
@@ -1953,8 +2037,21 @@ export default function MarketingPage() {
 
                                                 {isStickerFormat && renderStickerArtwork(true)}
 
+                                                {!isStickerFormat && selectedProduct && productArtworkData && (
+                                                    <ProductMarketingCard
+                                                        data={productArtworkData}
+                                                        format={format}
+                                                        imageUrl={selectedProductImage}
+                                                        logoUrl={companyInfo?.watermarkLogoUrl || settings.logo_url}
+                                                        whatsapp={artworkWhatsapp}
+                                                        website={artworkWebsite}
+                                                        showPrice={showArtworkPrice}
+                                                        carouselLabel={showCarouselPreview ? `Slide ${activeCarouselSlide?.slideNumber ?? 1} de ${activeCarouselSlide?.totalSlides ?? 1}` : undefined}
+                                                    />
+                                                )}
+
                                                 {/* A ARTE RENDERIZADA AO VIVO (Tamanhos Grandes Oficiais em PX/REM) */}
-                                                {!isStickerFormat && selectedProduct && (
+                                                {false && !isStickerFormat && selectedProduct && (
                                                     <div className={`absolute inset-0 flex flex-col ${format === 'feed' ? 'p-12 lg:p-16' : 'p-16 lg:p-24 pt-32 pb-48'}`}>
 
                                                         {/* Módulo Superior: Imagem num Bloco Branco */}
