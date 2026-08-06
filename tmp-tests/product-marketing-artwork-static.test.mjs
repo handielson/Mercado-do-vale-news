@@ -12,13 +12,22 @@ assert.match(page, /META SEM PREÇO/);
 assert.match(page, /Foto\/variante principal da arte/);
 assert.match(page, /marketing_primary_variants/);
 assert.match(page, /paymentFeesService\.list\(\)/);
+assert.match(page, /Confira o preço antes de baixar/);
+assert.match(page, /pixDiscountPercentage/);
+assert.match(page, /modelColorImagesService\.getByModelIds/);
+assert.match(page, /row\.model_id === product\.model_id && row\.color_id === colorId/);
+assert.match(page, /Cadastre uma foto para este modelo e esta cor na galeria/);
+assert.doesNotMatch(page, /getModelImageWithCache/);
 
 assert.match(card, /CONSULTE CORES DISPONÍVEIS/);
 assert.match(card, /Total a prazo:/);
+assert.match(card, /useProductCutout/);
+assert.match(card, /mercado-do-vale-logo\.png/);
 assert.match(card, /Consulte condições e disponibilidade/);
 assert.doesNotMatch(card, /CELULARES E ACESSÓRIOS/i);
 
-assert.match(resolver, /calculateInstallmentFromFees\(price, paymentFees, 12\)/);
+assert.match(resolver, /calculateInstallmentFromFees\(retailPrice, paymentFees, 12\)/);
+assert.match(resolver, /calculatePixPrice\(retailPrice, pixDiscountPercentage\)/);
 assert.match(resolver, /cam_principal_mpx/);
 assert.match(resolver, /battery_mah/);
 assert.match(resolver, /identity\.includes\('poco'\)/);

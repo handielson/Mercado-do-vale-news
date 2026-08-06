@@ -6,7 +6,8 @@ import { toBlob, toPng } from 'html-to-image';
 import { catalogService } from '../../../services/catalogService';
 import type { CatalogProduct, ProductGroup } from '../../../types/catalog';
 import { groupProductsByVariants } from '../../../services/productGrouping';
-import { getModelImageWithCache, prefetchModelImages } from '../../../services/modelImageCache';
+import { colorService } from '../../../services/colors';
+import { modelColorImagesService } from '../../../services/model-color-images';
 import { getMarketingBulkExportSlides, getMarketingExportSlides } from '../../../utils/marketing-carousel';
 import {
     DEFAULT_MARKETING_STICKER_SETTINGS,
@@ -88,9 +89,10 @@ const waitForMarketingProductImage = async (
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) {
         const productImage = node.querySelector<HTMLImageElement>('img[data-marketing-product-image="true"]');
-        const currentImageUrl = productImage?.getAttribute('src') ?? null;
+        const currentImageUrl = productImage?.dataset.marketingSourceUrl ?? productImage?.getAttribute('src') ?? null;
+        const imageReady = productImage?.dataset.marketingImageReady !== 'false';
 
-        if (currentImageUrl === expectedImageUrl) return;
+        if (currentImageUrl === expectedImageUrl && imageReady) return;
         await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
     }
 
@@ -114,59 +116,37 @@ const getRenderableProductImages = (product?: CatalogProduct | null): string[] =
     return hasRenderableMediaUrl(fallbackImageUrl) ? [fallbackImageUrl] : [];
 };
 
-const hydrateMarketingProductMedia = async (product: CatalogProduct): Promise<CatalogProduct> => {
-    const usableImages = getRenderableProductImages(product);
-    if (usableImages.length > 0) {
-        return {
-            ...product,
-            images: usableImages,
-            image_url: usableImages[0] ?? null,
-        };
-    }
-
-    if (!product.model_id) {
-        return {
-            ...product,
-            images: [],
-            image_url: null,
-        };
-    }
-
-    const fallbackUrl = await getModelImageWithCache(
-        product.model_id,
-        typeof product.specs?.color === 'string' ? product.specs.color : undefined,
-    );
-
-    const safeFallbackUrl = toBrowserSafeMediaUrl(fallbackUrl);
-    if (!hasRenderableMediaUrl(safeFallbackUrl)) {
-        return {
-            ...product,
-            images: [],
-            image_url: null,
-        };
-    }
-
-    return {
-        ...product,
-        images: [safeFallbackUrl],
-        image_url: safeFallbackUrl,
-    };
-};
-
 const prepareMarketingProducts = async (products: CatalogProduct[]): Promise<CatalogProduct[]> => {
-    const modelIdsNeedingFallback = [
-        ...new Set(
-            products
-                .filter((product) => getRenderableProductImages(product).length === 0 && product.model_id)
-                .map((product) => product.model_id!)
-        ),
-    ];
+    const modelIds = [...new Set(products.map((product) => product.model_id).filter(Boolean))];
+    if (modelIds.length === 0) return products.map((product) => ({ ...product, images: [], image_url: null }));
 
-    if (modelIdsNeedingFallback.length > 0) {
-        await prefetchModelImages(modelIdsNeedingFallback);
+    try {
+        const [galleryRows, colors] = await Promise.all([
+            modelColorImagesService.getByModelIds(modelIds),
+            colorService.list(),
+        ]);
+        const colorIdByName = new Map(colors.map((color) => [color.name.trim().toLowerCase(), color.id]));
+
+        return products.map((product) => {
+            const colorName = String(product.specs?.color || product.specs?.cor || '').trim().toLowerCase();
+            const colorId = colorIdByName.get(colorName);
+            const galleryEntry = colorId
+                ? galleryRows.find((row) => row.model_id === product.model_id && row.color_id === colorId)
+                : undefined;
+            const galleryImages = (galleryEntry?.images || [])
+                .map((value) => toBrowserSafeMediaUrl(value))
+                .filter((value) => hasRenderableMediaUrl(value));
+
+            return {
+                ...product,
+                images: galleryImages,
+                image_url: galleryImages[0] || null,
+            };
+        });
+    } catch (error) {
+        console.warn('[Marketing] Não foi possível carregar a galeria oficial de modelo/cor.', error);
+        return products.map((product) => ({ ...product, images: [], image_url: null }));
     }
-
-    return Promise.all(products.map(hydrateMarketingProductMedia));
 };
 
 const MARKETING_PRIMARY_VARIANTS_KEY = 'marketing_primary_variants';
@@ -437,8 +417,8 @@ export default function MarketingPage() {
         : activeCarouselSlide?.imageUrl ?? null;
     const showCarouselPreview = carouselSlides.length > 1;
     const productArtworkData = useMemo(
-        () => selectedProduct ? buildProductMarketingArtworkData(selectedProduct, marketingPaymentFees) : null,
-        [selectedProduct, marketingPaymentFees],
+        () => selectedProduct ? buildProductMarketingArtworkData(selectedProduct, marketingPaymentFees, companyInfo?.pixDiscountPercentage || 0) : null,
+        [selectedProduct, marketingPaymentFees, companyInfo?.pixDiscountPercentage],
     );
     const artworkWhatsapp = normalizeBrazilianWhatsapp(companyInfo?.phone) || '(87) 98803-2612';
     const artworkWebsite = (companyInfo?.socialMedia?.website || 'mercadodovale.com.br')
@@ -500,6 +480,21 @@ export default function MarketingPage() {
     const selectedProductGroup = useMemo(() => groupedResults.find((group) =>
         getGroupProducts(group).some((product) => product.id === selectedProduct?.id)
     ) || null, [groupedResults, selectedProduct?.id]);
+    const selectedPriceAnomaly = useMemo(() => {
+        if (!selectedProduct || !selectedProductGroup) return null;
+        const comparablePrices = getGroupProducts(selectedProductGroup)
+            .map((product) => Number(product.price_retail || 0))
+            .filter((price) => price > 0)
+            .sort((left, right) => left - right);
+        if (comparablePrices.length < 2) return null;
+        const middle = Math.floor(comparablePrices.length / 2);
+        const median = comparablePrices.length % 2
+            ? comparablePrices[middle]
+            : Math.round((comparablePrices[middle - 1] + comparablePrices[middle]) / 2);
+        const selectedPrice = Number(selectedProduct.price_retail || 0);
+        if (!median || selectedPrice <= median * 1.35) return null;
+        return { selectedPrice, median };
+    }, [selectedProduct, selectedProductGroup]);
     const selectedCategoryName = selectedProduct?.category_id
         ? categories.find((category) => category.id === selectedProduct.category_id)?.name ?? ''
         : '';
@@ -1012,6 +1007,14 @@ export default function MarketingPage() {
     // Export to Image Logic
     const handleDownload = async (stickerExportMode?: MarketingStickerExportMode) => {
         if (!canvasRef.current) return;
+        if (selectedProduct && selectedProductImages.length === 0) {
+            toast.error('Cadastre uma foto para este modelo e esta cor na galeria antes de gerar a arte.');
+            return;
+        }
+        if (!isStickerFormat && showArtworkPrice && selectedPriceAnomaly) {
+            toast.error('Confira e corrija o preço deste SKU antes de gerar a arte.');
+            return;
+        }
 
         const previousSlideIndex = carouselSlideIndex;
         const currentStickerExportMode = stickerExportMode ?? 'png';
@@ -1071,6 +1074,11 @@ export default function MarketingPage() {
             .filter(p => bulkSelectedIds.has(p.id));
 
         if (productsToGenerate.length === 0) return;
+        const productsWithoutGalleryImage = productsToGenerate.filter((product) => getRenderableProductImages(product).length === 0);
+        if (productsWithoutGalleryImage.length > 0) {
+            toast.error(`${productsWithoutGalleryImage.length} produto(s) não têm foto na galeria para o modelo e a cor selecionados.`);
+            return;
+        }
 
         const slidesToGenerate = getMarketingBulkExportSlides(
             productsToGenerate,
@@ -1486,7 +1494,7 @@ export default function MarketingPage() {
                                         </div>
                                         <button
                                             onClick={() => handleDownload()}
-                                            disabled={isGenerating || (!selectedProduct && !customBgUrl)}
+                                            disabled={isGenerating || (!selectedProduct && !customBgUrl) || Boolean(selectedProduct && selectedProductImages.length === 0)}
                                             className="bg-pink-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-pink-700 transition-colors disabled:opacity-50"
                                         >
                                             <Download className="w-5 h-5" />
@@ -1734,6 +1742,7 @@ export default function MarketingPage() {
                                                         <div>
                                                             <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-0.5">Produto no Palco (Preview)</p>
                                                             <p className="text-sm font-bold text-slate-800 line-clamp-1">{selectedProduct.name}</p>
+                                                            <p className="text-[10px] font-semibold text-slate-500">SKU {selectedProduct.sku}</p>
                                                             <p className="text-xs font-bold text-green-600">
                                                                 R$ {formatCurrency(selectedProduct.price_retail || 0)}
                                                             </p>
@@ -1744,6 +1753,18 @@ export default function MarketingPage() {
                                                             )}
                                                         </div>
                                                     </div>
+                                                    {selectedPriceAnomaly && (
+                                                        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                                                            <strong className="block font-black uppercase">Confira o preço antes de baixar</strong>
+                                                            Este SKU está em {formatCurrency(selectedPriceAnomaly.selectedPrice)}, enquanto o valor mediano das demais variantes do modelo é {formatCurrency(selectedPriceAnomaly.median)}. A arte mostra exatamente o cadastro atual.
+                                                        </div>
+                                                    )}
+                                                    {!selectedProductImage && (
+                                                        <div className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-xs leading-relaxed text-red-800">
+                                                            <strong className="block font-black uppercase">Foto não cadastrada na galeria</strong>
+                                                            Cadastre a imagem para este modelo e esta cor. O gerador não usará a foto de outro aparelho ou de outra cor.
+                                                        </div>
+                                                    )}
                                                     {selectedProductGroup && getGroupProducts(selectedProductGroup).length > 1 && (
                                                         <div className="mt-3 border-t border-slate-200 pt-3">
                                                             <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Foto/variante principal da arte</label>

@@ -1,6 +1,6 @@
 import type { CatalogProduct } from '../../../../types/catalog';
 import type { PaymentFee } from '../../../../types/payment-fees';
-import { calculateInstallmentFromFees } from '../../../../services/installmentCalculator';
+import { calculateInstallmentFromFees, calculatePixPrice } from '../../../../services/installmentCalculator';
 
 export interface ProductMarketingTheme {
   accent: string;
@@ -21,6 +21,7 @@ export interface ProductMarketingArtworkData {
   version: string;
   technology: string;
   color: string;
+  retailPrice: number;
   price: number;
   installmentValue: number;
   installmentTotal: number;
@@ -78,22 +79,24 @@ export function resolveCurrentMarketingPrice(product: CatalogProduct, now = new 
   return promo;
 }
 
-export function buildProductMarketingArtworkData(product: CatalogProduct, paymentFees: PaymentFee[]): ProductMarketingArtworkData {
-  const price = resolveCurrentMarketingPrice(product);
-  const plan = calculateInstallmentFromFees(price, paymentFees, 12);
+export function buildProductMarketingArtworkData(product: CatalogProduct, paymentFees: PaymentFee[], pixDiscountPercentage = 0): ProductMarketingArtworkData {
+  const retailPrice = resolveCurrentMarketingPrice(product);
+  const price = calculatePixPrice(retailPrice, pixDiscountPercentage);
+  const plan = calculateInstallmentFromFees(retailPrice, paymentFees, 12);
   const version = readSpec(product, ['versao', 'version', 'versão']);
   const network = readSpec(product, ['network', 'rede', 'tecnologia', 'technology']);
   const technology = /5g/i.test(`${network} ${product.name}`) ? '5G' : /4g/i.test(`${network} ${product.name}`) ? '4G' : network;
-  const rearCamera = readSpec(product, ['cam_principal_mpx', 'camera_principal_mpx', 'camera_traseira_mpx', 'rear_camera', 'camera']);
+  const rearCameraRaw = readSpec(product, ['cam_principal_mpx', 'camera_principal_mpx', 'camera_traseira_mpx', 'rear_camera', 'camera']);
+  const rearCamera = rearCameraRaw.match(/\d+(?:[.,]\d+)?\s*MP/i)?.[0] || rearCameraRaw;
   const frontCamera = readSpec(product, ['cam_selfie_mpx', 'camera_selfie_mpx', 'camera_frontal_mpx', 'front_camera']);
   const battery = readSpec(product, ['battery_mah', 'bateria_mah', 'battery', 'bateria']);
   const processor = readSpec(product, ['chipset', 'processador', 'processor', 'cpu']);
-  const display = readSpec(product, ['display_type', 'tipo_tela', 'screen_type', 'display', 'tela']);
+  const display = readSpec(product, ['display_type', 'tipo_de_display', 'tipo_tela', 'screen_type', 'tela', 'display']);
   const refreshRate = readSpec(product, ['celular_fps_display', 'refresh_rate', 'taxa_atualizacao', 'taxa_de_atualizacao']);
   const storage = normalizeMemory(readSpec(product, ['storage', 'armazenamento', 'memoria_interna', 'capacity']));
   const ram = normalizeMemory(readSpec(product, ['ram', 'memoria_ram', 'memory_ram']));
   const specValues: Array<ProductMarketingSpec | null> = [
-    rearCamera ? { key: 'rearCamera', label: 'Câmera traseira', value: withUnit(rearCamera, 'MP'), detail: /ois/i.test(rearCamera) ? 'OIS' : undefined } : null,
+    rearCamera ? { key: 'rearCamera', label: 'Câmera traseira', value: withUnit(rearCamera, 'MP'), detail: /ois/i.test(rearCameraRaw) ? 'OIS' : undefined } : null,
     frontCamera ? { key: 'frontCamera', label: 'Câmera frontal', value: withUnit(frontCamera, 'MP') } : null,
     battery ? { key: 'battery', label: 'Bateria', value: withUnit(battery, 'mAh') } : null,
     processor ? { key: 'processor', label: 'Processador', value: processor } : null,
@@ -112,7 +115,7 @@ export function buildProductMarketingArtworkData(product: CatalogProduct, paymen
   const features = [
     isEnabled(rawSpecs.nfc) ? 'NFC' : '',
     technology === '5G' || isEnabled(rawSpecs['5g']) || isEnabled(rawSpecs.has_5g) ? '5G' : '',
-    isEnabled(rawSpecs.dual_chip) || isEnabled(rawSpecs.dual_sim) || /dual/i.test(readSpec(product, ['sim', 'chips'])) ? 'DUAL CHIP' : '',
+    isEnabled(rawSpecs.dual_chip) || isEnabled(rawSpecs.dual_sim) || /dual/i.test(readSpec(product, ['sim', 'chips', 'celular_slot_para_cartao'])) ? 'DUAL CHIP' : '',
   ].filter(Boolean);
 
   return {
@@ -121,6 +124,7 @@ export function buildProductMarketingArtworkData(product: CatalogProduct, paymen
     version,
     technology,
     color: readSpec(product, ['color', 'cor', 'colour']),
+    retailPrice,
     price,
     installmentValue: plan.value,
     installmentTotal: plan.total,
