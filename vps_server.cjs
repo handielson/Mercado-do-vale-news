@@ -28067,6 +28067,11 @@ async function upsertWhatsAppBroadcastContact(sender, name = '') {
 
 const WHATSAPP_BROADCAST_CONTEXT_INVITE_COOLDOWN_DAYS = 30;
 
+function isWhatsAppBroadcastConversationEnabled() {
+  const normalized = String(process.env.WHATSAPP_BROADCAST_CONVERSATION_ENABLED || 'false').trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+}
+
 function isWhatsAppBroadcastPhoneCategory(category) {
   const normalizedName = normalizeAutoresponderText(category?.name || category?.slug || '');
   return /\b(celular|celulares|smartphone|smartphones|iphone|iphones|telefone|telefones)\b/.test(normalizedName);
@@ -28096,6 +28101,7 @@ async function appendWhatsAppBroadcastContextInvite({ sender, replyMessages, cat
   const messages = (Array.isArray(replyMessages) ? replyMessages : [replyMessages])
     .map((item) => String(item || '').trim())
     .filter(Boolean);
+  if (!isWhatsAppBroadcastConversationEnabled()) return messages;
   if (!messages.length || !category?.id || !normalizeDeliveryWhatsAppNumber(sender)) return messages;
 
   const topic = await getWhatsAppBroadcastTopicForCategory(category);
@@ -28132,6 +28138,7 @@ function isWhatsAppBroadcastOptOutMessage(message) {
 }
 
 async function handleWhatsAppBroadcastPreferenceReply({ sender, message }) {
+  if (!isWhatsAppBroadcastConversationEnabled()) return null;
   const phone = normalizeDeliveryWhatsAppNumber(sender);
   if (!phone || !String(message || '').trim()) return null;
   const [contactRows] = await pool.query(

@@ -16,6 +16,9 @@ for (const source of [serverJs, serverCjs]) {
   assert.match(source, /last_invited_topic_id/);
   assert.match(source, /last_invited_at/);
   assert.match(source, /WHATSAPP_BROADCAST_CONTEXT_INVITE_COOLDOWN_DAYS = 30/);
+  assert.match(source, /WHATSAPP_BROADCAST_CONVERSATION_ENABLED \|\| 'false'/);
+  assert.match(source, /if \(!isWhatsAppBroadcastConversationEnabled\(\)\) return messages;/);
+  assert.match(source, /if \(!isWhatsAppBroadcastConversationEnabled\(\)\) return null;/);
   assert.match(source, /appendWhatsAppBroadcastContextInvite/);
   assert.match(source, /Responda SIM para entrar na lista/);
   assert.match(source, /contact\?\.pending_topic_id && isAffirmative/);

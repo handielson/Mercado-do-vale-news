@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.214-whatsapp-listas-contextuais
+version: v1.2.215-whatsapp-listas-desativadas
 date: 2026-08-05
 status: ready
-release_vps: /var/www/mdv-site/releases/20260806-023352-whatsapp-listas-contextuais
+release_vps: /var/www/mdv-site/releases/20260806-024030-whatsapp-listas-desativadas
 branch: main
-summary: Cria listas Celulares e Outros produtos com convite contextual e consentimento explicito.
+summary: Mantem as listas do WhatsApp prontas, com o fluxo de conversa desativado por padrao.
 ```
