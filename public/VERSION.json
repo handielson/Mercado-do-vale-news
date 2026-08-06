@@ -1,8 +1,8 @@
 {
-  "version": "v1.2.212-banner-product-slug",
+  "version": "v1.2.213-product-color-image-isolation",
   "date": "2026-08-05",
   "status": "ready",
-  "release_vps": "/var/www/mdv-site/releases/20260805-204346-v12212-banner-product-slug",
+  "release_vps": "/var/www/mdv-site/releases/20260806-021045-product-color-image-isolation",
   "branch": "main",
-  "summary": "Mantem banner visivel ao usar URL publica com slug do produto."
+  "summary": "Impede catalogo e secoes de reutilizarem imagem de outra cor."
 }

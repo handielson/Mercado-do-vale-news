@@ -13,7 +13,7 @@ import { modelColorImagesService } from './model-color-images';
 
 // Persistent Cache (Stale-While-Revalidate pattern)
 const CACHE_TTL = 30 * 1000; // 30 segundos (evita cache obsoleto prolongado na UI)
-const CACHE_KEY_PREFIX = '@mv:catalog:v7:';
+const CACHE_KEY_PREFIX = '@mv:catalog:v8:';
 
 // Helper to safely access localStorage (prevents SSR errors)
 const getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
@@ -222,11 +222,9 @@ export const catalogService = {
 
                         const colorName = product.specs?.color;
                         const colorId = colorName ? colorNameToId.get(colorName) : undefined;
-                        let chosen = colorId
+                        const chosen = colorId
                             ? entriesForModel.find(mi => mi.color_id === colorId)
                             : undefined;
-
-                        if (!chosen) chosen = entriesForModel[0];
 
                         if (chosen?.images?.length > 0) {
                             return {

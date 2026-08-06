@@ -109,7 +109,7 @@ class CatalogSectionsService {
 
     // Prefix for persistent LocalStorage caching of section products
     // ⚠️ Bump a versão aqui sempre que a lógica de fetch mudar (invalida cache antigo automaticamente)
-    private CACHE_KEY_PREFIX = '@mv:section_products:v5:';
+    private CACHE_KEY_PREFIX = '@mv:section_products:v6:';
 
     // Helper to safely access localStorage (prevents SSR errors)
     private getStorage = () => typeof window !== 'undefined' ? window.localStorage : null;
@@ -429,12 +429,9 @@ class CatalogSectionsService {
                         // Try to find entry matching the product's color
                         const colorName = product.specs?.color;
                         const colorId = colorName ? colorNameToId.get(colorName) : undefined;
-                        let chosen = colorId
+                        const chosen = colorId
                             ? entriesForModel.find(mi => mi.color_id === colorId)
                             : undefined;
-
-                        // Fallback: first available entry for the model
-                        if (!chosen) chosen = entriesForModel[0];
 
                         if (chosen?.images?.length > 0) {
                             return { ...product, images: chosen.images };

@@ -71,15 +71,35 @@ assert.equal(
 
 assert.equal(
   selectCatalogCardImageProduct({
-    product: { ...representedProduct, images: [] },
-    currentProduct: { ...representedProduct, images: [] },
+    product: { ...representedProduct, images: [], specs: { color: 'Preto' } },
+    currentProduct: { ...representedProduct, images: [], specs: { color: 'Preto' } },
     selectedVariant: {
       colors: [],
-      products: [{ ...representedProduct, images: [] }, siblingProduct],
+      products: [
+        { ...representedProduct, images: [], specs: { color: 'Preto' } },
+        { ...siblingProduct, images: ['https://cdn/yellow.png'], specs: { color: 'Amarelo' } },
+      ],
     },
     currentColorIndex: -1,
   }).id,
-  'other-sku',
+  'sl6011',
+);
+
+assert.equal(
+  selectCatalogCardImageProduct({
+    product: { ...representedProduct, images: [], specs: { color: 'Preto' } },
+    currentProduct: { ...representedProduct, images: [], specs: { color: 'Preto' } },
+    selectedVariant: {
+      colors: [],
+      products: [
+        { ...representedProduct, images: [], specs: { color: 'Preto' } },
+        { id: 'black-old', images: ['https://cdn/black.png'], specs: { color: 'preto' } },
+        { ...siblingProduct, images: ['https://cdn/yellow.png'], specs: { color: 'Amarelo' } },
+      ],
+    },
+    currentColorIndex: -1,
+  }).id,
+  'black-old',
 );
 
 assert.equal(

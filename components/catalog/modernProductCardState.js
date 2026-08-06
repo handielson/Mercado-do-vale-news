@@ -93,9 +93,21 @@ export function selectCatalogCardImageProduct({
     return product;
   }
 
-  if (selectedVariant?.products?.length) {
-    return selectedVariant.products.find(productHasCatalogMedia) || baseProduct;
+  const baseColor = normalizeCatalogColor(baseProduct?.specs?.color || product?.specs?.color);
+  if (baseColor && selectedVariant?.products?.length) {
+    const sameColorProduct = selectedVariant.products.find((candidate) =>
+      normalizeCatalogColor(candidate?.specs?.color) === baseColor && productHasCatalogMedia(candidate),
+    );
+    if (sameColorProduct) return sameColorProduct;
   }
 
   return baseProduct;
+}
+
+function normalizeCatalogColor(value) {
+  return String(value || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
