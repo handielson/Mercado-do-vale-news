@@ -273,7 +273,7 @@ export default function MarketingPage() {
     const [isGeneratingBulk, setIsGeneratingBulk] = useState(false);
     const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
     const [companyInfo, setCompanyInfo] = useState<Company | null>(null);
-    const [format, setFormat] = useState<MarketingAssetFormat>('sticker');
+    const [format, setFormat] = useState<MarketingAssetFormat>('status');
     const [showArtworkPrice, setShowArtworkPrice] = useState(true);
     const [marketingPaymentFees, setMarketingPaymentFees] = useState<PaymentFee[]>([]);
     const [stickerSettings, setStickerSettings] = useState<MarketingStickerSettings>(DEFAULT_MARKETING_STICKER_SETTINGS);
@@ -1310,32 +1310,32 @@ export default function MarketingPage() {
     );
 
     return (
-        <div className="p-6 max-w-7xl mx-auto">
+        <div className="mx-auto max-w-[1500px] p-4 sm:p-6">
             {/* Cabeçalho */}
-            <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="mb-6">
                 <div className="flex items-start gap-3">
                     <div className="rounded-xl bg-pink-50 p-3">
                         <Sparkles className="w-6 h-6 text-pink-600" />
                     </div>
                     <div>
-                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Marketing Studio</p>
-                        <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900">Central de Conteúdo</h1>
+                        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Marketing e divulgação</p>
+                        <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900">Gerador de Artes</h1>
                         <p className="mt-2 text-sm text-slate-500">
-                            Crie a arte e organize cada canal em seu próprio espaço.
+                            Escolha um produto, confira a arte automática e baixe pronta para publicar.
                         </p>
                     </div>
                 </div>
 
-                <div className="inline-flex flex-wrap rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+                <div className="mt-6 grid w-full grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm md:grid-cols-3 xl:grid-cols-6">
                     <button
                         onClick={() => setActiveTab('studio')}
-                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
+                        className={`col-span-2 rounded-xl px-4 py-3 text-sm font-black transition-colors md:col-span-1 ${
                             activeTab === 'studio'
                                 ? 'bg-slate-900 text-white'
                                 : 'text-slate-600 hover:bg-slate-100'
                         }`}
                     >
-                        <span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4" /> Studio</span>
+                        <span className="inline-flex items-center gap-2"><Sparkles className="h-4 w-4" /> Gerador de Artes</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('instagram')}
@@ -1345,7 +1345,7 @@ export default function MarketingPage() {
                                 : 'text-slate-600 hover:bg-slate-100'
                         }`}
                     >
-                        <span className="inline-flex items-center gap-2"><Instagram className="h-4 w-4" /> Instagram</span>
+                        <span className="inline-flex items-center gap-2"><Instagram className="h-4 w-4" /> Agenda Instagram</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('facebook')}
@@ -1355,7 +1355,7 @@ export default function MarketingPage() {
                                 : 'text-slate-600 hover:bg-blue-50 hover:text-blue-700'
                         }`}
                     >
-                        <span className="inline-flex items-center gap-2"><Facebook className="h-4 w-4" /> Facebook</span>
+                        <span className="inline-flex items-center gap-2"><Facebook className="h-4 w-4" /> Marketplace</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('whatsapp')}
@@ -1365,7 +1365,7 @@ export default function MarketingPage() {
                                 : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
                         }`}
                     >
-                        <span className="inline-flex items-center gap-2"><MessageCircle className="h-4 w-4" /> WhatsApp</span>
+                        <span className="inline-flex items-center gap-2"><MessageCircle className="h-4 w-4" /> Status WhatsApp</span>
                     </button>
                     <button
                         onClick={() => setActiveTab('campaigns')}
@@ -1392,26 +1392,24 @@ export default function MarketingPage() {
 
             <div className="space-y-6">
                 {activeTab === 'studio' && (
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-pink-500">Missão do dia</p>
-                            <h2 className="mt-2 text-lg font-black text-slate-900">{DAY_LABELS_FULL[todayDayIndex] ?? 'Hoje'}</h2>
-                            <p className="mt-1 text-sm text-slate-500">{currentDayRule.label}</p>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-blue-500">Categoria foco</p>
-                            <h2 className="mt-2 text-lg font-black text-slate-900 line-clamp-2">{editorialCategoryLabel}</h2>
-                            <p className="mt-1 text-sm text-slate-500">{studioPrimaryProduct?.name || 'Selecione um produto principal'}</p>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-500">Pipeline</p>
-                            <h2 className="mt-2 text-lg font-black text-slate-900">{scheduleSlots.filter((slot) => slot.active).length} slots ativos</h2>
-                            <p className="mt-1 text-sm text-slate-500">{bulkSelectedIds.size} itens marcados para lote</p>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-purple-500">Kit operacional</p>
-                            <h2 className="mt-2 text-lg font-black text-slate-900">{kitStatusLabel}</h2>
-                            <p className="mt-1 text-sm text-slate-500">{marketingKit.shortCaption || 'Monte o kit do dia para enviar ao time.'}</p>
+                    <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 shadow-sm">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Crie sua arte em 3 passos</p>
+                                <p className="mt-1 text-sm text-slate-600">Foto, especificações, recursos e valores vêm automaticamente do cadastro.</p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                {[
+                                    ['1', 'Busque o aparelho'],
+                                    ['2', 'Escolha Story ou Feed'],
+                                    ['3', 'Confira e baixe'],
+                                ].map(([step, label]) => (
+                                    <div key={step} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm">
+                                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-black text-white">{step}</span>
+                                        {label}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -1439,8 +1437,8 @@ export default function MarketingPage() {
                     {activeTab === 'studio' && (
                         <div className="space-y-6 animate-in fade-in duration-300">
                             {/* Toolbar */}
-                            <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                                <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+                                <div className="flex flex-wrap bg-slate-100 p-1 rounded-lg border border-slate-200">
                                     <button
                                         onClick={() => setFormat('feed')}
                                         className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${format === 'feed' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}

@@ -16,6 +16,9 @@ assert.match(page, /activeTab === 'whatsapp'[\s\S]*?<WhatsAppStatusCampaignPanel
 assert.match(page, /activeTab === 'approvals'[\s\S]*?<MarketingApprovalCenterPanel/);
 assert.match(page, /activeTab === 'campaigns'[\s\S]*?<MarketingCampaignAgentPanel/);
 assert.doesNotMatch(page, /activeTab === 'agenda'|setActiveTab\('agenda'\)/);
-assert.match(page, />Central de Conteúdo</);
+assert.match(page, />Gerador de Artes</);
+assert.match(page, /useState<MarketingAssetFormat>\('status'\)/);
+assert.match(page, /Crie sua arte em 3 passos/);
+assert.match(page, /Busque o aparelho/);
 
 console.log('marketing channel tabs are separated: OK');

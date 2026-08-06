@@ -6,6 +6,8 @@ const card = await readFile(new URL('../pages/admin/settings/marketing/ProductMa
 const resolver = await readFile(new URL('../pages/admin/settings/marketing/productMarketingArtwork.ts', import.meta.url), 'utf8');
 
 assert.match(page, /<ProductMarketingCard/);
+assert.match(page, /useState<MarketingAssetFormat>\('status'\)/);
+assert.match(page, /Gerador de Artes/);
 assert.match(page, /META SEM PREÇO/);
 assert.match(page, /Foto\/variante principal da arte/);
 assert.match(page, /marketing_primary_variants/);

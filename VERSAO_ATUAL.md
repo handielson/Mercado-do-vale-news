@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.216-marketing-artes-dinamicas
+version: v1.2.217-gerador-artes-organizado
 date: 2026-08-06
 status: ready
-release_vps: /var/www/mdv-site/releases/20260806-150403-marketing-artes-dinamicas
+release_vps: /var/www/mdv-site/releases/20260806-151247-gerador-artes-organizado
 branch: main
-summary: Adiciona gerador dinamico de artes de produtos, selecao de variante e modo Meta sem preco.
+summary: Destaca o Gerador de Artes no menu e simplifica a navegacao da area de marketing.
 ```
