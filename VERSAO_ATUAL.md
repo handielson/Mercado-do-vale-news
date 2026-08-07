@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.221-shopee-comprovante-80mm
+version: v1.2.222-shopee-comprovante-black-text-fix
 date: 2026-08-07
 status: ready
-release_vps: /var/www/mdv-site/releases/20260807-174340
+release_vps: pendente
 branch: main
-summary: Ajusta impressão da impressora Comprovante (shopee_printer_a4) para papel 80mm mantendo a etiqueta de envio em 10x15.
+summary: Corrige impressão em branco do comprovante/resumo ajustando cores para preto puro e escala nativa de driver.
 ```

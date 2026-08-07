@@ -160,13 +160,13 @@ async function createShopeeSeparationSummaryPdf(order) {
 
     for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
         const page = pdf.addPage([288, 432]);
-        const black = rgb(0.04, 0.07, 0.12);
-        const gray = rgb(0.32, 0.36, 0.42);
-        const border = rgb(0.78, 0.81, 0.85);
+        const black = rgb(0, 0, 0);
+        const gray = rgb(0, 0, 0);
+        const border = rgb(0, 0, 0);
         page.drawRectangle({ x: 0, y: 0, width: 288, height: 432, color: rgb(1, 1, 1) });
-        page.drawRectangle({ x: 12, y: 384, width: 264, height: 36, color: rgb(0.06, 0.12, 0.22) });
-        page.drawText('RESUMO DE SEPARACAO', { x: 22, y: 398, size: 13, font: bold, color: rgb(1, 1, 1) });
-        page.drawText(`SHOPEE  |  ${pageIndex + 1}/${pages.length}`, { x: 210, y: 399, size: 7, font: bold, color: rgb(1, 1, 1) });
+        page.drawRectangle({ x: 12, y: 384, width: 264, height: 36, borderColor: black, borderWidth: 1, color: rgb(1, 1, 1) });
+        page.drawText('RESUMO DE SEPARACAO', { x: 22, y: 398, size: 13, font: bold, color: black });
+        page.drawText(`SHOPEE  |  ${pageIndex + 1}/${pages.length}`, { x: 210, y: 399, size: 7, font: bold, color: black });
 
         page.drawText(`PEDIDO: ${printableText(order?.orderSn) || '-'}`, { x: 18, y: 365, size: 11, font: bold, color: black });
         page.drawText('CODIGO DE RASTREIO', { x: 18, y: 350, size: 7, font: bold, color: gray });

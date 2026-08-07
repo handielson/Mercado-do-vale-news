@@ -329,7 +329,6 @@ async function printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, 
         const ptp = require('pdf-to-printer');
         await ptp.print(receiptPath, {
             printer: summaryPrinter,
-            paperSize: '80mm',
             scale: 'fit',
         });
         markPrintStep(markerPath);
@@ -367,18 +366,19 @@ async function createThermalTestPdf({ title, subtitle, lines }) {
     const page = pdf.addPage([288, 432]); // 4 x 6 polegadas (10 x 15 cm)
     const regular = await pdf.embedFont(StandardFonts.Helvetica);
     const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const black = rgb(0, 0, 0);
     page.drawRectangle({ x: 0, y: 0, width: 288, height: 432, color: rgb(1, 1, 1) });
-    page.drawRectangle({ x: 18, y: 374, width: 252, height: 40, color: rgb(0.06, 0.12, 0.22) });
-    page.drawText(title, { x: 30, y: 390, size: 15, font: bold, color: rgb(1, 1, 1) });
-    page.drawText(subtitle, { x: 30, y: 354, size: 9, font: regular, color: rgb(0.25, 0.3, 0.36) });
+    page.drawRectangle({ x: 18, y: 374, width: 252, height: 40, borderColor: black, borderWidth: 1, color: rgb(1, 1, 1) });
+    page.drawText(title, { x: 30, y: 390, size: 15, font: bold, color: black });
+    page.drawText(subtitle, { x: 30, y: 354, size: 9, font: regular, color: black });
     let y = 320;
     for (const line of lines) {
-        page.drawText(line, { x: 30, y, size: 12, font: regular, color: rgb(0.08, 0.12, 0.18) });
+        page.drawText(line, { x: 30, y, size: 12, font: regular, color: black });
         y -= 28;
     }
-    page.drawRectangle({ x: 30, y: 62, width: 228, height: 2, color: rgb(0.08, 0.12, 0.18) });
+    page.drawRectangle({ x: 30, y: 62, width: 228, height: 2, color: black });
     page.drawText('TESTE - nenhum pedido real foi alterado', {
-        x: 30, y: 38, size: 9, font: bold, color: rgb(0.72, 0.12, 0.12),
+        x: 30, y: 38, size: 9, font: bold, color: black,
     });
     return Buffer.from(await pdf.save());
 }
@@ -407,7 +407,7 @@ async function runPrintFlowTest() {
     }));
 
     await ptp.print(labelPath, { printer: labelPrinter, paperSize: '4x6', scale: 'fit' });
-    await ptp.print(summaryPath, { printer: summaryPrinter, paperSize: '80mm', scale: 'fit' });
+    await ptp.print(summaryPath, { printer: summaryPrinter, scale: 'fit' });
     return { label_file: path.basename(labelPath), summary_file: path.basename(summaryPath) };
 }
 
@@ -681,7 +681,6 @@ function startLocalServer() {
                             fs.writeFileSync(tempPkgPath, await createShopeeSeparationSummaryPdf(summaryData));
                             await ptp.print(tempPkgPath, {
                                 printer: targetSummaryPrinter,
-                                paperSize: '80mm',
                                 scale: 'fit'
                             });
                             console.log(`[MANUAL PRINT] Resumo com rastreio enviado!`);
@@ -829,7 +828,6 @@ async function legacyRunLoop() {
                             console.log(`Enviando Resumo para impressora: ${settings.shopee_printer_a4}`);
                             await ptp.print(tempPkgPath, {
                                 printer: settings.shopee_printer_a4,
-                                paperSize: '80mm',
                                 scale: 'fit'
                             });
                             console.log(`Sucesso ao imprimir RESUMO ${order_sn}!`);
@@ -987,7 +985,6 @@ async function runLoop() {
                     console.log(`Enviando resumo para: ${settings.shopee_printer_a4}`);
                     await ptp.print(summaryPath, {
                         printer: settings.shopee_printer_a4,
-                        paperSize: '80mm',
                         scale: 'fit',
                     });
                     markPrintStep(markers.summary);

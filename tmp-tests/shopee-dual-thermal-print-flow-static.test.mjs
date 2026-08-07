@@ -23,9 +23,9 @@ assert.match(script, /expandShopeeLabelForThermalPaper/,
 const labelPrints = script.match(/paperSize:\s*'4x6'[\s\S]{0,80}?scale:\s*'fit'/g) || [];
 assert.ok(labelPrints.length >= 4,
   'etiqueta de envio precisa usar papel 4x6 e escala fit');
-const summary80mmPrints = script.match(/paperSize:\s*'80mm'[\s\S]{0,80}?scale:\s*'fit'/g) || [];
-assert.ok(summary80mmPrints.length >= 4,
-  'comprovante/resumo precisa usar papel 80mm e escala fit');
+const summaryPrints = script.match(/printer:\s*(?:summaryPrinter|settings\.shopee_printer_a4|targetSummaryPrinter)[\s\S]{0,80}?scale:\s*'fit'/g) || [];
+assert.ok(summaryPrints.length >= 4,
+  'comprovante/resumo precisa usar escala fit na impressora Comprovante');
 assert.match(script, /runPrintFlowTest[\s\S]*?labelPrinter[\s\S]*?summaryPrinter/,
   'o teste precisa enviar conteúdo para as duas térmicas');
 assert.match(script, /req\.url === '\/test-flow' && req\.method === 'POST'/,
