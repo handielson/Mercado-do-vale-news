@@ -2,7 +2,7 @@
   "version": "v1.2.221-shopee-comprovante-80mm",
   "date": "2026-08-07",
   "status": "ready",
-  "release_vps": "pendente",
+  "release_vps": "/var/www/mdv-site/releases/20260807-174340",
   "branch": "main",
   "summary": "Ajusta impressão da impressora Comprovante (shopee_printer_a4) para papel 80mm mantendo a etiqueta de envio em 10x15."
 }
