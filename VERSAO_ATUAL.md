@@ -4,7 +4,7 @@
 version: v1.2.223-shopee-test-flow-independent-printers
 date: 2026-08-07
 status: ready
-release_vps: pendente
+release_vps: /var/www/mdv-site/releases/20260807-201840
 branch: main
 summary: Isola o disparo de teste das impressoras de etiqueta e comprovante em try/catch independentes.
 ```
