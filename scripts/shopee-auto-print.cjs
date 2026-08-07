@@ -329,7 +329,7 @@ async function printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, 
         const ptp = require('pdf-to-printer');
         await ptp.print(receiptPath, {
             printer: summaryPrinter,
-            paperSize: '4x6',
+            paperSize: '80mm',
             scale: 'fit',
         });
         markPrintStep(markerPath);
@@ -407,7 +407,7 @@ async function runPrintFlowTest() {
     }));
 
     await ptp.print(labelPath, { printer: labelPrinter, paperSize: '4x6', scale: 'fit' });
-    await ptp.print(summaryPath, { printer: summaryPrinter, paperSize: '4x6', scale: 'fit' });
+    await ptp.print(summaryPath, { printer: summaryPrinter, paperSize: '80mm', scale: 'fit' });
     return { label_file: path.basename(labelPath), summary_file: path.basename(summaryPath) };
 }
 
@@ -681,7 +681,7 @@ function startLocalServer() {
                             fs.writeFileSync(tempPkgPath, await createShopeeSeparationSummaryPdf(summaryData));
                             await ptp.print(tempPkgPath, {
                                 printer: targetSummaryPrinter,
-                                paperSize: '4x6',
+                                paperSize: '80mm',
                                 scale: 'fit'
                             });
                             console.log(`[MANUAL PRINT] Resumo com rastreio enviado!`);
@@ -829,7 +829,7 @@ async function legacyRunLoop() {
                             console.log(`Enviando Resumo para impressora: ${settings.shopee_printer_a4}`);
                             await ptp.print(tempPkgPath, {
                                 printer: settings.shopee_printer_a4,
-                                paperSize: '4x6',
+                                paperSize: '80mm',
                                 scale: 'fit'
                             });
                             console.log(`Sucesso ao imprimir RESUMO ${order_sn}!`);
@@ -987,7 +987,7 @@ async function runLoop() {
                     console.log(`Enviando resumo para: ${settings.shopee_printer_a4}`);
                     await ptp.print(summaryPath, {
                         printer: settings.shopee_printer_a4,
-                        paperSize: '4x6',
+                        paperSize: '80mm',
                         scale: 'fit',
                     });
                     markPrintStep(markers.summary);
