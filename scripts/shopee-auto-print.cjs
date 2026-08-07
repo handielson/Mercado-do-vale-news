@@ -406,9 +406,24 @@ async function runPrintFlowTest() {
         lines: ['Pedido teste #TESTE', 'Produto: conferência de impressão', 'Quantidade: 1', 'Impressora 2: OK'],
     }));
 
-    await ptp.print(labelPath, { printer: labelPrinter, paperSize: '4x6', scale: 'fit' });
-    await ptp.print(summaryPath, { printer: summaryPrinter, scale: 'fit' });
-    return { label_file: path.basename(labelPath), summary_file: path.basename(summaryPath) };
+    const results = {};
+    try {
+        await ptp.print(labelPath, { printer: labelPrinter, paperSize: '4x6', scale: 'fit' });
+        results.label_printed = true;
+    } catch (e) {
+        console.error(`[TEST FLOW] Falha ao imprimir etiqueta na impressora ${labelPrinter}:`, e.message);
+        results.label_error = e.message;
+    }
+
+    try {
+        await ptp.print(summaryPath, { printer: summaryPrinter, scale: 'fit' });
+        results.summary_printed = true;
+    } catch (e) {
+        console.error(`[TEST FLOW] Falha ao imprimir comprovante na impressora ${summaryPrinter}:`, e.message);
+        results.summary_error = e.message;
+    }
+
+    return { label_file: path.basename(labelPath), summary_file: path.basename(summaryPath), results };
 }
 
 async function pullPrinterServiceUpdate() {
