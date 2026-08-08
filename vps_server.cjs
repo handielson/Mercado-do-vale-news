@@ -1817,6 +1817,10 @@ async function handleBrasilapiNcmProxy(request, reply) {
 
 function buildVpsProxyPayload(request) {
   if (request.method === 'GET' || request.method === 'HEAD') return undefined;
+  const contentType = String(request.headers['content-type'] || '').toLowerCase();
+  if (contentType.includes('multipart/form-data')) {
+    return request.raw;
+  }
   if (request.body == null) return undefined;
   if (Buffer.isBuffer(request.body) || typeof request.body === 'string') return request.body;
   return JSON.stringify(request.body);
