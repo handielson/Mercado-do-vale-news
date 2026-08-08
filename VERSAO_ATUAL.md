@@ -4,7 +4,7 @@
 version: v1.2.224-vps-proxy-multipart-raw-payload
 date: 2026-08-08
 status: ready
-release_vps: pendente
+release_vps: /var/www/mdv-site/releases/20260808-132148
 branch: main
 summary: Corrige proxy de upload multipart no /api/vps-proxy repassando request.raw para preservação de arquivos.
 ```
