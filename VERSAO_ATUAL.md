@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.224-vps-proxy-multipart-raw-payload
-date: 2026-08-08
+version: v1.2.225-n8n-runner-2337
+date: 2026-08-09
 status: ready
-release_vps: /var/www/mdv-site/releases/20260808-132259
+release_vps: infraestrutura-n8n-swarm
 branch: main
-summary: Corrige proxy de upload multipart no /api/vps-proxy repassando request.raw para preservação de arquivos.
+summary: Atualiza e fixa n8n e Task Runner em 2.33.7 para corrigir quedas intermitentes dos Code nodes.
 ```
