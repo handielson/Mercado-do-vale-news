@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 
 const CHANNELS = new Set(['online', 'pdv', 'shopee', 'tiktok']);
+const OPERATIONAL_CHANNELS = new Set([...CHANNELS, 'n8n']);
 const INVALID_FCM_TOKEN_CODES = new Set([
   'messaging/invalid-registration-token',
   'messaging/registration-token-not-registered',
@@ -26,6 +27,12 @@ function parseJson(value, fallback = null) {
 function normalizeChannel(value) {
   const channel = boundedText(value, 20).toLowerCase();
   if (!CHANNELS.has(channel)) throw new Error('Canal de venda invalido.');
+  return channel;
+}
+
+function normalizeOperationalChannel(value) {
+  const channel = boundedText(value, 20).toLowerCase();
+  if (!OPERATIONAL_CHANNELS.has(channel)) throw new Error('Canal operacional invalido.');
   return channel;
 }
 
@@ -289,7 +296,7 @@ function createMobileSalesPushService({ pool, logger = console }) {
   }
 
   async function sendOperationalAlert(input) {
-    const channel = normalizeChannel(input?.channel || 'shopee');
+    const channel = normalizeOperationalChannel(input?.channel || 'shopee');
     const externalId = boundedText(input?.external_id || input?.sale_id, 255);
     const eventKey = boundedText(input?.event_key || `${channel}:${externalId}:operational-alert`, 540);
     const title = boundedText(input?.title || 'Atenção na automação', 255);
@@ -324,10 +331,12 @@ function createMobileSalesPushService({ pool, logger = console }) {
       const response = await messaging.sendEachForMulticast({
         tokens,
         data: {
-          // O aplicativo atual abre a venda Shopee ao receber type=sale.
+          // type=sale keeps operational pushes visible on app versions already installed.
           type: 'sale',
+          operational_alert: 'true',
           channel,
           sale_id: externalId,
+          alert_id: externalId,
           status: `automation_${severity}`,
           total_cents: '0',
           occurred_at: new Date().toISOString(),
@@ -362,6 +371,21 @@ function createMobileSalesPushService({ pool, logger = console }) {
         push: { configured: true, sent: 0, failed: 1, error: error?.message || String(error) },
       };
     }
+  }
+
+  async function listOperationalAlerts(channel, limit = 20) {
+    const normalizedChannel = normalizeOperationalChannel(channel);
+    const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+    await ensureTables();
+    const [rows] = await pool.query(
+      `SELECT id, event_key, channel, external_id, severity, title, body, notified_at, created_at
+         FROM mobile_operational_alerts
+        WHERE channel = ?
+        ORDER BY created_at DESC
+        LIMIT ?`,
+      [normalizedChannel, safeLimit],
+    );
+    return rows || [];
   }
 
   async function recordSaleEvent(input, { notify = true } = {}) {
@@ -450,6 +474,7 @@ function createMobileSalesPushService({ pool, logger = console }) {
   return {
     ensureTables,
     getRecordedSale,
+    listOperationalAlerts,
     listRecordedSales,
     recordSaleEvent,
     registerDevice,

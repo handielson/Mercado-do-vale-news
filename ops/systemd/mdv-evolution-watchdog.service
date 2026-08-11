@@ -1,0 +1,8 @@
+[Unit]
+Description=Mercado do Vale Evolution API frozen socket watchdog
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mdv-evolution-watchdog

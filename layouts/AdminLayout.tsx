@@ -6,6 +6,7 @@ import { useVpsAuth } from '../contexts/VpsAuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { cn } from '../utils/cn';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { vpsClient } from '../services/vpsClient';
 
 function isLikelyCredentialAutofill(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -18,6 +19,14 @@ type AppVersionInfo = {
   summary?: string;
 };
 
+type BotHealth = {
+  status: 'checking' | 'online' | 'offline';
+  consecutiveFailures: number;
+  checkedAt: string | null;
+  incidentStartedAt: string | null;
+  lastError: string | null;
+};
+
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, customer, signOut } = useVpsAuth();
   const { settings } = useTheme();
@@ -26,6 +35,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [search, setSearch] = useState('');
   const [appVersion, setAppVersion] = useState<AppVersionInfo | null>(null);
+  const [botHealth, setBotHealth] = useState<BotHealth | null>(null);
 
   usePageTitle();
 
@@ -43,6 +53,21 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       isMounted = false;
     };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const status = await vpsClient.get<BotHealth>('/admin/bot-health');
+        if (active) setBotHealth(status);
+      } catch {
+        // A indisponibilidade total da API ja aparece nas telas que dependem dela.
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    return () => { active = false; window.clearInterval(timer); };
   }, []);
 
   function handleMenuSearchChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -292,7 +317,21 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
         )}
       </aside>
-      <main className="flex-1 p-4 md:p-10 overflow-y-auto w-full md:w-auto overflow-x-hidden">{children}</main>
+      <main className="flex-1 p-4 md:p-10 overflow-y-auto w-full md:w-auto overflow-x-hidden">
+        {botHealth?.status === 'offline' && (
+          <div role="alert" className="mb-5 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-red-900 shadow-sm">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-none text-red-600" />
+              <div>
+                <p className="font-bold">Bot do WhatsApp fora do ar</p>
+                <p className="mt-1 text-sm">O n8n não respondeu às verificações automáticas. O atendimento pode estar interrompido.</p>
+                {botHealth.checkedAt && <p className="mt-1 text-xs text-red-700">Última verificação: {new Date(botHealth.checkedAt).toLocaleString('pt-BR')}</p>}
+              </div>
+            </div>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 };

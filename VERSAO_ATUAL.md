@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.226-shopee-comprovante-80mm-margens
+version: v1.2.227-n8n-cordialidade-monitor
 date: 2026-08-11
 status: ready
-release_vps: /var/www/mdv-site/releases/20260811-154916-shopee-comprovante-80mm-margens
+release_vps: /var/www/mdv-site/releases/20260811-165246-n8n-cordialidade-monitor
 branch: main
-summary: Ajusta o comprovante Shopee para papel de 80 mm, margens de 5 mm e nomes de produtos com quebra integral de linha.
+summary: Saudação inicial com nome e horário, celulares agrupados por marca e monitoramento do bot n8n no Admin e Gestão MDV.
 ```

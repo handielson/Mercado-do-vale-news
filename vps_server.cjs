@@ -205,6 +205,68 @@ const pool = mysql.createPool({
   connectionLimit: 10,
 });
 const mobileSalesPushService = createMobileSalesPushService({ pool, logger: console });
+const N8N_HEALTH_URL = String(process.env.N8N_HEALTH_URL || 'https://n8n.mercadodovale.com.br/healthz').trim();
+const N8N_HEALTH_INTERVAL_MS = Math.max(15_000, Number(process.env.N8N_HEALTH_INTERVAL_MS) || 30_000);
+const N8N_FAILURE_THRESHOLD = Math.max(2, Number(process.env.N8N_FAILURE_THRESHOLD) || 3);
+const n8nHealthState = {
+  status: 'checking',
+  consecutiveFailures: 0,
+  checkedAt: null,
+  responseMs: null,
+  incidentStartedAt: null,
+  lastError: null,
+};
+let n8nHealthCheckRunning = false;
+
+async function checkN8nBotHealthVps() {
+  if (n8nHealthCheckRunning) return n8nHealthState;
+  n8nHealthCheckRunning = true;
+  const startedAt = Date.now();
+  const previousStatus = n8nHealthState.status;
+  try {
+    const response = await fetch(N8N_HEALTH_URL, { cache: 'no-store', signal: AbortSignal.timeout(8_000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    n8nHealthState.status = 'online';
+    n8nHealthState.consecutiveFailures = 0;
+    n8nHealthState.checkedAt = new Date().toISOString();
+    n8nHealthState.responseMs = Date.now() - startedAt;
+    n8nHealthState.lastError = null;
+    if (previousStatus === 'offline' && n8nHealthState.incidentStartedAt) {
+      const incidentId = n8nHealthState.incidentStartedAt;
+      n8nHealthState.incidentStartedAt = null;
+      await mobileSalesPushService.sendOperationalAlert({
+        event_key: `n8n:${incidentId}:recovered`, channel: 'n8n', external_id: incidentId,
+        severity: 'success', title: 'Bot n8n voltou ao ar',
+        body: 'O atendimento automático do WhatsApp voltou a responder normalmente. ✅',
+      }).catch((error) => console.error('[n8n-monitor] recovery notification failed:', error.message));
+    }
+  } catch (error) {
+    n8nHealthState.consecutiveFailures += 1;
+    n8nHealthState.checkedAt = new Date().toISOString();
+    n8nHealthState.responseMs = Date.now() - startedAt;
+    n8nHealthState.lastError = String(error?.message || error).slice(0, 500);
+    if (n8nHealthState.consecutiveFailures >= N8N_FAILURE_THRESHOLD) {
+      n8nHealthState.status = 'offline';
+      if (previousStatus !== 'offline') {
+        n8nHealthState.incidentStartedAt = new Date().toISOString();
+        const incidentId = n8nHealthState.incidentStartedAt;
+        await mobileSalesPushService.sendOperationalAlert({
+          event_key: `n8n:${incidentId}:offline`, channel: 'n8n', external_id: incidentId,
+          severity: 'error', title: 'Bot n8n fora do ar',
+          body: 'O atendimento automático do WhatsApp não respondeu às verificações. Confira o painel do Gestão MDV. ⚠️',
+        }).catch((notifyError) => console.error('[n8n-monitor] outage notification failed:', notifyError.message));
+      }
+    }
+  } finally {
+    n8nHealthCheckRunning = false;
+  }
+  return n8nHealthState;
+}
+
+function startN8nBotHealthMonitorVps() {
+  setTimeout(() => void checkN8nBotHealthVps(), 5_000).unref?.();
+  setInterval(() => void checkN8nBotHealthVps(), N8N_HEALTH_INTERVAL_MS).unref?.();
+}
 const MP_PIX_FEE_PCT = Number(process.env.MP_PIX_FEE_PCT || 0);
 const MP_CARD_FEE_PCT = Number(process.env.MP_CARD_FEE_PCT || 0.0499);
 
@@ -26214,6 +26276,11 @@ fastify.delete('/products/:id', { preHandler: requireSyncKey }, async (req, repl
     connection.release();
   }
 });
+fastify.get('/admin/bot-health', { preHandler: requireAdminBearerToken }, async (request, reply) => {
+  reply.header('Cache-Control', 'no-store');
+  const alerts = await mobileSalesPushService.listOperationalAlerts('n8n', 10).catch(() => []);
+  return { ...n8nHealthState, url: N8N_HEALTH_URL, alerts };
+});
 
 // Update images by SKU (used by image bank sync)
 fastify.patch('/products/images', { preHandler: requireSyncKey }, async (req, reply) => {
@@ -38766,6 +38833,7 @@ runMigrations().then(() => {
   startFacebookMarketplaceAutomationVps();
   startWhatsAppStatusAutomationVps();
   startShopeeReviewAutomationVps();
+  startN8nBotHealthMonitorVps();
   fastify.listen({ port: process.env.PORT || 4000, host: '0.0.0.0' }, (err) => {
     if (err) { console.error(err); process.exit(1); }
     console.log(`MDV API rodando na porta ${process.env.PORT || 4000}`);

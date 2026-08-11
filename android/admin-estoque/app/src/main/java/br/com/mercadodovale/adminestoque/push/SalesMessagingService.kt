@@ -21,21 +21,25 @@ class SalesMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         val data = message.data
-        if (data["type"] != "sale" && message.notification == null) return
+        val messageType = data["type"].orEmpty()
+        if (messageType != "sale" && messageType != "operational_alert" && message.notification == null) return
 
         val channel = data["channel"].orEmpty()
-        val saleId = data["sale_id"].orEmpty()
+        val isOperationalAlert = messageType == "operational_alert" || data["operational_alert"] == "true"
+        val saleId = if (isOperationalAlert) data["alert_id"].orEmpty() else data["sale_id"].orEmpty()
         val title = data["notification_title"] ?: message.notification?.title ?: "Nova venda"
         val body = data["notification_body"]
             ?: message.notification?.body
             ?: "Toque para conferir os detalhes."
-        SalesCache.markPending(applicationContext, channel, saleId)
-        sendBroadcast(
-            Intent(SalesNotificationContract.ACTION_SALE_RECEIVED)
-                .setPackage(packageName)
-                .putExtra(SalesNotificationContract.EXTRA_SALES_CHANNEL, channel)
-                .putExtra(SalesNotificationContract.EXTRA_SALE_ID, saleId),
-        )
+        if (!isOperationalAlert) {
+            SalesCache.markPending(applicationContext, channel, saleId)
+            sendBroadcast(
+                Intent(SalesNotificationContract.ACTION_SALE_RECEIVED)
+                    .setPackage(packageName)
+                    .putExtra(SalesNotificationContract.EXTRA_SALES_CHANNEL, channel)
+                    .putExtra(SalesNotificationContract.EXTRA_SALE_ID, saleId),
+            )
+        }
         if (!SalesNotificationFreshness.shouldAlert(
                 occurredAt = data["occurred_at"],
                 sentTimeMs = message.sentTime,
@@ -66,9 +70,11 @@ class SalesMessagingService : FirebaseMessagingService() {
 
         val openSaleIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(SalesNotificationContract.EXTRA_OPEN_SALE, true)
-            putExtra(SalesNotificationContract.EXTRA_SALES_CHANNEL, channel)
-            putExtra(SalesNotificationContract.EXTRA_SALE_ID, saleId)
+            if (!isOperationalAlert) {
+                putExtra(SalesNotificationContract.EXTRA_OPEN_SALE, true)
+                putExtra(SalesNotificationContract.EXTRA_SALES_CHANNEL, channel)
+                putExtra(SalesNotificationContract.EXTRA_SALE_ID, saleId)
+            }
         }
         val pendingIntent = PendingIntent.getActivity(
             this,
