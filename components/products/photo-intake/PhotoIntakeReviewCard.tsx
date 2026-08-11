@@ -8,6 +8,7 @@ import type { Model } from '../../../types/model';
 import type {
   SmartphoneBrandPriceMargin,
   SmartphonePhotoIntake,
+  SmartphonePhotoIntakePriceConfirmation,
   SmartphonePhotoIntakeUpdate,
 } from '../../../types/smartphone-photo-intake';
 import { SMARTPHONE_PHOTO_INTAKE_STATUS_LABELS } from '../../../types/smartphone-photo-intake';
@@ -18,7 +19,9 @@ interface PhotoIntakeReviewCardProps {
   colors: Color[];
   margin?: SmartphoneBrandPriceMargin | null;
   busy?: boolean;
+  matchingGroupCount?: number;
   onUpdate: (input: SmartphonePhotoIntakeUpdate) => Promise<void>;
+  onConfirmPrices: (input: SmartphonePhotoIntakePriceConfirmation, applyToGroup: boolean) => Promise<void>;
   onAttachModel: (modelId: string) => Promise<void>;
   onRetry: () => Promise<void>;
   onRefreshColors: () => Promise<void>;
@@ -65,7 +68,9 @@ export function PhotoIntakeReviewCard({
   colors,
   margin,
   busy,
+  matchingGroupCount = 1,
   onUpdate,
+  onConfirmPrices,
   onAttachModel,
   onRetry,
   onRefreshColors,
@@ -74,6 +79,7 @@ export function PhotoIntakeReviewCard({
   const [draft, setDraft] = useState<SmartphonePhotoIntakeUpdate>(() => buildDraft(intake));
   const [selectedModelId, setSelectedModelId] = useState(intake.matched_model_id || '');
   const [sku, setSku] = useState(intake.detected_product_code || '');
+  const [applyPricesToGroup, setApplyPricesToGroup] = useState(true);
 
   useEffect(() => {
     setDraft(buildDraft(intake));
@@ -100,7 +106,12 @@ export function PhotoIntakeReviewCard({
   };
 
   const confirmPrices = async () => {
-    await onUpdate({ ...draft, prices_confirmed: true });
+    await onConfirmPrices({
+      price_cost: Number(draft.price_cost || 0),
+      price_retail: Number(draft.price_retail || 0),
+      price_reseller: Number(draft.price_reseller || 0),
+      price_wholesale: Number(draft.price_wholesale || 0),
+    }, matchingGroupCount > 1 && applyPricesToGroup);
   };
 
   const issues = [
@@ -258,6 +269,20 @@ export function PhotoIntakeReviewCard({
               <CurrencyInput label="Revenda" value={draft.price_reseller || 0} onChange={value => setDraft(current => ({ ...current, price_reseller: value }))} />
               <CurrencyInput label="Atacado" value={draft.price_wholesale || 0} onChange={value => setDraft(current => ({ ...current, price_wholesale: value }))} />
             </div>
+            {matchingGroupCount > 1 && (
+              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300 bg-white/80 p-3">
+                <input
+                  type="checkbox"
+                  checked={applyPricesToGroup}
+                  onChange={event => setApplyPricesToGroup(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                />
+                <span>
+                  <span className="block text-sm font-bold text-amber-950">Aplicar aos {matchingGroupCount} aparelhos iguais</span>
+                  <span className="block text-xs text-amber-800">Mesmo modelo, RAM, armazenamento e cor. IMEIs e seriais permanecem individuais.</span>
+                </span>
+              </label>
+            )}
             <button
               type="button"
               onClick={() => void confirmPrices()}

@@ -100,3 +100,15 @@ export interface SmartphonePhotoIntakeUpdate {
   price_wholesale?: number | null;
   prices_confirmed?: boolean;
 }
+
+export interface SmartphonePhotoIntakePriceConfirmation {
+  price_cost: number;
+  price_retail: number;
+  price_reseller: number;
+  price_wholesale: number;
+}
+
+export interface SmartphonePhotoIntakeGroupPriceResult {
+  intake: SmartphonePhotoIntake;
+  updated_count: number;
+}

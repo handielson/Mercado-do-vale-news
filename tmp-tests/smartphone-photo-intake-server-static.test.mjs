@@ -18,6 +18,8 @@ assert.match(source, /if \(!intake\.matched_color_id\)[\s\S]*Selecione ou cadast
 assert.match(source, /color_id: intake\.matched_color_id/, 'produto final deve guardar o identificador da cor');
 assert.match(source, /SELECT id FROM units WHERE imei_1 IN[\s\S]*already_registered/, 'edições manuais devem repetir a checagem de duplicidade');
 assert.match(source, /beginTransaction\(\)[\s\S]*FOR UPDATE[\s\S]*commit\(\)/, 'finalização deve ser transacional e bloquear a pendência');
+assert.match(source, /confirm-group-prices[\s\S]*matched_model_id=\?[\s\S]*matched_color_id=\?[\s\S]*detected_ram[\s\S]*detected_storage[\s\S]*FOR UPDATE/, 'confirmação em grupo deve usar a combinação exata e bloquear as linhas');
+assert.match(source, /updated_count: groupRows\.length/, 'confirmação em grupo deve informar quantos aparelhos foram atualizados');
 assert.doesNotMatch(source, /budget|spending[_A-Za-z]*limit|monthly[_A-Za-z]*limit/i, 'a leitura não deve ser bloqueada por limite financeiro');
 
 console.log('smartphone photo intake server static test passed');

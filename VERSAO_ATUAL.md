@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.232-smartphone-foto-modelo-cor
+version: v1.2.233-smartphone-precos-grupo
 date: 2026-08-11
 status: ready
-release_vps: /var/www/mdv-site/releases/20260811-200807-smartphone-foto-modelo-cor
+release_vps: /var/www/mdv-site/releases/20260811-231744-smartphone-precos-grupo
 branch: main
-summary: Preenche o modelo identificado no cadastro por foto, traduz e vincula a cor ao cadastro do sistema antes de liberar o smartphone.
+summary: Permite confirmar uma única vez os preços de smartphones iguais por modelo, RAM, armazenamento e cor.
 ```

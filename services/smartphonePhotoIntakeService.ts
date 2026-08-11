@@ -4,6 +4,8 @@ import { buildVpsUrl, getVpsSyncHeaders } from './vpsProxyBase';
 import type {
   SmartphoneBrandPriceMargin,
   SmartphonePhotoIntake,
+  SmartphonePhotoIntakeGroupPriceResult,
+  SmartphonePhotoIntakePriceConfirmation,
   SmartphonePhotoIntakeUpdate,
 } from '../types/smartphone-photo-intake';
 
@@ -65,6 +67,16 @@ async function attachModel(id: string, modelId: string): Promise<SmartphonePhoto
   return update(id, { matched_model_id: modelId });
 }
 
+async function confirmGroupPrices(
+  id: string,
+  input: SmartphonePhotoIntakePriceConfirmation,
+): Promise<SmartphonePhotoIntakeGroupPriceResult> {
+  return vpsClient.post<SmartphonePhotoIntakeGroupPriceResult>(
+    `/smartphone-photo-intakes/${encodeURIComponent(id)}/confirm-group-prices`,
+    input,
+  );
+}
+
 async function finalize(id: string, input: { sku?: string; product_id?: string } = {}): Promise<SmartphonePhotoIntake> {
   return extractIntake(await vpsClient.post<IntakeResponse>(
     `/smartphone-photo-intakes/${encodeURIComponent(id)}/finalize`,
@@ -116,6 +128,7 @@ export const smartphonePhotoIntakeService = {
   retry,
   update,
   attachModel,
+  confirmGroupPrices,
   finalize,
   loadProtectedPhoto,
   listMargins,

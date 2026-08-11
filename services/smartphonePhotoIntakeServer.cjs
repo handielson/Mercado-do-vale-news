@@ -496,6 +496,63 @@ function registerSmartphonePhotoIntakeRoutes(fastify, dependencies) {
     return toPublicIntake(await loadIntake(intake.id));
   });
 
+  fastify.post('/smartphone-photo-intakes/:id/confirm-group-prices', { preHandler: requireSyncKey }, async (request, reply) => {
+    await ensureSchema();
+    const intake = await loadIntake(request.params.id);
+    if (!intake) return reply.code(404).send({ error: 'Pré-cadastro não encontrado' });
+    if (!intake.matched_model_id || !intake.matched_color_id || !intake.detected_ram || !intake.detected_storage) {
+      return reply.code(409).send({ error: 'Confirme modelo, RAM, armazenamento e cor antes de agrupar' });
+    }
+    const priceFields = ['price_cost', 'price_retail', 'price_reseller', 'price_wholesale'];
+    const prices = {};
+    for (const field of priceFields) {
+      const value = Number(request.body?.[field]);
+      if (!Number.isFinite(value) || value <= 0) return reply.code(400).send({ error: 'Informe todos os preços do grupo' });
+      prices[field] = Math.round(value);
+    }
+    const normalizedRam = String(intake.detected_ram).replace(/\s+/g, '').toUpperCase();
+    const normalizedStorage = String(intake.detected_storage).replace(/\s+/g, '').toUpperCase();
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [groupRows] = await connection.query(
+        `SELECT id,matched_model_id,validation_errors FROM smartphone_photo_intakes
+          WHERE company_id <=> ? AND matched_model_id=? AND matched_color_id=?
+            AND UPPER(REPLACE(COALESCE(detected_ram,''),' ',''))=?
+            AND UPPER(REPLACE(COALESCE(detected_storage,''),' ',''))=?
+            AND status IN ('waiting_price_confirmation','review_required','ready_to_finalize')
+          FOR UPDATE`,
+        [intake.company_id || null, intake.matched_model_id, intake.matched_color_id, normalizedRam, normalizedStorage]
+      );
+      if (groupRows.length === 0) {
+        await connection.rollback();
+        return reply.code(409).send({ error: 'Nenhum aparelho disponível neste grupo' });
+      }
+      for (const row of groupRows) {
+        const status = resolvePhotoIntakeStatus({
+          validationErrors: safeJson(row.validation_errors, []),
+          matchedModelId: row.matched_model_id,
+          pricesConfirmed: true,
+        });
+        await connection.query(
+          `UPDATE smartphone_photo_intakes SET price_cost=?,price_retail=?,price_reseller=?,price_wholesale=?,
+           prices_confirmed=1,status=? WHERE id=?`,
+          [prices.price_cost, prices.price_retail, prices.price_reseller, prices.price_wholesale, status, row.id]
+        );
+      }
+      await connection.commit();
+      return {
+        intake: toPublicIntake(await loadIntake(intake.id)),
+        updated_count: groupRows.length,
+      };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  });
+
   fastify.get('/smartphone-brand-margins', { preHandler: requireSyncKey }, async (request) => {
     await ensureSchema();
     const companyId = await resolvePhotoIntakeCompanyId(request.query?.company_id);

@@ -16,10 +16,22 @@ import type { Model } from '../../../types/model';
 import type {
   SmartphoneBrandPriceMargin,
   SmartphonePhotoIntake,
+  SmartphonePhotoIntakePriceConfirmation,
   SmartphonePhotoIntakeUpdate,
 } from '../../../types/smartphone-photo-intake';
 
 type ViewMode = 'queue' | 'margins';
+const GROUPABLE_STATUSES = new Set(['waiting_price_confirmation', 'review_required', 'ready_to_finalize']);
+const normalizeGroupValue = (value?: string | null) => String(value || '').replace(/\s+/g, '').toUpperCase();
+
+function hasSamePriceGroup(left: SmartphonePhotoIntake, right: SmartphonePhotoIntake): boolean {
+  return Boolean(left.matched_model_id && left.matched_color_id)
+    && left.matched_model_id === right.matched_model_id
+    && left.matched_color_id === right.matched_color_id
+    && normalizeGroupValue(left.detected_ram) === normalizeGroupValue(right.detected_ram)
+    && normalizeGroupValue(left.detected_storage) === normalizeGroupValue(right.detected_storage)
+    && GROUPABLE_STATUSES.has(right.status);
+}
 
 export function SmartphonePhotoIntakePage() {
   const navigate = useNavigate();
@@ -95,6 +107,11 @@ export function SmartphonePhotoIntakePage() {
     return margins.find(margin => margin.brand_id === brandId && Boolean(margin.active)) || null;
   }, [margins, models, selected]);
 
+  const matchingGroupCount = useMemo(
+    () => selected ? items.filter(item => hasSamePriceGroup(selected, item)).length : 0,
+    [items, selected],
+  );
+
   const runMutation = async (operation: () => Promise<SmartphonePhotoIntake>, successMessage: string) => {
     setBusy(true);
     try {
@@ -114,6 +131,25 @@ export function SmartphonePhotoIntakePage() {
       () => smartphonePhotoIntakeService.update(selected.id, input),
       input.prices_confirmed ? 'Preços confirmados.' : 'Conferência salva.',
     );
+  };
+
+  const confirmSelectedPrices = async (input: SmartphonePhotoIntakePriceConfirmation, applyToGroup: boolean) => {
+    if (!selected) return;
+    if (!applyToGroup) {
+      await updateSelected({ ...input, prices_confirmed: true });
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await smartphonePhotoIntakeService.confirmGroupPrices(selected.id, input);
+      await loadQueue();
+      setSelectedId(result.intake.id);
+      toast.success(`Preços aplicados a ${result.updated_count} aparelhos iguais.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível confirmar os preços do grupo.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const saveMargin = async (brandId: string, margin: SmartphoneBrandPriceMargin) => {
@@ -200,7 +236,9 @@ export function SmartphonePhotoIntakePage() {
                   colors={colors}
                   margin={selectedMargin}
                   busy={busy}
+                  matchingGroupCount={matchingGroupCount}
                   onUpdate={updateSelected}
+                  onConfirmPrices={confirmSelectedPrices}
                   onAttachModel={modelId => runMutation(
                     () => smartphonePhotoIntakeService.attachModel(selected.id, modelId),
                     'Modelo associado ao aparelho.',
