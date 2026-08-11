@@ -23,18 +23,18 @@ assert.match(script, /expandShopeeLabelForThermalPaper/,
 const labelPrints = script.match(/paperSize:\s*'4x6'[\s\S]{0,80}?scale:\s*'fit'/g) || [];
 assert.ok(labelPrints.length >= 4,
   'etiqueta de envio precisa usar papel 4x6 e escala fit');
-const summaryPrints = script.match(/printer:\s*(?:summaryPrinter|settings\.shopee_printer_a4|targetSummaryPrinter)[\s\S]{0,80}?scale:\s*'fit'/g) || [];
+const summaryPrints = script.match(/printer:\s*(?:summaryPrinter|settings\.shopee_printer_a4|targetSummaryPrinter)[\s\S]{0,80}?scale:\s*'shrink'/g) || [];
 assert.ok(summaryPrints.length >= 4,
-  'comprovante/resumo precisa usar escala fit na impressora Comprovante');
+  'comprovante/resumo precisa apenas reduzir quando exceder a area imprimivel, sem ampliar o PDF real');
 assert.match(summary, /RECEIPT_WIDTH_MM\s*=\s*80/,
   'o PDF do comprovante precisa ter largura real de 80 mm');
-assert.match(summary, /RECEIPT_MARGIN_MM\s*=\s*5/,
-  'o PDF do comprovante precisa reservar margem de 5 mm nos quatro lados');
+assert.match(summary, /RECEIPT_MARGIN_MM\s*=\s*10/,
+  'o PDF do comprovante precisa reservar zona segura de 10 mm nos quatro lados');
 assert.match(summary, /Number\.POSITIVE_INFINITY/,
   'nomes de produtos precisam quebrar em quantas linhas forem necessarias sem truncamento');
 assert.match(panel, /Comprovante 80 mm/,
   'o painel precisa identificar corretamente o papel da impressora de comprovante');
-assert.match(panel, /margens de 5 mm/,
+assert.match(panel, /margens de 10 mm/,
   'o painel precisa documentar as margens configuradas no PDF');
 assert.match(script, /runPrintFlowTest[\s\S]*?labelPrinter[\s\S]*?summaryPrinter/,
   'o teste precisa enviar conteúdo para as duas térmicas');

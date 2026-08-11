@@ -329,7 +329,7 @@ async function printHumanInterventionReceipt({ settings, shopeeApiUrl, orderSn, 
         const ptp = require('pdf-to-printer');
         await ptp.print(receiptPath, {
             printer: summaryPrinter,
-            scale: 'fit',
+            scale: 'shrink',
         });
         markPrintStep(markerPath);
         console.log(`[INTERVENTION] Comprovante ${issue.errorCode} impresso para ${orderSn}.`);
@@ -426,7 +426,7 @@ async function runPrintFlowTest() {
     }
 
     try {
-        await ptp.print(summaryPath, { printer: summaryPrinter, scale: 'fit' });
+        await ptp.print(summaryPath, { printer: summaryPrinter, scale: 'shrink' });
         results.summary_printed = true;
     } catch (e) {
         console.error(`[TEST FLOW] Falha ao imprimir comprovante na impressora ${summaryPrinter}:`, e.message);
@@ -706,7 +706,7 @@ function startLocalServer() {
                             fs.writeFileSync(tempPkgPath, await createShopeeSeparationSummaryPdf(summaryData));
                             await ptp.print(tempPkgPath, {
                                 printer: targetSummaryPrinter,
-                                scale: 'fit'
+                                scale: 'shrink'
                             });
                             console.log(`[MANUAL PRINT] Resumo com rastreio enviado!`);
                         } catch(e) { console.error("Erro manual Resumo:", e); }
@@ -853,7 +853,7 @@ async function legacyRunLoop() {
                             console.log(`Enviando Resumo para impressora: ${settings.shopee_printer_a4}`);
                             await ptp.print(tempPkgPath, {
                                 printer: settings.shopee_printer_a4,
-                                scale: 'fit'
+                                scale: 'shrink'
                             });
                             console.log(`Sucesso ao imprimir RESUMO ${order_sn}!`);
                         } catch (pkgErr) {
@@ -1010,7 +1010,7 @@ async function runLoop() {
                     console.log(`Enviando resumo para: ${settings.shopee_printer_a4}`);
                     await ptp.print(summaryPath, {
                         printer: settings.shopee_printer_a4,
-                        scale: 'fit',
+                        scale: 'shrink',
                     });
                     markPrintStep(markers.summary);
                     console.log(`Resumo ${orderSn} impresso e marcado.`);

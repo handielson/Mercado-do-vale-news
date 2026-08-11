@@ -4,7 +4,12 @@ const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const MM_TO_PT = 72 / 25.4;
 const RECEIPT_WIDTH_MM = 80;
 const RECEIPT_HEIGHT_MM = 152.4;
-const RECEIPT_MARGIN_MM = 5;
+// The Lenovo receipt driver has an asymmetric hardware/driver dead zone that
+// consumes roughly the first 8 mm of a custom PDF page. Keep every printable
+// element inside a 10 mm safe area so real order receipts are not clipped,
+// even though the Windows native test page (which uses driver-owned margins)
+// prints correctly.
+const RECEIPT_MARGIN_MM = 10;
 const RECEIPT_WIDTH = RECEIPT_WIDTH_MM * MM_TO_PT;
 const RECEIPT_HEIGHT = RECEIPT_HEIGHT_MM * MM_TO_PT;
 const RECEIPT_MARGIN = RECEIPT_MARGIN_MM * MM_TO_PT;
@@ -250,9 +255,9 @@ async function createShopeeSeparationSummaryPdf(order) {
         const border = rgb(0, 0, 0);
         page.drawRectangle({ x: 0, y: 0, width: RECEIPT_WIDTH, height: RECEIPT_HEIGHT, color: rgb(1, 1, 1) });
         page.drawRectangle({ x: RECEIPT_MARGIN, y: 381, width: RECEIPT_CONTENT_WIDTH, height: 36, borderColor: black, borderWidth: 1, color: rgb(1, 1, 1) });
-        page.drawText('RESUMO DE SEPARACAO', { x: RECEIPT_MARGIN + 7, y: 395, size: 10.5, font: bold, color: black });
+        page.drawText('RESUMO DE SEPARACAO', { x: RECEIPT_MARGIN + 6, y: 395, size: 8.5, font: bold, color: black });
         drawRightAlignedText(page, `SHOPEE | ${pageIndex + 1}/${pages.length}`, {
-            right: RECEIPT_RIGHT - 6, y: 396, size: 6.2, font: bold, color: black,
+            right: RECEIPT_RIGHT - 4, y: 396, size: 5.8, font: bold, color: black,
         });
 
         page.drawText(`PEDIDO: ${printableText(order?.orderSn) || '-'}`, { x: RECEIPT_MARGIN + 4, y: 363, size: 10, font: bold, color: black });
@@ -304,11 +309,11 @@ async function createShopeeSeparationSummaryPdf(order) {
             y -= 8;
         }
 
-        page.drawLine({ start: { x: RECEIPT_MARGIN + 4, y: 68 }, end: { x: RECEIPT_RIGHT - 4, y: 68 }, thickness: 0.7, color: border });
-        page.drawText('CONFERENCIA', { x: RECEIPT_MARGIN + 4, y: 56, size: 7, font: bold, color: black });
-        page.drawText('[ ] Produto  [ ] Quantidade  [ ] Modelo/Cor', { x: RECEIPT_MARGIN + 4, y: 44, size: 6.2, font: regular, color: black });
-        page.drawText('Separado: __________  Conferido: __________', { x: RECEIPT_MARGIN + 4, y: 30, size: 6.2, font: regular, color: black });
-        page.drawText('Horario: ________:________', { x: RECEIPT_MARGIN + 4, y: RECEIPT_MARGIN + 1, size: 6.2, font: regular, color: black });
+        page.drawLine({ start: { x: RECEIPT_MARGIN + 4, y: 90 }, end: { x: RECEIPT_RIGHT - 4, y: 90 }, thickness: 0.7, color: border });
+        page.drawText('CONFERENCIA', { x: RECEIPT_MARGIN + 4, y: 78, size: 7, font: bold, color: black });
+        page.drawText('[ ] Produto  [ ] Quantidade  [ ] Modelo/Cor', { x: RECEIPT_MARGIN + 4, y: 66, size: 6.2, font: regular, color: black });
+        page.drawText('Separado: __________  Conferido: __________', { x: RECEIPT_MARGIN + 4, y: 52, size: 6.2, font: regular, color: black });
+        page.drawText('Horario: ________:________', { x: RECEIPT_MARGIN + 4, y: 38, size: 6.2, font: regular, color: black });
     }
 
     return Buffer.from(await pdf.save());

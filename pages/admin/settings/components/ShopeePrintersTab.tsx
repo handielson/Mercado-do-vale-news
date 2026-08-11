@@ -329,7 +329,7 @@ export default function ShopeePrintersTab() {
                                     Impressora térmica (Comprovante 80 mm)
                                 </label>
                                 <p className="text-xs text-slate-500 mb-2">
-                                    Segunda impressora térmica, usada para imprimir o resumo do pedido em papel de 80 mm, com margens de 5 mm.
+                                    Segunda impressora térmica, usada para imprimir o resumo do pedido em papel de 80 mm, com margens de 10 mm para segurança.
                                 </p>
                                 <div className="flex gap-2">
                                     <select

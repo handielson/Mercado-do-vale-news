@@ -29,6 +29,8 @@ const {
     const firstPageSize = pdf.getPage(0).getSize();
     assert.ok(Math.abs(firstPageSize.width - (80 * 72 / 25.4)) < 0.01, 'o comprovante deve ter largura real de 80 mm');
     assert.ok(Math.abs(firstPageSize.height - (152.4 * 72 / 25.4)) < 0.01, 'o comprovante deve manter altura de 152,4 mm');
+    const source = require('node:fs').readFileSync(require.resolve('../scripts/shopee-separation-summary.cjs'), 'utf8');
+    assert.match(source, /const RECEIPT_MARGIN_MM = 10;/, 'o comprovante real deve respeitar a zona segura de 10 mm do driver Lenovo');
     assert.equal(printableText('Código — “teste” ✅'), 'Código - "teste"', 'texto deve ficar compatível com fonte PDF');
     assert.match(formatOrderDate(1785325500), /\d{2}\/\d{2}\/\d{4}/, 'data deve ser exibida em pt-BR');
 
