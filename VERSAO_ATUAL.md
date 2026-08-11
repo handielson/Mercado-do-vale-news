@@ -1,10 +1,10 @@
 # Versão Atual
 
 ```text
-version: v1.2.228-shopee-comprovante-lenovo
+version: v1.2.229-smartphone-foto-nfc
 date: 2026-08-11
 status: ready
-release_vps: /var/www/mdv-site/releases/20260811-174019-shopee-comprovante-lenovo
+release_vps: /var/www/mdv-site/releases/20260811-212304-smartphone-foto-nfc
 branch: main
-summary: Corrige o corte lateral do comprovante real da Shopee no Lenovo com zona segura de 10 mm e escala sem ampliação.
+summary: Adiciona pré-cadastro de smartphones por foto, preços por marca e cor, e filtro NFC no bot mantendo o formato atual da lista.
 ```

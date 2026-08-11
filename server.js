@@ -7,6 +7,7 @@ const zlib = require('zlib');
 const { spawn } = require('child_process');
 const ffmpegStaticPath = require('ffmpeg-static');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
+const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
 const crypto = require('crypto');
 const { PDFDocument } = require('pdf-lib');
 require('dotenv').config({ path: path.join(__dirname, '.env.tiktok.local'), override: false });
@@ -23998,6 +23999,7 @@ async function syncProductStock(productId) {
 }
 
 // Start
+registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname });
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {

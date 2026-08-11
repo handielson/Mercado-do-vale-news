@@ -8,6 +8,7 @@ const zlib = require('zlib');
 const { spawn } = require('child_process');
 const ffmpegStaticPath = require('ffmpeg-static');
 const { validateMediaUploadPath } = require('./services/vpsUploadPathPolicy.cjs');
+const { registerSmartphonePhotoIntakeRoutes } = require('./services/smartphonePhotoIntakeServer.cjs');
 const crypto = require('crypto');
 const sharp = require('sharp');
 const { PDFDocument } = require('pdf-lib');
@@ -38826,6 +38827,7 @@ fastify.post('/financial/customer-debts/pay', { preHandler: requireSyncKey }, as
 
 
 // Start
+registerSmartphonePhotoIntakeRoutes(fastify, { pool, requireSyncKey, baseDir: __dirname });
 scheduleNextSystemBackup();
 
 runMigrations().then(() => {

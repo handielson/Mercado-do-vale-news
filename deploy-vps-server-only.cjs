@@ -18,6 +18,10 @@ const localServerCjs = path.join(__dirname, 'vps_server.cjs');
 const firebaseServiceAccountPath = String(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '').trim();
 const mobileSalesServicePath = 'services/mobileSalesPushService.cjs';
 const marketingCampaignServicePath = 'services/marketingCampaignApi.cjs';
+const smartphonePhotoIntakeServiceFiles = [
+  'services/smartphonePhotoIntakeCore.cjs',
+  'services/smartphonePhotoIntakeServer.cjs',
+];
 const autoresponderEngineFiles = [
   'services/autoresponder/engine/types.js',
   'services/autoresponder/engine/state.js',
@@ -139,6 +143,14 @@ async function uploadMarketingCampaignFiles(appDir) {
     remotePathJoin(appDir, marketingCampaignServicePath),
   );
   console.log(`Uploaded ${marketingCampaignServicePath}`);
+}
+
+async function uploadSmartphonePhotoIntakeFiles(appDir) {
+  await exec(`mkdir -p ${appDir}/services`);
+  for (const relativePath of smartphonePhotoIntakeServiceFiles) {
+    await upload(path.join(__dirname, relativePath), remotePathJoin(appDir, relativePath));
+    console.log(`Uploaded ${relativePath}`);
+  }
 }
 
 async function ensureRemoteFirebaseCredentials(appDir) {
@@ -287,6 +299,7 @@ async function main() {
   await uploadSignedWarrantyFiles(appDir);
   await uploadMobileSalesPushFiles(appDir);
   await uploadMarketingCampaignFiles(appDir);
+  await uploadSmartphonePhotoIntakeFiles(appDir);
   const remoteFirebaseCredentialPath = await ensureRemoteFirebaseCredentials(appDir);
   await ensureRemoteAdminEnv(appDir, remoteFirebaseCredentialPath);
   await ensureRemoteMediaDocumentDependencies(appDir);

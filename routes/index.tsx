@@ -43,6 +43,7 @@ const RedefinirSenhaPage = lazy(() => import('../pages/auth/RedefinirSenhaPage')
 const CustomerProfilePage = lazy(() => import('../pages/customer/CustomerProfilePage').then(module => ({ default: module.CustomerProfilePage })));
 const CustomerFavoritesPage = lazy(() => import('../pages/customer/CustomerFavoritesPage').then(module => ({ default: module.CustomerFavoritesPage })));
 const BulkRegistrationPage = lazy(() => import('../pages/admin/products/BulkRegistrationPage').then(module => ({ default: module.BulkRegistrationPage })));
+const SmartphonePhotoIntakePage = lazy(() => import('../pages/admin/products/SmartphonePhotoIntakePage').then(module => ({ default: module.SmartphonePhotoIntakePage })));
 const CategorySettingsPage = lazy(() => import('../pages/admin/settings/categories/index'));
 const NewCategoryPage = lazy(() => import('../pages/admin/settings/categories/new'));
 const FieldPresetsPage = lazy(() => import('../pages/admin/settings/categories/presets'));
@@ -424,6 +425,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute requireAdmin={true}>
         <AdminLayout><BulkRegistrationPage /></AdminLayout>
+      </ProtectedRoute>
+    )
+  },
+  {
+    path: "/admin/products/photo-intake",
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <AdminLayout><SmartphonePhotoIntakePage /></AdminLayout>
       </ProtectedRoute>
     )
   },

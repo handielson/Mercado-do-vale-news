@@ -8,6 +8,7 @@ import { CurrencyInput } from '../ui/CurrencyInput';
 interface Variation {
     ram: string;
     storage: string;
+    color: string;
     products: {
         id: string;
         name: string;
@@ -70,8 +71,9 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline }: ModelP
             for (const p of sortedProducts) {
                 const ram = p.specs?.ram || '';
                 const storage = p.specs?.storage || '';
-                const key = `${ram}|${storage}`;
-                if (!map[key]) map[key] = { ram, storage, products: [] };
+                const color = p.specs?.color || p.specs?.cor || '';
+                const key = `${ram}|${storage}|${color}`;
+                if (!map[key]) map[key] = { ram, storage, color, products: [] };
                 map[key].products.push(p);
             }
 
@@ -80,7 +82,7 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline }: ModelP
 
             const inputs: typeof priceInputs = {};
             for (const v of vars) {
-                const key = `${v.ram}|${v.storage}`;
+                const key = `${v.ram}|${v.storage}|${v.color}`;
                 const total = v.products.reduce((s, p) => s + (p.stock_quantity || 0), 0);
                 const wavg = (field: keyof typeof v.products[0]) =>
                     total > 0
@@ -110,7 +112,7 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline }: ModelP
     }
 
     async function handleApply(variation: Variation) {
-        const key = `${variation.ram}|${variation.storage}`;
+        const key = `${variation.ram}|${variation.storage}|${variation.color}`;
         const prices = priceInputs[key];
         if (!prices) return;
 
@@ -141,7 +143,7 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline }: ModelP
                 </p>
             ) : (
                 variations.map(v => {
-                    const key = `${v.ram}|${v.storage}`;
+                    const key = `${v.ram}|${v.storage}|${v.color}`;
                     const prices = priceInputs[key] || { price_cost: 0, price_retail: 0, price_reseller: 0, price_wholesale: 0 };
                     const isApplying = applying === key;
                     const totalStock = v.products.reduce((s, p) => s + (p.stock_quantity || 0), 0);
@@ -150,7 +152,7 @@ export function ModelPricesPanel({ modelId, modelName, onClose, inline }: ModelP
                         <div key={key} className="border border-slate-200 rounded-xl overflow-hidden">
                             <div className="bg-slate-50 px-4 py-2.5 flex items-center gap-3 border-b border-slate-200">
                                 <span className="text-sm font-semibold text-slate-700">
-                                    {[v.ram, v.storage].filter(Boolean).join(' · ') || 'Sem variação'}
+                                    {[v.ram, v.storage, v.color].filter(Boolean).join(' · ') || 'Sem variação'}
                                 </span>
                                 <span className="text-xs text-slate-400 bg-white border border-slate-200 rounded-full px-2 py-0.5">
                                     {v.products.length} produto{v.products.length !== 1 ? 's' : ''} · {totalStock} em estoque

@@ -18,6 +18,7 @@
     "test:sale-legacy-item-money": "node tmp-tests/sale-legacy-item-money-static.test.mjs",
     "test:signed-warranty": "node --test tmp-tests/signed-warranty-core.test.cjs && node tmp-tests/signed-warranty-static.test.mjs",
     "test:autoresponder:whatsapp": "node tmp-tests/google-contacts-oauth-static.test.mjs && node tmp-tests/autoresponder-contact-name-invalid-replies-static.test.mjs && node tmp-tests/autoresponder-google-contact-flow-static.test.mjs && node tmp-tests/autoresponder-smartphone-catalog-loop-regression-static.test.mjs",
+    "test:smartphone-photo-intake": "node tmp-tests/smartphone-photo-intake-core.test.cjs && node tmp-tests/smartphone-photo-intake-server-static.test.mjs && node tmp-tests/smartphone-photo-intake-deploy-static.test.mjs && node tmp-tests/smartphone-color-price-isolation-static.test.mjs",
     "publish:vps-plan": "node scripts/publish-vps-plan.cjs",
     "deploy:vps-site": "node scripts/deploy-vps-site.cjs",
     "preview": "vite preview"

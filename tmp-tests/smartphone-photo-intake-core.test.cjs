@@ -1,0 +1,55 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const {
+  PHOTO_INTAKE_STATUS,
+  calculateBrandPrices,
+  filterSmartphonesByFeatures,
+  isValidGtin,
+  isValidImei,
+  resolvePhotoIntakeStatus,
+  validatePhotoExtraction,
+} = require('../services/smartphonePhotoIntakeCore.cjs');
+
+assert.equal(isValidImei('861260086190905'), true);
+assert.equal(isValidImei('861260086190906'), false);
+assert.equal(isValidGtin('6932554457259'), true);
+
+const extraction = validatePhotoExtraction({
+  brand: 'POCO', model: 'C85', color: 'Black', ram: '8 GB', storage: '256 GB',
+  serial: '69385/66RK03160', imei1: '861260086190905', imei2: '861260086190913', ean: '6932554457259',
+});
+assert.equal(extraction.valid, true);
+assert.equal(extraction.value.ram, '8GB');
+assert.equal(extraction.value.storage, '256GB');
+
+assert.deepEqual(calculateBrandPrices(87000, {
+  retail_margin_cents: 20000,
+  reseller_margin_cents: 15000,
+  wholesale_margin_cents: 10000,
+}), {
+  price_cost: 87000,
+  price_retail: 107000,
+  price_reseller: 102000,
+  price_wholesale: 97000,
+});
+
+assert.equal(resolvePhotoIntakeStatus({ matchedModelId: null }), PHOTO_INTAKE_STATUS.WAITING_MODEL_REGISTRATION);
+assert.equal(resolvePhotoIntakeStatus({ matchedModelId: 'model-1' }), PHOTO_INTAKE_STATUS.WAITING_PRICE_CONFIRMATION);
+assert.equal(resolvePhotoIntakeStatus({ matchedModelId: 'model-1', pricesConfirmed: true }), PHOTO_INTAKE_STATUS.READY_TO_FINALIZE);
+
+const filtered = filterSmartphonesByFeatures([
+  { status: 'active', stock_quantity: 2, brand: 'Xiaomi', price_retail: 107000, specs: { nfc: 'Sim', ram: '4GB', storage: '256GB' } },
+  { status: 'active', stock_quantity: 3, brand: 'Realme', price_retail: 99000, specs: { nfc: 'Não', ram: '4GB', storage: '256GB' } },
+  { status: 'active', stock_quantity: 0, brand: 'Xiaomi', price_retail: 90000, specs: { nfc: 'Sim', ram: '4GB', storage: '256GB' } },
+], { nfc: true, storage: '256 gb' });
+assert.equal(filtered.length, 1);
+assert.equal(filtered[0].brand, 'Xiaomi');
+
+const conflicting = filterSmartphonesByFeatures([
+  { id: 'one', model_id: 'model-1', status: 'active', stock_quantity: 1, specs: { nfc: 'Sim', ram: '8GB', storage: '256GB', color: 'Roxo' } },
+  { id: 'two', model_id: 'model-1', status: 'active', stock_quantity: 1, specs: { nfc: 'Consulte', ram: '8GB', storage: '256GB', color: 'Roxo' } },
+], { nfc: true });
+assert.equal(conflicting.length, 0, 'conflicting NFC data must not be advertised as confirmed');
+
+console.log('smartphone photo intake core checks passed');

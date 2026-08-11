@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Zap, Upload } from 'lucide-react';
+import { ArrowLeft, Camera, Zap, Upload } from 'lucide-react';
 import { QuickRegisterForm } from '../../../components/products/bulk/QuickRegisterForm';
 import { BulkUploadForm } from '../../../components/products/bulk/BulkUploadForm';
 import { BulkPreviewTable } from '../../../components/products/bulk/BulkPreviewTable';
@@ -159,6 +159,16 @@ export function BulkRegistrationPage() {
                                 Excel
                             </div>
                             {activeTab === 'upload' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                        </button>
+
+                        <button
+                            onClick={() => navigate('/admin/products/photo-intake')}
+                            className="flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent transition-all duration-200"
+                        >
+                            <div className="flex items-center gap-3">
+                                <Camera className="w-5 h-5 text-slate-400" />
+                                Por foto
+                            </div>
                         </button>
                     </nav>
                 </div>

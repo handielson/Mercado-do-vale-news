@@ -110,6 +110,7 @@ interface VariationPriceAdjustment {
     targetIds: string[];
     ram: string;
     storage: string;
+    color: string;
     prices: {
         price_retail: number;
         price_reseller: number;
@@ -139,8 +140,9 @@ async function syncVariationPrices(source: Product): Promise<VariationPriceAdjus
     const modelId = String(source.model_id || '').trim();
     const ram = normalizeVariationSpec(source.specs?.ram);
     const storage = normalizeVariationSpec(source.specs?.storage);
+    const color = normalizeVariationSpec(source.specs?.color_id || source.specs?.color || source.specs?.cor);
 
-    if (!modelId || !ram || !storage) return null;
+    if (!modelId || !ram || !storage || !color) return null;
 
     const rows = await vpsApiService.getProducts({
         model_id: modelId,
@@ -156,6 +158,7 @@ async function syncVariationPrices(source: Product): Promise<VariationPriceAdjus
             hasSellableStock(product) &&
             normalizeVariationSpec(product.specs?.ram) === ram &&
             normalizeVariationSpec(product.specs?.storage) === storage &&
+            normalizeVariationSpec(product.specs?.color_id || product.specs?.color || product.specs?.cor) === color &&
             salePricesDiffer(product, source)
         );
 
@@ -178,6 +181,7 @@ async function syncVariationPrices(source: Product): Promise<VariationPriceAdjus
         targetIds: peers.map((product) => product.id),
         ram: String(source.specs?.ram || ''),
         storage: String(source.specs?.storage || ''),
+        color: String(source.specs?.color || source.specs?.cor || ''),
         prices: {
             price_retail: source.price_retail,
             price_reseller: source.price_reseller,
