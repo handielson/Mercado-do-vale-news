@@ -205,7 +205,7 @@ export default function ShopeePrintersTab() {
                             <p className="font-semibold mb-1">Como funciona a impressão automática?</p>
                             <p className="text-blue-700/80">
                                 No computador onde as impressoras estão conectadas, use o botão para buscar e selecionar cada térmica uma única vez.
-                                O serviço local de impressão mantém essa configuração e envia automaticamente a etiqueta de envio para uma térmica 10x15 e o resumo de separação para a outra.
+                                O serviço local de impressão mantém essa configuração e envia automaticamente a etiqueta de envio para uma térmica 10x15 e o resumo de separação para a impressora de comprovante em papel 80 mm.
                             </p>
                         </div>
                     </div>
@@ -326,10 +326,10 @@ export default function ShopeePrintersTab() {
                         <div className="space-y-4">
                             <div className="space-y-2">
                                 <label className="block text-sm font-bold text-slate-700">
-                                    Impressora térmica (Resumo de separação 10x15)
+                                    Impressora térmica (Comprovante 80 mm)
                                 </label>
                                 <p className="text-xs text-slate-500 mb-2">
-                                    Segunda impressora térmica, usada para imprimir o resumo do pedido para separação em papel 10x15.
+                                    Segunda impressora térmica, usada para imprimir o resumo do pedido em papel de 80 mm, com margens de 5 mm.
                                 </p>
                                 <div className="flex gap-2">
                                     <select

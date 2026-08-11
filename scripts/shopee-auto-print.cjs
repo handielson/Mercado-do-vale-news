@@ -394,16 +394,26 @@ async function runPrintFlowTest() {
     const ptp = require('pdf-to-printer');
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const labelPath = path.join(shippingLabelsDir, `TESTE_${stamp}_etiqueta-10x15.pdf`);
-    const summaryPath = path.join(shippingLabelsDir, `TESTE_${stamp}_resumo-separacao-10x15.pdf`);
+    const summaryPath = path.join(shippingLabelsDir, `TESTE_${stamp}_resumo-separacao-80mm.pdf`);
     fs.writeFileSync(labelPath, await createThermalTestPdf({
         title: 'ETIQUETA DE ENVIO',
         subtitle: 'Fluxo Shopee - teste local',
         lines: ['1. Nota fiscal: simulada', '2. Preparar envio: simulado', '3. Etiqueta 10x15: pronta', 'Impressora 1: OK'],
     }));
-    fs.writeFileSync(summaryPath, await createThermalTestPdf({
-        title: 'RESUMO DE SEPARAÇÃO',
-        subtitle: 'Fluxo Shopee - teste local',
-        lines: ['Pedido teste #TESTE', 'Produto: conferência de impressão', 'Quantidade: 1', 'Impressora 2: OK'],
+    fs.writeFileSync(summaryPath, await createShopeeSeparationSummaryPdf({
+        orderSn: 'TESTE-80MM',
+        trackingNumber: 'TESTE123456BR',
+        buyerName: 'Cliente de teste',
+        shippingCarrier: 'Shopee - teste local',
+        createdAt: Date.now(),
+        note: 'Nenhum pedido real foi alterado.',
+        items: [{
+            name: 'Produto de conferencia com nome longo e quebra automatica de linha',
+            sku: 'TESTE-80MM',
+            modelName: 'Teste',
+            quantity: 1,
+            stockLocation: 'Loja Principal / Estoque Geral',
+        }],
     }));
 
     const results = {};
@@ -692,7 +702,7 @@ function startLocalServer() {
                     if ((docType === 'both' || docType === 'summary') && targetSummaryPrinter) {
                         try {
                             const summaryData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn);
-                            const tempPkgPath = path.join(shippingLabelsDir, `MANUAL_${orderSn}_resumo-separacao-10x15.pdf`);
+                            const tempPkgPath = path.join(shippingLabelsDir, `MANUAL_${orderSn}_resumo-separacao-80mm.pdf`);
                             fs.writeFileSync(tempPkgPath, await createShopeeSeparationSummaryPdf(summaryData));
                             await ptp.print(tempPkgPath, {
                                 printer: targetSummaryPrinter,
@@ -838,7 +848,7 @@ async function legacyRunLoop() {
                         try {
                             console.log(`Gerando resumo de separação com rastreio para ${order_sn}...`);
                             const summaryData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, order_sn);
-                            const tempPkgPath = path.join(shippingLabelsDir, `${order_sn}_resumo-separacao-10x15.pdf`);
+                            const tempPkgPath = path.join(shippingLabelsDir, `${order_sn}_resumo-separacao-80mm.pdf`);
                             fs.writeFileSync(tempPkgPath, await createShopeeSeparationSummaryPdf(summaryData));
                             console.log(`Enviando Resumo para impressora: ${settings.shopee_printer_a4}`);
                             await ptp.print(tempPkgPath, {
@@ -993,7 +1003,7 @@ async function runLoop() {
                 if (settings.shopee_printer_a4 && !fs.existsSync(markers.summary)) {
                     currentStage = 'summary';
                     const summaryData = await getShopeeOrderSummaryData(settings, shopeeApiUrl, orderSn);
-                    const summaryPath = path.join(shippingLabelsDir, `${orderSn}_resumo-separacao-10x15.pdf`);
+                    const summaryPath = path.join(shippingLabelsDir, `${orderSn}_resumo-separacao-80mm.pdf`);
                     const summaryBuffer = await createShopeeSeparationSummaryPdf(summaryData);
                     if (!summaryBuffer?.length) throw new Error('Resumo de separação vazio.');
                     fs.writeFileSync(summaryPath, summaryBuffer);

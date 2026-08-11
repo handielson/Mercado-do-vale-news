@@ -33,10 +33,12 @@ const { createShopeeInterventionReceiptPdf } = require('../scripts/shopee-separa
         instructions: 'Abra a NF-e no Bling, corrija NCM, CEST ou tributacao, autorize a nota e confirme o envio para a Shopee.',
         occurredAt: Date.now(),
     });
-    assert.ok(Buffer.isBuffer(buffer) && buffer.length > 1_000, 'deve gerar comprovante 10x15 não vazio');
+    assert.ok(Buffer.isBuffer(buffer) && buffer.length > 1_000, 'deve gerar comprovante 80 mm não vazio');
     const pdf = await PDFDocument.load(buffer);
-    assert.equal(pdf.getPageCount(), 1, 'dois itens devem caber em uma folha 10x15');
-    assert.deepEqual(pdf.getPage(0).getSize(), { width: 288, height: 432 }, 'papel deve permanecer em 4x6 polegadas');
+    assert.equal(pdf.getPageCount(), 1, 'dois itens devem caber em uma folha de comprovante 80 mm');
+    const pageSize = pdf.getPage(0).getSize();
+    assert.ok(Math.abs(pageSize.width - (80 * 72 / 25.4)) < 0.01, 'comprovante de intervencao deve ter largura real de 80 mm');
+    assert.ok(Math.abs(pageSize.height - (152.4 * 72 / 25.4)) < 0.01, 'comprovante de intervencao deve manter altura de 152,4 mm');
 
     const outputPath = process.env.SHOPEE_INTERVENTION_SAMPLE_PATH;
     if (outputPath) {
